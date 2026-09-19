@@ -181,6 +181,20 @@ Decisões importantes devem ser registradas na documentação, indicando se são
 - Não transformar uma conversa ou hipótese em código sem que isso seja solicitado.
 - Usar nomes provisórios enquanto a identidade do produto não estiver definida.
 
+### Revisão obrigatória do Git e segurança
+
+Antes de qualquer commit, pull request ou envio para um repositório remoto:
+
+- Verificar o estado do repositório, incluindo arquivos modificados, staged, não rastreados e ignorados relevantes.
+- Revisar o diff completo e confirmar que cada alteração é intencional.
+- Conferir se não existem senhas, tokens, chaves privadas, certificados, arquivos `.env`, credenciais, dados pessoais ou configurações locais.
+- Conferir se não existem arquivos grandes, arquivos gerados, caches, builds, mídia privada ou artefatos que não devam ir para o GitHub.
+- Atualizar o `.gitignore` quando necessário, sem usar o `.gitignore` para esconder uma alteração que deveria ser revisada.
+- Verificar nomes, extensões e conteúdo dos arquivos não rastreados; nunca revisar apenas os arquivos já staged.
+- Se houver qualquer arquivo suspeito ou dúvida sobre sua publicação, parar e solicitar orientação antes de continuar.
+
+Não fazer commit ou push automaticamente. Essas ações exigem autorização explícita do usuário.
+
 ## 11. Estado atual
 
 - A visão do produto está em definição.
