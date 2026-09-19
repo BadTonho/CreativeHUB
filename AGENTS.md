@@ -48,6 +48,7 @@ O editor de imagens faz parte da visão geral, mas é um módulo futuro. Não de
 ## 3. Princípios obrigatórios
 
 - O projeto deve ser código aberto.
+- Toda a documentação do projeto deve ser escrita em inglês, incluindo README, guias, especificações, decisões de arquitetura e comentários destinados a usuários ou contribuidores.
 - O software deve ser leve, eficiente e responsivo.
 - Desempenho, consumo de memória e tempo de inicialização são requisitos importantes.
 - O suporte a Windows, macOS e Linux deve ser considerado desde o início.
