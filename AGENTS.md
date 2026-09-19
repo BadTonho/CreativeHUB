@@ -175,9 +175,11 @@ Decisões importantes devem ser registradas na documentação, indicando se são
 - Inspecionar a estrutura e o estado atual antes de assumir como algo deve funcionar.
 - Preservar alterações existentes do usuário.
 - Fazer alterações pequenas e coerentes.
+- Keep the project organized into clear categories and subcategories. Avoid introducing an unnecessary monorepo structure; prefer a single coherent repository organized by modules and folders unless a concrete technical or organizational need justifies otherwise.
 - Não adicionar dependências sem justificar a necessidade e a licença.
 - Não apagar, resetar ou sobrescrever trabalho existente sem autorização explícita.
 - Atualizar a documentação quando uma decisão de arquitetura for tomada.
+- Keep all project documentation up to date with the current implementation, architecture, behavior, and decisions. Update the relevant documentation in the same change whenever the documented state changes.
 - Não transformar uma conversa ou hipótese em código sem que isso seja solicitado.
 - Usar nomes provisórios enquanto a identidade do produto não estiver definida.
 
