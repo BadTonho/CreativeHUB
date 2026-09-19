@@ -1,208 +1,208 @@
-# AGENTS.md — Regras do projeto
+# AGENTS.md - Project Rules
 
-Este arquivo define as regras de trabalho do projeto. Deve ser lido antes de qualquer alteração no repositório.
+This file defines the project's working rules. It must be read before making any change to the repository.
 
-As instruções do sistema, do ambiente e do usuário têm prioridade sobre este documento.
+System, environment, and user instructions take priority over this document.
 
-## 1. Contexto do projeto
+## 1. Project Context
 
-Este é um projeto de código aberto para uma suíte criativa profissional, leve e multiplataforma.
+This is an open-source project for a professional, lightweight, cross-platform creative suite.
 
-O nome atual do projeto é temporário. Não renomear o projeto ou criar uma identidade definitiva sem uma decisão explícita.
+The current project name is temporary. Do not rename the project or create a definitive identity without an explicit decision.
 
-O repositório principal é único. A separação deve ser feita por módulos e pastas, não por repositórios independentes, salvo decisão futura baseada em uma necessidade real.
+The main repository is a single repository. Separation should be handled through modules and folders, not independent repositories, unless a future decision based on a real need justifies it.
 
-## 2. Visão do produto
+## 2. Product Vision
 
-A suíte deverá funcionar em Windows, macOS e Linux.
+The suite should run on Windows, macOS, and Linux.
 
-### Editor principal
+### Main Editor
 
-Aplicativo de edição audiovisual que combine ideias de Premiere e DaVinci Resolve:
+An audiovisual editing application combining ideas from Premiere and DaVinci Resolve:
 
-- edição em timeline;
-- organização de mídias;
-- corte e montagem;
-- correção e gradação de cor;
-- edição e mixagem de áudio;
-- textos, legendas e efeitos;
-- motion básico dentro da própria timeline;
-- exportação para formatos comuns.
+- timeline editing;
+- media organization;
+- cutting and assembly;
+- color correction and grading;
+- audio editing and mixing;
+- text, captions, and effects;
+- basic motion inside the timeline itself;
+- export to common formats.
 
 ### Motion Studio
 
-Aplicativo separado para motion e composição avançada:
+A separate application for motion design and advanced compositing:
 
-- animações complexas;
-- keyframes e curvas;
-- máscaras animadas;
-- composições aninhadas;
-- textos e formas avançadas;
-- efeitos encadeados;
-- partículas e recursos 3D em fases futuras, se fizerem sentido.
+- complex animations;
+- keyframes and curves;
+- animated masks;
+- nested compositions;
+- advanced text and shapes;
+- chained effects;
+- particles and 3D features in future phases, if they make sense.
 
-### Editor de imagens
+### Image Editor
 
-O editor de imagens faz parte da visão geral, mas é um módulo futuro. Não deve atrasar o desenvolvimento do Editor principal e do Motion Studio.
+The image editor is part of the overall vision but is a future module. It must not delay development of the Main Editor and Motion Studio.
 
-## 3. Princípios obrigatórios
+## 3. Mandatory Principles
 
-- O projeto deve ser código aberto.
-- Toda a documentação do projeto deve ser escrita em inglês, incluindo README, guias, especificações, decisões de arquitetura e comentários destinados a usuários ou contribuidores.
-- O software deve ser leve, eficiente e responsivo.
-- Desempenho, consumo de memória e tempo de inicialização são requisitos importantes.
-- O suporte a Windows, macOS e Linux deve ser considerado desde o início.
-- A arquitetura deve ser modular e permitir evolução gradual.
-- A maior parte do trabalho deve funcionar localmente, sem depender obrigatoriamente de serviços online.
-- Formatos de projeto e interfaces internas devem ser documentados sempre que possível.
-- Dependências, licenças, codecs e assets de terceiros devem ser rastreados.
-- Não usar código, assets, marcas ou recursos proprietários sem autorização adequada.
+- The project must be open source.
+- All project documentation must be written in English, including the README, guides, specifications, architectural decisions, and comments intended for users or contributors.
+- The software must be lightweight, efficient, and responsive.
+- Performance, memory usage, and startup time are important requirements.
+- Support for Windows, macOS, and Linux must be considered from the beginning.
+- The architecture must be modular and allow gradual evolution.
+- Most work should run locally without requiring online services.
+- Project formats and internal interfaces should be documented whenever possible.
+- Third-party dependencies, licenses, codecs, and assets must be tracked.
+- Do not use proprietary code, assets, trademarks, or resources without proper authorization.
 
-## 4. Arquitetura
+## 4. Architecture
 
-O projeto deve possuir um núcleo compartilhado, mas o núcleo não é um aplicativo separado para o usuário. Ele é um conjunto de bibliotecas reutilizadas pelos aplicativos.
+The project must have a shared core, but the core is not a separate user-facing application. It is a set of libraries reused by the applications.
 
-Responsabilidades esperadas do núcleo:
+Expected core responsibilities:
 
-- modelo de projetos e documentos;
-- importação e gerenciamento de mídia;
-- camadas, máscaras e transformações;
-- timeline e propriedades animáveis;
+- project and document model;
+- media import and management;
+- layers, masks, and transformations;
+- timeline and animatable properties;
 - keyframes;
-- composição e efeitos;
-- renderização e uso da GPU;
-- áudio;
-- cache e arquivos temporários;
-- undo, redo, autosave e recuperação;
-- exportação;
-- sistema de plugins.
+- compositing and effects;
+- rendering and GPU usage;
+- audio;
+- cache and temporary files;
+- undo, redo, autosave, and recovery;
+- export;
+- plugin system.
 
-O Editor principal e o Motion Studio devem compartilhar o núcleo sem perder suas responsabilidades específicas.
+The Main Editor and Motion Studio must share the core without losing their specific responsibilities.
 
-Não duplicar motores de mídia, renderização ou animação sem uma justificativa técnica clara.
+Do not duplicate media, rendering, or animation engines without a clear technical justification.
 
-Evitar atravessar repetidamente fronteiras entre módulos com dados pesados. Frames, buffers de vídeo e recursos de GPU devem ser compartilhados ou referenciados de forma eficiente quando possível.
+Avoid repeatedly crossing module boundaries with heavy data. Video frames, buffers, and GPU resources should be shared or referenced efficiently whenever possible.
 
-## 5. Linguagens e tecnologias
+## 5. Languages and Technologies
 
-Rust e C++ são candidatos principais. Ainda não existe uma decisão definitiva.
+Rust and C++ are primary candidates. There is no final decision yet.
 
-Não escolher uma linguagem apenas por preferência pessoal ou por afirmar que ela é sempre mais rápida. A decisão deve considerar:
+Do not choose a language based only on personal preference or on the claim that it is always faster. The decision must consider:
 
-- desempenho real;
-- consumo de memória;
-- tempo de inicialização;
-- maturidade das bibliotecas de vídeo, áudio e GPU;
-- segurança de memória;
-- suporte a Windows, macOS e Linux;
-- facilidade de depuração e manutenção;
-- disponibilidade de contribuidores;
-- licenças das dependências;
-- complexidade de build e distribuição.
+- real-world performance;
+- memory usage;
+- startup time;
+- maturity of video, audio, and GPU libraries;
+- memory safety;
+- support for Windows, macOS, and Linux;
+- ease of debugging and maintenance;
+- contributor availability;
+- dependency licenses;
+- build and distribution complexity.
 
-Usar Rust e C++ juntos é permitido, mas não se deve criar um núcleo próprio misturado sem uma divisão clara. Cada módulo deve ter uma linguagem principal e uma API bem definida.
+Using Rust and C++ together is allowed, but a mixed custom core must not be created without a clear division. Each module must have a primary language and a well-defined API.
 
-Antes de uma decisão definitiva, comparar protótipos reais que consigam:
+Before making a final decision, compare real prototypes that can:
 
-1. abrir e decodificar um vídeo;
-2. navegar em uma timeline;
-3. exibir preview acelerado pela GPU;
-4. aplicar um efeito simples;
-5. medir memória e desempenho;
-6. compilar e executar nos três sistemas operacionais.
+1. open and decode a video;
+2. navigate a timeline;
+3. display a GPU-accelerated preview;
+4. apply a simple effect;
+5. measure memory and performance;
+6. compile and run on all three operating systems.
 
-Não registrar uma escolha provisória como decisão final.
+Do not record a provisional choice as a final decision.
 
-## 6. Interface e desempenho
+## 6. Interface and Performance
 
-- A interface deve ser moderna, clara e responsiva.
-- O visual não deve depender de um navegador completo ou de uma camada pesada sem justificativa baseada em medições.
-- Processamento de vídeo, áudio, efeitos e renderização não deve ficar em uma camada de interface lenta.
-- Usar profiling antes de otimizações complexas.
-- Evitar carregar projetos, painéis, assets e efeitos desnecessários antes que sejam usados.
-- Considerar proxies, cache, renderização incremental e carregamento sob demanda.
-- Testar projetos pequenos, médios e pesados.
+- The interface must be modern, clear, and responsive.
+- The visual layer must not depend on a full browser or a heavyweight layer without measurement-based justification.
+- Video, audio, effects, and rendering workloads must not run in a slow interface layer.
+- Use profiling before applying complex optimizations.
+- Avoid loading projects, panels, assets, and effects before they are needed.
+- Consider proxies, caching, incremental rendering, and on-demand loading.
+- Test small, medium, and heavy projects.
 
-## 7. Multiplataforma
+## 7. Cross-Platform Support
 
-O código deve evitar dependências desnecessárias de um sistema operacional específico.
+The code should avoid unnecessary dependencies on a specific operating system.
 
-Quando uma API específica for necessária, isolá-la atrás de uma abstração ou adaptador. Testar Windows, macOS e Linux desde as primeiras versões relevantes, em vez de deixar a portabilidade para o final.
+When a platform-specific API is necessary, isolate it behind an abstraction or adapter. Test Windows, macOS, and Linux from the first relevant versions instead of leaving portability until the end.
 
-Prestar atenção especial a:
+Pay special attention to:
 
-- caminhos e permissões de arquivos;
-- fontes;
-- áudio e dispositivos de entrada;
-- APIs gráficas e drivers;
+- file paths and permissions;
+- fonts;
+- audio and input devices;
+- graphics APIs and drivers;
 - codecs;
-- gerenciamento de cores;
-- atalhos de teclado;
-- instalação, atualização e distribuição;
-- assinatura e notarização no macOS;
-- formatos de pacote e variações de distribuições Linux.
+- color management;
+- keyboard shortcuts;
+- installation, updates, and distribution;
+- macOS signing and notarization;
+- package formats and Linux distribution variants.
 
-## 8. Qualidade do código
+## 8. Code Quality
 
-- Preferir módulos pequenos e responsabilidades claras.
-- Evitar abstrações prematuras.
-- Não esconder cópias de dados ou alocações importantes.
-- Documentar APIs públicas e formatos de projeto.
-- Criar testes para o núcleo e para os limites entre módulos.
-- Usar análise estática, sanitizers, fuzzing e profiling quando forem adequados à tecnologia escolhida.
-- Tratar erros de mídia, arquivos corrompidos e falta de recursos sem encerrar o aplicativo inesperadamente.
-- Considerar recuperação automática de projetos e autosave desde cedo.
+- Prefer small modules with clear responsibilities.
+- Avoid premature abstractions.
+- Do not hide important data copies or allocations.
+- Document public APIs and project formats.
+- Create tests for the core and for boundaries between modules.
+- Use static analysis, sanitizers, fuzzing, and profiling when appropriate for the chosen technology.
+- Handle media errors, corrupted files, and resource shortages without unexpectedly terminating the application.
+- Consider automatic project recovery and autosave from an early stage.
 
-## 9. Processo de decisão
+## 9. Decision Process
 
-O projeto deve buscar a melhor solução técnica, mesmo quando ela contradizer uma preferência inicial.
+The project should pursue the best technical solution, even when it contradicts an initial preference.
 
-Ao recomendar uma tecnologia ou arquitetura, explicar claramente:
+When recommending a technology or architecture, clearly explain:
 
-- benefícios;
-- custos;
-- riscos;
-- alternativas consideradas;
-- como validar a decisão.
+- benefits;
+- costs;
+- risks;
+- alternatives considered;
+- how to validate the decision.
 
-Não concordar automaticamente com uma ideia. Se uma escolha aumentar muito a complexidade, reduzir desempenho ou dificultar a manutenção, isso deve ser informado diretamente.
+Do not automatically agree with an idea. If a choice would greatly increase complexity, reduce performance, or make maintenance harder, state that directly.
 
-Decisões importantes devem ser registradas na documentação, indicando se são provisórias ou definitivas.
+Important decisions must be recorded in the documentation, indicating whether they are provisional or final.
 
-## 10. Regras para alterações no repositório
+## 10. Repository Change Rules
 
-- Ler este arquivo e a documentação relacionada antes de alterar o projeto.
-- Inspecionar a estrutura e o estado atual antes de assumir como algo deve funcionar.
-- Preservar alterações existentes do usuário.
-- Fazer alterações pequenas e coerentes.
+- Read this file and the relevant documentation before changing the project.
+- Inspect the current structure and state before assuming how something should work.
+- Preserve existing user changes.
+- Make small, coherent changes.
 - Keep the project organized into clear categories and subcategories. Avoid introducing an unnecessary monorepo structure; prefer a single coherent repository organized by modules and folders unless a concrete technical or organizational need justifies otherwise.
-- Não adicionar dependências sem justificar a necessidade e a licença.
-- Não apagar, resetar ou sobrescrever trabalho existente sem autorização explícita.
-- Atualizar a documentação quando uma decisão de arquitetura for tomada.
+- Do not add dependencies without justifying the need and license.
+- Do not delete, reset, or overwrite existing work without explicit authorization.
+- Update the documentation whenever an architectural decision is made.
 - Keep all project documentation up to date with the current implementation, architecture, behavior, and decisions. Update the relevant documentation in the same change whenever the documented state changes.
-- Não transformar uma conversa ou hipótese em código sem que isso seja solicitado.
-- Usar nomes provisórios enquanto a identidade do produto não estiver definida.
+- Do not turn a conversation or hypothesis into code unless requested.
+- Use temporary names while the product identity has not been defined.
 
-### Revisão obrigatória do Git e segurança
+### Mandatory Git and Security Review
 
-Antes de qualquer commit, pull request ou envio para um repositório remoto:
+Before any commit, pull request, or submission to a remote repository:
 
-- Verificar o estado do repositório, incluindo arquivos modificados, staged, não rastreados e ignorados relevantes.
-- Revisar o diff completo e confirmar que cada alteração é intencional.
-- Conferir se não existem senhas, tokens, chaves privadas, certificados, arquivos `.env`, credenciais, dados pessoais ou configurações locais.
-- Conferir se não existem arquivos grandes, arquivos gerados, caches, builds, mídia privada ou artefatos que não devam ir para o GitHub.
-- Atualizar o `.gitignore` quando necessário, sem usar o `.gitignore` para esconder uma alteração que deveria ser revisada.
-- Verificar nomes, extensões e conteúdo dos arquivos não rastreados; nunca revisar apenas os arquivos já staged.
-- Se houver qualquer arquivo suspeito ou dúvida sobre sua publicação, parar e solicitar orientação antes de continuar.
+- Check the repository status, including modified, staged, untracked, and relevant ignored files.
+- Review the complete diff and confirm that every change is intentional.
+- Check that there are no passwords, tokens, private keys, certificates, `.env` files, credentials, personal data, or local configuration files.
+- Check that there are no large files, generated files, caches, builds, private media, or artifacts that should not be sent to GitHub.
+- Update `.gitignore` when necessary, without using `.gitignore` to hide a change that should be reviewed.
+- Check the names, extensions, and contents of untracked files; never review only files that are already staged.
+- If there is any suspicious file or uncertainty about publishing it, stop and ask for guidance before continuing.
 
-Não fazer commit ou push automaticamente. Essas ações exigem autorização explícita do usuário.
+Do not commit or push automatically. These actions require explicit user authorization.
 
-## 11. Estado atual
+## 11. Current State
 
-- A visão do produto está em definição.
-- O projeto ainda não tem uma decisão final entre Rust e C++.
-- O suporte-alvo é Windows, macOS e Linux.
-- A suíte deve ter um Editor principal e um Motion Studio.
-- O editor de imagens é uma etapa futura.
-- A arquitetura deve permanecer em um único repositório.
-- O próximo passo técnico deve ser definido depois de entender a estrutura real do repositório e comparar um protótipo mínimo.
+- The product vision is still being defined.
+- The project does not yet have a final decision between Rust and C++.
+- The target platforms are Windows, macOS, and Linux.
+- The suite should have a Main Editor and a Motion Studio.
+- The image editor is a future stage.
+- The architecture must remain in a single repository.
+- The next technical step should be defined after understanding the actual repository structure and comparing a minimal prototype.
