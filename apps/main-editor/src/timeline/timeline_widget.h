@@ -33,6 +33,7 @@ public:
 
 signals:
     void clipSelected(qint64 clip_index);
+    void clipMoveRequested(qint64 from_index, qint64 to_index);
     void seekStarted();
     void seekRequested(qint64 frame_index);
     void mediaDropRequested(const QString& source_path);
@@ -51,6 +52,8 @@ private:
     [[nodiscard]] bool isTrackPosition(const QPointF& position) const noexcept;
     [[nodiscard]] std::optional<std::size_t> activeClipIndex() const noexcept;
     [[nodiscard]] std::optional<std::size_t> clipIndexAtPosition(double x) const noexcept;
+    [[nodiscard]] std::optional<std::size_t> insertionBoundaryAtPosition(
+        double x) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> frameAtPosition(double x) const noexcept;
     [[nodiscard]] std::optional<double> playheadFraction() const noexcept;
     [[nodiscard]] double displayedPlayheadFrame() const noexcept;
@@ -60,6 +63,9 @@ private:
     std::int64_t playhead_frame_ = 0;
     std::optional<std::int64_t> drag_frame_;
     bool dragging_ = false;
+    bool moving_clip_ = false;
+    std::size_t moving_clip_index_ = 0;
+    std::optional<std::size_t> move_target_index_;
     bool drag_hovering_ = false;
 };
 

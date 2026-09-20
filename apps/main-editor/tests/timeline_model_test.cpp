@@ -107,6 +107,56 @@ int main() {
         require(model.clips().back().timeline_duration_frames == 60,
                 "Duration and frame rate fallback was calculated incorrectly.");
 
+        const auto total_before_moves = model.totalDurationFrames();
+        require(model.moveClip(0, 3) == timeline::MoveClipResult::Moved,
+                "Moving the first clip to the end failed.");
+        require(model.clips()[0].source_path ==
+                    std::filesystem::weakly_canonical(second_source),
+                "The first-to-last move produced the wrong first source.");
+        require(model.clips()[0].timeline_start_frame == 0 &&
+                    model.clips()[1].timeline_start_frame == 60 &&
+                    model.clips()[2].timeline_start_frame == 180 &&
+                    model.clips()[3].timeline_start_frame == 240,
+                "The first-to-last move did not recalculate starts.");
+        require(model.totalDurationFrames() == total_before_moves,
+                "Moving a clip changed the total duration.");
+        require(model.clips()[1].display_name == "first.mkv" &&
+                    model.clips()[1].frame_count == first_metadata.frame_count,
+                "Moving a clip did not preserve its metadata.");
+
+        require(model.moveClip(3, 0) == timeline::MoveClipResult::Moved,
+                "Moving the last clip to the beginning failed.");
+        require(model.clips()[0].source_path ==
+                    std::filesystem::weakly_canonical(first_source),
+                "The last-to-first move produced the wrong first source.");
+        require(model.clips()[0].timeline_start_frame == 0 &&
+                    model.clips()[1].timeline_start_frame == 120 &&
+                    model.clips()[2].timeline_start_frame == 180 &&
+                    model.clips()[3].timeline_start_frame == 300,
+                "The last-to-first move did not recalculate starts.");
+
+        require(model.moveClip(1, 2) == timeline::MoveClipResult::Moved,
+                "Moving an intermediate clip failed.");
+        require(model.clips()[0].timeline_start_frame == 0 &&
+                    model.clips()[1].timeline_start_frame == 120 &&
+                    model.clips()[2].timeline_start_frame == 240 &&
+                    model.clips()[3].timeline_start_frame == 300,
+                "The intermediate move did not recalculate starts.");
+        require(model.clips()[0].source_path == model.clips()[1].source_path,
+                "Repeated sources were not preserved as independent occurrences.");
+        require(model.firstClipIndexForSource(first_source) == 0,
+                "Source lookup did not preserve the first occurrence after moves.");
+
+        const auto starts_before_invalid_move = model.clips()[1].timeline_start_frame;
+        require(model.moveClip(1, 1) == timeline::MoveClipResult::NoChange,
+                "A no-op move was not reported as such.");
+        require(model.moveClip(99, 0) == timeline::MoveClipResult::InvalidIndex,
+                "An invalid source index was accepted.");
+        require(model.moveClip(0, 99) == timeline::MoveClipResult::InvalidIndex,
+                "An invalid destination index was accepted.");
+        require(model.clips()[1].timeline_start_frame == starts_before_invalid_move,
+                "An invalid move changed the timeline.");
+
         media::VideoMetadata invalid_metadata;
         invalid_metadata.source_path = directory / "media" / "invalid.mkv";
         invalid_metadata.display_name = "invalid.mkv";

@@ -62,6 +62,8 @@ void TimelineWidget::setClips(const std::vector<TimelineClip>& clips) {
     }
     drag_frame_.reset();
     dragging_ = false;
+    moving_clip_ = false;
+    move_target_index_.reset();
     drag_hovering_ = false;
     update();
 }
@@ -72,6 +74,8 @@ void TimelineWidget::clearClips() {
     playhead_frame_ = 0;
     drag_frame_.reset();
     dragging_ = false;
+    moving_clip_ = false;
+    move_target_index_.reset();
     drag_hovering_ = false;
     update();
 }
@@ -87,6 +91,8 @@ void TimelineWidget::setActiveClipIndex(
     playhead_frame_ = 0;
     drag_frame_.reset();
     dragging_ = false;
+    moving_clip_ = false;
+    move_target_index_.reset();
     update();
 }
 
@@ -140,6 +146,33 @@ std::optional<std::size_t> TimelineWidget::clipIndexAtPosition(
     }
 
     return std::nullopt;
+}
+
+std::optional<std::size_t> TimelineWidget::insertionBoundaryAtPosition(
+    double x) const noexcept {
+    if (clips_.empty()) return std::nullopt;
+
+    const auto track = trackRect(this).adjusted(4.0, 4.0, -4.0, -4.0);
+    const auto total_duration = clips_.back().timeline_start_frame +
+        clips_.back().timeline_duration_frames;
+    if (track.width() <= 0.0 || total_duration <= 0 ||
+        x < track.left() || x > track.right()) {
+        return std::nullopt;
+    }
+
+    for (std::size_t index = 0; index < clips_.size(); ++index) {
+        const auto& clip = clips_[index];
+        const double left = track.left() + track.width() *
+            static_cast<double>(clip.timeline_start_frame) /
+            static_cast<double>(total_duration);
+        const double right = track.left() + track.width() *
+            static_cast<double>(clip.timeline_start_frame +
+                                clip.timeline_duration_frames) /
+            static_cast<double>(total_duration);
+        if (x < (left + right) * 0.5) return index;
+    }
+
+    return clips_.size();
 }
 
 std::optional<std::int64_t> TimelineWidget::frameAtPosition(double x) const noexcept {
@@ -242,9 +275,20 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             std::max(2.0, right - left),
             clip_track.height());
         const bool active = active_index.has_value() && *active_index == index;
+        const bool moving = moving_clip_ && moving_clip_index_ == index;
+        const bool move_target = move_target_index_.has_value() &&
+            *move_target_index_ == index && !moving;
 
-        painter.setPen(active ? QColor("#ffcf5c") : QColor("#7db7ff"));
-        painter.setBrush(active ? QColor("#386e9f") : QColor("#315d8c"));
+        if (moving) {
+            painter.setPen(QPen(QColor("#ff9f43"), 2.0, Qt::DashLine));
+            painter.setBrush(QColor("#8a5a2f"));
+        } else if (move_target) {
+            painter.setPen(QColor("#9be28f"));
+            painter.setBrush(QColor("#3c7e52"));
+        } else {
+            painter.setPen(active ? QColor("#ffcf5c") : QColor("#7db7ff"));
+            painter.setBrush(active ? QColor("#386e9f") : QColor("#315d8c"));
+        }
         painter.drawRoundedRect(clip_rect, 3.0, 3.0);
 
         const QString label = fromUtf8(clip.display_name) + " - " +
@@ -342,6 +386,16 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         return;
     }
 
+    if (event->modifiers().testFlag(Qt::AltModifier)) {
+        moving_clip_ = true;
+        moving_clip_index_ = *clip_index;
+        move_target_index_ = *clip_index;
+        grabMouse();
+        update();
+        event->accept();
+        return;
+    }
+
     if (!activeClipIndex().has_value() ||
         *activeClipIndex() != *clip_index) {
         emit clipSelected(static_cast<qint64>(*clip_index));
@@ -364,6 +418,22 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (moving_clip_) {
+        move_target_index_.reset();
+        if (isTrackPosition(event->position())) {
+            if (const auto boundary = insertionBoundaryAtPosition(
+                    event->position().x()); boundary.has_value()) {
+                const auto target = *boundary > moving_clip_index_
+                    ? *boundary - 1
+                    : *boundary;
+                if (target < clips_.size()) move_target_index_ = target;
+            }
+        }
+        update();
+        event->accept();
+        return;
+    }
+
     if (!dragging_) {
         event->ignore();
         return;
@@ -377,6 +447,26 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (moving_clip_) {
+        if (event->button() != Qt::LeftButton) {
+            event->ignore();
+            return;
+        }
+
+        const auto target = move_target_index_;
+        moving_clip_ = false;
+        move_target_index_.reset();
+        releaseMouse();
+        if (target.has_value() && *target != moving_clip_index_) {
+            emit clipMoveRequested(
+                static_cast<qint64>(moving_clip_index_),
+                static_cast<qint64>(*target));
+        }
+        update();
+        event->accept();
+        return;
+    }
+
     if (!dragging_ || event->button() != Qt::LeftButton) {
         event->ignore();
         return;

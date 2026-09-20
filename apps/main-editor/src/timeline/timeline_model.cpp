@@ -81,6 +81,37 @@ AddClipResult TimelineModel::addClip(const media::VideoMetadata& metadata) {
     return AddClipResult::Added;
 }
 
+MoveClipResult TimelineModel::moveClip(
+    std::size_t from_index,
+    std::size_t to_index) {
+    if (from_index >= clips_.size() || to_index >= clips_.size()) {
+        return MoveClipResult::InvalidIndex;
+    }
+    if (from_index == to_index) {
+        return MoveClipResult::NoChange;
+    }
+
+    if (from_index < to_index) {
+        std::rotate(
+            clips_.begin() + static_cast<std::ptrdiff_t>(from_index),
+            clips_.begin() + static_cast<std::ptrdiff_t>(from_index + 1),
+            clips_.begin() + static_cast<std::ptrdiff_t>(to_index + 1));
+    } else {
+        std::rotate(
+            clips_.begin() + static_cast<std::ptrdiff_t>(to_index),
+            clips_.begin() + static_cast<std::ptrdiff_t>(from_index),
+            clips_.begin() + static_cast<std::ptrdiff_t>(from_index + 1));
+    }
+
+    std::int64_t timeline_start_frame = 0;
+    for (auto& clip : clips_) {
+        clip.timeline_start_frame = timeline_start_frame;
+        timeline_start_frame += clip.timeline_duration_frames;
+    }
+
+    return MoveClipResult::Moved;
+}
+
 void TimelineModel::clear() noexcept {
     clips_.clear();
 }

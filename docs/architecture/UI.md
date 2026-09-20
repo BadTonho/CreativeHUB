@@ -23,3 +23,10 @@ services through explicit C++ interfaces.
 User-facing keyboard shortcuts are maintained separately in
 [`docs/SHORTCUTS.md`](../SHORTCUTS.md). Any shortcut change must update that
 document in the same change.
+
+The Timeline uses two distinct mouse gestures. Normal click-and-drag on the
+active clip seeks and decodes only when the mouse is released. `Alt + drag`
+reorders a clip in the single track; it gives visual movement feedback but does
+not seek or decode during the drag. The horizontal drop position is converted
+to a compact insertion order. `Ctrl + Left` and `Ctrl + Right` move the active
+clip one position while preserving the current Media Browser selection.

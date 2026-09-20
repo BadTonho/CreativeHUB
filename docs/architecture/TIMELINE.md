@@ -40,5 +40,16 @@ cancelled cooperatively and are not reported as errors.
 
 When timestamps or frame-rate information are not reliable, the session falls
 back to decoding from the beginning to preserve frame accuracy. Frame stepping
-crosses clip boundaries while remaining paused. Clip movement, cuts, multiple
-tracks, and project persistence remain future responsibilities.
+crosses clip boundaries while remaining paused.
+
+Clips can be reordered within the single track with `Alt + drag` or with
+`Ctrl + Left` and `Ctrl + Right` for the active clip. Reordering always keeps
+the track compact: clips are stored in vector order and every
+`timeline_start_frame` is recalculated so there are no overlaps or gaps. The
+operation does not move the active selection to another source. Playback is
+paused while the order changes, and the current preview and local frame are
+preserved. Normal dragging remains seeking for the active clip; moving does
+not decode frames during the drag.
+
+Cuts, deletion, multiple tracks, free positioning, audio, and project
+persistence remain future responsibilities.

@@ -45,6 +45,8 @@ private:
     void addSelectedMediaToTimeline();
     void handleMediaDrop(const QString& source_path);
     void clearTimeline();
+    void handleTimelineClipMove(qint64 from_index, qint64 to_index);
+    void moveActiveTimelineClip(int direction);
     void updateTimelineState();
     [[nodiscard]] bool hasSelectedMedia() const noexcept;
     [[nodiscard]] std::optional<std::size_t> selectedTimelineClipIndex() const noexcept;

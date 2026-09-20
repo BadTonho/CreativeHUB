@@ -26,9 +26,16 @@ enum class AddClipResult {
     InvalidTimingMetadata,
 };
 
+enum class MoveClipResult {
+    Moved,
+    NoChange,
+    InvalidIndex,
+};
+
 class TimelineModel final {
 public:
     AddClipResult addClip(const media::VideoMetadata& metadata);
+    MoveClipResult moveClip(std::size_t from_index, std::size_t to_index);
     void clear() noexcept;
 
     [[nodiscard]] bool hasClip() const noexcept;

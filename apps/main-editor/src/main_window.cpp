@@ -255,6 +255,22 @@ void MainWindow::createMenus() {
         sendPlaybackCommand("stepForward");
     });
     addAction(next_frame_action);
+
+    auto* move_left_action = new QAction(this);
+    move_left_action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Left));
+    move_left_action->setShortcutContext(Qt::WindowShortcut);
+    connect(move_left_action, &QAction::triggered, this, [this]() {
+        moveActiveTimelineClip(-1);
+    });
+    addAction(move_left_action);
+
+    auto* move_right_action = new QAction(this);
+    move_right_action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Right));
+    move_right_action->setShortcutContext(Qt::WindowShortcut);
+    connect(move_right_action, &QAction::triggered, this, [this]() {
+        moveActiveTimelineClip(1);
+    });
+    addAction(move_right_action);
 }
 
 QWidget* MainWindow::createMediaBrowser() {
@@ -339,6 +355,11 @@ QWidget* MainWindow::createTimeline() {
         &timeline::TimelineWidget::clipSelected,
         this,
         &MainWindow::handleTimelineClipSelected);
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::clipMoveRequested,
+        this,
+        &MainWindow::handleTimelineClipMove);
     connect(
         timeline_widget_,
         &timeline::TimelineWidget::seekStarted,
@@ -696,6 +717,89 @@ void MainWindow::clearTimeline() {
         updatePlaybackStatus();
     }
     statusBar()->showMessage("Timeline cleared.");
+}
+
+void MainWindow::handleTimelineClipMove(qint64 from_index, qint64 to_index) {
+    if (from_index < 0 || to_index < 0 ||
+        from_index >= static_cast<qint64>(timeline_model_.clipCount()) ||
+        to_index >= static_cast<qint64>(timeline_model_.clipCount()) ||
+        from_index == to_index) {
+        return;
+    }
+
+    const auto from = static_cast<std::size_t>(from_index);
+    const auto to = static_cast<std::size_t>(to_index);
+    const auto source_path = timeline_model_.clips()[from].source_path;
+
+    try {
+        pending_clip_activation_.reset();
+        ++playback_generation_;
+        playback_is_playing_ = false;
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_,
+                "stop",
+                Qt::QueuedConnection);
+        }
+
+        const auto result = timeline_model_.moveClip(from, to);
+        if (result == timeline::MoveClipResult::NoChange ||
+            result == timeline::MoveClipResult::InvalidIndex) {
+            return;
+        }
+
+        if (active_timeline_clip_index_.has_value()) {
+            const auto active = *active_timeline_clip_index_;
+            if (active == from) {
+                active_timeline_clip_index_ = to;
+            } else if (from < active && to >= active) {
+                active_timeline_clip_index_ = active - 1;
+            } else if (from > active && to <= active) {
+                active_timeline_clip_index_ = active + 1;
+            }
+        }
+
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        statusBar()->showMessage("Timeline clip moved.");
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "timeline",
+            "move_clip",
+            error.what(),
+            {{"from_index", std::to_string(from_index)},
+             {"to_index", std::to_string(to_index)},
+             {"path", pathToUtf8(source_path)}});
+        statusBar()->showMessage("Could not move the timeline clip.");
+        QMessageBox::warning(
+            this,
+            "Timeline error",
+            "The timeline clip could not be moved.");
+    }
+}
+
+void MainWindow::moveActiveTimelineClip(int direction) {
+    if (!active_timeline_clip_index_.has_value() ||
+        timeline_model_.clipCount() < 2) {
+        return;
+    }
+
+    const auto active = *active_timeline_clip_index_;
+    if (direction < 0) {
+        if (active == 0) return;
+        handleTimelineClipMove(
+            static_cast<qint64>(active),
+            static_cast<qint64>(active - 1));
+        return;
+    }
+
+    if (direction > 0 && active + 1 < timeline_model_.clipCount()) {
+        handleTimelineClipMove(
+            static_cast<qint64>(active),
+            static_cast<qint64>(active + 1));
+    }
 }
 
 void MainWindow::sendPlaybackCommand(const char* command) {
