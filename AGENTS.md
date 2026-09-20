@@ -151,6 +151,10 @@ Pay special attention to:
 - Create tests for the core and for boundaries between modules.
 - Use static analysis, sanitizers, fuzzing, and profiling when appropriate for the chosen technology.
 - Handle media errors, corrupted files, and resource shortages without unexpectedly terminating the application.
+- Every application and failure-prone module must maintain an actionable error log so problems can be diagnosed and corrected.
+- Error entries should include the timestamp, severity, subsystem, operation, human-readable cause, relevant error code, and useful context such as a file path or identifier when available.
+- User-facing error messages may remain concise, but the detailed cause must be written to the local log before or while the error is reported.
+- Logs must never contain passwords, tokens, private keys, or unnecessary sensitive personal data, and should support bounded size or rotation when persistent.
 - Consider automatic project recovery and autosave from an early stage.
 
 ## 9. Decision Process
