@@ -46,10 +46,15 @@ timeline, or rendering services through explicit C++ interfaces.
 
 ## Rendering boundary
 
-The Main Editor does not choose the final GPU backend or implement continuous
-playback. The first-frame preview is currently a temporary CPU path: the media
-layer owns decoded RGBA8 pixels and the Qt UI presents them through `QImage`
-and `QLabel`.
+The Main Editor does not choose the final GPU backend. The current preview and
+basic playback path is temporary CPU rendering: the media layer owns decoded
+RGBA8 pixels and the Qt UI presents them through `QImage` and `QLabel`.
+
+Playback timing and decoding are deliberately separated from the UI thread.
+The application layer owns a Qt `QThread` and a worker-owned `QTimer`; the
+worker emits owning shared frame payloads to the UI. The UI may copy a frame
+into a `QImage` for presentation, but it does not own the FFmpeg decoder
+resources or decode frames itself during playback.
 
 The future preview renderer must be introduced behind a project-owned C++
 interface. Media decoding, timeline state, frame ownership, and GPU resource
@@ -68,11 +73,19 @@ translates FFmpeg failures into `MediaError`. The Qt layer converts the
 metadata into display strings and remains responsible for dialogs and widgets.
 
 The media module now includes an application-local `VideoDecoder` that opens
-the selected stream, decodes only the first frame, and converts it to RGBA8
-with FFmpeg's `libswscale`. `VideoFrame` owns its pixel buffer through a
-standard C++ container, and the UI copies it into an owning `QImage` before
-displaying it. Continuous playback, frame seeking, thumbnails, asynchronous
-import, and GPU resources are reserved for later media modules.
+the selected stream, decodes the first frame, and converts it to RGBA8 with
+FFmpeg's `libswscale`. `VideoFrame` owns its pixel buffer through a standard
+C++ container, and the UI copies it into an owning `QImage` before displaying
+it.
+
+`VideoPlaybackSession` is the persistent, Qt-independent media boundary for
+sequential decoding, reset, end-of-file state, and previous-frame re-decoding.
+It owns the FFmpeg format context, codec context, packet, decoded frame, and
+RGBA conversion resources through RAII. The playback worker owns one session
+at a time and transfers each decoded frame as a shared owning payload; the
+session and its buffers are destroyed on the worker thread. This is a
+provisional CPU playback decision intended to validate correctness before a
+GPU renderer is selected.
 
 ## Logging boundary
 
@@ -107,6 +120,7 @@ chosen configuration.
 
 ## Current non-goals
 
-The current application does not implement continuous video playback, seeking,
-GPU preview, project persistence, timeline editing, audio, Motion Studio, or
-Rust code.
+The current application does not implement GPU preview, random seeking,
+thumbnails, project persistence, timeline editing, audio, Motion Studio, or
+Rust code. Previous-frame navigation currently re-decodes from the beginning
+inside the worker for correctness; it is not an optimized seeking system.

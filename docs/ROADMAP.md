@@ -59,9 +59,9 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Choose Qt 6 Widgets as the provisional UI, window, and input approach.
 - [ ] Define the rendering abstraction and CPU/GPU responsibilities.
 - [ ] Create the project and document model.
-- [-] Create the initial media import and management layer; metadata probing
-  and first-frame preview are implemented, while playback and library
-  management remain pending.
+- [-] Create the initial media import and management layer; metadata probing,
+  first-frame preview, and basic CPU playback are implemented, while seeking
+  and library management remain pending.
 - [ ] Create the basic file, autosave, recovery, undo, and redo systems.
 - [ ] Define the initial project format and document it.
 - [ ] Add automated tests for the core and module boundaries.
@@ -75,10 +75,13 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   pending.
 - [x] Display the first decoded video frame through the temporary CPU preview
   path, including manual UI confirmation.
+- [x] Add basic CPU playback with play/pause and previous/next frame controls;
+  manual validation confirmed pause and frame advancement; GPU playback,
+  optimized seeking, and timeline editing remain pending.
 - [ ] Create a functional timeline.
 - [ ] Support video, image, text, and audio clips.
 - [ ] Implement cutting, splitting, moving, and rearranging clips.
-- [ ] Add a real-time video preview.
+- [ ] Add a real-time GPU video preview.
 - [ ] Add basic audio editing and volume control.
 - [ ] Add basic layers, transformations, and keyframes.
 - [ ] Add basic text and captions.

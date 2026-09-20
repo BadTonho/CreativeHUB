@@ -1,0 +1,67 @@
+#pragma once
+
+#include "../media/video_playback.h"
+#include "../media/video_metadata.h"
+
+#include <QMetaType>
+#include <QObject>
+#include <QString>
+#include <QtGlobal>
+
+#include <cstdint>
+#include <exception>
+#include <filesystem>
+#include <memory>
+#include <optional>
+
+class QTimer;
+
+namespace playback {
+
+using VideoFramePtr = std::shared_ptr<const media::VideoFrame>;
+
+class PlaybackWorker final : public QObject {
+    Q_OBJECT
+
+public:
+    explicit PlaybackWorker(QObject* parent = nullptr);
+    ~PlaybackWorker() override;
+
+public slots:
+    void setMedia(QString source_path, double frame_rate, quint64 generation);
+    void play();
+    void pause();
+    void stop();
+    void stepForward();
+    void stepBackward();
+
+signals:
+    void frameReady(VideoFramePtr frame, qint64 frame_index, quint64 generation);
+    void playbackStateChanged(bool playing, quint64 generation);
+    void playbackFinished(quint64 generation);
+    void playbackError(QString message, quint64 generation);
+
+private slots:
+    void decodeTick();
+
+private:
+    bool ensureSessionAtCurrentFrame();
+    void ensureTimer();
+    void finishPlayback();
+    void emitFrame(std::optional<media::VideoFrame> frame);
+    void reportFailure(const media::MediaError& error, const char* operation);
+    void reportFailure(const std::exception& error, const char* operation);
+    [[nodiscard]] int frameIntervalMilliseconds() const noexcept;
+
+    QTimer* timer_ = nullptr;
+    std::unique_ptr<media::VideoPlaybackSession> session_;
+    std::filesystem::path source_path_;
+    double frame_rate_ = 30.0;
+    std::int64_t current_frame_index_ = 0;
+    quint64 generation_ = 0;
+    bool playing_ = false;
+};
+
+} // namespace playback
+
+Q_DECLARE_METATYPE(playback::VideoFramePtr)

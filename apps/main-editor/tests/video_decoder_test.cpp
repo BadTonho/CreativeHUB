@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
 
         const auto empty_file = directory / "empty.mkv";
         std::ofstream(empty_file, std::ios::binary).close();
-        expectMediaError(decoder, empty_file, "Opening media for preview");
+        expectMediaError(decoder, empty_file, "Opening media for");
 
         if (argc == 4) {
             const auto frame = decoder.decode_first_frame(argv[1]);

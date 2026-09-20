@@ -1,5 +1,7 @@
 include(GNUInstallDirs)
 
+set(CMAKE_AUTOMOC ON)
+
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Widgets)
 find_package(FFMPEG MODULE REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
 
@@ -9,12 +11,16 @@ add_executable(creative-suite-main-editor
     src/main_window.h
     src/preview_widget.cpp
     src/preview_widget.h
+    src/playback/playback_worker.cpp
+    src/playback/playback_worker.h
     src/logging/logger.cpp
     src/logging/logger.h
     src/media/video_decoder.cpp
     src/media/video_decoder.h
     src/media/video_frame.h
     src/media/video_metadata.h
+    src/media/video_playback.cpp
+    src/media/video_playback.h
     src/media/video_probe.cpp
     src/media/video_probe.h
 )

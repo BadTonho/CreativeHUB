@@ -1,0 +1,88 @@
+#include "media/video_metadata.h"
+#include "media/video_playback.h"
+
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+
+namespace {
+
+void require(bool condition, const std::string& message) {
+    if (!condition) throw std::runtime_error(message);
+}
+
+std::filesystem::path uniqueTestDirectory() {
+    const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+    return std::filesystem::temp_directory_path() /
+        ("creative-suite-video-playback-test-" + std::to_string(stamp));
+}
+
+void expectMediaError(const std::filesystem::path& path, const std::string& expected_text) {
+    try {
+        static_cast<void>(media::VideoPlaybackSession::open(path));
+    } catch (const media::MediaError& error) {
+        require(std::string(error.what()).find(expected_text) != std::string::npos,
+                "Unexpected media error: " + std::string(error.what()));
+        return;
+    }
+
+    throw std::runtime_error("Expected VideoPlaybackSession to reject the input.");
+}
+
+void validateReference(const std::filesystem::path& path) {
+    auto session = media::VideoPlaybackSession::open(path);
+    require(session->current_frame_index() == -1, "Session did not start before the first frame.");
+
+    const auto first = session->decode_next_frame();
+    require(first.has_value(), "The first frame was not decoded.");
+    require(first->width == 640 && first->height == 360, "Unexpected first frame dimensions.");
+    require(session->current_frame_index() == 0, "First frame index is incorrect.");
+
+    const auto second = session->decode_next_frame();
+    require(second.has_value(), "The second frame was not decoded.");
+    require(session->current_frame_index() == 1, "Second frame index is incorrect.");
+
+    const auto previous = session->decode_frame_at(0);
+    require(previous.has_value(), "The previous frame could not be decoded.");
+    require(session->current_frame_index() == 0, "Previous frame index is incorrect.");
+
+    session->reset();
+    require(session->current_frame_index() == -1, "Reset did not restore the initial index.");
+
+    std::size_t decoded_frames = 0;
+    while (session->decode_next_frame().has_value()) {
+        ++decoded_frames;
+    }
+    require(decoded_frames >= 2, "The session did not decode a complete sequence.");
+    require(session->at_end(), "The session did not report end-of-file.");
+    require(!session->decode_next_frame().has_value(), "Frames were decoded after end-of-file.");
+}
+
+} // namespace
+
+int main(int argc, char* argv[]) {
+    const auto directory = uniqueTestDirectory();
+
+    try {
+        std::filesystem::create_directories(directory);
+        expectMediaError(directory / "missing.mkv", "Input is not a readable regular file");
+
+        const auto empty_file = directory / "empty.mkv";
+        std::ofstream(empty_file, std::ios::binary).close();
+        expectMediaError(empty_file, "Opening media for playback");
+
+        if (argc == 2) validateReference(argv[1]);
+    } catch (const std::exception& error) {
+        std::error_code cleanup_error;
+        std::filesystem::remove_all(directory, cleanup_error);
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+
+    std::error_code cleanup_error;
+    std::filesystem::remove_all(directory, cleanup_error);
+    return cleanup_error ? 1 : 0;
+}

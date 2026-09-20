@@ -8,13 +8,17 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QDesktopServices>
+#include <QHBoxLayout>
+#include <QKeySequence>
 #include <QLabel>
 #include <QAbstractItemView>
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMetaObject>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QStatusBar>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -129,8 +133,13 @@ MainWindow::MainWindow(QWidget* parent)
 
     createWorkspace();
     createMenus();
+    initializePlayback();
 
     statusBar()->showMessage("Ready");
+}
+
+MainWindow::~MainWindow() {
+    shutdownPlayback();
 }
 
 void MainWindow::createWorkspace() {
@@ -152,7 +161,7 @@ void MainWindow::createWorkspace() {
     timeline_dock_ = createDock(
         "Timeline",
         "timelineDock",
-        createPlaceholder("Timeline", "Editing tracks and clips will appear here."));
+        createTimeline());
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
 }
 
@@ -218,6 +227,30 @@ void MainWindow::createMenus() {
             "Main Editor application shell\n\n"
             "This is an early open-source creative suite workspace.");
     });
+
+    auto* play_action = new QAction(this);
+    play_action->setShortcut(QKeySequence(Qt::Key_Space));
+    play_action->setShortcutContext(Qt::WindowShortcut);
+    connect(play_action, &QAction::triggered, this, [this]() {
+        sendPlaybackCommand(playback_is_playing_ ? "pause" : "play");
+    });
+    addAction(play_action);
+
+    auto* previous_frame_action = new QAction(this);
+    previous_frame_action->setShortcut(QKeySequence(Qt::Key_Left));
+    previous_frame_action->setShortcutContext(Qt::WindowShortcut);
+    connect(previous_frame_action, &QAction::triggered, this, [this]() {
+        sendPlaybackCommand("stepBackward");
+    });
+    addAction(previous_frame_action);
+
+    auto* next_frame_action = new QAction(this);
+    next_frame_action->setShortcut(QKeySequence(Qt::Key_Right));
+    next_frame_action->setShortcutContext(Qt::WindowShortcut);
+    connect(next_frame_action, &QAction::triggered, this, [this]() {
+        sendPlaybackCommand("stepForward");
+    });
+    addAction(next_frame_action);
 }
 
 QWidget* MainWindow::createMediaBrowser() {
@@ -243,6 +276,148 @@ QWidget* MainWindow::createMediaBrowser() {
     layout->addWidget(media_details_);
 
     return container;
+}
+
+QWidget* MainWindow::createTimeline() {
+    auto* container = new QWidget;
+    auto* layout = new QVBoxLayout(container);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(8);
+
+    auto* title = new QLabel("Timeline", container);
+    title->setStyleSheet("font-weight: 600; font-size: 14px;");
+    layout->addWidget(title);
+
+    auto* controls = new QHBoxLayout;
+    controls->setSpacing(6);
+
+    previous_frame_button_ = new QPushButton("Previous Frame", container);
+    play_pause_button_ = new QPushButton("Play", container);
+    next_frame_button_ = new QPushButton("Next Frame", container);
+    controls->addWidget(previous_frame_button_);
+    controls->addWidget(play_pause_button_);
+    controls->addWidget(next_frame_button_);
+    controls->addStretch();
+    layout->addLayout(controls);
+
+    playback_status_label_ = new QLabel("No media selected.", container);
+    playback_status_label_->setStyleSheet("color: #9aa4b2;");
+    layout->addWidget(playback_status_label_);
+    layout->addStretch();
+
+    connect(previous_frame_button_, &QPushButton::clicked, this, [this]() {
+        sendPlaybackCommand("stepBackward");
+    });
+    connect(play_pause_button_, &QPushButton::clicked, this, [this]() {
+        sendPlaybackCommand(playback_is_playing_ ? "pause" : "play");
+    });
+    connect(next_frame_button_, &QPushButton::clicked, this, [this]() {
+        sendPlaybackCommand("stepForward");
+    });
+
+    updatePlaybackControls();
+    return container;
+}
+
+void MainWindow::initializePlayback() {
+    qRegisterMetaType<playback::VideoFramePtr>();
+
+    playback_worker_ = new playback::PlaybackWorker;
+    playback_worker_->moveToThread(&playback_thread_);
+
+    connect(
+        &playback_thread_,
+        &QThread::finished,
+        playback_worker_,
+        &QObject::deleteLater);
+    connect(
+        playback_worker_,
+        &playback::PlaybackWorker::frameReady,
+        this,
+        [this](playback::VideoFramePtr frame, qint64 frame_index, quint64 generation) {
+            handlePlaybackFrame(std::move(frame), frame_index, generation);
+        },
+        Qt::QueuedConnection);
+    connect(
+        playback_worker_,
+        &playback::PlaybackWorker::playbackStateChanged,
+        this,
+        [this](bool playing, quint64 generation) {
+            handlePlaybackStateChanged(playing, generation);
+        },
+        Qt::QueuedConnection);
+    connect(
+        playback_worker_,
+        &playback::PlaybackWorker::playbackFinished,
+        this,
+        [this](quint64 generation) { handlePlaybackFinished(generation); },
+        Qt::QueuedConnection);
+    connect(
+        playback_worker_,
+        &playback::PlaybackWorker::playbackError,
+        this,
+        [this](const QString& message, quint64 generation) {
+            handlePlaybackError(message, generation);
+        },
+        Qt::QueuedConnection);
+
+    playback_thread_.start();
+}
+
+void MainWindow::shutdownPlayback() {
+    if (playback_worker_ == nullptr) return;
+
+    if (playback_thread_.isRunning()) {
+        QMetaObject::invokeMethod(
+            playback_worker_,
+            "stop",
+            Qt::BlockingQueuedConnection);
+        playback_thread_.quit();
+        playback_thread_.wait();
+    }
+    playback_worker_ = nullptr;
+}
+
+void MainWindow::sendPlaybackCommand(const char* command) {
+    if (playback_worker_ == nullptr || media_list_ == nullptr ||
+        media_list_->currentRow() < 0) {
+        return;
+    }
+
+    QMetaObject::invokeMethod(playback_worker_, command, Qt::QueuedConnection);
+}
+
+void MainWindow::updatePlaybackControls() {
+    const bool has_media = media_list_ != nullptr &&
+        media_list_->currentRow() >= 0 &&
+        media_list_->currentRow() < static_cast<int>(media_items_.size());
+    if (previous_frame_button_ != nullptr) previous_frame_button_->setEnabled(has_media);
+    if (play_pause_button_ != nullptr) play_pause_button_->setEnabled(has_media);
+    if (next_frame_button_ != nullptr) next_frame_button_->setEnabled(has_media);
+    if (play_pause_button_ != nullptr) {
+        play_pause_button_->setText(playback_is_playing_ ? "Pause" : "Play");
+    }
+}
+
+void MainWindow::updatePlaybackStatus() {
+    if (playback_status_label_ == nullptr) return;
+
+    const int row = media_list_ != nullptr ? media_list_->currentRow() : -1;
+    if (row < 0 || row >= static_cast<int>(media_items_.size())) {
+        playback_status_label_->setText("No media selected.");
+        return;
+    }
+
+    const auto& metadata = media_items_[static_cast<size_t>(row)].metadata;
+    const QString total = metadata.frame_count.has_value()
+        ? QString::number(*metadata.frame_count)
+        : "?";
+    const QString state = playback_is_playing_ ? "Playing" : "Paused";
+    playback_status_label_->setText(
+        QString("%1 - Frame %2 / %3")
+            .arg(state)
+            .arg(playback_frame_index_ + 1)
+            .arg(total));
 }
 
 void MainWindow::openMedia() {
@@ -307,15 +482,38 @@ void MainWindow::openMedia() {
 }
 
 void MainWindow::updateMediaDetails(int row) {
+    ++playback_generation_;
+    if (playback_worker_ != nullptr) {
+        QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
+    }
+    playback_is_playing_ = false;
+    playback_frame_index_ = 0;
+
     if (row < 0 || row >= static_cast<int>(media_items_.size())) {
         media_details_->setText("No media imported.");
         preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
+        updatePlaybackControls();
+        updatePlaybackStatus();
         return;
     }
 
     const auto& item = media_items_[static_cast<size_t>(row)];
     media_details_->setText(mediaDetailsText(item.metadata));
     preview_widget_->setFrame(item.first_frame);
+    updatePlaybackControls();
+    updatePlaybackStatus();
+
+    if (playback_worker_ != nullptr) {
+        const QString source_path = fromUtf8(pathToUtf8(item.metadata.source_path));
+        const double frame_rate = item.metadata.frame_rate.value_or(30.0);
+        QMetaObject::invokeMethod(
+            playback_worker_,
+            "setMedia",
+            Qt::QueuedConnection,
+            Q_ARG(QString, source_path),
+            Q_ARG(double, frame_rate),
+            Q_ARG(quint64, playback_generation_));
+    }
 }
 
 void MainWindow::addMediaItem(media::VideoMetadata metadata, media::VideoFrame first_frame) {
@@ -325,6 +523,46 @@ void MainWindow::addMediaItem(media::VideoMetadata metadata, media::VideoFrame f
     auto* list_item = new QListWidgetItem(mediaListText(item.metadata), media_list_);
     list_item->setToolTip(fromUtf8(pathToUtf8(item.metadata.source_path)));
     media_list_->setCurrentItem(list_item);
+}
+
+void MainWindow::handlePlaybackFrame(
+    playback::VideoFramePtr frame,
+    qint64 frame_index,
+    quint64 generation) {
+    if (generation != playback_generation_ || frame == nullptr) return;
+
+    playback_frame_index_ = frame_index;
+    preview_widget_->setFrame(*frame);
+    updatePlaybackStatus();
+}
+
+void MainWindow::handlePlaybackStateChanged(bool playing, quint64 generation) {
+    if (generation != playback_generation_) return;
+
+    playback_is_playing_ = playing;
+    updatePlaybackControls();
+    updatePlaybackStatus();
+}
+
+void MainWindow::handlePlaybackFinished(quint64 generation) {
+    if (generation != playback_generation_) return;
+
+    playback_is_playing_ = false;
+    updatePlaybackControls();
+    if (playback_status_label_ != nullptr) {
+        playback_status_label_->setText("End of media.");
+    }
+}
+
+void MainWindow::handlePlaybackError(const QString& message, quint64 generation) {
+    if (generation != playback_generation_) return;
+
+    playback_is_playing_ = false;
+    updatePlaybackControls();
+    if (playback_status_label_ != nullptr) {
+        playback_status_label_->setText("Playback error.");
+    }
+    QMessageBox::warning(this, "Playback error", message);
 }
 
 void MainWindow::restoreDefaultLayout() {
