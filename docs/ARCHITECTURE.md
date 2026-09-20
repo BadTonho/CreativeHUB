@@ -87,6 +87,25 @@ session and its buffers are destroyed on the worker thread. This is a
 provisional CPU playback decision intended to validate correctness before a
 GPU renderer is selected.
 
+## Timeline boundary
+
+The first timeline implementation is application-local under
+`apps/main-editor/src/timeline/`. `TimelineModel` uses standard C++ types and
+stores at most one `TimelineClip` with its canonical source path and media
+metadata. It does not own decoded frames, FFmpeg resources, or Qt objects.
+
+The Qt-only `TimelineWidget` renders one video track, the clip label, duration,
+and a playhead derived from the current decoded frame. Media is added through
+an explicit UI action, and the model rejects duplicate or second clips until
+the timeline is cleared. The widget intentionally consumes mouse clicks
+without seeking; random seeking, multiple tracks, clip editing, and project
+persistence remain future responsibilities.
+
+When a timeline clip exists, playback is enabled only while its media is
+selected. Selecting another imported item stops playback and preserves the
+timeline clip, preventing the preview and the visual sequence from silently
+referring to different sources.
+
 ## Logging boundary
 
 The Main Editor owns the first application-local logger under
@@ -121,6 +140,7 @@ chosen configuration.
 ## Current non-goals
 
 The current application does not implement GPU preview, random seeking,
-thumbnails, project persistence, timeline editing, audio, Motion Studio, or
-Rust code. Previous-frame navigation currently re-decodes from the beginning
-inside the worker for correctness; it is not an optimized seeking system.
+thumbnails, full timeline editing, multiple tracks, project persistence,
+audio, Motion Studio, or Rust code. Previous-frame navigation currently
+re-decodes from the beginning inside the worker for correctness; it is not an
+optimized seeking system.

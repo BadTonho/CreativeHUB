@@ -4,6 +4,7 @@
 #include "media/video_metadata.h"
 #include "media/video_probe.h"
 #include "playback/playback_worker.h"
+#include "timeline/timeline_model.h"
 
 #include <QMainWindow>
 #include <QThread>
@@ -18,6 +19,10 @@ class QListWidget;
 class QPushButton;
 class PreviewWidget;
 class QWidget;
+
+namespace timeline {
+class TimelineWidget;
+}
 
 class MainWindow final : public QMainWindow {
 public:
@@ -35,6 +40,12 @@ private:
     void openMedia();
     void updateMediaDetails(int row);
     void addMediaItem(media::VideoMetadata metadata, media::VideoFrame first_frame);
+    void addSelectedMediaToTimeline();
+    void clearTimeline();
+    void updateTimelineState();
+    [[nodiscard]] bool hasSelectedMedia() const noexcept;
+    [[nodiscard]] bool selectedMediaMatchesTimeline() const noexcept;
+    [[nodiscard]] bool canPreviewSelectedMedia() const noexcept;
     void sendPlaybackCommand(const char* command);
     void updatePlaybackControls();
     void updatePlaybackStatus();
@@ -57,11 +68,15 @@ private:
     PreviewWidget* preview_widget_ = nullptr;
     QListWidget* media_list_ = nullptr;
     QLabel* media_details_ = nullptr;
+    QPushButton* add_to_timeline_button_ = nullptr;
     QPushButton* previous_frame_button_ = nullptr;
     QPushButton* play_pause_button_ = nullptr;
     QPushButton* next_frame_button_ = nullptr;
+    QPushButton* clear_timeline_button_ = nullptr;
     QLabel* playback_status_label_ = nullptr;
+    timeline::TimelineWidget* timeline_widget_ = nullptr;
     std::vector<ImportedMedia> media_items_;
+    timeline::TimelineModel timeline_model_;
     media::VideoProbe video_probe_;
     media::VideoDecoder video_decoder_;
     QThread playback_thread_;

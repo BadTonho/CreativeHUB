@@ -78,7 +78,9 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Add basic CPU playback with play/pause and previous/next frame controls;
   manual validation confirmed pause and frame advancement; GPU playback,
   optimized seeking, and timeline editing remain pending.
-- [ ] Create a functional timeline.
+- [x] Add the first visual timeline milestone with one manually added clip and
+  one video track; seeking, multiple tracks, and clip editing remain pending.
+- [ ] Create a full functional timeline with seeking and editing.
 - [ ] Support video, image, text, and audio clips.
 - [ ] Implement cutting, splitting, moving, and rearranging clips.
 - [ ] Add a real-time GPU video preview.

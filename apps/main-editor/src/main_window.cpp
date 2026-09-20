@@ -2,6 +2,7 @@
 
 #include "logging/logger.h"
 #include "preview_widget.h"
+#include "timeline/timeline_widget.h"
 
 #include <QAction>
 #include <QDockWidget>
@@ -275,6 +276,14 @@ QWidget* MainWindow::createMediaBrowser() {
     media_details_->setStyleSheet("color: #9aa4b2;");
     layout->addWidget(media_details_);
 
+    add_to_timeline_button_ = new QPushButton("Add to Timeline", container);
+    connect(add_to_timeline_button_, &QPushButton::clicked, this, [this]() {
+        addSelectedMediaToTimeline();
+    });
+    layout->addWidget(add_to_timeline_button_);
+
+    updateTimelineState();
+
     return container;
 }
 
@@ -294,11 +303,16 @@ QWidget* MainWindow::createTimeline() {
     previous_frame_button_ = new QPushButton("Previous Frame", container);
     play_pause_button_ = new QPushButton("Play", container);
     next_frame_button_ = new QPushButton("Next Frame", container);
+    clear_timeline_button_ = new QPushButton("Clear Timeline", container);
     controls->addWidget(previous_frame_button_);
     controls->addWidget(play_pause_button_);
     controls->addWidget(next_frame_button_);
+    controls->addWidget(clear_timeline_button_);
     controls->addStretch();
     layout->addLayout(controls);
+
+    timeline_widget_ = new timeline::TimelineWidget(container);
+    layout->addWidget(timeline_widget_);
 
     playback_status_label_ = new QLabel("No media selected.", container);
     playback_status_label_->setStyleSheet("color: #9aa4b2;");
@@ -314,7 +328,11 @@ QWidget* MainWindow::createTimeline() {
     connect(next_frame_button_, &QPushButton::clicked, this, [this]() {
         sendPlaybackCommand("stepForward");
     });
+    connect(clear_timeline_button_, &QPushButton::clicked, this, [this]() {
+        clearTimeline();
+    });
 
+    updateTimelineState();
     updatePlaybackControls();
     return container;
 }
@@ -378,9 +396,88 @@ void MainWindow::shutdownPlayback() {
     playback_worker_ = nullptr;
 }
 
+bool MainWindow::hasSelectedMedia() const noexcept {
+    return media_list_ != nullptr &&
+        media_list_->currentRow() >= 0 &&
+        media_list_->currentRow() < static_cast<int>(media_items_.size());
+}
+
+bool MainWindow::selectedMediaMatchesTimeline() const noexcept {
+    if (!hasSelectedMedia() || !timeline_model_.hasClip()) return false;
+    const auto* clip = timeline_model_.clip();
+    const auto& selected = media_items_[static_cast<size_t>(media_list_->currentRow())];
+    return clip != nullptr && clip->source_path == selected.metadata.source_path;
+}
+
+bool MainWindow::canPreviewSelectedMedia() const noexcept {
+    return hasSelectedMedia() &&
+        (!timeline_model_.hasClip() || selectedMediaMatchesTimeline());
+}
+
+void MainWindow::updateTimelineState() {
+    const bool selected = hasSelectedMedia();
+    const bool occupied = timeline_model_.hasClip();
+    const bool selected_is_clip = selectedMediaMatchesTimeline();
+
+    if (add_to_timeline_button_ != nullptr) {
+        add_to_timeline_button_->setEnabled(selected && !occupied);
+        if (!occupied) {
+            add_to_timeline_button_->setText("Add to Timeline");
+        } else if (selected_is_clip) {
+            add_to_timeline_button_->setText("Already in Timeline");
+        } else {
+            add_to_timeline_button_->setText("Clear Timeline to Add");
+        }
+    }
+
+    if (clear_timeline_button_ != nullptr) {
+        clear_timeline_button_->setEnabled(occupied);
+    }
+
+    if (timeline_widget_ != nullptr) {
+        timeline_widget_->setClip(timeline_model_.clip());
+        timeline_widget_->setPlayheadFrame(playback_frame_index_);
+    }
+}
+
+void MainWindow::addSelectedMediaToTimeline() {
+    if (!hasSelectedMedia()) return;
+
+    const auto& selected = media_items_[static_cast<size_t>(media_list_->currentRow())];
+    switch (timeline_model_.addClip(selected.metadata)) {
+    case timeline::AddClipResult::Added:
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        statusBar()->showMessage("Media added to the timeline.");
+        break;
+    case timeline::AddClipResult::AlreadyPresent:
+        statusBar()->showMessage("Media is already in the timeline.");
+        break;
+    case timeline::AddClipResult::Occupied:
+        statusBar()->showMessage("Clear the timeline before adding another media item.");
+        break;
+    }
+}
+
+void MainWindow::clearTimeline() {
+    if (!timeline_model_.hasClip()) return;
+
+    timeline_model_.clear();
+    const int selected_row = media_list_ != nullptr ? media_list_->currentRow() : -1;
+    if (selected_row >= 0) {
+        updateMediaDetails(selected_row);
+    } else {
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+    }
+    statusBar()->showMessage("Timeline cleared.");
+}
+
 void MainWindow::sendPlaybackCommand(const char* command) {
     if (playback_worker_ == nullptr || media_list_ == nullptr ||
-        media_list_->currentRow() < 0) {
+        !canPreviewSelectedMedia()) {
         return;
     }
 
@@ -388,9 +485,7 @@ void MainWindow::sendPlaybackCommand(const char* command) {
 }
 
 void MainWindow::updatePlaybackControls() {
-    const bool has_media = media_list_ != nullptr &&
-        media_list_->currentRow() >= 0 &&
-        media_list_->currentRow() < static_cast<int>(media_items_.size());
+    const bool has_media = canPreviewSelectedMedia();
     if (previous_frame_button_ != nullptr) previous_frame_button_->setEnabled(has_media);
     if (play_pause_button_ != nullptr) play_pause_button_->setEnabled(has_media);
     if (next_frame_button_ != nullptr) next_frame_button_->setEnabled(has_media);
@@ -405,6 +500,11 @@ void MainWindow::updatePlaybackStatus() {
     const int row = media_list_ != nullptr ? media_list_->currentRow() : -1;
     if (row < 0 || row >= static_cast<int>(media_items_.size())) {
         playback_status_label_->setText("No media selected.");
+        return;
+    }
+
+    if (!canPreviewSelectedMedia()) {
+        playback_status_label_->setText("Select the timeline media to play.");
         return;
     }
 
@@ -492,6 +592,7 @@ void MainWindow::updateMediaDetails(int row) {
     if (row < 0 || row >= static_cast<int>(media_items_.size())) {
         media_details_->setText("No media imported.");
         preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
+        updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
         return;
@@ -500,10 +601,11 @@ void MainWindow::updateMediaDetails(int row) {
     const auto& item = media_items_[static_cast<size_t>(row)];
     media_details_->setText(mediaDetailsText(item.metadata));
     preview_widget_->setFrame(item.first_frame);
+    updateTimelineState();
     updatePlaybackControls();
     updatePlaybackStatus();
 
-    if (playback_worker_ != nullptr) {
+    if (playback_worker_ != nullptr && canPreviewSelectedMedia()) {
         const QString source_path = fromUtf8(pathToUtf8(item.metadata.source_path));
         const double frame_rate = item.metadata.frame_rate.value_or(30.0);
         QMetaObject::invokeMethod(
@@ -533,6 +635,9 @@ void MainWindow::handlePlaybackFrame(
 
     playback_frame_index_ = frame_index;
     preview_widget_->setFrame(*frame);
+    if (timeline_widget_ != nullptr && selectedMediaMatchesTimeline()) {
+        timeline_widget_->setPlayheadFrame(frame_index);
+    }
     updatePlaybackStatus();
 }
 

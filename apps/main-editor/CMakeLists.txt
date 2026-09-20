@@ -23,6 +23,10 @@ add_executable(creative-suite-main-editor
     src/media/video_playback.h
     src/media/video_probe.cpp
     src/media/video_probe.h
+    src/timeline/timeline_model.cpp
+    src/timeline/timeline_model.h
+    src/timeline/timeline_widget.cpp
+    src/timeline/timeline_widget.h
 )
 
 target_link_libraries(creative-suite-main-editor PRIVATE

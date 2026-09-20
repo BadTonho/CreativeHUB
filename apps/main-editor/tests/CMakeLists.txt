@@ -140,3 +140,27 @@ if(EXISTS "${REFERENCE_VIDEO}")
         COMMAND creative-suite-main-editor-video-playback-tests "${REFERENCE_VIDEO}"
     )
 endif()
+
+add_executable(creative-suite-main-editor-timeline-tests
+    timeline_model_test.cpp
+    ../src/media/video_metadata.h
+    ../src/timeline/timeline_model.cpp
+    ../src/timeline/timeline_model.h
+)
+
+target_include_directories(creative-suite-main-editor-timeline-tests PRIVATE
+    ../src
+)
+
+target_compile_features(creative-suite-main-editor-timeline-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-timeline-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-timeline-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-timeline
+    COMMAND creative-suite-main-editor-timeline-tests
+)
