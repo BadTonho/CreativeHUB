@@ -76,3 +76,9 @@ keyframe markers are visual and not draggable in this milestone.
 The preview composes all visible tracks in worker-owned code, from the bottom
 track to the top track, before handing one frame to the GPU/CPU preview. A gap
 or an empty canvas is not an error and uses the dark preview background.
+
+The `MainWindow` coordinator is implemented in responsibility-focused
+translation units under `apps/main-editor/src/main_window/`. Workspace,
+project, Media Browser, Timeline, playback, and Inspector construction and
+coordination remain part of the same window class; this organization does not
+introduce additional controllers or change ownership.

@@ -17,6 +17,14 @@ add_executable(creative-suite-main-editor
     src/main.cpp
     src/main_window.cpp
     src/main_window.h
+    src/main_window/main_window_support.cpp
+    src/main_window/main_window_support.h
+    src/main_window/main_window_workspace.cpp
+    src/main_window/main_window_project.cpp
+    src/main_window/main_window_media.cpp
+    src/main_window/main_window_timeline.cpp
+    src/main_window/main_window_playback.cpp
+    src/main_window/main_window_inspector.cpp
     src/preview_widget.cpp
     src/preview_widget.h
     src/rendering/opengl_preview_surface.cpp
