@@ -89,11 +89,11 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   manual UI validation passed. Operating-system file drops and drop positioning
   remain pending.
 - [x] Add the multi-clip Timeline foundation with sequential placement and
-  continuous playback on one track; basic compact clip movement is in manual
-  validation, while cuts and editing remain pending.
-- [-] Add basic compact single-track clip reordering with `Alt + drag` and
-  `Ctrl + Left`/`Ctrl + Right`; automated coverage passes, with manual UI
-  validation still pending.
+  continuous playback on one track; basic compact clip movement is complete,
+  while cuts and editing remain pending.
+- [x] Add basic compact single-track clip reordering with `Alt + drag` and
+  `Ctrl + Left`/`Ctrl + Right`; manual validation confirmed selection, preview,
+  and playback synchronization.
 - [ ] Create a full functional timeline with editing.
 - [ ] Support video, image, text, and audio clips.
 - [ ] Implement cutting, splitting, and deletion of clips.
