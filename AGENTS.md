@@ -189,6 +189,9 @@ Important decisions must be recorded in the documentation, indicating whether th
 - Do not delete, reset, or overwrite existing work without explicit authorization.
 - Update the documentation whenever an architectural decision is made.
 - Keep all project documentation up to date with the current implementation, architecture, behavior, and decisions. Update the relevant documentation in the same change whenever the documented state changes.
+- Document every user-facing keyboard shortcut in `docs/SHORTCUTS.md` and
+  update that file in the same change whenever a shortcut is added, removed, or
+  changed.
 - Do not turn a conversation or hypothesis into code unless requested.
 - Use temporary names while the product identity has not been defined.
 
