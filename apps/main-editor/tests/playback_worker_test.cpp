@@ -7,6 +7,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -107,6 +108,43 @@ void validateReference(QCoreApplication& application, const std::filesystem::pat
     require(ready_count == 2, "Reactivating media did not emit mediaReady again.");
 }
 
+void validateSeekCoalescing(QCoreApplication& application, const std::filesystem::path& path) {
+    playback::PlaybackWorker worker;
+    std::vector<qint64> received_frames;
+    bool received_error = false;
+
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&received_frames](playback::VideoFramePtr frame, qint64 frame_index, quint64) {
+            require(frame != nullptr, "Coalesced seek emitted an empty frame payload.");
+            received_frames.push_back(frame_index);
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&received_error](const QString&, qint64, quint64) {
+            received_error = true;
+        });
+
+    worker.setMedia(toQString(path), 30.0, 20);
+    worker.requestSeek(10, 21);
+    worker.requestSeek(40, 22);
+    worker.requestSeek(90, 23);
+
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&timeout, &QTimer::timeout, &application, &QCoreApplication::quit);
+    timeout.start(1000);
+    application.exec();
+
+    require(!received_error, "Coalesced seeks produced a playback error.");
+    require(received_frames.size() == 1,
+            "Obsolete seek requests were not coalesced.");
+    require(received_frames.front() == 90,
+            "The worker did not emit the newest seek request.");
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -116,6 +154,7 @@ int main(int argc, char* argv[]) {
         validateMissingMedia(application);
         if (argc == 2) {
             validateReference(application, std::filesystem::path(argv[1]));
+            validateSeekCoalescing(application, std::filesystem::path(argv[1]));
         }
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

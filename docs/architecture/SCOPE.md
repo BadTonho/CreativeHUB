@@ -17,7 +17,6 @@ The current Main Editor includes:
 The current application does not implement:
 
 - GPU preview or GPU playback;
-- optimized random seeking or frame caching;
 - thumbnails;
 - full timeline editing;
 - multiple tracks;
@@ -27,5 +26,6 @@ The current application does not implement:
 - Motion Studio;
 - Rust integration.
 
-Previous-frame navigation currently re-decodes from the beginning inside the
-worker for correctness; it is not an optimized seeking system.
+Random seeking uses FFmpeg keyframe navigation with a bounded recent-frame
+cache. Streams without reliable temporal metadata fall back to decoding from
+the beginning for correctness. Global timeline seeking is not implemented.

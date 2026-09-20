@@ -45,11 +45,11 @@ void validateReference(const std::filesystem::path& path) {
     require(second.has_value(), "The second frame was not decoded.");
     require(session->current_frame_index() == 1, "Second frame index is incorrect.");
 
-    const auto previous = session->decode_frame_at(0);
-    require(previous.has_value(), "The previous frame could not be decoded.");
+    const auto first_seek = session->decode_frame_at(0);
+    require(first_seek.has_value(), "Seeking to the first frame failed.");
     require(session->current_frame_index() == 0, "Previous frame index is incorrect.");
-    require(previous->width == 640 && previous->height == 360,
-            "The previous frame dimensions are incorrect.");
+    require(first_seek->width == 640 && first_seek->height == 360,
+            "The first seek frame dimensions are incorrect.");
 
     const auto intermediate = session->decode_frame_at(30);
     require(intermediate.has_value(), "The intermediate frame could not be decoded.");
@@ -57,20 +57,52 @@ void validateReference(const std::filesystem::path& path) {
     require(intermediate->width == 640 && intermediate->height == 360,
             "The intermediate frame dimensions are incorrect.");
 
+    const auto after_intermediate = session->decode_next_frame();
+    require(after_intermediate.has_value(), "Decoding did not continue after seeking.");
+    require(session->current_frame_index() == 31,
+            "The frame after an intermediate seek has the wrong index.");
+
+    bool negative_seek_rejected = false;
+    try {
+        static_cast<void>(session->decode_frame_at(-1));
+    } catch (const media::MediaError& error) {
+        require(std::string(error.what()).find("negative") != std::string::npos,
+                "Unexpected negative seek error.");
+        negative_seek_rejected = true;
+    }
+    require(negative_seek_rejected, "Negative seek was not rejected.");
+
+    session->reset();
+    std::int64_t final_frame_index = -1;
+    std::size_t decoded_frames = 0;
+    while (const auto frame = session->decode_next_frame()) {
+        require(frame->width == 640 && frame->height == 360,
+                "A sequential frame has unexpected dimensions.");
+        final_frame_index = session->current_frame_index();
+        ++decoded_frames;
+    }
+    require(decoded_frames >= 2, "The session did not decode a complete sequence.");
+    require(final_frame_index >= 0, "The reference video has no final frame.");
+    require(session->at_end(), "The session did not report end-of-file.");
+
+    session->reset();
+    const auto final_frame = session->decode_frame_at(final_frame_index);
+    require(final_frame.has_value(), "Seeking to the final frame failed.");
+    require(session->current_frame_index() == final_frame_index,
+            "Final seek frame index is incorrect.");
+    require(final_frame->width == 640 && final_frame->height == 360,
+            "The final seek frame dimensions are incorrect.");
+
+    const auto after_final = session->decode_next_frame();
+    require(!after_final.has_value(), "A frame was decoded after the final frame.");
+    require(session->at_end(), "The final-frame seek did not reach end-of-file.");
+
     const auto outside_range = session->decode_frame_at(10000);
     require(!outside_range.has_value(), "An out-of-range frame was decoded.");
     require(session->at_end(), "Out-of-range seeking did not reach end-of-file.");
 
     session->reset();
     require(session->current_frame_index() == -1, "Reset did not restore the initial index.");
-
-    std::size_t decoded_frames = 0;
-    while (session->decode_next_frame().has_value()) {
-        ++decoded_frames;
-    }
-    require(decoded_frames >= 2, "The session did not decode a complete sequence.");
-    require(session->at_end(), "The session did not report end-of-file.");
-    require(!session->decode_next_frame().has_value(), "Frames were decoded after end-of-file.");
 }
 
 } // namespace

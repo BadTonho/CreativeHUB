@@ -3,6 +3,7 @@
 #include "../logging/logger.h"
 
 #include <QFileInfo>
+#include <QMetaObject>
 #include <QTimer>
 
 #include <algorithm>
@@ -15,6 +16,7 @@ namespace playback {
 namespace {
 
 constexpr double default_frame_rate = 30.0;
+constexpr qint64 no_pending_seek = std::numeric_limits<qint64>::min();
 
 std::string pathToUtf8(const std::filesystem::path& path) {
     const auto value = path.u8string();
@@ -39,7 +41,24 @@ PlaybackWorker::~PlaybackWorker() {
     session_.reset();
 }
 
+void PlaybackWorker::requestSeek(qint64 frame_index, quint64 generation) {
+    pending_seek_frame_.store(frame_index, std::memory_order_relaxed);
+    pending_seek_generation_.store(generation, std::memory_order_relaxed);
+    pending_seek_sequence_.fetch_add(1, std::memory_order_release);
+
+    if (!seek_dispatch_scheduled_.exchange(true, std::memory_order_acq_rel)) {
+        QMetaObject::invokeMethod(
+            this,
+            "processPendingSeek",
+            Qt::QueuedConnection);
+    }
+}
+
 void PlaybackWorker::setMedia(QString source_path, double frame_rate, quint64 generation) {
+    pending_seek_frame_.store(no_pending_seek, std::memory_order_relaxed);
+    pending_seek_generation_.store(generation, std::memory_order_relaxed);
+    pending_seek_sequence_.fetch_add(1, std::memory_order_release);
+
     if (timer_ != nullptr) timer_->stop();
     if (playing_) {
         playing_ = false;
@@ -137,27 +156,60 @@ void PlaybackWorker::stepBackward() {
 }
 
 void PlaybackWorker::seekToFrame(qint64 frame_index, quint64 generation) {
-    generation_ = generation;
-    pause();
+    requestSeek(frame_index, generation);
+}
 
-    try {
-        if (frame_index < 0) {
-            throw media::MediaError("The requested frame index is negative.");
+void PlaybackWorker::processPendingSeek() {
+    while (true) {
+        const auto sequence = pending_seek_sequence_.load(std::memory_order_acquire);
+        const auto frame_index = pending_seek_frame_.load(std::memory_order_relaxed);
+        const auto generation = pending_seek_generation_.load(std::memory_order_relaxed);
+        if (frame_index == no_pending_seek) {
+            seek_dispatch_scheduled_.store(false, std::memory_order_release);
+            if (pending_seek_frame_.load(std::memory_order_relaxed) != no_pending_seek &&
+                !seek_dispatch_scheduled_.exchange(true, std::memory_order_acq_rel)) {
+                continue;
+            }
+            return;
         }
-        if (source_path_.empty()) {
-            throw media::MediaError("Cannot seek without selected media.");
-        }
-        if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
+        generation_ = generation;
+        pause();
 
-        auto frame = session_->decode_frame_at(frame_index);
-        if (!frame.has_value()) {
-            throw media::MediaError("The requested frame is outside the media range.");
+        const auto seek_is_current = [this, sequence]() {
+            return !isSeekCurrent(sequence);
+        };
+
+        try {
+            if (frame_index < 0) {
+                throw media::MediaError("The requested frame index is negative.");
+            }
+            if (source_path_.empty()) {
+                throw media::MediaError("Cannot seek without selected media.");
+            }
+            if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
+
+            auto frame = session_->decode_frame_at(frame_index, seek_is_current);
+            if (!isSeekCurrent(sequence)) continue;
+            if (!frame.has_value()) {
+                throw media::MediaError("The requested frame is outside the media range.");
+            }
+            emitFrame(std::move(frame));
+        } catch (const media::MediaError& error) {
+            if (!isSeekCurrent(sequence)) continue;
+            reportFailure(error, "seek", frame_index);
+        } catch (const std::exception& error) {
+            if (!isSeekCurrent(sequence)) continue;
+            reportFailure(error, "seek", frame_index);
         }
-        emitFrame(std::move(frame));
-    } catch (const media::MediaError& error) {
-        reportFailure(error, "seek", frame_index);
-    } catch (const std::exception& error) {
-        reportFailure(error, "seek", frame_index);
+
+        if (isSeekCurrent(sequence)) {
+            seek_dispatch_scheduled_.store(false, std::memory_order_release);
+            if (pending_seek_sequence_.load(std::memory_order_acquire) != sequence &&
+                !seek_dispatch_scheduled_.exchange(true, std::memory_order_acq_rel)) {
+                continue;
+            }
+            return;
+        }
     }
 }
 
@@ -179,6 +231,10 @@ void PlaybackWorker::decodeTick() {
     } catch (const std::exception& error) {
         reportFailure(error, "decode_tick");
     }
+}
+
+bool PlaybackWorker::isSeekCurrent(quint64 sequence) const noexcept {
+    return pending_seek_sequence_.load(std::memory_order_acquire) == sequence;
 }
 
 bool PlaybackWorker::ensureSessionAtCurrentFrame() {

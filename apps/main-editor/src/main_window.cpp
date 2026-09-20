@@ -933,12 +933,9 @@ void MainWindow::handlePlaybackMediaReady(quint64 generation) {
 
     const auto pending = *pending_clip_activation_;
     if (pending.target_frame > 0) {
-        QMetaObject::invokeMethod(
-            playback_worker_,
-            "seekToFrame",
-            Qt::QueuedConnection,
-            Q_ARG(qint64, static_cast<qint64>(pending.target_frame)),
-            Q_ARG(quint64, generation));
+        playback_worker_->requestSeek(
+            static_cast<qint64>(pending.target_frame),
+            generation);
         return;
     }
 
@@ -1053,12 +1050,7 @@ void MainWindow::handleTimelineSeek(qint64 frame_index) {
     updatePlaybackControls();
     updatePlaybackStatus();
 
-    QMetaObject::invokeMethod(
-        playback_worker_,
-        "seekToFrame",
-        Qt::QueuedConnection,
-        Q_ARG(qint64, frame_index),
-        Q_ARG(quint64, playback_generation_));
+    playback_worker_->requestSeek(frame_index, playback_generation_);
 }
 
 void MainWindow::restoreDefaultLayout() {

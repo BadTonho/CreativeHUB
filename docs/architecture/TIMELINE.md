@@ -31,6 +31,14 @@ time.
 
 Seeking updates the active clip's visual playhead without decoding during mouse
 movement. The worker decodes the requested frame only after release and leaves
-playback paused. Frame stepping crosses clip boundaries while remaining
-paused. Optimized seeking, clip movement, cuts, multiple tracks, and project
-persistence remain future responsibilities.
+playback paused. The media session seeks to the preceding FFmpeg keyframe,
+flushes the decoder, and advances to the exact requested frame. A bounded cache
+of up to eight recent decoded frames or 64 MiB, whichever limit is reached
+first, serves repeated seeks; the decoder is re-anchored before sequential
+playback continues after a cached frame. Requests that become obsolete are
+cancelled cooperatively and are not reported as errors.
+
+When timestamps or frame-rate information are not reliable, the session falls
+back to decoding from the beginning to preserve frame accuracy. Frame stepping
+crosses clip boundaries while remaining paused. Clip movement, cuts, multiple
+tracks, and project persistence remain future responsibilities.

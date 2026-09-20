@@ -60,8 +60,9 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [ ] Define the rendering abstraction and CPU/GPU responsibilities.
 - [ ] Create the project and document model.
 - [-] Create the initial media import and management layer; metadata probing,
-  first-frame preview, basic CPU playback, seeking, and sequential timeline
-  playback are implemented, while full library management remains pending.
+  first-frame preview, basic CPU playback, keyframe-based seeking, and
+  sequential timeline playback are implemented, while full library management
+  remains pending.
 - [ ] Create the basic file, autosave, recovery, undo, and redo systems.
 - [ ] Define the initial project format and document it.
 - [ ] Add automated tests for the core and module boundaries.
@@ -76,19 +77,20 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Display the first decoded video frame through the temporary CPU preview
   path, including manual UI confirmation.
 - [x] Add basic CPU playback with play/pause and previous/next frame controls;
-  manual validation confirmed pause and frame advancement; GPU playback,
-  optimized seeking, and timeline editing remain pending.
+  manual validation confirmed pause and frame advancement; GPU playback and
+  timeline editing remain pending.
 - [x] Add the first visual timeline milestone with one manually added clip and
   one video track; seeking, multiple tracks, and clip editing remain pending.
 - [x] Add basic single-clip click-and-drag seeking; automated and manual
-  validation passed. Optimized seeking, multiple tracks, and clip editing
-  remain pending.
+  validation passed. Multiple tracks and clip editing remain pending.
+- [x] Optimize timeline seeking with FFmpeg keyframe navigation, bounded frame
+  caching, temporal-metadata fallback, and obsolete-request coalescing.
 - [x] Add drag-and-drop from imported Media Browser items to the Timeline;
   manual UI validation passed. Operating-system file drops and drop positioning
   remain pending.
 - [x] Add the multi-clip Timeline foundation with sequential placement and
   continuous playback on one track; cuts, movement, and editing remain pending.
-- [ ] Create a full functional timeline with editing and optimized seeking.
+- [ ] Create a full functional timeline with editing.
 - [ ] Support video, image, text, and audio clips.
 - [ ] Implement cutting, splitting, moving, and rearranging clips.
 - [ ] Add a real-time GPU video preview.
