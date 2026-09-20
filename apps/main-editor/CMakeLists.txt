@@ -23,6 +23,9 @@ add_executable(creative-suite-main-editor
     src/media/video_playback.h
     src/media/video_probe.cpp
     src/media/video_probe.h
+    src/project/project_document.h
+    src/project/project_file.cpp
+    src/project/project_file.h
     src/timeline/timeline_model.cpp
     src/timeline/timeline_model.h
     src/timeline/timeline_history.cpp

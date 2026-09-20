@@ -27,6 +27,6 @@ The Main Editor and Motion Studio are expected to share core responsibilities
 without duplicating media, rendering, or animation engines. A shared library is
 created only when it has a second real consumer and a documented responsibility.
 
-The initial application keeps media, timeline, playback, logging, and UI code
-application-local. This avoids premature abstractions while the product
-boundaries are still being validated.
+The initial application keeps media, timeline, playback, logging, project
+persistence, and UI code application-local. This avoids premature abstractions
+while the product boundaries are still being validated.

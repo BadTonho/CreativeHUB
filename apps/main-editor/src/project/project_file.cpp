@@ -1,0 +1,290 @@
+#include "project_file.h"
+
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QJsonValue>
+#include <QSaveFile>
+#include <QString>
+
+#include <cmath>
+#include <limits>
+#include <string>
+#include <system_error>
+
+namespace project {
+namespace {
+
+QString pathToQString(const std::filesystem::path& path) {
+    const auto value = path.u8string();
+    return QString::fromUtf8(
+        reinterpret_cast<const char*>(value.data()),
+        static_cast<qsizetype>(value.size()));
+}
+
+std::string pathToUtf8(const std::filesystem::path& path) {
+    const auto value = path.generic_u8string();
+    return std::string(reinterpret_cast<const char*>(value.data()), value.size());
+}
+
+std::filesystem::path pathFromUtf8(const QString& value) {
+    const auto bytes = value.toUtf8();
+    const auto* begin = reinterpret_cast<const char8_t*>(bytes.constData());
+    const auto* end = begin + bytes.size();
+    return std::filesystem::path(std::u8string(begin, end));
+}
+
+std::filesystem::path normalizedPath(const std::filesystem::path& path) {
+    std::error_code error;
+    const auto canonical = std::filesystem::weakly_canonical(path, error);
+    if (!error) return canonical;
+
+    const auto absolute = std::filesystem::absolute(path, error);
+    if (!error) return absolute.lexically_normal();
+    return path.lexically_normal();
+}
+
+bool isParentRelativePath(const std::filesystem::path& path) {
+    const auto normalized = path.lexically_normal();
+    if (normalized.empty()) return false;
+    const auto first = normalized.begin();
+    return first != normalized.end() && *first == "..";
+}
+
+QString storedPath(const std::filesystem::path& project_path,
+                  const std::filesystem::path& source_path) {
+    const auto project_directory = normalizedPath(project_path).parent_path();
+    const auto source = normalizedPath(source_path);
+    std::error_code error;
+    const auto relative = std::filesystem::relative(source, project_directory, error);
+    if (!error && !relative.empty() && !isParentRelativePath(relative)) {
+        return QString::fromUtf8(pathToUtf8(relative));
+    }
+    return QString::fromUtf8(pathToUtf8(source));
+}
+
+std::filesystem::path resolvedPath(const std::filesystem::path& project_path,
+                                   const QString& stored_path) {
+    const auto stored = pathFromUtf8(stored_path);
+    if (stored.is_absolute()) return normalizedPath(stored);
+    return normalizedPath(normalizedPath(project_path).parent_path() / stored);
+}
+
+[[noreturn]] void throwJson(ProjectErrorCode code,
+                             const std::filesystem::path& project_path,
+                             const char* message) {
+    throw ProjectError(code, message, std::nullopt, project_path);
+}
+
+std::int64_t requiredInteger(const QJsonObject& object,
+                             const char* key,
+                             const std::filesystem::path& project_path) {
+    const auto value = object.value(QLatin1String(key));
+    if (value.isUndefined() || value.isNull()) {
+        throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing a required integer field.");
+    }
+    if (!value.isDouble()) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains a non-numeric integer field.");
+    }
+
+    const double number = value.toDouble();
+    if (!std::isfinite(number) || std::floor(number) != number ||
+        number < static_cast<double>(std::numeric_limits<std::int64_t>::min()) ||
+        number > static_cast<double>(std::numeric_limits<std::int64_t>::max())) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid integer value.");
+    }
+    return static_cast<std::int64_t>(number);
+}
+
+QString requiredString(const QJsonObject& object,
+                       const char* key,
+                       const std::filesystem::path& project_path) {
+    const auto value = object.value(QLatin1String(key));
+    if (value.isUndefined() || value.isNull()) {
+        throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing a required string field.");
+    }
+    if (!value.isString() || value.toString().isEmpty()) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid string field.");
+    }
+    return value.toString();
+}
+
+void validateDocument(const ProjectDocument& document,
+                      const std::filesystem::path& project_path) {
+    for (const auto& source : document.media_sources) {
+        if (source.empty()) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an empty media path.");
+        }
+    }
+
+    for (const auto& clip : document.timeline_clips) {
+        if (clip.source_path.empty() || clip.source_start_frame < 0 ||
+            clip.duration_frames <= 0) {
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains an invalid timeline segment.");
+        }
+    }
+}
+
+} // namespace
+
+ProjectDocument load(const std::filesystem::path& project_path) {
+    const QString file_name = pathToQString(project_path);
+    QFile file(file_name);
+    if (!file.open(QIODevice::ReadOnly)) {
+        throw ProjectError(
+            ProjectErrorCode::Io,
+            "Could not open the project file for reading.",
+            file.error(),
+            project_path);
+    }
+
+    const auto bytes = file.readAll();
+    if (file.error() != QFileDevice::NoError) {
+        throw ProjectError(
+            ProjectErrorCode::Io,
+            "Could not read the project file.",
+            file.error(),
+            project_path);
+    }
+
+    QJsonParseError parse_error;
+    const auto json = QJsonDocument::fromJson(bytes, &parse_error);
+    if (parse_error.error != QJsonParseError::NoError || !json.isObject()) {
+        throw ProjectError(
+            ProjectErrorCode::InvalidFormat,
+            "The project file is not valid JSON.",
+            static_cast<int>(parse_error.error),
+            project_path);
+    }
+
+    const auto root = json.object();
+    if (requiredString(root, "format", project_path) !=
+        QString::fromLatin1(format_identifier)) {
+        throw ProjectError(
+            ProjectErrorCode::InvalidFormat,
+            "The project file has an unsupported format identifier.",
+            std::nullopt,
+            project_path);
+    }
+
+    const auto version = requiredInteger(root, "version", project_path);
+    if (version != current_format_version) {
+        throw ProjectError(
+            ProjectErrorCode::UnsupportedVersion,
+            "The project file version is not supported.",
+            static_cast<int>(version),
+            project_path);
+    }
+
+    const auto media_value = root.value("media");
+    if (!media_value.isArray()) {
+        throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the media array.");
+    }
+
+    ProjectDocument document;
+    for (const auto& media_value_item : media_value.toArray()) {
+        if (!media_value_item.isObject()) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid media item.");
+        }
+        const auto source_path = resolvedPath(
+            project_path,
+            requiredString(media_value_item.toObject(), "path", project_path));
+        std::error_code file_error;
+        if (!std::filesystem::is_regular_file(source_path, file_error) || file_error) {
+            throw ProjectError(
+                ProjectErrorCode::MediaUnavailable,
+                "A project media file is missing or is not a regular file.",
+                file_error ? std::optional<int>(file_error.value()) : std::nullopt,
+                source_path);
+        }
+        document.media_sources.push_back(source_path);
+    }
+
+    const auto timeline_value = root.value("timeline");
+    if (!timeline_value.isObject()) {
+        throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the timeline object.");
+    }
+    const auto clips_value = timeline_value.toObject().value("clips");
+    if (!clips_value.isArray()) {
+        throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the timeline clips array.");
+    }
+
+    for (const auto& clip_value : clips_value.toArray()) {
+        if (!clip_value.isObject()) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid timeline clip.");
+        }
+        const auto clip_object = clip_value.toObject();
+        ProjectClip clip;
+        clip.source_path = resolvedPath(
+            project_path,
+            requiredString(clip_object, "source", project_path));
+        clip.source_start_frame = requiredInteger(
+            clip_object, "source_start_frame", project_path);
+        clip.duration_frames = requiredInteger(
+            clip_object, "duration_frames", project_path);
+        document.timeline_clips.push_back(std::move(clip));
+    }
+
+    validateDocument(document, project_path);
+    return document;
+}
+
+void save(const std::filesystem::path& project_path, const ProjectDocument& document) {
+    if (project_path.empty()) {
+        throw ProjectError(ProjectErrorCode::Io, "The project path is empty.");
+    }
+    validateDocument(document, project_path);
+
+    QJsonArray media;
+    for (const auto& source : document.media_sources) {
+        QJsonObject item;
+        item.insert("path", storedPath(project_path, source));
+        media.append(item);
+    }
+
+    QJsonArray clips;
+    for (const auto& clip : document.timeline_clips) {
+        QJsonObject item;
+        item.insert("source", storedPath(project_path, clip.source_path));
+        item.insert("source_start_frame", static_cast<qint64>(clip.source_start_frame));
+        item.insert("duration_frames", static_cast<qint64>(clip.duration_frames));
+        clips.append(item);
+    }
+
+    QJsonObject timeline;
+    timeline.insert("clips", clips);
+    QJsonObject root;
+    root.insert("format", QString::fromLatin1(format_identifier));
+    root.insert("version", current_format_version);
+    root.insert("media", media);
+    root.insert("timeline", timeline);
+
+    QSaveFile file(pathToQString(project_path));
+    if (!file.open(QIODevice::WriteOnly)) {
+        throw ProjectError(
+            ProjectErrorCode::Io,
+            "Could not open the project file for atomic writing.",
+            file.error(),
+            project_path);
+    }
+
+    const auto bytes = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    if (file.write(bytes) != bytes.size()) {
+        throw ProjectError(
+            ProjectErrorCode::Io,
+            "Could not write the complete project file.",
+            file.error(),
+            project_path);
+    }
+    if (!file.commit()) {
+        throw ProjectError(
+            ProjectErrorCode::Io,
+            "Could not commit the project file atomically.",
+            file.error(),
+            project_path);
+    }
+}
+
+} // namespace project

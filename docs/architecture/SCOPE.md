@@ -14,7 +14,8 @@ The current Main Editor includes:
 - basic clip deletion and edge trimming with compact placement;
 - bounded Undo/Redo for successful Timeline edits;
 - drag-and-drop from imported Media Browser items to the Timeline;
-- local structured error logging.
+- local structured error logging;
+- basic `.csp` project persistence for imported media and Timeline structure.
 
 The current application does not implement:
 
@@ -23,7 +24,6 @@ The current application does not implement:
 - full timeline editing;
 - multiple tracks;
 - advanced ripple editing and project-wide history;
-- project persistence;
 - audio;
 - Motion Studio;
 - Rust integration.
@@ -31,3 +31,7 @@ The current application does not implement:
 Random seeking uses FFmpeg keyframe navigation with a bounded recent-frame
 cache. Streams without reliable temporal metadata fall back to decoding from
 the beginning for correctness. Global timeline seeking is not implemented.
+
+Basic project persistence is implemented for versioned `.csp` files. Autosave,
+recovery, media copying, relinking, shared projects, and project-wide history
+remain future responsibilities.

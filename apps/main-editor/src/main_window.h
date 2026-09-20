@@ -4,6 +4,7 @@
 #include "media/video_metadata.h"
 #include "media/video_probe.h"
 #include "playback/playback_worker.h"
+#include "project/project_document.h"
 #include "timeline/timeline_history.h"
 #include "timeline/timeline_model.h"
 
@@ -13,11 +14,13 @@
 #include <QtGlobal>
 
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <vector>
 
 class QDockWidget;
 class QAction;
+class QCloseEvent;
 class QLabel;
 class QListWidget;
 class QPushButton;
@@ -33,7 +36,12 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
+protected:
+    void closeEvent(QCloseEvent* event) override;
+
 private:
+    struct ImportedMedia;
+
     void createMenus();
     void createWorkspace();
     void restoreDefaultLayout();
@@ -43,7 +51,26 @@ private:
     void shutdownPlayback();
     void openMedia();
     void updateMediaDetails(int row);
-    void addMediaItem(media::VideoMetadata metadata, media::VideoFrame first_frame);
+    void addMediaItem(
+        media::VideoMetadata metadata,
+        media::VideoFrame first_frame,
+        bool mark_dirty = true);
+    void newProject();
+    void openProject();
+    void saveProject();
+    void saveProjectAs();
+    [[nodiscard]] bool confirmProjectChange();
+    [[nodiscard]] bool saveProjectTo(
+        const std::filesystem::path& project_path,
+        const char* operation);
+    [[nodiscard]] project::ProjectDocument currentProjectDocument() const;
+    void updateProjectDirtyState();
+    void clearProjectState();
+    void applyLoadedProject(
+        std::vector<ImportedMedia> media_items,
+        timeline::TimelineModel::Snapshot timeline_snapshot,
+        const std::filesystem::path& project_path,
+        const project::ProjectDocument& saved_document);
     void addSelectedMediaToTimeline();
     void handleMediaDrop(const QString& source_path);
     void clearTimeline();
@@ -124,6 +151,10 @@ private:
     QPushButton* clear_timeline_button_ = nullptr;
     QPushButton* razor_button_ = nullptr;
     QLabel* playback_status_label_ = nullptr;
+    QAction* new_project_action_ = nullptr;
+    QAction* open_project_action_ = nullptr;
+    QAction* save_project_action_ = nullptr;
+    QAction* save_project_as_action_ = nullptr;
     QAction* delete_clip_action_ = nullptr;
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
@@ -134,6 +165,9 @@ private:
     timeline::TimelineHistory timeline_history_;
     std::optional<std::size_t> active_timeline_clip_index_;
     std::optional<PendingClipActivation> pending_clip_activation_;
+    std::optional<std::filesystem::path> project_path_;
+    std::optional<project::ProjectDocument> saved_project_document_;
+    bool project_dirty_ = false;
     media::VideoProbe video_probe_;
     media::VideoDecoder video_decoder_;
     QThread playback_thread_;

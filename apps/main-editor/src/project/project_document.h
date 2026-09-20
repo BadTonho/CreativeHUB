@@ -1,0 +1,67 @@
+#pragma once
+
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace project {
+
+inline constexpr int current_format_version = 1;
+inline constexpr const char* format_identifier = "creative-suite.main-editor";
+
+struct ProjectClip {
+    std::filesystem::path source_path;
+    std::int64_t source_start_frame = 0;
+    std::int64_t duration_frames = 0;
+
+    friend bool operator==(const ProjectClip&, const ProjectClip&) = default;
+};
+
+struct ProjectDocument {
+    std::vector<std::filesystem::path> media_sources;
+    std::vector<ProjectClip> timeline_clips;
+
+    friend bool operator==(const ProjectDocument&, const ProjectDocument&) = default;
+};
+
+enum class ProjectErrorCode {
+    Io,
+    InvalidFormat,
+    UnsupportedVersion,
+    MissingField,
+    InvalidValue,
+    MediaUnavailable,
+    InvalidTimeline,
+};
+
+class ProjectError final : public std::runtime_error {
+public:
+    ProjectError(
+        ProjectErrorCode code,
+        std::string message,
+        std::optional<int> system_error = std::nullopt,
+        std::filesystem::path related_path = {})
+        : std::runtime_error(std::move(message)),
+          code_(code),
+          system_error_(system_error),
+          related_path_(std::move(related_path)) {}
+
+    [[nodiscard]] ProjectErrorCode code() const noexcept { return code_; }
+    [[nodiscard]] const std::optional<int>& system_error() const noexcept {
+        return system_error_;
+    }
+    [[nodiscard]] const std::filesystem::path& related_path() const noexcept {
+        return related_path_;
+    }
+
+private:
+    ProjectErrorCode code_;
+    std::optional<int> system_error_;
+    std::filesystem::path related_path_;
+};
+
+} // namespace project

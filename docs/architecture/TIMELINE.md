@@ -85,7 +85,8 @@ intentional UI outcomes and do not create error-log entries.
 Gesture priority is `Alt + drag` for reordering, Blade Tool clicks for
 splitting, edge drags with Blade Tool disabled for trimming, and interior
 drags for seeking. Advanced ripple editing, multiple tracks, free positioning,
-audio, and project persistence remain future responsibilities.
+and audio remain future responsibilities. Basic project persistence stores the
+editable clip structure separately in the versioned `.csp` document.
 
 ## Timeline history
 
@@ -102,5 +103,7 @@ restore the model and selection, and re-decode the selected frame when needed.
 
 A new successful Timeline edit clears the Redo stack. Invalid operations,
 no-op operations, media import, selection changes, seeking, and playback do not
-create history entries. Project persistence and advanced ripple history remain
-future work.
+create history entries. Project persistence stores only imported source paths
+and Timeline segment ranges in the `.csp` document; it does not store history,
+selection, playhead, or decoded buffers. Advanced ripple history remains future
+work.

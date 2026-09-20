@@ -24,6 +24,20 @@ User-facing keyboard shortcuts are maintained separately in
 [`docs/SHORTCUTS.md`](../SHORTCUTS.md). Any shortcut change must update that
 document in the same change.
 
+The File menu provides `New Project`, `Open Project...`, `Save Project`, and
+`Save Project As...`. Project files use the temporary `.csp` extension. The
+window title includes `*` while editable project content differs from the
+last saved document. New, open, and close operations prompt with Save,
+Discard, and Cancel when changes are pending. Cancel leaves the current
+session untouched; an unsuccessful save also stops the requested operation.
+
+Project opening is transactional from the UI perspective: media is probed and
+its first frame is decoded into temporary state before the current session is
+replaced. A failed open keeps the current project, selection, preview, and
+Timeline intact. A successful open clears Timeline Undo/Redo and starts paused
+on the first Timeline clip, or the first imported media when the Timeline is
+empty.
+
 The Timeline uses two distinct mouse gestures. Normal click-and-drag on the
 active clip seeks and decodes only when the mouse is released. `Alt + drag`
 reorders a clip in the single track; it gives visual movement feedback but does

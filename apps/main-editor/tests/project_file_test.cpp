@@ -1,0 +1,149 @@
+#include "project/project_file.h"
+
+#include <QCoreApplication>
+
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+
+namespace {
+
+void require(bool condition, const std::string& message) {
+    if (!condition) throw std::runtime_error(message);
+}
+
+std::filesystem::path uniqueTestDirectory() {
+    const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+    return std::filesystem::temp_directory_path() /
+        ("creative-suite-project-test-" + std::to_string(stamp));
+}
+
+void writeText(const std::filesystem::path& path, const std::string& text) {
+    std::ofstream file(path, std::ios::binary);
+    file << text;
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+    QCoreApplication application(argc, argv);
+    const auto directory = uniqueTestDirectory();
+
+    try {
+        std::filesystem::create_directories(directory / "media");
+        const auto project_path = directory / "project.csp";
+        const auto first_source = directory / "media" / "first video.mkv";
+        const auto outside_source = std::filesystem::temp_directory_path() /
+            ("creative-suite-project-outside-" + std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count()) + ".mkv");
+        std::ofstream(first_source, std::ios::binary).close();
+        std::ofstream(outside_source, std::ios::binary).close();
+
+        project::ProjectDocument original;
+        original.media_sources = {first_source, outside_source};
+        original.timeline_clips = {
+            {first_source, 30, 60},
+            {first_source, 0, 30},
+        };
+        project::save(project_path, original);
+
+        const auto loaded = project::load(project_path);
+        require(loaded == original, "A project did not round-trip through JSON.");
+        require(loaded.timeline_clips[0].source_start_frame == 30,
+                "A source offset was not preserved.");
+        require(loaded.timeline_clips[1].source_path == loaded.timeline_clips[0].source_path,
+                "Repeated source occurrences were not preserved.");
+
+        std::ifstream saved_file(project_path, std::ios::binary);
+        const std::string saved_json{
+            std::istreambuf_iterator<char>(saved_file),
+            std::istreambuf_iterator<char>()};
+        saved_file.close();
+        require(saved_json.find("media/first video.mkv") != std::string::npos,
+                "A source inside the project was not stored relatively.");
+        require(saved_json.find("creative-suite-project-outside-") != std::string::npos,
+                "An outside source was not stored in the project.");
+
+        const auto original_contents = saved_json;
+        bool failed = false;
+        try {
+            project::save(directory, original);
+        } catch (const project::ProjectError&) {
+            failed = true;
+        }
+        require(failed, "Saving to an invalid target did not fail.");
+        std::ifstream preserved_file(project_path, std::ios::binary);
+        const std::string preserved_contents{
+            std::istreambuf_iterator<char>(preserved_file),
+            std::istreambuf_iterator<char>()};
+        preserved_file.close();
+        require(preserved_contents == original_contents,
+                "A failed save changed the existing project file.");
+
+        writeText(project_path, "{not json");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("Malformed JSON was accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::InvalidFormat,
+                    "Malformed JSON returned the wrong error category.");
+        }
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":99,"media":[],"timeline":{"clips":[]}})");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("An unsupported version was accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::UnsupportedVersion,
+                    "Unsupported version returned the wrong error category.");
+        }
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":1,"media":[{"path":"media/first video.mkv"}],"timeline":{"clips":[{"source":"media/first video.mkv","source_start_frame":0,"duration_frames":0}]}})");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("A zero-duration clip was accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::InvalidTimeline,
+                    "Invalid timeline returned the wrong error category.");
+        }
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":1,"media":[{"path":"media/first video.mkv"}],"timeline":{"clips":[{"source":"media/first video.mkv","source_start_frame":-1,"duration_frames":1}]}})");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("A negative source frame was accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::InvalidTimeline,
+                    "Negative source frame returned the wrong error category.");
+        }
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":1,"media":[{"path":"media/missing.mkv"}],"timeline":{"clips":[]}})");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("Missing media was accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::MediaUnavailable,
+                    "Missing media returned the wrong error category.");
+        }
+
+        std::error_code cleanup_error;
+        std::filesystem::remove(outside_source, cleanup_error);
+        std::filesystem::remove_all(directory, cleanup_error);
+        return cleanup_error ? 1 : 0;
+    } catch (const std::exception& error) {
+        std::error_code cleanup_error;
+        std::filesystem::remove_all(directory, cleanup_error);
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}

@@ -2,10 +2,12 @@
 
 #include "logging/logger.h"
 #include "preview_widget.h"
+#include "project/project_file.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser_list_widget.h"
 
 #include <QAction>
+#include <QCloseEvent>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -28,6 +30,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <iterator>
 #include <limits>
@@ -140,11 +143,432 @@ MainWindow::MainWindow(QWidget* parent)
     createMenus();
     initializePlayback();
 
+    saved_project_document_ = currentProjectDocument();
+    updateProjectDirtyState();
+
     statusBar()->showMessage("Ready");
 }
 
 MainWindow::~MainWindow() {
     shutdownPlayback();
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+    if (confirmProjectChange()) {
+        event->accept();
+        return;
+    }
+    event->ignore();
+}
+
+project::ProjectDocument MainWindow::currentProjectDocument() const {
+    project::ProjectDocument document;
+    document.media_sources.reserve(media_items_.size());
+    for (const auto& item : media_items_) {
+        document.media_sources.push_back(normalizedPath(item.metadata.source_path));
+    }
+
+    document.timeline_clips.reserve(timeline_model_.clipCount());
+    for (const auto& clip : timeline_model_.clips()) {
+        document.timeline_clips.push_back(project::ProjectClip{
+            normalizedPath(clip.source_path),
+            clip.source_start_frame,
+            clip.timeline_duration_frames});
+    }
+    return document;
+}
+
+void MainWindow::updateProjectDirtyState() {
+    if (!saved_project_document_.has_value()) {
+        project_dirty_ = false;
+    } else {
+        project_dirty_ = currentProjectDocument() != *saved_project_document_;
+    }
+
+    setWindowTitle(project_dirty_ ? "Main Editor *" : "Main Editor");
+    if (save_project_action_ != nullptr) {
+        save_project_action_->setEnabled(!project_path_.has_value() || project_dirty_);
+    }
+    if (save_project_as_action_ != nullptr) save_project_as_action_->setEnabled(true);
+}
+
+bool MainWindow::saveProjectTo(
+    const std::filesystem::path& project_path,
+    const char* operation) {
+    try {
+        const auto document = currentProjectDocument();
+        project::save(project_path, document);
+        project_path_ = normalizedPath(project_path);
+        saved_project_document_ = document;
+        updateProjectDirtyState();
+        statusBar()->showMessage(
+            std::string_view(operation) == "save_as"
+                ? "Project saved as."
+                : "Project saved.");
+        return true;
+    } catch (const project::ProjectError& error) {
+        logging::Context context{
+            {"project_path", pathToUtf8(project_path)},
+            {"cause", error.what()}};
+        if (error.system_error().has_value()) {
+            context.emplace_back("error_code", std::to_string(*error.system_error()));
+        }
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "project",
+            operation,
+            error.what(),
+            context);
+        QMessageBox::warning(this, "Could not save project", fromUtf8(error.what()));
+        statusBar()->showMessage("Could not save project.");
+        return false;
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "project",
+            operation,
+            error.what(),
+            {{"project_path", pathToUtf8(project_path)}});
+        QMessageBox::warning(this, "Could not save project", "The project could not be saved.");
+        statusBar()->showMessage("Could not save project.");
+        return false;
+    }
+}
+
+void MainWindow::saveProject() {
+    if (!project_path_.has_value()) {
+        saveProjectAs();
+        return;
+    }
+    static_cast<void>(saveProjectTo(*project_path_, "save"));
+}
+
+void MainWindow::saveProjectAs() {
+    const QString initial_path = project_path_.has_value()
+        ? fromUtf8(pathToUtf8(*project_path_))
+        : QString();
+    QString selected_path = QFileDialog::getSaveFileName(
+        this,
+        "Save Project As",
+        initial_path,
+        "Creative Suite Project (*.csp);;All Files (*)");
+    if (selected_path.isEmpty()) return;
+
+    if (!selected_path.endsWith(".csp", Qt::CaseInsensitive)) {
+        selected_path += ".csp";
+    }
+    static_cast<void>(saveProjectTo(
+        normalizedPath(QFileInfo(selected_path).filesystemFilePath()),
+        "save_as"));
+}
+
+bool MainWindow::confirmProjectChange() {
+    if (!project_dirty_) return true;
+
+    QMessageBox prompt(this);
+    prompt.setIcon(QMessageBox::Warning);
+    prompt.setWindowTitle("Unsaved Changes");
+    prompt.setText("The current project has unsaved changes.");
+    prompt.setInformativeText("Do you want to save the project before continuing?");
+    auto* save_button = prompt.addButton("Save", QMessageBox::AcceptRole);
+    auto* discard_button = prompt.addButton("Discard", QMessageBox::DestructiveRole);
+    auto* cancel_button = prompt.addButton("Cancel", QMessageBox::RejectRole);
+    prompt.setDefaultButton(save_button);
+    prompt.exec();
+
+    if (prompt.clickedButton() == save_button) {
+        saveProject();
+        return !project_dirty_;
+    }
+    if (prompt.clickedButton() == discard_button) return true;
+    static_cast<void>(cancel_button);
+    return false;
+}
+
+void MainWindow::clearProjectState() {
+    pending_clip_activation_.reset();
+    ++playback_generation_;
+    playback_is_playing_ = false;
+    if (playback_worker_ != nullptr) {
+        QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
+    }
+
+    timeline_model_.clear();
+    timeline_history_.clear();
+    active_timeline_clip_index_.reset();
+    playback_frame_index_ = 0;
+    project_path_.reset();
+    saved_project_document_ = project::ProjectDocument{};
+    project_dirty_ = false;
+
+    {
+        const QSignalBlocker blocker(media_list_);
+        media_list_->clear();
+    }
+    media_items_.clear();
+    media_details_->setText("No media imported.");
+    preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
+    updateTimelineState();
+    updatePlaybackControls();
+    updatePlaybackStatus();
+    updateHistoryActions();
+}
+
+void MainWindow::newProject() {
+    if (!confirmProjectChange()) return;
+
+    try {
+        clearProjectState();
+        statusBar()->showMessage("New project created.");
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "project",
+            "new",
+            error.what(),
+            {{"project_path", project_path_.has_value()
+                    ? pathToUtf8(*project_path_)
+                    : ""},
+             {"generation", std::to_string(playback_generation_)}});
+        QMessageBox::warning(this, "Could not create project", "The new project could not be created.");
+        statusBar()->showMessage("Could not create project.");
+    }
+}
+
+void MainWindow::openProject() {
+    const QString selected_file = QFileDialog::getOpenFileName(
+        this,
+        "Open Project",
+        QString(),
+        "Creative Suite Project (*.csp);;All Files (*)");
+    if (selected_file.isEmpty()) return;
+
+    if (!confirmProjectChange()) return;
+
+    const auto project_path = normalizedPath(
+        QFileInfo(selected_file).filesystemFilePath());
+    std::filesystem::path current_media_path;
+    std::optional<std::size_t> current_clip_index;
+    try {
+        const auto document = project::load(project_path);
+        std::vector<ImportedMedia> loaded_media;
+        loaded_media.reserve(document.media_sources.size());
+
+        for (const auto& source_path : document.media_sources) {
+            current_media_path = source_path;
+            auto metadata = video_probe_.probe(source_path);
+            auto first_frame = video_decoder_.decode_first_frame(source_path);
+            loaded_media.push_back({std::move(metadata), std::move(first_frame)});
+        }
+
+        auto media_index_for = [&loaded_media](const std::filesystem::path& source_path)
+            -> std::optional<std::size_t> {
+            const auto normalized_source = normalizedPath(source_path);
+            for (std::size_t index = 0; index < loaded_media.size(); ++index) {
+                if (normalizedPath(loaded_media[index].metadata.source_path) == normalized_source) {
+                    return index;
+                }
+            }
+            return std::nullopt;
+        };
+
+        auto available_frame_count = [](const media::VideoMetadata& metadata)
+            -> std::optional<std::int64_t> {
+            if (metadata.frame_count.has_value() && *metadata.frame_count > 0) {
+                return metadata.frame_count;
+            }
+            if (!metadata.duration_seconds.has_value() ||
+                !metadata.frame_rate.has_value() ||
+                !std::isfinite(*metadata.duration_seconds) ||
+                !std::isfinite(*metadata.frame_rate) ||
+                *metadata.duration_seconds <= 0.0 ||
+                *metadata.frame_rate <= 0.0) {
+                return std::nullopt;
+            }
+            const double estimated = *metadata.duration_seconds * *metadata.frame_rate;
+            if (!std::isfinite(estimated) ||
+                estimated > static_cast<double>(std::numeric_limits<std::int64_t>::max())) {
+                return std::nullopt;
+            }
+            return std::max<std::int64_t>(1, static_cast<std::int64_t>(std::ceil(estimated)));
+        };
+
+        timeline::TimelineModel::Snapshot snapshot;
+        std::int64_t timeline_start = 0;
+        for (std::size_t index = 0; index < document.timeline_clips.size(); ++index) {
+            current_clip_index = index;
+            const auto& project_clip = document.timeline_clips[index];
+            const auto media_index = media_index_for(project_clip.source_path);
+            if (!media_index.has_value()) {
+                throw project::ProjectError(
+                    project::ProjectErrorCode::MediaUnavailable,
+                    "A timeline clip refers to media that is not imported in the project.",
+                    std::nullopt,
+                    project_clip.source_path);
+            }
+
+            const auto& metadata = loaded_media[*media_index].metadata;
+            const auto available_frames = available_frame_count(metadata);
+            if (!available_frames.has_value() ||
+                project_clip.source_start_frame < 0 ||
+                project_clip.duration_frames <= 0 ||
+                project_clip.source_start_frame > *available_frames ||
+                project_clip.duration_frames > *available_frames -
+                    project_clip.source_start_frame ||
+                timeline_start > std::numeric_limits<std::int64_t>::max() -
+                    project_clip.duration_frames) {
+                throw project::ProjectError(
+                    project::ProjectErrorCode::InvalidTimeline,
+                    "A timeline clip is outside the current media bounds.",
+                    std::nullopt,
+                    project_clip.source_path);
+            }
+
+            snapshot.clips.push_back(timeline::TimelineClip{
+                timeline_start,
+                project_clip.source_start_frame,
+                project_clip.duration_frames,
+                normalizedPath(metadata.source_path),
+                metadata.display_name,
+                metadata.duration_seconds,
+                metadata.frame_rate,
+                metadata.frame_count});
+            timeline_start += project_clip.duration_frames;
+        }
+
+        applyLoadedProject(
+            std::move(loaded_media),
+            std::move(snapshot),
+            project_path,
+            document);
+        statusBar()->showMessage("Project opened.");
+    } catch (const project::ProjectError& error) {
+        logging::Context context{
+            {"project_path", pathToUtf8(project_path)},
+            {"cause", error.what()}};
+        const bool related_path_is_project = !error.related_path().empty() &&
+            normalizedPath(error.related_path()) == project_path;
+        if (!error.related_path().empty() && !related_path_is_project) {
+            context.emplace_back("media_path", pathToUtf8(error.related_path()));
+        } else if (!current_media_path.empty() &&
+                   error.code() == project::ProjectErrorCode::MediaUnavailable) {
+            context.emplace_back("media_path", pathToUtf8(current_media_path));
+        }
+        if (current_clip_index.has_value()) {
+            context.emplace_back("clip_index", std::to_string(*current_clip_index));
+        }
+        if (error.system_error().has_value()) {
+            context.emplace_back("error_code", std::to_string(*error.system_error()));
+        }
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "project",
+            "open",
+            error.what(),
+            context);
+        QMessageBox::warning(this, "Could not open project", fromUtf8(error.what()));
+        statusBar()->showMessage("Could not open project.");
+    } catch (const media::MediaError& error) {
+        logging::Context context{
+            {"project_path", pathToUtf8(project_path)},
+            {"media_path", pathToUtf8(current_media_path)},
+            {"cause", error.what()}};
+        if (current_clip_index.has_value()) {
+            context.emplace_back("clip_index", std::to_string(*current_clip_index));
+        }
+        if (error.error_code().has_value()) {
+            context.emplace_back("error_code", std::to_string(*error.error_code()));
+        }
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "project",
+            "open",
+            error.what(),
+            context);
+        QMessageBox::warning(this, "Could not open project", fromUtf8(error.what()));
+        statusBar()->showMessage("Could not open project.");
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "project",
+            "open",
+            error.what(),
+            { {"project_path", pathToUtf8(project_path)},
+              {"media_path", pathToUtf8(current_media_path)},
+              {"clip_index", current_clip_index.has_value()
+                    ? std::to_string(*current_clip_index)
+                    : "none"} });
+        QMessageBox::warning(this, "Could not open project", "The project could not be opened.");
+        statusBar()->showMessage("Could not open project.");
+    }
+}
+
+void MainWindow::applyLoadedProject(
+    std::vector<ImportedMedia> media_items,
+    timeline::TimelineModel::Snapshot timeline_snapshot,
+    const std::filesystem::path& project_path,
+    const project::ProjectDocument& saved_document) {
+    pending_clip_activation_.reset();
+    ++playback_generation_;
+    playback_is_playing_ = false;
+    if (playback_worker_ != nullptr) {
+        QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
+    }
+
+    timeline_model_.restore(std::move(timeline_snapshot));
+    timeline_history_.clear();
+    media_items_ = std::move(media_items);
+    active_timeline_clip_index_.reset();
+    playback_frame_index_ = 0;
+    project_path_ = normalizedPath(project_path);
+    saved_project_document_ = saved_document;
+
+    {
+        const QSignalBlocker blocker(media_list_);
+        media_list_->clear();
+        for (const auto& item : media_items_) {
+            auto* list_item = new QListWidgetItem(mediaListText(item.metadata), media_list_);
+            list_item->setToolTip(fromUtf8(pathToUtf8(item.metadata.source_path)));
+            list_item->setData(Qt::UserRole, fromUtf8(pathToUtf8(item.metadata.source_path)));
+        }
+    }
+
+    media_details_->setText("No media imported.");
+    preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
+    updateProjectDirtyState();
+
+    if (timeline_model_.hasClip()) {
+        active_timeline_clip_index_ = 0;
+        const auto& clip = timeline_model_.clips().front();
+        const auto media = std::find_if(
+            media_items_.begin(),
+            media_items_.end(),
+            [&clip](const ImportedMedia& item) {
+                return normalizedPath(item.metadata.source_path) == normalizedPath(clip.source_path);
+            });
+        if (media != media_items_.end()) {
+            const auto media_index = static_cast<int>(std::distance(media_items_.begin(), media));
+            {
+                const QSignalBlocker blocker(media_list_);
+                media_list_->setCurrentRow(media_index);
+            }
+            media_details_->setText(mediaDetailsText(media->metadata));
+            preview_widget_->setFrame(media->first_frame);
+            activateTimelineClip(0, 0, false);
+        }
+    } else if (!media_items_.empty()) {
+        media_list_->setCurrentRow(0);
+        updateMediaDetails(0);
+    } else {
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+    }
+
+    updateTimelineState();
+    updatePlaybackControls();
+    updatePlaybackStatus();
+    updateHistoryActions();
 }
 
 void MainWindow::createWorkspace() {
@@ -172,12 +596,24 @@ void MainWindow::createWorkspace() {
 
 void MainWindow::createMenus() {
     auto* file_menu = menuBar()->addMenu("&File");
-    auto* new_project_action = file_menu->addAction("&New Project");
-    new_project_action->setEnabled(false);
+    new_project_action_ = file_menu->addAction("&New Project");
+    new_project_action_->setShortcut(QKeySequence("Ctrl+N"));
+    new_project_action_->setShortcutContext(Qt::WindowShortcut);
+    connect(new_project_action_, &QAction::triggered, this, &MainWindow::newProject);
     auto* open_media_action = file_menu->addAction("Open &Media...");
     connect(open_media_action, &QAction::triggered, this, &MainWindow::openMedia);
-    auto* open_project_action = file_menu->addAction("&Open Project...");
-    open_project_action->setEnabled(false);
+    open_project_action_ = file_menu->addAction("&Open Project...");
+    open_project_action_->setShortcut(QKeySequence("Ctrl+O"));
+    open_project_action_->setShortcutContext(Qt::WindowShortcut);
+    connect(open_project_action_, &QAction::triggered, this, &MainWindow::openProject);
+    save_project_action_ = file_menu->addAction("&Save Project");
+    save_project_action_->setShortcut(QKeySequence("Ctrl+S"));
+    save_project_action_->setShortcutContext(Qt::WindowShortcut);
+    connect(save_project_action_, &QAction::triggered, this, &MainWindow::saveProject);
+    save_project_as_action_ = file_menu->addAction("Save Project &As...");
+    save_project_as_action_->setShortcut(QKeySequence("Ctrl+Shift+S"));
+    save_project_as_action_->setShortcutContext(Qt::WindowShortcut);
+    connect(save_project_as_action_, &QAction::triggered, this, &MainWindow::saveProjectAs);
     file_menu->addSeparator();
     auto* exit_action = file_menu->addAction("E&xit");
     connect(exit_action, &QAction::triggered, this, &QWidget::close);
@@ -597,6 +1033,7 @@ void MainWindow::updateTimelineState() {
     }
 
     updateHistoryActions();
+    updateProjectDirtyState();
 }
 
 void MainWindow::addSelectedMediaToTimeline() {
@@ -1664,7 +2101,10 @@ void MainWindow::updateMediaDetails(int row) {
     }
 }
 
-void MainWindow::addMediaItem(media::VideoMetadata metadata, media::VideoFrame first_frame) {
+void MainWindow::addMediaItem(
+    media::VideoMetadata metadata,
+    media::VideoFrame first_frame,
+    bool mark_dirty) {
     media_items_.push_back({std::move(metadata), std::move(first_frame)});
     auto& item = media_items_.back();
 
@@ -1674,6 +2114,7 @@ void MainWindow::addMediaItem(media::VideoMetadata metadata, media::VideoFrame f
         Qt::UserRole,
         fromUtf8(pathToUtf8(item.metadata.source_path)));
     media_list_->setCurrentItem(list_item);
+    if (mark_dirty) updateProjectDirtyState();
 }
 
 void MainWindow::handlePlaybackFrame(

@@ -228,3 +228,45 @@ add_test(
     NAME creative-suite-main-editor-timeline
     COMMAND creative-suite-main-editor-timeline-tests
 )
+
+add_executable(creative-suite-main-editor-project-tests
+    project_file_test.cpp
+    ../src/project/project_document.h
+    ../src/project/project_file.cpp
+    ../src/project/project_file.h
+)
+
+target_include_directories(creative-suite-main-editor-project-tests PRIVATE
+    ../src
+)
+
+target_link_libraries(creative-suite-main-editor-project-tests PRIVATE
+    Qt6::Core
+)
+
+target_compile_features(creative-suite-main-editor-project-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-project-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-project-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(WIN32)
+    get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
+    if(NOT QT_CORE_DLL)
+        get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION)
+    endif()
+
+    add_custom_command(TARGET creative-suite-main-editor-project-tests POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${QT_CORE_DLL}"
+            "$<TARGET_FILE_DIR:creative-suite-main-editor-project-tests>"
+        VERBATIM
+    )
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-project
+    COMMAND creative-suite-main-editor-project-tests
+)

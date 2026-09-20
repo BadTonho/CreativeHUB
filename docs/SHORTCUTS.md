@@ -17,6 +17,10 @@ removal, or behavior change.
 | `Ctrl + K` | Split the active timeline clip at the playhead | Main Editor window |
 | `Ctrl + Z` | Undo the last successful Timeline edit | Main Editor window |
 | `Ctrl + Y` / `Ctrl + Shift + Z` | Redo the last undone Timeline edit, depending on platform | Main Editor window |
+| `Ctrl + N` | Create a new project | Main Editor window |
+| `Ctrl + O` | Open a project | Main Editor window |
+| `Ctrl + S` | Save the current project, or open Save As when it has no path | Main Editor window |
+| `Ctrl + Shift + S` | Save the current project under a new path | Main Editor window |
 
 Playback shortcuts are disabled when no media is selected or when the selected
 media is not present in the timeline.
