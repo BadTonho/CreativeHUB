@@ -53,6 +53,15 @@ int main(int argc, char** argv) {
                 {first_source, 60, 0, 30, 1.25, false},
             }},
         };
+        project::ProjectClip title_clip;
+        title_clip.timeline_start_frame = 10;
+        title_clip.duration_frames = 20;
+        title_clip.kind = timeline::ClipKind::Text;
+        title_clip.text.content = "Title";
+        title_clip.text.font_size_pixels = 64.0;
+        title_clip.text.alignment = timeline::TextAlignment::Left;
+        title_clip.text.color = {255, 200, 100, 230};
+        original.timeline_tracks.front().clips.push_back(title_clip);
         original.canvas_width = 1920;
         original.canvas_height = 1080;
         original.timeline_tracks.front().clips.front().transform.position_x = 0.25;
@@ -92,6 +101,9 @@ int main(int argc, char** argv) {
         require(saved_json.find("audio_gain") != std::string::npos &&
                     saved_json.find("audio_muted") != std::string::npos,
                 "Audio settings were not written to the project.");
+        require(saved_json.find("\"kind\": \"text\"") != std::string::npos &&
+                    saved_json.find("\"content\": \"Title\"") != std::string::npos,
+                "Text clip content and kind were not written to the project.");
 
         const auto original_contents = saved_json;
         bool failed = false;
@@ -203,6 +215,27 @@ int main(int argc, char** argv) {
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::InvalidTimeline,
                     "Track overlap returned the wrong error category.");
+        }
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":3,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"tracks":[{"name":"Video 1","clips":[{"source":"a.mkv","timeline_start_frame":0,"source_start_frame":0,"duration_frames":10}]}]}})");
+        const auto migrated_v3 = project::load(project_path);
+        require(migrated_v3.timeline_tracks.front().clips.front().kind ==
+                    timeline::ClipKind::Video &&
+                    migrated_v3.timeline_tracks.front().clips.front().text ==
+                        timeline::TextStyle{},
+                "A version 3 project was not migrated to default video/text fields.");
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":4,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"tracks":[{"name":"Video 1","clips":[{"kind":"text","timeline_start_frame":0,"source_start_frame":0,"duration_frames":30,"text":{"content":"Bad","font_family":"Sans Serif","font_size_pixels":0,"color":{"r":255,"g":255,"b":255,"a":255},"alignment":"center"}}]}]}})");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("An invalid text style was accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::InvalidValue,
+                    "Invalid text style returned the wrong error category.");
         }
 
         std::error_code cleanup_error;

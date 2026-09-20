@@ -102,3 +102,23 @@ up to the top track. The compositor runs outside the UI worker boundary and
 produces one RGBA frame for the preview. The provisional canvas is 1920x1080;
 empty areas use the dark preview background. Audio keeps the existing rule of
 following only the highest-priority visible clip.
+
+## Text clips
+
+Timeline clips may be `Video` or manual `Text`. Text clips are created with
+the Add Text button on the active track at the current playhead, with a
+five-second default duration and the selected media frame rate (or 30 FPS
+when no video is selected). If no track is active, the top track is used.
+
+Within one track, text is composited above video. Video-over-video and
+text-over-text overlap is rejected, while text-over-video overlap is allowed.
+The existing absolute positions, gaps, selection, split, trim, move, delete,
+and Timeline Undo/Redo rules apply to both kinds of clip.
+
+Text stores UTF-8 content and a small style record: font family, pixel size,
+RGBA color, and horizontal alignment. The default is Sans Serif, 48 pixels,
+white, and centered. Its transform and local linear keyframes use the same
+rules as video occurrences. Selecting text keeps the Media Browser selection,
+video session, and playback clock intact; the Inspector changes to text
+editing controls. Text-only timelines can show a static composition, but
+video playback controls remain disabled without a valid video source.

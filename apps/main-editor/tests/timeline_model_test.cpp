@@ -530,6 +530,47 @@ int main() {
         history.recordBeforeEdit(make_history_state(0, first_source, 999));
         require(!history.canRedo(),
                 "A new edit did not clear the Redo history.");
+
+        timeline::TimelineModel text_model;
+        require(text_model.addClip(first_metadata) == timeline::AddClipResult::Added,
+                "The text overlap test video was not added.");
+        require(text_model.addTextClip(0, 10, 150, 24.0) == timeline::AddClipResult::Added,
+                "A text clip could not overlap a video clip.");
+        require(text_model.clipCount() == 2 &&
+                    text_model.tracks()[0].clips[1].kind == timeline::ClipKind::Text,
+                "The text clip kind or count was incorrect.");
+        const auto& text_clip = text_model.tracks()[0].clips[1];
+        require(text_clip.text.content == "Text" &&
+                    text_clip.text.font_family == "Sans Serif" &&
+                    text_clip.text.font_size_pixels == 48.0 &&
+                    text_clip.text.alignment == timeline::TextAlignment::Center &&
+                    text_clip.text.color == std::array<std::uint8_t, 4>{255, 255, 255, 255} &&
+                    text_clip.frame_rate == 24.0 && text_clip.timeline_duration_frames == 150,
+                "Text clip defaults were incorrect.");
+        require(text_model.addTextClip(0, 20, 10) == timeline::AddClipResult::Overlap,
+                "Overlapping text clips were accepted.");
+        require(text_model.addClip(0, second_metadata, 10) == timeline::AddClipResult::Overlap,
+                "An overlapping video clip was accepted.");
+        require(text_model.clipAt(0, 20).has_value() &&
+                    text_model.clipAt(0, 20)->clip_index == 1,
+                "Text was not preferred when selecting an overlapping frame.");
+        auto text_style = text_clip.text;
+        text_style.content = "Hello\nWorld";
+        text_style.alignment = timeline::TextAlignment::Left;
+        text_style.color = {10, 20, 30, 200};
+        require(text_model.setClipText(0, 1, text_style) ==
+                    timeline::TextParameterResult::Changed,
+                "Text style could not be edited.");
+        require(text_model.tracks()[0].clips[1].display_name == "Hello\nWorld" &&
+                    text_model.tracks()[0].clips[1].text == text_style,
+                "Text style changes were not preserved.");
+        text_style.font_size_pixels = 0.0;
+        require(text_model.setClipText(0, 1, text_style) ==
+                    timeline::TextParameterResult::InvalidValue,
+                "An invalid text style was accepted.");
+        require(text_model.setClipText(0, 0, timeline::TextStyle{}) ==
+                    timeline::TextParameterResult::InvalidValue,
+                "Text style was accepted for a video clip.");
     } catch (const std::exception& error) {
         std::error_code cleanup_error;
         std::filesystem::remove_all(directory, cleanup_error);

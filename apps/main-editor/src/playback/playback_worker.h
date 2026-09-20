@@ -4,6 +4,7 @@
 #include "../media/video_metadata.h"
 #include "../media/audio_playback.h"
 #include "../rendering/frame_compositor.h"
+#include "../timeline/timeline_model.h"
 #include "audio_output.h"
 
 #include <QMetaType>
@@ -38,6 +39,8 @@ struct CompositionLayerSpec {
     qint64 clip_index = -1;
     timeline::Transform2D transform;
     timeline::TransformKeyframes keyframes;
+    timeline::ClipKind kind = timeline::ClipKind::Video;
+    timeline::TextStyle text;
 };
 
 class PlaybackWorker final : public QObject {
@@ -72,6 +75,10 @@ public slots:
         double clip_audio_gain,
         bool clip_audio_muted);
     void setComposition(QVector<CompositionLayerSpec> layers, quint64 generation);
+    void renderCompositionFrame(
+        qint64 global_frame,
+        qint64 frame_index,
+        quint64 generation);
     void stepForward();
     void stepBackward();
     void seekToFrame(qint64 frame_index, quint64 generation);

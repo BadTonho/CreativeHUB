@@ -9,6 +9,8 @@
 
 #include <QAction>
 #include <QCheckBox>
+#include <QColorDialog>
+#include <QComboBox>
 #include <QCloseEvent>
 #include <QDockWidget>
 #include <QFileDialog>
@@ -16,6 +18,7 @@
 #include <QDesktopServices>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QFontComboBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QKeySequence>
@@ -29,7 +32,9 @@
 #include <QMetaObject>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QPlainTextEdit>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QScrollArea>
 #include <QSlider>
 #include <QStatusBar>
@@ -112,6 +117,54 @@ QWidget* MainWindow::createInspector() {
         });
     }
     layout->addLayout(form);
+
+    text_controls_ = new QWidget(container);
+    auto* text_layout = new QVBoxLayout(text_controls_);
+    text_layout->setContentsMargins(0, 8, 0, 0);
+    text_layout->setSpacing(6);
+    auto* text_title = new QLabel("Text", text_controls_);
+    text_title->setStyleSheet("font-weight: 600;");
+    text_layout->addWidget(text_title);
+    text_content_editor_ = new QPlainTextEdit(text_controls_);
+    text_content_editor_->setPlaceholderText("Text content");
+    text_content_editor_->setFixedHeight(70);
+    text_layout->addWidget(text_content_editor_);
+
+    auto* text_form = new QFormLayout;
+    text_font_combo_ = new QFontComboBox(text_controls_);
+    text_font_size_spin_ = new QSpinBox(text_controls_);
+    text_font_size_spin_->setRange(1, 512);
+    text_font_size_spin_->setValue(48);
+    text_color_button_ = new QPushButton("Color", text_controls_);
+    text_alignment_combo_ = new QComboBox(text_controls_);
+    text_alignment_combo_->addItems({"Left", "Center", "Right"});
+    text_form->addRow("Font", text_font_combo_);
+    text_form->addRow("Size", text_font_size_spin_);
+    text_form->addRow("Color", text_color_button_);
+    text_form->addRow("Alignment", text_alignment_combo_);
+    text_layout->addLayout(text_form);
+    apply_text_button_ = new QPushButton("Apply Text", text_controls_);
+    text_layout->addWidget(apply_text_button_);
+    layout->addWidget(text_controls_);
+
+    connect(text_color_button_, &QPushButton::clicked, this, [this]() {
+        const QColor current(
+            text_color_[0], text_color_[1], text_color_[2], text_color_[3]);
+        const auto chosen = QColorDialog::getColor(
+            current, this, "Text color", QColorDialog::ShowAlphaChannel);
+        if (!chosen.isValid()) return;
+        text_color_ = {
+            static_cast<std::uint8_t>(chosen.red()),
+            static_cast<std::uint8_t>(chosen.green()),
+            static_cast<std::uint8_t>(chosen.blue()),
+            static_cast<std::uint8_t>(chosen.alpha())};
+        text_color_button_->setStyleSheet(
+            QString("background-color: rgba(%1, %2, %3, %4);")
+                .arg(chosen.red()).arg(chosen.green())
+                .arg(chosen.blue()).arg(chosen.alpha()));
+    });
+    connect(apply_text_button_, &QPushButton::clicked,
+            this, &MainWindow::applyTextStyle);
     layout->addStretch();
     updateInspector();
     return container;
@@ -126,9 +179,54 @@ void MainWindow::updateInspector() {
     for (auto* button : transform_key_buttons_) {
         if (button != nullptr) button->setEnabled(enabled);
     }
+    const bool text_enabled = enabled &&
+        timeline_model_.tracks()[location->track_index]
+            .clips[location->clip_index].kind == timeline::ClipKind::Text;
+    if (text_controls_ != nullptr) text_controls_->setVisible(text_enabled);
+    if (text_content_editor_ != nullptr) text_content_editor_->setEnabled(text_enabled);
+    if (text_font_combo_ != nullptr) text_font_combo_->setEnabled(text_enabled);
+    if (text_font_size_spin_ != nullptr) text_font_size_spin_->setEnabled(text_enabled);
+    if (text_color_button_ != nullptr) text_color_button_->setEnabled(text_enabled);
+    if (text_alignment_combo_ != nullptr) text_alignment_combo_->setEnabled(text_enabled);
+    if (apply_text_button_ != nullptr) apply_text_button_->setEnabled(text_enabled);
     if (location.has_value() && enabled) {
         const auto& clip = timeline_model_.tracks()[location->track_index]
             .clips[location->clip_index];
+        if (clip.kind == timeline::ClipKind::Text) {
+            if (text_content_editor_ != nullptr) {
+                const QSignalBlocker blocker(text_content_editor_);
+                text_content_editor_->setPlainText(QString::fromUtf8(
+                    clip.text.content.data(),
+                    static_cast<qsizetype>(clip.text.content.size())));
+            }
+            if (text_font_combo_ != nullptr) {
+                const QSignalBlocker blocker(text_font_combo_);
+                text_font_combo_->setCurrentFont(QFont(QString::fromUtf8(
+                    clip.text.font_family.data(),
+                    static_cast<qsizetype>(clip.text.font_family.size()))));
+            }
+            if (text_font_size_spin_ != nullptr) {
+                const QSignalBlocker blocker(text_font_size_spin_);
+                text_font_size_spin_->setValue(
+                    static_cast<int>(std::lround(clip.text.font_size_pixels)));
+            }
+            text_color_ = clip.text.color;
+            if (text_color_button_ != nullptr) {
+                text_color_button_->setStyleSheet(
+                    QString("background-color: rgba(%1, %2, %3, %4);")
+                        .arg(text_color_[0]).arg(text_color_[1])
+                        .arg(text_color_[2]).arg(text_color_[3]));
+            }
+            if (text_alignment_combo_ != nullptr) {
+                const QSignalBlocker blocker(text_alignment_combo_);
+                text_alignment_combo_->setCurrentIndex(
+                    clip.text.alignment == timeline::TextAlignment::Left
+                        ? 0
+                        : clip.text.alignment == timeline::TextAlignment::Right
+                            ? 2
+                            : 1);
+            }
+        }
         const auto evaluated = timeline::evaluateTransform(
             clip.transform,
             clip.keyframes,
@@ -170,6 +268,65 @@ void MainWindow::updateInspector() {
             }
         }
     }
+}
+
+void MainWindow::applyTextStyle() {
+    if (!active_timeline_track_index_.has_value() ||
+        !active_timeline_clip_index_.has_value() ||
+        text_content_editor_ == nullptr || text_font_combo_ == nullptr ||
+        text_font_size_spin_ == nullptr || text_alignment_combo_ == nullptr) {
+        return;
+    }
+    const auto track_index = *active_timeline_track_index_;
+    const auto clip_index = *active_timeline_clip_index_;
+    if (track_index >= timeline_model_.trackCount() ||
+        clip_index >= timeline_model_.clipCount(track_index) ||
+        timeline_model_.tracks()[track_index].clips[clip_index].kind !=
+            timeline::ClipKind::Text) {
+        return;
+    }
+
+    timeline::TextStyle text;
+    text.content = text_content_editor_->toPlainText().toUtf8().toStdString();
+    text.font_family = text_font_combo_->currentFont().family().toUtf8().toStdString();
+    text.font_size_pixels = text_font_size_spin_->value();
+    text.color = text_color_;
+    text.alignment = text_alignment_combo_->currentIndex() == 0
+        ? timeline::TextAlignment::Left
+        : text_alignment_combo_->currentIndex() == 2
+            ? timeline::TextAlignment::Right
+            : timeline::TextAlignment::Center;
+
+    const auto before = captureTimelineEditState();
+    pending_clip_activation_.reset();
+    ++playback_generation_;
+    playback_is_playing_ = false;
+    if (playback_worker_ != nullptr) {
+        QMetaObject::invokeMethod(playback_worker_, "pause", Qt::QueuedConnection);
+    }
+    const auto result = timeline_model_.setClipText(track_index, clip_index, text);
+    if (result != timeline::TextParameterResult::Changed) {
+        updateInspector();
+        return;
+    }
+    recordTimelineEdit(before);
+    updateTimelineState();
+    updateProjectDirtyState();
+    sendCompositionToWorker();
+    if (playback_worker_ != nullptr &&
+        timeline_model_.tracks()[track_index].clips[clip_index].kind ==
+            timeline::ClipKind::Text) {
+        QMetaObject::invokeMethod(
+            playback_worker_,
+            "renderCompositionFrame",
+            Qt::QueuedConnection,
+            Q_ARG(qint64, static_cast<qint64>(timelinePlayheadFrame())),
+            Q_ARG(qint64, static_cast<qint64>(playback_frame_index_)),
+            Q_ARG(quint64, playback_generation_));
+    } else if (playback_worker_ != nullptr && canPlaybackSelectedMedia()) {
+        playback_worker_->requestSeek(playback_frame_index_, playback_generation_);
+    }
+    statusBar()->showMessage("Text style updated.");
 }
 
 void MainWindow::applyTransformProperty(int property_index, double value) {

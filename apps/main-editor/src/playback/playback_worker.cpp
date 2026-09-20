@@ -1,6 +1,7 @@
 #include "playback_worker.h"
 
 #include "../logging/logger.h"
+#include "../rendering/text_renderer.h"
 
 #include <QFileInfo>
 #include <QByteArray>
@@ -258,14 +259,17 @@ void PlaybackWorker::setComposition(
 
     try {
         for (const auto& spec : composition_specs_) {
-            if (spec.source_path.isEmpty() || spec.timeline_start_frame < 0 ||
+            if (spec.timeline_start_frame < 0 ||
                 spec.source_start_frame < 0 || spec.segment_frame_count <= 0) {
                 continue;
             }
             CompositionSession composition_session;
             composition_session.spec = spec;
-            composition_session.session = media::VideoPlaybackSession::open(
-                QFileInfo(spec.source_path).filesystemFilePath());
+            if (spec.kind == timeline::ClipKind::Video) {
+                if (spec.source_path.isEmpty()) continue;
+                composition_session.session = media::VideoPlaybackSession::open(
+                    QFileInfo(spec.source_path).filesystemFilePath());
+            }
             if (spec.track_index == track_index_ && spec.clip_index == clip_index_) {
                 primary_timeline_start_frame_ = spec.timeline_start_frame;
             }
@@ -279,6 +283,26 @@ void PlaybackWorker::setComposition(
         composition_sessions_.clear();
         composition_enabled_ = false;
         reportFailure(error, "compose");
+    }
+}
+
+void PlaybackWorker::renderCompositionFrame(
+    qint64 global_frame,
+    qint64 frame_index,
+    quint64 generation) {
+    if (generation < generation_ || !composition_enabled_) return;
+    generation_ = generation;
+    try {
+        const auto composed = decodeCompositionAt(global_frame);
+        if (!composed.has_value()) {
+            throw media::MediaError("The timeline composition could not produce a frame.");
+        }
+        auto payload = std::make_shared<const media::VideoFrame>(*composed);
+        emit frameReady(std::move(payload), frame_index, generation_);
+    } catch (const media::MediaError& error) {
+        reportFailure(error, "compose", frame_index);
+    } catch (const std::exception& error) {
+        reportFailure(error, "compose", frame_index);
     }
 }
 
@@ -691,11 +715,26 @@ std::optional<media::VideoFrame> PlaybackWorker::decodeCompositionAt(
     std::vector<rendering::CompositionLayer> layers;
     layers.reserve(composition_sessions_.size());
 
-    for (auto iterator = composition_sessions_.rbegin();
-         iterator != composition_sessions_.rend();
-         ++iterator) {
-        auto& composition = *iterator;
-        const auto& spec = composition.spec;
+    std::vector<CompositionSession*> ordered_sessions;
+    ordered_sessions.reserve(composition_sessions_.size());
+    for (auto& composition : composition_sessions_) {
+        ordered_sessions.push_back(&composition);
+    }
+    std::sort(
+        ordered_sessions.begin(),
+        ordered_sessions.end(),
+        [](const CompositionSession* left, const CompositionSession* right) {
+            if (left->spec.track_index != right->spec.track_index) {
+                return left->spec.track_index > right->spec.track_index;
+            }
+            if (left->spec.kind != right->spec.kind) {
+                return left->spec.kind == timeline::ClipKind::Video;
+            }
+            return left->spec.clip_index < right->spec.clip_index;
+        });
+
+    for (auto* composition : ordered_sessions) {
+        const auto& spec = composition->spec;
         if (global_frame < spec.timeline_start_frame ||
             global_frame >= spec.timeline_start_frame + spec.segment_frame_count) {
             continue;
@@ -706,7 +745,15 @@ std::optional<media::VideoFrame> PlaybackWorker::decodeCompositionAt(
             continue;
         }
         const auto source_frame = spec.source_start_frame + local_frame;
-        auto frame = composition.session->decode_frame_at(source_frame);
+        std::optional<media::VideoFrame> frame;
+        if (spec.kind == timeline::ClipKind::Text) {
+            frame = rendering::renderText(spec.text);
+            if (!frame.has_value()) {
+                throw media::MediaError("The text layer could not be rasterized.");
+            }
+        } else if (composition->session != nullptr) {
+            frame = composition->session->decode_frame_at(source_frame);
+        }
         if (!frame.has_value()) continue;
         decoded_frames.push_back(std::move(*frame));
         layers.push_back(rendering::CompositionLayer{

@@ -77,6 +77,25 @@ The preview composes all visible tracks in worker-owned code, from the bottom
 track to the top track, before handing one frame to the GPU/CPU preview. A gap
 or an empty canvas is not an error and uses the dark preview background.
 
+## Text clip editing
+
+The Timeline dock also provides Add Text. It creates a five-second manual text
+clip at the current playhead on the active track, using the selected media FPS
+or a 30 FPS fallback. Text clips have a distinct visual style and may sit
+above a video clip in the same track; same-kind overlap is rejected.
+
+When a text occurrence is selected, the Inspector shows a multiline content
+editor, font family, pixel size, RGBA color, horizontal alignment, and an
+Apply action, followed by the shared transform and keyframe controls. A text
+selection keeps the Media Browser selection, current video session, and
+playback clock unchanged. Text-only projects can show a static composition,
+but playback remains disabled without video media. Confirmed text/style edits
+are Timeline Undo/Redo entries and are persisted in `.csp` version 4.
+
+Text rasterization is performed with `QImage/QPainter` by the playback worker;
+the UI only edits the values and receives the composed RGBA frame. No new
+keyboard shortcut is introduced for text creation or editing.
+
 The `MainWindow` coordinator is implemented in responsibility-focused
 translation units under `apps/main-editor/src/main_window/`. Workspace,
 project, Media Browser, Timeline, playback, and Inspector construction and

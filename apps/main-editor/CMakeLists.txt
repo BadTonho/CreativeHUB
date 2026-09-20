@@ -31,6 +31,8 @@ add_executable(creative-suite-main-editor
     src/rendering/opengl_preview_surface.h
     src/rendering/frame_compositor.cpp
     src/rendering/frame_compositor.h
+    src/rendering/text_renderer.cpp
+    src/rendering/text_renderer.h
     src/playback/playback_worker.cpp
     src/playback/playback_worker.h
     src/playback/audio_output.cpp

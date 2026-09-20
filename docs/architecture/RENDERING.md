@@ -53,3 +53,18 @@ keeps the first composition milestone deterministic while leaving per-layer GPU
 composition as a future optimization. A missing layer, invalid media, or
 composition failure preserves the previous preview and is logged with the
 affected source, track, clip, frame, and technical error context.
+
+## Text rasterization
+
+Manual text clips are rasterized with `QImage` and `QPainter` in the playback
+worker, never in the UI thread. The renderer produces a transparent RGBA
+layer using the clip's UTF-8 content, font family, pixel size, color, and
+horizontal alignment. The default style is Sans Serif at 48 pixels, white,
+and centered. The resulting layer enters the same 1920x1080 worker-side
+composition as video layers, with text above video within a track and the
+existing track priority between tracks.
+
+Text is rendered only while visible at the global playhead. Rasterization and
+composition failures preserve the last valid preview and are reported with
+the affected track, clip, frame, and rendering context. OpenGL remains only
+the final presentation path for the composed RGBA frame.

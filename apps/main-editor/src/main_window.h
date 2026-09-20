@@ -24,12 +24,16 @@ class QDockWidget;
 class QAction;
 class QCloseEvent;
 class QCheckBox;
+class QComboBox;
 class QDoubleSpinBox;
+class QFontComboBox;
 class QLabel;
 class QListWidget;
+class QPlainTextEdit;
 class QPushButton;
 class QPoint;
 class QSlider;
+class QSpinBox;
 class QTreeWidget;
 class QTreeWidgetItem;
 class PreviewWidget;
@@ -73,6 +77,7 @@ private:
     void renameActiveTrack();
     void moveActiveTrack(int direction);
     void removeActiveTrack();
+    void addTextClip();
     [[nodiscard]] std::optional<std::size_t> selectedMediaIndex() const noexcept;
     [[nodiscard]] std::string selectedBinPath() const;
     void addMediaItem(
@@ -146,6 +151,7 @@ private:
     void updateInspector();
     void applyTransformProperty(int property_index, double value);
     void toggleTransformKeyframe(int property_index);
+    void applyTextStyle();
     [[nodiscard]] bool hasSelectedMedia() const noexcept;
     [[nodiscard]] std::optional<timeline::ClipLocation>
     selectedTimelineClipLocation() const noexcept;
@@ -220,6 +226,7 @@ private:
     QPushButton* next_frame_button_ = nullptr;
     QPushButton* clear_timeline_button_ = nullptr;
     QPushButton* razor_button_ = nullptr;
+    QPushButton* add_text_button_ = nullptr;
     QSlider* clip_volume_slider_ = nullptr;
     QSlider* track_volume_slider_ = nullptr;
     QCheckBox* clip_mute_check_ = nullptr;
@@ -227,6 +234,13 @@ private:
     QLabel* playback_status_label_ = nullptr;
     std::array<QDoubleSpinBox*, 5> transform_spin_boxes_{};
     std::array<QPushButton*, 5> transform_key_buttons_{};
+    QWidget* text_controls_ = nullptr;
+    QPlainTextEdit* text_content_editor_ = nullptr;
+    QFontComboBox* text_font_combo_ = nullptr;
+    QSpinBox* text_font_size_spin_ = nullptr;
+    QComboBox* text_alignment_combo_ = nullptr;
+    QPushButton* text_color_button_ = nullptr;
+    QPushButton* apply_text_button_ = nullptr;
     QAction* new_project_action_ = nullptr;
     QAction* open_project_action_ = nullptr;
     QAction* save_project_action_ = nullptr;
@@ -259,4 +273,5 @@ private:
     std::int64_t playback_frame_index_ = 0;
     quint64 playback_generation_ = 0;
     bool playback_is_playing_ = false;
+    std::array<std::uint8_t, 4> text_color_{255, 255, 255, 255};
 };

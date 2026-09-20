@@ -209,6 +209,7 @@ std::optional<ClipLocation> TimelineWidget::clipAt(double x, double y) const noe
     // first visible clip in that priority order, regardless of the row under
     // the pointer.
     for (std::size_t track_index = 0; track_index < tracks_.size(); ++track_index) {
+        std::optional<ClipLocation> video_match;
         for (std::size_t clip_index = 0;
              clip_index < tracks_[track_index].clips.size();
              ++clip_index) {
@@ -216,9 +217,13 @@ std::optional<ClipLocation> TimelineWidget::clipAt(double x, double y) const noe
             if (*global_frame >= clip.timeline_start_frame &&
                 *global_frame < clip.timeline_start_frame +
                     clip.timeline_duration_frames) {
-                return ClipLocation{track_index, clip_index};
+                if (clip.kind == ClipKind::Text) {
+                    return ClipLocation{track_index, clip_index};
+                }
+                video_match = ClipLocation{track_index, clip_index};
             }
         }
+        if (video_match.has_value()) return video_match;
     }
     return std::nullopt;
 }
@@ -399,26 +404,29 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                 *active_clip_ == location;
             const bool moving = moving_active_ && moving_clip_ == location;
             const bool trimming = trimming_ && trimming_clip_ == location;
+            const auto& clip = tracks_[track_index].clips[clip_index];
             const QColor track_colors[] = {
                 QColor("#3c75ae"), QColor("#357f70"),
                 QColor("#6d5ca8"), QColor("#9b6943")};
-            const auto clip_color = track_colors[track_index % 4];
+            const auto clip_color = clip.kind == ClipKind::Text
+                ? QColor("#8c5fb3")
+                : track_colors[track_index % 4];
             painter.setPen(active ? QColor("#ffcf5c") : clip_color.lighter(135));
             painter.setBrush(moving || trimming
                 ? QColor("#8a5a2f")
                 : active ? clip_color.lighter(115) : clip_color);
             painter.drawRoundedRect(rect, 3, 3);
             painter.setPen(QColor("#f4f7fb"));
-            const auto label = QString("%1  %2")
+            const auto label = QString("%1  %2%3")
                 .arg(clip_index + 1)
-                .arg(text(tracks_[track_index].clips[clip_index].display_name))
+                .arg(clip.kind == ClipKind::Text ? "[Text] " : "")
+                .arg(text(clip.display_name))
                 + " - " + clipDuration(tracks_[track_index].clips[clip_index]);
             painter.drawText(rect.adjusted(6, 0, -6, 0),
                 Qt::AlignVCenter,
                 QFontMetrics(painter.font()).elidedText(
                     label, Qt::ElideRight, std::max(1, static_cast<int>(rect.width() - 12))));
 
-            const auto& clip = tracks_[track_index].clips[clip_index];
             if (active && clip.timeline_duration_frames > 0) {
                 painter.setPen(Qt::NoPen);
                 painter.setBrush(QColor("#ffe08a"));

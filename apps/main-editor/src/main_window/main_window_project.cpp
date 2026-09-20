@@ -72,14 +72,18 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
         project_track.clips.reserve(track.clips.size());
         for (const auto& clip : track.clips) {
             project_track.clips.push_back(project::ProjectClip{
-                normalizedPath(clip.source_path),
+                clip.kind == timeline::ClipKind::Video
+                    ? normalizedPath(clip.source_path)
+                    : std::filesystem::path{},
                 clip.timeline_start_frame,
                 clip.source_start_frame,
                 clip.timeline_duration_frames,
                 clip.audio_gain,
                 clip.audio_muted,
                 clip.transform,
-                clip.keyframes});
+                clip.keyframes,
+                clip.kind,
+                clip.text});
         }
         document.timeline_tracks.push_back(std::move(project_track));
     }
@@ -384,6 +388,38 @@ void MainWindow::openProject() {
             for (std::size_t clip_index = 0; clip_index < project_track.clips.size(); ++clip_index) {
                 current_clip_index = clip_index;
                 const auto& project_clip = project_track.clips[clip_index];
+                if (project_clip.kind == timeline::ClipKind::Text) {
+                    if (project_clip.timeline_start_frame < 0 ||
+                        project_clip.source_start_frame < 0 ||
+                        project_clip.duration_frames <= 0 ||
+                        !timeline::TimelineModel::validTextStyle(project_clip.text)) {
+                        throw project::ProjectError(
+                            project::ProjectErrorCode::InvalidTimeline,
+                            "A text timeline clip has invalid timing or style.",
+                            std::nullopt,
+                            project_path);
+                    }
+                    timeline::TimelineClip text_clip;
+                    text_clip.timeline_start_frame = project_clip.timeline_start_frame;
+                    text_clip.source_start_frame = project_clip.source_start_frame;
+                    text_clip.timeline_duration_frames = project_clip.duration_frames;
+                    text_clip.display_name = project_clip.text.content.empty()
+                        ? "Text"
+                        : project_clip.text.content;
+                    text_clip.duration_seconds =
+                        static_cast<double>(project_clip.duration_frames) / 30.0;
+                    text_clip.frame_rate = 30.0;
+                    text_clip.frame_count = project_clip.duration_frames;
+                    text_clip.audio_gain = project_clip.audio_gain;
+                    text_clip.audio_muted = project_clip.audio_muted;
+                    text_clip.transform = project_clip.transform;
+                    text_clip.keyframes = project_clip.keyframes;
+                    text_clip.kind = timeline::ClipKind::Text;
+                    text_clip.text = project_clip.text;
+                    snapshot.clips.push_back(text_clip);
+                    snapshot.tracks.back().clips.push_back(std::move(text_clip));
+                    continue;
+                }
             const auto media_index = media_index_for(project_clip.source_path);
             if (!media_index.has_value()) {
                 throw project::ProjectError(
@@ -427,7 +463,9 @@ void MainWindow::openProject() {
                 0,
                 0,
                 project_clip.transform,
-                project_clip.keyframes});
+                project_clip.keyframes,
+                timeline::ClipKind::Video,
+                {}});
             snapshot.tracks.back().clips.push_back(snapshot.clips.back());
             }
         }

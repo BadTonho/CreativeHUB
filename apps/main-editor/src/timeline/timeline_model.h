@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <array>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -14,6 +15,27 @@ namespace timeline {
 
 using TrackId = std::uint64_t;
 using ClipId = std::uint64_t;
+
+enum class ClipKind {
+    Video,
+    Text,
+};
+
+enum class TextAlignment {
+    Left,
+    Center,
+    Right,
+};
+
+struct TextStyle {
+    std::string content = "Text";
+    std::string font_family = "Sans Serif";
+    double font_size_pixels = 48.0;
+    std::array<std::uint8_t, 4> color{255, 255, 255, 255};
+    TextAlignment alignment = TextAlignment::Center;
+
+    friend bool operator==(const TextStyle&, const TextStyle&) = default;
+};
 
 struct TimelineClip {
     std::int64_t timeline_start_frame = 0;
@@ -30,6 +52,8 @@ struct TimelineClip {
     TrackId track_id = 0;
     Transform2D transform;
     TransformKeyframes keyframes;
+    ClipKind kind = ClipKind::Video;
+    TextStyle text;
 
     friend bool operator==(const TimelineClip&, const TimelineClip&) = default;
 };
@@ -83,6 +107,7 @@ enum class RemoveClipResult { Removed, InvalidIndex };
 enum class TrimClipResult { Trimmed, InvalidIndex, InvalidRange };
 enum class AudioParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class TransformParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
+enum class TextParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 
 class TimelineModel final {
 public:
@@ -125,6 +150,11 @@ public:
 
     // Compatibility helpers for the original single-track API.
     AddClipResult addClip(const media::VideoMetadata& metadata);
+    AddClipResult addTextClip(
+        std::size_t track_index,
+        std::int64_t timeline_start_frame,
+        std::int64_t duration_frames,
+        double frame_rate = 30.0);
     MoveClipResult moveClip(std::size_t from_index, std::size_t to_index);
     SplitClipResult splitClip(std::size_t clip_index, std::int64_t local_frame);
     RemoveClipResult removeClip(std::size_t clip_index);
@@ -156,6 +186,10 @@ public:
         std::size_t clip_index,
         TransformProperty property,
         std::int64_t local_frame);
+    TextParameterResult setClipText(
+        std::size_t track_index,
+        std::size_t clip_index,
+        const TextStyle& text);
 
     void clear() noexcept;
 
@@ -181,6 +215,7 @@ public:
         const std::string& display_name);
 
     [[nodiscard]] static bool validAudioGain(double gain) noexcept;
+    [[nodiscard]] static bool validTextStyle(const TextStyle& text) noexcept;
 
 private:
     [[nodiscard]] static std::optional<std::int64_t> durationInFrames(
@@ -190,6 +225,11 @@ private:
     [[nodiscard]] static bool validName(const std::string& name) noexcept;
     [[nodiscard]] static bool overlaps(
         const TimelineClip& left,
+        std::int64_t start_frame,
+        std::int64_t duration_frames) noexcept;
+    [[nodiscard]] static bool overlapsSameKind(
+        const TimelineClip& left,
+        ClipKind kind,
         std::int64_t start_frame,
         std::int64_t duration_frames) noexcept;
     [[nodiscard]] static std::int64_t trackEnd(

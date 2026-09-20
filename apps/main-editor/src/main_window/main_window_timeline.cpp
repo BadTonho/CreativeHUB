@@ -180,6 +180,89 @@ void MainWindow::removeActiveTrack() {
     }
 }
 
+void MainWindow::addTextClip() {
+    const auto track_index = active_timeline_track_index_.value_or(0);
+    if (track_index >= timeline_model_.trackCount()) {
+        statusBar()->showMessage("No video track is available for text.");
+        return;
+    }
+
+    double frame_rate = 30.0;
+    if (const auto selected_index = selectedMediaIndex(); selected_index.has_value()) {
+        const auto& metadata = media_items_[*selected_index].metadata;
+        if (metadata.frame_rate.has_value() &&
+            std::isfinite(*metadata.frame_rate) && *metadata.frame_rate > 0.0) {
+            frame_rate = *metadata.frame_rate;
+        }
+    }
+    const auto duration_frames = std::max<std::int64_t>(
+        1, static_cast<std::int64_t>(std::ceil(frame_rate * 5.0)));
+    const auto start_frame = std::max<std::int64_t>(0, timelinePlayheadFrame());
+
+    try {
+        const auto before = captureTimelineEditState();
+        const auto result = timeline_model_.addTextClip(
+            track_index, start_frame, duration_frames, frame_rate);
+        if (result == timeline::AddClipResult::Overlap) {
+            statusBar()->showMessage("A text clip already occupies that range.");
+            return;
+        }
+        if (result != timeline::AddClipResult::Added) {
+            statusBar()->showMessage("The text clip could not be added.");
+            return;
+        }
+
+        pending_clip_activation_.reset();
+        ++playback_generation_;
+        playback_is_playing_ = false;
+        recordTimelineEdit(before);
+        const auto& clips = timeline_model_.tracks()[track_index].clips;
+        const auto inserted = std::find_if(
+            clips.begin(), clips.end(),
+            [start_frame, duration_frames](const timeline::TimelineClip& clip) {
+                return clip.kind == timeline::ClipKind::Text &&
+                    clip.timeline_start_frame == start_frame &&
+                    clip.timeline_duration_frames == duration_frames;
+            });
+        if (inserted != clips.end()) {
+            active_timeline_track_index_ = track_index;
+            active_timeline_clip_index_ = static_cast<std::size_t>(
+                std::distance(clips.begin(), inserted));
+            playback_frame_index_ = 0;
+        }
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        sendCompositionToWorker();
+        if (playback_worker_ != nullptr &&
+            active_timeline_track_index_.has_value() &&
+            active_timeline_clip_index_.has_value() &&
+            timeline_model_.tracks()[*active_timeline_track_index_]
+                .clips[*active_timeline_clip_index_].kind == timeline::ClipKind::Text) {
+            QMetaObject::invokeMethod(
+                playback_worker_,
+                "renderCompositionFrame",
+                Qt::QueuedConnection,
+                Q_ARG(qint64, static_cast<qint64>(timelinePlayheadFrame())),
+                Q_ARG(qint64, static_cast<qint64>(playback_frame_index_)),
+                Q_ARG(quint64, playback_generation_));
+        } else if (playback_worker_ != nullptr && canPlaybackSelectedMedia()) {
+            playback_worker_->requestSeek(playback_frame_index_, playback_generation_);
+        }
+        statusBar()->showMessage("Text clip added.");
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "timeline",
+            "add_text",
+            error.what(),
+            {{"track_index", std::to_string(track_index)},
+             {"timeline_frame", std::to_string(start_frame)}});
+        statusBar()->showMessage("Could not add the text clip.");
+        QMessageBox::warning(this, "Timeline error", "The text clip could not be added.");
+    }
+}
+
 QWidget* MainWindow::createTimeline() {
     auto* container = new QWidget;
     auto* layout = new QVBoxLayout(container);
@@ -208,12 +291,16 @@ QWidget* MainWindow::createTimeline() {
     next_frame_button_ = new QPushButton("Next Frame", container);
     clear_timeline_button_ = new QPushButton("Clear Timeline", container);
     razor_button_ = new QPushButton("Blade Tool", container);
+    add_text_button_ = new QPushButton("Add Text", container);
+    add_text_button_ = new QPushButton("Add Text", container);
     razor_button_->setCheckable(true);
     controls->addWidget(previous_frame_button_);
     controls->addWidget(play_pause_button_);
     controls->addWidget(next_frame_button_);
     controls->addWidget(clear_timeline_button_);
     controls->addWidget(razor_button_);
+    controls->addWidget(add_text_button_);
+    controls->addWidget(add_text_button_);
     controls->addSpacing(10);
     auto* tracks_label = new QLabel("Tracks", container);
     tracks_label->setStyleSheet("color: #9aa4b2; font-weight: 600;");
@@ -266,6 +353,8 @@ QWidget* MainWindow::createTimeline() {
     next_frame_button_->setToolTip("Step one frame forward");
     clear_timeline_button_->setToolTip("Remove all clips from every track");
     razor_button_->setToolTip("Split a clip where you click");
+    add_text_button_->setToolTip("Add a five-second text clip at the current playhead");
+    add_text_button_->setToolTip("Add a five-second text clip at the current playhead");
     add_track_button->setToolTip("Create a new empty video track");
     rename_track_button->setToolTip("Rename the active track");
     move_track_up_button->setToolTip("Move the active track toward the top");
@@ -316,6 +405,8 @@ QWidget* MainWindow::createTimeline() {
         }
         if (timeline_widget_ != nullptr) timeline_widget_->setRazorMode(enabled);
     });
+    connect(add_text_button_, &QPushButton::clicked,
+            this, &MainWindow::addTextClip);
     connect(add_track_button, &QPushButton::clicked,
             this, &MainWindow::addVideoTrack);
     connect(rename_track_button, &QPushButton::clicked,
@@ -400,11 +491,7 @@ bool MainWindow::hasSelectedMedia() const noexcept {
 
 std::optional<timeline::ClipLocation>
 MainWindow::selectedTimelineClipLocation() const noexcept {
-    if (!hasSelectedMedia() || !timeline_model_.hasClip()) return std::nullopt;
-
-    const auto selected_index = selectedMediaIndex();
-    if (!selected_index.has_value()) return std::nullopt;
-    const auto& selected = media_items_[*selected_index];
+    if (!timeline_model_.hasClip()) return std::nullopt;
     if (active_timeline_track_index_.has_value() &&
         active_timeline_clip_index_.has_value() &&
         *active_timeline_track_index_ < timeline_model_.trackCount() &&
@@ -412,15 +499,25 @@ MainWindow::selectedTimelineClipLocation() const noexcept {
             *active_timeline_track_index_)) {
         const auto& active_clip = timeline_model_.tracks()
             [*active_timeline_track_index_].clips[*active_timeline_clip_index_];
-        if (active_clip.source_path == selected.metadata.source_path) {
+        if (active_clip.kind == timeline::ClipKind::Text) {
+            return timeline::ClipLocation{
+                *active_timeline_track_index_, *active_timeline_clip_index_};
+        }
+        const auto selected_index = selectedMediaIndex();
+        if (selected_index.has_value() &&
+            active_clip.source_path == media_items_[*selected_index].metadata.source_path) {
             return timeline::ClipLocation{
                 *active_timeline_track_index_, *active_timeline_clip_index_};
         }
     }
+    const auto selected_index = selectedMediaIndex();
+    if (!selected_index.has_value()) return std::nullopt;
+    const auto& selected = media_items_[*selected_index];
     for (std::size_t track = 0; track < timeline_model_.trackCount(); ++track) {
         const auto& clips = timeline_model_.tracks()[track].clips;
         for (std::size_t index = 0; index < clips.size(); ++index) {
-            if (clips[index].source_path == selected.metadata.source_path) {
+            if (clips[index].kind == timeline::ClipKind::Video &&
+                clips[index].source_path == selected.metadata.source_path) {
                 return timeline::ClipLocation{track, index};
             }
         }
@@ -615,7 +712,9 @@ void MainWindow::updateTimelineState() {
 
     const bool audio_enabled = canPlaybackSelectedMedia() &&
         active_timeline_track_index_.has_value() &&
-        active_timeline_clip_index_.has_value();
+        active_timeline_clip_index_.has_value() &&
+        timeline_model_.tracks()[*active_timeline_track_index_]
+            .clips[*active_timeline_clip_index_].kind == timeline::ClipKind::Video;
     if (clip_volume_slider_ != nullptr && clip_mute_check_ != nullptr &&
         track_volume_slider_ != nullptr && track_mute_check_ != nullptr) {
         clip_volume_slider_->setEnabled(audio_enabled);
@@ -888,6 +987,30 @@ void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_in
         return;
     }
     active_timeline_track_index_ = static_cast<std::size_t>(track_index);
+    const auto& selected_clip = timeline_model_.tracks()
+        [*active_timeline_track_index_].clips[static_cast<std::size_t>(clip_index)];
+    if (selected_clip.kind == timeline::ClipKind::Text) {
+        active_timeline_clip_index_ = static_cast<std::size_t>(clip_index);
+        pending_clip_activation_.reset();
+        ++playback_generation_;
+        playback_is_playing_ = false;
+        playback_frame_index_ = 0;
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        sendCompositionToWorker();
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_,
+                "renderCompositionFrame",
+                Qt::QueuedConnection,
+                Q_ARG(qint64, static_cast<qint64>(timelinePlayheadFrame())),
+                Q_ARG(qint64, static_cast<qint64>(playback_frame_index_)),
+                Q_ARG(quint64, playback_generation_));
+        }
+        statusBar()->showMessage("Text clip selected.");
+        return;
+    }
     if (*active_timeline_track_index_ == 0) {
         handleTimelineClipSelected(clip_index);
         return;
@@ -1006,7 +1129,11 @@ void MainWindow::handleTimelineClipSplitAt(
     qint64 track_index,
     qint64 clip_index,
     qint64 local_frame) {
-    if (track_index == 0) {
+    if (track_index == 0 &&
+        clip_index >= 0 &&
+        clip_index < static_cast<qint64>(timeline_model_.clipCount(0)) &&
+        timeline_model_.tracks()[0].clips[static_cast<std::size_t>(clip_index)].kind ==
+            timeline::ClipKind::Video) {
         active_timeline_track_index_ = 0;
         handleTimelineClipSplit(clip_index, local_frame);
         return;
@@ -1070,7 +1197,11 @@ void MainWindow::handleTimelineClipTrimAt(
     qint64 clip_index,
     qint64 local_start_frame,
     qint64 local_end_frame) {
-    if (track_index == 0) {
+    if (track_index == 0 &&
+        clip_index >= 0 &&
+        clip_index < static_cast<qint64>(timeline_model_.clipCount(0)) &&
+        timeline_model_.tracks()[0].clips[static_cast<std::size_t>(clip_index)].kind ==
+            timeline::ClipKind::Video) {
         active_timeline_track_index_ = 0;
         handleTimelineClipTrim(clip_index, local_start_frame, local_end_frame);
         return;
@@ -1501,8 +1632,7 @@ void MainWindow::moveActiveTimelineClip(int direction) {
 }
 
 void MainWindow::deleteActiveTimelineClip() {
-    if (!canPlaybackSelectedMedia() ||
-        !active_timeline_track_index_.has_value() ||
+    if (!active_timeline_track_index_.has_value() ||
         !active_timeline_clip_index_.has_value() ||
         *active_timeline_track_index_ >= timeline_model_.trackCount() ||
         *active_timeline_clip_index_ >= timeline_model_.clipCount(
@@ -1514,6 +1644,7 @@ void MainWindow::deleteActiveTimelineClip() {
     const auto track_index = *active_timeline_track_index_;
     const auto clip_index = *active_timeline_clip_index_;
     const auto clip = timeline_model_.tracks()[track_index].clips[clip_index];
+    if (clip.kind == timeline::ClipKind::Video && !canPlaybackSelectedMedia()) return;
     timeline::EditState before_edit;
 
     try {
@@ -1572,7 +1703,17 @@ void MainWindow::deleteActiveTimelineClip() {
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
-        activateTimelineClipAt(next_track, next_index, 0, false);
+        if (timeline_model_.tracks()[next_track].clips[next_index].kind ==
+            timeline::ClipKind::Video) {
+            activateTimelineClipAt(next_track, next_index, 0, false);
+        } else {
+            active_timeline_track_index_ = next_track;
+            active_timeline_clip_index_ = next_index;
+            sendCompositionToWorker();
+            updateTimelineState();
+            updatePlaybackControls();
+            updatePlaybackStatus();
+        }
         statusBar()->showMessage("Timeline clip deleted.");
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
@@ -1603,8 +1744,14 @@ void MainWindow::splitActiveClipAtPlayhead() {
         *active_timeline_track_index_ >= timeline_model_.trackCount() ||
         *active_timeline_clip_index_ >= timeline_model_.clipCount(
             *active_timeline_track_index_) ||
-        !canPlaybackSelectedMedia() ||
         pending_clip_activation_.has_value()) {
+        return;
+    }
+
+    const auto& active_clip = timeline_model_.tracks()
+        [*active_timeline_track_index_].clips[*active_timeline_clip_index_];
+    if (active_clip.kind == timeline::ClipKind::Video &&
+        !canPlaybackSelectedMedia()) {
         return;
     }
 
@@ -1659,6 +1806,44 @@ void MainWindow::handleTimelineClipTrim(
     const auto new_source_start_frame = clip.source_start_frame +
         local_start_frame;
     const auto new_duration_frames = local_end_frame - local_start_frame;
+    if (clip.kind == timeline::ClipKind::Text) {
+        const bool was_active = active_timeline_clip_index_.has_value() &&
+            *active_timeline_clip_index_ == index;
+        const auto old_playhead_frame = playback_frame_index_;
+        try {
+            const auto before_edit = captureTimelineEditState();
+            const auto result = timeline_model_.trimClip(
+                index, new_source_start_frame, new_duration_frames);
+            if (result != timeline::TrimClipResult::Trimmed) {
+                statusBar()->showMessage("The text clip cannot be trimmed to that range.");
+                return;
+            }
+            recordTimelineEdit(before_edit);
+            active_timeline_track_index_ = 0;
+            active_timeline_clip_index_ = index;
+            playback_frame_index_ = was_active
+                ? std::clamp<std::int64_t>(
+                    old_playhead_frame - local_start_frame,
+                    0, new_duration_frames - 1)
+                : 0;
+            updateTimelineState();
+            updatePlaybackControls();
+            updatePlaybackStatus();
+            sendCompositionToWorker();
+            statusBar()->showMessage("Text clip trimmed.");
+        } catch (const std::exception& error) {
+            logging::Logger::instance().log(
+                logging::Level::Error,
+                "timeline",
+                "trim_clip",
+                error.what(),
+                {{"clip_index", std::to_string(clip_index)},
+                 {"local_start_frame", std::to_string(local_start_frame)},
+                 {"local_end_frame", std::to_string(local_end_frame)}});
+            statusBar()->showMessage("Could not trim the text clip.");
+        }
+        return;
+    }
     const auto media_item = std::find_if(
         media_items_.begin(),
         media_items_.end(),
@@ -1762,6 +1947,43 @@ void MainWindow::handleTimelineClipSplit(qint64 clip_index, qint64 local_frame) 
         local_frame > std::numeric_limits<std::int64_t>::max() -
             source_clip.source_start_frame) {
         statusBar()->showMessage("A clip cannot be split at its boundary.");
+        return;
+    }
+
+    if (source_clip.kind == timeline::ClipKind::Text) {
+        try {
+            const auto before = captureTimelineEditState();
+            pending_clip_activation_.reset();
+            ++playback_generation_;
+            playback_is_playing_ = false;
+            if (playback_worker_ != nullptr) {
+                QMetaObject::invokeMethod(
+                    playback_worker_, "pause", Qt::QueuedConnection);
+            }
+            if (timeline_model_.splitClip(0, source_index, local_frame) !=
+                timeline::SplitClipResult::Split) {
+                statusBar()->showMessage("A clip cannot be split at its boundary.");
+                return;
+            }
+            recordTimelineEdit(before);
+            active_timeline_track_index_ = 0;
+            active_timeline_clip_index_ = source_index + 1;
+            playback_frame_index_ = 0;
+            updateTimelineState();
+            updatePlaybackControls();
+            updatePlaybackStatus();
+            sendCompositionToWorker();
+            statusBar()->showMessage("Text clip split at the playhead.");
+        } catch (const std::exception& error) {
+            logging::Logger::instance().log(
+                logging::Level::Error,
+                "timeline",
+                "split_clip",
+                error.what(),
+                {{"clip_index", std::to_string(clip_index)},
+                 {"local_frame", std::to_string(local_frame)}});
+            statusBar()->showMessage("Could not split the text clip.");
+        }
         return;
     }
 

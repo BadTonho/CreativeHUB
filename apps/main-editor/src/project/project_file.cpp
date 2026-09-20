@@ -60,6 +60,20 @@ bool validAudioGain(double gain) {
     return std::isfinite(gain) && gain >= 0.0 && gain <= 2.0;
 }
 
+bool validTextStyle(const timeline::TextStyle& text) {
+    if (text.font_family.empty() || !std::isfinite(text.font_size_pixels) ||
+        text.font_size_pixels <= 0.0 || text.font_size_pixels > 512.0) {
+        return false;
+    }
+    switch (text.alignment) {
+    case timeline::TextAlignment::Left:
+    case timeline::TextAlignment::Center:
+    case timeline::TextAlignment::Right:
+        return true;
+    }
+    return false;
+}
+
 bool validKeyframeList(
     const std::vector<timeline::Keyframe>& keyframes,
     timeline::TransformProperty property,
@@ -134,6 +148,66 @@ QString requiredString(const QJsonObject& object,
     return value.toString();
 }
 
+timeline::TextStyle parseTextStyle(
+    const QJsonObject& clip_object,
+    const std::filesystem::path& project_path) {
+    const auto text_value = clip_object.value("text");
+    if (!text_value.isObject()) {
+        throwJson(ProjectErrorCode::MissingField, project_path, "A text clip is missing its text object.");
+    }
+    const auto object = text_value.toObject();
+    timeline::TextStyle text;
+    const auto content = object.value("content");
+    if (!content.isString()) {
+        throwJson(ProjectErrorCode::MissingField, project_path, "A text clip is missing text content.");
+    }
+    text.content = content.toString().toUtf8().toStdString();
+    if (object.contains("font_family")) {
+        if (!object.value("font_family").isString()) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "A text clip contains an invalid font family.");
+        }
+        text.font_family = object.value("font_family").toString().toUtf8().toStdString();
+    }
+    if (object.contains("font_size_pixels")) {
+        if (!object.value("font_size_pixels").isDouble()) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "A text clip contains an invalid font size.");
+        }
+        text.font_size_pixels = object.value("font_size_pixels").toDouble();
+    }
+    if (object.contains("color")) {
+        const auto color_value = object.value("color");
+        if (!color_value.isObject()) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "A text clip contains an invalid color.");
+        }
+        const auto color = color_value.toObject();
+        for (const auto key : {"r", "g", "b", "a"}) {
+            const auto component = color.value(QLatin1String(key));
+            if (!component.isDouble() || component.toDouble() < 0.0 ||
+                component.toDouble() > 255.0 ||
+                std::floor(component.toDouble()) != component.toDouble()) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path, "A text clip contains an invalid color component.");
+            }
+        }
+        text.color = {
+            static_cast<std::uint8_t>(color.value("r").toInt()),
+            static_cast<std::uint8_t>(color.value("g").toInt()),
+            static_cast<std::uint8_t>(color.value("b").toInt()),
+            static_cast<std::uint8_t>(color.value("a").toInt())};
+    }
+    if (object.contains("alignment")) {
+        const auto alignment = object.value("alignment");
+        if (!alignment.isString()) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "A text clip contains an invalid alignment.");
+        }
+        const auto value = alignment.toString();
+        if (value == QLatin1String("left")) text.alignment = timeline::TextAlignment::Left;
+        else if (value == QLatin1String("center")) text.alignment = timeline::TextAlignment::Center;
+        else if (value == QLatin1String("right")) text.alignment = timeline::TextAlignment::Right;
+        else throwJson(ProjectErrorCode::InvalidValue, project_path, "A text clip contains an unsupported alignment.");
+    }
+    return text;
+}
+
 void validateDocument(const ProjectDocument& document,
                       const std::filesystem::path& project_path) {
     if (document.canvas_width != 1920 || document.canvas_height != 1080) {
@@ -161,7 +235,10 @@ void validateDocument(const ProjectDocument& document,
     }
 
     auto validate_clip = [&project_path](const ProjectClip& clip) {
-        if (clip.source_path.empty() || clip.timeline_start_frame < 0 ||
+        if (clip.kind == timeline::ClipKind::Video && clip.source_path.empty()) {
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains a video clip without a source.");
+        }
+        if (clip.timeline_start_frame < 0 ||
             clip.source_start_frame < 0 || clip.duration_frames <= 0) {
             throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains an invalid timeline segment.");
         }
@@ -172,6 +249,9 @@ void validateDocument(const ProjectDocument& document,
         }
         if (!validAudioGain(clip.audio_gain)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip audio gain.");
+        }
+        if (clip.kind == timeline::ClipKind::Text && !validTextStyle(clip.text)) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains invalid text clip styling.");
         }
         if (!timeline::validTransform(clip.transform) ||
             !validKeyframeList(clip.keyframes.position_x,
@@ -208,7 +288,8 @@ void validateDocument(const ProjectDocument& document,
                 const auto& second = track.clips[right];
                 const auto second_end =
                     second.timeline_start_frame + second.duration_frames;
-                if (second.timeline_start_frame < first_end &&
+                if (first.kind == second.kind &&
+                    second.timeline_start_frame < first_end &&
                     first.timeline_start_frame <
                         second_end) {
                     throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains overlapping clips on one track.");
@@ -263,7 +344,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
 
     const auto version = requiredInteger(root, "version", project_path);
     if (version != current_format_version && version != previous_format_version &&
-        version != legacy_format_version) {
+        version != older_format_version && version != legacy_format_version) {
         throw ProjectError(
             ProjectErrorCode::UnsupportedVersion,
             "The project file version is not supported.",
@@ -277,7 +358,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
     }
 
     ProjectDocument document;
-    if (version >= current_format_version) {
+    if (version >= previous_format_version) {
         const auto canvas_value = root.value("canvas");
         if (!canvas_value.isObject()) {
             throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the canvas object.");
@@ -398,7 +479,25 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                 }
                 const auto clip_object = clip_value.toObject();
                 ProjectClip clip;
-                clip.source_path = resolvedPath(project_path, requiredString(clip_object, "source", project_path));
+                if (version >= current_format_version && clip_object.contains("kind")) {
+                    const auto kind = clip_object.value("kind");
+                    if (!kind.isString()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip kind.");
+                    }
+                    if (kind.toString() == QLatin1String("video")) {
+                        clip.kind = timeline::ClipKind::Video;
+                    } else if (kind.toString() == QLatin1String("text")) {
+                        clip.kind = timeline::ClipKind::Text;
+                    } else {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an unsupported clip kind.");
+                    }
+                }
+                if (clip.kind == timeline::ClipKind::Video) {
+                    clip.source_path = resolvedPath(
+                        project_path, requiredString(clip_object, "source", project_path));
+                } else {
+                    clip.text = parseTextStyle(clip_object, project_path);
+                }
                 clip.timeline_start_frame = requiredInteger(clip_object, "timeline_start_frame", project_path);
                 clip.source_start_frame = requiredInteger(clip_object, "source_start_frame", project_path);
                 clip.duration_frames = requiredInteger(clip_object, "duration_frames", project_path);
@@ -414,7 +513,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                     }
                     clip.audio_muted = clip_object.value("audio_muted").toBool();
                 }
-                if (version >= current_format_version && clip_object.contains("transform")) {
+                if (version >= previous_format_version && clip_object.contains("transform")) {
                     const auto transform = clip_object.value("transform");
                     if (!transform.isObject()) {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip transform.");
@@ -435,7 +534,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                     clip.transform.rotation_degrees = transform_object.value("rotation").toDouble();
                     clip.transform.opacity = transform_object.value("opacity").toDouble();
                 }
-                if (version >= current_format_version && clip_object.contains("keyframes")) {
+                if (version >= previous_format_version && clip_object.contains("keyframes")) {
                     const auto keyframes = clip_object.value("keyframes");
                     if (!keyframes.isObject()) {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains invalid clip keyframes.");
@@ -520,7 +619,28 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
         QJsonArray clips;
         for (const auto& clip : track_source.clips) {
             QJsonObject item;
-            item.insert("source", storedPath(project_path, clip.source_path));
+            item.insert("kind", clip.kind == timeline::ClipKind::Text ? "text" : "video");
+            if (clip.kind == timeline::ClipKind::Video) {
+                item.insert("source", storedPath(project_path, clip.source_path));
+            } else {
+                QJsonObject text;
+                text.insert("content", QString::fromUtf8(
+                    clip.text.content.data(), static_cast<int>(clip.text.content.size())));
+                text.insert("font_family", QString::fromUtf8(
+                    clip.text.font_family.data(), static_cast<int>(clip.text.font_family.size())));
+                text.insert("font_size_pixels", clip.text.font_size_pixels);
+                QJsonObject color;
+                color.insert("r", clip.text.color[0]);
+                color.insert("g", clip.text.color[1]);
+                color.insert("b", clip.text.color[2]);
+                color.insert("a", clip.text.color[3]);
+                text.insert("color", color);
+                const char* alignment = "center";
+                if (clip.text.alignment == timeline::TextAlignment::Left) alignment = "left";
+                else if (clip.text.alignment == timeline::TextAlignment::Right) alignment = "right";
+                text.insert("alignment", alignment);
+                item.insert("text", text);
+            }
             item.insert("timeline_start_frame", static_cast<qint64>(clip.timeline_start_frame));
             item.insert("source_start_frame", static_cast<qint64>(clip.source_start_frame));
             item.insert("duration_frames", static_cast<qint64>(clip.duration_frames));

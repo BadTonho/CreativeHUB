@@ -43,6 +43,20 @@ bool TimelineModel::validAudioGain(double gain) noexcept {
     return std::isfinite(gain) && gain >= 0.0 && gain <= 2.0;
 }
 
+bool TimelineModel::validTextStyle(const TextStyle& text) noexcept {
+    if (text.font_family.empty() || !std::isfinite(text.font_size_pixels) ||
+        text.font_size_pixels <= 0.0 || text.font_size_pixels > 512.0) {
+        return false;
+    }
+    switch (text.alignment) {
+    case TextAlignment::Left:
+    case TextAlignment::Center:
+    case TextAlignment::Right:
+        return true;
+    }
+    return false;
+}
+
 std::filesystem::path TimelineModel::canonicalPath(const std::filesystem::path& path) {
     std::error_code error;
     const auto canonical = std::filesystem::weakly_canonical(path, error);
@@ -86,6 +100,14 @@ bool TimelineModel::overlaps(
     const auto end_frame = start_frame + duration_frames;
     const auto left_end = left.timeline_start_frame + left.timeline_duration_frames;
     return start_frame < left_end && left.timeline_start_frame < end_frame;
+}
+
+bool TimelineModel::overlapsSameKind(
+    const TimelineClip& left,
+    ClipKind kind,
+    std::int64_t start_frame,
+    std::int64_t duration_frames) noexcept {
+    return left.kind == kind && overlaps(left, start_frame, duration_frames);
 }
 
 std::int64_t TimelineModel::trackEnd(const TimelineTrack& track) noexcept {
@@ -165,7 +187,8 @@ AddClipResult TimelineModel::addClip(
         return AddClipResult::InvalidPosition;
     }
     for (const auto& existing : track->clips) {
-        if (overlaps(existing, timeline_start_frame, *duration_frames)) {
+        if (overlapsSameKind(
+                existing, ClipKind::Video, timeline_start_frame, *duration_frames)) {
             return AddClipResult::Overlap;
         }
     }
@@ -182,6 +205,43 @@ AddClipResult TimelineModel::addClip(
         false,
         next_clip_id_++,
         track->track_id};
+    track->clips.push_back(std::move(clip));
+    std::sort(track->clips.begin(), track->clips.end(),
+              [](const auto& left, const auto& right) {
+                  return left.timeline_start_frame < right.timeline_start_frame;
+              });
+    return AddClipResult::Added;
+}
+
+AddClipResult TimelineModel::addTextClip(
+    std::size_t track_index,
+    std::int64_t timeline_start_frame,
+    std::int64_t duration_frames,
+    double frame_rate) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr) return AddClipResult::InvalidTrack;
+    if (timeline_start_frame < 0 || duration_frames <= 0 ||
+        duration_frames > std::numeric_limits<std::int64_t>::max() - timeline_start_frame ||
+        !std::isfinite(frame_rate) || frame_rate <= 0.0) {
+        return AddClipResult::InvalidPosition;
+    }
+    for (const auto& existing : track->clips) {
+        if (overlapsSameKind(
+                existing, ClipKind::Text, timeline_start_frame, duration_frames)) {
+            return AddClipResult::Overlap;
+        }
+    }
+
+    TimelineClip clip;
+    clip.timeline_start_frame = timeline_start_frame;
+    clip.timeline_duration_frames = duration_frames;
+    clip.display_name = "Text";
+    clip.duration_seconds = static_cast<double>(duration_frames) / frame_rate;
+    clip.frame_rate = frame_rate;
+    clip.frame_count = duration_frames;
+    clip.clip_id = next_clip_id_++;
+    clip.track_id = track->track_id;
+    clip.kind = ClipKind::Text;
     track->clips.push_back(std::move(clip));
     std::sort(track->clips.begin(), track->clips.end(),
               [](const auto& left, const auto& right) {
@@ -208,8 +268,8 @@ MoveClipResult TimelineModel::moveClip(
     }
     for (std::size_t index = 0; index < target_track->clips.size(); ++index) {
         if (target_track == source_track && index == from.clip_index) continue;
-        if (overlaps(target_track->clips[index], timeline_start_frame,
-                     clip.timeline_duration_frames)) {
+        if (overlapsSameKind(target_track->clips[index], clip.kind,
+                             timeline_start_frame, clip.timeline_duration_frames)) {
             return MoveClipResult::Overlap;
         }
     }
@@ -300,9 +360,9 @@ TrimClipResult TimelineModel::trimClip(
         return TrimClipResult::InvalidRange;
     }
     for (std::size_t index = 0; index < track->clips.size(); ++index) {
-        if (index != clip_index && overlaps(track->clips[index],
-                                            clip.timeline_start_frame,
-                                            new_duration_frames)) {
+        if (index != clip_index && overlapsSameKind(track->clips[index], clip.kind,
+                                                    clip.timeline_start_frame,
+                                                    new_duration_frames)) {
             return TrimClipResult::InvalidRange;
         }
     }
@@ -421,14 +481,16 @@ std::optional<ClipLocation> TimelineModel::clipAt(
     std::int64_t timeline_frame) const {
     const auto* track = trackAt(track_index);
     if (track == nullptr || timeline_frame < 0) return std::nullopt;
+    std::optional<ClipLocation> video_match;
     for (std::size_t index = 0; index < track->clips.size(); ++index) {
         const auto& clip = track->clips[index];
         if (timeline_frame >= clip.timeline_start_frame &&
             timeline_frame < clip.timeline_start_frame + clip.timeline_duration_frames) {
-            return ClipLocation{track_index, index};
+            if (clip.kind == ClipKind::Text) return ClipLocation{track_index, index};
+            video_match = ClipLocation{track_index, index};
         }
     }
-    return std::nullopt;
+    return video_match;
 }
 
 std::optional<ClipLocation> TimelineModel::topClipAt(std::int64_t timeline_frame) const {
@@ -496,7 +558,10 @@ void TimelineModel::updateDisplayNameForSource(
     const auto canonical_source = canonicalPath(source_path);
     for (auto& track : tracks_) {
         for (auto& clip : track.clips) {
-            if (canonicalPath(clip.source_path) == canonical_source) clip.display_name = display_name;
+            if (clip.kind == ClipKind::Video &&
+                canonicalPath(clip.source_path) == canonical_source) {
+                clip.display_name = display_name;
+            }
         }
     }
 }
@@ -588,6 +653,24 @@ TransformParameterResult TimelineModel::removeClipKeyframe(
         return TransformParameterResult::NoChange;
     }
     return TransformParameterResult::Changed;
+}
+
+TextParameterResult TimelineModel::setClipText(
+    std::size_t track_index,
+    std::size_t clip_index,
+    const TextStyle& text) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_index >= track->clips.size()) {
+        return TextParameterResult::InvalidIndex;
+    }
+    if (track->clips[clip_index].kind != ClipKind::Text || !validTextStyle(text)) {
+        return TextParameterResult::InvalidValue;
+    }
+    auto& clip = track->clips[clip_index];
+    if (clip.text == text) return TextParameterResult::NoChange;
+    clip.text = text;
+    clip.display_name = text.content.empty() ? "Text" : text.content;
+    return TextParameterResult::Changed;
 }
 
 } // namespace timeline
