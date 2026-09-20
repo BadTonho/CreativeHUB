@@ -43,7 +43,10 @@ int main(int argc, char** argv) {
         std::ofstream(outside_source, std::ios::binary).close();
 
         project::ProjectDocument original;
-        original.media_sources = {first_source, outside_source};
+        original.media = {
+            {first_source, "First Video", "Footage/Scenes", false},
+            {outside_source, "Offline Asset", "Unsorted", true},
+        };
         original.timeline_clips = {
             {first_source, 30, 60},
             {first_source, 0, 30},
@@ -66,6 +69,8 @@ int main(int argc, char** argv) {
                 "A source inside the project was not stored relatively.");
         require(saved_json.find("creative-suite-project-outside-") != std::string::npos,
                 "An outside source was not stored in the project.");
+        require(saved_json.find("Footage/Scenes") != std::string::npos,
+                "The media bin was not stored in the project.");
 
         const auto original_contents = saved_json;
         bool failed = false;
@@ -128,13 +133,18 @@ int main(int argc, char** argv) {
         writeText(
             project_path,
             R"({"format":"creative-suite.main-editor","version":1,"media":[{"path":"media/missing.mkv"}],"timeline":{"clips":[]}})");
-        try {
-            static_cast<void>(project::load(project_path));
-            throw std::runtime_error("Missing media was accepted.");
-        } catch (const project::ProjectError& error) {
-            require(error.code() == project::ProjectErrorCode::MediaUnavailable,
-                    "Missing media returned the wrong error category.");
-        }
+        const auto missing = project::load(project_path);
+        require(missing.media.size() == 1 && missing.media.front().offline == false,
+                "A missing media entry was not preserved for the application to mark offline.");
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":1,"media":[{"path":"media/first video.mkv"}],"timeline":{"clips":[]}})");
+        const auto legacy = project::load(project_path);
+        require(legacy.media.front().display_name.empty() &&
+                    legacy.media.front().bin_path == "Unsorted" &&
+                    !legacy.media.front().offline,
+                "A path-only version 1 media entry was not kept backward compatible.");
 
         std::error_code cleanup_error;
         std::filesystem::remove(outside_source, cleanup_error);

@@ -10,9 +10,12 @@
 #include <QString>
 
 #include <cmath>
+#include <algorithm>
 #include <limits>
 #include <string>
 #include <system_error>
+
+#include "../media/media_library.h"
 
 namespace project {
 namespace {
@@ -113,9 +116,24 @@ QString requiredString(const QJsonObject& object,
 
 void validateDocument(const ProjectDocument& document,
                       const std::filesystem::path& project_path) {
-    for (const auto& source : document.media_sources) {
-        if (source.empty()) {
+    std::vector<std::filesystem::path> media_paths;
+    for (const auto& media : document.media) {
+        if (media.source_path.empty()) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an empty media path.");
+        }
+        if (!media::MediaLibrary::validBinPath(media.bin_path)) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid media bin path.");
+        }
+        const auto canonical = media::MediaLibrary::canonicalPath(media.source_path);
+        if (std::find(media_paths.begin(), media_paths.end(), canonical) != media_paths.end()) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains duplicate media paths.");
+        }
+        media_paths.push_back(canonical);
+    }
+
+    for (const auto& bin : document.bins) {
+        if (!media::MediaLibrary::validBinPath(bin)) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid bin path.");
         }
     }
 
@@ -184,22 +202,47 @@ ProjectDocument load(const std::filesystem::path& project_path) {
     }
 
     ProjectDocument document;
+    const auto bins_value = root.value("bins");
+    if (!bins_value.isUndefined()) {
+        if (!bins_value.isArray()) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid bins array.");
+        }
+        for (const auto& bin_value : bins_value.toArray()) {
+            if (!bin_value.isString() || !media::MediaLibrary::validBinPath(
+                    bin_value.toString().toUtf8().toStdString())) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid bin path.");
+            }
+            document.bins.push_back(bin_value.toString().toUtf8().toStdString());
+        }
+    }
     for (const auto& media_value_item : media_value.toArray()) {
         if (!media_value_item.isObject()) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid media item.");
         }
-        const auto source_path = resolvedPath(
+        const auto object = media_value_item.toObject();
+        ProjectMedia media;
+        media.source_path = resolvedPath(
             project_path,
-            requiredString(media_value_item.toObject(), "path", project_path));
-        std::error_code file_error;
-        if (!std::filesystem::is_regular_file(source_path, file_error) || file_error) {
-            throw ProjectError(
-                ProjectErrorCode::MediaUnavailable,
-                "A project media file is missing or is not a regular file.",
-                file_error ? std::optional<int>(file_error.value()) : std::nullopt,
-                source_path);
+            requiredString(object, "path", project_path));
+        if (object.contains("name")) {
+            if (!object.value("name").isString()) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid media name.");
+            }
+            media.display_name = object.value("name").toString().toUtf8().toStdString();
         }
-        document.media_sources.push_back(source_path);
+        if (object.contains("bin")) {
+            if (!object.value("bin").isString()) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid media bin.");
+            }
+            media.bin_path = object.value("bin").toString().toUtf8().toStdString();
+        }
+        if (object.contains("offline")) {
+            if (!object.value("offline").isBool()) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid offline media flag.");
+            }
+            media.offline = object.value("offline").toBool();
+        }
+        document.media.push_back(std::move(media));
     }
 
     const auto timeline_value = root.value("timeline");
@@ -238,9 +281,16 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
     validateDocument(document, project_path);
 
     QJsonArray media;
-    for (const auto& source : document.media_sources) {
+    for (const auto& media_source : document.media) {
         QJsonObject item;
-        item.insert("path", storedPath(project_path, source));
+        item.insert("path", storedPath(project_path, media_source.source_path));
+        if (!media_source.display_name.empty()) {
+            item.insert("name", QString::fromUtf8(media_source.display_name.data(),
+                                                    static_cast<int>(media_source.display_name.size())));
+        }
+        item.insert("bin", QString::fromUtf8(media_source.bin_path.data(),
+                                               static_cast<int>(media_source.bin_path.size())));
+        item.insert("offline", media_source.offline);
         media.append(item);
     }
 
@@ -259,6 +309,11 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
     root.insert("format", QString::fromLatin1(format_identifier));
     root.insert("version", current_format_version);
     root.insert("media", media);
+    if (!document.bins.empty()) {
+        QJsonArray bins;
+        for (const auto& bin : document.bins) bins.append(QString::fromStdString(bin));
+        root.insert("bins", bins);
+    }
     root.insert("timeline", timeline);
 
     QSaveFile file(pathToQString(project_path));

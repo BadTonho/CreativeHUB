@@ -21,8 +21,18 @@ struct ProjectClip {
     friend bool operator==(const ProjectClip&, const ProjectClip&) = default;
 };
 
+struct ProjectMedia {
+    std::filesystem::path source_path;
+    std::string display_name;
+    std::string bin_path = "Unsorted";
+    bool offline = false;
+
+    friend bool operator==(const ProjectMedia&, const ProjectMedia&) = default;
+};
+
 struct ProjectDocument {
-    std::vector<std::filesystem::path> media_sources;
+    std::vector<ProjectMedia> media;
+    std::vector<std::string> bins;
     std::vector<ProjectClip> timeline_clips;
 
     friend bool operator==(const ProjectDocument&, const ProjectDocument&) = default;

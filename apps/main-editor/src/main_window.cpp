@@ -13,11 +13,13 @@
 #include <QFileInfo>
 #include <QDesktopServices>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
 #include <QAbstractItemView>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMetaObject>
@@ -28,10 +30,13 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <string_view>
@@ -96,6 +101,18 @@ QString mediaDetailsText(const media::VideoMetadata& metadata) {
         .arg(formatOptionalDouble(metadata.duration_seconds, " s"))
         .arg(frame_count)
         .arg(fromUtf8(pathToUtf8(metadata.source_path)));
+}
+
+QString mediaItemListText(const media::VideoMetadata& metadata,
+                          std::string_view display_name,
+                          std::string_view bin_path,
+                          bool offline) {
+    const QString state = offline ? " [Offline]" : "";
+    return QString("%1%2 â€” %3 â€” %4")
+        .arg(fromUtf8(display_name.empty() ? metadata.display_name : std::string(display_name)))
+        .arg(state)
+        .arg(fromUtf8(std::string(bin_path)))
+        .arg(offline ? "Unavailable" : mediaListText(metadata));
 }
 
 QWidget* createPlaceholder(const QString& title, const QString& description) {
@@ -163,9 +180,14 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 
 project::ProjectDocument MainWindow::currentProjectDocument() const {
     project::ProjectDocument document;
-    document.media_sources.reserve(media_items_.size());
+    document.media.reserve(media_items_.size());
+    document.bins = bin_paths_;
     for (const auto& item : media_items_) {
-        document.media_sources.push_back(normalizedPath(item.metadata.source_path));
+        document.media.push_back(project::ProjectMedia{
+            normalizedPath(item.metadata.source_path),
+            item.display_name,
+            item.bin_path,
+            item.offline});
     }
 
     document.timeline_clips.reserve(timeline_model_.clipCount());
@@ -306,6 +328,8 @@ void MainWindow::clearProjectState() {
         media_list_->clear();
     }
     media_items_.clear();
+    bin_paths_ = {"Unsorted"};
+    populateMediaBrowser();
     media_details_->setText("No media imported.");
     preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
     updateTimelineState();
@@ -351,14 +375,72 @@ void MainWindow::openProject() {
     std::optional<std::size_t> current_clip_index;
     try {
         const auto document = project::load(project_path);
+        auto normalized_document = document;
         std::vector<ImportedMedia> loaded_media;
-        loaded_media.reserve(document.media_sources.size());
+        loaded_media.reserve(document.media.size());
 
-        for (const auto& source_path : document.media_sources) {
-            current_media_path = source_path;
-            auto metadata = video_probe_.probe(source_path);
-            auto first_frame = video_decoder_.decode_first_frame(source_path);
-            loaded_media.push_back({std::move(metadata), std::move(first_frame)});
+        for (std::size_t media_index = 0; media_index < document.media.size(); ++media_index) {
+            const auto& project_media = document.media[media_index];
+            current_media_path = project_media.source_path;
+            auto& normalized_media = normalized_document.media[media_index];
+            if (normalized_media.bin_path.empty()) normalized_media.bin_path = "Unsorted";
+            std::error_code file_error;
+            const bool exists = std::filesystem::is_regular_file(
+                project_media.source_path, file_error) && !file_error;
+            if (project_media.offline || !exists) {
+                if (!exists && !project_media.offline) {
+                    normalized_document.media[media_index].offline = true;
+                    logging::Logger::instance().log(
+                        logging::Level::Warning,
+                        "project",
+                        "open",
+                        "Project media is unavailable and was loaded offline.",
+                        {{"project_path", pathToUtf8(project_path)},
+                         {"media_path", pathToUtf8(project_media.source_path)},
+                         {"name", project_media.display_name},
+                         {"bin", project_media.bin_path},
+                         {"offline", "true"}});
+                }
+                media::VideoMetadata metadata;
+                metadata.source_path = normalizedPath(project_media.source_path);
+                metadata.display_name = project_media.display_name.empty()
+                    ? media::MediaLibrary::defaultDisplayName(metadata.source_path)
+                    : project_media.display_name;
+                normalized_media.display_name = metadata.display_name;
+                loaded_media.push_back({std::move(metadata), {},
+                                        loaded_media.empty() ? project_media.display_name : project_media.display_name,
+                                        project_media.bin_path,
+                                        true});
+                if (loaded_media.back().display_name.empty()) {
+                    loaded_media.back().display_name = loaded_media.back().metadata.display_name;
+                }
+                continue;
+            }
+
+            auto metadata = video_probe_.probe(project_media.source_path);
+            auto first_frame = video_decoder_.decode_first_frame(project_media.source_path);
+            const auto display_name = project_media.display_name.empty()
+                ? metadata.display_name
+                : project_media.display_name;
+            metadata.display_name = display_name;
+            normalized_media.display_name = display_name;
+            loaded_media.push_back({std::move(metadata), std::move(first_frame),
+                                    display_name, project_media.bin_path, false});
+        }
+
+        if (normalized_document.bins.empty()) normalized_document.bins.push_back("Unsorted");
+        for (const auto& item : loaded_media) {
+            std::size_t start = 0;
+            while (start < item.bin_path.size()) {
+                const auto separator = item.bin_path.find('/', start);
+                const auto path = item.bin_path.substr(
+                    0, separator == std::string::npos ? item.bin_path.size() : separator);
+                if (std::find(normalized_document.bins.begin(), normalized_document.bins.end(), path) ==
+                    normalized_document.bins.end()) {
+                    normalized_document.bins.push_back(path);
+                }
+                start = separator == std::string::npos ? item.bin_path.size() : separator + 1;
+            }
         }
 
         auto media_index_for = [&loaded_media](const std::filesystem::path& source_path)
@@ -407,14 +489,18 @@ void MainWindow::openProject() {
                     project_clip.source_path);
             }
 
-            const auto& metadata = loaded_media[*media_index].metadata;
-            const auto available_frames = available_frame_count(metadata);
-            if (!available_frames.has_value() ||
+            const auto& loaded_item = loaded_media[*media_index];
+            const auto& metadata = loaded_item.metadata;
+            const auto available_frames = loaded_item.offline
+                ? std::optional<std::int64_t>{}
+                : available_frame_count(metadata);
+            if ((!loaded_item.offline && !available_frames.has_value()) ||
                 project_clip.source_start_frame < 0 ||
                 project_clip.duration_frames <= 0 ||
-                project_clip.source_start_frame > *available_frames ||
-                project_clip.duration_frames > *available_frames -
-                    project_clip.source_start_frame ||
+                (!loaded_item.offline &&
+                 (project_clip.source_start_frame > *available_frames ||
+                  project_clip.duration_frames > *available_frames -
+                      project_clip.source_start_frame)) ||
                 timeline_start > std::numeric_limits<std::int64_t>::max() -
                     project_clip.duration_frames) {
                 throw project::ProjectError(
@@ -429,7 +515,7 @@ void MainWindow::openProject() {
                 project_clip.source_start_frame,
                 project_clip.duration_frames,
                 normalizedPath(metadata.source_path),
-                metadata.display_name,
+                loaded_item.display_name,
                 metadata.duration_seconds,
                 metadata.frame_rate,
                 metadata.frame_count});
@@ -440,7 +526,7 @@ void MainWindow::openProject() {
             std::move(loaded_media),
             std::move(snapshot),
             project_path,
-            document);
+            normalized_document);
         statusBar()->showMessage("Project opened.");
     } catch (const project::ProjectError& error) {
         logging::Context context{
@@ -518,20 +604,27 @@ void MainWindow::applyLoadedProject(
     timeline_model_.restore(std::move(timeline_snapshot));
     timeline_history_.clear();
     media_items_ = std::move(media_items);
+    bin_paths_ = saved_document.bins.empty()
+        ? std::vector<std::string>{"Unsorted"}
+        : saved_document.bins;
+    for (const auto& item : media_items_) {
+        std::size_t start = 0;
+        while (start < item.bin_path.size()) {
+            const auto separator = item.bin_path.find('/', start);
+            const auto path = item.bin_path.substr(
+                0, separator == std::string::npos ? item.bin_path.size() : separator);
+            if (std::find(bin_paths_.begin(), bin_paths_.end(), path) == bin_paths_.end()) {
+                bin_paths_.push_back(path);
+            }
+            start = separator == std::string::npos ? item.bin_path.size() : separator + 1;
+        }
+    }
     active_timeline_clip_index_.reset();
     playback_frame_index_ = 0;
     project_path_ = normalizedPath(project_path);
     saved_project_document_ = saved_document;
 
-    {
-        const QSignalBlocker blocker(media_list_);
-        media_list_->clear();
-        for (const auto& item : media_items_) {
-            auto* list_item = new QListWidgetItem(mediaListText(item.metadata), media_list_);
-            list_item->setToolTip(fromUtf8(pathToUtf8(item.metadata.source_path)));
-            list_item->setData(Qt::UserRole, fromUtf8(pathToUtf8(item.metadata.source_path)));
-        }
-    }
+    populateMediaBrowser();
 
     media_details_->setText("No media imported.");
     preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
@@ -547,14 +640,12 @@ void MainWindow::applyLoadedProject(
                 return normalizedPath(item.metadata.source_path) == normalizedPath(clip.source_path);
             });
         if (media != media_items_.end()) {
-            const auto media_index = static_cast<int>(std::distance(media_items_.begin(), media));
-            {
-                const QSignalBlocker blocker(media_list_);
-                media_list_->setCurrentRow(media_index);
-            }
+            const auto media_index = static_cast<std::size_t>(std::distance(media_items_.begin(), media));
+            populateMediaBrowser(clip.source_path);
             media_details_->setText(mediaDetailsText(media->metadata));
-            preview_widget_->setFrame(media->first_frame);
-            activateTimelineClip(0, 0, false);
+            if (!media->offline) preview_widget_->setFrame(media->first_frame);
+            if (!media->offline) activateTimelineClip(0, 0, false);
+            static_cast<void>(media_index);
         }
     } else if (!media_items_.empty()) {
         media_list_->setCurrentRow(0);
@@ -780,10 +871,30 @@ QWidget* MainWindow::createMediaBrowser() {
     title->setStyleSheet("font-weight: 600; font-size: 14px;");
     layout->addWidget(title);
 
+    auto* browser_controls = new QHBoxLayout;
+    new_bin_button_ = new QPushButton("New Bin", container);
+    connect(new_bin_button_, &QPushButton::clicked, this, &MainWindow::createBin);
+    browser_controls->addWidget(new_bin_button_);
+    browser_controls->addStretch();
+    layout->addLayout(browser_controls);
+
+    bin_tree_ = new QTreeWidget(container);
+    bin_tree_->setHeaderHidden(true);
+    bin_tree_->setMaximumHeight(150);
+    bin_tree_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(bin_tree_, &QTreeWidget::currentItemChanged, this,
+            [this](QTreeWidgetItem*, QTreeWidgetItem*) { updateMediaBrowserFilter(); });
+    connect(bin_tree_, &QTreeWidget::customContextMenuRequested, this,
+            &MainWindow::showMediaContextMenu);
+    layout->addWidget(bin_tree_);
+
     media_list_ = new MediaBrowserListWidget(container);
     media_list_->setSelectionMode(QAbstractItemView::SingleSelection);
     media_list_->setWordWrap(true);
     connect(media_list_, &QListWidget::currentRowChanged, this, &MainWindow::updateMediaDetails);
+    media_list_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(media_list_, &QListWidget::customContextMenuRequested, this,
+            &MainWindow::showMediaContextMenu);
     layout->addWidget(media_list_, 1);
 
     media_details_ = new QLabel("No media imported.", container);
@@ -798,9 +909,311 @@ QWidget* MainWindow::createMediaBrowser() {
     });
     layout->addWidget(add_to_timeline_button_);
 
+    populateMediaBrowser();
     updateTimelineState();
 
     return container;
+}
+
+std::optional<std::size_t> MainWindow::selectedMediaIndex() const noexcept {
+    if (media_list_ == nullptr || media_list_->currentItem() == nullptr) return std::nullopt;
+    bool ok = false;
+    const auto value = media_list_->currentItem()->data(Qt::UserRole + 1).toLongLong(&ok);
+    if (!ok || value < 0 || value >= static_cast<qint64>(media_items_.size())) return std::nullopt;
+    return static_cast<std::size_t>(value);
+}
+
+std::string MainWindow::selectedBinPath() const {
+    if (bin_tree_ == nullptr || bin_tree_->currentItem() == nullptr) return {};
+    return bin_tree_->currentItem()->data(0, Qt::UserRole).toString().toStdString();
+}
+
+void MainWindow::populateMediaBrowser(const std::filesystem::path& selected_path) {
+    if (media_list_ == nullptr || bin_tree_ == nullptr) return;
+
+    std::filesystem::path path_to_select = selected_path;
+    if (path_to_select.empty()) {
+        const auto selected = selectedMediaIndex();
+        if (selected.has_value()) path_to_select = media_items_[*selected].metadata.source_path;
+    }
+
+    std::string selected_bin = selectedBinPath();
+    if (selected_bin.empty()) selected_bin = "";
+
+    std::vector<std::string> bins;
+    for (const auto& bin : bin_paths_) {
+        if (std::find(bins.begin(), bins.end(), bin) == bins.end()) bins.push_back(bin);
+    }
+    for (const auto& item : media_items_) {
+        std::string current;
+        std::size_t start = 0;
+        while (start < item.bin_path.size()) {
+            const auto separator = item.bin_path.find('/', start);
+            const auto part = item.bin_path.substr(
+                start,
+                separator == std::string::npos ? item.bin_path.size() - start : separator - start);
+            if (!current.empty()) current += '/';
+            current += part;
+            if (std::find(bins.begin(), bins.end(), current) == bins.end()) bins.push_back(current);
+            start = separator == std::string::npos ? item.bin_path.size() : separator + 1;
+        }
+    }
+    if (std::find(bins.begin(), bins.end(), "Unsorted") == bins.end()) bins.emplace_back("Unsorted");
+    std::sort(bins.begin(), bins.end());
+
+    {
+        const QSignalBlocker tree_blocker(bin_tree_);
+        bin_tree_->clear();
+        auto* all = new QTreeWidgetItem(bin_tree_, {"All Media"});
+        all->setData(0, Qt::UserRole, QString());
+        bin_tree_->setCurrentItem(all);
+        for (const auto& bin : bins) {
+            QTreeWidgetItem* parent = all;
+            std::string current;
+            std::size_t start = 0;
+            while (start < bin.size()) {
+                const auto separator = bin.find('/', start);
+                const auto part = bin.substr(
+                    start,
+                    separator == std::string::npos ? bin.size() - start : separator - start);
+                if (!current.empty()) current += '/';
+                current += part;
+                QTreeWidgetItem* child = nullptr;
+                for (int index = 0; index < parent->childCount(); ++index) {
+                    if (parent->child(index)->data(0, Qt::UserRole).toString().toStdString() == current) {
+                        child = parent->child(index);
+                        break;
+                    }
+                }
+                if (child == nullptr) {
+                    child = new QTreeWidgetItem(parent, {QString::fromStdString(part)});
+                    child->setData(0, Qt::UserRole, QString::fromStdString(current));
+                }
+                parent = child;
+                start = separator == std::string::npos ? bin.size() : separator + 1;
+            }
+        }
+        std::function<QTreeWidgetItem*(QTreeWidgetItem*)> find_bin =
+            [&find_bin, &selected_bin](QTreeWidgetItem* item) -> QTreeWidgetItem* {
+                if (item->data(0, Qt::UserRole).toString().toStdString() == selected_bin) return item;
+                for (int index = 0; index < item->childCount(); ++index) {
+                    if (auto* found = find_bin(item->child(index)); found != nullptr) return found;
+                }
+                return nullptr;
+            };
+        if (!selected_bin.empty()) {
+            if (auto* found = find_bin(all); found != nullptr) bin_tree_->setCurrentItem(found);
+        }
+    }
+
+    {
+        const QSignalBlocker list_blocker(media_list_);
+        media_list_->clear();
+        const auto active_bin = selectedBinPath();
+        for (std::size_t index = 0; index < media_items_.size(); ++index) {
+            const auto& item = media_items_[index];
+            if (!active_bin.empty() &&
+                item.bin_path != active_bin &&
+                item.bin_path.rfind(active_bin + '/', 0) != 0) {
+                continue;
+            }
+            auto* list_item = new QListWidgetItem(
+                mediaItemListText(item.metadata, item.display_name, item.bin_path, item.offline),
+                media_list_);
+            list_item->setToolTip(fromUtf8(pathToUtf8(item.metadata.source_path)));
+            list_item->setData(Qt::UserRole, fromUtf8(pathToUtf8(item.metadata.source_path)));
+            list_item->setData(Qt::UserRole + 1, static_cast<qint64>(index));
+            if (!path_to_select.empty() &&
+                normalizedPath(item.metadata.source_path) == normalizedPath(path_to_select)) {
+                media_list_->setCurrentItem(list_item);
+            }
+        }
+    }
+
+    if (media_list_->currentRow() >= 0) {
+        updateMediaDetails(media_list_->currentRow());
+    } else {
+        media_details_->setText(media_items_.empty() ? "No media imported." : "No media in this bin.");
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+    }
+}
+
+void MainWindow::updateMediaBrowserFilter() {
+    populateMediaBrowser();
+}
+
+void MainWindow::createBin() {
+    bool accepted = false;
+    const QString value = QInputDialog::getText(
+        this, "New Bin", "Bin path (use / for sub-bins):", QLineEdit::Normal,
+        "New Bin", &accepted);
+    if (!accepted) return;
+    if (!media::MediaLibrary::validBinPath(value.toStdString())) {
+        QMessageBox::warning(this, "Invalid bin", "Use a non-empty bin path with / separators.");
+        return;
+    }
+    const std::string current = value.toStdString();
+    if (std::find(bin_paths_.begin(), bin_paths_.end(), current) != bin_paths_.end()) return;
+    std::size_t start = 0;
+    while (start < current.size()) {
+        const auto separator = current.find('/', start);
+        const auto path = current.substr(
+            0, separator == std::string::npos ? current.size() : separator);
+        if (std::find(bin_paths_.begin(), bin_paths_.end(), path) == bin_paths_.end()) {
+            bin_paths_.push_back(path);
+        }
+        start = separator == std::string::npos ? current.size() : separator + 1;
+    }
+    updateProjectDirtyState();
+    populateMediaBrowser();
+}
+
+void MainWindow::renameSelectedBin() {
+    const auto old_path = selectedBinPath();
+    if (old_path.empty() || old_path == "Unsorted") return;
+    bool accepted = false;
+    const QString value = QInputDialog::getText(
+        this, "Rename Bin", "New bin path:", QLineEdit::Normal,
+        QString::fromStdString(old_path), &accepted);
+    if (!accepted) return;
+    media::MediaLibrary library;
+    for (const auto& item : media_items_) {
+        library.addOffline(item.metadata.source_path, item.display_name, item.bin_path);
+    }
+    const auto result = library.renameBin(old_path, value.toStdString());
+    if (result != media::MediaMutationResult::Changed) {
+        QMessageBox::warning(this, "Could not rename bin", "The bin name is invalid or already exists.");
+        return;
+    }
+    for (std::size_t index = 0; index < media_items_.size(); ++index) {
+        const auto library_index = library.indexForPath(media_items_[index].metadata.source_path);
+        if (library_index != library.size()) media_items_[index].bin_path = library.items()[library_index].bin_path;
+    }
+    bin_paths_.clear();
+    bin_paths_.push_back("Unsorted");
+    for (const auto& item : media_items_) {
+        if (std::find(bin_paths_.begin(), bin_paths_.end(), item.bin_path) == bin_paths_.end()) {
+            bin_paths_.push_back(item.bin_path);
+        }
+    }
+    updateProjectDirtyState();
+    populateMediaBrowser();
+}
+
+void MainWindow::renameSelectedMedia() {
+    const auto index = selectedMediaIndex();
+    if (!index.has_value()) return;
+    bool accepted = false;
+    const QString value = QInputDialog::getText(
+        this, "Rename Media", "Display name:", QLineEdit::Normal,
+        QString::fromStdString(media_items_[*index].display_name), &accepted);
+    if (!accepted) return;
+    if (value.isEmpty()) {
+        QMessageBox::warning(this, "Invalid name", "The display name cannot be empty.");
+        return;
+    }
+    media_items_[*index].display_name = value.toStdString();
+    media_items_[*index].metadata.display_name = media_items_[*index].display_name;
+    timeline_model_.updateDisplayNameForSource(
+        media_items_[*index].metadata.source_path,
+        media_items_[*index].display_name);
+    updateProjectDirtyState();
+    populateMediaBrowser(media_items_[*index].metadata.source_path);
+}
+
+void MainWindow::moveSelectedMediaToBin() {
+    const auto index = selectedMediaIndex();
+    if (!index.has_value()) return;
+    QStringList choices;
+    for (const auto& bin : bin_paths_) {
+        if (choices.indexOf(QString::fromStdString(bin)) < 0) {
+            choices.push_back(QString::fromStdString(bin));
+        }
+    }
+    if (choices.isEmpty()) choices << "Unsorted";
+    bool accepted = false;
+    const QString value = QInputDialog::getItem(
+        this, "Move to Bin", "Bin:", choices,
+        choices.indexOf(QString::fromStdString(media_items_[*index].bin_path)), false, &accepted);
+    if (!accepted) return;
+    if (value.toStdString() == media_items_[*index].bin_path) return;
+    media_items_[*index].bin_path = value.toStdString();
+    updateProjectDirtyState();
+    populateMediaBrowser(media_items_[*index].metadata.source_path);
+}
+
+void MainWindow::removeSelectedMedia() {
+    const auto index = selectedMediaIndex();
+    if (!index.has_value() || media_items_[*index].offline) return;
+    media_items_[*index].offline = true;
+    media_items_[*index].first_frame = {};
+    ++playback_generation_;
+    playback_is_playing_ = false;
+    if (playback_worker_ != nullptr) QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
+    preview_widget_->clearFrame("Preview area\n\nThe selected media is offline.");
+    updateProjectDirtyState();
+    populateMediaBrowser(media_items_[*index].metadata.source_path);
+    statusBar()->showMessage("Media marked offline. Timeline clips were preserved.");
+}
+
+void MainWindow::restoreSelectedMedia() {
+    const auto index = selectedMediaIndex();
+    if (!index.has_value() || !media_items_[*index].offline) return;
+    const auto path = media_items_[*index].metadata.source_path;
+    try {
+        auto metadata = video_probe_.probe(path);
+        auto frame = video_decoder_.decode_first_frame(path);
+        metadata.display_name = media_items_[*index].display_name;
+        media_items_[*index].metadata = std::move(metadata);
+        media_items_[*index].first_frame = std::move(frame);
+        media_items_[*index].offline = false;
+        updateProjectDirtyState();
+        populateMediaBrowser(path);
+        statusBar()->showMessage("Media restored.");
+    } catch (const media::MediaError& error) {
+        logging::Context context{{"path", pathToUtf8(path)}, {"cause", error.what()}};
+        if (error.error_code().has_value()) context.emplace_back("error_code", std::to_string(*error.error_code()));
+        logging::Logger::instance().log(logging::Level::Error, "media", "restore", error.what(), context);
+        QMessageBox::warning(this, "Could not restore media", fromUtf8(error.what()));
+    }
+}
+
+void MainWindow::showMediaContextMenu(const QPoint& position) {
+    QMenu menu(this);
+    auto* new_bin = menu.addAction("New Bin");
+    connect(new_bin, &QAction::triggered, this, &MainWindow::createBin);
+    const bool from_media_list = sender() == media_list_;
+    if (from_media_list) {
+        if (auto* item = media_list_->itemAt(position); item != nullptr) {
+            media_list_->setCurrentItem(item);
+        }
+    } else if (bin_tree_ != nullptr) {
+        if (auto* item = bin_tree_->itemAt(position); item != nullptr) {
+            bin_tree_->setCurrentItem(item);
+        }
+    }
+    const auto media_index = from_media_list ? selectedMediaIndex() : std::nullopt;
+    if (media_index.has_value()) {
+        menu.addSeparator();
+        auto* rename = menu.addAction("Rename");
+        connect(rename, &QAction::triggered, this, &MainWindow::renameSelectedMedia);
+        auto* move = menu.addAction("Move to Bin");
+        connect(move, &QAction::triggered, this, &MainWindow::moveSelectedMediaToBin);
+        auto* remove = menu.addAction(media_items_[*media_index].offline
+            ? "Restore Media" : "Remove from Browser");
+        connect(remove, &QAction::triggered, this,
+                media_items_[*media_index].offline
+                    ? &MainWindow::restoreSelectedMedia
+                    : &MainWindow::removeSelectedMedia);
+    } else if (!selectedBinPath().empty()) {
+        menu.addSeparator();
+        auto* rename = menu.addAction("Rename");
+        connect(rename, &QAction::triggered, this, &MainWindow::renameSelectedBin);
+    }
+    menu.exec((sender() == media_list_ ? media_list_->viewport()->mapToGlobal(position)
+                                       : bin_tree_->viewport()->mapToGlobal(position)));
 }
 
 QWidget* MainWindow::createTimeline() {
@@ -971,15 +1384,15 @@ void MainWindow::shutdownPlayback() {
 }
 
 bool MainWindow::hasSelectedMedia() const noexcept {
-    return media_list_ != nullptr &&
-        media_list_->currentRow() >= 0 &&
-        media_list_->currentRow() < static_cast<int>(media_items_.size());
+    return selectedMediaIndex().has_value();
 }
 
 std::optional<std::size_t> MainWindow::selectedTimelineClipIndex() const noexcept {
     if (!hasSelectedMedia() || !timeline_model_.hasClip()) return std::nullopt;
 
-    const auto& selected = media_items_[static_cast<std::size_t>(media_list_->currentRow())];
+    const auto selected_index = selectedMediaIndex();
+    if (!selected_index.has_value()) return std::nullopt;
+    const auto& selected = media_items_[*selected_index];
     const auto& clips = timeline_model_.clips();
     for (std::size_t index = 0; index < clips.size(); ++index) {
         if (clips[index].source_path == selected.metadata.source_path) {
@@ -995,6 +1408,7 @@ bool MainWindow::selectedMediaMatchesTimeline() const noexcept {
 
 bool MainWindow::canPreviewSelectedMedia() const noexcept {
     return hasSelectedMedia() &&
+        !media_items_[*selectedMediaIndex()].offline &&
         (!timeline_model_.hasClip() || selectedMediaMatchesTimeline());
 }
 
@@ -1011,7 +1425,7 @@ timeline::EditState MainWindow::captureTimelineEditState() const {
     state.active_clip_index = active_timeline_clip_index_;
     if (hasSelectedMedia()) {
         state.selected_source_path = normalizedPath(
-            media_items_[static_cast<std::size_t>(media_list_->currentRow())]
+        media_items_[*selectedMediaIndex()]
                 .metadata.source_path);
     }
     state.playhead_frame = playback_frame_index_;
@@ -1038,7 +1452,7 @@ void MainWindow::updateHistoryActions() {
 }
 
 void MainWindow::updateTimelineState() {
-    const bool selected = hasSelectedMedia();
+    const bool selected = hasSelectedMedia() && !media_items_[*selectedMediaIndex()].offline;
     const bool occupied = timeline_model_.hasClip();
 
     if (add_to_timeline_button_ != nullptr) {
@@ -1063,7 +1477,13 @@ void MainWindow::updateTimelineState() {
 void MainWindow::addSelectedMediaToTimeline() {
     if (!hasSelectedMedia()) return;
 
-    const auto& selected = media_items_[static_cast<size_t>(media_list_->currentRow())];
+    const auto selected_index = selectedMediaIndex();
+    if (!selected_index.has_value()) return;
+    const auto& selected = media_items_[*selected_index];
+    if (selected.offline) {
+        statusBar()->showMessage("Offline media cannot be added to the timeline.");
+        return;
+    }
     try {
         const auto before_edit = captureTimelineEditState();
         switch (timeline_model_.addClip(selected.metadata)) {
@@ -1125,9 +1545,9 @@ void MainWindow::handleMediaDrop(const QString& source_path) {
             return;
         }
 
-        const int index = static_cast<int>(
-            std::distance(media_items_.begin(), existing));
-        media_list_->setCurrentRow(index);
+        populateMediaBrowser(dropped_path);
+        const auto index = selectedMediaIndex();
+        if (!index.has_value()) return;
         addSelectedMediaToTimeline();
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
@@ -1179,14 +1599,12 @@ void MainWindow::handleTimelineClipSelected(qint64 clip_index) {
         return;
     }
 
-    const int media_index = static_cast<int>(
+    const auto media_index = static_cast<std::size_t>(
         std::distance(media_items_.begin(), media_item));
-    const bool row_changed = media_list_->currentRow() != media_index;
-    if (row_changed) {
-        media_list_->setCurrentRow(media_index);
-    } else if (had_pending_activation) {
-        updateMediaDetails(media_index);
-    }
+    populateMediaBrowser(clip.source_path);
+    const bool selected_after_filter = selectedMediaIndex().has_value() &&
+        *selectedMediaIndex() == media_index;
+    if (!selected_after_filter && had_pending_activation) updateMediaDetails(-1);
 
     active_timeline_clip_index_ = static_cast<std::size_t>(clip_index);
     updateTimelineState();
@@ -1211,7 +1629,7 @@ void MainWindow::activateTimelineClip(
         [&clip](const ImportedMedia& item) {
             return item.metadata.source_path == clip.source_path;
         });
-    if (media_item == media_items_.end() ||
+    if (media_item == media_items_.end() || media_item->offline ||
         target_frame < 0 ||
         target_frame >= clip.timeline_duration_frames) {
         logging::Context context{
@@ -1224,6 +1642,8 @@ void MainWindow::activateTimelineClip(
             "transition",
             media_item == media_items_.end()
                 ? "The timeline clip has no matching imported media item."
+                : media_item->offline
+                ? "The timeline clip refers to offline media."
                 : "The requested timeline transition frame is invalid.",
             context);
         statusBar()->showMessage("Could not activate the timeline clip.");
@@ -1369,7 +1789,7 @@ void MainWindow::restoreTimelineEditState(
             playback_frame_index_ = 0;
         }
 
-        int selected_row = -1;
+        std::optional<std::size_t> selected_media_index;
         if (state.selected_source_path.has_value()) {
             const auto selected_path = normalizedPath(*state.selected_source_path);
             const auto selected_media = std::find_if(
@@ -1379,7 +1799,7 @@ void MainWindow::restoreTimelineEditState(
                     return normalizedPath(item.metadata.source_path) == selected_path;
                 });
             if (selected_media != media_items_.end()) {
-                selected_row = static_cast<int>(
+                selected_media_index = static_cast<std::size_t>(
                     std::distance(media_items_.begin(), selected_media));
             } else {
                 logging::Logger::instance().log(
@@ -1392,16 +1812,14 @@ void MainWindow::restoreTimelineEditState(
             }
         }
 
-        if (media_list_ != nullptr) {
-            const QSignalBlocker blocker(media_list_);
-            media_list_->setCurrentRow(selected_row);
-        }
-
-        if (selected_row >= 0 &&
-            selected_row < static_cast<int>(media_items_.size())) {
-            const auto& item = media_items_[static_cast<std::size_t>(selected_row)];
-            media_details_->setText(mediaDetailsText(item.metadata));
-            preview_widget_->setFrame(item.first_frame);
+        if (selected_media_index.has_value()) {
+            const auto& item = media_items_[*selected_media_index];
+            populateMediaBrowser(item.metadata.source_path);
+            media_details_->setText(item.offline
+                ? QString("Name: %1\nBin: %2\nStatus: Offline")
+                    .arg(fromUtf8(item.display_name)).arg(fromUtf8(item.bin_path))
+                : mediaDetailsText(item.metadata));
+            if (!item.offline) preview_widget_->setFrame(item.first_frame);
         } else {
             media_details_->setText("No media imported.");
             preview_widget_->clearFrame(
@@ -1412,12 +1830,12 @@ void MainWindow::restoreTimelineEditState(
         updatePlaybackControls();
         updatePlaybackStatus();
 
-        if (active_timeline_clip_index_.has_value() && selected_row >= 0 &&
+        if (active_timeline_clip_index_.has_value() && selected_media_index.has_value() &&
             *active_timeline_clip_index_ < timeline_model_.clipCount() &&
             timeline_model_.clips()[*active_timeline_clip_index_].source_path ==
-                normalizedPath(media_items_[static_cast<std::size_t>(selected_row)]
+                normalizedPath(media_items_[*selected_media_index]
                                    .metadata.source_path)) {
-            activateTimelineClip(
+            if (!media_items_[*selected_media_index].offline) activateTimelineClip(
                 *active_timeline_clip_index_,
                 playback_frame_index_,
                 false);
@@ -1985,8 +2403,8 @@ void MainWindow::updatePlaybackStatus() {
         return;
     }
 
-    const int row = media_list_ != nullptr ? media_list_->currentRow() : -1;
-    if (row < 0 || row >= static_cast<int>(media_items_.size())) {
+    const auto selected_index = selectedMediaIndex();
+    if (!selected_index.has_value()) {
         playback_status_label_->setText("No media selected.");
         return;
     }
@@ -1996,7 +2414,7 @@ void MainWindow::updatePlaybackStatus() {
         return;
     }
 
-    const auto& metadata = media_items_[static_cast<size_t>(row)].metadata;
+    const auto& metadata = media_items_[*selected_index].metadata;
     QString total = metadata.frame_count.has_value()
         ? QString::number(*metadata.frame_count)
         : "?";
@@ -2032,16 +2450,29 @@ void MainWindow::openMedia() {
             return item.metadata.source_path == source_path;
         });
     if (existing != media_items_.end()) {
-        const auto index = static_cast<int>(std::distance(media_items_.begin(), existing));
-        media_list_->setCurrentRow(index);
-        updateMediaDetails(index);
-        logging::Logger::instance().log(
-            logging::Level::Debug,
-            "media",
-            "import",
-            "Media was already imported.",
-            {{"path", pathToUtf8(source_path)}});
-        statusBar()->showMessage("Media is already imported.");
+        const auto index = static_cast<std::size_t>(std::distance(media_items_.begin(), existing));
+        if (existing->offline) {
+            try {
+                auto metadata = video_probe_.probe(source_path);
+                auto first_frame = video_decoder_.decode_first_frame(source_path);
+                existing->metadata = std::move(metadata);
+                existing->metadata.display_name = existing->display_name;
+                existing->first_frame = std::move(first_frame);
+                existing->offline = false;
+                updateProjectDirtyState();
+                populateMediaBrowser(source_path);
+                statusBar()->showMessage("Offline media restored.");
+            } catch (const media::MediaError& error) {
+                logging::Context context{{"path", pathToUtf8(source_path)}, {"cause", error.what()}};
+                if (error.error_code().has_value()) context.emplace_back("error_code", std::to_string(*error.error_code()));
+                logging::Logger::instance().log(logging::Level::Error, "media", "restore", error.what(), context);
+                QMessageBox::warning(this, "Could not restore media", fromUtf8(error.what()));
+            }
+        } else {
+            populateMediaBrowser(source_path);
+            static_cast<void>(index);
+            statusBar()->showMessage("Media is already imported.");
+        }
         return;
     }
 
@@ -2059,6 +2490,9 @@ void MainWindow::openMedia() {
              {"height", std::to_string(media_items_.back().first_frame.height)}});
         statusBar()->showMessage("Media imported with preview frame.");
     } catch (const media::MediaError& error) {
+        logging::Context context{{"path", pathToUtf8(source_path)}, {"cause", error.what()}};
+        if (error.error_code().has_value()) context.emplace_back("error_code", std::to_string(*error.error_code()));
+        logging::Logger::instance().log(logging::Level::Error, "media", "import", error.what(), context);
         const QString message = fromUtf8(error.what());
         QMessageBox::warning(this, "Could not open media", message);
         statusBar()->showMessage("Could not import media.");
@@ -2084,7 +2518,7 @@ void MainWindow::updateMediaDetails(int row) {
     playback_is_playing_ = false;
     playback_frame_index_ = 0;
 
-    if (row < 0 || row >= static_cast<int>(media_items_.size())) {
+    if (row < 0 || media_list_ == nullptr || media_list_->currentItem() == nullptr) {
         active_timeline_clip_index_.reset();
         media_details_->setText("No media imported.");
         preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
@@ -2094,10 +2528,28 @@ void MainWindow::updateMediaDetails(int row) {
         return;
     }
 
-    const auto& item = media_items_[static_cast<size_t>(row)];
+    const auto item_index = selectedMediaIndex();
+    if (!item_index.has_value()) {
+        media_details_->setText("No media selected.");
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        return;
+    }
+    const auto& item = media_items_[*item_index];
     active_timeline_clip_index_ = selectedTimelineClipIndex();
-    media_details_->setText(mediaDetailsText(item.metadata));
-    preview_widget_->setFrame(item.first_frame);
+    media_details_->setText(
+        item.offline
+            ? QString("Name: %1\nBin: %2\nStatus: Offline\nPath: %3")
+                .arg(fromUtf8(item.display_name))
+                .arg(fromUtf8(item.bin_path))
+                .arg(fromUtf8(pathToUtf8(item.metadata.source_path)))
+            : mediaDetailsText(item.metadata));
+    if (item.offline) {
+        preview_widget_->clearFrame("Preview area\n\nThe selected media is offline.");
+    } else {
+        preview_widget_->setFrame(item.first_frame);
+    }
     updateTimelineState();
     updatePlaybackControls();
     updatePlaybackStatus();
@@ -2128,16 +2580,20 @@ void MainWindow::updateMediaDetails(int row) {
 void MainWindow::addMediaItem(
     media::VideoMetadata metadata,
     media::VideoFrame first_frame,
+    std::string display_name,
+    std::string bin_path,
+    bool offline,
     bool mark_dirty) {
-    media_items_.push_back({std::move(metadata), std::move(first_frame)});
+    if (display_name.empty()) display_name = metadata.display_name;
+    if (display_name.empty()) display_name = media::MediaLibrary::defaultDisplayName(metadata.source_path);
+    metadata.display_name = display_name;
+    if (std::find(bin_paths_.begin(), bin_paths_.end(), bin_path) == bin_paths_.end()) {
+        bin_paths_.push_back(bin_path);
+    }
+    media_items_.push_back({std::move(metadata), std::move(first_frame),
+                            std::move(display_name), std::move(bin_path), offline});
     auto& item = media_items_.back();
-
-    auto* list_item = new QListWidgetItem(mediaListText(item.metadata), media_list_);
-    list_item->setToolTip(fromUtf8(pathToUtf8(item.metadata.source_path)));
-    list_item->setData(
-        Qt::UserRole,
-        fromUtf8(pathToUtf8(item.metadata.source_path)));
-    media_list_->setCurrentItem(list_item);
+    populateMediaBrowser(item.metadata.source_path);
     if (mark_dirty) updateProjectDirtyState();
 }
 

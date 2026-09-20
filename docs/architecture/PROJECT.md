@@ -8,7 +8,7 @@ file. The application-local implementation lives under
 
 ```text
 ProjectDocument
-  media_sources: filesystem paths
+  media: canonical path, display name, bin path, online/offline state
   timeline_clips: source path, source start frame, segment duration
 ```
 
@@ -26,7 +26,12 @@ media, and Timeline segments:
   "format": "creative-suite.main-editor",
   "version": 1,
   "media": [
-    { "path": "media/video.mkv" }
+    {
+      "path": "media/video.mkv",
+      "name": "Intro Video",
+      "bin": "Footage/Scenes",
+      "offline": false
+    }
   ],
   "timeline": {
     "clips": [
@@ -45,6 +50,12 @@ relative to the project directory when it is inside that directory; media
 outside it is stored as an absolute path. On open, paths are resolved and
 canonicalized before they are used.
 
+The optional `name`, `bin`, and `offline` media fields are backward compatible
+with version 1 files containing only `path`. `Unsorted` is the default bin.
+Explicitly offline or missing media is preserved as offline so the Timeline
+and project context are not lost. Existing media is probed and its first frame
+is decoded; a corrupt or unsupported existing file aborts the complete open.
+
 ## Save and open rules
 
 `QJsonDocument` and `QSaveFile` are confined to the application serialization
@@ -57,8 +68,9 @@ values, and segment durations are validated first. Every imported media source
 is then probed with FFmpeg and its first frame is decoded. Timeline segments
 are checked against the current media timing metadata. The current Main Editor
 session is replaced only after all media and segments pass validation. A
-missing, corrupt, audio-only, unsupported, or incompatible media source aborts
-the complete open and leaves the current project unchanged.
+corrupt, audio-only, unsupported, or incompatible existing media source aborts
+the complete open and leaves the current project unchanged. Missing media is
+loaded as offline and can be restored later.
 
 Technical failures are logged under the `project` subsystem with the project
 path, related media or clip index when available, cause, and error code. Dialog

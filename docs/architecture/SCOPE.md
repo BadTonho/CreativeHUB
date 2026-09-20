@@ -16,6 +16,8 @@ The current Main Editor includes:
 - drag-and-drop from imported Media Browser items to the Timeline;
 - local structured error logging;
 - basic `.csp` project persistence for imported media and Timeline structure.
+- basic Media Browser management with hierarchical bins, project labels, and
+  visible offline media state.
 
 The current application does not implement:
 
@@ -32,6 +34,7 @@ Random seeking uses FFmpeg keyframe navigation with a bounded recent-frame
 cache. Streams without reliable temporal metadata fall back to decoding from
 the beginning for correctness. Global timeline seeking is not implemented.
 
-Basic project persistence is implemented for versioned `.csp` files. Autosave,
-recovery, media copying, relinking, shared projects, and project-wide history
-remain future responsibilities.
+Basic project persistence is implemented for versioned `.csp` files, including
+media labels, bins, and offline state. Autosave, recovery, media copying,
+complete relinking, shared projects, and project-wide history remain future
+responsibilities.

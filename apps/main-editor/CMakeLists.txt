@@ -20,6 +20,8 @@ add_executable(creative-suite-main-editor
     src/media/video_decoder.cpp
     src/media/video_decoder.h
     src/media/video_frame.h
+    src/media/media_library.cpp
+    src/media/media_library.h
     src/media/video_metadata.h
     src/media/video_playback.cpp
     src/media/video_playback.h

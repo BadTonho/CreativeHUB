@@ -231,6 +231,8 @@ add_test(
 
 add_executable(creative-suite-main-editor-project-tests
     project_file_test.cpp
+    ../src/media/media_library.cpp
+    ../src/media/media_library.h
     ../src/project/project_document.h
     ../src/project/project_file.cpp
     ../src/project/project_file.h
@@ -269,6 +271,31 @@ endif()
 add_test(
     NAME creative-suite-main-editor-project
     COMMAND creative-suite-main-editor-project-tests
+)
+
+add_executable(creative-suite-main-editor-media-library-tests
+    media_library_test.cpp
+    ../src/media/media_library.cpp
+    ../src/media/media_library.h
+    ../src/media/video_frame.h
+    ../src/media/video_metadata.h
+)
+
+target_include_directories(creative-suite-main-editor-media-library-tests PRIVATE
+    ../src
+)
+
+target_compile_features(creative-suite-main-editor-media-library-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-media-library-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-media-library-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-media-library
+    COMMAND creative-suite-main-editor-media-library-tests
 )
 
 add_executable(creative-suite-main-editor-preview-tests

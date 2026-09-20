@@ -76,6 +76,9 @@ public:
         const std::filesystem::path& source_path) const;
     [[nodiscard]] Snapshot snapshot() const;
     void restore(Snapshot snapshot);
+    void updateDisplayNameForSource(
+        const std::filesystem::path& source_path,
+        const std::string& display_name);
 
 private:
     std::vector<TimelineClip> clips_;

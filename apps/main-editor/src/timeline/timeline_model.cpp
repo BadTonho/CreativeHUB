@@ -232,4 +232,15 @@ void TimelineModel::restore(Snapshot snapshot) {
     clips_ = std::move(snapshot.clips);
 }
 
+void TimelineModel::updateDisplayNameForSource(
+    const std::filesystem::path& source_path,
+    const std::string& display_name) {
+    const auto canonical_source = canonicalPath(source_path);
+    for (auto& clip : clips_) {
+        if (canonicalPath(clip.source_path) == canonical_source) {
+            clip.display_name = display_name;
+        }
+    }
+}
+
 } // namespace timeline

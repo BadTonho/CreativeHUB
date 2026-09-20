@@ -47,6 +47,13 @@ Timeline intact. A successful open clears Timeline Undo/Redo and starts paused
 on the first Timeline clip, or the first imported media when the Timeline is
 empty.
 
+The Media Browser contains a hierarchical bin tree and a filtered media list.
+Context menus provide `New Bin`, `Rename`, `Move to Bin`, `Remove from
+Browser`, and `Restore Media`. Removing media marks it offline without deleting
+the source file or Timeline clips. Offline entries remain visible and disable
+preview and playback until the source is restored. Media labels are project
+labels and do not rename files.
+
 The Timeline uses two distinct mouse gestures. Normal click-and-drag on the
 active clip seeks and decodes only when the mouse is released. `Alt + drag`
 reorders a clip in the single track; it gives visual movement feedback but does

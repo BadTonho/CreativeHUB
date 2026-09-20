@@ -1,6 +1,7 @@
 #pragma once
 
 #include "media/video_decoder.h"
+#include "media/media_library.h"
 #include "media/video_metadata.h"
 #include "media/video_probe.h"
 #include "playback/playback_worker.h"
@@ -24,6 +25,9 @@ class QCloseEvent;
 class QLabel;
 class QListWidget;
 class QPushButton;
+class QPoint;
+class QTreeWidget;
+class QTreeWidgetItem;
 class PreviewWidget;
 class QWidget;
 
@@ -51,9 +55,23 @@ private:
     void shutdownPlayback();
     void openMedia();
     void updateMediaDetails(int row);
+    void populateMediaBrowser(const std::filesystem::path& selected_path = {});
+    void updateMediaBrowserFilter();
+    void showMediaContextMenu(const QPoint& position);
+    void createBin();
+    void renameSelectedBin();
+    void renameSelectedMedia();
+    void moveSelectedMediaToBin();
+    void removeSelectedMedia();
+    void restoreSelectedMedia();
+    [[nodiscard]] std::optional<std::size_t> selectedMediaIndex() const noexcept;
+    [[nodiscard]] std::string selectedBinPath() const;
     void addMediaItem(
         media::VideoMetadata metadata,
         media::VideoFrame first_frame,
+        std::string display_name = {},
+        std::string bin_path = "Unsorted",
+        bool offline = false,
         bool mark_dirty = true);
     void newProject();
     void openProject();
@@ -126,6 +144,9 @@ private:
     struct ImportedMedia {
         media::VideoMetadata metadata;
         media::VideoFrame first_frame;
+        std::string display_name;
+        std::string bin_path = "Unsorted";
+        bool offline = false;
     };
 
     struct PendingClipActivation {
@@ -143,8 +164,10 @@ private:
     QDockWidget* timeline_dock_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
     QListWidget* media_list_ = nullptr;
+    QTreeWidget* bin_tree_ = nullptr;
     QLabel* media_details_ = nullptr;
     QPushButton* add_to_timeline_button_ = nullptr;
+    QPushButton* new_bin_button_ = nullptr;
     QPushButton* previous_frame_button_ = nullptr;
     QPushButton* play_pause_button_ = nullptr;
     QPushButton* next_frame_button_ = nullptr;
@@ -161,6 +184,7 @@ private:
     QAction* razor_tool_action_ = nullptr;
     timeline::TimelineWidget* timeline_widget_ = nullptr;
     std::vector<ImportedMedia> media_items_;
+    std::vector<std::string> bin_paths_{"Unsorted"};
     timeline::TimelineModel timeline_model_;
     timeline::TimelineHistory timeline_history_;
     std::optional<std::size_t> active_timeline_clip_index_;

@@ -61,10 +61,10 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   the provisional Qt OpenGL preview and CPU fallback are implemented.
 - [x] Create the project and document model with versioned `.csp` persistence;
   manual validation confirmed.
-- [-] Create the initial media import and management layer; metadata probing,
-  first-frame preview, basic CPU playback, keyframe-based seeking, and
-  sequential timeline playback are implemented, while full library management
-  remains pending.
+- [x] Create the initial media import and management layer; metadata probing,
+  first-frame preview, playback, seeking, sequential timeline playback, and
+  basic Media Browser management are implemented. Advanced organization and
+  relinking remain future work.
 - [ ] Create autosave, recovery, and project-wide history systems; basic Save
   and Open persistence is implemented separately.
 - [x] Define and validate the initial versioned `.csp` project format.
@@ -74,9 +74,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 ## 4. Main Editor MVP
 
 - [x] Create the initial application shell and primary workspace.
-- [-] Add initial media import and Media Browser support; metadata and a
-  cached first-frame preview are implemented, while project bins remain
-  pending.
+- [x] Add initial media import and Media Browser support with hierarchical bins,
+  project-owned names, duplicate-path protection, and visible offline state.
 - [x] Display the first decoded video frame through the provisional Qt OpenGL
   preview with a CPU fallback, including manual UI confirmation.
 - [x] Add basic CPU playback with play/pause and previous/next frame controls;
@@ -113,6 +112,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Add a provisional real-time GPU video preview with shader grayscale and a
   validated CPU fallback; automated, startup, and interactive visual
   validation passed.
+- [x] Add basic project media management with hierarchical bins, project labels,
+  offline entries, restoration through import, and version 1 `.csp` persistence.
 - [ ] Add basic audio editing and volume control.
 - [ ] Add basic layers, transformations, and keyframes.
 - [ ] Add basic text and captions.
@@ -123,7 +124,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 
 ## 5. Main Editor Expansion
 
-- [ ] Add advanced media organization and synchronization tools.
+- [ ] Add advanced media organization and synchronization tools, including
+  complete relinking and asset management.
 - [ ] Add color correction and grading workflows.
 - [ ] Improve audio editing and mixing.
 - [ ] Add masks and more advanced compositing.
