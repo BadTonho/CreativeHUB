@@ -58,15 +58,15 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   by the Main Editor.
 - [x] Choose Qt 6 Widgets as the provisional UI, window, and input approach.
 - [ ] Define the rendering abstraction and CPU/GPU responsibilities.
-- [-] Create the project and document model; versioned `.csp` persistence is
-  implemented and awaiting manual validation.
+- [x] Create the project and document model with versioned `.csp` persistence;
+  manual validation confirmed.
 - [-] Create the initial media import and management layer; metadata probing,
   first-frame preview, basic CPU playback, keyframe-based seeking, and
   sequential timeline playback are implemented, while full library management
   remains pending.
 - [ ] Create autosave, recovery, and project-wide history systems; basic Save
   and Open persistence is implemented separately.
-- [-] Define and validate the initial versioned `.csp` project format.
+- [x] Define and validate the initial versioned `.csp` project format.
 - [ ] Add automated tests for the core and module boundaries.
 - [ ] Track dependencies, licenses, codecs, and third-party assets.
 
@@ -104,9 +104,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   Timeline, selected media, active clip, and playhead; automated and manual
   validation confirmed. Advanced ripple editing and project-wide history
   remain future work.
-- [-] Add the first project document and persistence workflow with transactional
-  Save, Save As, New, and Open; automated format validation is passing and
-  manual file-dialog validation remains.
+- [x] Add the first project document and persistence workflow with transactional
+  Save, Save As, New, and Open; automated and manual validation confirmed.
 - [ ] Create a full functional timeline with editing.
 - [ ] Support video, image, text, and audio clips.
 - [ ] Add advanced ripple editing beyond the current bounded Timeline history.
