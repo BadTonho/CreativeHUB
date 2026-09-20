@@ -83,6 +83,25 @@ function(copy_ffmpeg_test_runtime target_name)
     endif()
 endfunction()
 
+function(deploy_qt_test_runtime target_name)
+    if(WIN32 AND CREATIVE_SUITE_HAS_QT_MULTIMEDIA)
+        get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
+        if(NOT QT_CORE_DLL)
+            get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION)
+        endif()
+        get_filename_component(QT_BIN_DIR "${QT_CORE_DLL}" DIRECTORY)
+        find_program(QT_DEPLOY_TOOL windeployqt HINTS "${QT_BIN_DIR}" REQUIRED)
+
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND "${QT_DEPLOY_TOOL}"
+                --no-translations
+                --no-compiler-runtime
+                "$<TARGET_FILE:${target_name}>"
+            VERBATIM
+        )
+    endif()
+endfunction()
+
 copy_ffmpeg_test_runtime(creative-suite-main-editor-video-decoder-tests)
 
 add_test(
@@ -227,6 +246,7 @@ else()
 endif()
 
 copy_ffmpeg_test_runtime(creative-suite-main-editor-audio-playback-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-audio-playback-tests)
 
 add_test(
     NAME creative-suite-main-editor-audio-playback
@@ -241,20 +261,7 @@ if(EXISTS "${REFERENCE_VIDEO}")
 endif()
 
 copy_ffmpeg_test_runtime(creative-suite-main-editor-playback-worker-tests)
-
-if(WIN32)
-    get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
-    if(NOT QT_CORE_DLL)
-        get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION)
-    endif()
-
-    add_custom_command(TARGET creative-suite-main-editor-playback-worker-tests POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${QT_CORE_DLL}"
-            "$<TARGET_FILE_DIR:creative-suite-main-editor-playback-worker-tests>"
-        VERBATIM
-    )
-endif()
+deploy_qt_test_runtime(creative-suite-main-editor-playback-worker-tests)
 
 add_test(
     NAME creative-suite-main-editor-playback-worker-errors
