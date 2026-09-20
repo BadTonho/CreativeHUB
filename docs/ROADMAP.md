@@ -121,9 +121,9 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   and Timeline history coverage; automated and manual audio-device validation
   passed. Audio-only sources, mixing, waveforms, automation, recording, and
   export remain future work.
-- [ ] Add basic layers, transformations, and keyframes (implementation and
-  automated regression coverage in progress; manual composition validation
-  remains before marking complete).
+- [x] Add basic layers, transformations, and keyframes, including worker-side
+  composition, normalized transforms, linear keyframes, Inspector controls,
+  project persistence, and Undo/Redo; manual validation confirmed.
 - [ ] Add basic text and captions.
 - [ ] Add essential transitions and effects.
 - [ ] Add common video export formats.
