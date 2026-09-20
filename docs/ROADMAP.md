@@ -57,7 +57,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [ ] Define shared-core responsibilities and create only the modules required
   by the Main Editor.
 - [x] Choose Qt 6 Widgets as the provisional UI, window, and input approach.
-- [ ] Define the rendering abstraction and CPU/GPU responsibilities.
+- [ ] Define the final rendering abstraction and CPU/GPU responsibilities;
+  the provisional Qt OpenGL preview and CPU fallback are implemented.
 - [x] Create the project and document model with versioned `.csp` persistence;
   manual validation confirmed.
 - [-] Create the initial media import and management layer; metadata probing,
@@ -76,8 +77,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [-] Add initial media import and Media Browser support; metadata and a
   cached first-frame preview are implemented, while project bins remain
   pending.
-- [x] Display the first decoded video frame through the temporary CPU preview
-  path, including manual UI confirmation.
+- [x] Display the first decoded video frame through the provisional Qt OpenGL
+  preview with a CPU fallback, including manual UI confirmation.
 - [x] Add basic CPU playback with play/pause and previous/next frame controls;
   manual validation confirmed pause and frame advancement; GPU playback and
   timeline editing remain pending.
@@ -109,7 +110,9 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [ ] Create a full functional timeline with editing.
 - [ ] Support video, image, text, and audio clips.
 - [ ] Add advanced ripple editing beyond the current bounded Timeline history.
-- [ ] Add a real-time GPU video preview.
+- [x] Add a provisional real-time GPU video preview with shader grayscale and a
+  validated CPU fallback; automated, startup, and interactive visual
+  validation passed.
 - [ ] Add basic audio editing and volume control.
 - [ ] Add basic layers, transformations, and keyframes.
 - [ ] Add basic text and captions.

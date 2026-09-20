@@ -2,7 +2,7 @@ include(GNUInstallDirs)
 
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Widgets)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Widgets OpenGL OpenGLWidgets)
 find_package(FFMPEG MODULE REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
 
 add_executable(creative-suite-main-editor
@@ -11,6 +11,8 @@ add_executable(creative-suite-main-editor
     src/main_window.h
     src/preview_widget.cpp
     src/preview_widget.h
+    src/rendering/opengl_preview_surface.cpp
+    src/rendering/opengl_preview_surface.h
     src/playback/playback_worker.cpp
     src/playback/playback_worker.h
     src/logging/logger.cpp
@@ -39,10 +41,13 @@ add_executable(creative-suite-main-editor
 
 target_link_libraries(creative-suite-main-editor PRIVATE
     Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
     ${FFMPEG_LIBRARIES}
 )
 
 target_include_directories(creative-suite-main-editor PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${FFMPEG_INCLUDE_DIRS}
 )
 

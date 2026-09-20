@@ -6,7 +6,7 @@ The current Main Editor includes:
 
 - a Qt 6 desktop shell with dockable workspace panels;
 - local video metadata import through FFmpeg;
-- first-frame CPU preview;
+- first-frame preview through provisional Qt OpenGL with a CPU fallback;
 - basic CPU playback with play/pause and frame stepping;
 - a multi-clip visual timeline with one video track;
 - continuous playback across sequential clips;
@@ -19,7 +19,7 @@ The current Main Editor includes:
 
 The current application does not implement:
 
-- GPU preview or GPU playback;
+- GPU playback;
 - thumbnails;
 - full timeline editing;
 - multiple tracks;

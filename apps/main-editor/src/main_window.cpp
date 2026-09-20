@@ -574,6 +574,23 @@ void MainWindow::applyLoadedProject(
 void MainWindow::createWorkspace() {
     preview_widget_ = new PreviewWidget(this);
     setCentralWidget(preview_widget_);
+    connect(
+        preview_widget_,
+        &PreviewWidget::gpuFallbackRequested,
+        this,
+        [this](const QString& reason, qint64 error_code) {
+            logging::Context context{{"cause", reason.toUtf8().toStdString()}};
+            if (error_code != 0) {
+                context.emplace_back("error_code", std::to_string(error_code));
+            }
+            logging::Logger::instance().log(
+                logging::Level::Error,
+                "rendering",
+                "gpu_preview",
+                reason.toUtf8().toStdString(),
+                context);
+            statusBar()->showMessage("GPU preview unavailable; using CPU preview.");
+        });
 
     media_browser_dock_ = createDock(
         "Media Browser",
@@ -662,6 +679,13 @@ void MainWindow::createMenus() {
     view_menu->addAction(media_browser_dock_->toggleViewAction());
     view_menu->addAction(inspector_dock_->toggleViewAction());
     view_menu->addAction(timeline_dock_->toggleViewAction());
+    view_menu->addSeparator();
+    auto* grayscale_action = view_menu->addAction("Grayscale Preview");
+    grayscale_action->setCheckable(true);
+    grayscale_action->setChecked(false);
+    connect(grayscale_action, &QAction::toggled, this, [this](bool enabled) {
+        if (preview_widget_ != nullptr) preview_widget_->setGrayscaleEnabled(enabled);
+    });
     view_menu->addSeparator();
     auto* restore_layout_action = view_menu->addAction("Restore &Default Layout");
     connect(restore_layout_action, &QAction::triggered, this, &MainWindow::restoreDefaultLayout);

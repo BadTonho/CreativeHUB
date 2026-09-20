@@ -16,6 +16,15 @@ libraries must use standard C++ types or project-owned interfaces instead of
 exposing `QObject`, `QString`, `QVariant`, Qt containers, or Qt signals and
 slots in their public APIs.
 
+The preview uses a provisional Qt OpenGL surface when available. `View >
+Grayscale Preview` is a checkable view action, disabled by default, with no
+keyboard shortcut. Grayscale is applied in the preview shader and equivalently
+in the CPU fallback. If OpenGL initialization or rendering fails, the UI keeps
+the current frame, switches to the CPU preview, shows a concise status message,
+and records the technical failure in the local log. Setting
+`CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1` forces the CPU path for diagnostics and
+does not represent an error.
+
 This boundary keeps a future UI replacement limited primarily to the
 application layer. The UI may adapt project, media, timeline, or rendering
 services through explicit C++ interfaces.
