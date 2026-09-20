@@ -3,13 +3,17 @@
 #include "../media/video_metadata.h"
 
 #include <cstdint>
+#include <cstddef>
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace timeline {
 
 struct TimelineClip {
+    std::int64_t timeline_start_frame = 0;
+    std::int64_t timeline_duration_frames = 0;
     std::filesystem::path source_path;
     std::string display_name;
     std::optional<double> duration_seconds;
@@ -19,8 +23,7 @@ struct TimelineClip {
 
 enum class AddClipResult {
     Added,
-    AlreadyPresent,
-    Occupied,
+    InvalidTimingMetadata,
 };
 
 class TimelineModel final {
@@ -29,10 +32,14 @@ public:
     void clear() noexcept;
 
     [[nodiscard]] bool hasClip() const noexcept;
-    [[nodiscard]] const TimelineClip* clip() const noexcept;
+    [[nodiscard]] std::size_t clipCount() const noexcept;
+    [[nodiscard]] std::int64_t totalDurationFrames() const noexcept;
+    [[nodiscard]] const std::vector<TimelineClip>& clips() const noexcept;
+    [[nodiscard]] std::optional<std::size_t> firstClipIndexForSource(
+        const std::filesystem::path& source_path) const;
 
 private:
-    std::optional<TimelineClip> clip_;
+    std::vector<TimelineClip> clips_;
 };
 
 } // namespace timeline

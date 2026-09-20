@@ -5,8 +5,10 @@
 #include <QString>
 #include <QWidget>
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 class QMouseEvent;
 class QPaintEvent;
@@ -24,11 +26,13 @@ class TimelineWidget final : public QWidget {
 public:
     explicit TimelineWidget(QWidget* parent = nullptr);
 
-    void setClip(const TimelineClip* clip);
-    void clearClip();
+    void setClips(const std::vector<TimelineClip>& clips);
+    void clearClips();
+    void setActiveClipIndex(std::optional<std::size_t> clip_index);
     void setPlayheadFrame(std::int64_t frame_index);
 
 signals:
+    void clipSelected(qint64 clip_index);
     void seekStarted();
     void seekRequested(qint64 frame_index);
     void mediaDropRequested(const QString& source_path);
@@ -45,11 +49,14 @@ protected:
 
 private:
     [[nodiscard]] bool isTrackPosition(const QPointF& position) const noexcept;
+    [[nodiscard]] std::optional<std::size_t> activeClipIndex() const noexcept;
+    [[nodiscard]] std::optional<std::size_t> clipIndexAtPosition(double x) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> frameAtPosition(double x) const noexcept;
     [[nodiscard]] std::optional<double> playheadFraction() const noexcept;
     [[nodiscard]] double displayedPlayheadFrame() const noexcept;
 
-    std::optional<TimelineClip> clip_;
+    std::vector<TimelineClip> clips_;
+    std::optional<std::size_t> active_clip_index_;
     std::int64_t playhead_frame_ = 0;
     std::optional<std::int64_t> drag_frame_;
     bool dragging_ = false;

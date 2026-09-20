@@ -13,7 +13,7 @@ removal, or behavior change.
 | `Right Arrow` | Show the next video frame | Main Editor window |
 
 Playback shortcuts are disabled when no media is selected or when the selected
-media is not the clip currently present in the single-clip timeline.
+media is not present in the timeline.
 
 ## Notes
 

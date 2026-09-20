@@ -14,8 +14,8 @@ unexpected, technical, or operational failure must produce a detailed log
 entry before or while it is reported to the user.
 
 Expected control-flow outcomes, such as cancelling a dialog, duplicate
-imports, an occupied single-clip timeline, or a drop outside the active track,
-are intentionally excluded from error logging.
+imports, or a drop outside the active track, are intentionally excluded from
+error logging.
 
 Logs are stored in the platform's user log directory and limited to three files
 of up to 5 MB each. The Help menu provides an `Open Log Folder` action. Native

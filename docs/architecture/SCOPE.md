@@ -8,7 +8,7 @@ The current Main Editor includes:
 - local video metadata import through FFmpeg;
 - first-frame CPU preview;
 - basic CPU playback with play/pause and frame stepping;
-- a single-clip visual timeline;
+- a multi-clip visual timeline with one video track;
 - click-and-drag seeking with worker-thread decoding;
 - drag-and-drop from imported Media Browser items to the Timeline;
 - local structured error logging.
@@ -19,7 +19,8 @@ The current application does not implement:
 - optimized random seeking or frame caching;
 - thumbnails;
 - full timeline editing;
-- multiple clips or tracks;
+- multiple tracks;
+- continuous playback across clip boundaries;
 - clip cuts, movement, or rearrangement;
 - project persistence;
 - audio;

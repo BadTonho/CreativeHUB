@@ -22,13 +22,14 @@ std::filesystem::path uniqueTestDirectory() {
 
 media::VideoMetadata makeMetadata(
     const std::filesystem::path& source_path,
-    const std::string& display_name) {
+    const std::string& display_name,
+    std::int64_t frame_count = 120) {
     media::VideoMetadata metadata;
     metadata.source_path = source_path;
     metadata.display_name = display_name;
     metadata.duration_seconds = 4.0;
     metadata.frame_rate = 30.0;
-    metadata.frame_count = 120;
+    metadata.frame_count = frame_count;
     return metadata;
 }
 
@@ -39,41 +40,86 @@ int main() {
 
     try {
         std::filesystem::create_directories(directory / "media");
-        const auto source_path = directory / "media" / "reference.mkv";
-        std::ofstream(source_path, std::ios::binary).close();
-        const auto non_canonical_path = directory / "media" / ".." / "media" / "reference.mkv";
+        const auto first_source = directory / "media" / "first.mkv";
+        const auto second_source = directory / "media" / "second.mkv";
+        std::ofstream(first_source, std::ios::binary).close();
+        std::ofstream(second_source, std::ios::binary).close();
 
+        const auto non_canonical_first =
+            directory / "media" / ".." / "media" / "first.mkv";
         timeline::TimelineModel model;
         require(!model.hasClip(), "A new timeline should be empty.");
-        require(model.clip() == nullptr, "An empty timeline should have no clip.");
+        require(model.clipCount() == 0, "A new timeline should have no clips.");
+        require(model.totalDurationFrames() == 0,
+                "An empty timeline should have zero duration.");
 
-        const auto metadata = makeMetadata(non_canonical_path, "reference.mkv");
-        require(model.addClip(metadata) == timeline::AddClipResult::Added,
+        const auto first_metadata = makeMetadata(
+            non_canonical_first,
+            "first.mkv");
+        require(model.addClip(first_metadata) == timeline::AddClipResult::Added,
                 "The first clip was not added.");
-        require(model.hasClip(), "The timeline did not report its added clip.");
+        require(model.clipCount() == 1, "The first clip count was incorrect.");
 
-        const auto* clip = model.clip();
-        require(clip != nullptr, "The added clip was not accessible.");
-        require(clip->source_path == std::filesystem::weakly_canonical(source_path),
-                "The clip source path was not canonicalized.");
-        require(clip->display_name == "reference.mkv", "The clip name was not preserved.");
-        require(clip->duration_seconds == metadata.duration_seconds,
-                "The clip duration was not preserved.");
-        require(clip->frame_rate == metadata.frame_rate,
-                "The clip frame rate was not preserved.");
-        require(clip->frame_count == metadata.frame_count,
-                "The clip frame count was not preserved.");
+        const auto& first_clip = model.clips().front();
+        require(first_clip.timeline_start_frame == 0,
+                "The first clip did not start at frame zero.");
+        require(first_clip.timeline_duration_frames == 120,
+                "The first clip duration was incorrect.");
+        require(first_clip.source_path == std::filesystem::weakly_canonical(first_source),
+                "The first source path was not canonicalized.");
+        require(first_clip.display_name == "first.mkv",
+                "The first clip name was not preserved.");
+        require(first_clip.duration_seconds == first_metadata.duration_seconds,
+                "The first clip duration metadata was not preserved.");
+        require(first_clip.frame_rate == first_metadata.frame_rate,
+                "The first clip frame rate was not preserved.");
+        require(first_clip.frame_count == first_metadata.frame_count,
+                "The first clip frame count was not preserved.");
 
-        require(model.addClip(makeMetadata(source_path, "duplicate.mkv")) ==
-                    timeline::AddClipResult::AlreadyPresent,
-                "A duplicate clip was accepted.");
-        require(model.addClip(makeMetadata(directory / "other.mkv", "other.mkv")) ==
-                    timeline::AddClipResult::Occupied,
-                "A second clip was accepted while the timeline was occupied.");
+        const auto second_metadata = makeMetadata(second_source, "second.mkv", 60);
+        require(model.addClip(second_metadata) == timeline::AddClipResult::Added,
+                "The second clip was not added.");
+        require(model.clips().size() == 2,
+                "The timeline did not retain both clips.");
+        require(model.clips()[1].timeline_start_frame == 120,
+                "The second clip was not appended after the first.");
+        require(model.clips()[1].timeline_duration_frames == 60,
+                "The second clip duration was incorrect.");
+        require(model.totalDurationFrames() == 180,
+                "The total timeline duration was incorrect.");
+
+        require(model.addClip(first_metadata) == timeline::AddClipResult::Added,
+                "The same source could not be added a second time.");
+        require(model.clips().size() == 3,
+                "The repeated source did not create an independent clip.");
+        require(model.clips()[2].timeline_start_frame == 180,
+                "The repeated source was not appended at the end.");
+        require(model.firstClipIndexForSource(first_source) == 0,
+                "The first source lookup did not return the first occurrence.");
+
+        media::VideoMetadata fallback_metadata;
+        fallback_metadata.source_path = directory / "media" / "fallback.mkv";
+        fallback_metadata.display_name = "fallback.mkv";
+        fallback_metadata.duration_seconds = 2.5;
+        fallback_metadata.frame_rate = 24.0;
+        require(model.addClip(fallback_metadata) == timeline::AddClipResult::Added,
+                "Duration and frame rate fallback metadata was rejected.");
+        require(model.clips().back().timeline_duration_frames == 60,
+                "Duration and frame rate fallback was calculated incorrectly.");
+
+        media::VideoMetadata invalid_metadata;
+        invalid_metadata.source_path = directory / "media" / "invalid.mkv";
+        invalid_metadata.display_name = "invalid.mkv";
+        require(model.addClip(invalid_metadata) ==
+                    timeline::AddClipResult::InvalidTimingMetadata,
+                "Metadata without timing information was accepted.");
+        require(model.clips().size() == 4,
+                "Invalid metadata changed the timeline.");
 
         model.clear();
         require(!model.hasClip(), "The timeline was not cleared.");
-        require(model.clip() == nullptr, "The cleared timeline still exposed a clip.");
+        require(model.clipCount() == 0, "The cleared timeline still has clips.");
+        require(model.clips().empty(), "The cleared clip collection was not empty.");
     } catch (const std::exception& error) {
         std::error_code cleanup_error;
         std::filesystem::remove_all(directory, cleanup_error);

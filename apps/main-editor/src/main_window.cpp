@@ -334,6 +334,11 @@ QWidget* MainWindow::createTimeline() {
     });
     connect(
         timeline_widget_,
+        &timeline::TimelineWidget::clipSelected,
+        this,
+        &MainWindow::handleTimelineClipSelected);
+    connect(
+        timeline_widget_,
         &timeline::TimelineWidget::seekStarted,
         this,
         &MainWindow::handleTimelineSeekStarted);
@@ -418,11 +423,21 @@ bool MainWindow::hasSelectedMedia() const noexcept {
         media_list_->currentRow() < static_cast<int>(media_items_.size());
 }
 
+std::optional<std::size_t> MainWindow::selectedTimelineClipIndex() const noexcept {
+    if (!hasSelectedMedia() || !timeline_model_.hasClip()) return std::nullopt;
+
+    const auto& selected = media_items_[static_cast<std::size_t>(media_list_->currentRow())];
+    const auto& clips = timeline_model_.clips();
+    for (std::size_t index = 0; index < clips.size(); ++index) {
+        if (clips[index].source_path == selected.metadata.source_path) {
+            return index;
+        }
+    }
+    return std::nullopt;
+}
+
 bool MainWindow::selectedMediaMatchesTimeline() const noexcept {
-    if (!hasSelectedMedia() || !timeline_model_.hasClip()) return false;
-    const auto* clip = timeline_model_.clip();
-    const auto& selected = media_items_[static_cast<size_t>(media_list_->currentRow())];
-    return clip != nullptr && clip->source_path == selected.metadata.source_path;
+    return selectedTimelineClipIndex().has_value();
 }
 
 bool MainWindow::canPreviewSelectedMedia() const noexcept {
@@ -433,17 +448,10 @@ bool MainWindow::canPreviewSelectedMedia() const noexcept {
 void MainWindow::updateTimelineState() {
     const bool selected = hasSelectedMedia();
     const bool occupied = timeline_model_.hasClip();
-    const bool selected_is_clip = selectedMediaMatchesTimeline();
 
     if (add_to_timeline_button_ != nullptr) {
-        add_to_timeline_button_->setEnabled(selected && !occupied);
-        if (!occupied) {
-            add_to_timeline_button_->setText("Add to Timeline");
-        } else if (selected_is_clip) {
-            add_to_timeline_button_->setText("Already in Timeline");
-        } else {
-            add_to_timeline_button_->setText("Clear Timeline to Add");
-        }
+        add_to_timeline_button_->setEnabled(selected);
+        add_to_timeline_button_->setText("Add to Timeline");
     }
 
     if (clear_timeline_button_ != nullptr) {
@@ -451,7 +459,8 @@ void MainWindow::updateTimelineState() {
     }
 
     if (timeline_widget_ != nullptr) {
-        timeline_widget_->setClip(timeline_model_.clip());
+        timeline_widget_->setClips(timeline_model_.clips());
+        timeline_widget_->setActiveClipIndex(active_timeline_clip_index_);
         timeline_widget_->setPlayheadFrame(playback_frame_index_);
     }
 }
@@ -462,17 +471,27 @@ void MainWindow::addSelectedMediaToTimeline() {
     const auto& selected = media_items_[static_cast<size_t>(media_list_->currentRow())];
     switch (timeline_model_.addClip(selected.metadata)) {
     case timeline::AddClipResult::Added:
+        active_timeline_clip_index_ = timeline_model_.clipCount() - 1;
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
         statusBar()->showMessage("Media added to the timeline.");
         break;
-    case timeline::AddClipResult::AlreadyPresent:
-        statusBar()->showMessage("Media is already in the timeline.");
+    case timeline::AddClipResult::InvalidTimingMetadata: {
+        const auto path = pathToUtf8(selected.metadata.source_path);
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "timeline",
+            "add_clip",
+            "Media does not contain enough valid timing metadata for timeline placement.",
+            {{"path", path}});
+        QMessageBox::warning(
+            this,
+            "Could not add media",
+            "This media does not contain enough timing metadata for the timeline.");
+        statusBar()->showMessage("Could not add media to the timeline.");
         break;
-    case timeline::AddClipResult::Occupied:
-        statusBar()->showMessage("Clear the timeline before adding another media item.");
-        break;
+    }
     }
 }
 
@@ -512,10 +531,49 @@ void MainWindow::handleMediaDrop(const QString& source_path) {
     }
 }
 
+void MainWindow::handleTimelineClipSelected(qint64 clip_index) {
+    if (clip_index < 0 ||
+        clip_index >= static_cast<qint64>(timeline_model_.clipCount())) {
+        return;
+    }
+
+    const auto& clip = timeline_model_.clips()[static_cast<std::size_t>(clip_index)];
+    const auto media_item = std::find_if(
+        media_items_.begin(),
+        media_items_.end(),
+        [&clip](const ImportedMedia& item) {
+            return item.metadata.source_path == clip.source_path;
+        });
+    if (media_item == media_items_.end()) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "timeline",
+            "select_clip",
+            "The selected timeline clip has no matching imported media item.",
+            {{"path", pathToUtf8(clip.source_path)},
+             {"clip_index", std::to_string(clip_index)}});
+        statusBar()->showMessage("Could not select the timeline clip.");
+        return;
+    }
+
+    const int media_index = static_cast<int>(
+        std::distance(media_items_.begin(), media_item));
+    if (media_list_->currentRow() != media_index) {
+        media_list_->setCurrentRow(media_index);
+    }
+
+    active_timeline_clip_index_ = static_cast<std::size_t>(clip_index);
+    updateTimelineState();
+    updatePlaybackControls();
+    updatePlaybackStatus();
+    statusBar()->showMessage("Timeline clip selected.");
+}
+
 void MainWindow::clearTimeline() {
     if (!timeline_model_.hasClip()) return;
 
     timeline_model_.clear();
+    active_timeline_clip_index_.reset();
     const int selected_row = media_list_ != nullptr ? media_list_->currentRow() : -1;
     if (selected_row >= 0) {
         updateMediaDetails(selected_row);
@@ -642,6 +700,7 @@ void MainWindow::updateMediaDetails(int row) {
     playback_frame_index_ = 0;
 
     if (row < 0 || row >= static_cast<int>(media_items_.size())) {
+        active_timeline_clip_index_.reset();
         media_details_->setText("No media imported.");
         preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
         updateTimelineState();
@@ -651,6 +710,7 @@ void MainWindow::updateMediaDetails(int row) {
     }
 
     const auto& item = media_items_[static_cast<size_t>(row)];
+    active_timeline_clip_index_ = selectedTimelineClipIndex();
     media_details_->setText(mediaDetailsText(item.metadata));
     preview_widget_->setFrame(item.first_frame);
     updateTimelineState();
