@@ -56,6 +56,7 @@ void PlaybackWorker::setMedia(QString source_path, double frame_rate, quint64 ge
 
     try {
         session_ = media::VideoPlaybackSession::open(source_path_);
+        emit mediaReady(generation_);
     } catch (const media::MediaError& error) {
         reportFailure(error, "set_media");
     } catch (const std::exception& error) {
@@ -200,7 +201,7 @@ void PlaybackWorker::finishPlayback() {
     const bool was_playing = playing_;
     playing_ = false;
     if (was_playing) emit playbackStateChanged(false, generation_);
-    emit playbackFinished(generation_);
+    emit playbackFinished(generation_, was_playing);
 }
 
 void PlaybackWorker::emitFrame(std::optional<media::VideoFrame> frame) {
@@ -241,7 +242,10 @@ void PlaybackWorker::reportFailure(
     if (timer_ != nullptr) timer_->stop();
     playing_ = false;
     session_.reset();
-    emit playbackError(QString::fromUtf8(error.what()), generation_);
+    emit playbackError(
+        QString::fromUtf8(error.what()),
+        error.error_code().value_or(-1),
+        generation_);
 }
 
 void PlaybackWorker::reportFailure(
@@ -268,7 +272,7 @@ void PlaybackWorker::reportFailure(
     if (timer_ != nullptr) timer_->stop();
     playing_ = false;
     session_.reset();
-    emit playbackError(QString::fromUtf8(error.what()), generation_);
+    emit playbackError(QString::fromUtf8(error.what()), -1, generation_);
 }
 
 int PlaybackWorker::frameIntervalMilliseconds() const noexcept {

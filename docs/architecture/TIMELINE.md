@@ -22,13 +22,15 @@ derived duration from `duration × frame_rate`; media without valid timing
 metadata is rejected with a logged error.
 
 The Media Browser controls the active clip, and clicking a clip block selects
-that clip and synchronizes the Media Browser to its source. Playback and
-click-and-drag seeking remain limited to the selected media. The playback
-worker still owns one FFmpeg session at a time; it does not automatically
-switch sessions when the playhead reaches the next clip.
+that clip and synchronizes the Media Browser to its source. Playback follows
+the clips in sequence: when a clip reaches its end, the next clip is opened on
+the worker, becomes active after the session is ready, and resumes
+automatically. The Media Browser selection and cached first-frame preview
+follow that transition. The playback worker still owns one FFmpeg session at a
+time.
 
 Seeking updates the active clip's visual playhead without decoding during mouse
 movement. The worker decodes the requested frame only after release and leaves
-playback paused. Optimized seeking, clip movement, cuts, multiple tracks,
-continuous cross-clip playback, and project persistence remain future
-responsibilities.
+playback paused. Frame stepping crosses clip boundaries while remaining
+paused. Optimized seeking, clip movement, cuts, multiple tracks, and project
+persistence remain future responsibilities.

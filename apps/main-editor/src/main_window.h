@@ -57,16 +57,37 @@ private:
         playback::VideoFramePtr frame,
         qint64 frame_index,
         quint64 generation);
+    void handlePlaybackMediaReady(quint64 generation);
     void handlePlaybackStateChanged(bool playing, quint64 generation);
-    void handlePlaybackFinished(quint64 generation);
-    void handlePlaybackError(const QString& message, quint64 generation);
+    void handlePlaybackFinished(quint64 generation, bool during_playback);
+    void handlePlaybackError(
+        const QString& message,
+        qint64 error_code,
+        quint64 generation);
     void handleTimelineClipSelected(qint64 clip_index);
     void handleTimelineSeekStarted();
     void handleTimelineSeek(qint64 frame_index);
+    void activateTimelineClip(
+        std::size_t clip_index,
+        std::int64_t target_frame,
+        bool resume_playback);
+    void commitTimelineClipActivation(
+        std::size_t clip_index,
+        std::size_t media_index,
+        std::int64_t frame_index,
+        bool show_cached_frame);
 
     struct ImportedMedia {
         media::VideoMetadata metadata;
         media::VideoFrame first_frame;
+    };
+
+    struct PendingClipActivation {
+        std::size_t clip_index = 0;
+        std::size_t media_index = 0;
+        std::int64_t target_frame = 0;
+        bool resume_playback = false;
+        quint64 generation = 0;
     };
 
     QDockWidget* media_browser_dock_ = nullptr;
@@ -85,6 +106,7 @@ private:
     std::vector<ImportedMedia> media_items_;
     timeline::TimelineModel timeline_model_;
     std::optional<std::size_t> active_timeline_clip_index_;
+    std::optional<PendingClipActivation> pending_clip_activation_;
     media::VideoProbe video_probe_;
     media::VideoDecoder video_decoder_;
     QThread playback_thread_;

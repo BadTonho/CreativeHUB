@@ -135,9 +135,71 @@ add_test(
 )
 
 if(EXISTS "${REFERENCE_VIDEO}")
+add_test(
+    NAME creative-suite-main-editor-video-playback-reference
+    COMMAND creative-suite-main-editor-video-playback-tests "${REFERENCE_VIDEO}"
+)
+endif()
+
+add_executable(creative-suite-main-editor-playback-worker-tests
+    playback_worker_test.cpp
+    ../src/logging/logger.cpp
+    ../src/logging/logger.h
+    ../src/media/video_frame.h
+    ../src/media/video_metadata.h
+    ../src/media/video_playback.cpp
+    ../src/media/video_playback.h
+    ../src/playback/playback_worker.cpp
+    ../src/playback/playback_worker.h
+)
+
+target_include_directories(creative-suite-main-editor-playback-worker-tests PRIVATE
+    ../src
+    ${FFMPEG_INCLUDE_DIRS}
+)
+
+target_link_directories(creative-suite-main-editor-playback-worker-tests PRIVATE
+    ${FFMPEG_LIBRARY_DIRS}
+)
+
+target_link_libraries(creative-suite-main-editor-playback-worker-tests PRIVATE
+    Qt6::Core
+    ${FFMPEG_LIBRARIES}
+)
+
+target_compile_features(creative-suite-main-editor-playback-worker-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-playback-worker-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-playback-worker-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+copy_ffmpeg_test_runtime(creative-suite-main-editor-playback-worker-tests)
+
+if(WIN32)
+    get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
+    if(NOT QT_CORE_DLL)
+        get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION)
+    endif()
+
+    add_custom_command(TARGET creative-suite-main-editor-playback-worker-tests POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${QT_CORE_DLL}"
+            "$<TARGET_FILE_DIR:creative-suite-main-editor-playback-worker-tests>"
+        VERBATIM
+    )
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-playback-worker-errors
+    COMMAND creative-suite-main-editor-playback-worker-tests
+)
+
+if(EXISTS "${REFERENCE_VIDEO}")
     add_test(
-        NAME creative-suite-main-editor-video-playback-reference
-        COMMAND creative-suite-main-editor-video-playback-tests "${REFERENCE_VIDEO}"
+        NAME creative-suite-main-editor-playback-worker-reference
+        COMMAND creative-suite-main-editor-playback-worker-tests "${REFERENCE_VIDEO}"
     )
 endif()
 

@@ -9,8 +9,8 @@ removal, or behavior change.
 | Shortcut | Action | Context |
 | --- | --- | --- |
 | `Space` | Play or pause the selected media | Main Editor window |
-| `Left Arrow` | Show the previous video frame | Main Editor window |
-| `Right Arrow` | Show the next video frame | Main Editor window |
+| `Left Arrow` | Show the previous video frame, crossing to the previous clip when needed | Main Editor window |
+| `Right Arrow` | Show the next video frame, crossing to the next clip when needed | Main Editor window |
 
 Playback shortcuts are disabled when no media is selected or when the selected
 media is not present in the timeline.

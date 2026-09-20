@@ -9,6 +9,7 @@ The current Main Editor includes:
 - first-frame CPU preview;
 - basic CPU playback with play/pause and frame stepping;
 - a multi-clip visual timeline with one video track;
+- continuous playback across sequential clips;
 - click-and-drag seeking with worker-thread decoding;
 - drag-and-drop from imported Media Browser items to the Timeline;
 - local structured error logging.
@@ -20,7 +21,6 @@ The current application does not implement:
 - thumbnails;
 - full timeline editing;
 - multiple tracks;
-- continuous playback across clip boundaries;
 - clip cuts, movement, or rearrangement;
 - project persistence;
 - audio;

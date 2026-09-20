@@ -38,9 +38,10 @@ public slots:
 
 signals:
     void frameReady(VideoFramePtr frame, qint64 frame_index, quint64 generation);
+    void mediaReady(quint64 generation);
     void playbackStateChanged(bool playing, quint64 generation);
-    void playbackFinished(quint64 generation);
-    void playbackError(QString message, quint64 generation);
+    void playbackFinished(quint64 generation, bool during_playback);
+    void playbackError(QString message, qint64 error_code, quint64 generation);
 
 private slots:
     void decodeTick();

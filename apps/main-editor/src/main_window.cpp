@@ -21,6 +21,7 @@
 #include <QMetaObject>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -29,6 +30,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <iterator>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -379,6 +381,12 @@ void MainWindow::initializePlayback() {
         Qt::QueuedConnection);
     connect(
         playback_worker_,
+        &playback::PlaybackWorker::mediaReady,
+        this,
+        &MainWindow::handlePlaybackMediaReady,
+        Qt::QueuedConnection);
+    connect(
+        playback_worker_,
         &playback::PlaybackWorker::playbackStateChanged,
         this,
         [this](bool playing, quint64 generation) {
@@ -389,14 +397,16 @@ void MainWindow::initializePlayback() {
         playback_worker_,
         &playback::PlaybackWorker::playbackFinished,
         this,
-        [this](quint64 generation) { handlePlaybackFinished(generation); },
+        [this](quint64 generation, bool during_playback) {
+            handlePlaybackFinished(generation, during_playback);
+        },
         Qt::QueuedConnection);
     connect(
         playback_worker_,
         &playback::PlaybackWorker::playbackError,
         this,
-        [this](const QString& message, quint64 generation) {
-            handlePlaybackError(message, generation);
+        [this](const QString& message, qint64 error_code, quint64 generation) {
+            handlePlaybackError(message, error_code, generation);
         },
         Qt::QueuedConnection);
 
@@ -537,6 +547,16 @@ void MainWindow::handleTimelineClipSelected(qint64 clip_index) {
         return;
     }
 
+    const bool had_pending_activation = pending_clip_activation_.has_value();
+    if (had_pending_activation) {
+        pending_clip_activation_.reset();
+        ++playback_generation_;
+        playback_is_playing_ = false;
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
+        }
+    }
+
     const auto& clip = timeline_model_.clips()[static_cast<std::size_t>(clip_index)];
     const auto media_item = std::find_if(
         media_items_.begin(),
@@ -558,8 +578,11 @@ void MainWindow::handleTimelineClipSelected(qint64 clip_index) {
 
     const int media_index = static_cast<int>(
         std::distance(media_items_.begin(), media_item));
-    if (media_list_->currentRow() != media_index) {
+    const bool row_changed = media_list_->currentRow() != media_index;
+    if (row_changed) {
         media_list_->setCurrentRow(media_index);
+    } else if (had_pending_activation) {
+        updateMediaDetails(media_index);
     }
 
     active_timeline_clip_index_ = static_cast<std::size_t>(clip_index);
@@ -567,6 +590,96 @@ void MainWindow::handleTimelineClipSelected(qint64 clip_index) {
     updatePlaybackControls();
     updatePlaybackStatus();
     statusBar()->showMessage("Timeline clip selected.");
+}
+
+void MainWindow::activateTimelineClip(
+    std::size_t clip_index,
+    std::int64_t target_frame,
+    bool resume_playback) {
+    if (playback_worker_ == nullptr ||
+        clip_index >= timeline_model_.clipCount()) {
+        return;
+    }
+
+    const auto& clip = timeline_model_.clips()[clip_index];
+    const auto media_item = std::find_if(
+        media_items_.begin(),
+        media_items_.end(),
+        [&clip](const ImportedMedia& item) {
+            return item.metadata.source_path == clip.source_path;
+        });
+    if (media_item == media_items_.end() ||
+        target_frame < 0 ||
+        target_frame >= clip.timeline_duration_frames) {
+        logging::Context context{
+            {"clip_index", std::to_string(clip_index)},
+            {"path", pathToUtf8(clip.source_path)},
+            {"requested_frame", std::to_string(target_frame)}};
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "playback",
+            "transition",
+            media_item == media_items_.end()
+                ? "The timeline clip has no matching imported media item."
+                : "The requested timeline transition frame is invalid.",
+            context);
+        statusBar()->showMessage("Could not activate the timeline clip.");
+        QMessageBox::warning(
+            this,
+            "Playback transition error",
+            "The next timeline clip could not be activated.");
+        playback_is_playing_ = false;
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        return;
+    }
+
+    ++playback_generation_;
+    pending_clip_activation_ = PendingClipActivation{
+        clip_index,
+        static_cast<std::size_t>(std::distance(media_items_.begin(), media_item)),
+        target_frame,
+        resume_playback,
+        playback_generation_};
+    playback_is_playing_ = false;
+    updatePlaybackControls();
+    updatePlaybackStatus();
+    statusBar()->showMessage("Loading timeline clip...");
+
+    QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
+    const auto& item = *media_item;
+    QMetaObject::invokeMethod(
+        playback_worker_,
+        "setMedia",
+        Qt::QueuedConnection,
+        Q_ARG(QString, fromUtf8(pathToUtf8(item.metadata.source_path))),
+        Q_ARG(double, item.metadata.frame_rate.value_or(30.0)),
+        Q_ARG(quint64, playback_generation_));
+}
+
+void MainWindow::commitTimelineClipActivation(
+    std::size_t clip_index,
+    std::size_t media_index,
+    std::int64_t frame_index,
+    bool show_cached_frame) {
+    if (clip_index >= timeline_model_.clipCount() ||
+        media_index >= media_items_.size()) {
+        return;
+    }
+
+    active_timeline_clip_index_ = clip_index;
+    playback_frame_index_ = frame_index;
+    {
+        const QSignalBlocker blocker(media_list_);
+        media_list_->setCurrentRow(static_cast<int>(media_index));
+    }
+
+    const auto& item = media_items_[media_index];
+    media_details_->setText(mediaDetailsText(item.metadata));
+    if (show_cached_frame) preview_widget_->setFrame(item.first_frame);
+    updateTimelineState();
+    updatePlaybackControls();
+    updatePlaybackStatus();
 }
 
 void MainWindow::clearTimeline() {
@@ -587,7 +700,38 @@ void MainWindow::clearTimeline() {
 
 void MainWindow::sendPlaybackCommand(const char* command) {
     if (playback_worker_ == nullptr || media_list_ == nullptr ||
-        !canPreviewSelectedMedia()) {
+        !canPreviewSelectedMedia() || pending_clip_activation_.has_value()) {
+        return;
+    }
+
+    const auto active_index = active_timeline_clip_index_;
+    if (active_index.has_value() &&
+        *active_index < timeline_model_.clipCount() &&
+        std::string_view(command) == "stepForward") {
+        const auto& clip = timeline_model_.clips()[*active_index];
+        if (playback_frame_index_ >= clip.timeline_duration_frames - 1) {
+            if (*active_index + 1 < timeline_model_.clipCount()) {
+                activateTimelineClip(*active_index + 1, 0, false);
+            } else {
+                statusBar()->showMessage("Already at the end of the timeline.");
+            }
+            return;
+        }
+    }
+
+    if (active_index.has_value() &&
+        *active_index < timeline_model_.clipCount() &&
+        std::string_view(command) == "stepBackward" &&
+        playback_frame_index_ <= 0) {
+        if (*active_index > 0) {
+            const auto& previous_clip = timeline_model_.clips()[*active_index - 1];
+            activateTimelineClip(
+                *active_index - 1,
+                previous_clip.timeline_duration_frames - 1,
+                false);
+        } else {
+            statusBar()->showMessage("Already at the beginning of the timeline.");
+        }
         return;
     }
 
@@ -595,7 +739,8 @@ void MainWindow::sendPlaybackCommand(const char* command) {
 }
 
 void MainWindow::updatePlaybackControls() {
-    const bool has_media = canPreviewSelectedMedia();
+    const bool has_media = canPreviewSelectedMedia() &&
+        !pending_clip_activation_.has_value();
     if (previous_frame_button_ != nullptr) previous_frame_button_->setEnabled(has_media);
     if (play_pause_button_ != nullptr) play_pause_button_->setEnabled(has_media);
     if (next_frame_button_ != nullptr) next_frame_button_->setEnabled(has_media);
@@ -606,6 +751,11 @@ void MainWindow::updatePlaybackControls() {
 
 void MainWindow::updatePlaybackStatus() {
     if (playback_status_label_ == nullptr) return;
+
+    if (pending_clip_activation_.has_value()) {
+        playback_status_label_->setText("Loading timeline clip...");
+        return;
+    }
 
     const int row = media_list_ != nullptr ? media_list_->currentRow() : -1;
     if (row < 0 || row >= static_cast<int>(media_items_.size())) {
@@ -692,6 +842,7 @@ void MainWindow::openMedia() {
 }
 
 void MainWindow::updateMediaDetails(int row) {
+    pending_clip_activation_.reset();
     ++playback_generation_;
     if (playback_worker_ != nullptr) {
         QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
@@ -748,12 +899,59 @@ void MainWindow::handlePlaybackFrame(
     quint64 generation) {
     if (generation != playback_generation_ || frame == nullptr) return;
 
+    if (pending_clip_activation_.has_value() &&
+        pending_clip_activation_->generation == generation) {
+        const auto pending = *pending_clip_activation_;
+        pending_clip_activation_.reset();
+        commitTimelineClipActivation(
+            pending.clip_index,
+            pending.media_index,
+            frame_index,
+            false);
+        preview_widget_->setFrame(*frame);
+        if (timeline_widget_ != nullptr) {
+            timeline_widget_->setPlayheadFrame(frame_index);
+        }
+        updatePlaybackStatus();
+        return;
+    }
+
     playback_frame_index_ = frame_index;
     preview_widget_->setFrame(*frame);
     if (timeline_widget_ != nullptr && selectedMediaMatchesTimeline()) {
         timeline_widget_->setPlayheadFrame(frame_index);
     }
     updatePlaybackStatus();
+}
+
+void MainWindow::handlePlaybackMediaReady(quint64 generation) {
+    if (generation != playback_generation_ ||
+        !pending_clip_activation_.has_value() ||
+        pending_clip_activation_->generation != generation) {
+        return;
+    }
+
+    const auto pending = *pending_clip_activation_;
+    if (pending.target_frame > 0) {
+        QMetaObject::invokeMethod(
+            playback_worker_,
+            "seekToFrame",
+            Qt::QueuedConnection,
+            Q_ARG(qint64, static_cast<qint64>(pending.target_frame)),
+            Q_ARG(quint64, generation));
+        return;
+    }
+
+    pending_clip_activation_.reset();
+    commitTimelineClipActivation(
+        pending.clip_index,
+        pending.media_index,
+        0,
+        true);
+
+    if (pending.resume_playback && playback_worker_ != nullptr) {
+        QMetaObject::invokeMethod(playback_worker_, "play", Qt::QueuedConnection);
+    }
 }
 
 void MainWindow::handlePlaybackStateChanged(bool playing, quint64 generation) {
@@ -764,18 +962,63 @@ void MainWindow::handlePlaybackStateChanged(bool playing, quint64 generation) {
     updatePlaybackStatus();
 }
 
-void MainWindow::handlePlaybackFinished(quint64 generation) {
+void MainWindow::handlePlaybackFinished(
+    quint64 generation,
+    bool during_playback) {
     if (generation != playback_generation_) return;
 
     playback_is_playing_ = false;
+    if (during_playback && active_timeline_clip_index_.has_value()) {
+        const auto next_clip_index = *active_timeline_clip_index_ + 1;
+        if (next_clip_index < timeline_model_.clipCount()) {
+            activateTimelineClip(next_clip_index, 0, true);
+            return;
+        }
+    }
+
     updatePlaybackControls();
     if (playback_status_label_ != nullptr) {
-        playback_status_label_->setText("End of media.");
+        playback_status_label_->setText(
+            during_playback ? "End of timeline." : "End of media.");
     }
 }
 
-void MainWindow::handlePlaybackError(const QString& message, quint64 generation) {
+void MainWindow::handlePlaybackError(
+    const QString& message,
+    qint64 error_code,
+    quint64 generation) {
     if (generation != playback_generation_) return;
+
+    if (pending_clip_activation_.has_value() &&
+        pending_clip_activation_->generation == generation) {
+        const auto pending = *pending_clip_activation_;
+        if (pending.clip_index >= timeline_model_.clipCount()) {
+            pending_clip_activation_.reset();
+            playback_is_playing_ = false;
+            updatePlaybackControls();
+            updatePlaybackStatus();
+            QMessageBox::warning(this, "Playback error", message);
+            return;
+        }
+        const auto& clip = timeline_model_.clips()[pending.clip_index];
+        logging::Context context{
+            {"path", pathToUtf8(clip.source_path)},
+            {"clip_index", std::to_string(pending.clip_index)},
+            {"media_index", std::to_string(pending.media_index)},
+            {"requested_frame", std::to_string(pending.target_frame)},
+            {"generation", std::to_string(generation)}};
+        if (error_code >= 0) {
+            context.emplace_back("error_code", std::to_string(error_code));
+        }
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "playback",
+            "transition",
+            message.toUtf8().toStdString(),
+            context);
+        pending_clip_activation_.reset();
+        statusBar()->showMessage("Could not activate the next timeline clip.");
+    }
 
     playback_is_playing_ = false;
     updatePlaybackControls();
@@ -789,7 +1032,7 @@ void MainWindow::handlePlaybackError(const QString& message, quint64 generation)
 }
 
 void MainWindow::handleTimelineSeekStarted() {
-    if (!canPreviewSelectedMedia()) return;
+    if (!canPreviewSelectedMedia() || pending_clip_activation_.has_value()) return;
 
     playback_is_playing_ = false;
     updatePlaybackControls();
@@ -798,7 +1041,11 @@ void MainWindow::handleTimelineSeekStarted() {
 }
 
 void MainWindow::handleTimelineSeek(qint64 frame_index) {
-    if (playback_worker_ == nullptr || !canPreviewSelectedMedia()) return;
+    if (playback_worker_ == nullptr ||
+        !canPreviewSelectedMedia() ||
+        pending_clip_activation_.has_value()) {
+        return;
+    }
 
     ++playback_generation_;
     playback_is_playing_ = false;

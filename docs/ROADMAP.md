@@ -60,8 +60,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [ ] Define the rendering abstraction and CPU/GPU responsibilities.
 - [ ] Create the project and document model.
 - [-] Create the initial media import and management layer; metadata probing,
-  first-frame preview, and basic CPU playback are implemented, while seeking
-  and library management remain pending.
+  first-frame preview, basic CPU playback, seeking, and sequential timeline
+  playback are implemented, while full library management remains pending.
 - [ ] Create the basic file, autosave, recovery, undo, and redo systems.
 - [ ] Define the initial project format and document it.
 - [ ] Add automated tests for the core and module boundaries.
@@ -86,8 +86,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Add drag-and-drop from imported Media Browser items to the Timeline;
   manual UI validation passed. Operating-system file drops and drop positioning
   remain pending.
-- [-] Add the multi-clip Timeline foundation with sequential placement on one
-  track; sequential playback across clips and clip editing remain pending.
+- [x] Add the multi-clip Timeline foundation with sequential placement and
+  continuous playback on one track; cuts, movement, and editing remain pending.
 - [ ] Create a full functional timeline with editing and optimized seeking.
 - [ ] Support video, image, text, and audio clips.
 - [ ] Implement cutting, splitting, moving, and rearranging clips.
