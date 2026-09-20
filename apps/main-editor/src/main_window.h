@@ -7,6 +7,7 @@
 #include "timeline/timeline_model.h"
 
 #include <QMainWindow>
+#include <QString>
 #include <QThread>
 #include <QtGlobal>
 
@@ -41,6 +42,7 @@ private:
     void updateMediaDetails(int row);
     void addMediaItem(media::VideoMetadata metadata, media::VideoFrame first_frame);
     void addSelectedMediaToTimeline();
+    void handleMediaDrop(const QString& source_path);
     void clearTimeline();
     void updateTimelineState();
     [[nodiscard]] bool hasSelectedMedia() const noexcept;

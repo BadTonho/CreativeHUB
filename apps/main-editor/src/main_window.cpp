@@ -3,6 +3,7 @@
 #include "logging/logger.h"
 #include "preview_widget.h"
 #include "timeline/timeline_widget.h"
+#include "ui/media_browser_list_widget.h"
 
 #include <QAction>
 #include <QDockWidget>
@@ -264,7 +265,7 @@ QWidget* MainWindow::createMediaBrowser() {
     title->setStyleSheet("font-weight: 600; font-size: 14px;");
     layout->addWidget(title);
 
-    media_list_ = new QListWidget(container);
+    media_list_ = new MediaBrowserListWidget(container);
     media_list_->setSelectionMode(QAbstractItemView::SingleSelection);
     media_list_->setWordWrap(true);
     connect(media_list_, &QListWidget::currentRowChanged, this, &MainWindow::updateMediaDetails);
@@ -341,6 +342,11 @@ QWidget* MainWindow::createTimeline() {
         &timeline::TimelineWidget::seekRequested,
         this,
         &MainWindow::handleTimelineSeek);
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::mediaDropRequested,
+        this,
+        &MainWindow::handleMediaDrop);
 
     updateTimelineState();
     updatePlaybackControls();
@@ -467,6 +473,42 @@ void MainWindow::addSelectedMediaToTimeline() {
     case timeline::AddClipResult::Occupied:
         statusBar()->showMessage("Clear the timeline before adding another media item.");
         break;
+    }
+}
+
+void MainWindow::handleMediaDrop(const QString& source_path) {
+    const std::string source_text = source_path.toUtf8().toStdString();
+    try {
+        const auto dropped_path = normalizedPath(
+            QFileInfo(source_path).filesystemFilePath());
+        const auto existing = std::find_if(
+            media_items_.begin(),
+            media_items_.end(),
+            [&dropped_path](const ImportedMedia& item) {
+                return item.metadata.source_path == dropped_path;
+            });
+
+        if (existing == media_items_.end()) {
+            statusBar()->showMessage("Import this media before adding it to the timeline.");
+            return;
+        }
+
+        const int index = static_cast<int>(
+            std::distance(media_items_.begin(), existing));
+        media_list_->setCurrentRow(index);
+        addSelectedMediaToTimeline();
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "ui",
+            "timeline_drop",
+            error.what(),
+            {{"path", source_text}});
+        statusBar()->showMessage("Could not add dropped media to the timeline.");
+        QMessageBox::warning(
+            this,
+            "Could not add media",
+            "The dropped media could not be added to the timeline.");
     }
 }
 
@@ -634,6 +676,9 @@ void MainWindow::addMediaItem(media::VideoMetadata metadata, media::VideoFrame f
 
     auto* list_item = new QListWidgetItem(mediaListText(item.metadata), media_list_);
     list_item->setToolTip(fromUtf8(pathToUtf8(item.metadata.source_path)));
+    list_item->setData(
+        Qt::UserRole,
+        fromUtf8(pathToUtf8(item.metadata.source_path)));
     media_list_->setCurrentItem(list_item);
 }
 

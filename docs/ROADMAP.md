@@ -83,6 +83,9 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Add basic single-clip click-and-drag seeking; automated and manual
   validation passed. Optimized seeking, multiple tracks, and clip editing
   remain pending.
+- [x] Add drag-and-drop from imported Media Browser items to the single-clip
+  Timeline; manual UI validation passed. Operating-system file drops, multiple
+  clips, and drop positioning remain pending.
 - [ ] Create a full functional timeline with editing and optimized seeking.
 - [ ] Support video, image, text, and audio clips.
 - [ ] Implement cutting, splitting, moving, and rearranging clips.

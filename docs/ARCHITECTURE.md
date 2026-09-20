@@ -109,6 +109,16 @@ selected. Selecting another imported item stops playback and preserves the
 timeline clip, preventing the preview and the visual sequence from silently
 referring to different sources.
 
+The Media Browser can drag an already imported item to the Timeline through the
+UI-only MIME type `application/x-creative-suite-media-path`. The Main Window
+resolves that canonical path back to the imported metadata and reuses the same
+single-clip insertion flow as the `Add to Timeline` button. The Timeline accepts
+drops only over the active track; the horizontal drop position is intentionally
+ignored while the model supports one clip. Dragging does not decode frames or
+change the preview until the drop is accepted. Files dragged directly from the
+operating system are outside this milestone, and expected rejections such as an
+occupied timeline or a drop outside the track are not error-log entries.
+
 ## Logging boundary
 
 The Main Editor owns the first application-local logger under

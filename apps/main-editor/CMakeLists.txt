@@ -27,6 +27,9 @@ add_executable(creative-suite-main-editor
     src/timeline/timeline_model.h
     src/timeline/timeline_widget.cpp
     src/timeline/timeline_widget.h
+    src/ui/media_browser_list_widget.cpp
+    src/ui/media_browser_list_widget.h
+    src/ui/media_drag_mime.h
 )
 
 target_link_libraries(creative-suite-main-editor PRIVATE

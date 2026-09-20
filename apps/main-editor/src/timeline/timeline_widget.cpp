@@ -1,9 +1,18 @@
 #include "timeline_widget.h"
 
+#include "../ui/media_drag_mime.h"
+
+#include <QDragEnterEvent>
+#include <QDragLeaveEvent>
+#include <QDragMoveEvent>
 #include <QFontMetrics>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QDropEvent>
+#include <QPointF>
+#include <QRectF>
 
 #include <algorithm>
 #include <cmath>
@@ -28,6 +37,7 @@ TimelineWidget::TimelineWidget(QWidget* parent)
     setMinimumHeight(100);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     setFocusPolicy(Qt::NoFocus);
+    setAcceptDrops(true);
 }
 
 void TimelineWidget::setClip(const TimelineClip* clip) {
@@ -35,6 +45,7 @@ void TimelineWidget::setClip(const TimelineClip* clip) {
     playhead_frame_ = 0;
     drag_frame_.reset();
     dragging_ = false;
+    drag_hovering_ = false;
     update();
 }
 
@@ -43,6 +54,7 @@ void TimelineWidget::clearClip() {
     playhead_frame_ = 0;
     drag_frame_.reset();
     dragging_ = false;
+    drag_hovering_ = false;
     update();
 }
 
@@ -50,6 +62,11 @@ void TimelineWidget::setPlayheadFrame(std::int64_t frame_index) {
     playhead_frame_ = std::max<std::int64_t>(0, frame_index);
     drag_frame_.reset();
     update();
+}
+
+bool TimelineWidget::isTrackPosition(const QPointF& position) const noexcept {
+    const QRectF track_rect(12.0, 32.0, static_cast<double>(width()) - 24.0, 44.0);
+    return track_rect.width() > 0.0 && track_rect.contains(position);
 }
 
 std::optional<std::int64_t> TimelineWidget::frameAtPosition(double x) const noexcept {
@@ -113,8 +130,8 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     const QRectF track_rect = QRectF(12.0, 32.0, width() - 24.0, 44.0);
     if (track_rect.width() <= 0.0) return;
 
-    painter.setPen(QColor("#596273"));
-    painter.setBrush(QColor("#252b36"));
+    painter.setPen(drag_hovering_ ? QColor("#8cc8ff") : QColor("#596273"));
+    painter.setBrush(drag_hovering_ ? QColor("#315d8c") : QColor("#252b36"));
     painter.drawRoundedRect(track_rect, 4.0, 4.0);
 
     painter.setPen(palette().text().color());
@@ -144,6 +161,55 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         painter.setPen(QPen(QColor("#ffcf5c"), 2.0));
         painter.drawLine(QPointF(x, 24.0), QPointF(x, 84.0));
     }
+}
+
+void TimelineWidget::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasFormat(ui::kMediaPathMimeType)) {
+        event->acceptProposedAction();
+        return;
+    }
+    event->ignore();
+}
+
+void TimelineWidget::dragLeaveEvent(QDragLeaveEvent* event) {
+    drag_hovering_ = false;
+    update();
+    event->accept();
+}
+
+void TimelineWidget::dragMoveEvent(QDragMoveEvent* event) {
+    const bool accepted = event->mimeData()->hasFormat(ui::kMediaPathMimeType) &&
+        isTrackPosition(event->position());
+    drag_hovering_ = accepted;
+    update();
+
+    if (accepted) {
+        event->acceptProposedAction();
+    } else {
+        event->ignore();
+    }
+}
+
+void TimelineWidget::dropEvent(QDropEvent* event) {
+    const bool accepted = event->mimeData()->hasFormat(ui::kMediaPathMimeType) &&
+        isTrackPosition(event->position());
+    drag_hovering_ = false;
+    update();
+
+    if (!accepted) {
+        event->ignore();
+        return;
+    }
+
+    const QString source_path = QString::fromUtf8(
+        event->mimeData()->data(ui::kMediaPathMimeType));
+    if (source_path.isEmpty()) {
+        event->ignore();
+        return;
+    }
+
+    emit mediaDropRequested(source_path);
+    event->acceptProposedAction();
 }
 
 void TimelineWidget::mousePressEvent(QMouseEvent* event) {
