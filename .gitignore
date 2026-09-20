@@ -3,6 +3,7 @@ docs/IDEIA_SUITE_CRIATIVA.md
 /build/
 /out/
 /vcpkg_installed/
+/apps/**/vcpkg_installed/
 /apps/**/build/
 /prototypes/vcpkg_installed/
 /prototypes/cpp/build/

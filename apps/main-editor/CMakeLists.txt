@@ -1,15 +1,28 @@
 include(GNUInstallDirs)
 
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Widgets)
+find_package(FFMPEG MODULE REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL)
 
 add_executable(creative-suite-main-editor
     src/main.cpp
     src/main_window.cpp
     src/main_window.h
+    src/media/video_metadata.h
+    src/media/video_probe.cpp
+    src/media/video_probe.h
 )
 
 target_link_libraries(creative-suite-main-editor PRIVATE
     Qt6::Widgets
+    ${FFMPEG_LIBRARIES}
+)
+
+target_include_directories(creative-suite-main-editor PRIVATE
+    ${FFMPEG_INCLUDE_DIRS}
+)
+
+target_link_directories(creative-suite-main-editor PRIVATE
+    ${FFMPEG_LIBRARY_DIRS}
 )
 
 target_compile_features(creative-suite-main-editor PRIVATE cxx_std_20)
@@ -49,11 +62,41 @@ if(WIN32)
     get_filename_component(QT_BIN_DIR "${QT_CORE_DLL}" DIRECTORY)
     find_program(QT_DEPLOY_TOOL windeployqt HINTS "${QT_BIN_DIR}" REQUIRED)
 
-    add_custom_command(TARGET creative-suite-main-editor POST_BUILD
+    set(MAIN_EDITOR_POST_BUILD_COMMANDS
         COMMAND "${QT_DEPLOY_TOOL}"
             --no-translations
             --no-compiler-runtime
             "$<TARGET_FILE:creative-suite-main-editor>"
+    )
+
+    set(FFMPEG_RUNTIME_DLLS)
+    foreach(FFMPEG_LIBRARY_DIR IN LISTS FFMPEG_LIBRARY_DIRS)
+        if(FFMPEG_LIBRARY_DIR MATCHES "[/\\\\]debug([/\\\\]|$)")
+            continue()
+        endif()
+        get_filename_component(FFMPEG_ROOT_DIR "${FFMPEG_LIBRARY_DIR}" DIRECTORY)
+        foreach(FFMPEG_RUNTIME_NAME IN ITEMS avcodec avdevice avfilter avformat avutil swresample swscale)
+            file(GLOB FFMPEG_RUNTIME_MATCHES
+                "${FFMPEG_ROOT_DIR}/bin/${FFMPEG_RUNTIME_NAME}-*.dll")
+            list(APPEND FFMPEG_RUNTIME_DLLS ${FFMPEG_RUNTIME_MATCHES})
+        endforeach()
+    endforeach()
+    list(REMOVE_DUPLICATES FFMPEG_RUNTIME_DLLS)
+
+    if(FFMPEG_RUNTIME_DLLS)
+        install(FILES ${FFMPEG_RUNTIME_DLLS}
+            DESTINATION ${CMAKE_INSTALL_BINDIR}
+        )
+
+        list(APPEND MAIN_EDITOR_POST_BUILD_COMMANDS
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                ${FFMPEG_RUNTIME_DLLS}
+                "$<TARGET_FILE_DIR:creative-suite-main-editor>"
+        )
+    endif()
+
+    add_custom_command(TARGET creative-suite-main-editor POST_BUILD
+        ${MAIN_EDITOR_POST_BUILD_COMMANDS}
         VERBATIM
     )
 endif()

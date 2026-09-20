@@ -59,7 +59,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Choose Qt 6 Widgets as the provisional UI, window, and input approach.
 - [ ] Define the rendering abstraction and CPU/GPU responsibilities.
 - [ ] Create the project and document model.
-- [ ] Create the media import and management layer.
+- [-] Create the initial media import and management layer; metadata probing is
+  implemented, while frame decoding and library management remain pending.
 - [ ] Create the basic file, autosave, recovery, undo, and redo systems.
 - [ ] Define the initial project format and document it.
 - [ ] Add automated tests for the core and module boundaries.
@@ -68,7 +69,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 ## 4. Main Editor MVP
 
 - [x] Create the initial application shell and primary workspace.
-- [ ] Add media import, a media browser, and project bins.
+- [-] Add initial media import and Media Browser support; project bins remain
+  pending.
 - [ ] Create a functional timeline.
 - [ ] Support video, image, text, and audio clips.
 - [ ] Implement cutting, splitting, moving, and rearranging clips.
