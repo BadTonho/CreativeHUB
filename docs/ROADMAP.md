@@ -59,8 +59,9 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Choose Qt 6 Widgets as the provisional UI, window, and input approach.
 - [ ] Define the rendering abstraction and CPU/GPU responsibilities.
 - [ ] Create the project and document model.
-- [-] Create the initial media import and management layer; metadata probing is
-  implemented, while frame decoding and library management remain pending.
+- [-] Create the initial media import and management layer; metadata probing
+  and first-frame preview are implemented, while playback and library
+  management remain pending.
 - [ ] Create the basic file, autosave, recovery, undo, and redo systems.
 - [ ] Define the initial project format and document it.
 - [ ] Add automated tests for the core and module boundaries.
@@ -69,8 +70,11 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 ## 4. Main Editor MVP
 
 - [x] Create the initial application shell and primary workspace.
-- [-] Add initial media import and Media Browser support; project bins remain
+- [-] Add initial media import and Media Browser support; metadata and a
+  cached first-frame preview are implemented, while project bins remain
   pending.
+- [x] Display the first decoded video frame through the temporary CPU preview
+  path, including manual UI confirmation.
 - [ ] Create a functional timeline.
 - [ ] Support video, image, text, and audio clips.
 - [ ] Implement cutting, splitting, moving, and rearranging clips.
@@ -121,8 +125,9 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   and keyboard shortcuts on Windows, macOS, and Linux.
 - [ ] Define installation, update, packaging, signing, and distribution
   workflows.
-- [-] Add local structured error logging and useful error handling without
-  requiring online services; native crash dumps remain pending.
+- [x] Add local structured error logging and useful error handling without
+  requiring online services.
+- [ ] Add native crash dumps and backtrace collection in a future milestone.
 - [ ] Create contributor documentation and public technical documentation.
 - [ ] Review performance, memory usage, and startup time before major
   releases.

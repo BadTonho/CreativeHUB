@@ -1,14 +1,19 @@
 include(GNUInstallDirs)
 
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Widgets)
-find_package(FFMPEG MODULE REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL)
+find_package(FFMPEG MODULE REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
 
 add_executable(creative-suite-main-editor
     src/main.cpp
     src/main_window.cpp
     src/main_window.h
+    src/preview_widget.cpp
+    src/preview_widget.h
     src/logging/logger.cpp
     src/logging/logger.h
+    src/media/video_decoder.cpp
+    src/media/video_decoder.h
+    src/media/video_frame.h
     src/media/video_metadata.h
     src/media/video_probe.cpp
     src/media/video_probe.h

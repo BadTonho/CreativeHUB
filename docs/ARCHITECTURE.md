@@ -46,9 +46,10 @@ timeline, or rendering services through explicit C++ interfaces.
 
 ## Rendering boundary
 
-The initial shell contains only a preview placeholder. It does not choose the
-final GPU backend or decode video frames. Metadata inspection belongs to the
-application-local media boundary described below.
+The Main Editor does not choose the final GPU backend or implement continuous
+playback. The first-frame preview is currently a temporary CPU path: the media
+layer owns decoded RGBA8 pixels and the Qt UI presents them through `QImage`
+and `QLabel`.
 
 The future preview renderer must be introduced behind a project-owned C++
 interface. Media decoding, timeline state, frame ownership, and GPU resource
@@ -66,9 +67,12 @@ types. `VideoProbe` owns FFmpeg format and codec contexts through RAII and
 translates FFmpeg failures into `MediaError`. The Qt layer converts the
 metadata into display strings and remains responsible for dialogs and widgets.
 
-This milestone opens the video decoder to validate the selected stream but does
-not decode frames. Frame ownership, playback, thumbnails, asynchronous import,
-and GPU resources are reserved for later media modules.
+The media module now includes an application-local `VideoDecoder` that opens
+the selected stream, decodes only the first frame, and converts it to RGBA8
+with FFmpeg's `libswscale`. `VideoFrame` owns its pixel buffer through a
+standard C++ container, and the UI copies it into an owning `QImage` before
+displaying it. Continuous playback, frame seeking, thumbnails, asynchronous
+import, and GPU resources are reserved for later media modules.
 
 ## Logging boundary
 
@@ -103,5 +107,6 @@ chosen configuration.
 
 ## Current non-goals
 
-The initial shell does not implement frame decoding, project persistence, GPU
-preview, timeline editing, audio, Motion Studio, or Rust code.
+The current application does not implement continuous video playback, seeking,
+GPU preview, project persistence, timeline editing, audio, Motion Studio, or
+Rust code.

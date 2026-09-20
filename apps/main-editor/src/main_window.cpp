@@ -1,12 +1,12 @@
 #include "main_window.h"
 
 #include "logging/logger.h"
+#include "preview_widget.h"
 
 #include <QAction>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QFrame>
 #include <QDesktopServices>
 #include <QLabel>
 #include <QAbstractItemView>
@@ -15,7 +15,6 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QSizePolicy>
 #include <QStatusBar>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -135,26 +134,8 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 void MainWindow::createWorkspace() {
-    auto* preview = new QFrame(this);
-    preview->setFrameShape(QFrame::StyledPanel);
-    preview->setStyleSheet("background-color: #1c2028;");
-    preview->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-
-    auto* preview_layout = new QVBoxLayout(preview);
-    preview_layout->setContentsMargins(24, 24, 24, 24);
-
-    auto* preview_label = new QLabel("Preview area", preview);
-    preview_label->setAlignment(Qt::AlignCenter);
-    preview_label->setStyleSheet("color: #c7d0dc; font-size: 20px;");
-    preview_layout->addWidget(preview_label);
-
-    auto* preview_note = new QLabel(
-        "Media playback and GPU rendering will be added in a later milestone.",
-        preview);
-    preview_note->setAlignment(Qt::AlignCenter);
-    preview_note->setStyleSheet("color: #8994a3;");
-    preview_layout->addWidget(preview_note);
-    setCentralWidget(preview);
+    preview_widget_ = new PreviewWidget(this);
+    setCentralWidget(preview_widget_);
 
     media_browser_dock_ = createDock(
         "Media Browser",
@@ -278,12 +259,13 @@ void MainWindow::openMedia() {
     const auto existing = std::find_if(
         media_items_.begin(),
         media_items_.end(),
-        [&source_path](const media::VideoMetadata& item) {
-            return item.source_path == source_path;
+        [&source_path](const ImportedMedia& item) {
+            return item.metadata.source_path == source_path;
         });
     if (existing != media_items_.end()) {
         const auto index = static_cast<int>(std::distance(media_items_.begin(), existing));
         media_list_->setCurrentRow(index);
+        updateMediaDetails(index);
         logging::Logger::instance().log(
             logging::Level::Debug,
             "media",
@@ -296,14 +278,17 @@ void MainWindow::openMedia() {
 
     try {
         auto metadata = video_probe_.probe(source_path);
-        addMediaItem(std::move(metadata));
+        auto first_frame = video_decoder_.decode_first_frame(source_path);
+        addMediaItem(std::move(metadata), std::move(first_frame));
         logging::Logger::instance().log(
             logging::Level::Info,
             "media",
             "import",
-            "Media metadata imported.",
-            {{"path", pathToUtf8(source_path)}});
-        statusBar()->showMessage("Media imported successfully.");
+            "Media metadata and first preview frame imported.",
+            {{"path", pathToUtf8(source_path)},
+             {"width", std::to_string(media_items_.back().first_frame.width)},
+             {"height", std::to_string(media_items_.back().first_frame.height)}});
+        statusBar()->showMessage("Media imported with preview frame.");
     } catch (const media::MediaError& error) {
         const QString message = fromUtf8(error.what());
         QMessageBox::warning(this, "Could not open media", message);
@@ -324,18 +309,21 @@ void MainWindow::openMedia() {
 void MainWindow::updateMediaDetails(int row) {
     if (row < 0 || row >= static_cast<int>(media_items_.size())) {
         media_details_->setText("No media imported.");
+        preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
         return;
     }
 
-    media_details_->setText(mediaDetailsText(media_items_[static_cast<size_t>(row)]));
+    const auto& item = media_items_[static_cast<size_t>(row)];
+    media_details_->setText(mediaDetailsText(item.metadata));
+    preview_widget_->setFrame(item.first_frame);
 }
 
-void MainWindow::addMediaItem(media::VideoMetadata metadata) {
-    media_items_.push_back(std::move(metadata));
+void MainWindow::addMediaItem(media::VideoMetadata metadata, media::VideoFrame first_frame) {
+    media_items_.push_back({std::move(metadata), std::move(first_frame)});
     auto& item = media_items_.back();
 
-    auto* list_item = new QListWidgetItem(mediaListText(item), media_list_);
-    list_item->setToolTip(fromUtf8(pathToUtf8(item.source_path)));
+    auto* list_item = new QListWidgetItem(mediaListText(item.metadata), media_list_);
+    list_item->setToolTip(fromUtf8(pathToUtf8(item.metadata.source_path)));
     media_list_->setCurrentItem(list_item);
 }
 
