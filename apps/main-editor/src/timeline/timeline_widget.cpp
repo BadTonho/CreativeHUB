@@ -25,6 +25,7 @@ constexpr double track_left = 12.0;
 constexpr double track_right = 12.0;
 constexpr double track_top = 32.0;
 constexpr double track_height = 44.0;
+constexpr double trim_edge_width = 8.0;
 
 QString fromUtf8(const std::string& value) {
     return QString::fromUtf8(value.data(), static_cast<int>(value.size()));
@@ -76,6 +77,7 @@ void TimelineWidget::setClips(const std::vector<TimelineClip>& clips) {
     dragging_ = false;
     moving_clip_ = false;
     move_target_index_.reset();
+    trimming_ = false;
     razor_clicking_ = false;
     razor_gesture_moved_ = false;
     drag_hovering_ = false;
@@ -90,6 +92,7 @@ void TimelineWidget::clearClips() {
     dragging_ = false;
     moving_clip_ = false;
     move_target_index_.reset();
+    trimming_ = false;
     razor_clicking_ = false;
     razor_gesture_moved_ = false;
     drag_hovering_ = false;
@@ -109,6 +112,7 @@ void TimelineWidget::setActiveClipIndex(
     dragging_ = false;
     moving_clip_ = false;
     move_target_index_.reset();
+    trimming_ = false;
     razor_clicking_ = false;
     razor_gesture_moved_ = false;
     update();
@@ -204,6 +208,32 @@ std::optional<std::size_t> TimelineWidget::insertionBoundaryAtPosition(
     return clips_.size();
 }
 
+std::optional<TimelineWidget::TrimEdge> TimelineWidget::trimEdgeAtPosition(
+    std::size_t clip_index,
+    double x) const noexcept {
+    if (clip_index >= clips_.size()) return std::nullopt;
+
+    const auto& clip = clips_[clip_index];
+    if (clip.timeline_duration_frames <= 0) return std::nullopt;
+
+    const auto track = trackRect(this).adjusted(4.0, 4.0, -4.0, -4.0);
+    const auto total_duration = clips_.back().timeline_start_frame +
+        clips_.back().timeline_duration_frames;
+    if (track.width() <= 0.0 || total_duration <= 0) return std::nullopt;
+
+    const double left = track.left() + track.width() *
+        static_cast<double>(clip.timeline_start_frame) /
+        static_cast<double>(total_duration);
+    const double right = track.left() + track.width() *
+        static_cast<double>(clip.timeline_start_frame +
+                            clip.timeline_duration_frames) /
+        static_cast<double>(total_duration);
+    if (x < left || x > right) return std::nullopt;
+    if (x - left <= trim_edge_width) return TrimEdge::Left;
+    if (right - x <= trim_edge_width) return TrimEdge::Right;
+    return std::nullopt;
+}
+
 std::optional<std::int64_t> TimelineWidget::frameAtPosition(
     std::size_t clip_index,
     double x) const noexcept {
@@ -235,6 +265,33 @@ std::optional<std::int64_t> TimelineWidget::frameAtPosition(
     if (clip_width <= 0.0) return std::nullopt;
 
     const double fraction = std::clamp((x - clip_left) / clip_width, 0.0, 1.0);
+    return static_cast<std::int64_t>(std::llround(
+        fraction * static_cast<double>(clip.timeline_duration_frames - 1)));
+}
+
+std::optional<std::int64_t> TimelineWidget::clampedFrameAtPosition(
+    std::size_t clip_index,
+    double x) const noexcept {
+    if (clip_index >= clips_.size()) return std::nullopt;
+
+    const auto& clip = clips_[clip_index];
+    if (clip.timeline_duration_frames <= 0) return std::nullopt;
+
+    const auto track = trackRect(this).adjusted(4.0, 4.0, -4.0, -4.0);
+    const auto total_duration = clips_.back().timeline_start_frame +
+        clips_.back().timeline_duration_frames;
+    if (track.width() <= 0.0 || total_duration <= 0) return std::nullopt;
+
+    const double left = track.left() + track.width() *
+        static_cast<double>(clip.timeline_start_frame) /
+        static_cast<double>(total_duration);
+    const double right = track.left() + track.width() *
+        static_cast<double>(clip.timeline_start_frame +
+                            clip.timeline_duration_frames) /
+        static_cast<double>(total_duration);
+    if (right <= left) return std::nullopt;
+
+    const double fraction = std::clamp((x - left) / (right - left), 0.0, 1.0);
     return static_cast<std::int64_t>(std::llround(
         fraction * static_cast<double>(clip.timeline_duration_frames - 1)));
 }
@@ -312,11 +369,15 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             clip_track.height());
         const bool active = active_index.has_value() && *active_index == index;
         const bool moving = moving_clip_ && moving_clip_index_ == index;
+        const bool trimming = trimming_ && trimming_clip_index_ == index;
         const bool move_target = move_target_index_.has_value() &&
             *move_target_index_ == index && !moving;
 
         if (moving) {
             painter.setPen(QPen(QColor("#ff9f43"), 2.0, Qt::DashLine));
+            painter.setBrush(QColor("#8a5a2f"));
+        } else if (trimming) {
+            painter.setPen(QPen(QColor("#ff9f43"), 2.0));
             painter.setBrush(QColor("#8a5a2f"));
         } else if (move_target) {
             painter.setPen(QColor("#9be28f"));
@@ -326,6 +387,32 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             painter.setBrush(active ? QColor("#386e9f") : QColor("#315d8c"));
         }
         painter.drawRoundedRect(clip_rect, 3.0, 3.0);
+
+        if (trimming) {
+            const auto boundary_frame = trim_edge_ == TrimEdge::Left
+                ? trim_start_frame_
+                : trim_end_frame_ - 1;
+            const double boundary_fraction = clip.timeline_duration_frames <= 1
+                ? 0.0
+                : static_cast<double>(boundary_frame) /
+                    static_cast<double>(clip.timeline_duration_frames - 1);
+            const qreal boundary_x = clip_rect.left() +
+                clip_rect.width() * std::clamp(boundary_fraction, 0.0, 1.0);
+            const QRectF trimmed_rect = trim_edge_ == TrimEdge::Left
+                ? QRectF(
+                    clip_rect.left(),
+                    clip_rect.top(),
+                    std::max<qreal>(0.0, boundary_x - clip_rect.left()),
+                    clip_rect.height())
+                : QRectF(
+                    boundary_x,
+                    clip_rect.top(),
+                    std::max<qreal>(0.0, clip_rect.right() - boundary_x),
+                    clip_rect.height());
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(12, 16, 24, 105));
+            painter.drawRect(trimmed_rect);
+        }
 
         const QString label = fromUtf8(clip.display_name) + " - " +
             formatClipDuration(clip);
@@ -338,6 +425,22 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             clip_rect.adjusted(6.0, 0.0, -6.0, 0.0),
             Qt::AlignVCenter,
             elided);
+
+        if (trimming) {
+            const auto boundary_frame = trim_edge_ == TrimEdge::Left
+                ? trim_start_frame_
+                : trim_end_frame_ - 1;
+            const double boundary_fraction = clip.timeline_duration_frames <= 1
+                ? 0.0
+                : static_cast<double>(boundary_frame) /
+                    static_cast<double>(clip.timeline_duration_frames - 1);
+            const qreal boundary_x = clip_rect.left() +
+                clip_rect.width() * std::clamp(boundary_fraction, 0.0, 1.0);
+            painter.setPen(QPen(QColor("#ffcf5c"), 2.0));
+            painter.drawLine(
+                QPointF(boundary_x, clip_rect.top()),
+                QPointF(boundary_x, clip_rect.bottom()));
+        }
     }
 
     if (const auto fraction = playheadFraction(); fraction.has_value() &&
@@ -453,6 +556,26 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         return;
     }
 
+    if (const auto edge = trimEdgeAtPosition(
+            *clip_index,
+            event->position().x()); edge.has_value()) {
+        trimming_ = true;
+        trimming_clip_index_ = *clip_index;
+        trim_edge_ = *edge;
+        trim_start_frame_ = 0;
+        trim_end_frame_ = clips_[*clip_index].timeline_duration_frames;
+        grabMouse();
+        setCursor(Qt::SizeHorCursor);
+        emit trimStarted();
+        if (!activeClipIndex().has_value() ||
+            *activeClipIndex() != *clip_index) {
+            emit clipSelected(static_cast<qint64>(*clip_index));
+        }
+        update();
+        event->accept();
+        return;
+    }
+
     if (!activeClipIndex().has_value() ||
         *activeClipIndex() != *clip_index) {
         emit clipSelected(static_cast<qint64>(*clip_index));
@@ -487,6 +610,27 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
             }
         }
         update();
+        event->accept();
+        return;
+    }
+
+    if (trimming_) {
+        if (const auto frame = clampedFrameAtPosition(
+                trimming_clip_index_,
+                event->position().x()); frame.has_value()) {
+            if (trim_edge_ == TrimEdge::Left) {
+                trim_start_frame_ = std::clamp<std::int64_t>(
+                    *frame,
+                    0,
+                    trim_end_frame_ - 1);
+            } else {
+                trim_end_frame_ = std::clamp<std::int64_t>(
+                    *frame + 1,
+                    trim_start_frame_ + 1,
+                    clips_[trimming_clip_index_].timeline_duration_frames);
+            }
+            update();
+        }
         event->accept();
         return;
     }
@@ -530,6 +674,30 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
             emit clipMoveRequested(
                 static_cast<qint64>(moving_clip_index_),
                 static_cast<qint64>(*target));
+        }
+        update();
+        event->accept();
+        return;
+    }
+
+    if (trimming_) {
+        if (event->button() != Qt::LeftButton) {
+            event->ignore();
+            return;
+        }
+
+        const auto clip_index = trimming_clip_index_;
+        const auto local_start = trim_start_frame_;
+        const auto local_end = trim_end_frame_;
+        const auto original_duration = clips_[clip_index].timeline_duration_frames;
+        trimming_ = false;
+        unsetCursor();
+        releaseMouse();
+        if (local_start != 0 || local_end != original_duration) {
+            emit clipTrimRequested(
+                static_cast<qint64>(clip_index),
+                local_start,
+                local_end);
         }
         update();
         event->accept();

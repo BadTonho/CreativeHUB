@@ -48,13 +48,20 @@ private:
     void clearTimeline();
     void handleTimelineClipMove(qint64 from_index, qint64 to_index);
     void moveActiveTimelineClip(int direction);
+    void deleteActiveTimelineClip();
     void splitActiveClipAtPlayhead();
     void handleTimelineClipSplit(qint64 clip_index, qint64 local_frame);
+    void handleTimelineTrimStarted();
+    void handleTimelineClipTrim(
+        qint64 clip_index,
+        qint64 local_start_frame,
+        qint64 local_end_frame);
     void updateTimelineState();
     [[nodiscard]] bool hasSelectedMedia() const noexcept;
     [[nodiscard]] std::optional<std::size_t> selectedTimelineClipIndex() const noexcept;
     [[nodiscard]] bool selectedMediaMatchesTimeline() const noexcept;
     [[nodiscard]] bool canPreviewSelectedMedia() const noexcept;
+    [[nodiscard]] bool canPlaybackSelectedMedia() const noexcept;
     void sendPlaybackCommand(const char* command);
     void updatePlaybackControls();
     void updatePlaybackStatus();
@@ -110,6 +117,7 @@ private:
     QPushButton* clear_timeline_button_ = nullptr;
     QPushButton* razor_button_ = nullptr;
     QLabel* playback_status_label_ = nullptr;
+    QAction* delete_clip_action_ = nullptr;
     QAction* razor_tool_action_ = nullptr;
     timeline::TimelineWidget* timeline_widget_ = nullptr;
     std::vector<ImportedMedia> media_items_;

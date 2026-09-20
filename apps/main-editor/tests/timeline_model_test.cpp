@@ -136,6 +136,12 @@ int main() {
                     split_model.clips()[1].frame_rate == first_metadata.frame_rate &&
                     split_model.clips()[1].frame_count == first_metadata.frame_count,
                 "Splitting did not preserve source metadata.");
+        require(split_model.trimClip(1, 50, 40) == timeline::TrimClipResult::Trimmed,
+                "Trimming a previously split segment failed.");
+        require(split_model.clips()[1].source_start_frame == 50 &&
+                    split_model.clips()[1].timeline_duration_frames == 40 &&
+                    split_model.clips()[2].timeline_start_frame == 70,
+                "Trimming a split segment produced incorrect offsets.");
         require(split_model.splitClip(2, 20) == timeline::SplitClipResult::Split,
                 "The second source occurrence was not split.");
         require(split_model.clips()[2].source_start_frame == 0 &&
@@ -147,6 +153,71 @@ int main() {
                 "A split at the last frame was accepted.");
         require(split_model.splitClip(99, 1) == timeline::SplitClipResult::InvalidIndex,
                 "An invalid split index was accepted.");
+
+        timeline::TimelineModel trim_model;
+        require(trim_model.addClip(first_metadata) == timeline::AddClipResult::Added,
+                "The trim test first source was not added.");
+        require(trim_model.addClip(second_metadata) == timeline::AddClipResult::Added,
+                "The trim test second source was not added.");
+        require(trim_model.addClip(first_metadata) == timeline::AddClipResult::Added,
+                "The trim test repeated source was not added.");
+        require(trim_model.trimClip(0, 20, 80) == timeline::TrimClipResult::Trimmed,
+                "Trimming the start of a clip failed.");
+        require(trim_model.clips()[0].source_start_frame == 20 &&
+                    trim_model.clips()[0].timeline_duration_frames == 80 &&
+                    trim_model.clips()[1].timeline_start_frame == 80 &&
+                    trim_model.clips()[2].timeline_start_frame == 140,
+                "Trimming the start did not preserve compact placement.");
+        require(trim_model.trimClip(1, 0, 30) == timeline::TrimClipResult::Trimmed,
+                "Trimming the end of a clip failed.");
+        require(trim_model.clips()[1].timeline_duration_frames == 30 &&
+                    trim_model.clips()[2].timeline_start_frame == 110,
+                "Trimming the end did not shift following clips.");
+        require(trim_model.totalDurationFrames() == 230,
+                "Trimming did not update the total timeline duration.");
+        require(trim_model.clips()[0].display_name == first_metadata.display_name &&
+                    trim_model.clips()[0].frame_rate == first_metadata.frame_rate &&
+                    trim_model.clips()[0].frame_count == first_metadata.frame_count,
+                "Trimming did not preserve source metadata.");
+        require(trim_model.trimClip(0, 10, 50) == timeline::TrimClipResult::InvalidRange,
+                "A trim before the current source start was accepted.");
+        require(trim_model.trimClip(2, 1, 120) == timeline::TrimClipResult::InvalidRange,
+                "A trim beyond the current segment was accepted.");
+        require(trim_model.trimClip(2, 0, 0) == timeline::TrimClipResult::InvalidRange,
+                "A zero-length trim was accepted.");
+        require(trim_model.trimClip(2, 0, 121) == timeline::TrimClipResult::InvalidRange,
+                "A trim beyond the current segment was accepted.");
+        require(trim_model.trimClip(99, 0, 1) == timeline::TrimClipResult::InvalidIndex,
+                "An invalid trim index was accepted.");
+
+        timeline::TimelineModel remove_model;
+        require(remove_model.addClip(first_metadata) == timeline::AddClipResult::Added,
+                "The remove test first source was not added.");
+        require(remove_model.addClip(second_metadata) == timeline::AddClipResult::Added,
+                "The remove test second source was not added.");
+        require(remove_model.addClip(first_metadata) == timeline::AddClipResult::Added,
+                "The remove test repeated source was not added.");
+        require(remove_model.removeClip(1) == timeline::RemoveClipResult::Removed,
+                "Removing an intermediate clip failed.");
+        require(remove_model.clipCount() == 2 &&
+                    remove_model.clips()[0].timeline_start_frame == 0 &&
+                    remove_model.clips()[1].timeline_start_frame == 120 &&
+                    remove_model.clips()[1].source_path ==
+                        std::filesystem::weakly_canonical(first_source),
+                "Removing an intermediate clip did not preserve compact order.");
+        require(remove_model.totalDurationFrames() == 240,
+                "Removing an intermediate clip did not update total duration.");
+        require(remove_model.removeClip(1) == timeline::RemoveClipResult::Removed,
+                "Removing the last clip failed.");
+        require(remove_model.clipCount() == 1 &&
+                    remove_model.clips().front().timeline_start_frame == 0,
+                "Removing the last clip left invalid placement.");
+        require(remove_model.removeClip(0) == timeline::RemoveClipResult::Removed,
+                "Removing the first clip failed.");
+        require(remove_model.clips().empty(),
+                "Removing the first clip did not empty the model.");
+        require(remove_model.removeClip(0) == timeline::RemoveClipResult::InvalidIndex,
+                "Removing an invalid clip index was accepted.");
 
         const auto total_before_moves = model.totalDurationFrames();
         require(model.moveClip(0, 3) == timeline::MoveClipResult::Moved,

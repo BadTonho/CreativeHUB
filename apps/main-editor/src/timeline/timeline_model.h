@@ -39,6 +39,17 @@ enum class SplitClipResult {
     InvalidBoundary,
 };
 
+enum class RemoveClipResult {
+    Removed,
+    InvalidIndex,
+};
+
+enum class TrimClipResult {
+    Trimmed,
+    InvalidIndex,
+    InvalidRange,
+};
+
 class TimelineModel final {
 public:
     AddClipResult addClip(const media::VideoMetadata& metadata);
@@ -46,6 +57,11 @@ public:
     SplitClipResult splitClip(
         std::size_t clip_index,
         std::int64_t local_frame);
+    RemoveClipResult removeClip(std::size_t clip_index);
+    TrimClipResult trimClip(
+        std::size_t clip_index,
+        std::int64_t new_source_start_frame,
+        std::int64_t new_duration_frames);
     void clear() noexcept;
 
     [[nodiscard]] bool hasClip() const noexcept;

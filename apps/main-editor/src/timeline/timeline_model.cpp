@@ -61,6 +61,14 @@ TimelineClip makeClip(
         metadata.frame_count};
 }
 
+void recalculateTimelineStarts(std::vector<TimelineClip>& clips) {
+    std::int64_t timeline_start_frame = 0;
+    for (auto& clip : clips) {
+        clip.timeline_start_frame = timeline_start_frame;
+        timeline_start_frame += clip.timeline_duration_frames;
+    }
+}
+
 } // namespace
 
 AddClipResult TimelineModel::addClip(const media::VideoMetadata& metadata) {
@@ -107,13 +115,52 @@ SplitClipResult TimelineModel::splitClip(
         right_clip);
     clips_[clip_index].timeline_duration_frames = local_frame;
 
-    std::int64_t timeline_start_frame = 0;
-    for (auto& current_clip : clips_) {
-        current_clip.timeline_start_frame = timeline_start_frame;
-        timeline_start_frame += current_clip.timeline_duration_frames;
-    }
+    recalculateTimelineStarts(clips_);
 
     return SplitClipResult::Split;
+}
+
+RemoveClipResult TimelineModel::removeClip(std::size_t clip_index) {
+    if (clip_index >= clips_.size()) {
+        return RemoveClipResult::InvalidIndex;
+    }
+
+    clips_.erase(clips_.begin() + static_cast<std::ptrdiff_t>(clip_index));
+    recalculateTimelineStarts(clips_);
+    return RemoveClipResult::Removed;
+}
+
+TrimClipResult TimelineModel::trimClip(
+    std::size_t clip_index,
+    std::int64_t new_source_start_frame,
+    std::int64_t new_duration_frames) {
+    if (clip_index >= clips_.size()) {
+        return TrimClipResult::InvalidIndex;
+    }
+
+    const auto& clip = clips_[clip_index];
+    if (new_source_start_frame < clip.source_start_frame ||
+        new_source_start_frame < 0 ||
+        new_duration_frames <= 0 ||
+        clip.source_start_frame > std::numeric_limits<std::int64_t>::max() -
+            clip.timeline_duration_frames ||
+        new_source_start_frame > std::numeric_limits<std::int64_t>::max() -
+            new_duration_frames) {
+        return TrimClipResult::InvalidRange;
+    }
+
+    const auto original_end = clip.source_start_frame +
+        clip.timeline_duration_frames;
+    const auto new_end = new_source_start_frame + new_duration_frames;
+    if (new_source_start_frame >= original_end || new_end > original_end) {
+        return TrimClipResult::InvalidRange;
+    }
+
+    auto& trimmed_clip = clips_[clip_index];
+    trimmed_clip.source_start_frame = new_source_start_frame;
+    trimmed_clip.timeline_duration_frames = new_duration_frames;
+    recalculateTimelineStarts(clips_);
+    return TrimClipResult::Trimmed;
 }
 
 MoveClipResult TimelineModel::moveClip(
@@ -138,11 +185,7 @@ MoveClipResult TimelineModel::moveClip(
             clips_.begin() + static_cast<std::ptrdiff_t>(from_index + 1));
     }
 
-    std::int64_t timeline_start_frame = 0;
-    for (auto& clip : clips_) {
-        clip.timeline_start_frame = timeline_start_frame;
-        timeline_start_frame += clip.timeline_duration_frames;
-    }
+    recalculateTimelineStarts(clips_);
 
     return MoveClipResult::Moved;
 }

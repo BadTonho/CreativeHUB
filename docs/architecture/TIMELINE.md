@@ -65,5 +65,24 @@ Splitting at the first or last frame is intentionally rejected without a log
 entry. The Blade Tool consumes a click without seeking; `Alt + drag` continues
 to have priority for compact clip reordering.
 
-Deletion, trimming, ripple editing, multiple tracks, free positioning, audio,
-and project persistence remain future responsibilities.
+The active timeline clip can be deleted with `Delete` or
+`Edit > Delete Selected Clip`. After deletion, the next clip at the same
+position becomes active, or the previous clip is selected when the deleted
+clip was last. Removing a clip recalculates all timeline starts and preserves
+the compact track. Removing the final clip clears the active timeline
+selection and disables playback controls.
+
+The left and right edges of a clip can be dragged to trim its source range.
+The model stores the resulting source start and segment duration, while later
+clips are shifted automatically to remain compact. Trimming is limited to the
+current segment, keeps at least one frame, pauses playback, and decodes only
+after the edge drag is released. A trim keeps the current source content under
+the playhead when possible. During the drag, the removed edge region remains
+visible with a light translucent overlay so the pending trim is clear; this is
+temporary feedback and does not create a timeline gap. Invalid trim ranges are
+intentional UI outcomes and do not create error-log entries.
+
+Gesture priority is `Alt + drag` for reordering, Blade Tool clicks for
+splitting, edge drags with Blade Tool disabled for trimming, and interior
+drags for seeking. Undo/redo, advanced ripple editing, multiple tracks, free
+positioning, audio, and project persistence remain future responsibilities.

@@ -11,6 +11,7 @@ The current Main Editor includes:
 - a multi-clip visual timeline with one video track;
 - continuous playback across sequential clips;
 - click-and-drag seeking with worker-thread decoding;
+- basic clip deletion and edge trimming with compact placement;
 - drag-and-drop from imported Media Browser items to the Timeline;
 - local structured error logging.
 
@@ -20,7 +21,7 @@ The current application does not implement:
 - thumbnails;
 - full timeline editing;
 - multiple tracks;
-- clip deletion, trimming, and ripple editing;
+- advanced ripple editing and undo/redo;
 - project persistence;
 - audio;
 - Motion Studio;

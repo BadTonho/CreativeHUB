@@ -37,6 +37,11 @@ signals:
     void clipSelected(qint64 clip_index);
     void clipMoveRequested(qint64 from_index, qint64 to_index);
     void clipSplitRequested(qint64 clip_index, qint64 local_frame);
+    void trimStarted();
+    void clipTrimRequested(
+        qint64 clip_index,
+        qint64 local_start_frame,
+        qint64 local_end_frame);
     void seekStarted();
     void seekRequested(qint64 frame_index);
     void mediaDropRequested(const QString& source_path);
@@ -57,7 +62,17 @@ private:
     [[nodiscard]] std::optional<std::size_t> clipIndexAtPosition(double x) const noexcept;
     [[nodiscard]] std::optional<std::size_t> insertionBoundaryAtPosition(
         double x) const noexcept;
+    enum class TrimEdge {
+        Left,
+        Right,
+    };
+    [[nodiscard]] std::optional<TrimEdge> trimEdgeAtPosition(
+        std::size_t clip_index,
+        double x) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> frameAtPosition(
+        std::size_t clip_index,
+        double x) const noexcept;
+    [[nodiscard]] std::optional<std::int64_t> clampedFrameAtPosition(
         std::size_t clip_index,
         double x) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> frameAtPosition(double x) const noexcept;
@@ -72,6 +87,11 @@ private:
     bool moving_clip_ = false;
     std::size_t moving_clip_index_ = 0;
     std::optional<std::size_t> move_target_index_;
+    bool trimming_ = false;
+    std::size_t trimming_clip_index_ = 0;
+    TrimEdge trim_edge_ = TrimEdge::Left;
+    std::int64_t trim_start_frame_ = 0;
+    std::int64_t trim_end_frame_ = 0;
     bool razor_mode_ = false;
     bool razor_clicking_ = false;
     bool razor_gesture_moved_ = false;

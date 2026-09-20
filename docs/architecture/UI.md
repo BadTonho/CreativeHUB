@@ -36,3 +36,12 @@ split request before the frame under the cursor. It does not decode while the
 pointer is pressed and it does not perform seeking. `Ctrl + K` performs the
 same operation at the active clip's playhead. `Alt + drag` remains the higher
 priority gesture for reordering clips.
+
+Timeline editing uses the following input priority: `Alt + drag` reorders a
+clip; a Blade Tool click splits it; a normal drag on a clip edge trims its
+source range; and a normal drag in the clip interior seeks. Edge trimming
+shows temporary visual feedback, including a translucent overlay for the
+removed portion, pauses playback at gesture start, and sends one frame-range
+request when the mouse is released. The clip being trimmed becomes active.
+`Delete` and `Edit > Delete Selected Clip` remove the active clip and keep the
+remaining track compact.

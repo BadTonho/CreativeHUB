@@ -90,15 +90,18 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   remain pending.
 - [x] Add the multi-clip Timeline foundation with sequential placement and
   continuous playback on one track; basic compact clip movement is complete,
-  while cuts and editing remain pending.
+  while full editing remains pending.
 - [x] Add basic compact single-track clip reordering with `Alt + drag` and
   `Ctrl + Left`/`Ctrl + Right`; manual validation confirmed selection, preview,
   and playback synchronization.
 - [x] Add real clip splitting at the playhead and with the persistent Blade
   Tool; source offsets and segment-limited playback were manually validated.
+- [x] Add basic clip deletion and edge trimming with compact placement;
+  manual UI validation confirmed. Undo, advanced ripple editing, and full
+  editing history remain future work.
 - [ ] Create a full functional timeline with editing.
 - [ ] Support video, image, text, and audio clips.
-- [ ] Implement clip deletion, trimming, and ripple editing.
+- [ ] Add undo/redo and advanced ripple editing.
 - [ ] Add a real-time GPU video preview.
 - [ ] Add basic audio editing and volume control.
 - [ ] Add basic layers, transformations, and keyframes.
