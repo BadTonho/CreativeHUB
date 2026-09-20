@@ -64,6 +64,10 @@ private:
     void moveSelectedMediaToBin();
     void removeSelectedMedia();
     void restoreSelectedMedia();
+    void addVideoTrack();
+    void renameActiveTrack();
+    void moveActiveTrack(int direction);
+    void removeActiveTrack();
     [[nodiscard]] std::optional<std::size_t> selectedMediaIndex() const noexcept;
     [[nodiscard]] std::string selectedBinPath() const;
     void addMediaItem(
@@ -91,14 +95,33 @@ private:
         const project::ProjectDocument& saved_document);
     void addSelectedMediaToTimeline();
     void handleMediaDrop(const QString& source_path);
+    void handleMediaDropAt(
+        const QString& source_path,
+        qint64 track_index,
+        qint64 timeline_frame);
     void clearTimeline();
     void handleTimelineClipMove(qint64 from_index, qint64 to_index);
     void moveActiveTimelineClip(int direction);
     void deleteActiveTimelineClip();
     void splitActiveClipAtPlayhead();
     void handleTimelineClipSplit(qint64 clip_index, qint64 local_frame);
+    void handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_index);
+    void handleTimelineClipMoveAt(
+        qint64 from_track,
+        qint64 from_clip,
+        qint64 to_track,
+        qint64 timeline_start_frame);
+    void handleTimelineClipSplitAt(
+        qint64 track_index,
+        qint64 clip_index,
+        qint64 local_frame);
     void handleTimelineTrimStarted();
     void handleTimelineClipTrim(
+        qint64 clip_index,
+        qint64 local_start_frame,
+        qint64 local_end_frame);
+    void handleTimelineClipTrimAt(
+        qint64 track_index,
         qint64 clip_index,
         qint64 local_start_frame,
         qint64 local_end_frame);
@@ -110,6 +133,8 @@ private:
     void updateHistoryActions();
     void updateTimelineState();
     [[nodiscard]] bool hasSelectedMedia() const noexcept;
+    [[nodiscard]] std::optional<timeline::ClipLocation>
+    selectedTimelineClipLocation() const noexcept;
     [[nodiscard]] std::optional<std::size_t> selectedTimelineClipIndex() const noexcept;
     [[nodiscard]] bool selectedMediaMatchesTimeline() const noexcept;
     [[nodiscard]] bool canPreviewSelectedMedia() const noexcept;
@@ -135,7 +160,13 @@ private:
         std::size_t clip_index,
         std::int64_t target_frame,
         bool resume_playback);
+    void activateTimelineClipAt(
+        std::size_t track_index,
+        std::size_t clip_index,
+        std::int64_t target_frame,
+        bool resume_playback);
     void commitTimelineClipActivation(
+        std::size_t track_index,
         std::size_t clip_index,
         std::size_t media_index,
         std::int64_t frame_index,
@@ -157,6 +188,7 @@ private:
         std::int64_t segment_frame_count = 0;
         bool resume_playback = false;
         quint64 generation = 0;
+        std::size_t track_index = 0;
     };
 
     QDockWidget* media_browser_dock_ = nullptr;
@@ -182,11 +214,17 @@ private:
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
     QAction* razor_tool_action_ = nullptr;
+    QAction* add_video_track_action_ = nullptr;
+    QAction* rename_track_action_ = nullptr;
+    QAction* move_track_up_action_ = nullptr;
+    QAction* move_track_down_action_ = nullptr;
+    QAction* remove_track_action_ = nullptr;
     timeline::TimelineWidget* timeline_widget_ = nullptr;
     std::vector<ImportedMedia> media_items_;
     std::vector<std::string> bin_paths_{"Unsorted"};
     timeline::TimelineModel timeline_model_;
     timeline::TimelineHistory timeline_history_;
+    std::optional<std::size_t> active_timeline_track_index_;
     std::optional<std::size_t> active_timeline_clip_index_;
     std::optional<PendingClipActivation> pending_clip_activation_;
     std::optional<std::filesystem::path> project_path_;

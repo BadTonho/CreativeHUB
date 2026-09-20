@@ -10,15 +10,24 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 1;
+inline constexpr int current_format_version = 2;
+inline constexpr int legacy_format_version = 1;
 inline constexpr const char* format_identifier = "creative-suite.main-editor";
 
 struct ProjectClip {
     std::filesystem::path source_path;
+    std::int64_t timeline_start_frame = 0;
     std::int64_t source_start_frame = 0;
     std::int64_t duration_frames = 0;
 
     friend bool operator==(const ProjectClip&, const ProjectClip&) = default;
+};
+
+struct ProjectTrack {
+    std::string name;
+    std::vector<ProjectClip> clips;
+
+    friend bool operator==(const ProjectTrack&, const ProjectTrack&) = default;
 };
 
 struct ProjectMedia {
@@ -33,6 +42,8 @@ struct ProjectMedia {
 struct ProjectDocument {
     std::vector<ProjectMedia> media;
     std::vector<std::string> bins;
+    std::vector<ProjectTrack> timeline_tracks;
+    // Compatibility view for callers still being migrated to timeline_tracks.
     std::vector<ProjectClip> timeline_clips;
 
     friend bool operator==(const ProjectDocument&, const ProjectDocument&) = default;

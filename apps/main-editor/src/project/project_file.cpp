@@ -137,12 +137,39 @@ void validateDocument(const ProjectDocument& document,
         }
     }
 
-    for (const auto& clip : document.timeline_clips) {
-        if (clip.source_path.empty() || clip.source_start_frame < 0 ||
-            clip.duration_frames <= 0) {
+    auto validate_clip = [&project_path](const ProjectClip& clip) {
+        if (clip.source_path.empty() || clip.timeline_start_frame < 0 ||
+            clip.source_start_frame < 0 || clip.duration_frames <= 0) {
             throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains an invalid timeline segment.");
         }
+        if (clip.duration_frames >
+            std::numeric_limits<std::int64_t>::max() -
+                clip.timeline_start_frame) {
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains an overflowing timeline range.");
+        }
+    };
+    for (const auto& track : document.timeline_tracks) {
+        if (track.name.empty()) {
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains a track without a name.");
+        }
+        for (const auto& clip : track.clips) validate_clip(clip);
+        for (std::size_t left = 0; left < track.clips.size(); ++left) {
+            const auto& first = track.clips[left];
+            const auto first_end =
+                first.timeline_start_frame + first.duration_frames;
+            for (std::size_t right = left + 1; right < track.clips.size(); ++right) {
+                const auto& second = track.clips[right];
+                const auto second_end =
+                    second.timeline_start_frame + second.duration_frames;
+                if (second.timeline_start_frame < first_end &&
+                    first.timeline_start_frame <
+                        second_end) {
+                    throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains overlapping clips on one track.");
+                }
+            }
+        }
     }
+    for (const auto& clip : document.timeline_clips) validate_clip(clip);
 }
 
 } // namespace
@@ -188,7 +215,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
     }
 
     const auto version = requiredInteger(root, "version", project_path);
-    if (version != current_format_version) {
+    if (version != current_format_version && version != legacy_format_version) {
         throw ProjectError(
             ProjectErrorCode::UnsupportedVersion,
             "The project file version is not supported.",
@@ -249,25 +276,63 @@ ProjectDocument load(const std::filesystem::path& project_path) {
     if (!timeline_value.isObject()) {
         throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the timeline object.");
     }
-    const auto clips_value = timeline_value.toObject().value("clips");
-    if (!clips_value.isArray()) {
-        throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the timeline clips array.");
-    }
-
-    for (const auto& clip_value : clips_value.toArray()) {
-        if (!clip_value.isObject()) {
-            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid timeline clip.");
+    const auto timeline_object = timeline_value.toObject();
+    if (version == legacy_format_version) {
+        const auto clips_value = timeline_object.value("clips");
+        if (!clips_value.isArray()) {
+            throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the timeline clips array.");
         }
-        const auto clip_object = clip_value.toObject();
-        ProjectClip clip;
-        clip.source_path = resolvedPath(
-            project_path,
-            requiredString(clip_object, "source", project_path));
-        clip.source_start_frame = requiredInteger(
-            clip_object, "source_start_frame", project_path);
-        clip.duration_frames = requiredInteger(
-            clip_object, "duration_frames", project_path);
-        document.timeline_clips.push_back(std::move(clip));
+        ProjectTrack track{"Video 1", {}};
+        std::int64_t timeline_start = 0;
+        for (const auto& clip_value : clips_value.toArray()) {
+            if (!clip_value.isObject()) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid timeline clip.");
+            }
+            const auto clip_object = clip_value.toObject();
+            ProjectClip clip;
+            clip.source_path = resolvedPath(project_path, requiredString(clip_object, "source", project_path));
+            clip.timeline_start_frame = timeline_start;
+            clip.source_start_frame = requiredInteger(clip_object, "source_start_frame", project_path);
+            clip.duration_frames = requiredInteger(clip_object, "duration_frames", project_path);
+            if (clip.duration_frames > 0 && timeline_start <=
+                std::numeric_limits<std::int64_t>::max() - clip.duration_frames) {
+                timeline_start += clip.duration_frames;
+            }
+            document.timeline_clips.push_back(clip);
+            track.clips.push_back(std::move(clip));
+        }
+        document.timeline_tracks.push_back(std::move(track));
+    } else {
+        const auto tracks_value = timeline_object.value("tracks");
+        if (!tracks_value.isArray()) {
+            throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the timeline tracks array.");
+        }
+        for (const auto& track_value : tracks_value.toArray()) {
+            if (!track_value.isObject()) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid timeline track.");
+            }
+            const auto track_object = track_value.toObject();
+            ProjectTrack track;
+            track.name = requiredString(track_object, "name", project_path).toUtf8().toStdString();
+            const auto track_clips = track_object.value("clips");
+            if (!track_clips.isArray()) {
+                throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing a track clips array.");
+            }
+            for (const auto& clip_value : track_clips.toArray()) {
+                if (!clip_value.isObject()) {
+                    throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid timeline clip.");
+                }
+                const auto clip_object = clip_value.toObject();
+                ProjectClip clip;
+                clip.source_path = resolvedPath(project_path, requiredString(clip_object, "source", project_path));
+                clip.timeline_start_frame = requiredInteger(clip_object, "timeline_start_frame", project_path);
+                clip.source_start_frame = requiredInteger(clip_object, "source_start_frame", project_path);
+                clip.duration_frames = requiredInteger(clip_object, "duration_frames", project_path);
+                track.clips.push_back(clip);
+                document.timeline_clips.push_back(std::move(clip));
+            }
+            document.timeline_tracks.push_back(std::move(track));
+        }
     }
 
     validateDocument(document, project_path);
@@ -294,17 +359,38 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
         media.append(item);
     }
 
-    QJsonArray clips;
-    for (const auto& clip : document.timeline_clips) {
-        QJsonObject item;
-        item.insert("source", storedPath(project_path, clip.source_path));
-        item.insert("source_start_frame", static_cast<qint64>(clip.source_start_frame));
-        item.insert("duration_frames", static_cast<qint64>(clip.duration_frames));
-        clips.append(item);
+    std::vector<ProjectTrack> tracks = document.timeline_tracks;
+    if (tracks.empty() && !document.timeline_clips.empty()) {
+        tracks.push_back({"Video 1", document.timeline_clips});
+        std::int64_t start = 0;
+        for (auto& clip : tracks.front().clips) {
+            clip.timeline_start_frame = start;
+            if (clip.duration_frames > 0 && start <=
+                std::numeric_limits<std::int64_t>::max() - clip.duration_frames) {
+                start += clip.duration_frames;
+            }
+        }
+    }
+
+    QJsonArray track_array;
+    for (const auto& track_source : tracks) {
+        QJsonObject track;
+        track.insert("name", QString::fromStdString(track_source.name));
+        QJsonArray clips;
+        for (const auto& clip : track_source.clips) {
+            QJsonObject item;
+            item.insert("source", storedPath(project_path, clip.source_path));
+            item.insert("timeline_start_frame", static_cast<qint64>(clip.timeline_start_frame));
+            item.insert("source_start_frame", static_cast<qint64>(clip.source_start_frame));
+            item.insert("duration_frames", static_cast<qint64>(clip.duration_frames));
+            clips.append(item);
+        }
+        track.insert("clips", clips);
+        track_array.append(track);
     }
 
     QJsonObject timeline;
-    timeline.insert("clips", clips);
+    timeline.insert("tracks", track_array);
     QJsonObject root;
     root.insert("format", QString::fromLatin1(format_identifier));
     root.insert("version", current_format_version);

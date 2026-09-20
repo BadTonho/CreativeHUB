@@ -3,6 +3,8 @@
 #include "timeline_model.h"
 
 #include <QString>
+#include <QPointF>
+#include <QRectF>
 #include <QWidget>
 
 #include <cstddef>
@@ -10,13 +12,12 @@
 #include <optional>
 #include <vector>
 
-class QMouseEvent;
-class QPaintEvent;
-class QPointF;
 class QDragEnterEvent;
 class QDragLeaveEvent;
 class QDragMoveEvent;
 class QDropEvent;
+class QMouseEvent;
+class QPaintEvent;
 
 namespace timeline {
 
@@ -26,25 +27,31 @@ class TimelineWidget final : public QWidget {
 public:
     explicit TimelineWidget(QWidget* parent = nullptr);
 
+    void setTracks(const std::vector<TimelineTrack>& tracks);
     void setClips(const std::vector<TimelineClip>& clips);
     void clearClips();
+    void setActiveClip(std::optional<ClipLocation> location);
     void setActiveClipIndex(std::optional<std::size_t> clip_index);
     void setPlayheadFrame(std::int64_t frame_index);
     void setRazorMode(bool enabled);
     [[nodiscard]] bool razorMode() const noexcept;
 
 signals:
+    // Compatibility signals for the original first-track UI path.
     void clipSelected(qint64 clip_index);
     void clipMoveRequested(qint64 from_index, qint64 to_index);
     void clipSplitRequested(qint64 clip_index, qint64 local_frame);
+    void clipTrimRequested(qint64 clip_index, qint64 local_start_frame, qint64 local_end_frame);
+    void mediaDropRequested(const QString& source_path);
+
+    void clipSelectedAt(qint64 track_index, qint64 clip_index);
+    void clipMoveRequestedAt(qint64 from_track, qint64 from_clip, qint64 to_track, qint64 timeline_start_frame);
+    void clipSplitRequestedAt(qint64 track_index, qint64 clip_index, qint64 local_frame);
+    void clipTrimRequestedAt(qint64 track_index, qint64 clip_index, qint64 local_start_frame, qint64 local_end_frame);
+    void mediaDropRequestedAt(const QString& source_path, qint64 track_index, qint64 timeline_frame);
     void trimStarted();
-    void clipTrimRequested(
-        qint64 clip_index,
-        qint64 local_start_frame,
-        qint64 local_end_frame);
     void seekStarted();
     void seekRequested(qint64 frame_index);
-    void mediaDropRequested(const QString& source_path);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -57,49 +64,46 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
-    [[nodiscard]] bool isTrackPosition(const QPointF& position) const noexcept;
-    [[nodiscard]] std::optional<std::size_t> activeClipIndex() const noexcept;
-    [[nodiscard]] std::optional<std::size_t> clipIndexAtPosition(double x) const noexcept;
-    [[nodiscard]] std::optional<std::size_t> insertionBoundaryAtPosition(
-        double x) const noexcept;
-    enum class TrimEdge {
-        Left,
-        Right,
-    };
-    [[nodiscard]] std::optional<TrimEdge> trimEdgeAtPosition(
-        std::size_t clip_index,
-        double x) const noexcept;
-    [[nodiscard]] std::optional<std::int64_t> frameAtPosition(
-        std::size_t clip_index,
-        double x) const noexcept;
-    [[nodiscard]] std::optional<std::int64_t> clampedFrameAtPosition(
-        std::size_t clip_index,
-        double x) const noexcept;
-    [[nodiscard]] std::optional<std::int64_t> frameAtPosition(double x) const noexcept;
-    [[nodiscard]] std::optional<double> playheadFraction() const noexcept;
-    [[nodiscard]] double displayedPlayheadFrame() const noexcept;
+    enum class TrimEdge { Left, Right };
 
-    std::vector<TimelineClip> clips_;
-    std::optional<std::size_t> active_clip_index_;
+    [[nodiscard]] QRectF trackRect(std::size_t index) const noexcept;
+    [[nodiscard]] QRectF trackContentRect(std::size_t index) const noexcept;
+    [[nodiscard]] QRectF clipRect(const ClipLocation& location) const noexcept;
+    [[nodiscard]] std::int64_t totalDuration() const noexcept;
+    [[nodiscard]] std::optional<std::size_t> trackAt(double y) const noexcept;
+    [[nodiscard]] std::optional<ClipLocation> clipAt(double x, double y) const noexcept;
+    [[nodiscard]] std::optional<std::int64_t> globalFrameAt(double x) const noexcept;
+    [[nodiscard]] std::optional<std::int64_t> localFrameAt(const ClipLocation&, double x) const noexcept;
+    [[nodiscard]] std::optional<TrimEdge> trimEdgeAt(const ClipLocation&, double x) const noexcept;
+    void emitSelected(const ClipLocation& location);
+    void emitLegacySelection(const ClipLocation& location);
+
+    std::vector<TimelineTrack> tracks_;
+    std::optional<ClipLocation> active_clip_;
     std::int64_t playhead_frame_ = 0;
     std::optional<std::int64_t> drag_frame_;
     bool dragging_ = false;
-    bool moving_clip_ = false;
-    std::size_t moving_clip_index_ = 0;
-    std::optional<std::size_t> move_target_index_;
+    bool moving_active_ = false;
+    ClipLocation moving_clip_{};
+    std::optional<std::size_t> move_target_track_;
+    std::int64_t move_target_frame_ = 0;
     bool trimming_ = false;
-    std::size_t trimming_clip_index_ = 0;
+    ClipLocation trimming_clip_{};
     TrimEdge trim_edge_ = TrimEdge::Left;
     std::int64_t trim_start_frame_ = 0;
     std::int64_t trim_end_frame_ = 0;
     bool razor_mode_ = false;
     bool razor_clicking_ = false;
     bool razor_gesture_moved_ = false;
-    std::size_t razor_clip_index_ = 0;
+    ClipLocation razor_clip_{};
     std::int64_t razor_frame_ = 0;
-    double razor_press_x_ = 0.0;
-    double razor_press_y_ = 0.0;
+    QPointF razor_press_position_{};
+    bool seek_pending_ = false;
+    QPointF seek_press_position_{};
+    ClipLocation seek_clip_{};
     bool drag_hovering_ = false;
+    std::optional<std::size_t> drop_hover_track_;
+    std::optional<std::int64_t> drop_hover_frame_;
 };
 
 } // namespace timeline

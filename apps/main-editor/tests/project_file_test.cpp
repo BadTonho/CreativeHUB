@@ -47,10 +47,13 @@ int main(int argc, char** argv) {
             {first_source, "First Video", "Footage/Scenes", false},
             {outside_source, "Offline Asset", "Unsorted", true},
         };
-        original.timeline_clips = {
-            {first_source, 30, 60},
-            {first_source, 0, 30},
+        original.timeline_tracks = {
+            {"Video 1", {
+                {first_source, 0, 30, 60},
+                {first_source, 60, 0, 30},
+            }},
         };
+        original.timeline_clips = original.timeline_tracks.front().clips;
         project::save(project_path, original);
 
         const auto loaded = project::load(project_path);
@@ -145,6 +148,28 @@ int main(int argc, char** argv) {
                     legacy.media.front().bin_path == "Unsorted" &&
                     !legacy.media.front().offline,
                 "A path-only version 1 media entry was not kept backward compatible.");
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":1,"media":[{"path":"media/first video.mkv"}],"timeline":{"clips":[{"source":"media/first video.mkv","source_start_frame":5,"duration_frames":10},{"source":"media/first video.mkv","source_start_frame":20,"duration_frames":4}]}})");
+        const auto migrated = project::load(project_path);
+        require(migrated.timeline_tracks.size() == 1 &&
+                    migrated.timeline_tracks.front().name == "Video 1" &&
+                    migrated.timeline_tracks.front().clips.size() == 2 &&
+                    migrated.timeline_tracks.front().clips[0].timeline_start_frame == 0 &&
+                    migrated.timeline_tracks.front().clips[1].timeline_start_frame == 10,
+                "A version 1 timeline was not migrated to sequential Video 1 clips.");
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":2,"media":[],"bins":["Unsorted"],"timeline":{"tracks":[{"name":"Video 1","clips":[{"source":"a.mkv","timeline_start_frame":0,"source_start_frame":0,"duration_frames":10},{"source":"b.mkv","timeline_start_frame":5,"source_start_frame":0,"duration_frames":10}]}]}})");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("Overlapping clips on one track were accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::InvalidTimeline,
+                    "Track overlap returned the wrong error category.");
+        }
 
         std::error_code cleanup_error;
         std::filesystem::remove(outside_source, cleanup_error);

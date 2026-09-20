@@ -12,6 +12,7 @@ namespace timeline {
 
 struct EditState {
     TimelineModel::Snapshot timeline;
+    std::optional<std::size_t> active_track_index;
     std::optional<std::size_t> active_clip_index;
     std::optional<std::filesystem::path> selected_source_path;
     std::int64_t playhead_frame = 0;

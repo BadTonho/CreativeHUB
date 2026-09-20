@@ -141,7 +141,8 @@ int main() {
                 "Trimming a previously split segment failed.");
         require(split_model.clips()[1].source_start_frame == 50 &&
                     split_model.clips()[1].timeline_duration_frames == 40 &&
-                    split_model.clips()[2].timeline_start_frame == 70,
+                    split_model.clips()[1].timeline_start_frame == 30 &&
+                    split_model.clips()[2].timeline_start_frame == 120,
                 "Trimming a split segment produced incorrect offsets.");
         require(split_model.splitClip(2, 20) == timeline::SplitClipResult::Split,
                 "The second source occurrence was not split.");
@@ -166,15 +167,16 @@ int main() {
                 "Trimming the start of a clip failed.");
         require(trim_model.clips()[0].source_start_frame == 20 &&
                     trim_model.clips()[0].timeline_duration_frames == 80 &&
-                    trim_model.clips()[1].timeline_start_frame == 80 &&
-                    trim_model.clips()[2].timeline_start_frame == 140,
-                "Trimming the start did not preserve compact placement.");
+                    trim_model.clips()[0].timeline_start_frame == 0 &&
+                    trim_model.clips()[1].timeline_start_frame == 120 &&
+                    trim_model.clips()[2].timeline_start_frame == 180,
+                "Trimming the start did not preserve absolute placement.");
         require(trim_model.trimClip(1, 0, 30) == timeline::TrimClipResult::Trimmed,
                 "Trimming the end of a clip failed.");
         require(trim_model.clips()[1].timeline_duration_frames == 30 &&
-                    trim_model.clips()[2].timeline_start_frame == 110,
-                "Trimming the end did not shift following clips.");
-        require(trim_model.totalDurationFrames() == 230,
+                    trim_model.clips()[2].timeline_start_frame == 180,
+                "Trimming the end changed following clip placement.");
+        require(trim_model.totalDurationFrames() == 300,
                 "Trimming did not update the total timeline duration.");
         require(trim_model.clips()[0].display_name == first_metadata.display_name &&
                     trim_model.clips()[0].frame_rate == first_metadata.frame_rate &&
@@ -202,11 +204,11 @@ int main() {
                 "Removing an intermediate clip failed.");
         require(remove_model.clipCount() == 2 &&
                     remove_model.clips()[0].timeline_start_frame == 0 &&
-                    remove_model.clips()[1].timeline_start_frame == 120 &&
+                    remove_model.clips()[1].timeline_start_frame == 180 &&
                     remove_model.clips()[1].source_path ==
                         std::filesystem::weakly_canonical(first_source),
-                "Removing an intermediate clip did not preserve compact order.");
-        require(remove_model.totalDurationFrames() == 240,
+                "Removing an intermediate clip did not preserve absolute placement.");
+        require(remove_model.totalDurationFrames() == 300,
                 "Removing an intermediate clip did not update total duration.");
         require(remove_model.removeClip(1) == timeline::RemoveClipResult::Removed,
                 "Removing the last clip failed.");
@@ -283,6 +285,48 @@ int main() {
         require(!model.hasClip(), "The timeline was not cleared.");
         require(model.clipCount() == 0, "The cleared timeline still has clips.");
         require(model.clips().empty(), "The cleared clip collection was not empty.");
+
+        timeline::TimelineModel multi_track_model;
+        require(multi_track_model.addTrack("Video 2") ==
+                    timeline::AddTrackResult::Added,
+                "The second video track was not created.");
+        require(multi_track_model.trackCount() == 2,
+                "The multi-track model has the wrong track count.");
+        require(multi_track_model.addClip(0, first_metadata, 10) ==
+                    timeline::AddClipResult::Added,
+                "A clip was not added at an absolute frame.");
+        require(multi_track_model.addClip(0, second_metadata, 150) ==
+                    timeline::AddClipResult::Added,
+                "A clip was not added after a gap.");
+        require(multi_track_model.addClip(0, first_metadata, 50) ==
+                    timeline::AddClipResult::Overlap,
+                "An overlapping clip was accepted on one track.");
+        require(multi_track_model.addClip(1, first_metadata, 50) ==
+                    timeline::AddClipResult::Added,
+                "A cross-track overlap was rejected.");
+        require(multi_track_model.topClipAt(55).has_value() &&
+                    multi_track_model.topClipAt(55)->track_index == 0,
+                "The top track priority was incorrect.");
+        require(!multi_track_model.clipAt(0, 140).has_value(),
+                "A timeline gap was not detected.");
+        const auto moved_id = multi_track_model.tracks()[0].clips[0].clip_id;
+        require(multi_track_model.moveClip(
+                    timeline::ClipLocation{0, 0},
+                    timeline::ClipLocation{1, 0},
+                    200) == timeline::MoveClipResult::Moved,
+                "Moving a clip between tracks failed.");
+        require(multi_track_model.locateClip(moved_id).has_value() &&
+                    multi_track_model.locateClip(moved_id)->track_index == 1,
+                "The moved clip could not be located by its stable id.");
+        require(multi_track_model.removeTrack(0) ==
+                    timeline::TrackMutationResult::NotEmpty,
+                "A non-empty track was removed.");
+        require(multi_track_model.removeClip(0, 0) ==
+                    timeline::RemoveClipResult::Removed,
+                "The remaining clip was not removed.");
+        require(multi_track_model.removeTrack(0) ==
+                    timeline::TrackMutationResult::Changed,
+                "An empty track could not be removed.");
 
         timeline::TimelineModel history_model;
         require(history_model.addClip(first_metadata) == timeline::AddClipResult::Added,

@@ -81,8 +81,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Add basic CPU playback with play/pause and previous/next frame controls;
   manual validation confirmed pause and frame advancement; GPU playback and
   timeline editing remain pending.
-- [x] Add the first visual timeline milestone with one manually added clip and
-  one video track; seeking, multiple tracks, and clip editing remain pending.
+- [x] Add the visual Timeline foundation with multiple video tracks, absolute
+  positions, gaps, track management, and positional drops.
 - [x] Add basic single-clip click-and-drag seeking; automated and manual
   validation passed. Multiple tracks and clip editing remain pending.
 - [x] Optimize timeline seeking with FFmpeg keyframe navigation, bounded frame
@@ -90,15 +90,13 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Add drag-and-drop from imported Media Browser items to the Timeline;
   manual UI validation passed. Operating-system file drops and drop positioning
   remain pending.
-- [x] Add the multi-clip Timeline foundation with sequential placement and
-  continuous playback on one track; basic compact clip movement is complete,
-  while full editing remains pending.
-- [x] Add basic compact single-track clip reordering with `Alt + drag` and
-  `Ctrl + Left`/`Ctrl + Right`; manual validation confirmed selection, preview,
-  and playback synchronization.
+- [x] Add the multi-clip Timeline foundation with absolute positions, gaps,
+  multiple tracks, and continuous playback within the active track.
+- [x] Add clip movement between video tracks and absolute positions with `Alt + drag`;
+  Ctrl + Left and Ctrl + Right now nudge the active clip by one frame.
 - [x] Add real clip splitting at the playhead and with the persistent Blade
   Tool; source offsets and segment-limited playback were manually validated.
-- [x] Add basic clip deletion and edge trimming with compact placement;
+- [x] Add basic clip deletion and edge trimming with absolute placement;
   manual UI validation confirmed.
 - [x] Add bounded Undo/Redo for successful Timeline edits, restoring the
   Timeline, selected media, active clip, and playhead; automated and manual
@@ -113,7 +111,10 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   validated CPU fallback; automated, startup, and interactive visual
   validation passed.
 - [x] Add basic project media management with hierarchical bins, project labels,
-  offline entries, restoration through import, and version 1 `.csp` persistence.
+  offline entries, restoration through import, and version 2 `.csp` persistence.
+- [-] Add the multi-track Timeline foundation with absolute positions, gaps,
+  track management, cross-track overlap, positional drops, and `.csp` version 2
+  migration from version 1.
 - [ ] Add basic audio editing and volume control.
 - [ ] Add basic layers, transformations, and keyframes.
 - [ ] Add basic text and captions.

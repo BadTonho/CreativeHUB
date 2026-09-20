@@ -1,40 +1,28 @@
 # Current Scope and Non-goals
 
-Status: **provisional**.
+Status: provisional.
 
-The current Main Editor includes:
+The Main Editor currently includes:
 
-- a Qt 6 desktop shell with dockable workspace panels;
-- local video metadata import through FFmpeg;
-- first-frame preview through provisional Qt OpenGL with a CPU fallback;
-- basic CPU playback with play/pause and frame stepping;
-- a multi-clip visual timeline with one video track;
-- continuous playback across sequential clips;
-- click-and-drag seeking with worker-thread decoding;
-- basic clip deletion and edge trimming with compact placement;
-- bounded Undo/Redo for successful Timeline edits;
-- drag-and-drop from imported Media Browser items to the Timeline;
-- local structured error logging;
-- basic `.csp` project persistence for imported media and Timeline structure.
-- basic Media Browser management with hierarchical bins, project labels, and
-  visible offline media state.
+- Qt 6 desktop shell with dockable workspace panels;
+- FFmpeg metadata import and first-frame decoding;
+- provisional Qt OpenGL preview with CPU fallback and grayscale;
+- CPU playback with worker-thread frame stepping and playback;
+- multiple video tracks with stable identifiers, absolute positions, gaps,
+  cross-track overlap, direct selection, track management, and positional drops;
+- clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
+- keyframe-based seeking with bounded cache and temporal fallback;
+- hierarchical Media Browser bins, project labels, and offline state;
+- versioned .csp persistence with version 1 migration to version 2;
+- local structured diagnostic logging.
 
-The current application does not implement:
+The current application does not include:
 
-- GPU playback;
-- thumbnails;
-- full timeline editing;
-- multiple tracks;
-- advanced ripple editing and project-wide history;
-- audio;
-- Motion Studio;
-- Rust integration.
+- audio, images, text, captions, or export;
+- advanced compositing or GPU playback;
+- ripple editing, automatic gap management, or project-wide history;
+- thumbnails, proxies, autosave, recovery, or complete relinking;
+- Motion Studio or Rust integration.
 
-Random seeking uses FFmpeg keyframe navigation with a bounded recent-frame
-cache. Streams without reliable temporal metadata fall back to decoding from
-the beginning for correctness. Global timeline seeking is not implemented.
-
-Basic project persistence is implemented for versioned `.csp` files, including
-media labels, bins, and offline state. Autosave, recovery, media copying,
-complete relinking, shared projects, and project-wide history remain future
-responsibilities.
+The architecture remains application-local until a second real consumer
+justifies a shared library.
