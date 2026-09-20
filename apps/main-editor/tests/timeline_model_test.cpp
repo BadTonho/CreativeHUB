@@ -1,4 +1,5 @@
 #include "media/video_metadata.h"
+#include "timeline/timeline_history.h"
 #include "timeline/timeline_model.h"
 
 #include <chrono>
@@ -282,6 +283,125 @@ int main() {
         require(!model.hasClip(), "The timeline was not cleared.");
         require(model.clipCount() == 0, "The cleared timeline still has clips.");
         require(model.clips().empty(), "The cleared clip collection was not empty.");
+
+        timeline::TimelineModel history_model;
+        require(history_model.addClip(first_metadata) == timeline::AddClipResult::Added,
+                "The history test first clip was not added.");
+        require(history_model.addClip(second_metadata) == timeline::AddClipResult::Added,
+                "The history test second clip was not added.");
+
+        const auto make_history_state =
+            [&history_model](std::optional<std::size_t> active,
+                             const std::filesystem::path& selected_source,
+                             std::int64_t frame) {
+                timeline::EditState state;
+                state.timeline = history_model.snapshot();
+                state.active_clip_index = active;
+                state.selected_source_path = selected_source;
+                state.playhead_frame = frame;
+                return state;
+            };
+
+        timeline::TimelineHistory history;
+        const auto before_move = make_history_state(0, first_source, 12);
+        history.recordBeforeEdit(before_move);
+        require(history.canUndo() && !history.canRedo() &&
+                    history.undoCount() == 1,
+                "The history did not record the initial edit state.");
+        require(history_model.moveClip(0, 1) == timeline::MoveClipResult::Moved,
+                "The history move operation failed.");
+        auto moved_state = make_history_state(1, second_source, 5);
+        const auto undone_move = history.undo(moved_state);
+        require(undone_move.has_value() && history.canRedo(),
+                "Undo did not return the previous timeline state.");
+        history_model.restore(undone_move->timeline);
+        require(history_model.clips()[0].source_path ==
+                    std::filesystem::weakly_canonical(first_source) &&
+                    history_model.clips()[1].source_path ==
+                        std::filesystem::weakly_canonical(second_source) &&
+                    undone_move->active_clip_index == 0 &&
+                    undone_move->selected_source_path == first_source &&
+                    undone_move->playhead_frame == 12,
+                "Undo did not restore the Timeline and UI state.");
+
+        const auto redone_move = history.redo(*undone_move);
+        require(redone_move.has_value() && history.canUndo(),
+                "Redo did not return the newer timeline state.");
+        history_model.restore(redone_move->timeline);
+        require(history_model.clips()[0].source_path ==
+                    std::filesystem::weakly_canonical(second_source) &&
+                    history_model.clips()[1].source_path ==
+                        std::filesystem::weakly_canonical(first_source) &&
+                    redone_move->active_clip_index == 1 &&
+                    redone_move->playhead_frame == 5,
+                "Redo did not restore the newer Timeline state.");
+
+        const auto before_split = make_history_state(0, first_source, 30);
+        history.clear();
+        history.recordBeforeEdit(before_split);
+        require(history_model.splitClip(1, 20) == timeline::SplitClipResult::Split,
+                "The history split operation failed.");
+        auto split_state = make_history_state(2, first_source, 0);
+        const auto undone_split = history.undo(split_state);
+        require(undone_split.has_value(), "Undo after split was unavailable.");
+        history_model.restore(undone_split->timeline);
+        require(history_model.clipCount() == 2 &&
+                    history_model.totalDurationFrames() == 180,
+                "Undo after split did not restore the original clips.");
+
+        const auto before_trim = make_history_state(0, first_source, 8);
+        history.clear();
+        history.recordBeforeEdit(before_trim);
+        require(history_model.trimClip(0, 10, 50) == timeline::TrimClipResult::Trimmed,
+                "The history trim operation failed.");
+        auto trim_state = make_history_state(0, first_source, 3);
+        const auto undone_trim = history.undo(trim_state);
+        require(undone_trim.has_value(), "Undo after trim was unavailable.");
+        history_model.restore(undone_trim->timeline);
+        require(history_model.clips()[0].source_start_frame == 0 &&
+                    history_model.clips()[0].timeline_duration_frames == 60,
+                "Undo after trim did not restore the source range.");
+
+        const auto before_remove = make_history_state(0, first_source, 2);
+        history.clear();
+        history.recordBeforeEdit(before_remove);
+        require(history_model.removeClip(1) == timeline::RemoveClipResult::Removed,
+                "The history remove operation failed.");
+        auto remove_state = make_history_state(0, first_source, 0);
+        const auto undone_remove = history.undo(remove_state);
+        require(undone_remove.has_value(), "Undo after remove was unavailable.");
+        history_model.restore(undone_remove->timeline);
+        require(history_model.clipCount() == 2 &&
+                    history_model.totalDurationFrames() == 180,
+                "Undo after remove did not restore the removed clip.");
+
+        const auto before_clear = make_history_state(0, first_source, 1);
+        history.clear();
+        history.recordBeforeEdit(before_clear);
+        history_model.clear();
+        auto clear_state = make_history_state(std::nullopt, first_source, 0);
+        const auto undone_clear = history.undo(clear_state);
+        require(undone_clear.has_value(), "Undo after clear was unavailable.");
+        history_model.restore(undone_clear->timeline);
+        require(history_model.clipCount() == 2 &&
+                    history_model.clips()[0].source_path ==
+                        std::filesystem::weakly_canonical(second_source),
+                "Undo after clear did not restore the Timeline.");
+
+        history.clear();
+        for (std::size_t index = 0; index < 105; ++index) {
+            history.recordBeforeEdit(make_history_state(
+                0,
+                first_source,
+                static_cast<std::int64_t>(index)));
+        }
+        require(history.undoCount() == timeline::TimelineHistory::max_states,
+                "The history exceeded its maximum Undo capacity.");
+        require(history.undo(make_history_state(0, first_source, 105)).has_value(),
+                "The bounded history could not undo its newest state.");
+        history.recordBeforeEdit(make_history_state(0, first_source, 999));
+        require(!history.canRedo(),
+                "A new edit did not clear the Redo history.");
     } catch (const std::exception& error) {
         std::error_code cleanup_error;
         std::filesystem::remove_all(directory, cleanup_error);

@@ -4,6 +4,7 @@
 #include "media/video_metadata.h"
 #include "media/video_probe.h"
 #include "playback/playback_worker.h"
+#include "timeline/timeline_history.h"
 #include "timeline/timeline_model.h"
 
 #include <QMainWindow>
@@ -56,6 +57,12 @@ private:
         qint64 clip_index,
         qint64 local_start_frame,
         qint64 local_end_frame);
+    void undoTimelineEdit();
+    void redoTimelineEdit();
+    [[nodiscard]] timeline::EditState captureTimelineEditState() const;
+    void restoreTimelineEditState(timeline::EditState state, const char* operation);
+    void recordTimelineEdit(timeline::EditState state);
+    void updateHistoryActions();
     void updateTimelineState();
     [[nodiscard]] bool hasSelectedMedia() const noexcept;
     [[nodiscard]] std::optional<std::size_t> selectedTimelineClipIndex() const noexcept;
@@ -118,10 +125,13 @@ private:
     QPushButton* razor_button_ = nullptr;
     QLabel* playback_status_label_ = nullptr;
     QAction* delete_clip_action_ = nullptr;
+    QAction* undo_action_ = nullptr;
+    QAction* redo_action_ = nullptr;
     QAction* razor_tool_action_ = nullptr;
     timeline::TimelineWidget* timeline_widget_ = nullptr;
     std::vector<ImportedMedia> media_items_;
     timeline::TimelineModel timeline_model_;
+    timeline::TimelineHistory timeline_history_;
     std::optional<std::size_t> active_timeline_clip_index_;
     std::optional<PendingClipActivation> pending_clip_activation_;
     media::VideoProbe video_probe_;

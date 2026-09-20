@@ -25,6 +25,8 @@ add_executable(creative-suite-main-editor
     src/media/video_probe.h
     src/timeline/timeline_model.cpp
     src/timeline/timeline_model.h
+    src/timeline/timeline_history.cpp
+    src/timeline/timeline_history.h
     src/timeline/timeline_widget.cpp
     src/timeline/timeline_widget.h
     src/ui/media_browser_list_widget.cpp

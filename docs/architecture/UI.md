@@ -45,3 +45,11 @@ removed portion, pauses playback at gesture start, and sends one frame-range
 request when the mouse is released. The clip being trimmed becomes active.
 `Delete` and `Edit > Delete Selected Clip` remove the active clip and keep the
 remaining track compact.
+
+`Edit > Undo` and `Edit > Redo` use platform-aware Qt shortcuts and operate on
+successful Timeline edits only. Undo is `Ctrl + Z` on Windows and Linux, with
+the platform equivalent on macOS. Redo uses the platform standard, typically
+`Ctrl + Y` on Windows or `Ctrl + Shift + Z` on Linux and macOS. Both actions restore the
+Timeline, active clip occurrence, selected media, and playhead while keeping
+playback paused. The worker is invalidated and reactivated only when a decoded
+frame is required; decoded pixel buffers are not stored in history.

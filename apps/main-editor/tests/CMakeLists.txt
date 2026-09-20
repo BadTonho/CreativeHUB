@@ -206,6 +206,8 @@ endif()
 add_executable(creative-suite-main-editor-timeline-tests
     timeline_model_test.cpp
     ../src/media/video_metadata.h
+    ../src/timeline/timeline_history.cpp
+    ../src/timeline/timeline_history.h
     ../src/timeline/timeline_model.cpp
     ../src/timeline/timeline_model.h
 )

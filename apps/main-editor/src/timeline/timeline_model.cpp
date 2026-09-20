@@ -224,4 +224,12 @@ std::optional<std::size_t> TimelineModel::firstClipIndexForSource(
     return std::nullopt;
 }
 
+TimelineModel::Snapshot TimelineModel::snapshot() const {
+    return Snapshot{clips_};
+}
+
+void TimelineModel::restore(Snapshot snapshot) {
+    clips_ = std::move(snapshot.clips);
+}
+
 } // namespace timeline

@@ -63,7 +63,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   first-frame preview, basic CPU playback, keyframe-based seeking, and
   sequential timeline playback are implemented, while full library management
   remains pending.
-- [ ] Create the basic file, autosave, recovery, undo, and redo systems.
+- [ ] Create the basic file, autosave, recovery, and project-wide history
+  systems.
 - [ ] Define the initial project format and document it.
 - [ ] Add automated tests for the core and module boundaries.
 - [ ] Track dependencies, licenses, codecs, and third-party assets.
@@ -97,11 +98,14 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Add real clip splitting at the playhead and with the persistent Blade
   Tool; source offsets and segment-limited playback were manually validated.
 - [x] Add basic clip deletion and edge trimming with compact placement;
-  manual UI validation confirmed. Undo, advanced ripple editing, and full
-  editing history remain future work.
+  manual UI validation confirmed.
+- [x] Add bounded Undo/Redo for successful Timeline edits, restoring the
+  Timeline, selected media, active clip, and playhead; automated and manual
+  validation confirmed. Advanced ripple editing, project persistence, and
+  project-wide history remain future work.
 - [ ] Create a full functional timeline with editing.
 - [ ] Support video, image, text, and audio clips.
-- [ ] Add undo/redo and advanced ripple editing.
+- [ ] Add advanced ripple editing beyond the current bounded Timeline history.
 - [ ] Add a real-time GPU video preview.
 - [ ] Add basic audio editing and volume control.
 - [ ] Add basic layers, transformations, and keyframes.

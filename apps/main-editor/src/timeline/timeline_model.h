@@ -52,6 +52,10 @@ enum class TrimClipResult {
 
 class TimelineModel final {
 public:
+    struct Snapshot {
+        std::vector<TimelineClip> clips;
+    };
+
     AddClipResult addClip(const media::VideoMetadata& metadata);
     MoveClipResult moveClip(std::size_t from_index, std::size_t to_index);
     SplitClipResult splitClip(
@@ -70,6 +74,8 @@ public:
     [[nodiscard]] const std::vector<TimelineClip>& clips() const noexcept;
     [[nodiscard]] std::optional<std::size_t> firstClipIndexForSource(
         const std::filesystem::path& source_path) const;
+    [[nodiscard]] Snapshot snapshot() const;
+    void restore(Snapshot snapshot);
 
 private:
     std::vector<TimelineClip> clips_;

@@ -84,5 +84,23 @@ intentional UI outcomes and do not create error-log entries.
 
 Gesture priority is `Alt + drag` for reordering, Blade Tool clicks for
 splitting, edge drags with Blade Tool disabled for trimming, and interior
-drags for seeking. Undo/redo, advanced ripple editing, multiple tracks, free
-positioning, audio, and project persistence remain future responsibilities.
+drags for seeking. Advanced ripple editing, multiple tracks, free positioning,
+audio, and project persistence remain future responsibilities.
+
+## Timeline history
+
+The current Timeline supports bounded Undo and Redo for every successful
+Timeline mutation: adding, moving, splitting, deleting, trimming, and clearing
+clips. The history is application-local, Qt-independent, and retains at most
+100 Undo states and 100 Redo states.
+
+Each state stores Timeline metadata and the UI selection state: the active clip
+occurrence, the selected canonical media path, and the local playhead frame.
+Decoded frames, FFmpeg sessions, and GPU resources are never copied into the
+history. Undo and Redo pause playback, invalidate pending worker generations,
+restore the model and selection, and re-decode the selected frame when needed.
+
+A new successful Timeline edit clears the Redo stack. Invalid operations,
+no-op operations, media import, selection changes, seeking, and playback do not
+create history entries. Project persistence and advanced ripple history remain
+future work.
