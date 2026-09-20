@@ -34,6 +34,7 @@ public slots:
     void stop();
     void stepForward();
     void stepBackward();
+    void seekToFrame(qint64 frame_index, quint64 generation);
 
 signals:
     void frameReady(VideoFramePtr frame, qint64 frame_index, quint64 generation);
@@ -49,8 +50,14 @@ private:
     void ensureTimer();
     void finishPlayback();
     void emitFrame(std::optional<media::VideoFrame> frame);
-    void reportFailure(const media::MediaError& error, const char* operation);
-    void reportFailure(const std::exception& error, const char* operation);
+    void reportFailure(
+        const media::MediaError& error,
+        const char* operation,
+        std::optional<std::int64_t> requested_frame = std::nullopt);
+    void reportFailure(
+        const std::exception& error,
+        const char* operation,
+        std::optional<std::int64_t> requested_frame = std::nullopt);
     [[nodiscard]] int frameIntervalMilliseconds() const noexcept;
 
     QTimer* timer_ = nullptr;

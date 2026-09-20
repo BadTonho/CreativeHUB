@@ -331,6 +331,16 @@ QWidget* MainWindow::createTimeline() {
     connect(clear_timeline_button_, &QPushButton::clicked, this, [this]() {
         clearTimeline();
     });
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::seekStarted,
+        this,
+        &MainWindow::handleTimelineSeekStarted);
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::seekRequested,
+        this,
+        &MainWindow::handleTimelineSeek);
 
     updateTimelineState();
     updatePlaybackControls();
@@ -667,7 +677,36 @@ void MainWindow::handlePlaybackError(const QString& message, quint64 generation)
     if (playback_status_label_ != nullptr) {
         playback_status_label_->setText("Playback error.");
     }
+    if (timeline_widget_ != nullptr && timeline_model_.hasClip()) {
+        timeline_widget_->setPlayheadFrame(playback_frame_index_);
+    }
     QMessageBox::warning(this, "Playback error", message);
+}
+
+void MainWindow::handleTimelineSeekStarted() {
+    if (!canPreviewSelectedMedia()) return;
+
+    playback_is_playing_ = false;
+    updatePlaybackControls();
+    updatePlaybackStatus();
+    sendPlaybackCommand("pause");
+}
+
+void MainWindow::handleTimelineSeek(qint64 frame_index) {
+    if (playback_worker_ == nullptr || !canPreviewSelectedMedia()) return;
+
+    ++playback_generation_;
+    playback_is_playing_ = false;
+    if (timeline_widget_ != nullptr) timeline_widget_->setPlayheadFrame(frame_index);
+    updatePlaybackControls();
+    updatePlaybackStatus();
+
+    QMetaObject::invokeMethod(
+        playback_worker_,
+        "seekToFrame",
+        Qt::QueuedConnection,
+        Q_ARG(qint64, frame_index),
+        Q_ARG(quint64, playback_generation_));
 }
 
 void MainWindow::restoreDefaultLayout() {

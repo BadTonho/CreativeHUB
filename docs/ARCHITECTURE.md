@@ -97,9 +97,12 @@ metadata. It does not own decoded frames, FFmpeg resources, or Qt objects.
 The Qt-only `TimelineWidget` renders one video track, the clip label, duration,
 and a playhead derived from the current decoded frame. Media is added through
 an explicit UI action, and the model rejects duplicate or second clips until
-the timeline is cleared. The widget intentionally consumes mouse clicks
-without seeking; random seeking, multiple tracks, clip editing, and project
-persistence remain future responsibilities.
+the timeline is cleared. Click-and-drag seeking updates the visual playhead
+without decoding during mouse movement; the worker decodes the requested frame
+only after release and leaves playback paused. The current implementation
+re-decodes from the beginning for correctness, while optimized seeking,
+multiple tracks, clip editing, and project persistence remain future
+responsibilities.
 
 When a timeline clip exists, playback is enabled only while its media is
 selected. Selecting another imported item stops playback and preserves the

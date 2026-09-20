@@ -80,7 +80,10 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   optimized seeking, and timeline editing remain pending.
 - [x] Add the first visual timeline milestone with one manually added clip and
   one video track; seeking, multiple tracks, and clip editing remain pending.
-- [ ] Create a full functional timeline with seeking and editing.
+- [x] Add basic single-clip click-and-drag seeking; automated and manual
+  validation passed. Optimized seeking, multiple tracks, and clip editing
+  remain pending.
+- [ ] Create a full functional timeline with editing and optimized seeking.
 - [ ] Support video, image, text, and audio clips.
 - [ ] Implement cutting, splitting, moving, and rearranging clips.
 - [ ] Add a real-time GPU video preview.

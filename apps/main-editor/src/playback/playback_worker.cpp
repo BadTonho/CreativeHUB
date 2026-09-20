@@ -135,6 +135,31 @@ void PlaybackWorker::stepBackward() {
     }
 }
 
+void PlaybackWorker::seekToFrame(qint64 frame_index, quint64 generation) {
+    generation_ = generation;
+    pause();
+
+    try {
+        if (frame_index < 0) {
+            throw media::MediaError("The requested frame index is negative.");
+        }
+        if (source_path_.empty()) {
+            throw media::MediaError("Cannot seek without selected media.");
+        }
+        if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
+
+        auto frame = session_->decode_frame_at(frame_index);
+        if (!frame.has_value()) {
+            throw media::MediaError("The requested frame is outside the media range.");
+        }
+        emitFrame(std::move(frame));
+    } catch (const media::MediaError& error) {
+        reportFailure(error, "seek", frame_index);
+    } catch (const std::exception& error) {
+        reportFailure(error, "seek", frame_index);
+    }
+}
+
 void PlaybackWorker::decodeTick() {
     if (!playing_) return;
 
@@ -189,11 +214,17 @@ void PlaybackWorker::emitFrame(std::optional<media::VideoFrame> frame) {
     emit frameReady(std::move(payload), current_frame_index_, generation_);
 }
 
-void PlaybackWorker::reportFailure(const media::MediaError& error, const char* operation) {
+void PlaybackWorker::reportFailure(
+    const media::MediaError& error,
+    const char* operation,
+    std::optional<std::int64_t> requested_frame) {
     try {
         logging::Context context{
             {"path", safePathForLog(source_path_)},
             {"frame_index", std::to_string(current_frame_index_)}};
+        if (requested_frame.has_value()) {
+            context.emplace_back("requested_frame", std::to_string(*requested_frame));
+        }
         if (error.error_code().has_value()) {
             context.emplace_back("error_code", std::to_string(*error.error_code()));
         }
@@ -213,15 +244,23 @@ void PlaybackWorker::reportFailure(const media::MediaError& error, const char* o
     emit playbackError(QString::fromUtf8(error.what()), generation_);
 }
 
-void PlaybackWorker::reportFailure(const std::exception& error, const char* operation) {
+void PlaybackWorker::reportFailure(
+    const std::exception& error,
+    const char* operation,
+    std::optional<std::int64_t> requested_frame) {
     try {
+        logging::Context context{
+            {"path", safePathForLog(source_path_)},
+            {"frame_index", std::to_string(current_frame_index_)}};
+        if (requested_frame.has_value()) {
+            context.emplace_back("requested_frame", std::to_string(*requested_frame));
+        }
         logging::Logger::instance().log(
             logging::Level::Error,
             "playback",
             operation,
             error.what(),
-            {{"path", safePathForLog(source_path_)},
-             {"frame_index", std::to_string(current_frame_index_)}});
+            context);
     } catch (...) {
         // The UI still receives the original short error when diagnostic logging fails.
     }

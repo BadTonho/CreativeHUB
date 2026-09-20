@@ -56,6 +56,8 @@ private:
     void handlePlaybackStateChanged(bool playing, quint64 generation);
     void handlePlaybackFinished(quint64 generation);
     void handlePlaybackError(const QString& message, quint64 generation);
+    void handleTimelineSeekStarted();
+    void handleTimelineSeek(qint64 frame_index);
 
     struct ImportedMedia {
         media::VideoMetadata metadata;

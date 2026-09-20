@@ -48,6 +48,18 @@ void validateReference(const std::filesystem::path& path) {
     const auto previous = session->decode_frame_at(0);
     require(previous.has_value(), "The previous frame could not be decoded.");
     require(session->current_frame_index() == 0, "Previous frame index is incorrect.");
+    require(previous->width == 640 && previous->height == 360,
+            "The previous frame dimensions are incorrect.");
+
+    const auto intermediate = session->decode_frame_at(30);
+    require(intermediate.has_value(), "The intermediate frame could not be decoded.");
+    require(session->current_frame_index() == 30, "Intermediate frame index is incorrect.");
+    require(intermediate->width == 640 && intermediate->height == 360,
+            "The intermediate frame dimensions are incorrect.");
+
+    const auto outside_range = session->decode_frame_at(10000);
+    require(!outside_range.has_value(), "An out-of-range frame was decoded.");
+    require(session->at_end(), "Out-of-range seeking did not reach end-of-file.");
 
     session->reset();
     require(session->current_frame_index() == -1, "Reset did not restore the initial index.");
