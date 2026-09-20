@@ -1,1 +1,8 @@
 docs/IDEIA_SUITE_CRIATIVA.md
+/.vscode/
+/prototypes/vcpkg_installed/
+/prototypes/cpp/build/
+/prototypes/cpp/build-*/
+/prototypes/archive/**/target/
+/prototypes/testdata/
+/prototypes/results/

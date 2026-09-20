@@ -20,13 +20,13 @@ This is the working roadmap for the creative suite. It is a living document and 
 
 ## 2. Technical Validation
 
-- [ ] Create a minimal prototype for opening and decoding video.
-- [ ] Implement basic timeline navigation in the prototype.
-- [ ] Display a GPU-accelerated preview.
-- [ ] Apply one simple video effect.
+- [-] Create a minimal prototype for opening and decoding video.
+- [-] Implement basic timeline navigation in the prototype.
+- [-] Display a GPU-accelerated preview.
+- [-] Apply one simple video effect.
 - [ ] Measure memory usage, startup time, and performance.
 - [ ] Build and test the prototype on Windows, macOS, and Linux.
-- [ ] Compare Rust and C++ using the same practical criteria.
+- [!] Complete the full Rust and C++ comparison only if Rust is reactivated as a primary application language.
 - [ ] Record the language decision only after the prototype comparison.
 
 ## 3. Project Foundation
