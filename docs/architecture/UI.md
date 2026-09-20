@@ -34,7 +34,11 @@ colors, visible gap regions, and explicit drop/playhead markers. The dock
 provides Add Video Track, Rename Track, Track Up, Track Down, and Remove Track.
 Only empty tracks can be removed.
 Playback state is shown in a compact fixed footer below the timeline content;
-it does not expand with the dock.
+it does not expand with the dock. The timeline receives the expandable dock
+space, and its track rows grow within that space while additional rows remain
+available through vertical scrolling. Each track row has a provisional maximum
+height of 180 pixels; extra space in the timeline remains empty until a later
+layout milestone gives it another purpose.
 
 Gesture priority is Alt + drag for moving, Blade Tool click for splitting,
 edge drag for trimming, interior drag for seeking, and simple click for

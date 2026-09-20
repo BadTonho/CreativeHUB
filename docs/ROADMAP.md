@@ -112,9 +112,10 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   validation passed.
 - [x] Add basic project media management with hierarchical bins, project labels,
   offline entries, restoration through import, and version 2 `.csp` persistence.
-- [-] Add the multi-track Timeline foundation with absolute positions, gaps,
+- [x] Add the multi-track Timeline foundation with absolute positions, gaps,
   track management, cross-track overlap, positional drops, and `.csp` version 2
-  migration from version 1.
+  migration from version 1; manual validation confirmed multiple tracks,
+  visual priority, gaps, clip movement, and timeline resizing.
 - [ ] Add basic audio editing and volume control.
 - [ ] Add basic layers, transformations, and keyframes.
 - [ ] Add basic text and captions.

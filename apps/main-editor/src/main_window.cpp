@@ -1449,15 +1449,19 @@ QWidget* MainWindow::createTimeline() {
     timeline_widget_ = new timeline::TimelineWidget(container);
     auto* timeline_scroll = new QScrollArea(container);
     timeline_scroll->setWidgetResizable(true);
-    timeline_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    timeline_scroll->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
+    timeline_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     timeline_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    timeline_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     timeline_scroll->setFrameShape(QFrame::NoFrame);
+    timeline_scroll->setStyleSheet(
+        "QScrollArea { background: transparent; border: none; }"
+        "QScrollArea > QWidget > QWidget { background: transparent; }");
     timeline_scroll->setWidget(timeline_widget_);
-    layout->addWidget(timeline_scroll);
+    layout->addWidget(timeline_scroll, 1);
 
-    // Keep the playback status as a compact footer instead of letting it
-    // participate in the expandable timeline area.
-    layout->addStretch(1);
+    // Keep the playback status as a compact footer while giving the timeline
+    // the expandable space in the dock.
     playback_status_label_ = new QLabel("No media selected.", container);
     playback_status_label_->setStyleSheet("color: #9aa4b2;");
     playback_status_label_->setSizePolicy(

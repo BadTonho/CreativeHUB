@@ -67,6 +67,7 @@ private:
     enum class TrimEdge { Left, Right };
 
     [[nodiscard]] QRectF trackRect(std::size_t index) const noexcept;
+    [[nodiscard]] double rowHeight() const noexcept;
     [[nodiscard]] QRectF trackContentRect(std::size_t index) const noexcept;
     [[nodiscard]] QRectF clipRect(const ClipLocation& location) const noexcept;
     [[nodiscard]] std::int64_t totalDuration() const noexcept;

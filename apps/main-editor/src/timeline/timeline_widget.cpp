@@ -22,7 +22,8 @@ namespace {
 constexpr double left_margin = 12.0;
 constexpr double right_margin = 12.0;
 constexpr double top_margin = 48.0;
-constexpr double row_height = 72.0;
+constexpr double minimum_row_height = 72.0;
+constexpr double maximum_row_height = 180.0;
 constexpr double row_gap = 10.0;
 constexpr double track_header_width = 142.0;
 constexpr double edge_width = 8.0;
@@ -47,7 +48,7 @@ QString clipDuration(const TimelineClip& clip) {
 TimelineWidget::TimelineWidget(QWidget* parent)
     : QWidget(parent) {
     setMinimumHeight(100);
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setAcceptDrops(true);
     setMouseTracking(true);
 }
@@ -61,8 +62,9 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
         active_clip_.reset();
         playhead_frame_ = 0;
     }
-    setFixedHeight(static_cast<int>(top_margin +
-        tracks_.size() * (row_height + row_gap) + 12.0));
+    setMinimumHeight(static_cast<int>(top_margin +
+        tracks_.size() * minimum_row_height +
+        (tracks_.size() > 0 ? tracks_.size() - 1 : 0) * row_gap + 12.0));
     moving_active_ = false;
     trimming_ = false;
     dragging_ = false;
@@ -82,7 +84,7 @@ void TimelineWidget::setClips(const std::vector<TimelineClip>& clips) {
 void TimelineWidget::clearClips() {
     tracks_.clear();
     tracks_.push_back(TimelineTrack{1, "Video 1", {}});
-    setFixedHeight(static_cast<int>(top_margin + row_height + row_gap + 12.0));
+    setMinimumHeight(static_cast<int>(top_margin + minimum_row_height + 12.0));
     active_clip_.reset();
     playhead_frame_ = 0;
     drag_frame_.reset();
@@ -141,11 +143,24 @@ bool TimelineWidget::razorMode() const noexcept {
 QRectF TimelineWidget::trackRect(std::size_t index) const noexcept {
     const double width = std::max(0.0,
         static_cast<double>(this->width()) - left_margin - right_margin);
+    const auto current_row_height = rowHeight();
     return QRectF(
         left_margin,
-        top_margin + static_cast<double>(index) * (row_height + row_gap),
+        top_margin + static_cast<double>(index) * (current_row_height + row_gap),
         width,
-        row_height);
+        current_row_height);
+}
+
+double TimelineWidget::rowHeight() const noexcept {
+    const auto track_count = std::max<std::size_t>(1, tracks_.size());
+    const double available = static_cast<double>(height()) - top_margin - 12.0 -
+        static_cast<double>(track_count - 1) * row_gap;
+    if (available <= 0.0) return minimum_row_height;
+    return std::min(
+        maximum_row_height,
+        std::max(
+        minimum_row_height,
+        available / static_cast<double>(track_count)));
 }
 
 QRectF TimelineWidget::trackContentRect(std::size_t index) const noexcept {
