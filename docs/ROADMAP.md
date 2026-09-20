@@ -51,12 +51,12 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 
 ## 3. Application Foundation
 
-- [ ] Define the repository structure and boundaries between applications,
+- [x] Define the initial repository structure and boundaries between applications,
   shared libraries, and platform adapters.
-- [ ] Create `apps/main-editor/` as the first real application.
+- [x] Create `apps/main-editor/` as the first real application.
 - [ ] Define shared-core responsibilities and create only the modules required
   by the Main Editor.
-- [ ] Choose the initial UI, window, and input approach.
+- [x] Choose Qt 6 Widgets as the provisional UI, window, and input approach.
 - [ ] Define the rendering abstraction and CPU/GPU responsibilities.
 - [ ] Create the project and document model.
 - [ ] Create the media import and management layer.
@@ -67,7 +67,7 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 
 ## 4. Main Editor MVP
 
-- [ ] Create the application shell and primary workspace.
+- [x] Create the initial application shell and primary workspace.
 - [ ] Add media import, a media browser, and project bins.
 - [ ] Create a functional timeline.
 - [ ] Support video, image, text, and audio clips.
