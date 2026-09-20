@@ -145,8 +145,7 @@ private:
     void sendCompositionToWorker();
     void updateInspector();
     void applyTransformProperty(int property_index, double value);
-    void addTransformKeyframe(int property_index);
-    void removeTransformKeyframe(int property_index);
+    void toggleTransformKeyframe(int property_index);
     [[nodiscard]] bool hasSelectedMedia() const noexcept;
     [[nodiscard]] std::optional<timeline::ClipLocation>
     selectedTimelineClipLocation() const noexcept;
@@ -228,8 +227,6 @@ private:
     QLabel* playback_status_label_ = nullptr;
     std::array<QDoubleSpinBox*, 5> transform_spin_boxes_{};
     std::array<QPushButton*, 5> transform_key_buttons_{};
-    std::array<QPushButton*, 5> transform_remove_buttons_{};
-    std::array<bool, 5> transform_keyframe_modes_{};
     QAction* new_project_action_ = nullptr;
     QAction* open_project_action_ = nullptr;
     QAction* save_project_action_ = nullptr;

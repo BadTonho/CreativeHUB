@@ -65,11 +65,13 @@ updated in the same change as any shortcut change.
 
 The Inspector exposes Position X/Y, uniform Scale, Rotation, and Opacity for
 the selected Timeline clip occurrence. Values use normalized coordinates for
-the fixed 1920x1080 canvas. Each property has its own explicit keyframe control
-and removal action. Editing with keyframe mode enabled creates or updates the
-keyframe at the current local clip frame; otherwise it changes the static base
-value. Timeline keyframe markers are visual and not draggable in this
-milestone.
+the fixed 1920x1080 canvas. Each property has one diamond keyframe toggle. The
+outlined diamond means that the current local frame has no keyframe; a filled,
+highlighted diamond means that the playhead is on a keyframe. Clicking the
+diamond adds a keyframe at the evaluated value or removes the keyframe at the
+current frame. Editing a property while a keyframe exists at the playhead
+updates that keyframe; otherwise it changes the static base value. Timeline
+keyframe markers are visual and not draggable in this milestone.
 
 The preview composes all visible tracks in worker-owned code, from the bottom
 track to the top track, before handing one frame to the GPU/CPU preview. A gap

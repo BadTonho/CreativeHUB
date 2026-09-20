@@ -85,8 +85,11 @@ scale must remain positive and opacity is limited to `0.0` through `1.0`.
 
 Keyframes are stored per occurrence and use the clip's local frame range, so
 moving a clip does not move its animation. Position X/Y, scale, rotation, and
-opacity use linear interpolation only. The Inspector creates or updates a
-property keyframe at the current playhead and the Timeline shows read-only
+opacity use linear interpolation only. The Inspector provides one diamond
+toggle per property: it is outlined when the playhead is not on a keyframe and
+filled/highlighted when it is. Clicking it creates a keyframe at the evaluated
+value or removes the keyframe at the current local frame. Editing a property
+on an existing keyframe updates that keyframe. The Timeline shows read-only
 markers for the active clip.
 
 Splitting partitions animation curves. The right segment receives later keys

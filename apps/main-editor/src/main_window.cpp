@@ -1449,18 +1449,17 @@ QWidget* MainWindow::createInspector() {
         spin->setDecimals(index == 3 ? 1 : 3);
         spin->setEnabled(false);
         transform_spin_boxes_[static_cast<std::size_t>(index)] = spin;
-        auto* key = new QPushButton("Key", row);
+        auto* key = new QPushButton("◇", row);
         key->setCheckable(true);
         key->setEnabled(false);
-        key->setToolTip("Enable keyframe editing for this property");
+        key->setFixedWidth(30);
+        key->setStyleSheet(
+            "QPushButton { font-size: 16px; font-weight: 600; padding: 0px; }"
+            "QPushButton:checked { color: #171a20; background: #e8b94f; }");
+        key->setToolTip("Add keyframe at the current frame");
         transform_key_buttons_[static_cast<std::size_t>(index)] = key;
-        auto* remove = new QPushButton("Remove", row);
-        remove->setEnabled(false);
-        remove->setToolTip("Remove the keyframe at the current frame");
-        transform_remove_buttons_[static_cast<std::size_t>(index)] = remove;
         row_layout->addWidget(spin, 1);
         row_layout->addWidget(key);
-        row_layout->addWidget(remove);
         form->addRow(labels[index], row);
 
         connect(spin, &QDoubleSpinBox::editingFinished, this, [this, index]() {
@@ -1470,12 +1469,8 @@ QWidget* MainWindow::createInspector() {
                     transform_spin_boxes_[static_cast<std::size_t>(index)]->value());
             }
         });
-        connect(key, &QPushButton::clicked, this, [this, index](bool enabled) {
-            transform_keyframe_modes_[static_cast<std::size_t>(index)] = enabled;
-            if (enabled) addTransformKeyframe(index);
-        });
-        connect(remove, &QPushButton::clicked, this, [this, index]() {
-            removeTransformKeyframe(index);
+        connect(key, &QPushButton::clicked, this, [this, index]() {
+            toggleTransformKeyframe(index);
         });
     }
     layout->addLayout(form);
@@ -2097,23 +2092,29 @@ void MainWindow::updateInspector() {
                 spins[index]->setValue(values[index]);
             }
             if (transform_key_buttons_[index] != nullptr) {
-                const QSignalBlocker blocker(transform_key_buttons_[index]);
-                transform_key_buttons_[index]->setChecked(
-                    transform_keyframe_modes_[index]);
-            }
-            if (transform_remove_buttons_[index] != nullptr) {
                 const auto property = static_cast<timeline::TransformProperty>(index);
                 const auto& keys = timeline::keyframesFor(clip.keyframes, property);
+                const auto current_frame = std::max<std::int64_t>(0, playback_frame_index_);
                 const bool has_key = std::any_of(keys.begin(), keys.end(),
-                    [this](const auto& key) {
-                        return key.frame == std::max<std::int64_t>(0, playback_frame_index_);
+                    [current_frame](const auto& key) {
+                        return key.frame == current_frame;
                     });
-                transform_remove_buttons_[index]->setEnabled(has_key);
+                const QSignalBlocker blocker(transform_key_buttons_[index]);
+                transform_key_buttons_[index]->setChecked(has_key);
+                transform_key_buttons_[index]->setText(has_key ? QStringLiteral("◆") : QStringLiteral("◇"));
+                transform_key_buttons_[index]->setToolTip(
+                    has_key ? QStringLiteral("Remove keyframe at the current frame")
+                            : QStringLiteral("Add keyframe at the current frame"));
             }
         }
     } else {
-        for (auto* button : transform_remove_buttons_) {
-            if (button != nullptr) button->setEnabled(false);
+        for (auto* button : transform_key_buttons_) {
+            if (button != nullptr) {
+                const QSignalBlocker blocker(button);
+                button->setChecked(false);
+                button->setText(QStringLiteral("◇"));
+                button->setToolTip(QStringLiteral("Add keyframe at the current frame"));
+            }
         }
     }
 }
@@ -2140,7 +2141,13 @@ void MainWindow::applyTransformProperty(int property_index, double value) {
         QMetaObject::invokeMethod(playback_worker_, "pause", Qt::QueuedConnection);
     }
 
-    if (transform_keyframe_modes_[static_cast<std::size_t>(property_index)]) {
+    const auto& clip = timeline_model_.tracks()[track_index].clips[clip_index];
+    const auto& keys = timeline::keyframesFor(clip.keyframes, property);
+    const bool has_key_at_frame = std::any_of(keys.begin(), keys.end(),
+        [local_frame](const auto& key) {
+            return key.frame == local_frame;
+        });
+    if (has_key_at_frame) {
         result = timeline_model_.setClipKeyframe(
             track_index, clip_index, property, local_frame, value);
     } else {
@@ -2167,7 +2174,7 @@ void MainWindow::applyTransformProperty(int property_index, double value) {
     statusBar()->showMessage("Transform updated.");
 }
 
-void MainWindow::addTransformKeyframe(int property_index) {
+void MainWindow::toggleTransformKeyframe(int property_index) {
     if (property_index < 0 || property_index >= 5 ||
         !active_timeline_track_index_.has_value() ||
         !active_timeline_clip_index_.has_value()) return;
@@ -2175,54 +2182,48 @@ void MainWindow::addTransformKeyframe(int property_index) {
     const auto clip_index = *active_timeline_clip_index_;
     if (track_index >= timeline_model_.trackCount() ||
         clip_index >= timeline_model_.clipCount(track_index)) return;
-    const auto before = captureTimelineEditState();
     const auto& clip = timeline_model_.tracks()[track_index].clips[clip_index];
     const auto frame = std::clamp<std::int64_t>(
         playback_frame_index_, 0, std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
     const auto property = static_cast<timeline::TransformProperty>(property_index);
-    const auto evaluated = timeline::evaluateTransform(clip.transform, clip.keyframes, frame);
-    const std::array<double, 5> values{
-        evaluated.position_x, evaluated.position_y, evaluated.scale,
-        evaluated.rotation_degrees, evaluated.opacity};
+    const auto& keys = timeline::keyframesFor(clip.keyframes, property);
+    const bool has_key = std::any_of(keys.begin(), keys.end(),
+        [frame](const auto& key) {
+            return key.frame == frame;
+        });
+    const auto before = captureTimelineEditState();
     pending_clip_activation_.reset();
     ++playback_generation_;
     playback_is_playing_ = false;
-    const auto result = timeline_model_.setClipKeyframe(
-        track_index, clip_index, property, frame,
-        values[static_cast<std::size_t>(property_index)]);
+    if (playback_worker_ != nullptr) {
+        QMetaObject::invokeMethod(playback_worker_, "pause", Qt::QueuedConnection);
+    }
+    timeline::TransformParameterResult result = timeline::TransformParameterResult::NoChange;
+    if (has_key) {
+        result = timeline_model_.removeClipKeyframe(
+            track_index, clip_index, property, frame);
+    } else {
+        const auto evaluated = timeline::evaluateTransform(
+            clip.transform, clip.keyframes, frame);
+        const std::array<double, 5> values{
+            evaluated.position_x, evaluated.position_y, evaluated.scale,
+            evaluated.rotation_degrees, evaluated.opacity};
+        result = timeline_model_.setClipKeyframe(
+            track_index, clip_index, property, frame,
+            values[static_cast<std::size_t>(property_index)]);
+    }
     if (result == timeline::TransformParameterResult::Changed) {
         recordTimelineEdit(before);
         updateTimelineState();
         updateProjectDirtyState();
         sendCompositionToWorker();
-        statusBar()->showMessage("Keyframe added.");
+        if (playback_worker_ != nullptr && canPlaybackSelectedMedia()) {
+            playback_worker_->requestSeek(frame, playback_generation_);
+        }
+        statusBar()->showMessage(has_key ? "Keyframe removed." : "Keyframe added.");
     } else {
-        updatePlaybackControls();
-        updatePlaybackStatus();
+        updateInspector();
     }
-}
-
-void MainWindow::removeTransformKeyframe(int property_index) {
-    if (property_index < 0 || property_index >= 5 ||
-        !active_timeline_track_index_.has_value() ||
-        !active_timeline_clip_index_.has_value()) return;
-    const auto track_index = *active_timeline_track_index_;
-    const auto clip_index = *active_timeline_clip_index_;
-    if (track_index >= timeline_model_.trackCount() ||
-        clip_index >= timeline_model_.clipCount(track_index)) return;
-    const auto before = captureTimelineEditState();
-    const auto frame = std::max<std::int64_t>(0, playback_frame_index_);
-    const auto result = timeline_model_.removeClipKeyframe(
-        track_index,
-        clip_index,
-        static_cast<timeline::TransformProperty>(property_index),
-        frame);
-    if (result != timeline::TransformParameterResult::Changed) return;
-    recordTimelineEdit(before);
-    updateTimelineState();
-    updateProjectDirtyState();
-    sendCompositionToWorker();
-    statusBar()->showMessage("Keyframe removed.");
 }
 
 void MainWindow::addSelectedMediaToTimeline() {
