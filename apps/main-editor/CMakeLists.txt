@@ -21,6 +21,8 @@ add_executable(creative-suite-main-editor
     src/preview_widget.h
     src/rendering/opengl_preview_surface.cpp
     src/rendering/opengl_preview_surface.h
+    src/rendering/frame_compositor.cpp
+    src/rendering/frame_compositor.h
     src/playback/playback_worker.cpp
     src/playback/playback_worker.h
     src/playback/audio_output.cpp
@@ -45,6 +47,8 @@ add_executable(creative-suite-main-editor
     src/project/project_file.h
     src/timeline/timeline_model.cpp
     src/timeline/timeline_model.h
+    src/timeline/timeline_transform.cpp
+    src/timeline/timeline_transform.h
     src/timeline/timeline_history.cpp
     src/timeline/timeline_history.h
     src/timeline/timeline_widget.cpp

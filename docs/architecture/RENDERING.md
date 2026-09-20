@@ -38,3 +38,18 @@ Editor: the application already depends on Qt Widgets, and adding a second
 window/input/GPU stack would increase deployment and boundary complexity before
 a second consumer exists. A formal renderer interface or another backend will
 be introduced only after a concrete need and measurements justify it.
+
+## Timeline composition
+
+The current layer compositor is application-local and Qt-independent. The
+playback worker decodes each online clip visible at the global playhead, applies
+its normalized position, uniform scale, rotation, opacity, and local keyframe
+evaluation, then blends the layers from the bottom track to the top track into
+a 1920x1080 RGBA8 frame. The UI receives only the owning composed frame and
+does not decode or transform media.
+
+The OpenGL surface remains a presentation backend for that final frame. This
+keeps the first composition milestone deterministic while leaving per-layer GPU
+composition as a future optimization. A missing layer, invalid media, or
+composition failure preserves the previous preview and is logged with the
+affected source, track, clip, frame, and technical error context.

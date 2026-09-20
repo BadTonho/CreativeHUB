@@ -60,3 +60,17 @@ message while the detailed cause goes to the local log.
 
 User-facing keyboard shortcuts are maintained in docs/SHORTCUTS.md and must be
 updated in the same change as any shortcut change.
+
+## Transform Inspector
+
+The Inspector exposes Position X/Y, uniform Scale, Rotation, and Opacity for
+the selected Timeline clip occurrence. Values use normalized coordinates for
+the fixed 1920x1080 canvas. Each property has its own explicit keyframe control
+and removal action. Editing with keyframe mode enabled creates or updates the
+keyframe at the current local clip frame; otherwise it changes the static base
+value. Timeline keyframe markers are visual and not draggable in this
+milestone.
+
+The preview composes all visible tracks in worker-owned code, from the bottom
+track to the top track, before handing one frame to the GPU/CPU preview. A gap
+or an empty canvas is not an error and uses the dark preview background.

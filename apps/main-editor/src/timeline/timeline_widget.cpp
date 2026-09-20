@@ -119,12 +119,9 @@ void TimelineWidget::setActiveClipIndex(std::optional<std::size_t> clip_index) {
 
 void TimelineWidget::setPlayheadFrame(std::int64_t frame_index) {
     playhead_frame_ = std::max<std::int64_t>(0, frame_index);
-    if (active_clip_.has_value()) {
-        const auto& clip = tracks_[active_clip_->track_index].clips[active_clip_->clip_index];
-        if (clip.timeline_duration_frames > 0) {
-            playhead_frame_ = std::min(
-                playhead_frame_, clip.timeline_duration_frames - 1);
-        }
+    const auto total = totalDuration();
+    if (total > 0) {
+        playhead_frame_ = std::min(playhead_frame_, total - 1);
     }
     drag_frame_.reset();
     update();
@@ -205,11 +202,23 @@ std::optional<std::size_t> TimelineWidget::trackAt(double y) const noexcept {
 }
 
 std::optional<ClipLocation> TimelineWidget::clipAt(double x, double y) const noexcept {
-    const auto track = trackAt(y);
-    if (!track.has_value()) return std::nullopt;
-    for (std::size_t index = 0; index < tracks_[*track].clips.size(); ++index) {
-        const ClipLocation location{*track, index};
-        if (clipRect(location).contains(QPointF(x, y))) return location;
+    if (!trackAt(y).has_value()) return std::nullopt;
+    const auto global_frame = globalFrameAt(x);
+    if (!global_frame.has_value()) return std::nullopt;
+    // Track zero is the visual top layer. A click in an overlap selects the
+    // first visible clip in that priority order, regardless of the row under
+    // the pointer.
+    for (std::size_t track_index = 0; track_index < tracks_.size(); ++track_index) {
+        for (std::size_t clip_index = 0;
+             clip_index < tracks_[track_index].clips.size();
+             ++clip_index) {
+            const auto& clip = tracks_[track_index].clips[clip_index];
+            if (*global_frame >= clip.timeline_start_frame &&
+                *global_frame < clip.timeline_start_frame +
+                    clip.timeline_duration_frames) {
+                return ClipLocation{track_index, clip_index};
+            }
+        }
     }
     return std::nullopt;
 }
@@ -408,6 +417,32 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                 Qt::AlignVCenter,
                 QFontMetrics(painter.font()).elidedText(
                     label, Qt::ElideRight, std::max(1, static_cast<int>(rect.width() - 12))));
+
+            const auto& clip = tracks_[track_index].clips[clip_index];
+            if (active && clip.timeline_duration_frames > 0) {
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(QColor("#ffe08a"));
+                for (const auto property : {
+                         timeline::TransformProperty::PositionX,
+                         timeline::TransformProperty::PositionY,
+                         timeline::TransformProperty::Scale,
+                         timeline::TransformProperty::Rotation,
+                         timeline::TransformProperty::Opacity}) {
+                    for (const auto& keyframe : timeline::keyframesFor(
+                             clip.keyframes, property)) {
+                        const double fraction = static_cast<double>(keyframe.frame) /
+                            std::max<std::int64_t>(1, clip.timeline_duration_frames - 1);
+                        const auto key_x = rect.left() + rect.width() *
+                            std::clamp(fraction, 0.0, 1.0);
+                        const auto key_y = rect.top() + 7.0;
+                        painter.drawPolygon({
+                            QPointF(key_x, key_y - 4.0),
+                            QPointF(key_x + 4.0, key_y),
+                            QPointF(key_x, key_y + 4.0),
+                            QPointF(key_x - 4.0, key_y)});
+                    }
+                }
+            }
         }
     }
 
@@ -429,21 +464,24 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         active_clip_->track_index < tracks_.size() &&
         active_clip_->clip_index < tracks_[active_clip_->track_index].clips.size()) {
         const auto& clip = tracks_[active_clip_->track_index].clips[active_clip_->clip_index];
-        const auto rect = clipRect(*active_clip_);
-        const auto frame = drag_frame_.value_or(playhead_frame_);
-        const double fraction = clip.timeline_duration_frames <= 1
-            ? 0.0
-            : static_cast<double>(std::clamp<std::int64_t>(
-                frame, 0, clip.timeline_duration_frames - 1)) /
-                static_cast<double>(clip.timeline_duration_frames - 1);
-        const auto x = rect.left() + rect.width() * fraction;
+        const auto content = trackContentRect(0);
+        const auto total_frames = std::max<std::int64_t>(1, totalDuration());
+        auto global_frame = playhead_frame_;
+        if (drag_frame_.has_value()) {
+            global_frame = clip.timeline_start_frame + *drag_frame_;
+        }
+        global_frame = std::clamp<std::int64_t>(global_frame, 0, total_frames - 1);
+        const auto x = content.left() + content.width() *
+            static_cast<double>(global_frame) / total_frames;
         painter.setPen(QPen(QColor("#ffcf5c"), 2));
-        painter.drawLine(QPointF(x, rect.top() - 20), QPointF(x, rect.bottom()));
+        painter.drawLine(
+            QPointF(x, trackRect(0).top() - 20),
+            QPointF(x, trackRect(tracks_.size() - 1).bottom()));
         painter.setBrush(QColor("#ffcf5c"));
         painter.drawPolygon({
-            QPointF(x - 4, rect.top() - 20),
-            QPointF(x + 4, rect.top() - 20),
-            QPointF(x, rect.top() - 13)});
+            QPointF(x - 4, trackRect(0).top() - 20),
+            QPointF(x + 4, trackRect(0).top() - 20),
+            QPointF(x, trackRect(0).top() - 13)});
     }
 }
 
@@ -510,7 +548,15 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
     }
     const auto location = clipAt(event->position().x(), event->position().y());
     if (!location.has_value()) {
-        event->ignore();
+        if (trackAt(event->position().y()).has_value() &&
+            globalFrameAt(event->position().x()).has_value()) {
+            active_clip_.reset();
+            emit clipSelectedAt(-1, -1);
+            update();
+            event->accept();
+        } else {
+            event->ignore();
+        }
         return;
     }
     if (event->modifiers().testFlag(Qt::AltModifier)) {

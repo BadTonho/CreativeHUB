@@ -7,6 +7,16 @@ model is Qt-independent and contains imported media, bins, ordered video tracks,
 and timeline clips. It does not contain selection, playhead, layout, Undo/Redo
 history, decoded frames, FFmpeg sessions, or Qt resources.
 
+## Version 3 format
+
+The current root uses `version: 3` and adds a fixed `canvas` object with
+`width: 1920` and `height: 1080`. Timeline clips additionally persist an
+occurrence-local `transform` object and five optional keyframe arrays:
+`position_x`, `position_y`, `scale`, `rotation`, and `opacity`. Keyframe frames
+are local to the clip segment and values use linear interpolation at runtime.
+All existing media, bin, track, source-offset, timing, and audio fields remain
+compatible.
+
 ## Version 2 format
 
 The root object contains format, version 2, media, bins, and timeline.tracks.
@@ -22,11 +32,13 @@ default bin is Unsorted. Missing audio fields load as `audio_gain: 1.0` and
 `audio_muted: false`, preserving compatibility with projects written before
 audio controls existed.
 
-## Version 1 migration
+## Version 2 and version 1 migration
 
-Version 1 files containing timeline.clips remain supported. They are converted
-to a single Video 1 track with sequential timeline starts computed from clip
-durations. The next successful save writes version 2.
+Version 2 files receive the identity transform, an empty keyframe set, and the
+1920x1080 canvas when opened. Version 1 files containing timeline.clips remain
+supported; they are converted to a single Video 1 track with sequential
+timeline starts computed from clip durations. The next successful save writes
+version 3.
 
 ## Transactional open and save
 

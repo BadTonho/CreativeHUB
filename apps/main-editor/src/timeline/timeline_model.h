@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../media/video_metadata.h"
+#include "timeline_transform.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -27,6 +28,8 @@ struct TimelineClip {
     bool audio_muted = false;
     ClipId clip_id = 0;
     TrackId track_id = 0;
+    Transform2D transform;
+    TransformKeyframes keyframes;
 
     friend bool operator==(const TimelineClip&, const TimelineClip&) = default;
 };
@@ -79,6 +82,7 @@ enum class SplitClipResult { Split, InvalidIndex, InvalidBoundary };
 enum class RemoveClipResult { Removed, InvalidIndex };
 enum class TrimClipResult { Trimmed, InvalidIndex, InvalidRange };
 enum class AudioParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
+enum class TransformParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 
 class TimelineModel final {
 public:
@@ -137,6 +141,21 @@ public:
         std::size_t track_index,
         double gain,
         bool muted);
+    TransformParameterResult setClipTransform(
+        std::size_t track_index,
+        std::size_t clip_index,
+        const Transform2D& transform);
+    TransformParameterResult setClipKeyframe(
+        std::size_t track_index,
+        std::size_t clip_index,
+        TransformProperty property,
+        std::int64_t local_frame,
+        double value);
+    TransformParameterResult removeClipKeyframe(
+        std::size_t track_index,
+        std::size_t clip_index,
+        TransformProperty property,
+        std::int64_t local_frame);
 
     void clear() noexcept;
 

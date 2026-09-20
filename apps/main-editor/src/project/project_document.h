@@ -8,9 +8,12 @@
 #include <utility>
 #include <vector>
 
+#include "../timeline/timeline_transform.h"
+
 namespace project {
 
-inline constexpr int current_format_version = 2;
+inline constexpr int current_format_version = 3;
+inline constexpr int previous_format_version = 2;
 inline constexpr int legacy_format_version = 1;
 inline constexpr const char* format_identifier = "creative-suite.main-editor";
 
@@ -21,6 +24,8 @@ struct ProjectClip {
     std::int64_t duration_frames = 0;
     double audio_gain = 1.0;
     bool audio_muted = false;
+    timeline::Transform2D transform;
+    timeline::TransformKeyframes keyframes;
 
     friend bool operator==(const ProjectClip&, const ProjectClip&) = default;
 };
@@ -44,6 +49,8 @@ struct ProjectMedia {
 };
 
 struct ProjectDocument {
+    int canvas_width = 1920;
+    int canvas_height = 1080;
     std::vector<ProjectMedia> media;
     std::vector<std::string> bins;
     std::vector<ProjectTrack> timeline_tracks;

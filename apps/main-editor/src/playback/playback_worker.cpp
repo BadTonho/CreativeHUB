@@ -43,6 +43,8 @@ PlaybackWorker::~PlaybackWorker() {
     disableAudioOutput();
     audio_session_.reset();
     session_.reset();
+    composition_sessions_.clear();
+    composition_specs_.clear();
 }
 
 void PlaybackWorker::requestSeek(qint64 frame_index, quint64 generation) {
@@ -104,6 +106,10 @@ void PlaybackWorker::setMedia(
     disableAudioOutput();
     audio_session_.reset();
     session_.reset();
+    composition_sessions_.clear();
+    composition_specs_.clear();
+    composition_enabled_ = false;
+    primary_timeline_start_frame_ = 0;
 
     try {
         if (source_start_frame_ < 0 || segment_frame_count_ < 0) {
@@ -236,6 +242,44 @@ void PlaybackWorker::setAudioParameters(
     audio_position_valid_ = false;
     if (audio_output_ != nullptr) audio_output_->stop();
     if (was_playing) play();
+}
+
+void PlaybackWorker::setComposition(
+    QVector<CompositionLayerSpec> layers,
+    quint64 generation) {
+    if (generation < generation_) return;
+    generation_ = generation;
+
+    composition_specs_ = std::move(layers);
+    composition_sessions_.clear();
+    composition_enabled_ = !composition_specs_.isEmpty();
+    primary_timeline_start_frame_ = 0;
+    if (!composition_enabled_) return;
+
+    try {
+        for (const auto& spec : composition_specs_) {
+            if (spec.source_path.isEmpty() || spec.timeline_start_frame < 0 ||
+                spec.source_start_frame < 0 || spec.segment_frame_count <= 0) {
+                continue;
+            }
+            CompositionSession composition_session;
+            composition_session.spec = spec;
+            composition_session.session = media::VideoPlaybackSession::open(
+                QFileInfo(spec.source_path).filesystemFilePath());
+            if (spec.track_index == track_index_ && spec.clip_index == clip_index_) {
+                primary_timeline_start_frame_ = spec.timeline_start_frame;
+            }
+            composition_sessions_.push_back(std::move(composition_session));
+        }
+    } catch (const media::MediaError& error) {
+        composition_sessions_.clear();
+        composition_enabled_ = false;
+        reportFailure(error, "compose");
+    } catch (const std::exception& error) {
+        composition_sessions_.clear();
+        composition_enabled_ = false;
+        reportFailure(error, "compose");
+    }
 }
 
 void PlaybackWorker::stepForward() {
@@ -622,8 +666,57 @@ void PlaybackWorker::emitFrame(std::optional<media::VideoFrame> frame) {
         return;
     }
     current_frame_index_ = source_frame - source_start_frame_;
+    if (composition_enabled_) {
+        emitComposedFrame();
+        return;
+    }
     auto payload = std::make_shared<const media::VideoFrame>(std::move(*frame));
     emit frameReady(std::move(payload), current_frame_index_, generation_);
+}
+
+void PlaybackWorker::emitComposedFrame() {
+    const auto composed = decodeCompositionAt(
+        primary_timeline_start_frame_ + current_frame_index_);
+    if (!composed.has_value()) {
+        throw media::MediaError("The timeline composition could not produce a frame.");
+    }
+    auto payload = std::make_shared<const media::VideoFrame>(*composed);
+    emit frameReady(std::move(payload), current_frame_index_, generation_);
+}
+
+std::optional<media::VideoFrame> PlaybackWorker::decodeCompositionAt(
+    std::int64_t global_frame) {
+    std::vector<media::VideoFrame> decoded_frames;
+    decoded_frames.reserve(composition_sessions_.size());
+    std::vector<rendering::CompositionLayer> layers;
+    layers.reserve(composition_sessions_.size());
+
+    for (auto iterator = composition_sessions_.rbegin();
+         iterator != composition_sessions_.rend();
+         ++iterator) {
+        auto& composition = *iterator;
+        const auto& spec = composition.spec;
+        if (global_frame < spec.timeline_start_frame ||
+            global_frame >= spec.timeline_start_frame + spec.segment_frame_count) {
+            continue;
+        }
+        const auto local_frame = global_frame - spec.timeline_start_frame;
+        if (spec.source_start_frame >
+            std::numeric_limits<std::int64_t>::max() - local_frame) {
+            continue;
+        }
+        const auto source_frame = spec.source_start_frame + local_frame;
+        auto frame = composition.session->decode_frame_at(source_frame);
+        if (!frame.has_value()) continue;
+        decoded_frames.push_back(std::move(*frame));
+        layers.push_back(rendering::CompositionLayer{
+            &decoded_frames.back(),
+            timeline::evaluateTransform(
+                spec.transform,
+                spec.keyframes,
+                local_frame)});
+    }
+    return rendering::FrameCompositor::compose(1920, 1080, layers);
 }
 
 void PlaybackWorker::reportFailure(

@@ -53,6 +53,11 @@ int main(int argc, char** argv) {
                 {first_source, 60, 0, 30, 1.25, false},
             }},
         };
+        original.canvas_width = 1920;
+        original.canvas_height = 1080;
+        original.timeline_tracks.front().clips.front().transform.position_x = 0.25;
+        original.timeline_tracks.front().clips.front().transform.rotation_degrees = 12.0;
+        original.timeline_tracks.front().clips.front().keyframes.position_x = {{0, 0.25}, {30, 0.75}};
         original.timeline_clips = original.timeline_tracks.front().clips;
         project::save(project_path, original);
 
@@ -67,6 +72,11 @@ int main(int argc, char** argv) {
                     loaded.timeline_tracks[0].clips[0].audio_gain == 0.5 &&
                     loaded.timeline_tracks[0].clips[0].audio_muted,
                 "Audio gain and mute settings were not preserved.");
+        require(loaded.canvas_width == 1920 && loaded.canvas_height == 1080 &&
+                    loaded.timeline_tracks[0].clips[0].transform.position_x == 0.25 &&
+                    loaded.timeline_tracks[0].clips[0].transform.rotation_degrees == 12.0 &&
+                    loaded.timeline_tracks[0].clips[0].keyframes.position_x.size() == 2,
+                "Transform and keyframe data was not preserved.");
 
         std::ifstream saved_file(project_path, std::ios::binary);
         const std::string saved_json{
@@ -158,9 +168,8 @@ int main(int argc, char** argv) {
                 "A path-only version 1 media entry was not kept backward compatible.");
         require(legacy.timeline_tracks.front().audio_gain == 1.0 &&
                     !legacy.timeline_tracks.front().audio_muted &&
-                    legacy.timeline_tracks.front().clips.front().audio_gain == 1.0 &&
-                    !legacy.timeline_tracks.front().clips.front().audio_muted,
-                "A legacy project did not receive default audio parameters.");
+                    legacy.timeline_tracks.front().clips.empty(),
+                "A path-only legacy project did not receive default track parameters.");
 
         writeText(
             project_path,
@@ -172,6 +181,18 @@ int main(int argc, char** argv) {
                     migrated.timeline_tracks.front().clips[0].timeline_start_frame == 0 &&
                     migrated.timeline_tracks.front().clips[1].timeline_start_frame == 10,
                 "A version 1 timeline was not migrated to sequential Video 1 clips.");
+        require(migrated.timeline_tracks.front().clips[0].audio_gain == 1.0 &&
+                    !migrated.timeline_tracks.front().clips[0].audio_muted,
+                "A legacy timeline clip did not receive default audio parameters.");
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":2,"media":[],"bins":["Unsorted"],"timeline":{"tracks":[{"name":"Video 1","clips":[{"source":"a.mkv","timeline_start_frame":0,"source_start_frame":0,"duration_frames":10}]}]}})");
+        const auto migrated_v2 = project::load(project_path);
+        require(migrated_v2.canvas_width == 1920 && migrated_v2.canvas_height == 1080 &&
+                    migrated_v2.timeline_tracks.front().clips.front().transform ==
+                        timeline::Transform2D{},
+                "A version 2 project did not receive identity transform defaults.");
 
         writeText(
             project_path,

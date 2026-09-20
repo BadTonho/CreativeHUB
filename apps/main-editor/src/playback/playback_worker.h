@@ -3,12 +3,14 @@
 #include "../media/video_playback.h"
 #include "../media/video_metadata.h"
 #include "../media/audio_playback.h"
+#include "../rendering/frame_compositor.h"
 #include "audio_output.h"
 
 #include <QMetaType>
 #include <QByteArray>
 #include <QObject>
 #include <QString>
+#include <QVector>
 #include <QtGlobal>
 
 #include <atomic>
@@ -18,12 +20,25 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <vector>
 
 class QTimer;
 
 namespace playback {
 
 using VideoFramePtr = std::shared_ptr<const media::VideoFrame>;
+
+struct CompositionLayerSpec {
+    QString source_path;
+    double frame_rate = 30.0;
+    qint64 timeline_start_frame = 0;
+    qint64 source_start_frame = 0;
+    qint64 segment_frame_count = 0;
+    qint64 track_index = -1;
+    qint64 clip_index = -1;
+    timeline::Transform2D transform;
+    timeline::TransformKeyframes keyframes;
+};
 
 class PlaybackWorker final : public QObject {
     Q_OBJECT
@@ -56,6 +71,7 @@ public slots:
         bool track_audio_muted,
         double clip_audio_gain,
         bool clip_audio_muted);
+    void setComposition(QVector<CompositionLayerSpec> layers, quint64 generation);
     void stepForward();
     void stepBackward();
     void seekToFrame(qint64 frame_index, quint64 generation);
@@ -77,6 +93,9 @@ private:
     void ensureTimer();
     void finishPlayback();
     void emitFrame(std::optional<media::VideoFrame> frame);
+    void emitComposedFrame();
+    [[nodiscard]] std::optional<media::VideoFrame> decodeCompositionAt(
+        std::int64_t global_frame);
     void reportFailure(
         const media::MediaError& error,
         const char* operation,
@@ -129,8 +148,18 @@ private:
     std::atomic<quint64> pending_seek_generation_{0};
     std::atomic<quint64> pending_seek_sequence_{0};
     std::atomic_bool seek_dispatch_scheduled_{false};
+    struct CompositionSession {
+        CompositionLayerSpec spec;
+        std::unique_ptr<media::VideoPlaybackSession> session;
+    };
+    QVector<CompositionLayerSpec> composition_specs_;
+    std::vector<CompositionSession> composition_sessions_;
+    bool composition_enabled_ = false;
+    std::int64_t primary_timeline_start_frame_ = 0;
 };
 
 } // namespace playback
 
 Q_DECLARE_METATYPE(playback::VideoFramePtr)
+Q_DECLARE_METATYPE(playback::CompositionLayerSpec)
+Q_DECLARE_METATYPE(QVector<playback::CompositionLayerSpec>)

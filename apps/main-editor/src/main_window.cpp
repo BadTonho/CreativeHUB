@@ -13,6 +13,8 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QDesktopServices>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QKeySequence>
@@ -214,7 +216,9 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
                 clip.source_start_frame,
                 clip.timeline_duration_frames,
                 clip.audio_gain,
-                clip.audio_muted});
+                clip.audio_muted,
+                clip.transform,
+                clip.keyframes});
         }
         document.timeline_tracks.push_back(std::move(project_track));
     }
@@ -559,7 +563,11 @@ void MainWindow::openProject() {
                 metadata.frame_rate,
                 metadata.frame_count,
                 project_clip.audio_gain,
-                project_clip.audio_muted});
+                project_clip.audio_muted,
+                0,
+                0,
+                project_clip.transform,
+                project_clip.keyframes});
             snapshot.tracks.back().clips.push_back(snapshot.clips.back());
             }
         }
@@ -737,7 +745,7 @@ void MainWindow::createWorkspace() {
     inspector_dock_ = createDock(
         "Inspector",
         "inspectorDock",
-        createPlaceholder("Inspector", "Selected item properties will appear here."));
+        createInspector());
     addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
 
     timeline_dock_ = createDock(
@@ -1362,6 +1370,7 @@ void MainWindow::moveActiveTrack(int direction) {
         recordTimelineEdit(before);
         active_timeline_track_index_ = to;
         updateTimelineState();
+        sendCompositionToWorker();
         statusBar()->showMessage("Track order updated.");
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
@@ -1391,6 +1400,7 @@ void MainWindow::removeActiveTrack() {
             std::min(track_index, timeline_model_.trackCount() - 1);
         active_timeline_clip_index_.reset();
         updateTimelineState();
+        sendCompositionToWorker();
         updatePlaybackControls();
         statusBar()->showMessage("Video track removed.");
     } catch (const std::exception& error) {
@@ -1402,6 +1412,76 @@ void MainWindow::removeActiveTrack() {
             {{"track_index", std::to_string(track_index)}});
         statusBar()->showMessage("Could not remove the video track.");
     }
+}
+
+QWidget* MainWindow::createInspector() {
+    auto* container = new QWidget(this);
+    auto* layout = new QVBoxLayout(container);
+    layout->setContentsMargins(12, 12, 12, 12);
+    layout->setSpacing(8);
+
+    auto* title = new QLabel("Transform", container);
+    title->setStyleSheet("font-weight: 600; font-size: 14px;");
+    layout->addWidget(title);
+
+    auto* description = new QLabel(
+        "Values are normalized to the 1920×1080 project canvas.", container);
+    description->setWordWrap(true);
+    description->setStyleSheet("color: #9aa4b2;");
+    layout->addWidget(description);
+
+    auto* form = new QFormLayout;
+    form->setHorizontalSpacing(8);
+    form->setVerticalSpacing(6);
+    const std::array<QString, 5> labels{
+        "Position X", "Position Y", "Scale", "Rotation", "Opacity"};
+    const std::array<double, 5> minimums{-10.0, -10.0, 0.01, -3600.0, 0.0};
+    const std::array<double, 5> maximums{10.0, 10.0, 20.0, 3600.0, 1.0};
+    const std::array<double, 5> steps{0.01, 0.01, 0.01, 1.0, 0.01};
+    for (int index = 0; index < 5; ++index) {
+        auto* row = new QWidget(container);
+        auto* row_layout = new QHBoxLayout(row);
+        row_layout->setContentsMargins(0, 0, 0, 0);
+        row_layout->setSpacing(4);
+        auto* spin = new QDoubleSpinBox(row);
+        spin->setRange(minimums[index], maximums[index]);
+        spin->setSingleStep(steps[index]);
+        spin->setDecimals(index == 3 ? 1 : 3);
+        spin->setEnabled(false);
+        transform_spin_boxes_[static_cast<std::size_t>(index)] = spin;
+        auto* key = new QPushButton("Key", row);
+        key->setCheckable(true);
+        key->setEnabled(false);
+        key->setToolTip("Enable keyframe editing for this property");
+        transform_key_buttons_[static_cast<std::size_t>(index)] = key;
+        auto* remove = new QPushButton("Remove", row);
+        remove->setEnabled(false);
+        remove->setToolTip("Remove the keyframe at the current frame");
+        transform_remove_buttons_[static_cast<std::size_t>(index)] = remove;
+        row_layout->addWidget(spin, 1);
+        row_layout->addWidget(key);
+        row_layout->addWidget(remove);
+        form->addRow(labels[index], row);
+
+        connect(spin, &QDoubleSpinBox::editingFinished, this, [this, index]() {
+            if (transform_spin_boxes_[static_cast<std::size_t>(index)] != nullptr) {
+                applyTransformProperty(
+                    index,
+                    transform_spin_boxes_[static_cast<std::size_t>(index)]->value());
+            }
+        });
+        connect(key, &QPushButton::clicked, this, [this, index](bool enabled) {
+            transform_keyframe_modes_[static_cast<std::size_t>(index)] = enabled;
+            if (enabled) addTransformKeyframe(index);
+        });
+        connect(remove, &QPushButton::clicked, this, [this, index]() {
+            removeTransformKeyframe(index);
+        });
+    }
+    layout->addLayout(form);
+    layout->addStretch();
+    updateInspector();
+    return container;
 }
 
 QWidget* MainWindow::createTimeline() {
@@ -1620,6 +1700,8 @@ QWidget* MainWindow::createTimeline() {
 
 void MainWindow::initializePlayback() {
     qRegisterMetaType<playback::VideoFramePtr>();
+    qRegisterMetaType<playback::CompositionLayerSpec>();
+    qRegisterMetaType<QVector<playback::CompositionLayerSpec>>();
 
     playback_worker_ = new playback::PlaybackWorker;
     playback_worker_->moveToThread(&playback_thread_);
@@ -1710,6 +1792,18 @@ MainWindow::selectedTimelineClipLocation() const noexcept {
     const auto selected_index = selectedMediaIndex();
     if (!selected_index.has_value()) return std::nullopt;
     const auto& selected = media_items_[*selected_index];
+    if (active_timeline_track_index_.has_value() &&
+        active_timeline_clip_index_.has_value() &&
+        *active_timeline_track_index_ < timeline_model_.trackCount() &&
+        *active_timeline_clip_index_ < timeline_model_.clipCount(
+            *active_timeline_track_index_)) {
+        const auto& active_clip = timeline_model_.tracks()
+            [*active_timeline_track_index_].clips[*active_timeline_clip_index_];
+        if (active_clip.source_path == selected.metadata.source_path) {
+            return timeline::ClipLocation{
+                *active_timeline_track_index_, *active_timeline_clip_index_};
+        }
+    }
     for (std::size_t track = 0; track < timeline_model_.trackCount(); ++track) {
         const auto& clips = timeline_model_.tracks()[track].clips;
         for (std::size_t index = 0; index < clips.size(); ++index) {
@@ -1748,6 +1842,26 @@ bool MainWindow::canPlaybackSelectedMedia() const noexcept {
         return false;
     }
     return canPreviewSelectedMedia();
+}
+
+std::int64_t MainWindow::timelinePlayheadFrame() const noexcept {
+    if (!active_timeline_track_index_.has_value() ||
+        !active_timeline_clip_index_.has_value() ||
+        *active_timeline_track_index_ >= timeline_model_.trackCount() ||
+        *active_timeline_clip_index_ >= timeline_model_.clipCount(
+            *active_timeline_track_index_)) {
+        return 0;
+    }
+    const auto& clip = timeline_model_.tracks()[*active_timeline_track_index_]
+        .clips[*active_timeline_clip_index_];
+    if (clip.timeline_duration_frames <= 0) return clip.timeline_start_frame;
+    const auto local_frame = std::clamp<std::int64_t>(
+        playback_frame_index_, 0, clip.timeline_duration_frames - 1);
+    if (clip.timeline_start_frame >
+        std::numeric_limits<std::int64_t>::max() - local_frame) {
+        return clip.timeline_start_frame;
+    }
+    return clip.timeline_start_frame + local_frame;
 }
 
 timeline::EditState MainWindow::captureTimelineEditState() const {
@@ -1860,6 +1974,44 @@ void MainWindow::updatePlaybackAudioParameters() {
         Q_ARG(bool, clip.audio_muted));
 }
 
+void MainWindow::sendCompositionToWorker() {
+    if (playback_worker_ == nullptr) return;
+    QVector<playback::CompositionLayerSpec> layers;
+    for (std::size_t track_index = 0;
+         track_index < timeline_model_.trackCount();
+         ++track_index) {
+        const auto& track = timeline_model_.tracks()[track_index];
+        for (std::size_t clip_index = 0;
+             clip_index < track.clips.size();
+             ++clip_index) {
+            const auto& clip = track.clips[clip_index];
+            const auto imported = std::find_if(
+                media_items_.begin(), media_items_.end(),
+                [&clip](const ImportedMedia& item) {
+                    return normalizedPath(item.metadata.source_path) ==
+                        normalizedPath(clip.source_path);
+                });
+            if (imported == media_items_.end() || imported->offline) continue;
+            layers.push_back(playback::CompositionLayerSpec{
+                fromUtf8(pathToUtf8(clip.source_path)),
+                clip.frame_rate.value_or(imported->metadata.frame_rate.value_or(30.0)),
+                clip.timeline_start_frame,
+                clip.source_start_frame,
+                clip.timeline_duration_frames,
+                static_cast<qint64>(track_index),
+                static_cast<qint64>(clip_index),
+                clip.transform,
+                clip.keyframes});
+        }
+    }
+    QMetaObject::invokeMethod(
+        playback_worker_,
+        "setComposition",
+        Qt::QueuedConnection,
+        Q_ARG(QVector<playback::CompositionLayerSpec>, layers),
+        Q_ARG(quint64, playback_generation_));
+}
+
 void MainWindow::updateTimelineState() {
     const bool selected = hasSelectedMedia() && !media_items_[*selectedMediaIndex()].offline;
     const bool occupied = timeline_model_.hasClip();
@@ -1883,7 +2035,7 @@ void MainWindow::updateTimelineState() {
         } else {
             timeline_widget_->setActiveClip(std::nullopt);
         }
-        timeline_widget_->setPlayheadFrame(playback_frame_index_);
+        timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());
     }
 
     const bool audio_enabled = canPlaybackSelectedMedia() &&
@@ -1913,6 +2065,164 @@ void MainWindow::updateTimelineState() {
 
     updateHistoryActions();
     updateProjectDirtyState();
+    updateInspector();
+}
+
+void MainWindow::updateInspector() {
+    const auto location = selectedTimelineClipLocation();
+    const bool enabled = location.has_value() &&
+        location->track_index < timeline_model_.trackCount() &&
+        location->clip_index < timeline_model_.clipCount(location->track_index);
+    const std::array<QDoubleSpinBox*, 5> spins = transform_spin_boxes_;
+    for (auto* spin : spins) if (spin != nullptr) spin->setEnabled(enabled);
+    for (auto* button : transform_key_buttons_) {
+        if (button != nullptr) button->setEnabled(enabled);
+    }
+    if (location.has_value() && enabled) {
+        const auto& clip = timeline_model_.tracks()[location->track_index]
+            .clips[location->clip_index];
+        const auto evaluated = timeline::evaluateTransform(
+            clip.transform,
+            clip.keyframes,
+            std::max<std::int64_t>(0, playback_frame_index_));
+        const std::array<double, 5> values{
+            evaluated.position_x,
+            evaluated.position_y,
+            evaluated.scale,
+            evaluated.rotation_degrees,
+            evaluated.opacity};
+        for (std::size_t index = 0; index < spins.size(); ++index) {
+            if (spins[index] != nullptr) {
+                const QSignalBlocker blocker(spins[index]);
+                spins[index]->setValue(values[index]);
+            }
+            if (transform_key_buttons_[index] != nullptr) {
+                const QSignalBlocker blocker(transform_key_buttons_[index]);
+                transform_key_buttons_[index]->setChecked(
+                    transform_keyframe_modes_[index]);
+            }
+            if (transform_remove_buttons_[index] != nullptr) {
+                const auto property = static_cast<timeline::TransformProperty>(index);
+                const auto& keys = timeline::keyframesFor(clip.keyframes, property);
+                const bool has_key = std::any_of(keys.begin(), keys.end(),
+                    [this](const auto& key) {
+                        return key.frame == std::max<std::int64_t>(0, playback_frame_index_);
+                    });
+                transform_remove_buttons_[index]->setEnabled(has_key);
+            }
+        }
+    } else {
+        for (auto* button : transform_remove_buttons_) {
+            if (button != nullptr) button->setEnabled(false);
+        }
+    }
+}
+
+void MainWindow::applyTransformProperty(int property_index, double value) {
+    if (property_index < 0 || property_index >= 5 ||
+        !active_timeline_track_index_.has_value() ||
+        !active_timeline_clip_index_.has_value()) {
+        return;
+    }
+    const auto track_index = *active_timeline_track_index_;
+    const auto clip_index = *active_timeline_clip_index_;
+    if (track_index >= timeline_model_.trackCount() ||
+        clip_index >= timeline_model_.clipCount(track_index)) return;
+
+    const auto before = captureTimelineEditState();
+    const auto property = static_cast<timeline::TransformProperty>(property_index);
+    const auto local_frame = std::max<std::int64_t>(0, playback_frame_index_);
+    timeline::TransformParameterResult result = timeline::TransformParameterResult::NoChange;
+    pending_clip_activation_.reset();
+    ++playback_generation_;
+    playback_is_playing_ = false;
+    if (playback_worker_ != nullptr) {
+        QMetaObject::invokeMethod(playback_worker_, "pause", Qt::QueuedConnection);
+    }
+
+    if (transform_keyframe_modes_[static_cast<std::size_t>(property_index)]) {
+        result = timeline_model_.setClipKeyframe(
+            track_index, clip_index, property, local_frame, value);
+    } else {
+        auto transform = timeline_model_.tracks()[track_index].clips[clip_index].transform;
+        switch (property) {
+        case timeline::TransformProperty::PositionX: transform.position_x = value; break;
+        case timeline::TransformProperty::PositionY: transform.position_y = value; break;
+        case timeline::TransformProperty::Scale: transform.scale = value; break;
+        case timeline::TransformProperty::Rotation: transform.rotation_degrees = value; break;
+        case timeline::TransformProperty::Opacity: transform.opacity = value; break;
+        }
+        result = timeline_model_.setClipTransform(track_index, clip_index, transform);
+    }
+    if (result != timeline::TransformParameterResult::Changed) {
+        return;
+    }
+    recordTimelineEdit(before);
+    updateProjectDirtyState();
+    updateTimelineState();
+    sendCompositionToWorker();
+    if (playback_worker_ != nullptr && canPlaybackSelectedMedia()) {
+        playback_worker_->requestSeek(local_frame, playback_generation_);
+    }
+    statusBar()->showMessage("Transform updated.");
+}
+
+void MainWindow::addTransformKeyframe(int property_index) {
+    if (property_index < 0 || property_index >= 5 ||
+        !active_timeline_track_index_.has_value() ||
+        !active_timeline_clip_index_.has_value()) return;
+    const auto track_index = *active_timeline_track_index_;
+    const auto clip_index = *active_timeline_clip_index_;
+    if (track_index >= timeline_model_.trackCount() ||
+        clip_index >= timeline_model_.clipCount(track_index)) return;
+    const auto before = captureTimelineEditState();
+    const auto& clip = timeline_model_.tracks()[track_index].clips[clip_index];
+    const auto frame = std::clamp<std::int64_t>(
+        playback_frame_index_, 0, std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
+    const auto property = static_cast<timeline::TransformProperty>(property_index);
+    const auto evaluated = timeline::evaluateTransform(clip.transform, clip.keyframes, frame);
+    const std::array<double, 5> values{
+        evaluated.position_x, evaluated.position_y, evaluated.scale,
+        evaluated.rotation_degrees, evaluated.opacity};
+    pending_clip_activation_.reset();
+    ++playback_generation_;
+    playback_is_playing_ = false;
+    const auto result = timeline_model_.setClipKeyframe(
+        track_index, clip_index, property, frame,
+        values[static_cast<std::size_t>(property_index)]);
+    if (result == timeline::TransformParameterResult::Changed) {
+        recordTimelineEdit(before);
+        updateTimelineState();
+        updateProjectDirtyState();
+        sendCompositionToWorker();
+        statusBar()->showMessage("Keyframe added.");
+    } else {
+        updatePlaybackControls();
+        updatePlaybackStatus();
+    }
+}
+
+void MainWindow::removeTransformKeyframe(int property_index) {
+    if (property_index < 0 || property_index >= 5 ||
+        !active_timeline_track_index_.has_value() ||
+        !active_timeline_clip_index_.has_value()) return;
+    const auto track_index = *active_timeline_track_index_;
+    const auto clip_index = *active_timeline_clip_index_;
+    if (track_index >= timeline_model_.trackCount() ||
+        clip_index >= timeline_model_.clipCount(track_index)) return;
+    const auto before = captureTimelineEditState();
+    const auto frame = std::max<std::int64_t>(0, playback_frame_index_);
+    const auto result = timeline_model_.removeClipKeyframe(
+        track_index,
+        clip_index,
+        static_cast<timeline::TransformProperty>(property_index),
+        frame);
+    if (result != timeline::TransformParameterResult::Changed) return;
+    recordTimelineEdit(before);
+    updateTimelineState();
+    updateProjectDirtyState();
+    sendCompositionToWorker();
+    statusBar()->showMessage("Keyframe removed.");
 }
 
 void MainWindow::addSelectedMediaToTimeline() {
@@ -1960,6 +2270,7 @@ void MainWindow::addSelectedMediaToTimeline() {
                     false);
             } else {
                 preview_widget_->setFrame(selected.first_frame);
+                sendCompositionToWorker();
             }
             statusBar()->showMessage("Media added to the timeline.");
             break;
@@ -2108,6 +2419,7 @@ void MainWindow::handleMediaDropAt(
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
+        sendCompositionToWorker();
         if (target_track == 0) {
             activateTimelineClipAt(
                 target_track,
@@ -2138,6 +2450,23 @@ void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_in
         track_index >= static_cast<qint64>(timeline_model_.trackCount()) ||
         clip_index >= static_cast<qint64>(
             timeline_model_.clipCount(static_cast<std::size_t>(track_index)))) {
+        // A click in a timeline gap intentionally clears the active clip. It
+        // is not an error and must not enter the technical error log.
+        pending_clip_activation_.reset();
+        ++playback_generation_;
+        playback_is_playing_ = false;
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_, "stop", Qt::QueuedConnection);
+        }
+        active_timeline_track_index_.reset();
+        active_timeline_clip_index_.reset();
+        playback_frame_index_ = 0;
+        preview_widget_->clearFrame("Gap in timeline.");
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        statusBar()->showMessage("Gap in timeline.");
         return;
     }
     active_timeline_track_index_ = static_cast<std::size_t>(track_index);
@@ -2239,6 +2568,7 @@ void MainWindow::handleTimelineClipMoveAt(
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
+        sendCompositionToWorker();
         statusBar()->showMessage("Timeline clip moved.");
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
@@ -2291,6 +2621,7 @@ void MainWindow::handleTimelineClipSplitAt(
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
+        sendCompositionToWorker();
         const auto& right_clip = timeline_model_.tracks()[track].clips[clip + 1];
         const auto media_item = std::find_if(
             media_items_.begin(),
@@ -2361,6 +2692,7 @@ void MainWindow::handleTimelineClipTrimAt(
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
+        sendCompositionToWorker();
         statusBar()->showMessage("Timeline clip trimmed.");
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
@@ -2519,6 +2851,7 @@ void MainWindow::activateTimelineClipAt(
          Q_ARG(qint64, static_cast<qint64>(track_index)),
          Q_ARG(qint64, static_cast<qint64>(clip_index)),
          Q_ARG(quint64, playback_generation_));
+    sendCompositionToWorker();
 }
 
 void MainWindow::commitTimelineClipActivation(
@@ -2567,6 +2900,7 @@ void MainWindow::clearTimeline() {
 
         timeline_model_.clear();
         recordTimelineEdit(before_edit);
+        sendCompositionToWorker();
         active_timeline_clip_index_.reset();
         playback_frame_index_ = 0;
         const int selected_row = media_list_ != nullptr ? media_list_->currentRow() : -1;
@@ -2804,6 +3138,7 @@ void MainWindow::handleTimelineClipMove(qint64 from_index, qint64 to_index) {
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
+        sendCompositionToWorker();
         statusBar()->showMessage("Timeline clip moved.");
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
@@ -2847,6 +3182,7 @@ void MainWindow::moveActiveTimelineClip(int direction) {
             return;
         }
         recordTimelineEdit(before);
+        sendCompositionToWorker();
         updateTimelineState();
         updateProjectDirtyState();
         statusBar()->showMessage("Timeline clip moved by one frame.");
@@ -2905,6 +3241,7 @@ void MainWindow::deleteActiveTimelineClip() {
         if (!timeline_model_.hasClip()) {
             active_timeline_track_index_.reset();
             active_timeline_clip_index_.reset();
+            sendCompositionToWorker();
             updateTimelineState();
             updatePlaybackControls();
             updatePlaybackStatus();
@@ -2930,6 +3267,7 @@ void MainWindow::deleteActiveTimelineClip() {
         }
         active_timeline_track_index_ = next_track;
         active_timeline_clip_index_ = next_index;
+        sendCompositionToWorker();
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -3067,6 +3405,7 @@ void MainWindow::handleTimelineClipTrim(
         }
 
         recordTimelineEdit(before_edit);
+        sendCompositionToWorker();
 
         active_timeline_clip_index_ = index;
         playback_frame_index_ = 0;
@@ -3215,6 +3554,7 @@ void MainWindow::handleTimelineClipSplit(qint64 clip_index, qint64 local_frame) 
                  Q_ARG(qint64, 0),
                  Q_ARG(qint64, static_cast<qint64>(clip_index + 1)),
                  Q_ARG(quint64, playback_generation_));
+            sendCompositionToWorker();
         }
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
@@ -3540,6 +3880,7 @@ void MainWindow::updateMediaDetails(int row) {
              Q_ARG(qint64, active_timeline_clip_index_.has_value()
                  ? static_cast<qint64>(*active_timeline_clip_index_) : -1),
              Q_ARG(quint64, playback_generation_));
+        sendCompositionToWorker();
     }
 }
 
@@ -3581,8 +3922,9 @@ void MainWindow::handlePlaybackFrame(
             false);
         preview_widget_->setFrame(*frame);
         if (timeline_widget_ != nullptr) {
-            timeline_widget_->setPlayheadFrame(frame_index);
+            timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());
         }
+        updateInspector();
         updatePlaybackStatus();
         if (pending.resume_playback && playback_worker_ != nullptr) {
             QMetaObject::invokeMethod(playback_worker_, "play", Qt::QueuedConnection);
@@ -3593,8 +3935,9 @@ void MainWindow::handlePlaybackFrame(
     playback_frame_index_ = frame_index;
     preview_widget_->setFrame(*frame);
     if (timeline_widget_ != nullptr && selectedMediaMatchesTimeline()) {
-        timeline_widget_->setPlayheadFrame(frame_index);
+        timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());
     }
+    updateInspector();
     updatePlaybackStatus();
 }
 
@@ -3620,6 +3963,10 @@ void MainWindow::handlePlaybackMediaReady(quint64 generation) {
         pending.media_index,
         0,
         true);
+
+    if (playback_worker_ != nullptr) {
+        playback_worker_->requestSeek(0, generation);
+    }
 
     if (pending.resume_playback && playback_worker_ != nullptr) {
         QMetaObject::invokeMethod(playback_worker_, "play", Qt::QueuedConnection);
@@ -3741,7 +4088,7 @@ void MainWindow::handlePlaybackError(
         playback_status_label_->setText("Playback error.");
     }
     if (timeline_widget_ != nullptr && timeline_model_.hasClip()) {
-        timeline_widget_->setPlayheadFrame(playback_frame_index_);
+        timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());
     }
     QMessageBox::warning(this, "Playback error", message);
 }
@@ -3764,7 +4111,9 @@ void MainWindow::handleTimelineSeek(qint64 frame_index) {
 
     ++playback_generation_;
     playback_is_playing_ = false;
-    if (timeline_widget_ != nullptr) timeline_widget_->setPlayheadFrame(frame_index);
+    if (timeline_widget_ != nullptr) {
+        timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());
+    }
     updatePlaybackControls();
     updatePlaybackStatus();
 

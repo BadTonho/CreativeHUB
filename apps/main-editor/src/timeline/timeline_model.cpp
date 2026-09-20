@@ -240,11 +240,25 @@ SplitClipResult TimelineModel::splitClip(
         local_frame > std::numeric_limits<std::int64_t>::max() - clip.source_start_frame) {
         return SplitClipResult::InvalidBoundary;
     }
+    const auto original_transform = clip.transform;
     TimelineClip right = clip;
     right.clip_id = next_clip_id_++;
     right.source_start_frame += local_frame;
     right.timeline_start_frame += local_frame;
     right.timeline_duration_frames -= local_frame;
+    right.keyframes = splitKeyframes(
+        clip.transform,
+        clip.keyframes,
+        local_frame,
+        right.transform);
+    clip.keyframes = trimKeyframes(
+        clip.transform,
+        clip.keyframes,
+        0,
+        0,
+        local_frame,
+        clip.transform);
+    clip.transform = original_transform;
     clip.timeline_duration_frames = local_frame;
     track->clips.insert(
         track->clips.begin() + static_cast<std::ptrdiff_t>(clip_index + 1),
@@ -292,8 +306,19 @@ TrimClipResult TimelineModel::trimClip(
             return TrimClipResult::InvalidRange;
         }
     }
+    const auto local_start = new_source_start_frame - clip.source_start_frame;
+    Transform2D trimmed_transform;
+    const auto trimmed_keyframes = trimKeyframes(
+        clip.transform,
+        clip.keyframes,
+        0,
+        local_start,
+        new_duration_frames,
+        trimmed_transform);
     clip.source_start_frame = new_source_start_frame;
     clip.timeline_duration_frames = new_duration_frames;
+    clip.transform = trimmed_transform;
+    clip.keyframes = trimmed_keyframes;
     return TrimClipResult::Trimmed;
 }
 
@@ -508,6 +533,61 @@ AudioParameterResult TimelineModel::setTrackAudio(
     track->audio_gain = gain;
     track->audio_muted = muted;
     return AudioParameterResult::Changed;
+}
+
+TransformParameterResult TimelineModel::setClipTransform(
+    std::size_t track_index,
+    std::size_t clip_index,
+    const Transform2D& transform) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_index >= track->clips.size()) {
+        return TransformParameterResult::InvalidIndex;
+    }
+    if (!validTransform(transform)) return TransformParameterResult::InvalidValue;
+    auto& clip = track->clips[clip_index];
+    if (clip.transform == transform) return TransformParameterResult::NoChange;
+    clip.transform = transform;
+    return TransformParameterResult::Changed;
+}
+
+TransformParameterResult TimelineModel::setClipKeyframe(
+    std::size_t track_index,
+    std::size_t clip_index,
+    TransformProperty property,
+    std::int64_t local_frame,
+    double value) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_index >= track->clips.size()) {
+        return TransformParameterResult::InvalidIndex;
+    }
+    const auto& clip = track->clips[clip_index];
+    if (local_frame < 0 || local_frame >= clip.timeline_duration_frames ||
+        !validKeyframeValue(property, value)) {
+        return TransformParameterResult::InvalidValue;
+    }
+    auto& mutable_clip = track->clips[clip_index];
+    const auto before = mutable_clip.keyframes;
+    if (!setKeyframe(mutable_clip.keyframes, property, local_frame, value)) {
+        return TransformParameterResult::InvalidValue;
+    }
+    return before == mutable_clip.keyframes
+        ? TransformParameterResult::NoChange
+        : TransformParameterResult::Changed;
+}
+
+TransformParameterResult TimelineModel::removeClipKeyframe(
+    std::size_t track_index,
+    std::size_t clip_index,
+    TransformProperty property,
+    std::int64_t local_frame) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_index >= track->clips.size()) {
+        return TransformParameterResult::InvalidIndex;
+    }
+    if (!removeKeyframe(track->clips[clip_index].keyframes, property, local_frame)) {
+        return TransformParameterResult::NoChange;
+    }
+    return TransformParameterResult::Changed;
 }
 
 } // namespace timeline

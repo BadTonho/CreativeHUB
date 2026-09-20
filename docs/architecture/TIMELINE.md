@@ -75,3 +75,27 @@ audio parameter structure.
 Version 1 sequential clips migrate to Video 1 when opened. Advanced ripple
 editing, multiple media types, audio-only sources, project-wide history, and
 export remain future work.
+
+## Layers, transformations, and keyframes
+
+Each clip occurrence owns an independent 2D transform. The initial transform
+uses normalized position `(0.5, 0.5)`, uniform scale `1.0`, zero rotation, and
+full opacity. Position and rotation may move outside the visible canvas;
+scale must remain positive and opacity is limited to `0.0` through `1.0`.
+
+Keyframes are stored per occurrence and use the clip's local frame range, so
+moving a clip does not move its animation. Position X/Y, scale, rotation, and
+opacity use linear interpolation only. The Inspector creates or updates a
+property keyframe at the current playhead and the Timeline shows read-only
+markers for the active clip.
+
+Splitting partitions animation curves. The right segment receives later keys
+with a new local origin and a frame-zero value evaluated at the split. Trimming
+remaps keys to the shortened local range and preserves the evaluated value at
+the new start. Invalid boundaries remain intentional no-op outcomes.
+
+At a global frame, all visible video clips are composed from the bottom track
+up to the top track. The compositor runs outside the UI worker boundary and
+produces one RGBA frame for the preview. The provisional canvas is 1920x1080;
+empty areas use the dark preview background. Audio keeps the existing rule of
+following only the highest-priority visible clip.

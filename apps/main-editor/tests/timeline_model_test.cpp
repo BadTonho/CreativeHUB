@@ -479,6 +479,43 @@ int main() {
                     history_model.clips()[0].audio_muted,
                 "Redo after audio edit did not restore clip audio parameters.");
 
+        const auto before_transform = make_history_state(0, first_source, 4);
+        history.clear();
+        history.recordBeforeEdit(before_transform);
+        auto edited_transform = history_model.clips()[0].transform;
+        edited_transform.position_x = 0.25;
+        require(history_model.setClipTransform(0, 0, edited_transform) ==
+                    timeline::TransformParameterResult::Changed,
+                "The history transform edit failed.");
+        const auto after_transform = make_history_state(0, first_source, 4);
+        const auto undone_transform = history.undo(after_transform);
+        require(undone_transform.has_value(),
+                "Undo after a transform edit was unavailable.");
+        history_model.restore(undone_transform->timeline);
+        require(history_model.clips()[0].transform.position_x == 0.5,
+                "Undo after a transform edit did not restore the base value.");
+        const auto redone_transform = history.redo(*undone_transform);
+        require(redone_transform.has_value(),
+                "Redo after a transform edit was unavailable.");
+        history_model.restore(redone_transform->timeline);
+        require(history_model.clips()[0].transform.position_x == 0.25,
+                "Redo after a transform edit did not restore the edited value.");
+
+        const auto before_keyframe = make_history_state(0, first_source, 4);
+        history.clear();
+        history.recordBeforeEdit(before_keyframe);
+        require(history_model.setClipKeyframe(
+                    0, 0, timeline::TransformProperty::Opacity, 4, 0.5) ==
+                    timeline::TransformParameterResult::Changed,
+                "The history keyframe edit failed.");
+        const auto after_keyframe = make_history_state(0, first_source, 4);
+        const auto undone_keyframe = history.undo(after_keyframe);
+        require(undone_keyframe.has_value(),
+                "Undo after a keyframe edit was unavailable.");
+        history_model.restore(undone_keyframe->timeline);
+        require(history_model.clips()[0].keyframes.opacity.empty(),
+                "Undo after a keyframe edit did not restore the curve.");
+
         history.clear();
         for (std::size_t index = 0; index < 105; ++index) {
             history.recordBeforeEdit(make_history_state(

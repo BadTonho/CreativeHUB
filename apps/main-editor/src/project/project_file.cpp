@@ -60,6 +60,22 @@ bool validAudioGain(double gain) {
     return std::isfinite(gain) && gain >= 0.0 && gain <= 2.0;
 }
 
+bool validKeyframeList(
+    const std::vector<timeline::Keyframe>& keyframes,
+    timeline::TransformProperty property,
+    std::int64_t duration_frames) {
+    std::int64_t previous = -1;
+    for (const auto& keyframe : keyframes) {
+        if (keyframe.frame < 0 || keyframe.frame >= duration_frames ||
+            keyframe.frame <= previous ||
+            !timeline::validKeyframeValue(property, keyframe.value)) {
+            return false;
+        }
+        previous = keyframe.frame;
+    }
+    return true;
+}
+
 QString storedPath(const std::filesystem::path& project_path,
                   const std::filesystem::path& source_path) {
     const auto project_directory = normalizedPath(project_path).parent_path();
@@ -120,6 +136,9 @@ QString requiredString(const QJsonObject& object,
 
 void validateDocument(const ProjectDocument& document,
                       const std::filesystem::path& project_path) {
+    if (document.canvas_width != 1920 || document.canvas_height != 1080) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an unsupported canvas size; only 1920x1080 is supported.");
+    }
     std::vector<std::filesystem::path> media_paths;
     for (const auto& media : document.media) {
         if (media.source_path.empty()) {
@@ -153,6 +172,24 @@ void validateDocument(const ProjectDocument& document,
         }
         if (!validAudioGain(clip.audio_gain)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip audio gain.");
+        }
+        if (!timeline::validTransform(clip.transform) ||
+            !validKeyframeList(clip.keyframes.position_x,
+                               timeline::TransformProperty::PositionX,
+                               clip.duration_frames) ||
+            !validKeyframeList(clip.keyframes.position_y,
+                               timeline::TransformProperty::PositionY,
+                               clip.duration_frames) ||
+            !validKeyframeList(clip.keyframes.scale,
+                               timeline::TransformProperty::Scale,
+                               clip.duration_frames) ||
+            !validKeyframeList(clip.keyframes.rotation,
+                               timeline::TransformProperty::Rotation,
+                               clip.duration_frames) ||
+            !validKeyframeList(clip.keyframes.opacity,
+                               timeline::TransformProperty::Opacity,
+                               clip.duration_frames)) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains invalid clip transform or keyframes.");
         }
     };
     for (const auto& track : document.timeline_tracks) {
@@ -225,7 +262,8 @@ ProjectDocument load(const std::filesystem::path& project_path) {
     }
 
     const auto version = requiredInteger(root, "version", project_path);
-    if (version != current_format_version && version != legacy_format_version) {
+    if (version != current_format_version && version != previous_format_version &&
+        version != legacy_format_version) {
         throw ProjectError(
             ProjectErrorCode::UnsupportedVersion,
             "The project file version is not supported.",
@@ -239,6 +277,20 @@ ProjectDocument load(const std::filesystem::path& project_path) {
     }
 
     ProjectDocument document;
+    if (version >= current_format_version) {
+        const auto canvas_value = root.value("canvas");
+        if (!canvas_value.isObject()) {
+            throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the canvas object.");
+        }
+        const auto canvas = canvas_value.toObject();
+        const auto width = requiredInteger(canvas, "width", project_path);
+        const auto height = requiredInteger(canvas, "height", project_path);
+        if (width != 1920 || height != 1080) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an unsupported canvas size; only 1920x1080 is supported.");
+        }
+        document.canvas_width = static_cast<int>(width);
+        document.canvas_height = static_cast<int>(height);
+    }
     const auto bins_value = root.value("bins");
     if (!bins_value.isUndefined()) {
         if (!bins_value.isArray()) {
@@ -362,6 +414,59 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                     }
                     clip.audio_muted = clip_object.value("audio_muted").toBool();
                 }
+                if (version >= current_format_version && clip_object.contains("transform")) {
+                    const auto transform = clip_object.value("transform");
+                    if (!transform.isObject()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip transform.");
+                    }
+                    const auto transform_object = transform.toObject();
+                    const auto position = transform_object.value("position");
+                    if (!position.isObject() ||
+                        !position.toObject().value("x").isDouble() ||
+                        !position.toObject().value("y").isDouble() ||
+                        !transform_object.value("scale").isDouble() ||
+                        !transform_object.value("rotation").isDouble() ||
+                        !transform_object.value("opacity").isDouble()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains incomplete clip transform data.");
+                    }
+                    clip.transform.position_x = position.toObject().value("x").toDouble();
+                    clip.transform.position_y = position.toObject().value("y").toDouble();
+                    clip.transform.scale = transform_object.value("scale").toDouble();
+                    clip.transform.rotation_degrees = transform_object.value("rotation").toDouble();
+                    clip.transform.opacity = transform_object.value("opacity").toDouble();
+                }
+                if (version >= current_format_version && clip_object.contains("keyframes")) {
+                    const auto keyframes = clip_object.value("keyframes");
+                    if (!keyframes.isObject()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains invalid clip keyframes.");
+                    }
+                    const auto parse_keyframes = [&](const char* key,
+                                                     timeline::TransformProperty property,
+                                                     std::vector<timeline::Keyframe>& output) {
+                        const auto value = keyframes.toObject().value(QLatin1String(key));
+                        if (value.isUndefined()) return;
+                        if (!value.isArray()) {
+                            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid keyframe list.");
+                        }
+                        for (const auto& keyframe_value : value.toArray()) {
+                            if (!keyframe_value.isObject()) {
+                                throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid keyframe.");
+                            }
+                            const auto keyframe_object = keyframe_value.toObject();
+                            const auto frame = requiredInteger(keyframe_object, "frame", project_path);
+                            const auto numeric = keyframe_object.value("value");
+                            if (!numeric.isDouble() || !timeline::validKeyframeValue(property, numeric.toDouble())) {
+                                throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid keyframe value.");
+                            }
+                            output.push_back({frame, numeric.toDouble()});
+                        }
+                    };
+                    parse_keyframes("position_x", timeline::TransformProperty::PositionX, clip.keyframes.position_x);
+                    parse_keyframes("position_y", timeline::TransformProperty::PositionY, clip.keyframes.position_y);
+                    parse_keyframes("scale", timeline::TransformProperty::Scale, clip.keyframes.scale);
+                    parse_keyframes("rotation", timeline::TransformProperty::Rotation, clip.keyframes.rotation);
+                    parse_keyframes("opacity", timeline::TransformProperty::Opacity, clip.keyframes.opacity);
+                }
                 track.clips.push_back(clip);
                 document.timeline_clips.push_back(std::move(clip));
             }
@@ -421,6 +526,33 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
             item.insert("duration_frames", static_cast<qint64>(clip.duration_frames));
             item.insert("audio_gain", clip.audio_gain);
             item.insert("audio_muted", clip.audio_muted);
+            QJsonObject transform;
+            QJsonObject position;
+            position.insert("x", clip.transform.position_x);
+            position.insert("y", clip.transform.position_y);
+            transform.insert("position", position);
+            transform.insert("scale", clip.transform.scale);
+            transform.insert("rotation", clip.transform.rotation_degrees);
+            transform.insert("opacity", clip.transform.opacity);
+            item.insert("transform", transform);
+
+            QJsonObject keyframes;
+            const auto write_keyframes = [](const std::vector<timeline::Keyframe>& values) {
+                QJsonArray output;
+                for (const auto& keyframe : values) {
+                    QJsonObject item;
+                    item.insert("frame", static_cast<qint64>(keyframe.frame));
+                    item.insert("value", keyframe.value);
+                    output.append(item);
+                }
+                return output;
+            };
+            keyframes.insert("position_x", write_keyframes(clip.keyframes.position_x));
+            keyframes.insert("position_y", write_keyframes(clip.keyframes.position_y));
+            keyframes.insert("scale", write_keyframes(clip.keyframes.scale));
+            keyframes.insert("rotation", write_keyframes(clip.keyframes.rotation));
+            keyframes.insert("opacity", write_keyframes(clip.keyframes.opacity));
+            item.insert("keyframes", keyframes);
             clips.append(item);
         }
         track.insert("clips", clips);
@@ -432,6 +564,10 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
     QJsonObject root;
     root.insert("format", QString::fromLatin1(format_identifier));
     root.insert("version", current_format_version);
+    QJsonObject canvas;
+    canvas.insert("width", document.canvas_width);
+    canvas.insert("height", document.canvas_height);
+    root.insert("canvas", canvas);
     root.insert("media", media);
     if (!document.bins.empty()) {
         QJsonArray bins;

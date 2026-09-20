@@ -177,6 +177,10 @@ add_executable(creative-suite-main-editor-playback-worker-tests
     ../src/playback/audio_output.h
     ../src/playback/playback_worker.cpp
     ../src/playback/playback_worker.h
+    ../src/rendering/frame_compositor.cpp
+    ../src/rendering/frame_compositor.h
+    ../src/timeline/timeline_transform.cpp
+    ../src/timeline/timeline_transform.h
 )
 
 target_include_directories(creative-suite-main-editor-playback-worker-tests PRIVATE
@@ -288,6 +292,8 @@ add_executable(creative-suite-main-editor-timeline-tests
     ../src/timeline/timeline_history.h
     ../src/timeline/timeline_model.cpp
     ../src/timeline/timeline_model.h
+    ../src/timeline/timeline_transform.cpp
+    ../src/timeline/timeline_transform.h
 )
 
 target_include_directories(creative-suite-main-editor-timeline-tests PRIVATE
@@ -307,6 +313,35 @@ add_test(
     COMMAND creative-suite-main-editor-timeline-tests
 )
 
+add_executable(creative-suite-main-editor-transform-compositor-tests
+    transform_compositor_test.cpp
+    ../src/media/video_frame.h
+    ../src/media/video_metadata.h
+    ../src/rendering/frame_compositor.cpp
+    ../src/rendering/frame_compositor.h
+    ../src/timeline/timeline_model.cpp
+    ../src/timeline/timeline_model.h
+    ../src/timeline/timeline_transform.cpp
+    ../src/timeline/timeline_transform.h
+)
+
+target_include_directories(creative-suite-main-editor-transform-compositor-tests PRIVATE
+    ../src
+)
+
+target_compile_features(creative-suite-main-editor-transform-compositor-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-transform-compositor-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-transform-compositor-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-transform-compositor
+    COMMAND creative-suite-main-editor-transform-compositor-tests
+)
+
 add_executable(creative-suite-main-editor-timeline-widget-tests
     timeline_widget_test.cpp
     ../src/media/video_metadata.h
@@ -314,6 +349,8 @@ add_executable(creative-suite-main-editor-timeline-widget-tests
     ../src/timeline/timeline_model.h
     ../src/timeline/timeline_widget.cpp
     ../src/timeline/timeline_widget.h
+    ../src/timeline/timeline_transform.cpp
+    ../src/timeline/timeline_transform.h
 )
 
 target_include_directories(creative-suite-main-editor-timeline-widget-tests PRIVATE
@@ -380,6 +417,8 @@ add_executable(creative-suite-main-editor-project-tests
     ../src/project/project_document.h
     ../src/project/project_file.cpp
     ../src/project/project_file.h
+    ../src/timeline/timeline_transform.cpp
+    ../src/timeline/timeline_transform.h
 )
 
 target_include_directories(creative-suite-main-editor-project-tests PRIVATE
