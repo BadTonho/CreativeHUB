@@ -152,6 +152,11 @@ Pay special attention to:
 - Use static analysis, sanitizers, fuzzing, and profiling when appropriate for the chosen technology.
 - Handle media errors, corrupted files, and resource shortages without unexpectedly terminating the application.
 - Every application and failure-prone module must maintain an actionable error log so problems can be diagnosed and corrected.
+- Every unexpected, technical, or operational error must be logged before or
+  while it is reported to the user. Intentional control-flow outcomes and
+  expected user actions, such as cancelling a dialog, importing a duplicate,
+  or trying to add a clip while the timeline is occupied, are not errors and
+  must not be written as error entries.
 - Error entries should include the timestamp, severity, subsystem, operation, human-readable cause, relevant error code, and useful context such as a file path or identifier when available.
 - User-facing error messages may remain concise, but the detailed cause must be written to the local log before or while the error is reported.
 - Logs must never contain passwords, tokens, private keys, or unnecessary sensitive personal data, and should support bounded size or rotation when persistent.

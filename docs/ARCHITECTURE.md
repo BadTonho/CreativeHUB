@@ -118,7 +118,10 @@ files of up to 5 MB each. The Help menu provides an `Open Log Folder` action.
 The logger records handled media and application errors as well as unexpected
 termination attempts, but it does not create native crash dumps in this phase.
 Passwords, tokens, private keys, and media contents must never be written to
-the log.
+the log. Every unexpected, technical, or operational failure must produce a
+detailed log entry before or while it is reported to the user. Expected
+control-flow outcomes, such as cancelling a dialog, duplicate imports, and an
+occupied single-clip timeline, are intentionally excluded from error logging.
 
 ## Build and dependency policy
 
