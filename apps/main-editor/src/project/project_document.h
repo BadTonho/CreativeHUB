@@ -19,12 +19,16 @@ struct ProjectClip {
     std::int64_t timeline_start_frame = 0;
     std::int64_t source_start_frame = 0;
     std::int64_t duration_frames = 0;
+    double audio_gain = 1.0;
+    bool audio_muted = false;
 
     friend bool operator==(const ProjectClip&, const ProjectClip&) = default;
 };
 
 struct ProjectTrack {
     std::string name;
+    double audio_gain = 1.0;
+    bool audio_muted = false;
     std::vector<ProjectClip> clips;
 
     friend bool operator==(const ProjectTrack&, const ProjectTrack&) = default;

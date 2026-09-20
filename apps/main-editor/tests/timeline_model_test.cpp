@@ -79,6 +79,30 @@ int main() {
         require(first_clip.frame_count == first_metadata.frame_count,
                 "The first clip frame count was not preserved.");
 
+        timeline::TimelineModel audio_model;
+        require(audio_model.addClip(first_metadata) == timeline::AddClipResult::Added,
+                "The audio parameter test source was not added.");
+        require(audio_model.tracks()[0].audio_gain == 1.0 &&
+                    !audio_model.tracks()[0].audio_muted &&
+                    audio_model.clips()[0].audio_gain == 1.0 &&
+                    !audio_model.clips()[0].audio_muted,
+                "Audio parameters did not start with their defaults.");
+        require(audio_model.setClipAudio(0, 0, 0.5, true) ==
+                    timeline::AudioParameterResult::Changed,
+                "Clip audio parameters could not be changed.");
+        require(audio_model.setTrackAudio(0, 1.5, false) ==
+                    timeline::AudioParameterResult::Changed,
+                "Track audio parameters could not be changed.");
+        require(audio_model.clips()[0].audio_gain == 0.5 &&
+                    audio_model.clips()[0].audio_muted &&
+                    audio_model.tracks()[0].audio_gain == 1.5,
+                "Audio parameter changes were not preserved.");
+        require(audio_model.setClipAudio(0, 0, 2.1, false) ==
+                    timeline::AudioParameterResult::InvalidValue &&
+                    audio_model.setTrackAudio(0, 99.0, false) ==
+                    timeline::AudioParameterResult::InvalidValue,
+                "Invalid audio gains were accepted.");
+
         const auto second_metadata = makeMetadata(second_source, "second.mkv", 60);
         require(model.addClip(second_metadata) == timeline::AddClipResult::Added,
                 "The second clip was not added.");
@@ -434,6 +458,26 @@ int main() {
                     history_model.clips()[0].source_path ==
                         std::filesystem::weakly_canonical(second_source),
                 "Undo after clear did not restore the Timeline.");
+
+        const auto before_audio = make_history_state(0, first_source, 4);
+        history.clear();
+        history.recordBeforeEdit(before_audio);
+        require(history_model.setClipAudio(0, 0, 0.25, true) ==
+                    timeline::AudioParameterResult::Changed,
+                "The history audio edit failed.");
+        const auto after_audio = make_history_state(0, first_source, 4);
+        const auto undone_audio = history.undo(after_audio);
+        require(undone_audio.has_value(), "Undo after audio edit was unavailable.");
+        history_model.restore(undone_audio->timeline);
+        require(history_model.clips()[0].audio_gain == 1.0 &&
+                    !history_model.clips()[0].audio_muted,
+                "Undo after audio edit did not restore clip audio parameters.");
+        const auto redone_audio = history.redo(*undone_audio);
+        require(redone_audio.has_value(), "Redo after audio edit was unavailable.");
+        history_model.restore(redone_audio->timeline);
+        require(history_model.clips()[0].audio_gain == 0.25 &&
+                    history_model.clips()[0].audio_muted,
+                "Redo after audio edit did not restore clip audio parameters.");
 
         history.clear();
         for (std::size_t index = 0; index < 105; ++index) {

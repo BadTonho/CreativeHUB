@@ -3,7 +3,15 @@ include(GNUInstallDirs)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Widgets OpenGL OpenGLWidgets)
-find_package(FFMPEG MODULE REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
+find_package(Qt6 CONFIG QUIET COMPONENTS Multimedia)
+find_package(FFMPEG MODULE REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL SWRESAMPLE SWSCALE)
+
+if(TARGET Qt6::Multimedia)
+    set(CREATIVE_SUITE_HAS_QT_MULTIMEDIA TRUE)
+else()
+    set(CREATIVE_SUITE_HAS_QT_MULTIMEDIA FALSE)
+    message(WARNING "Qt6::Multimedia was not found; audio output will use the diagnostic fallback.")
+endif()
 
 add_executable(creative-suite-main-editor
     src/main.cpp
@@ -15,11 +23,16 @@ add_executable(creative-suite-main-editor
     src/rendering/opengl_preview_surface.h
     src/playback/playback_worker.cpp
     src/playback/playback_worker.h
+    src/playback/audio_output.cpp
+    src/playback/audio_output.h
     src/logging/logger.cpp
     src/logging/logger.h
     src/media/video_decoder.cpp
     src/media/video_decoder.h
     src/media/video_frame.h
+    src/media/audio_frame.h
+    src/media/audio_playback.cpp
+    src/media/audio_playback.h
     src/media/media_library.cpp
     src/media/media_library.h
     src/media/video_metadata.h
@@ -47,6 +60,11 @@ target_link_libraries(creative-suite-main-editor PRIVATE
     Qt6::OpenGLWidgets
     ${FFMPEG_LIBRARIES}
 )
+
+if(CREATIVE_SUITE_HAS_QT_MULTIMEDIA)
+    target_link_libraries(creative-suite-main-editor PRIVATE Qt6::Multimedia)
+    target_compile_definitions(creative-suite-main-editor PRIVATE CREATIVE_SUITE_HAS_QT_MULTIMEDIA=1)
+endif()
 
 target_include_directories(creative-suite-main-editor PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src

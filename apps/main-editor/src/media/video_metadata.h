@@ -9,6 +9,15 @@
 
 namespace media {
 
+struct AudioMetadata {
+    std::string codec;
+    int sample_rate = 0;
+    int channel_count = 0;
+    std::optional<double> duration_seconds;
+
+    friend bool operator==(const AudioMetadata&, const AudioMetadata&) = default;
+};
+
 struct VideoMetadata {
     std::filesystem::path source_path;
     std::string display_name;
@@ -19,6 +28,7 @@ struct VideoMetadata {
     std::optional<double> frame_rate;
     std::optional<double> duration_seconds;
     std::optional<std::int64_t> frame_count;
+    std::optional<AudioMetadata> audio;
 };
 
 class MediaError final : public std::runtime_error {

@@ -1,5 +1,6 @@
 #include "media/video_decoder.h"
 #include "media/video_metadata.h"
+#include "media/video_probe.h"
 
 #include <chrono>
 #include <filesystem>
@@ -63,6 +64,11 @@ int main(int argc, char* argv[]) {
                         static_cast<std::size_t>(frame.stride) *
                             static_cast<std::size_t>(frame.height),
                     "Decoded frame buffer size is incorrect.");
+
+            const media::VideoProbe probe;
+            const auto metadata = probe.probe(argv[1]);
+            require(!metadata.audio.has_value(),
+                    "The video-only reference unexpectedly reported audio.");
         }
     } catch (const std::exception& error) {
         std::error_code cleanup_error;

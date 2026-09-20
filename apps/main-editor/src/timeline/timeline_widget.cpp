@@ -55,7 +55,7 @@ TimelineWidget::TimelineWidget(QWidget* parent)
 
 void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
     tracks_ = tracks;
-    if (tracks_.empty()) tracks_.push_back(TimelineTrack{1, "Video 1", {}});
+    if (tracks_.empty()) tracks_.push_back(TimelineTrack{1, "Video 1", 1.0, false, {}});
     if (active_clip_.has_value() &&
         (active_clip_->track_index >= tracks_.size() ||
          active_clip_->clip_index >= tracks_[active_clip_->track_index].clips.size())) {
@@ -77,13 +77,13 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
 }
 
 void TimelineWidget::setClips(const std::vector<TimelineClip>& clips) {
-    TimelineTrack track{1, "Video 1", clips};
+    TimelineTrack track{1, "Video 1", 1.0, false, clips};
     setTracks({track});
 }
 
 void TimelineWidget::clearClips() {
     tracks_.clear();
-    tracks_.push_back(TimelineTrack{1, "Video 1", {}});
+    tracks_.push_back(TimelineTrack{1, "Video 1", 1.0, false, {}});
     setMinimumHeight(static_cast<int>(top_margin + minimum_row_height + 12.0));
     active_clip_.reset();
     playhead_frame_ = 0;

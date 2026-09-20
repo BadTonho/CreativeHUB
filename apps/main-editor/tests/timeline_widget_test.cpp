@@ -68,10 +68,14 @@ int main(int argc, char* argv[]) {
         timeline::TimelineTrack top_track{
             2,
             "Video 2",
+            1.0,
+            false,
             {makeClip("top.mkv", 0, 100, "top.mkv")}};
         timeline::TimelineTrack lower_track{
             1,
             "Video 1",
+            1.0,
+            false,
             {makeClip("lower.mkv", 0, 100, "lower.mkv")}};
         widget.setTracks({top_track, lower_track});
         application.processEvents();

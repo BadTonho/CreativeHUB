@@ -116,7 +116,11 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   track management, cross-track overlap, positional drops, and `.csp` version 2
   migration from version 1; manual validation confirmed multiple tracks,
   visual priority, gaps, clip movement, and timeline resizing.
-- [ ] Add basic audio editing and volume control.
+- [-] Add synchronized playback of embedded video audio with per-clip and
+  per-track volume/mute controls, deterministic output fallback, persistence,
+  and Timeline history coverage. Automated coverage is passing; manual
+  audio-device and startup validation remain. Audio-only sources, mixing,
+  waveforms, automation, recording, and export remain future work.
 - [ ] Add basic layers, transformations, and keyframes.
 - [ ] Add basic text and captions.
 - [ ] Add essential transitions and effects.

@@ -50,10 +50,18 @@ operations retain repeated source occurrences independently.
 
 ## Playback
 
-The worker owns one FFmpeg session at a time. The Main Editor chooses the
-highest-priority visible clip at the current playhead and changes the session
-when crossing a clip boundary. Playback pauses in gaps and remains paused at
-the end of the last clip. GPU rendering and audio remain outside this scope.
+The worker owns one FFmpeg video session and, when available, one embedded
+audio session at a time. The Main Editor chooses the highest-priority visible
+clip at the current playhead and changes both sessions when crossing a clip
+boundary. Audio is the playback clock when output is available; videos without
+audio and output failures use the existing video timer. Playback pauses in
+gaps and remains paused at the end of the last clip. Audio is never mixed
+between overlapping tracks: only the visible top-priority clip contributes.
+
+Every clip and track also stores linear audio gain (`0.0` to `2.0`) and a mute
+flag. The effective gain is the product of clip and track gain. These
+parameters are Timeline edits and are restored by history, but decoded PCM is
+never stored in a snapshot.
 
 ## History and persistence
 
@@ -62,7 +70,8 @@ Undo/Redo snapshots. Snapshots restore tracks, order, names, clip identifiers,
 positions, active track and clip, selected media, and playhead. Decoded frames,
 FFmpeg sessions, and GPU resources are never stored.
 
-The versioned .csp project format stores the same track and clip structure.
+The versioned .csp project format stores the same track, clip, and optional
+audio parameter structure.
 Version 1 sequential clips migrate to Video 1 when opened. Advanced ripple
-editing, multiple media types, audio, project-wide history, and export remain
-future work.
+editing, multiple media types, audio-only sources, project-wide history, and
+export remain future work.

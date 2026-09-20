@@ -48,9 +48,9 @@ int main(int argc, char** argv) {
             {outside_source, "Offline Asset", "Unsorted", true},
         };
         original.timeline_tracks = {
-            {"Video 1", {
-                {first_source, 0, 30, 60},
-                {first_source, 60, 0, 30},
+            {"Video 1", 0.75, true, {
+                {first_source, 0, 30, 60, 0.5, true},
+                {first_source, 60, 0, 30, 1.25, false},
             }},
         };
         original.timeline_clips = original.timeline_tracks.front().clips;
@@ -62,6 +62,11 @@ int main(int argc, char** argv) {
                 "A source offset was not preserved.");
         require(loaded.timeline_clips[1].source_path == loaded.timeline_clips[0].source_path,
                 "Repeated source occurrences were not preserved.");
+        require(loaded.timeline_tracks[0].audio_gain == 0.75 &&
+                    loaded.timeline_tracks[0].audio_muted &&
+                    loaded.timeline_tracks[0].clips[0].audio_gain == 0.5 &&
+                    loaded.timeline_tracks[0].clips[0].audio_muted,
+                "Audio gain and mute settings were not preserved.");
 
         std::ifstream saved_file(project_path, std::ios::binary);
         const std::string saved_json{
@@ -74,6 +79,9 @@ int main(int argc, char** argv) {
                 "An outside source was not stored in the project.");
         require(saved_json.find("Footage/Scenes") != std::string::npos,
                 "The media bin was not stored in the project.");
+        require(saved_json.find("audio_gain") != std::string::npos &&
+                    saved_json.find("audio_muted") != std::string::npos,
+                "Audio settings were not written to the project.");
 
         const auto original_contents = saved_json;
         bool failed = false;
@@ -148,6 +156,11 @@ int main(int argc, char** argv) {
                     legacy.media.front().bin_path == "Unsorted" &&
                     !legacy.media.front().offline,
                 "A path-only version 1 media entry was not kept backward compatible.");
+        require(legacy.timeline_tracks.front().audio_gain == 1.0 &&
+                    !legacy.timeline_tracks.front().audio_muted &&
+                    legacy.timeline_tracks.front().clips.front().audio_gain == 1.0 &&
+                    !legacy.timeline_tracks.front().clips.front().audio_muted,
+                "A legacy project did not receive default audio parameters.");
 
         writeText(
             project_path,

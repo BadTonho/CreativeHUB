@@ -32,11 +32,15 @@ std::optional<std::int64_t> durationInFrames(const media::VideoMetadata& metadat
 } // namespace
 
 TimelineModel::TimelineModel() {
-    tracks_.push_back({next_track_id_++, "Video 1", {}});
+    tracks_.push_back({next_track_id_++, "Video 1", 1.0, false, {}});
 }
 
 bool TimelineModel::validName(const std::string& name) noexcept {
     return !name.empty() && name.find_first_not_of(" \t\r\n") != std::string::npos;
+}
+
+bool TimelineModel::validAudioGain(double gain) noexcept {
+    return std::isfinite(gain) && gain >= 0.0 && gain <= 2.0;
 }
 
 std::filesystem::path TimelineModel::canonicalPath(const std::filesystem::path& path) {
@@ -107,7 +111,7 @@ AddTrackResult TimelineModel::addTrack(std::string name) {
     if (!validName(name)) return AddTrackResult::InvalidName;
     tracks_.insert(
         tracks_.begin(),
-        TimelineTrack{next_track_id_++, std::move(name), {}});
+        TimelineTrack{next_track_id_++, std::move(name), 1.0, false, {}});
     return AddTrackResult::Added;
 }
 
@@ -174,6 +178,8 @@ AddClipResult TimelineModel::addClip(
         metadata.duration_seconds,
         metadata.frame_rate,
         metadata.frame_count,
+        1.0,
+        false,
         next_clip_id_++,
         track->track_id};
     track->clips.push_back(std::move(clip));
@@ -448,13 +454,15 @@ void TimelineModel::ensureIdentifiers() {
 void TimelineModel::restore(Snapshot snapshot) {
     if (snapshot.tracks.empty() && !snapshot.clips.empty()) {
         snapshot.tracks.push_back(
-            TimelineTrack{1, "Video 1", std::move(snapshot.clips)});
+            TimelineTrack{1, "Video 1", 1.0, false, std::move(snapshot.clips)});
     }
     tracks_ = std::move(snapshot.tracks);
     next_track_id_ = snapshot.next_track_id;
     next_clip_id_ = snapshot.next_clip_id;
     ensureIdentifiers();
-    if (tracks_.empty()) tracks_.push_back({next_track_id_++, "Video 1", {}});
+    if (tracks_.empty()) {
+        tracks_.push_back({next_track_id_++, "Video 1", 1.0, false, {}});
+    }
 }
 
 void TimelineModel::updateDisplayNameForSource(
@@ -466,6 +474,40 @@ void TimelineModel::updateDisplayNameForSource(
             if (canonicalPath(clip.source_path) == canonical_source) clip.display_name = display_name;
         }
     }
+}
+
+AudioParameterResult TimelineModel::setClipAudio(
+    std::size_t track_index,
+    std::size_t clip_index,
+    double gain,
+    bool muted) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_index >= track->clips.size()) {
+        return AudioParameterResult::InvalidIndex;
+    }
+    if (!validAudioGain(gain)) return AudioParameterResult::InvalidValue;
+    auto& clip = track->clips[clip_index];
+    if (clip.audio_gain == gain && clip.audio_muted == muted) {
+        return AudioParameterResult::NoChange;
+    }
+    clip.audio_gain = gain;
+    clip.audio_muted = muted;
+    return AudioParameterResult::Changed;
+}
+
+AudioParameterResult TimelineModel::setTrackAudio(
+    std::size_t track_index,
+    double gain,
+    bool muted) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr) return AudioParameterResult::InvalidIndex;
+    if (!validAudioGain(gain)) return AudioParameterResult::InvalidValue;
+    if (track->audio_gain == gain && track->audio_muted == muted) {
+        return AudioParameterResult::NoChange;
+    }
+    track->audio_gain = gain;
+    track->audio_muted = muted;
+    return AudioParameterResult::Changed;
 }
 
 } // namespace timeline

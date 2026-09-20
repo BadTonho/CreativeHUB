@@ -2,7 +2,12 @@
 
 Status: **provisional**.
 
-The root `vcpkg.json` tracks Qt 6 through `qtbase` and FFmpeg through `ffmpeg`.
+The root `vcpkg.json` tracks Qt 6 through `qtbase` and `qtmultimedia`, and
+FFmpeg through `ffmpeg`. The Main Editor uses the FFmpeg `AVFORMAT`, `AVCODEC`,
+`AVUTIL`, `SWSCALE`, and `SWRESAMPLE` components. Qt Multimedia is optional in
+the local CMake configuration so a developer environment without the module
+still builds the video-clock fallback; a complete vcpkg installation provides
+`Qt6::Multimedia` and enables `QAudioSink`.
 CMake discovers these dependencies through the selected toolchain or an
 externally supplied `CMAKE_PREFIX_PATH`; source files must not contain an
 absolute developer-machine path.

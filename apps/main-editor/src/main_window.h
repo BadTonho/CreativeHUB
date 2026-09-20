@@ -22,10 +22,12 @@
 class QDockWidget;
 class QAction;
 class QCloseEvent;
+class QCheckBox;
 class QLabel;
 class QListWidget;
 class QPushButton;
 class QPoint;
+class QSlider;
 class QTreeWidget;
 class QTreeWidgetItem;
 class PreviewWidget;
@@ -132,6 +134,11 @@ private:
     void recordTimelineEdit(timeline::EditState state);
     void updateHistoryActions();
     void updateTimelineState();
+    void beginAudioEdit();
+    void finishAudioEdit();
+    void applyClipAudioControls();
+    void applyTrackAudioControls();
+    void updatePlaybackAudioParameters();
     [[nodiscard]] bool hasSelectedMedia() const noexcept;
     [[nodiscard]] std::optional<timeline::ClipLocation>
     selectedTimelineClipLocation() const noexcept;
@@ -205,6 +212,10 @@ private:
     QPushButton* next_frame_button_ = nullptr;
     QPushButton* clear_timeline_button_ = nullptr;
     QPushButton* razor_button_ = nullptr;
+    QSlider* clip_volume_slider_ = nullptr;
+    QSlider* track_volume_slider_ = nullptr;
+    QCheckBox* clip_mute_check_ = nullptr;
+    QCheckBox* track_mute_check_ = nullptr;
     QLabel* playback_status_label_ = nullptr;
     QAction* new_project_action_ = nullptr;
     QAction* open_project_action_ = nullptr;
@@ -229,6 +240,7 @@ private:
     std::optional<PendingClipActivation> pending_clip_activation_;
     std::optional<std::filesystem::path> project_path_;
     std::optional<project::ProjectDocument> saved_project_document_;
+    std::optional<timeline::EditState> pending_audio_edit_;
     bool project_dirty_ = false;
     media::VideoProbe video_probe_;
     media::VideoDecoder video_decoder_;

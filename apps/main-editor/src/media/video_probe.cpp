@@ -13,6 +13,7 @@ extern "C" {
 #include <limits>
 #include <memory>
 #include <sstream>
+#include <utility>
 
 namespace media {
 namespace {
@@ -150,6 +151,28 @@ VideoMetadata VideoProbe::probe(const std::filesystem::path& source_path) const 
             const double estimated_frames = *metadata.duration_seconds * *metadata.frame_rate;
             if (estimated_frames <= static_cast<double>(std::numeric_limits<int64_t>::max())) {
                 metadata.frame_count = static_cast<int64_t>(std::llround(estimated_frames));
+            }
+        }
+
+        const AVCodec* audio_codec = nullptr;
+        const int audio_stream_index = av_find_best_stream(
+            format.get(), AVMEDIA_TYPE_AUDIO, -1, -1, &audio_codec, 0);
+        if (audio_stream_index >= 0 && audio_codec != nullptr) {
+            AVStream* audio_stream = format->streams[audio_stream_index];
+            if (audio_stream != nullptr && audio_stream->codecpar != nullptr) {
+                AudioMetadata audio;
+                audio.codec = audio_codec->long_name != nullptr
+                    ? audio_codec->long_name
+                    : (audio_codec->name != nullptr ? audio_codec->name : "Unknown");
+                audio.sample_rate = audio_stream->codecpar->sample_rate;
+                audio.channel_count = audio_stream->codecpar->ch_layout.nb_channels;
+                audio.duration_seconds = secondsFromTimestamp(
+                    audio_stream->duration,
+                    audio_stream->time_base);
+                if (!audio.duration_seconds.has_value()) {
+                    audio.duration_seconds = metadata.duration_seconds;
+                }
+                metadata.audio = std::move(audio);
             }
         }
 

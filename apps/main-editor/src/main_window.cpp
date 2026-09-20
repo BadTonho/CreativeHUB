@@ -7,6 +7,7 @@
 #include "ui/media_browser_list_widget.h"
 
 #include <QAction>
+#include <QCheckBox>
 #include <QCloseEvent>
 #include <QDockWidget>
 #include <QFileDialog>
@@ -27,6 +28,7 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QScrollArea>
+#include <QSlider>
 #include <QStatusBar>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -84,6 +86,12 @@ QString mediaDetailsText(const media::VideoMetadata& metadata) {
     const QString frame_count = metadata.frame_count.has_value()
         ? QString::number(*metadata.frame_count)
         : "Unknown";
+    const QString audio = metadata.audio.has_value()
+        ? QString("%1, %2 Hz, %3 channels")
+            .arg(fromUtf8(metadata.audio->codec))
+            .arg(metadata.audio->sample_rate)
+            .arg(metadata.audio->channel_count)
+        : "None";
 
     return QString("Name: %1\n"
                    "Format: %2\n"
@@ -92,7 +100,8 @@ QString mediaDetailsText(const media::VideoMetadata& metadata) {
                    "Frame rate: %6\n"
                    "Duration: %7\n"
                    "Frames: %8\n"
-                   "Path: %9")
+                   "Audio: %9\n"
+                   "Path: %10")
         .arg(fromUtf8(metadata.display_name))
         .arg(fromUtf8(metadata.container_format))
         .arg(fromUtf8(metadata.video_codec))
@@ -101,6 +110,7 @@ QString mediaDetailsText(const media::VideoMetadata& metadata) {
         .arg(formatOptionalDouble(metadata.frame_rate, " FPS"))
         .arg(formatOptionalDouble(metadata.duration_seconds, " s"))
         .arg(frame_count)
+        .arg(audio)
         .arg(fromUtf8(pathToUtf8(metadata.source_path)));
 }
 
@@ -194,13 +204,17 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
     for (const auto& track : timeline_model_.tracks()) {
         project::ProjectTrack project_track;
         project_track.name = track.name;
+        project_track.audio_gain = track.audio_gain;
+        project_track.audio_muted = track.audio_muted;
         project_track.clips.reserve(track.clips.size());
         for (const auto& clip : track.clips) {
             project_track.clips.push_back(project::ProjectClip{
                 normalizedPath(clip.source_path),
                 clip.timeline_start_frame,
                 clip.source_start_frame,
-                clip.timeline_duration_frames});
+                clip.timeline_duration_frames,
+                clip.audio_gain,
+                clip.audio_muted});
         }
         document.timeline_tracks.push_back(std::move(project_track));
     }
@@ -319,6 +333,7 @@ bool MainWindow::confirmProjectChange() {
 
 void MainWindow::clearProjectState() {
     pending_clip_activation_.reset();
+    pending_audio_edit_.reset();
     ++playback_generation_;
     playback_is_playing_ = false;
     if (playback_worker_ != nullptr) {
@@ -489,7 +504,7 @@ void MainWindow::openProject() {
         std::vector<project::ProjectTrack> project_tracks = document.timeline_tracks;
         if (project_tracks.empty() && !document.timeline_clips.empty()) {
             project_tracks.push_back(project::ProjectTrack{
-                "Video 1", document.timeline_clips});
+                "Video 1", 1.0, false, document.timeline_clips});
         }
 
         timeline::TimelineModel::Snapshot snapshot;
@@ -499,6 +514,8 @@ void MainWindow::openProject() {
                 0,
                 project_track.name.empty() ? "Video " + std::to_string(track_index + 1)
                                            : project_track.name,
+                project_track.audio_gain,
+                project_track.audio_muted,
                 {}});
             for (std::size_t clip_index = 0; clip_index < project_track.clips.size(); ++clip_index) {
                 current_clip_index = clip_index;
@@ -540,7 +557,9 @@ void MainWindow::openProject() {
                 loaded_item.display_name,
                 metadata.duration_seconds,
                 metadata.frame_rate,
-                metadata.frame_count});
+                metadata.frame_count,
+                project_clip.audio_gain,
+                project_clip.audio_muted});
             snapshot.tracks.back().clips.push_back(snapshot.clips.back());
             }
         }
@@ -618,6 +637,7 @@ void MainWindow::applyLoadedProject(
     const std::filesystem::path& project_path,
     const project::ProjectDocument& saved_document) {
     pending_clip_activation_.reset();
+    pending_audio_edit_.reset();
     ++playback_generation_;
     playback_is_playing_ = false;
     if (playback_worker_ != nullptr) {
@@ -1435,6 +1455,36 @@ QWidget* MainWindow::createTimeline() {
     controls->addStretch();
     layout->addLayout(controls);
 
+    auto* audio_controls = new QHBoxLayout;
+    audio_controls->setSpacing(6);
+    auto* audio_label = new QLabel("Audio", container);
+    audio_label->setStyleSheet("color: #9aa4b2; font-weight: 600;");
+    audio_controls->addWidget(audio_label);
+
+    auto* clip_volume_label = new QLabel("Clip", container);
+    clip_volume_slider_ = new QSlider(Qt::Horizontal, container);
+    clip_volume_slider_->setRange(0, 200);
+    clip_volume_slider_->setValue(100);
+    clip_volume_slider_->setFixedWidth(130);
+    clip_volume_slider_->setToolTip("Active clip volume (0% to 200%)");
+    clip_mute_check_ = new QCheckBox("Mute clip", container);
+    audio_controls->addWidget(clip_volume_label);
+    audio_controls->addWidget(clip_volume_slider_);
+    audio_controls->addWidget(clip_mute_check_);
+
+    auto* track_volume_label = new QLabel("Track", container);
+    track_volume_slider_ = new QSlider(Qt::Horizontal, container);
+    track_volume_slider_->setRange(0, 200);
+    track_volume_slider_->setValue(100);
+    track_volume_slider_->setFixedWidth(130);
+    track_volume_slider_->setToolTip("Active track volume (0% to 200%)");
+    track_mute_check_ = new QCheckBox("Mute track", container);
+    audio_controls->addWidget(track_volume_label);
+    audio_controls->addWidget(track_volume_slider_);
+    audio_controls->addWidget(track_mute_check_);
+    audio_controls->addStretch();
+    layout->addLayout(audio_controls);
+
     previous_frame_button_->setToolTip("Step one frame backward");
     play_pause_button_->setToolTip("Play or pause the active clip");
     next_frame_button_->setToolTip("Step one frame forward");
@@ -1500,6 +1550,28 @@ QWidget* MainWindow::createTimeline() {
             this, [this]() { moveActiveTrack(1); });
     connect(remove_track_button, &QPushButton::clicked,
             this, &MainWindow::removeActiveTrack);
+    connect(clip_volume_slider_, &QSlider::sliderPressed,
+            this, &MainWindow::beginAudioEdit);
+    connect(clip_volume_slider_, &QSlider::valueChanged,
+            this, [this](int) { applyClipAudioControls(); });
+    connect(clip_volume_slider_, &QSlider::sliderReleased,
+            this, &MainWindow::finishAudioEdit);
+    connect(track_volume_slider_, &QSlider::sliderPressed,
+            this, &MainWindow::beginAudioEdit);
+    connect(track_volume_slider_, &QSlider::valueChanged,
+            this, [this](int) { applyTrackAudioControls(); });
+    connect(track_volume_slider_, &QSlider::sliderReleased,
+            this, &MainWindow::finishAudioEdit);
+    connect(clip_mute_check_, &QCheckBox::toggled, this, [this](bool) {
+        beginAudioEdit();
+        applyClipAudioControls();
+        finishAudioEdit();
+    });
+    connect(track_mute_check_, &QCheckBox::toggled, this, [this](bool) {
+        beginAudioEdit();
+        applyTrackAudioControls();
+        finishAudioEdit();
+    });
     connect(
         timeline_widget_,
         &timeline::TimelineWidget::clipSelectedAt,
@@ -1593,6 +1665,20 @@ void MainWindow::initializePlayback() {
         this,
         [this](const QString& message, qint64 error_code, quint64 generation) {
             handlePlaybackError(message, error_code, generation);
+        },
+        Qt::QueuedConnection);
+    connect(
+        playback_worker_,
+        &playback::PlaybackWorker::audioWarning,
+        this,
+        [this](const QString&, qint64, quint64 generation) {
+            if (generation != playback_generation_) return;
+            statusBar()->showMessage(
+                "Audio unavailable; continuing with video playback.");
+            if (playback_status_label_ != nullptr) {
+                playback_status_label_->setText(
+                    "Audio unavailable; video fallback is active.");
+            }
         },
         Qt::QueuedConnection);
 
@@ -1697,6 +1783,83 @@ void MainWindow::updateHistoryActions() {
     if (redo_action_ != nullptr) redo_action_->setEnabled(timeline_history_.canRedo());
 }
 
+void MainWindow::beginAudioEdit() {
+    if (!pending_audio_edit_.has_value() &&
+        active_timeline_track_index_.has_value() &&
+        active_timeline_clip_index_.has_value()) {
+        pending_audio_edit_ = captureTimelineEditState();
+    }
+}
+
+void MainWindow::finishAudioEdit() {
+    if (!pending_audio_edit_.has_value()) return;
+    auto before = std::move(*pending_audio_edit_);
+    pending_audio_edit_.reset();
+    if (before.timeline != timeline_model_.snapshot()) {
+        recordTimelineEdit(std::move(before));
+    }
+    updateTimelineState();
+    updatePlaybackControls();
+    updatePlaybackStatus();
+}
+
+void MainWindow::applyClipAudioControls() {
+    if (!active_timeline_track_index_.has_value() ||
+        !active_timeline_clip_index_.has_value() ||
+        clip_volume_slider_ == nullptr || clip_mute_check_ == nullptr) {
+        return;
+    }
+    beginAudioEdit();
+    const auto result = timeline_model_.setClipAudio(
+        *active_timeline_track_index_,
+        *active_timeline_clip_index_,
+        static_cast<double>(clip_volume_slider_->value()) / 100.0,
+        clip_mute_check_->isChecked());
+    if (result == timeline::AudioParameterResult::Changed) {
+        updatePlaybackAudioParameters();
+        updateProjectDirtyState();
+        statusBar()->showMessage("Clip audio settings changed.");
+    }
+}
+
+void MainWindow::applyTrackAudioControls() {
+    if (!active_timeline_track_index_.has_value() ||
+        track_volume_slider_ == nullptr || track_mute_check_ == nullptr) {
+        return;
+    }
+    beginAudioEdit();
+    const auto result = timeline_model_.setTrackAudio(
+        *active_timeline_track_index_,
+        static_cast<double>(track_volume_slider_->value()) / 100.0,
+        track_mute_check_->isChecked());
+    if (result == timeline::AudioParameterResult::Changed) {
+        updatePlaybackAudioParameters();
+        updateProjectDirtyState();
+        statusBar()->showMessage("Track audio settings changed.");
+    }
+}
+
+void MainWindow::updatePlaybackAudioParameters() {
+    if (playback_worker_ == nullptr ||
+        !active_timeline_track_index_.has_value() ||
+        !active_timeline_clip_index_.has_value() ||
+        *active_timeline_track_index_ >= timeline_model_.trackCount() ||
+        *active_timeline_clip_index_ >= timeline_model_.clipCount(
+            *active_timeline_track_index_)) {
+        return;
+    }
+    const auto& track = timeline_model_.tracks()[*active_timeline_track_index_];
+    const auto& clip = track.clips[*active_timeline_clip_index_];
+    QMetaObject::invokeMethod(
+        playback_worker_,
+        "setAudioParameters",
+        Qt::QueuedConnection,
+        Q_ARG(double, track.audio_gain),
+        Q_ARG(bool, track.audio_muted),
+        Q_ARG(double, clip.audio_gain),
+        Q_ARG(bool, clip.audio_muted));
+}
+
 void MainWindow::updateTimelineState() {
     const bool selected = hasSelectedMedia() && !media_items_[*selectedMediaIndex()].offline;
     const bool occupied = timeline_model_.hasClip();
@@ -1721,6 +1884,31 @@ void MainWindow::updateTimelineState() {
             timeline_widget_->setActiveClip(std::nullopt);
         }
         timeline_widget_->setPlayheadFrame(playback_frame_index_);
+    }
+
+    const bool audio_enabled = canPlaybackSelectedMedia() &&
+        active_timeline_track_index_.has_value() &&
+        active_timeline_clip_index_.has_value();
+    if (clip_volume_slider_ != nullptr && clip_mute_check_ != nullptr &&
+        track_volume_slider_ != nullptr && track_mute_check_ != nullptr) {
+        clip_volume_slider_->setEnabled(audio_enabled);
+        clip_mute_check_->setEnabled(audio_enabled);
+        track_volume_slider_->setEnabled(audio_enabled);
+        track_mute_check_->setEnabled(audio_enabled);
+        if (audio_enabled) {
+            const auto& track = timeline_model_.tracks()[*active_timeline_track_index_];
+            const auto& clip = track.clips[*active_timeline_clip_index_];
+            const QSignalBlocker clip_slider_blocker(clip_volume_slider_);
+            const QSignalBlocker clip_mute_blocker(clip_mute_check_);
+            const QSignalBlocker track_slider_blocker(track_volume_slider_);
+            const QSignalBlocker track_mute_blocker(track_mute_check_);
+            clip_volume_slider_->setValue(static_cast<int>(std::lround(
+                std::clamp(clip.audio_gain, 0.0, 2.0) * 100.0)));
+            clip_mute_check_->setChecked(clip.audio_muted);
+            track_volume_slider_->setValue(static_cast<int>(std::lround(
+                std::clamp(track.audio_gain, 0.0, 2.0) * 100.0)));
+            track_mute_check_->setChecked(track.audio_muted);
+        }
     }
 
     updateHistoryActions();
@@ -2322,9 +2510,15 @@ void MainWindow::activateTimelineClipAt(
         Qt::QueuedConnection,
         Q_ARG(QString, fromUtf8(pathToUtf8(item.metadata.source_path))),
         Q_ARG(double, item.metadata.frame_rate.value_or(30.0)),
-        Q_ARG(qint64, static_cast<qint64>(clip.source_start_frame)),
-        Q_ARG(qint64, static_cast<qint64>(clip.timeline_duration_frames)),
-        Q_ARG(quint64, playback_generation_));
+         Q_ARG(qint64, static_cast<qint64>(clip.source_start_frame)),
+         Q_ARG(qint64, static_cast<qint64>(clip.timeline_duration_frames)),
+         Q_ARG(double, timeline_model_.tracks()[track_index].audio_gain),
+         Q_ARG(bool, timeline_model_.tracks()[track_index].audio_muted),
+         Q_ARG(double, clip.audio_gain),
+         Q_ARG(bool, clip.audio_muted),
+         Q_ARG(qint64, static_cast<qint64>(track_index)),
+         Q_ARG(qint64, static_cast<qint64>(clip_index)),
+         Q_ARG(quint64, playback_generation_));
 }
 
 void MainWindow::commitTimelineClipActivation(
@@ -3012,9 +3206,15 @@ void MainWindow::handleTimelineClipSplit(qint64 clip_index, qint64 local_frame) 
                 Qt::QueuedConnection,
                 Q_ARG(QString, fromUtf8(pathToUtf8(right_clip.source_path))),
                 Q_ARG(double, right_clip.frame_rate.value_or(30.0)),
-                Q_ARG(qint64, static_cast<qint64>(right_clip.source_start_frame)),
-                Q_ARG(qint64, static_cast<qint64>(right_clip.timeline_duration_frames)),
-                Q_ARG(quint64, playback_generation_));
+                 Q_ARG(qint64, static_cast<qint64>(right_clip.source_start_frame)),
+                 Q_ARG(qint64, static_cast<qint64>(right_clip.timeline_duration_frames)),
+                 Q_ARG(double, timeline_model_.tracks()[0].audio_gain),
+                 Q_ARG(bool, timeline_model_.tracks()[0].audio_muted),
+                 Q_ARG(double, right_clip.audio_gain),
+                 Q_ARG(bool, right_clip.audio_muted),
+                 Q_ARG(qint64, 0),
+                 Q_ARG(qint64, static_cast<qint64>(clip_index + 1)),
+                 Q_ARG(quint64, playback_generation_));
         }
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
@@ -3321,9 +3521,25 @@ void MainWindow::updateMediaDetails(int row) {
             Qt::QueuedConnection,
             Q_ARG(QString, source_path),
             Q_ARG(double, frame_rate),
-            Q_ARG(qint64, static_cast<qint64>(source_start_frame)),
-            Q_ARG(qint64, static_cast<qint64>(segment_frame_count)),
-            Q_ARG(quint64, playback_generation_));
+             Q_ARG(qint64, static_cast<qint64>(source_start_frame)),
+             Q_ARG(qint64, static_cast<qint64>(segment_frame_count)),
+             Q_ARG(double, active_timeline_track_index_.has_value()
+                 ? timeline_model_.tracks()[*active_timeline_track_index_].audio_gain : 1.0),
+             Q_ARG(bool, active_timeline_track_index_.has_value()
+                 ? timeline_model_.tracks()[*active_timeline_track_index_].audio_muted : false),
+             Q_ARG(double, active_timeline_track_index_.has_value() &&
+                 active_timeline_clip_index_.has_value()
+                 ? timeline_model_.tracks()[*active_timeline_track_index_]
+                     .clips[*active_timeline_clip_index_].audio_gain : 1.0),
+             Q_ARG(bool, active_timeline_track_index_.has_value() &&
+                 active_timeline_clip_index_.has_value()
+                 ? timeline_model_.tracks()[*active_timeline_track_index_]
+                     .clips[*active_timeline_clip_index_].audio_muted : false),
+             Q_ARG(qint64, active_timeline_track_index_.has_value()
+                 ? static_cast<qint64>(*active_timeline_track_index_) : -1),
+             Q_ARG(qint64, active_timeline_clip_index_.has_value()
+                 ? static_cast<qint64>(*active_timeline_clip_index_) : -1),
+             Q_ARG(quint64, playback_generation_));
     }
 }
 

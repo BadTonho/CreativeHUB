@@ -23,6 +23,8 @@ struct TimelineClip {
     std::optional<double> duration_seconds;
     std::optional<double> frame_rate;
     std::optional<std::int64_t> frame_count;
+    double audio_gain = 1.0;
+    bool audio_muted = false;
     ClipId clip_id = 0;
     TrackId track_id = 0;
 
@@ -32,6 +34,8 @@ struct TimelineClip {
 struct TimelineTrack {
     TrackId track_id = 0;
     std::string name;
+    double audio_gain = 1.0;
+    bool audio_muted = false;
     std::vector<TimelineClip> clips;
 
     friend bool operator==(const TimelineTrack&, const TimelineTrack&) = default;
@@ -74,6 +78,7 @@ enum class MoveClipResult {
 enum class SplitClipResult { Split, InvalidIndex, InvalidBoundary };
 enum class RemoveClipResult { Removed, InvalidIndex };
 enum class TrimClipResult { Trimmed, InvalidIndex, InvalidRange };
+enum class AudioParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 
 class TimelineModel final {
 public:
@@ -123,6 +128,15 @@ public:
         std::size_t clip_index,
         std::int64_t new_source_start_frame,
         std::int64_t new_duration_frames);
+    AudioParameterResult setClipAudio(
+        std::size_t track_index,
+        std::size_t clip_index,
+        double gain,
+        bool muted);
+    AudioParameterResult setTrackAudio(
+        std::size_t track_index,
+        double gain,
+        bool muted);
 
     void clear() noexcept;
 
@@ -146,6 +160,8 @@ public:
     void updateDisplayNameForSource(
         const std::filesystem::path& source_path,
         const std::string& display_name);
+
+    [[nodiscard]] static bool validAudioGain(double gain) noexcept;
 
 private:
     [[nodiscard]] static std::optional<std::int64_t> durationInFrames(

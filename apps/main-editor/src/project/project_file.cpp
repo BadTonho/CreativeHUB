@@ -56,6 +56,10 @@ bool isParentRelativePath(const std::filesystem::path& path) {
     return first != normalized.end() && *first == "..";
 }
 
+bool validAudioGain(double gain) {
+    return std::isfinite(gain) && gain >= 0.0 && gain <= 2.0;
+}
+
 QString storedPath(const std::filesystem::path& project_path,
                   const std::filesystem::path& source_path) {
     const auto project_directory = normalizedPath(project_path).parent_path();
@@ -147,10 +151,16 @@ void validateDocument(const ProjectDocument& document,
                 clip.timeline_start_frame) {
             throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains an overflowing timeline range.");
         }
+        if (!validAudioGain(clip.audio_gain)) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip audio gain.");
+        }
     };
     for (const auto& track : document.timeline_tracks) {
         if (track.name.empty()) {
             throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains a track without a name.");
+        }
+        if (!validAudioGain(track.audio_gain)) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid track audio gain.");
         }
         for (const auto& clip : track.clips) validate_clip(clip);
         for (std::size_t left = 0; left < track.clips.size(); ++left) {
@@ -282,7 +292,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
         if (!clips_value.isArray()) {
             throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the timeline clips array.");
         }
-        ProjectTrack track{"Video 1", {}};
+        ProjectTrack track{"Video 1", 1.0, false, {}};
         std::int64_t timeline_start = 0;
         for (const auto& clip_value : clips_value.toArray()) {
             if (!clip_value.isObject()) {
@@ -314,6 +324,18 @@ ProjectDocument load(const std::filesystem::path& project_path) {
             const auto track_object = track_value.toObject();
             ProjectTrack track;
             track.name = requiredString(track_object, "name", project_path).toUtf8().toStdString();
+            if (track_object.contains("audio_gain")) {
+                if (!track_object.value("audio_gain").isDouble()) {
+                    throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid track audio gain.");
+                }
+                track.audio_gain = track_object.value("audio_gain").toDouble();
+            }
+            if (track_object.contains("audio_muted")) {
+                if (!track_object.value("audio_muted").isBool()) {
+                    throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid track mute flag.");
+                }
+                track.audio_muted = track_object.value("audio_muted").toBool();
+            }
             const auto track_clips = track_object.value("clips");
             if (!track_clips.isArray()) {
                 throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing a track clips array.");
@@ -328,6 +350,18 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                 clip.timeline_start_frame = requiredInteger(clip_object, "timeline_start_frame", project_path);
                 clip.source_start_frame = requiredInteger(clip_object, "source_start_frame", project_path);
                 clip.duration_frames = requiredInteger(clip_object, "duration_frames", project_path);
+                if (clip_object.contains("audio_gain")) {
+                    if (!clip_object.value("audio_gain").isDouble()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip audio gain.");
+                    }
+                    clip.audio_gain = clip_object.value("audio_gain").toDouble();
+                }
+                if (clip_object.contains("audio_muted")) {
+                    if (!clip_object.value("audio_muted").isBool()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip mute flag.");
+                    }
+                    clip.audio_muted = clip_object.value("audio_muted").toBool();
+                }
                 track.clips.push_back(clip);
                 document.timeline_clips.push_back(std::move(clip));
             }
@@ -361,7 +395,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
 
     std::vector<ProjectTrack> tracks = document.timeline_tracks;
     if (tracks.empty() && !document.timeline_clips.empty()) {
-        tracks.push_back({"Video 1", document.timeline_clips});
+        tracks.push_back({"Video 1", 1.0, false, document.timeline_clips});
         std::int64_t start = 0;
         for (auto& clip : tracks.front().clips) {
             clip.timeline_start_frame = start;
@@ -376,6 +410,8 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
     for (const auto& track_source : tracks) {
         QJsonObject track;
         track.insert("name", QString::fromStdString(track_source.name));
+        track.insert("audio_gain", track_source.audio_gain);
+        track.insert("audio_muted", track_source.audio_muted);
         QJsonArray clips;
         for (const auto& clip : track_source.clips) {
             QJsonObject item;
@@ -383,6 +419,8 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
             item.insert("timeline_start_frame", static_cast<qint64>(clip.timeline_start_frame));
             item.insert("source_start_frame", static_cast<qint64>(clip.source_start_frame));
             item.insert("duration_frames", static_cast<qint64>(clip.duration_frames));
+            item.insert("audio_gain", clip.audio_gain);
+            item.insert("audio_muted", clip.audio_muted);
             clips.append(item);
         }
         track.insert("clips", clips);

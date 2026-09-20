@@ -10,14 +10,17 @@ history, decoded frames, FFmpeg sessions, or Qt resources.
 ## Version 2 format
 
 The root object contains format, version 2, media, bins, and timeline.tracks.
-Each track has a name and clips. Each clip stores source, timeline_start_frame,
-source_start_frame, and duration_frames. Media paths use UTF-8 and forward
+Each track has a name, optional `audio_gain`, optional `audio_muted`, and clips.
+Each clip stores source, timeline_start_frame, source_start_frame,
+duration_frames, and optional `audio_gain` and `audio_muted`. Media paths use UTF-8 and forward
 slashes. Paths inside the project directory are relative; outside paths are
 absolute. Paths are resolved and canonicalized on open.
 
 Repeated sources remain independent clip occurrences. Optional media name, bin,
 and offline fields are backward compatible with path-only media entries. The
-default bin is Unsorted.
+default bin is Unsorted. Missing audio fields load as `audio_gain: 1.0` and
+`audio_muted: false`, preserving compatibility with projects written before
+audio controls existed.
 
 ## Version 1 migration
 

@@ -29,6 +29,8 @@ add_executable(creative-suite-main-editor-video-decoder-tests
     ../src/media/video_decoder.h
     ../src/media/video_frame.h
     ../src/media/video_metadata.h
+    ../src/media/video_probe.cpp
+    ../src/media/video_probe.h
     ../src/media/video_playback.cpp
     ../src/media/video_playback.h
 )
@@ -149,6 +151,11 @@ add_executable(creative-suite-main-editor-playback-worker-tests
     ../src/media/video_metadata.h
     ../src/media/video_playback.cpp
     ../src/media/video_playback.h
+    ../src/media/audio_frame.h
+    ../src/media/audio_playback.cpp
+    ../src/media/audio_playback.h
+    ../src/playback/audio_output.cpp
+    ../src/playback/audio_output.h
     ../src/playback/playback_worker.cpp
     ../src/playback/playback_worker.h
 )
@@ -167,12 +174,70 @@ target_link_libraries(creative-suite-main-editor-playback-worker-tests PRIVATE
     ${FFMPEG_LIBRARIES}
 )
 
+if(CREATIVE_SUITE_HAS_QT_MULTIMEDIA)
+    target_link_libraries(creative-suite-main-editor-playback-worker-tests PRIVATE Qt6::Multimedia)
+    target_compile_definitions(creative-suite-main-editor-playback-worker-tests PRIVATE CREATIVE_SUITE_HAS_QT_MULTIMEDIA=1)
+endif()
+
 target_compile_features(creative-suite-main-editor-playback-worker-tests PRIVATE cxx_std_20)
 
 if(MSVC)
     target_compile_options(creative-suite-main-editor-playback-worker-tests PRIVATE /W4 /permissive-)
 else()
     target_compile_options(creative-suite-main-editor-playback-worker-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_executable(creative-suite-main-editor-audio-playback-tests
+    audio_playback_test.cpp
+    ../src/logging/logger.cpp
+    ../src/logging/logger.h
+    ../src/media/audio_frame.h
+    ../src/media/audio_playback.cpp
+    ../src/media/audio_playback.h
+    ../src/media/video_metadata.h
+    ../src/playback/audio_output.cpp
+    ../src/playback/audio_output.h
+)
+
+target_include_directories(creative-suite-main-editor-audio-playback-tests PRIVATE
+    ../src
+    ${FFMPEG_INCLUDE_DIRS}
+)
+
+target_link_directories(creative-suite-main-editor-audio-playback-tests PRIVATE
+    ${FFMPEG_LIBRARY_DIRS}
+)
+
+target_link_libraries(creative-suite-main-editor-audio-playback-tests PRIVATE
+    Qt6::Core
+    ${FFMPEG_LIBRARIES}
+)
+
+if(CREATIVE_SUITE_HAS_QT_MULTIMEDIA)
+    target_link_libraries(creative-suite-main-editor-audio-playback-tests PRIVATE Qt6::Multimedia)
+    target_compile_definitions(creative-suite-main-editor-audio-playback-tests PRIVATE CREATIVE_SUITE_HAS_QT_MULTIMEDIA=1)
+endif()
+
+target_compile_features(creative-suite-main-editor-audio-playback-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-audio-playback-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-audio-playback-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+copy_ffmpeg_test_runtime(creative-suite-main-editor-audio-playback-tests)
+
+add_test(
+    NAME creative-suite-main-editor-audio-playback
+    COMMAND creative-suite-main-editor-audio-playback-tests
+)
+
+if(EXISTS "${REFERENCE_VIDEO}")
+    add_test(
+        NAME creative-suite-main-editor-audio-playback-reference
+        COMMAND creative-suite-main-editor-audio-playback-tests "${REFERENCE_VIDEO}"
+    )
 endif()
 
 copy_ffmpeg_test_runtime(creative-suite-main-editor-playback-worker-tests)
@@ -195,11 +260,17 @@ add_test(
     NAME creative-suite-main-editor-playback-worker-errors
     COMMAND creative-suite-main-editor-playback-worker-tests
 )
+set_tests_properties(creative-suite-main-editor-playback-worker-errors PROPERTIES
+    ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1"
+)
 
 if(EXISTS "${REFERENCE_VIDEO}")
     add_test(
         NAME creative-suite-main-editor-playback-worker-reference
         COMMAND creative-suite-main-editor-playback-worker-tests "${REFERENCE_VIDEO}"
+    )
+    set_tests_properties(creative-suite-main-editor-playback-worker-reference PROPERTIES
+        ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1"
     )
 endif()
 

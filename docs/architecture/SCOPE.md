@@ -14,11 +14,14 @@ The Main Editor currently includes:
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
 - versioned .csp persistence with version 1 migration to version 2;
+- embedded audio playback synchronized with video, per-clip and per-track
+  gain/mute, and the video fallback path;
 - local structured diagnostic logging.
 
 The current application does not include:
 
-- audio, images, text, captions, or export;
+- audio-only sources, independent audio tracks, advanced mixing, waveforms,
+  automation, recording, images, text, captions, or export;
 - advanced compositing or GPU playback;
 - ripple editing, automatic gap management, or project-wide history;
 - thumbnails, proxies, autosave, recovery, or complete relinking;

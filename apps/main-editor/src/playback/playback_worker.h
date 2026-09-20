@@ -2,8 +2,11 @@
 
 #include "../media/video_playback.h"
 #include "../media/video_metadata.h"
+#include "../media/audio_playback.h"
+#include "audio_output.h"
 
 #include <QMetaType>
+#include <QByteArray>
 #include <QObject>
 #include <QString>
 #include <QtGlobal>
@@ -38,10 +41,21 @@ public slots:
         double frame_rate,
         qint64 source_start_frame,
         qint64 segment_frame_count,
+        double track_audio_gain,
+        bool track_audio_muted,
+        double clip_audio_gain,
+        bool clip_audio_muted,
+        qint64 track_index,
+        qint64 clip_index,
         quint64 generation);
     void play();
     void pause();
     void stop();
+    void setAudioParameters(
+        double track_audio_gain,
+        bool track_audio_muted,
+        double clip_audio_gain,
+        bool clip_audio_muted);
     void stepForward();
     void stepBackward();
     void seekToFrame(qint64 frame_index, quint64 generation);
@@ -52,6 +66,7 @@ signals:
     void playbackStateChanged(bool playing, quint64 generation);
     void playbackFinished(quint64 generation, bool during_playback);
     void playbackError(QString message, qint64 error_code, quint64 generation);
+    void audioWarning(QString message, qint64 error_code, quint64 generation);
 
 private slots:
     void decodeTick();
@@ -70,6 +85,16 @@ private:
         const std::exception& error,
         const char* operation,
         std::optional<std::int64_t> requested_frame = std::nullopt);
+    void reportAudioFailure(
+        const media::MediaError& error,
+        const char* operation);
+    void reportAudioFailure(
+        const std::exception& error,
+        const char* operation,
+        qint64 error_code = -1);
+    void configureAudio();
+    void fillAudioOutput();
+    void disableAudioOutput() noexcept;
     [[nodiscard]] std::optional<std::int64_t> sourceFrameForLocal(
         std::int64_t local_frame) const noexcept;
     [[nodiscard]] bool isLocalFrameInRange(std::int64_t local_frame) const noexcept;
@@ -79,11 +104,25 @@ private:
 
     QTimer* timer_ = nullptr;
     std::unique_ptr<media::VideoPlaybackSession> session_;
+    std::unique_ptr<media::AudioPlaybackSession> audio_session_;
+    std::unique_ptr<AudioOutput> audio_output_;
+    QByteArray pending_audio_bytes_;
     std::filesystem::path source_path_;
     double frame_rate_ = 30.0;
     std::int64_t source_start_frame_ = 0;
     std::int64_t segment_frame_count_ = 0;
     std::int64_t current_frame_index_ = 0;
+    double track_audio_gain_ = 1.0;
+    bool track_audio_muted_ = false;
+    double clip_audio_gain_ = 1.0;
+    bool clip_audio_muted_ = false;
+    qint64 track_index_ = -1;
+    qint64 clip_index_ = -1;
+    bool audio_enabled_ = false;
+    bool audio_failure_reported_ = false;
+    bool audio_position_valid_ = false;
+    qint64 audio_clock_origin_usecs_ = 0;
+    std::int64_t audio_clock_origin_frame_ = 0;
     quint64 generation_ = 0;
     bool playing_ = false;
     std::atomic<qint64> pending_seek_frame_{std::numeric_limits<qint64>::min()};

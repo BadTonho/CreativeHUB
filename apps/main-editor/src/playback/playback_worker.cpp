@@ -3,6 +3,7 @@
 #include "../logging/logger.h"
 
 #include <QFileInfo>
+#include <QByteArray>
 #include <QMetaObject>
 #include <QTimer>
 
@@ -10,6 +11,7 @@
 #include <cmath>
 #include <exception>
 #include <string>
+#include <stdexcept>
 #include <utility>
 
 namespace playback {
@@ -38,6 +40,8 @@ PlaybackWorker::PlaybackWorker(QObject* parent)
 
 PlaybackWorker::~PlaybackWorker() {
     if (timer_ != nullptr) timer_->stop();
+    disableAudioOutput();
+    audio_session_.reset();
     session_.reset();
 }
 
@@ -59,6 +63,12 @@ void PlaybackWorker::setMedia(
     double frame_rate,
     qint64 source_start_frame,
     qint64 segment_frame_count,
+    double track_audio_gain,
+    bool track_audio_muted,
+    double clip_audio_gain,
+    bool clip_audio_muted,
+    qint64 track_index,
+    qint64 clip_index,
     quint64 generation) {
     pending_seek_frame_.store(no_pending_seek, std::memory_order_relaxed);
     pending_seek_generation_.store(generation, std::memory_order_relaxed);
@@ -78,6 +88,21 @@ void PlaybackWorker::setMedia(
     source_start_frame_ = source_start_frame;
     segment_frame_count_ = segment_frame_count;
     current_frame_index_ = 0;
+    track_audio_gain_ = std::isfinite(track_audio_gain) && track_audio_gain >= 0.0 && track_audio_gain <= 2.0
+        ? track_audio_gain : 1.0;
+    track_audio_muted_ = track_audio_muted;
+    clip_audio_gain_ = std::isfinite(clip_audio_gain) && clip_audio_gain >= 0.0 && clip_audio_gain <= 2.0
+        ? clip_audio_gain : 1.0;
+    clip_audio_muted_ = clip_audio_muted;
+    track_index_ = track_index;
+    clip_index_ = clip_index;
+    audio_position_valid_ = false;
+    audio_failure_reported_ = false;
+    audio_clock_origin_usecs_ = 0;
+    audio_clock_origin_frame_ = 0;
+    pending_audio_bytes_.clear();
+    disableAudioOutput();
+    audio_session_.reset();
     session_.reset();
 
     try {
@@ -85,6 +110,7 @@ void PlaybackWorker::setMedia(
             throw media::MediaError("The playback segment range is invalid.");
         }
         session_ = media::VideoPlaybackSession::open(source_path_);
+        configureAudio();
         emit mediaReady(generation_);
     } catch (const media::MediaError& error) {
         reportFailure(error, "set_media");
@@ -107,6 +133,57 @@ void PlaybackWorker::play() {
             return;
         }
 
+        if (audio_enabled_ && audio_session_ != nullptr && audio_output_ != nullptr) {
+            try {
+                if (!audio_position_valid_) {
+                    const auto source_frame = sourceFrameForLocal(current_frame_index_);
+                    if (!source_frame.has_value()) {
+                        throw media::MediaError("The requested audio source frame is invalid.");
+                    }
+                    audio_session_->seek_to_source_frame(*source_frame, frame_rate_);
+                    audio_position_valid_ = true;
+                    pending_audio_bytes_.clear();
+                }
+            } catch (const media::MediaError& error) {
+                reportAudioFailure(error, "seek");
+            } catch (const std::exception& error) {
+                reportAudioFailure(error, "seek");
+            }
+            if (audio_enabled_) {
+                try {
+                    QString audio_error;
+                    qint64 audio_code = 0;
+                    const bool resumed = playing_
+                        ? true
+                        : audio_output_->resume(&audio_error, &audio_code);
+                    if (!resumed && !audio_output_->start(&audio_error, &audio_code)) {
+                        throw media::MediaError(
+                            audio_error.isEmpty()
+                                ? "The audio output could not be started."
+                                : audio_error.toUtf8().toStdString(),
+                            audio_code > 0
+                                ? std::optional<int>(static_cast<int>(audio_code))
+                                : std::nullopt);
+                    }
+                    audio_clock_origin_frame_ = current_frame_index_;
+                    audio_clock_origin_usecs_ = audio_output_->processedUsecs();
+                } catch (const media::MediaError& error) {
+                    reportAudioFailure(error, "output");
+                } catch (const std::exception& error) {
+                    reportAudioFailure(error, "output");
+                }
+            }
+            if (audio_enabled_) {
+                try {
+                    fillAudioOutput();
+                } catch (const media::MediaError& error) {
+                    reportAudioFailure(error, "decode");
+                } catch (const std::exception& error) {
+                    reportAudioFailure(error, "decode");
+                }
+            }
+        }
+
         ensureTimer();
         timer_->start(frameIntervalMilliseconds());
         if (!playing_) {
@@ -122,6 +199,7 @@ void PlaybackWorker::play() {
 
 void PlaybackWorker::pause() {
     if (timer_ != nullptr) timer_->stop();
+    if (audio_output_ != nullptr) audio_output_->pause();
     if (!playing_) return;
 
     playing_ = false;
@@ -130,6 +208,34 @@ void PlaybackWorker::pause() {
 
 void PlaybackWorker::stop() {
     pause();
+    if (audio_output_ != nullptr) audio_output_->stop();
+    audio_position_valid_ = false;
+    pending_audio_bytes_.clear();
+}
+
+void PlaybackWorker::setAudioParameters(
+    double track_audio_gain,
+    bool track_audio_muted,
+    double clip_audio_gain,
+    bool clip_audio_muted) {
+    const bool was_playing = playing_;
+    track_audio_gain_ = std::isfinite(track_audio_gain) &&
+            track_audio_gain >= 0.0 && track_audio_gain <= 2.0
+        ? track_audio_gain
+        : 1.0;
+    track_audio_muted_ = track_audio_muted;
+    clip_audio_gain_ = std::isfinite(clip_audio_gain) &&
+            clip_audio_gain >= 0.0 && clip_audio_gain <= 2.0
+        ? clip_audio_gain
+        : 1.0;
+    clip_audio_muted_ = clip_audio_muted;
+
+    // Discard already-scaled samples so the next audio buffer uses the new
+    // parameters. Video keeps its current frame and playback position.
+    pending_audio_bytes_.clear();
+    audio_position_valid_ = false;
+    if (audio_output_ != nullptr) audio_output_->stop();
+    if (was_playing) play();
 }
 
 void PlaybackWorker::stepForward() {
@@ -154,6 +260,7 @@ void PlaybackWorker::stepForward() {
             return;
         }
         emitFrame(frame);
+        audio_position_valid_ = false;
     } catch (const media::MediaError& error) {
         reportFailure(error, "step_forward");
     } catch (const std::exception& error) {
@@ -173,6 +280,7 @@ void PlaybackWorker::stepBackward() {
             throw media::MediaError("The requested previous frame is outside the playback segment.");
         }
         emitFrame(session_->decode_frame_at(*source_frame));
+        audio_position_valid_ = false;
     } catch (const media::MediaError& error) {
         reportFailure(error, "step_backward");
     } catch (const std::exception& error) {
@@ -226,6 +334,9 @@ void PlaybackWorker::processPendingSeek() {
                 throw media::MediaError("The requested frame is outside the media range.");
             }
             emitFrame(std::move(frame));
+            audio_position_valid_ = false;
+            pending_audio_bytes_.clear();
+            if (audio_output_ != nullptr) audio_output_->stop();
         } catch (const media::MediaError& error) {
             if (!isSeekCurrent(sequence)) continue;
             reportFailure(error, "seek", frame_index);
@@ -252,9 +363,38 @@ void PlaybackWorker::decodeTick() {
         if (!session_) {
             throw media::MediaError("Playback session is not available.");
         }
+        if (audio_enabled_) {
+            try {
+                fillAudioOutput();
+            } catch (const media::MediaError& error) {
+                reportAudioFailure(error, "decode");
+            } catch (const std::exception& error) {
+                reportAudioFailure(error, "decode");
+            }
+        }
         if (segment_frame_count_ > 0 &&
             current_frame_index_ >= segment_frame_count_ - 1) {
             finishPlayback();
+            return;
+        }
+        if (audio_enabled_ && audio_output_ != nullptr) {
+            const auto elapsed_usecs = std::max<qint64>(
+                0,
+                audio_output_->processedUsecs() - audio_clock_origin_usecs_);
+            const auto target_frame = std::min<std::int64_t>(
+                segment_frame_count_ > 0 ? segment_frame_count_ - 1 : current_frame_index_ + 1,
+                audio_clock_origin_frame_ + static_cast<std::int64_t>(
+                    std::floor(static_cast<double>(elapsed_usecs) * frame_rate_ / 1000000.0)));
+            if (target_frame <= current_frame_index_) return;
+            while (current_frame_index_ < target_frame) {
+                const auto frame = session_->decode_next_frame();
+                if (!frame.has_value() ||
+                    !isSourceFrameInRange(session_->current_frame_index())) {
+                    finishPlayback();
+                    return;
+                }
+                emitFrame(frame);
+            }
             return;
         }
         const auto frame = session_->decode_next_frame();
@@ -285,6 +425,173 @@ bool PlaybackWorker::ensureSessionAtCurrentFrame() {
         session_->current_frame_index() == *source_frame;
 }
 
+void PlaybackWorker::configureAudio() {
+    audio_enabled_ = false;
+    audio_output_ = std::make_unique<AudioOutput>();
+
+    // Probe the media before touching the system audio device. A video-only
+    // source is an expected case and must remain silent in the diagnostics.
+    try {
+        auto media_audio_probe = media::AudioPlaybackSession::open(source_path_);
+        if (!media_audio_probe->has_audio()) return;
+    } catch (const media::MediaError& error) {
+        reportAudioFailure(error, "probe");
+        return;
+    } catch (const std::exception& error) {
+        reportAudioFailure(error, "probe");
+        return;
+    }
+
+    QString output_error;
+    qint64 output_code = 0;
+    if (!audio_output_->initialize(&output_error, &output_code)) {
+        if (!audio_output_->disabledByEnvironment()) {
+            reportAudioFailure(
+                std::runtime_error(output_error.isEmpty()
+                    ? "The audio output could not be initialized."
+                    : output_error.toUtf8().toStdString()),
+                "output",
+                output_code);
+        }
+        return;
+    }
+
+    try {
+        audio_session_ = media::AudioPlaybackSession::open(
+            source_path_,
+            media::AudioPlaybackSession::OutputSpec{
+                audio_output_->sampleRate(),
+                audio_output_->channelCount()});
+        if (!audio_session_->has_audio()) {
+            audio_session_.reset();
+            audio_output_->stop();
+            return;
+        }
+        const auto source_frame = sourceFrameForLocal(0);
+        if (!source_frame.has_value()) {
+            throw media::MediaError("The audio source frame is invalid.");
+        }
+        audio_session_->seek_to_source_frame(*source_frame, frame_rate_);
+        audio_position_valid_ = true;
+        audio_enabled_ = true;
+    } catch (const media::MediaError& error) {
+        reportAudioFailure(error, "open");
+    } catch (const std::exception& error) {
+        reportAudioFailure(error, "open");
+    }
+}
+
+void PlaybackWorker::fillAudioOutput() {
+    if (!audio_enabled_ || audio_session_ == nullptr || audio_output_ == nullptr) return;
+
+    const auto effective_gain =
+        (track_audio_muted_ || clip_audio_muted_)
+            ? 0.0
+            : track_audio_gain_ * clip_audio_gain_;
+    const auto output = audio_session_->output_spec();
+    const auto target_bytes = static_cast<std::size_t>(
+        output.sample_rate * output.channel_count * 2 / 5);
+    std::int64_t segment_end_sample = std::numeric_limits<std::int64_t>::max();
+    if (segment_frame_count_ > 0 &&
+        source_start_frame_ <= std::numeric_limits<std::int64_t>::max() - segment_frame_count_) {
+        segment_end_sample = static_cast<std::int64_t>(std::ceil(
+            static_cast<long double>(source_start_frame_ + segment_frame_count_) *
+            output.sample_rate / static_cast<long double>(frame_rate_)));
+    }
+
+    while (pending_audio_bytes_.size() < static_cast<qsizetype>(target_bytes)) {
+        auto chunk = audio_session_->decode_samples(4096);
+        if (!chunk.has_value()) break;
+        if (chunk->first_sample_index >= segment_end_sample) break;
+
+        auto sample_count = static_cast<std::int64_t>(chunk->sampleCount());
+        if (chunk->first_sample_index + sample_count > segment_end_sample) {
+            sample_count = std::max<std::int64_t>(
+                0,
+                segment_end_sample - chunk->first_sample_index);
+            chunk->samples.resize(static_cast<std::size_t>(sample_count) *
+                                  static_cast<std::size_t>(chunk->channel_count));
+        }
+        if (sample_count <= 0) break;
+
+        for (auto& sample : chunk->samples) {
+            const auto scaled = static_cast<double>(sample) * effective_gain;
+            sample = static_cast<std::int16_t>(std::clamp(
+                scaled,
+                static_cast<double>(std::numeric_limits<std::int16_t>::min()),
+                static_cast<double>(std::numeric_limits<std::int16_t>::max())));
+        }
+        pending_audio_bytes_.append(
+            reinterpret_cast<const char*>(chunk->samples.data()),
+            static_cast<qsizetype>(chunk->samples.size() * sizeof(std::int16_t)));
+    }
+
+    while (!pending_audio_bytes_.isEmpty() && audio_output_->bytesFree() > 0) {
+        const auto writable = std::min<qint64>(
+            audio_output_->bytesFree(),
+            pending_audio_bytes_.size());
+        const auto written = audio_output_->write(
+            pending_audio_bytes_.left(static_cast<qsizetype>(writable)));
+        if (written <= 0) break;
+        pending_audio_bytes_.remove(0, static_cast<qsizetype>(written));
+    }
+}
+
+void PlaybackWorker::disableAudioOutput() noexcept {
+    audio_enabled_ = false;
+    audio_position_valid_ = false;
+    pending_audio_bytes_.clear();
+    if (audio_output_ != nullptr) audio_output_->stop();
+}
+
+void PlaybackWorker::reportAudioFailure(
+    const media::MediaError& error,
+    const char* operation) {
+    reportAudioFailure(
+        static_cast<const std::exception&>(error),
+        operation,
+        error.error_code().value_or(-1));
+}
+
+void PlaybackWorker::reportAudioFailure(
+    const std::exception& error,
+    const char* operation,
+    qint64 error_code) {
+    if (!audio_failure_reported_) {
+        audio_failure_reported_ = true;
+        try {
+            logging::Context context{
+                {"path", safePathForLog(source_path_)},
+                {"frame_index", std::to_string(current_frame_index_)},
+                {"source_start_frame", std::to_string(source_start_frame_)},
+                {"segment_frame_count", std::to_string(segment_frame_count_)},
+                {"track_index", std::to_string(track_index_)},
+                {"clip_index", std::to_string(clip_index_)},
+                {"track_audio_gain", std::to_string(track_audio_gain_)},
+                {"clip_audio_gain", std::to_string(clip_audio_gain_)}};
+            if (audio_session_ != nullptr) {
+                context.emplace_back(
+                    "sample_index",
+                    std::to_string(audio_session_->current_sample_index()));
+            }
+            if (error_code >= 0) context.emplace_back("error_code", std::to_string(error_code));
+            logging::Logger::instance().log(
+                logging::Level::Error,
+                "audio",
+                operation,
+                error.what(),
+                context);
+        } catch (...) {
+        }
+        emit audioWarning(
+            QString::fromUtf8(error.what()),
+            error_code,
+            generation_);
+    }
+    disableAudioOutput();
+    audio_session_.reset();
+}
+
 void PlaybackWorker::ensureTimer() {
     if (timer_ != nullptr) return;
 
@@ -294,6 +601,9 @@ void PlaybackWorker::ensureTimer() {
 
 void PlaybackWorker::finishPlayback() {
     if (timer_ != nullptr) timer_->stop();
+    if (audio_output_ != nullptr) audio_output_->stop();
+    audio_position_valid_ = false;
+    pending_audio_bytes_.clear();
     const bool was_playing = playing_;
     playing_ = false;
     if (was_playing) emit playbackStateChanged(false, generation_);
