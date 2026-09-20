@@ -149,6 +149,12 @@ Pay special attention to:
 - Do not hide important data copies or allocations.
 - Document public APIs and project formats.
 - Create tests for the core and for boundaries between modules.
+- Every new or modified function and user-facing behavior must have regression
+  coverage in the same change. Use automated tests whenever the behavior is
+  deterministic; for visual or full-application interactions, add a
+  documented manual validation step and keep the automated boundary tests.
+- A feature is not considered complete until its tests pass and its relevant
+  regression coverage is updated.
 - Use static analysis, sanitizers, fuzzing, and profiling when appropriate for the chosen technology.
 - Handle media errors, corrupted files, and resource shortages without unexpectedly terminating the application.
 - Every application and failure-prone module must maintain an actionable error log so problems can be diagnosed and corrected.
