@@ -63,6 +63,8 @@ int main() {
         const auto& first_clip = model.clips().front();
         require(first_clip.timeline_start_frame == 0,
                 "The first clip did not start at frame zero.");
+        require(first_clip.source_start_frame == 0,
+                "The first clip did not start at source frame zero.");
         require(first_clip.timeline_duration_frames == 120,
                 "The first clip duration was incorrect.");
         require(first_clip.source_path == std::filesystem::weakly_canonical(first_source),
@@ -106,6 +108,45 @@ int main() {
                 "Duration and frame rate fallback metadata was rejected.");
         require(model.clips().back().timeline_duration_frames == 60,
                 "Duration and frame rate fallback was calculated incorrectly.");
+
+        timeline::TimelineModel split_model;
+        require(split_model.addClip(first_metadata) == timeline::AddClipResult::Added,
+                "The split test source was not added.");
+        require(split_model.addClip(second_metadata) == timeline::AddClipResult::Added,
+                "The split test second source was not added.");
+        const auto split_total_before = split_model.totalDurationFrames();
+        require(split_model.splitClip(0, 30) == timeline::SplitClipResult::Split,
+                "The first clip was not split at an intermediate frame.");
+        require(split_model.clipCount() == 3,
+                "Splitting did not create a second segment.");
+        require(split_model.clips()[0].source_start_frame == 0 &&
+                    split_model.clips()[0].timeline_duration_frames == 30 &&
+                    split_model.clips()[1].source_start_frame == 30 &&
+                    split_model.clips()[1].timeline_duration_frames == 90,
+                "The split source offsets or durations were incorrect.");
+        require(split_model.clips()[0].timeline_start_frame == 0 &&
+                    split_model.clips()[1].timeline_start_frame == 30 &&
+                    split_model.clips()[2].timeline_start_frame == 120,
+                "Splitting did not recalculate timeline starts.");
+        require(split_model.totalDurationFrames() == split_total_before,
+                "Splitting changed the total timeline duration.");
+        require(split_model.clips()[1].source_path ==
+                    std::filesystem::weakly_canonical(first_source) &&
+                    split_model.clips()[1].display_name == first_metadata.display_name &&
+                    split_model.clips()[1].frame_rate == first_metadata.frame_rate &&
+                    split_model.clips()[1].frame_count == first_metadata.frame_count,
+                "Splitting did not preserve source metadata.");
+        require(split_model.splitClip(2, 20) == timeline::SplitClipResult::Split,
+                "The second source occurrence was not split.");
+        require(split_model.clips()[2].source_start_frame == 0 &&
+                    split_model.clips()[3].source_start_frame == 20,
+                "Repeated source occurrences did not keep independent offsets.");
+        require(split_model.splitClip(0, 0) == timeline::SplitClipResult::InvalidBoundary,
+                "A split at the first frame was accepted.");
+        require(split_model.splitClip(0, 30) == timeline::SplitClipResult::InvalidBoundary,
+                "A split at the last frame was accepted.");
+        require(split_model.splitClip(99, 1) == timeline::SplitClipResult::InvalidIndex,
+                "An invalid split index was accepted.");
 
         const auto total_before_moves = model.totalDurationFrames();
         require(model.moveClip(0, 3) == timeline::MoveClipResult::Moved,

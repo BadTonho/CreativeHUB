@@ -16,6 +16,7 @@
 #include <vector>
 
 class QDockWidget;
+class QAction;
 class QLabel;
 class QListWidget;
 class QPushButton;
@@ -47,6 +48,8 @@ private:
     void clearTimeline();
     void handleTimelineClipMove(qint64 from_index, qint64 to_index);
     void moveActiveTimelineClip(int direction);
+    void splitActiveClipAtPlayhead();
+    void handleTimelineClipSplit(qint64 clip_index, qint64 local_frame);
     void updateTimelineState();
     [[nodiscard]] bool hasSelectedMedia() const noexcept;
     [[nodiscard]] std::optional<std::size_t> selectedTimelineClipIndex() const noexcept;
@@ -88,6 +91,8 @@ private:
         std::size_t clip_index = 0;
         std::size_t media_index = 0;
         std::int64_t target_frame = 0;
+        std::int64_t source_start_frame = 0;
+        std::int64_t segment_frame_count = 0;
         bool resume_playback = false;
         quint64 generation = 0;
     };
@@ -103,7 +108,9 @@ private:
     QPushButton* play_pause_button_ = nullptr;
     QPushButton* next_frame_button_ = nullptr;
     QPushButton* clear_timeline_button_ = nullptr;
+    QPushButton* razor_button_ = nullptr;
     QLabel* playback_status_label_ = nullptr;
+    QAction* razor_tool_action_ = nullptr;
     timeline::TimelineWidget* timeline_widget_ = nullptr;
     std::vector<ImportedMedia> media_items_;
     timeline::TimelineModel timeline_model_;

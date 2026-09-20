@@ -54,7 +54,12 @@ void PlaybackWorker::requestSeek(qint64 frame_index, quint64 generation) {
     }
 }
 
-void PlaybackWorker::setMedia(QString source_path, double frame_rate, quint64 generation) {
+void PlaybackWorker::setMedia(
+    QString source_path,
+    double frame_rate,
+    qint64 source_start_frame,
+    qint64 segment_frame_count,
+    quint64 generation) {
     pending_seek_frame_.store(no_pending_seek, std::memory_order_relaxed);
     pending_seek_generation_.store(generation, std::memory_order_relaxed);
     pending_seek_sequence_.fetch_add(1, std::memory_order_release);
@@ -70,10 +75,15 @@ void PlaybackWorker::setMedia(QString source_path, double frame_rate, quint64 ge
     frame_rate_ = std::isfinite(frame_rate) && frame_rate > 0.0
         ? frame_rate
         : default_frame_rate;
+    source_start_frame_ = source_start_frame;
+    segment_frame_count_ = segment_frame_count;
     current_frame_index_ = 0;
     session_.reset();
 
     try {
+        if (source_start_frame_ < 0 || segment_frame_count_ < 0) {
+            throw media::MediaError("The playback segment range is invalid.");
+        }
         session_ = media::VideoPlaybackSession::open(source_path_);
         emit mediaReady(generation_);
     } catch (const media::MediaError& error) {
@@ -128,11 +138,22 @@ void PlaybackWorker::stepForward() {
 
     try {
         if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
+        if (segment_frame_count_ > 0 &&
+            current_frame_index_ >= segment_frame_count_ - 1) {
+            finishPlayback();
+            return;
+        }
         if (!ensureSessionAtCurrentFrame()) {
             finishPlayback();
             return;
         }
-        emitFrame(session_->decode_next_frame());
+        const auto frame = session_->decode_next_frame();
+        if (!frame.has_value() ||
+            !isSourceFrameInRange(session_->current_frame_index())) {
+            finishPlayback();
+            return;
+        }
+        emitFrame(frame);
     } catch (const media::MediaError& error) {
         reportFailure(error, "step_forward");
     } catch (const std::exception& error) {
@@ -147,7 +168,11 @@ void PlaybackWorker::stepBackward() {
     try {
         if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
         const auto target_frame = std::max<std::int64_t>(0, current_frame_index_ - 1);
-        emitFrame(session_->decode_frame_at(target_frame));
+        const auto source_frame = sourceFrameForLocal(target_frame);
+        if (!source_frame.has_value()) {
+            throw media::MediaError("The requested previous frame is outside the playback segment.");
+        }
+        emitFrame(session_->decode_frame_at(*source_frame));
     } catch (const media::MediaError& error) {
         reportFailure(error, "step_backward");
     } catch (const std::exception& error) {
@@ -183,12 +208,19 @@ void PlaybackWorker::processPendingSeek() {
             if (frame_index < 0) {
                 throw media::MediaError("The requested frame index is negative.");
             }
+            if (!isLocalFrameInRange(frame_index)) {
+                throw media::MediaError("The requested frame is outside the playback segment.");
+            }
             if (source_path_.empty()) {
                 throw media::MediaError("Cannot seek without selected media.");
             }
             if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
 
-            auto frame = session_->decode_frame_at(frame_index, seek_is_current);
+            const auto source_frame = sourceFrameForLocal(frame_index);
+            if (!source_frame.has_value()) {
+                throw media::MediaError("The requested source frame is outside the media range.");
+            }
+            auto frame = session_->decode_frame_at(*source_frame, seek_is_current);
             if (!isSeekCurrent(sequence)) continue;
             if (!frame.has_value()) {
                 throw media::MediaError("The requested frame is outside the media range.");
@@ -220,8 +252,14 @@ void PlaybackWorker::decodeTick() {
         if (!session_) {
             throw media::MediaError("Playback session is not available.");
         }
+        if (segment_frame_count_ > 0 &&
+            current_frame_index_ >= segment_frame_count_ - 1) {
+            finishPlayback();
+            return;
+        }
         const auto frame = session_->decode_next_frame();
-        if (!frame.has_value()) {
+        if (!frame.has_value() ||
+            !isSourceFrameInRange(session_->current_frame_index())) {
             finishPlayback();
             return;
         }
@@ -238,11 +276,13 @@ bool PlaybackWorker::isSeekCurrent(quint64 sequence) const noexcept {
 }
 
 bool PlaybackWorker::ensureSessionAtCurrentFrame() {
-    while (session_->current_frame_index() < current_frame_index_) {
-        const auto frame = session_->decode_next_frame();
-        if (!frame.has_value()) return false;
-    }
-    return true;
+    const auto source_frame = sourceFrameForLocal(current_frame_index_);
+    if (!source_frame.has_value()) return false;
+    if (session_->current_frame_index() == *source_frame) return true;
+
+    const auto frame = session_->decode_frame_at(*source_frame);
+    return frame.has_value() &&
+        session_->current_frame_index() == *source_frame;
 }
 
 void PlaybackWorker::ensureTimer() {
@@ -266,7 +306,12 @@ void PlaybackWorker::emitFrame(std::optional<media::VideoFrame> frame) {
         return;
     }
 
-    current_frame_index_ = session_->current_frame_index();
+    const auto source_frame = session_->current_frame_index();
+    if (!isSourceFrameInRange(source_frame)) {
+        finishPlayback();
+        return;
+    }
+    current_frame_index_ = source_frame - source_start_frame_;
     auto payload = std::make_shared<const media::VideoFrame>(std::move(*frame));
     emit frameReady(std::move(payload), current_frame_index_, generation_);
 }
@@ -278,7 +323,9 @@ void PlaybackWorker::reportFailure(
     try {
         logging::Context context{
             {"path", safePathForLog(source_path_)},
-            {"frame_index", std::to_string(current_frame_index_)}};
+            {"frame_index", std::to_string(current_frame_index_)},
+            {"source_start_frame", std::to_string(source_start_frame_)},
+            {"segment_frame_count", std::to_string(segment_frame_count_)}};
         if (requested_frame.has_value()) {
             context.emplace_back("requested_frame", std::to_string(*requested_frame));
         }
@@ -311,7 +358,9 @@ void PlaybackWorker::reportFailure(
     try {
         logging::Context context{
             {"path", safePathForLog(source_path_)},
-            {"frame_index", std::to_string(current_frame_index_)}};
+            {"frame_index", std::to_string(current_frame_index_)},
+            {"source_start_frame", std::to_string(source_start_frame_)},
+            {"segment_frame_count", std::to_string(segment_frame_count_)}};
         if (requested_frame.has_value()) {
             context.emplace_back("requested_frame", std::to_string(*requested_frame));
         }
@@ -329,6 +378,27 @@ void PlaybackWorker::reportFailure(
     playing_ = false;
     session_.reset();
     emit playbackError(QString::fromUtf8(error.what()), -1, generation_);
+}
+
+std::optional<std::int64_t> PlaybackWorker::sourceFrameForLocal(
+    std::int64_t local_frame) const noexcept {
+    if (local_frame < 0 ||
+        local_frame > std::numeric_limits<std::int64_t>::max() -
+            source_start_frame_) {
+        return std::nullopt;
+    }
+    return source_start_frame_ + local_frame;
+}
+
+bool PlaybackWorker::isLocalFrameInRange(std::int64_t local_frame) const noexcept {
+    return local_frame >= 0 &&
+        (segment_frame_count_ <= 0 || local_frame < segment_frame_count_);
+}
+
+bool PlaybackWorker::isSourceFrameInRange(std::int64_t source_frame) const noexcept {
+    if (source_frame < source_start_frame_) return false;
+    if (segment_frame_count_ <= 0) return true;
+    return source_frame - source_start_frame_ < segment_frame_count_;
 }
 
 int PlaybackWorker::frameIntervalMilliseconds() const noexcept {

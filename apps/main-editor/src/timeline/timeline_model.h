@@ -13,6 +13,7 @@ namespace timeline {
 
 struct TimelineClip {
     std::int64_t timeline_start_frame = 0;
+    std::int64_t source_start_frame = 0;
     std::int64_t timeline_duration_frames = 0;
     std::filesystem::path source_path;
     std::string display_name;
@@ -32,10 +33,19 @@ enum class MoveClipResult {
     InvalidIndex,
 };
 
+enum class SplitClipResult {
+    Split,
+    InvalidIndex,
+    InvalidBoundary,
+};
+
 class TimelineModel final {
 public:
     AddClipResult addClip(const media::VideoMetadata& metadata);
     MoveClipResult moveClip(std::size_t from_index, std::size_t to_index);
+    SplitClipResult splitClip(
+        std::size_t clip_index,
+        std::int64_t local_frame);
     void clear() noexcept;
 
     [[nodiscard]] bool hasClip() const noexcept;

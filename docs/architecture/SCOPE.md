@@ -20,7 +20,7 @@ The current application does not implement:
 - thumbnails;
 - full timeline editing;
 - multiple tracks;
-- clip cuts, splitting, or deletion;
+- clip deletion, trimming, and ripple editing;
 - project persistence;
 - audio;
 - Motion Studio;

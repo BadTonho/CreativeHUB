@@ -30,3 +30,9 @@ reorders a clip in the single track; it gives visual movement feedback but does
 not seek or decode during the drag. The horizontal drop position is converted
 to a compact insertion order. `Ctrl + Left` and `Ctrl + Right` move the active
 clip one position while preserving the current Media Browser selection.
+
+The persistent Blade Tool changes a simple click on any timeline clip into a
+split request before the frame under the cursor. It does not decode while the
+pointer is pressed and it does not perform seeking. `Ctrl + K` performs the
+same operation at the active clip's playhead. `Alt + drag` remains the higher
+priority gesture for reordering clips.

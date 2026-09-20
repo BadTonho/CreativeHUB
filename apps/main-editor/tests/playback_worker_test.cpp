@@ -35,6 +35,8 @@ void validateMissingMedia(QCoreApplication& application) {
     worker.setMedia(
         toQString(std::filesystem::temp_directory_path() / "missing-creative-suite.mkv"),
         30.0,
+        0,
+        0,
         1);
     QCoreApplication::processEvents();
     require(received_error, "Missing media did not produce a worker error.");
@@ -87,7 +89,7 @@ void validateReference(QCoreApplication& application, const std::filesystem::pat
             application.quit();
         });
 
-    worker.setMedia(toQString(path), 30.0, 7);
+    worker.setMedia(toQString(path), 30.0, 0, 0, 7);
     require(media_ready, "Opening valid media did not emit mediaReady.");
 
     worker.play();
@@ -104,7 +106,7 @@ void validateReference(QCoreApplication& application, const std::filesystem::pat
     require(frame_count >= 2, "Worker playback emitted too few frames.");
     require(last_frame_index >= 0, "Worker playback did not expose the final frame index.");
 
-    worker.setMedia(toQString(path), 30.0, 8);
+    worker.setMedia(toQString(path), 30.0, 0, 0, 8);
     require(ready_count == 2, "Reactivating media did not emit mediaReady again.");
 }
 
@@ -127,7 +129,7 @@ void validateSeekCoalescing(QCoreApplication& application, const std::filesystem
             received_error = true;
         });
 
-    worker.setMedia(toQString(path), 30.0, 20);
+    worker.setMedia(toQString(path), 30.0, 0, 0, 20);
     worker.requestSeek(10, 21);
     worker.requestSeek(40, 22);
     worker.requestSeek(90, 23);
@@ -145,6 +147,83 @@ void validateSeekCoalescing(QCoreApplication& application, const std::filesystem
             "The worker did not emit the newest seek request.");
 }
 
+void validateSegmentRange(
+    QCoreApplication& application,
+    const std::filesystem::path& path) {
+    playback::PlaybackWorker worker;
+    std::vector<qint64> received_frames;
+    bool received_error = false;
+    bool received_ready = false;
+
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::mediaReady,
+        [&received_ready](quint64) {
+            received_ready = true;
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&received_frames](playback::VideoFramePtr frame, qint64 frame_index, quint64) {
+            require(frame != nullptr, "A segment seek emitted an empty frame payload.");
+            received_frames.push_back(frame_index);
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&received_error](const QString&, qint64, quint64) {
+            received_error = true;
+        });
+
+    worker.setMedia(toQString(path), 30.0, 30, 3, 24);
+    require(received_ready, "Opening a ranged media session did not emit mediaReady.");
+
+    worker.requestSeek(0, 25);
+    QTimer seek_timeout;
+    seek_timeout.setSingleShot(true);
+    QObject::connect(
+        &seek_timeout,
+        &QTimer::timeout,
+        &application,
+        &QCoreApplication::quit);
+    seek_timeout.start(1000);
+    application.exec();
+
+    require(!received_error, "Seeking to the first segment frame failed.");
+    require(received_frames.size() == 1 && received_frames.front() == 0,
+            "The worker did not expose a local segment frame index.");
+
+    worker.stepForward();
+    worker.stepForward();
+    require(received_frames.size() == 3 && received_frames[1] == 1 &&
+                received_frames[2] == 2,
+            "Segment frame stepping did not stay within the local range.");
+
+    bool finished = false;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackFinished,
+        [&finished](quint64, bool) {
+            finished = true;
+        });
+    worker.stepForward();
+    require(finished, "The worker did not finish at the segment boundary.");
+    require(received_frames.size() == 3,
+            "The worker emitted a frame beyond the segment boundary.");
+
+    worker.requestSeek(3, 26);
+    QTimer invalid_timeout;
+    invalid_timeout.setSingleShot(true);
+    QObject::connect(
+        &invalid_timeout,
+        &QTimer::timeout,
+        &application,
+        &QCoreApplication::quit);
+    invalid_timeout.start(1000);
+    application.exec();
+    require(received_error, "An out-of-range segment seek was accepted.");
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -155,6 +234,7 @@ int main(int argc, char* argv[]) {
         if (argc == 2) {
             validateReference(application, std::filesystem::path(argv[1]));
             validateSeekCoalescing(application, std::filesystem::path(argv[1]));
+            validateSegmentRange(application, std::filesystem::path(argv[1]));
         }
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

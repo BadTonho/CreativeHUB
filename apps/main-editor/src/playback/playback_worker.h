@@ -33,7 +33,12 @@ public:
     void requestSeek(qint64 frame_index, quint64 generation);
 
 public slots:
-    void setMedia(QString source_path, double frame_rate, quint64 generation);
+    void setMedia(
+        QString source_path,
+        double frame_rate,
+        qint64 source_start_frame,
+        qint64 segment_frame_count,
+        quint64 generation);
     void play();
     void pause();
     void stop();
@@ -65,6 +70,10 @@ private:
         const std::exception& error,
         const char* operation,
         std::optional<std::int64_t> requested_frame = std::nullopt);
+    [[nodiscard]] std::optional<std::int64_t> sourceFrameForLocal(
+        std::int64_t local_frame) const noexcept;
+    [[nodiscard]] bool isLocalFrameInRange(std::int64_t local_frame) const noexcept;
+    [[nodiscard]] bool isSourceFrameInRange(std::int64_t source_frame) const noexcept;
     [[nodiscard]] bool isSeekCurrent(quint64 sequence) const noexcept;
     [[nodiscard]] int frameIntervalMilliseconds() const noexcept;
 
@@ -72,6 +81,8 @@ private:
     std::unique_ptr<media::VideoPlaybackSession> session_;
     std::filesystem::path source_path_;
     double frame_rate_ = 30.0;
+    std::int64_t source_start_frame_ = 0;
+    std::int64_t segment_frame_count_ = 0;
     std::int64_t current_frame_index_ = 0;
     quint64 generation_ = 0;
     bool playing_ = false;

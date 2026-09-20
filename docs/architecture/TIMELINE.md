@@ -51,5 +51,19 @@ paused while the order changes, and the current preview and local frame are
 preserved. Normal dragging remains seeking for the active clip; moving does
 not decode frames during the drag.
 
-Cuts, deletion, multiple tracks, free positioning, audio, and project
-persistence remain future responsibilities.
+The Timeline now supports real clip splitting. `Ctrl + K` splits the active
+clip at its local playhead, while the persistent Blade Tool can split any clip
+before the frame under the cursor. The right-hand segment becomes active at
+local frame zero. A split stores `source_start_frame`, so playback of the new
+segment begins at the correct frame in the original media instead of repeating
+the source from frame zero. Segment durations are derived from their local
+frame counts and frame rate, while source metadata remains unchanged.
+
+Playback is paused before a split, pending transitions are invalidated, and
+the previous preview remains visible until the new segment frame is decoded.
+Splitting at the first or last frame is intentionally rejected without a log
+entry. The Blade Tool consumes a click without seeking; `Alt + drag` continues
+to have priority for compact clip reordering.
+
+Deletion, trimming, ripple editing, multiple tracks, free positioning, audio,
+and project persistence remain future responsibilities.

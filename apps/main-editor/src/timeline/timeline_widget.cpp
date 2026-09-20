@@ -35,6 +35,18 @@ QString formatDuration(const std::optional<double>& duration) {
     return QString::number(*duration, 'f', 3) + " s";
 }
 
+QString formatClipDuration(const TimelineClip& clip) {
+    if (clip.frame_rate.has_value() &&
+        std::isfinite(*clip.frame_rate) && *clip.frame_rate > 0.0 &&
+        clip.timeline_duration_frames > 0) {
+        return QString::number(
+            static_cast<double>(clip.timeline_duration_frames) / *clip.frame_rate,
+            'f',
+            3) + " s";
+    }
+    return formatDuration(clip.duration_seconds);
+}
+
 QRectF trackRect(const QWidget* widget) {
     return QRectF(
         track_left,
@@ -64,6 +76,8 @@ void TimelineWidget::setClips(const std::vector<TimelineClip>& clips) {
     dragging_ = false;
     moving_clip_ = false;
     move_target_index_.reset();
+    razor_clicking_ = false;
+    razor_gesture_moved_ = false;
     drag_hovering_ = false;
     update();
 }
@@ -76,6 +90,8 @@ void TimelineWidget::clearClips() {
     dragging_ = false;
     moving_clip_ = false;
     move_target_index_.reset();
+    razor_clicking_ = false;
+    razor_gesture_moved_ = false;
     drag_hovering_ = false;
     update();
 }
@@ -93,6 +109,8 @@ void TimelineWidget::setActiveClipIndex(
     dragging_ = false;
     moving_clip_ = false;
     move_target_index_.reset();
+    razor_clicking_ = false;
+    razor_gesture_moved_ = false;
     update();
 }
 
@@ -106,6 +124,17 @@ void TimelineWidget::setPlayheadFrame(std::int64_t frame_index) {
     }
     drag_frame_.reset();
     update();
+}
+
+void TimelineWidget::setRazorMode(bool enabled) {
+    razor_mode_ = enabled;
+    razor_clicking_ = false;
+    razor_gesture_moved_ = false;
+    update();
+}
+
+bool TimelineWidget::razorMode() const noexcept {
+    return razor_mode_;
 }
 
 bool TimelineWidget::isTrackPosition(const QPointF& position) const noexcept {
@@ -175,11 +204,12 @@ std::optional<std::size_t> TimelineWidget::insertionBoundaryAtPosition(
     return clips_.size();
 }
 
-std::optional<std::int64_t> TimelineWidget::frameAtPosition(double x) const noexcept {
-    const auto index = activeClipIndex();
-    if (!index.has_value()) return std::nullopt;
+std::optional<std::int64_t> TimelineWidget::frameAtPosition(
+    std::size_t clip_index,
+    double x) const noexcept {
+    if (clip_index >= clips_.size()) return std::nullopt;
 
-    const auto& clip = clips_[*index];
+    const auto& clip = clips_[clip_index];
     if (clip.timeline_duration_frames <= 0) return std::nullopt;
 
     const auto track = trackRect(this).adjusted(4.0, 4.0, -4.0, -4.0);
@@ -207,6 +237,12 @@ std::optional<std::int64_t> TimelineWidget::frameAtPosition(double x) const noex
     const double fraction = std::clamp((x - clip_left) / clip_width, 0.0, 1.0);
     return static_cast<std::int64_t>(std::llround(
         fraction * static_cast<double>(clip.timeline_duration_frames - 1)));
+}
+
+std::optional<std::int64_t> TimelineWidget::frameAtPosition(double x) const noexcept {
+    const auto index = activeClipIndex();
+    if (!index.has_value()) return std::nullopt;
+    return frameAtPosition(*index, x);
 }
 
 std::optional<double> TimelineWidget::playheadFraction() const noexcept {
@@ -243,7 +279,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     painter.setPen(palette().text().color());
     painter.drawText(
         QRectF(track_left, 8.0, track.width(), 20.0),
-        "Video Track 1");
+        razor_mode_ ? "Video Track 1 - Blade Tool" : "Video Track 1");
 
     if (clips_.empty()) {
         painter.setPen(QColor("#9aa4b2"));
@@ -292,7 +328,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         painter.drawRoundedRect(clip_rect, 3.0, 3.0);
 
         const QString label = fromUtf8(clip.display_name) + " - " +
-            formatDuration(clip.duration_seconds);
+            formatClipDuration(clip);
         const QString elided = QFontMetrics(painter.font()).elidedText(
             label,
             Qt::ElideRight,
@@ -396,6 +432,27 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         return;
     }
 
+    if (razor_mode_) {
+        const auto frame = frameAtPosition(
+            *clip_index,
+            event->position().x());
+        if (!frame.has_value()) {
+            event->ignore();
+            return;
+        }
+
+        razor_clicking_ = true;
+        razor_gesture_moved_ = false;
+        razor_clip_index_ = *clip_index;
+        razor_frame_ = *frame;
+        razor_press_x_ = event->position().x();
+        razor_press_y_ = event->position().y();
+        grabMouse();
+        update();
+        event->accept();
+        return;
+    }
+
     if (!activeClipIndex().has_value() ||
         *activeClipIndex() != *clip_index) {
         emit clipSelected(static_cast<qint64>(*clip_index));
@@ -434,6 +491,18 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
         return;
     }
 
+    if (razor_clicking_) {
+        const bool moved = std::abs(event->position().x() - razor_press_x_) > 3.0 ||
+            std::abs(event->position().y() - razor_press_y_) > 3.0;
+        if (moved) {
+            razor_clicking_ = false;
+            razor_gesture_moved_ = true;
+        }
+        update();
+        event->accept();
+        return;
+    }
+
     if (!dragging_) {
         event->ignore();
         return;
@@ -461,6 +530,31 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
             emit clipMoveRequested(
                 static_cast<qint64>(moving_clip_index_),
                 static_cast<qint64>(*target));
+        }
+        update();
+        event->accept();
+        return;
+    }
+
+    if (razor_clicking_ || razor_gesture_moved_) {
+        if (event->button() != Qt::LeftButton) {
+            event->ignore();
+            return;
+        }
+
+        const bool valid_click = razor_clicking_ &&
+            isTrackPosition(event->position()) &&
+            clipIndexAtPosition(event->position().x()).value_or(
+                clips_.size()) == razor_clip_index_;
+        const auto clip_index = razor_clip_index_;
+        const auto frame = razor_frame_;
+        razor_clicking_ = false;
+        razor_gesture_moved_ = false;
+        releaseMouse();
+        if (valid_click) {
+            emit clipSplitRequested(
+                static_cast<qint64>(clip_index),
+                static_cast<qint64>(frame));
         }
         update();
         event->accept();

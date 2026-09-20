@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <iterator>
+#include <limits>
 #include <string_view>
 #include <system_error>
 #include <utility>
@@ -186,6 +187,24 @@ void MainWindow::createMenus() {
     undo_action->setEnabled(false);
     auto* redo_action = edit_menu->addAction("&Redo");
     redo_action->setEnabled(false);
+    edit_menu->addSeparator();
+    auto* split_clip_action = edit_menu->addAction("Split Clip at Playhead");
+    split_clip_action->setShortcut(QKeySequence("Ctrl+K"));
+    split_clip_action->setShortcutContext(Qt::WindowShortcut);
+    connect(
+        split_clip_action,
+        &QAction::triggered,
+        this,
+        &MainWindow::splitActiveClipAtPlayhead);
+    auto* razor_tool_action = edit_menu->addAction("Blade Tool");
+    razor_tool_action->setCheckable(true);
+    razor_tool_action_ = razor_tool_action;
+    connect(razor_tool_action_, &QAction::toggled, this, [this](bool enabled) {
+        if (razor_button_ != nullptr && razor_button_->isChecked() != enabled) {
+            razor_button_->setChecked(enabled);
+        }
+        if (timeline_widget_ != nullptr) timeline_widget_->setRazorMode(enabled);
+    });
 
     auto* view_menu = menuBar()->addMenu("&View");
     view_menu->addAction(media_browser_dock_->toggleViewAction());
@@ -323,10 +342,13 @@ QWidget* MainWindow::createTimeline() {
     play_pause_button_ = new QPushButton("Play", container);
     next_frame_button_ = new QPushButton("Next Frame", container);
     clear_timeline_button_ = new QPushButton("Clear Timeline", container);
+    razor_button_ = new QPushButton("Blade Tool", container);
+    razor_button_->setCheckable(true);
     controls->addWidget(previous_frame_button_);
     controls->addWidget(play_pause_button_);
     controls->addWidget(next_frame_button_);
     controls->addWidget(clear_timeline_button_);
+    controls->addWidget(razor_button_);
     controls->addStretch();
     layout->addLayout(controls);
 
@@ -350,6 +372,13 @@ QWidget* MainWindow::createTimeline() {
     connect(clear_timeline_button_, &QPushButton::clicked, this, [this]() {
         clearTimeline();
     });
+    connect(razor_button_, &QPushButton::toggled, this, [this](bool enabled) {
+        if (razor_tool_action_ != nullptr &&
+            razor_tool_action_->isChecked() != enabled) {
+            razor_tool_action_->setChecked(enabled);
+        }
+        if (timeline_widget_ != nullptr) timeline_widget_->setRazorMode(enabled);
+    });
     connect(
         timeline_widget_,
         &timeline::TimelineWidget::clipSelected,
@@ -360,6 +389,11 @@ QWidget* MainWindow::createTimeline() {
         &timeline::TimelineWidget::clipMoveRequested,
         this,
         &MainWindow::handleTimelineClipMove);
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::clipSplitRequested,
+        this,
+        &MainWindow::handleTimelineClipSplit);
     connect(
         timeline_widget_,
         &timeline::TimelineWidget::seekStarted,
@@ -660,6 +694,8 @@ void MainWindow::activateTimelineClip(
         clip_index,
         static_cast<std::size_t>(std::distance(media_items_.begin(), media_item)),
         target_frame,
+        clip.source_start_frame,
+        clip.timeline_duration_frames,
         resume_playback,
         playback_generation_};
     playback_is_playing_ = false;
@@ -675,6 +711,8 @@ void MainWindow::activateTimelineClip(
         Qt::QueuedConnection,
         Q_ARG(QString, fromUtf8(pathToUtf8(item.metadata.source_path))),
         Q_ARG(double, item.metadata.frame_rate.value_or(30.0)),
+        Q_ARG(qint64, static_cast<qint64>(clip.source_start_frame)),
+        Q_ARG(qint64, static_cast<qint64>(clip.timeline_duration_frames)),
         Q_ARG(quint64, playback_generation_));
 }
 
@@ -799,6 +837,141 @@ void MainWindow::moveActiveTimelineClip(int direction) {
         handleTimelineClipMove(
             static_cast<qint64>(active),
             static_cast<qint64>(active + 1));
+    }
+}
+
+void MainWindow::splitActiveClipAtPlayhead() {
+    if (!active_timeline_clip_index_.has_value() ||
+        *active_timeline_clip_index_ >= timeline_model_.clipCount() ||
+        !canPreviewSelectedMedia() ||
+        pending_clip_activation_.has_value()) {
+        return;
+    }
+
+    handleTimelineClipSplit(
+        static_cast<qint64>(*active_timeline_clip_index_),
+        static_cast<qint64>(playback_frame_index_));
+}
+
+void MainWindow::handleTimelineClipSplit(qint64 clip_index, qint64 local_frame) {
+    if (clip_index < 0 || local_frame < 0 ||
+        clip_index >= static_cast<qint64>(timeline_model_.clipCount())) {
+        return;
+    }
+
+    const auto source_index = static_cast<std::size_t>(clip_index);
+    const auto& source_clip = timeline_model_.clips()[source_index];
+    if (local_frame <= 0 ||
+        local_frame >= source_clip.timeline_duration_frames ||
+        source_clip.source_start_frame < 0 ||
+        local_frame > std::numeric_limits<std::int64_t>::max() -
+            source_clip.source_start_frame) {
+        statusBar()->showMessage("A clip cannot be split at its boundary.");
+        return;
+    }
+
+    const auto media_item = std::find_if(
+        media_items_.begin(),
+        media_items_.end(),
+        [&source_clip](const ImportedMedia& item) {
+            return item.metadata.source_path == source_clip.source_path;
+        });
+    if (media_item == media_items_.end()) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "timeline",
+            "split_clip",
+            "The timeline clip has no matching imported media item.",
+            {{"path", pathToUtf8(source_clip.source_path)},
+             {"clip_index", std::to_string(clip_index)},
+             {"local_frame", std::to_string(local_frame)}});
+        statusBar()->showMessage("Could not split the timeline clip.");
+        QMessageBox::warning(
+            this,
+            "Timeline error",
+            "The timeline clip could not be split.");
+        return;
+    }
+
+    const auto source_frame = source_clip.source_start_frame + local_frame;
+    try {
+        pending_clip_activation_.reset();
+        ++playback_generation_;
+        playback_is_playing_ = false;
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_,
+                "stop",
+                Qt::QueuedConnection);
+        }
+
+        const auto result = timeline_model_.splitClip(
+            source_index,
+            local_frame);
+        if (result != timeline::SplitClipResult::Split) {
+            updatePlaybackControls();
+            updatePlaybackStatus();
+            statusBar()->showMessage("The clip could not be split at that frame.");
+            return;
+        }
+
+        const auto right_clip_index = source_index + 1;
+        const auto& right_clip = timeline_model_.clips()[right_clip_index];
+        const auto media_index = static_cast<std::size_t>(
+            std::distance(media_items_.begin(), media_item));
+        active_timeline_clip_index_ = right_clip_index;
+        playback_frame_index_ = 0;
+        {
+            const QSignalBlocker blocker(media_list_);
+            media_list_->setCurrentRow(static_cast<int>(media_index));
+        }
+        media_details_->setText(mediaDetailsText(media_item->metadata));
+
+        pending_clip_activation_ = PendingClipActivation{
+            right_clip_index,
+            media_index,
+            0,
+            right_clip.source_start_frame,
+            right_clip.timeline_duration_frames,
+            false,
+            playback_generation_};
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        statusBar()->showMessage("Clip split at the playhead.");
+
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_,
+                "setMedia",
+                Qt::QueuedConnection,
+                Q_ARG(QString, fromUtf8(pathToUtf8(right_clip.source_path))),
+                Q_ARG(double, right_clip.frame_rate.value_or(30.0)),
+                Q_ARG(qint64, static_cast<qint64>(right_clip.source_start_frame)),
+                Q_ARG(qint64, static_cast<qint64>(right_clip.timeline_duration_frames)),
+                Q_ARG(quint64, playback_generation_));
+        }
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "timeline",
+            "split_clip",
+            error.what(),
+            {{"path", pathToUtf8(source_clip.source_path)},
+             {"clip_index", std::to_string(clip_index)},
+             {"local_frame", std::to_string(local_frame)},
+             {"source_frame", std::to_string(source_frame)},
+             {"generation", std::to_string(playback_generation_)}});
+        pending_clip_activation_.reset();
+        playback_is_playing_ = false;
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        statusBar()->showMessage("Could not split the timeline clip.");
+        QMessageBox::warning(
+            this,
+            "Timeline error",
+            "The timeline clip could not be split.");
     }
 }
 
@@ -975,12 +1148,22 @@ void MainWindow::updateMediaDetails(int row) {
     if (playback_worker_ != nullptr && canPreviewSelectedMedia()) {
         const QString source_path = fromUtf8(pathToUtf8(item.metadata.source_path));
         const double frame_rate = item.metadata.frame_rate.value_or(30.0);
+        std::int64_t source_start_frame = 0;
+        std::int64_t segment_frame_count = item.metadata.frame_count.value_or(0);
+        if (active_timeline_clip_index_.has_value() &&
+            *active_timeline_clip_index_ < timeline_model_.clipCount()) {
+            const auto& clip = timeline_model_.clips()[*active_timeline_clip_index_];
+            source_start_frame = clip.source_start_frame;
+            segment_frame_count = clip.timeline_duration_frames;
+        }
         QMetaObject::invokeMethod(
             playback_worker_,
             "setMedia",
             Qt::QueuedConnection,
             Q_ARG(QString, source_path),
             Q_ARG(double, frame_rate),
+            Q_ARG(qint64, static_cast<qint64>(source_start_frame)),
+            Q_ARG(qint64, static_cast<qint64>(segment_frame_count)),
             Q_ARG(quint64, playback_generation_));
     }
 }
@@ -1017,6 +1200,9 @@ void MainWindow::handlePlaybackFrame(
             timeline_widget_->setPlayheadFrame(frame_index);
         }
         updatePlaybackStatus();
+        if (pending.resume_playback && playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(playback_worker_, "play", Qt::QueuedConnection);
+        }
         return;
     }
 
@@ -1036,7 +1222,7 @@ void MainWindow::handlePlaybackMediaReady(quint64 generation) {
     }
 
     const auto pending = *pending_clip_activation_;
-    if (pending.target_frame > 0) {
+    if (pending.target_frame > 0 || pending.source_start_frame > 0) {
         playback_worker_->requestSeek(
             static_cast<qint64>(pending.target_frame),
             generation);
@@ -1107,6 +1293,8 @@ void MainWindow::handlePlaybackError(
             {"clip_index", std::to_string(pending.clip_index)},
             {"media_index", std::to_string(pending.media_index)},
             {"requested_frame", std::to_string(pending.target_frame)},
+            {"source_start_frame", std::to_string(pending.source_start_frame)},
+            {"segment_frame_count", std::to_string(pending.segment_frame_count)},
             {"generation", std::to_string(generation)}};
         if (error_code >= 0) {
             context.emplace_back("error_code", std::to_string(error_code));

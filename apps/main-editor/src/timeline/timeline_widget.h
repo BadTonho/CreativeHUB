@@ -30,10 +30,13 @@ public:
     void clearClips();
     void setActiveClipIndex(std::optional<std::size_t> clip_index);
     void setPlayheadFrame(std::int64_t frame_index);
+    void setRazorMode(bool enabled);
+    [[nodiscard]] bool razorMode() const noexcept;
 
 signals:
     void clipSelected(qint64 clip_index);
     void clipMoveRequested(qint64 from_index, qint64 to_index);
+    void clipSplitRequested(qint64 clip_index, qint64 local_frame);
     void seekStarted();
     void seekRequested(qint64 frame_index);
     void mediaDropRequested(const QString& source_path);
@@ -54,6 +57,9 @@ private:
     [[nodiscard]] std::optional<std::size_t> clipIndexAtPosition(double x) const noexcept;
     [[nodiscard]] std::optional<std::size_t> insertionBoundaryAtPosition(
         double x) const noexcept;
+    [[nodiscard]] std::optional<std::int64_t> frameAtPosition(
+        std::size_t clip_index,
+        double x) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> frameAtPosition(double x) const noexcept;
     [[nodiscard]] std::optional<double> playheadFraction() const noexcept;
     [[nodiscard]] double displayedPlayheadFrame() const noexcept;
@@ -66,6 +72,13 @@ private:
     bool moving_clip_ = false;
     std::size_t moving_clip_index_ = 0;
     std::optional<std::size_t> move_target_index_;
+    bool razor_mode_ = false;
+    bool razor_clicking_ = false;
+    bool razor_gesture_moved_ = false;
+    std::size_t razor_clip_index_ = 0;
+    std::int64_t razor_frame_ = 0;
+    double razor_press_x_ = 0.0;
+    double razor_press_y_ = 0.0;
     bool drag_hovering_ = false;
 };
 

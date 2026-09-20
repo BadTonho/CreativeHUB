@@ -13,6 +13,7 @@ removal, or behavior change.
 | `Right Arrow` | Show the next video frame, crossing to the next clip when needed | Main Editor window |
 | `Ctrl + Left` | Move the active timeline clip one position to the left | Main Editor window |
 | `Ctrl + Right` | Move the active timeline clip one position to the right | Main Editor window |
+| `Ctrl + K` | Split the active timeline clip at the playhead | Main Editor window |
 
 Playback shortcuts are disabled when no media is selected or when the selected
 media is not present in the timeline.

@@ -52,6 +52,7 @@ TimelineClip makeClip(
     std::int64_t timeline_duration_frames) {
     return TimelineClip{
         timeline_start_frame,
+        0,
         timeline_duration_frames,
         canonicalPath(metadata.source_path),
         metadata.display_name,
@@ -79,6 +80,40 @@ AddClipResult TimelineModel::addClip(const media::VideoMetadata& metadata) {
         timeline_start_frame,
         *duration_frames));
     return AddClipResult::Added;
+}
+
+SplitClipResult TimelineModel::splitClip(
+    std::size_t clip_index,
+    std::int64_t local_frame) {
+    if (clip_index >= clips_.size()) {
+        return SplitClipResult::InvalidIndex;
+    }
+
+    const auto& clip = clips_[clip_index];
+    if (local_frame <= 0 || local_frame >= clip.timeline_duration_frames ||
+        clip.source_start_frame < 0 ||
+        local_frame > std::numeric_limits<std::int64_t>::max() -
+            clip.source_start_frame) {
+        return SplitClipResult::InvalidBoundary;
+    }
+
+    TimelineClip right_clip = clip;
+    right_clip.source_start_frame += local_frame;
+    right_clip.timeline_duration_frames -= local_frame;
+    right_clip.timeline_start_frame = clip.timeline_start_frame + local_frame;
+
+    clips_.insert(
+        clips_.begin() + static_cast<std::ptrdiff_t>(clip_index + 1),
+        right_clip);
+    clips_[clip_index].timeline_duration_frames = local_frame;
+
+    std::int64_t timeline_start_frame = 0;
+    for (auto& current_clip : clips_) {
+        current_clip.timeline_start_frame = timeline_start_frame;
+        timeline_start_frame += current_clip.timeline_duration_frames;
+    }
+
+    return SplitClipResult::Split;
 }
 
 MoveClipResult TimelineModel::moveClip(

@@ -94,9 +94,11 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Add basic compact single-track clip reordering with `Alt + drag` and
   `Ctrl + Left`/`Ctrl + Right`; manual validation confirmed selection, preview,
   and playback synchronization.
+- [x] Add real clip splitting at the playhead and with the persistent Blade
+  Tool; source offsets and segment-limited playback were manually validated.
 - [ ] Create a full functional timeline with editing.
 - [ ] Support video, image, text, and audio clips.
-- [ ] Implement cutting, splitting, and deletion of clips.
+- [ ] Implement clip deletion, trimming, and ripple editing.
 - [ ] Add a real-time GPU video preview.
 - [ ] Add basic audio editing and volume control.
 - [ ] Add basic layers, transformations, and keyframes.
