@@ -105,7 +105,9 @@ const TimelineTrack* TimelineModel::trackAt(std::size_t track_index) const noexc
 
 AddTrackResult TimelineModel::addTrack(std::string name) {
     if (!validName(name)) return AddTrackResult::InvalidName;
-    tracks_.push_back({next_track_id_++, std::move(name), {}});
+    tracks_.insert(
+        tracks_.begin(),
+        TimelineTrack{next_track_id_++, std::move(name), {}});
     return AddTrackResult::Added;
 }
 

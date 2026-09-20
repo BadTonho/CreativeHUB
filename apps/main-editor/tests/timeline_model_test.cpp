@@ -292,6 +292,9 @@ int main() {
                 "The second video track was not created.");
         require(multi_track_model.trackCount() == 2,
                 "The multi-track model has the wrong track count.");
+        require(multi_track_model.tracks()[0].name == "Video 2" &&
+                    multi_track_model.tracks()[1].name == "Video 1",
+                "New tracks were not inserted above the existing tracks.");
         require(multi_track_model.addClip(0, first_metadata, 10) ==
                     timeline::AddClipResult::Added,
                 "A clip was not added at an absolute frame.");

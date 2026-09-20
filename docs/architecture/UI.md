@@ -25,12 +25,16 @@ and Cancel when the project is dirty.
 
 ## Timeline interaction
 
-The Timeline draws one row per video track, preserves absolute positions and
+The Timeline draws one vertical row per video track, with the top row having
+the highest visual priority. Video 1 is created first; each newly created track
+is inserted above the existing tracks. It preserves absolute positions and
 gaps, and allows overlap only across different tracks. It displays a shared
 frame-and-seconds ruler, dedicated track headers, clip counters, track-specific
 colors, visible gap regions, and explicit drop/playhead markers. The dock
 provides Add Video Track, Rename Track, Track Up, Track Down, and Remove Track.
 Only empty tracks can be removed.
+Playback state is shown in a compact fixed footer below the timeline content;
+it does not expand with the dock.
 
 Gesture priority is Alt + drag for moving, Blade Tool click for splitting,
 edge drag for trimming, interior drag for seeking, and simple click for

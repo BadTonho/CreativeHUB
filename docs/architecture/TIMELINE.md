@@ -9,9 +9,11 @@ It does not own decoded frames, FFmpeg resources, or Qt objects.
 
 ## Multi-track behavior
 
-Video 1 is created by default and is the top visual priority. Tracks can be
-added, renamed, reordered, and removed when empty. Each track permits gaps and
-rejects overlap within that track; clips on different tracks may overlap.
+Video 1 is created by default. Each newly created track is inserted above the
+existing tracks, so it becomes the top visual priority. Tracks are drawn
+vertically, with the top row composited above the rows below it. Tracks can be
+renamed, reordered, and removed when empty. Each track permits gaps and rejects
+overlap within that track; clips on different tracks may overlap.
 TimelineModel can locate the clip visible at a frame and the top-priority clip
 when tracks overlap.
 
@@ -19,6 +21,8 @@ TimelineWidget presents the sequence with a shared frame-and-seconds ruler,
 separate track headers, per-track clip counts, visible gap regions, and
 track-specific clip colors. The active track and clip use a highlighted border;
 drop targets and the playhead are shown directly over the timeline content.
+The timeline surface grows only as much as its track rows require; additional
+tracks are available through vertical scrolling.
 
 Add to Timeline appends to the active track. A drop from the imported Media
 Browser provides a target track and absolute timeline frame. The same source

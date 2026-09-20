@@ -1275,7 +1275,8 @@ void MainWindow::addVideoTrack() {
             return;
         }
         recordTimelineEdit(before);
-        active_timeline_track_index_ = timeline_model_.trackCount() - 1;
+        // New tracks are inserted above the existing stack and become active.
+        active_timeline_track_index_ = 0;
         active_timeline_clip_index_.reset();
         updateTimelineState();
         updatePlaybackControls();
@@ -1448,14 +1449,23 @@ QWidget* MainWindow::createTimeline() {
     timeline_widget_ = new timeline::TimelineWidget(container);
     auto* timeline_scroll = new QScrollArea(container);
     timeline_scroll->setWidgetResizable(true);
+    timeline_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    timeline_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     timeline_scroll->setFrameShape(QFrame::NoFrame);
     timeline_scroll->setWidget(timeline_widget_);
     layout->addWidget(timeline_scroll);
 
+    // Keep the playback status as a compact footer instead of letting it
+    // participate in the expandable timeline area.
+    layout->addStretch(1);
     playback_status_label_ = new QLabel("No media selected.", container);
     playback_status_label_->setStyleSheet("color: #9aa4b2;");
+    playback_status_label_->setSizePolicy(
+        QSizePolicy::Preferred,
+        QSizePolicy::Fixed);
+    playback_status_label_->setFixedHeight(
+        playback_status_label_->sizeHint().height());
     layout->addWidget(playback_status_label_);
-    layout->addStretch();
 
     connect(previous_frame_button_, &QPushButton::clicked, this, [this]() {
         sendPlaybackCommand("stepBackward");

@@ -47,7 +47,7 @@ QString clipDuration(const TimelineClip& clip) {
 TimelineWidget::TimelineWidget(QWidget* parent)
     : QWidget(parent) {
     setMinimumHeight(100);
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setAcceptDrops(true);
     setMouseTracking(true);
 }
@@ -61,7 +61,7 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
         active_clip_.reset();
         playhead_frame_ = 0;
     }
-    setMinimumHeight(static_cast<int>(top_margin +
+    setFixedHeight(static_cast<int>(top_margin +
         tracks_.size() * (row_height + row_gap) + 12.0));
     moving_active_ = false;
     trimming_ = false;
@@ -82,6 +82,7 @@ void TimelineWidget::setClips(const std::vector<TimelineClip>& clips) {
 void TimelineWidget::clearClips() {
     tracks_.clear();
     tracks_.push_back(TimelineTrack{1, "Video 1", {}});
+    setFixedHeight(static_cast<int>(top_margin + row_height + row_gap + 12.0));
     active_clip_.reset();
     playhead_frame_ = 0;
     drag_frame_.reset();
