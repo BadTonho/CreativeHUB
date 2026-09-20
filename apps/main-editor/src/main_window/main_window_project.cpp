@@ -581,21 +581,51 @@ void MainWindow::applyLoadedProject(
     updateProjectDirtyState();
 
     if (timeline_model_.hasClip()) {
-        active_timeline_track_index_ = 0;
-        active_timeline_clip_index_ = 0;
-        const auto& clip = timeline_model_.clips().front();
+        std::optional<timeline::ClipLocation> first_clip_location;
+        for (std::size_t track_index = 0;
+             track_index < timeline_model_.trackCount() && !first_clip_location.has_value();
+             ++track_index) {
+            if (timeline_model_.clipCount(track_index) > 0) {
+                first_clip_location = timeline::ClipLocation{track_index, 0};
+            }
+        }
+
+        if (!first_clip_location.has_value()) {
+            updateTimelineState();
+            updatePlaybackControls();
+            updatePlaybackStatus();
+            updateHistoryActions();
+            return;
+        }
+
+        active_timeline_track_index_ = first_clip_location->track_index;
+        active_timeline_clip_index_ = first_clip_location->clip_index;
+        const auto& clip = timeline_model_.tracks()[first_clip_location->track_index]
+            .clips[first_clip_location->clip_index];
         const auto media = std::find_if(
             media_items_.begin(),
             media_items_.end(),
             [&clip](const ImportedMedia& item) {
                 return normalizedPath(item.metadata.source_path) == normalizedPath(clip.source_path);
             });
-        if (media != media_items_.end()) {
+        if (clip.kind == timeline::ClipKind::Text) {
+            activateTimelineClipAt(
+                first_clip_location->track_index,
+                first_clip_location->clip_index,
+                0,
+                false);
+        } else if (media != media_items_.end()) {
             const auto media_index = static_cast<std::size_t>(std::distance(media_items_.begin(), media));
             populateMediaBrowser(clip.source_path);
             media_details_->setText(mediaDetailsText(media->metadata));
             if (!media->offline) preview_widget_->setFrame(media->first_frame);
-            if (!media->offline) activateTimelineClipAt(0, 0, 0, false);
+            if (!media->offline) {
+                activateTimelineClipAt(
+                    first_clip_location->track_index,
+                    first_clip_location->clip_index,
+                    0,
+                    false);
+            }
             static_cast<void>(media_index);
         }
     } else if (!media_items_.empty()) {

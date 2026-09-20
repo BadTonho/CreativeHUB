@@ -292,14 +292,12 @@ QWidget* MainWindow::createTimeline() {
     clear_timeline_button_ = new QPushButton("Clear Timeline", container);
     razor_button_ = new QPushButton("Blade Tool", container);
     add_text_button_ = new QPushButton("Add Text", container);
-    add_text_button_ = new QPushButton("Add Text", container);
     razor_button_->setCheckable(true);
     controls->addWidget(previous_frame_button_);
     controls->addWidget(play_pause_button_);
     controls->addWidget(next_frame_button_);
     controls->addWidget(clear_timeline_button_);
     controls->addWidget(razor_button_);
-    controls->addWidget(add_text_button_);
     controls->addWidget(add_text_button_);
     controls->addSpacing(10);
     auto* tracks_label = new QLabel("Tracks", container);
@@ -353,7 +351,6 @@ QWidget* MainWindow::createTimeline() {
     next_frame_button_->setToolTip("Step one frame forward");
     clear_timeline_button_->setToolTip("Remove all clips from every track");
     razor_button_->setToolTip("Split a clip where you click");
-    add_text_button_->setToolTip("Add a five-second text clip at the current playhead");
     add_text_button_->setToolTip("Add a five-second text clip at the current playhead");
     add_track_button->setToolTip("Create a new empty video track");
     rename_track_button->setToolTip("Rename the active track");

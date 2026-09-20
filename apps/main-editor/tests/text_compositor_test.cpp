@@ -59,6 +59,27 @@ int main(int argc, char** argv) {
         require(composed.has_value() && composed->width == 64 &&
                     composed->height == 64 && composed->stride == 256,
                 "Text and video composition returned invalid output.");
+
+        const std::vector<rendering::CompositionLayer> text_only_layers{
+            {&*text_frame, {}}};
+        const auto text_only_composed = rendering::FrameCompositor::compose(
+            64, 64, text_only_layers);
+        require(text_only_composed.has_value(),
+                "Text-only composition returned no frame.");
+        bool text_only_has_visible_pixels = false;
+        for (std::size_t index = 0;
+             index + 3 < text_only_composed->rgba_pixels.size();
+             index += 4) {
+            if (text_only_composed->rgba_pixels[index + 3] != 255 ||
+                text_only_composed->rgba_pixels[index] != 0 ||
+                text_only_composed->rgba_pixels[index + 1] != 0 ||
+                text_only_composed->rgba_pixels[index + 2] != 0) {
+                text_only_has_visible_pixels = true;
+                break;
+            }
+        }
+        require(text_only_has_visible_pixels,
+                "Text-only composition contained no visible pixels.");
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
