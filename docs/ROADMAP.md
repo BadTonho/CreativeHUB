@@ -121,8 +121,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   and keyboard shortcuts on Windows, macOS, and Linux.
 - [ ] Define installation, update, packaging, signing, and distribution
   workflows.
-- [ ] Add crash reporting and useful error handling without requiring online
-  services.
+- [-] Add local structured error logging and useful error handling without
+  requiring online services; native crash dumps remain pending.
 - [ ] Create contributor documentation and public technical documentation.
 - [ ] Review performance, memory usage, and startup time before major
   releases.

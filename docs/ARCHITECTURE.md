@@ -47,7 +47,8 @@ timeline, or rendering services through explicit C++ interfaces.
 ## Rendering boundary
 
 The initial shell contains only a preview placeholder. It does not choose the
-final GPU backend and does not integrate FFmpeg or SDL3.
+final GPU backend or decode video frames. Metadata inspection belongs to the
+application-local media boundary described below.
 
 The future preview renderer must be introduced behind a project-owned C++
 interface. Media decoding, timeline state, frame ownership, and GPU resource
@@ -68,6 +69,20 @@ metadata into display strings and remains responsible for dialogs and widgets.
 This milestone opens the video decoder to validate the selected stream but does
 not decode frames. Frame ownership, playback, thumbnails, asynchronous import,
 and GPU resources are reserved for later media modules.
+
+## Logging boundary
+
+The Main Editor owns the first application-local logger under
+`apps/main-editor/src/logging/`. It uses only the C++ standard library and does
+not expose Qt types. The logger writes structured text entries with UTC
+timestamps, severity, subsystem, operation, message, and optional context.
+
+Logs are stored in the platform's user log directory and are limited to three
+files of up to 5 MB each. The Help menu provides an `Open Log Folder` action.
+The logger records handled media and application errors as well as unexpected
+termination attempts, but it does not create native crash dumps in this phase.
+Passwords, tokens, private keys, and media contents must never be written to
+the log.
 
 ## Build and dependency policy
 

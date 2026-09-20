@@ -7,6 +7,8 @@ add_executable(creative-suite-main-editor
     src/main.cpp
     src/main_window.cpp
     src/main_window.h
+    src/logging/logger.cpp
+    src/logging/logger.h
     src/media/video_metadata.h
     src/media/video_probe.cpp
     src/media/video_probe.h
@@ -31,6 +33,10 @@ if(MSVC)
     target_compile_options(creative-suite-main-editor PRIVATE /W4 /permissive-)
 else()
     target_compile_options(creative-suite-main-editor PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
 endif()
 
 set_target_properties(creative-suite-main-editor PROPERTIES

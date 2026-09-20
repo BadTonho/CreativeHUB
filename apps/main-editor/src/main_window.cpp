@@ -1,10 +1,13 @@
 #include "main_window.h"
 
+#include "logging/logger.h"
+
 #include <QAction>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
+#include <QDesktopServices>
 #include <QLabel>
 #include <QAbstractItemView>
 #include <QListWidget>
@@ -14,6 +17,7 @@
 #include <QMessageBox>
 #include <QSizePolicy>
 #include <QStatusBar>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -198,6 +202,33 @@ void MainWindow::createMenus() {
     connect(restore_layout_action, &QAction::triggered, this, &MainWindow::restoreDefaultLayout);
 
     auto* help_menu = menuBar()->addMenu("&Help");
+    auto* open_log_folder_action = help_menu->addAction("Open &Log Folder");
+    connect(open_log_folder_action, &QAction::triggered, this, [this]() {
+        auto& logger = logging::Logger::instance();
+        const auto directory = logger.log_directory();
+        const auto directory_text = pathToUtf8(directory);
+        const bool opened = !directory.empty() &&
+            QDesktopServices::openUrl(QUrl::fromLocalFile(fromUtf8(directory_text)));
+        if (!opened) {
+            logger.log(
+                logging::Level::Warning,
+                "ui",
+                "open_log_folder",
+                "Could not open the log directory.",
+                {{"path", directory_text}});
+            statusBar()->showMessage("Could not open the log folder.");
+            return;
+        }
+
+        logger.log(
+            logging::Level::Info,
+            "ui",
+            "open_log_folder",
+            "Opened the log directory.",
+            {{"path", directory_text}});
+        statusBar()->showMessage("Log folder opened.");
+    });
+    help_menu->addSeparator();
     auto* about_action = help_menu->addAction("&About Main Editor");
     connect(about_action, &QAction::triggered, this, [this]() {
         QMessageBox::about(
@@ -253,6 +284,12 @@ void MainWindow::openMedia() {
     if (existing != media_items_.end()) {
         const auto index = static_cast<int>(std::distance(media_items_.begin(), existing));
         media_list_->setCurrentRow(index);
+        logging::Logger::instance().log(
+            logging::Level::Debug,
+            "media",
+            "import",
+            "Media was already imported.",
+            {{"path", pathToUtf8(source_path)}});
         statusBar()->showMessage("Media is already imported.");
         return;
     }
@@ -260,12 +297,24 @@ void MainWindow::openMedia() {
     try {
         auto metadata = video_probe_.probe(source_path);
         addMediaItem(std::move(metadata));
+        logging::Logger::instance().log(
+            logging::Level::Info,
+            "media",
+            "import",
+            "Media metadata imported.",
+            {{"path", pathToUtf8(source_path)}});
         statusBar()->showMessage("Media imported successfully.");
     } catch (const media::MediaError& error) {
         const QString message = fromUtf8(error.what());
         QMessageBox::warning(this, "Could not open media", message);
         statusBar()->showMessage("Could not import media.");
     } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "ui",
+            "media_import",
+            error.what(),
+            {{"path", pathToUtf8(source_path)}});
         const QString message = fromUtf8(error.what());
         QMessageBox::warning(this, "Could not open media", message);
         statusBar()->showMessage("Could not import media.");
