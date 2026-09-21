@@ -325,8 +325,6 @@ void MainWindow::activateTimelineClipAt(
     playback_is_playing_ = false;
     updatePlaybackControls();
     updatePlaybackStatus();
-    statusBar()->showMessage("Loading timeline clip...");
-
     QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
     const auto& item = *media_item;
     QMetaObject::invokeMethod(
@@ -506,8 +504,30 @@ void MainWindow::updatePlaybackControls() {
 void MainWindow::updatePlaybackStatus() {
     if (playback_status_label_ == nullptr) return;
 
-    if (pending_clip_activation_.has_value()) {
-        playback_status_label_->setText("Loading timeline clip...");
+    const bool timeline_loading = pending_clip_activation_.has_value();
+    if (timeline_loading_label_ != nullptr) {
+        timeline_loading_label_->setText(
+            timeline_loading
+                ? QStringLiteral("Loading timeline clip...")
+                : QString());
+        timeline_loading_label_->setVisible(timeline_loading);
+    }
+
+    if (timeline_loading &&
+        pending_clip_activation_->track_index < timeline_model_.trackCount() &&
+        pending_clip_activation_->clip_index < timeline_model_.clipCount(
+            pending_clip_activation_->track_index)) {
+        const auto& clip = timeline_model_.tracks()
+            [pending_clip_activation_->track_index]
+            .clips[pending_clip_activation_->clip_index];
+        const auto frame = std::clamp<std::int64_t>(
+            pending_clip_activation_->target_frame,
+            0,
+            std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
+        playback_status_label_->setText(
+            QString("Paused - Frame %1 / %2")
+                .arg(frame + 1)
+                .arg(clip.timeline_duration_frames));
         return;
     }
 
@@ -743,6 +763,10 @@ void MainWindow::handlePlaybackError(
 
     playback_is_playing_ = false;
     updatePlaybackControls();
+    if (timeline_loading_label_ != nullptr) {
+        timeline_loading_label_->clear();
+        timeline_loading_label_->setVisible(false);
+    }
     if (playback_status_label_ != nullptr) {
         playback_status_label_->setText("Playback error.");
     }

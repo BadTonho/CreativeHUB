@@ -87,7 +87,8 @@ in the running Main Editor after UI or integration changes:
   clip movement; clear both the Media Browser and Timeline item selections,
   place the playhead over a valid clip, and confirm Play resolves that clip
   and starts playback; also confirm that playback crosses a text-to-video
-  boundary without an out-of-range-frame error;
+  boundary without an out-of-range-frame error, and that the frame status and
+  `Loading timeline clip...` message share one compact footer line;
 - Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;
   confirm that the numeric fields remain editable, values stay within their
   property ranges, keyframe edits still target the current frame, and one

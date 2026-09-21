@@ -411,14 +411,28 @@ QWidget* MainWindow::createTimeline() {
 
     // Keep the playback status as a compact footer while giving the timeline
     // the expandable space in the dock.
-    playback_status_label_ = new QLabel("No media selected.", container);
+    auto* playback_footer = new QWidget(container);
+    auto* playback_footer_layout = new QHBoxLayout(playback_footer);
+    playback_footer_layout->setContentsMargins(0, 0, 0, 0);
+    playback_footer_layout->setSpacing(12);
+
+    playback_status_label_ = new QLabel("No media selected.", playback_footer);
     playback_status_label_->setStyleSheet("color: #9aa4b2;");
     playback_status_label_->setSizePolicy(
         QSizePolicy::Preferred,
         QSizePolicy::Fixed);
-    playback_status_label_->setFixedHeight(
-        playback_status_label_->sizeHint().height());
-    layout->addWidget(playback_status_label_);
+    playback_footer_layout->addWidget(playback_status_label_);
+
+    timeline_loading_label_ = new QLabel(playback_footer);
+    timeline_loading_label_->setStyleSheet("color: #9aa4b2;");
+    timeline_loading_label_->setSizePolicy(
+        QSizePolicy::Preferred,
+        QSizePolicy::Fixed);
+    timeline_loading_label_->setVisible(false);
+    playback_footer_layout->addWidget(timeline_loading_label_);
+    playback_footer_layout->addStretch(1);
+    playback_footer->setFixedHeight(playback_footer->sizeHint().height());
+    layout->addWidget(playback_footer);
 
     connect(previous_frame_button_, &QPushButton::clicked, this, [this]() {
         sendPlaybackCommand("stepBackward");
