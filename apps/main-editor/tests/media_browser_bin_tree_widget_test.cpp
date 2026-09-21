@@ -29,6 +29,12 @@ int main(int argc, char* argv[]) {
     try {
         MediaBrowserBinTreeWidget tree;
         tree.resize(320, 180);
+        require(
+            tree.editTriggers().testFlag(QAbstractItemView::DoubleClicked),
+            "Bins must support double-click editing.");
+        require(
+            tree.editTriggers().testFlag(QAbstractItemView::EditKeyPressed),
+            "Bins must support F2 editing.");
         auto* all_media = new QTreeWidgetItem(&tree, {"All Media"});
         all_media->setData(0, Qt::UserRole, QString());
         auto* footage = new QTreeWidgetItem(all_media, {"Footage"});

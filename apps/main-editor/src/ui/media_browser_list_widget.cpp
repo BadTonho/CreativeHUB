@@ -84,6 +84,9 @@ MediaBrowserListWidget::MediaBrowserListWidget(QWidget* parent)
     setDragEnabled(true);
     setDragDropMode(QAbstractItemView::DragOnly);
     setDefaultDropAction(Qt::CopyAction);
+    setEditTriggers(
+        QAbstractItemView::DoubleClicked |
+        QAbstractItemView::EditKeyPressed);
     setMouseTracking(true);
     viewport()->setMouseTracking(true);
     setItemDelegate(new MediaBrowserItemDelegate(this, this));

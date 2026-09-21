@@ -27,6 +27,9 @@ MediaBrowserBinTreeWidget::MediaBrowserBinTreeWidget(QWidget* parent)
     setDefaultDropAction(Qt::MoveAction);
     setDragDropOverwriteMode(false);
     setSelectionMode(QAbstractItemView::SingleSelection);
+    setEditTriggers(
+        QAbstractItemView::DoubleClicked |
+        QAbstractItemView::EditKeyPressed);
     setAutoExpandDelay(500);
 }
 

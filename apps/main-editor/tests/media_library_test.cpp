@@ -44,7 +44,18 @@ int main() {
     require(library.createBin("Footage/Empty") ==
                 media::MediaMutationResult::Changed,
             "An empty bin was not created.");
-    require(library.moveToBin(0, "Footage/Scenes/Closeups") ==
+    require(library.renameBin("Footage/Scenes", "Footage/Renamed") ==
+                media::MediaMutationResult::Changed,
+            "A bin with descendants was not renamed.");
+    require(library.items()[0].bin_path == "Footage/Renamed",
+            "Media was not updated when its bin was renamed.");
+    require(library.renameBin("Footage/Renamed", "Footage/Renamed/Child") ==
+                media::MediaMutationResult::InvalidBin,
+            "A bin was allowed to move into its own descendant.");
+    require(library.renameBin("Footage/Renamed", "Footage/Empty") ==
+                media::MediaMutationResult::InvalidBin,
+            "A bin collision was not rejected during rename.");
+    require(library.moveToBin(0, "Footage/Renamed/Closeups") ==
                 media::MediaMutationResult::Changed,
             "The media item was not moved.");
     require(library.isInBin(0, "Footage"), "Parent-bin filtering failed.");
@@ -70,9 +81,9 @@ int main() {
     };
     require(has_bin("Archive/Footage/Empty"),
             "The empty bin was not preserved while moving its parent.");
-    require(has_bin("Archive/Footage/Scenes/Closeups"),
+    require(has_bin("Archive/Footage/Renamed/Closeups"),
             "The child bin was not moved with its parent.");
-    require(library.items()[0].bin_path == "Archive/Footage/Scenes/Closeups",
+    require(library.items()[0].bin_path == "Archive/Footage/Renamed/Closeups",
             "Media bin paths were not updated with the moved subtree.");
     require(library.moveBin("Archive", "Archive/Footage") ==
                 media::MediaMutationResult::InvalidBin,

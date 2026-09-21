@@ -38,6 +38,8 @@ class QTabWidget;
 class QScrollArea;
 class MediaBrowserBinTreeWidget;
 class MediaBrowserListWidget;
+class QListWidgetItem;
+class QTreeWidgetItem;
 class PreviewWidget;
 class QWidget;
 
@@ -83,9 +85,11 @@ private:
     void handleMediaBrowserBinDrop(
         const QString& source_bin,
         const QString& destination_bin);
+    void handleMediaBrowserListItemChanged(QListWidgetItem* item);
+    void handleMediaBrowserBinItemChanged(QTreeWidgetItem* item, int column);
+    void selectMediaBrowserListBin(const QString& path);
+    void beginMediaBrowserBinEdit(const QString& path);
     void createBin();
-    void renameSelectedBin();
-    void renameSelectedMedia();
     void moveSelectedMediaToBin();
     void removeSelectedMedia();
     void restoreSelectedMedia();
@@ -272,6 +276,7 @@ private:
     QCheckBox* track_mute_check_ = nullptr;
     QLabel* timeline_interaction_hint_ = nullptr;
     QLabel* playback_status_label_ = nullptr;
+    bool media_browser_inline_rename_pending_ = false;
     std::array<QDoubleSpinBox*, 5> transform_spin_boxes_{};
     std::array<QSlider*, 5> transform_sliders_{};
     std::array<QPushButton*, 5> transform_key_buttons_{};

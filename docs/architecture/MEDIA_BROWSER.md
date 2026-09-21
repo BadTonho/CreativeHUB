@@ -32,9 +32,8 @@ layout.
 The media view also includes the immediate child bins of the active location as
 folder items alongside the media entries. Folder items use the standard Qt
 folder icon, do not participate in the media-to-Timeline drag operation, and
-open that bin on double-click. The bin tree remains available for direct
-navigation and filtering; the existing parent-bin filter still includes its
-descendants.
+can be renamed inline. The bin tree remains available for direct navigation
+and filtering; the existing parent-bin filter still includes its descendants.
 
 Each item draws a small information icon in its upper-right corner. Hovering
 that icon shows the complete technical summary: name, format, codec,
@@ -43,9 +42,12 @@ offline status, bin, and path for unavailable media. This information is view
 state and changing list/block mode does not mark the project dirty.
 
 Right-clicking the bin tree or the media area opens the existing context menu.
-`New Bin` creates a bin below the clicked or selected bin; in the media area it
-uses the currently selected bin as the parent. Slash-separated relative paths
-can create multiple child levels in one operation.
+`New Bin` creates a child below the clicked or selected bin without opening a
+dialog. It uses the first available name from `New Bin`, `New Bin 2`, and so on,
+then starts inline editing in the media view. Bins and media are renamed with
+double-click or `F2`; `All Media` and `Unsorted` are not editable. Bin
+renaming preserves descendants and empty bins. The tree remains the navigation
+surface, while the media view keeps the current folder items alongside media.
 
 Media items can be dragged one at a time from the Browser list onto a real bin
 to move them. Bins can be dragged onto another real bin to reparent the whole
@@ -55,9 +57,9 @@ be renamed or moved. Invalid self, descendant, and collision drops are ignored;
 the tree remains alphabetically displayed and does not support manual sibling
 reordering or bin deletion in this milestone.
 
-Context menus support renaming media or bins, moving media, removing media
-from the Browser, and restoring an available offline item. Media Browser items
-can be dragged to the Timeline through the internal
+Context menus support creating bins, moving media, removing media from the
+Browser, and restoring an available offline item. Media Browser items can be
+dragged to the Timeline through the internal
 `application/x-creative-suite-media-path` MIME type. Only already imported
 items participate in this drag-and-drop flow; operating-system file drops and
 full manual relinking are future work.

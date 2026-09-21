@@ -35,6 +35,12 @@ int main(int argc, char* argv[]) {
             "Media Browser must default to list mode.");
         require(widget.viewMode() == QListView::ListMode,
                 "List mode was not applied to the QListWidget.");
+        require(
+            widget.editTriggers().testFlag(QAbstractItemView::DoubleClicked),
+            "Media items must support double-click editing.");
+        require(
+            widget.editTriggers().testFlag(QAbstractItemView::EditKeyPressed),
+            "Media items must support F2 editing.");
 
         auto* item = new QListWidgetItem("Sample clip", &widget);
         item->setData(Qt::UserRole, QStringLiteral("sample.mp4"));
@@ -44,6 +50,7 @@ int main(int argc, char* argv[]) {
         item->setData(
             media_browser_ui::kMediaInfoRole,
             QStringLiteral("Name: Sample clip\nFormat: MP4"));
+        item->setFlags(item->flags() | Qt::ItemIsEditable);
         QPixmap thumbnail(16, 16);
         thumbnail.fill(Qt::blue);
         item->setIcon(QIcon(thumbnail));
@@ -65,6 +72,8 @@ int main(int argc, char* argv[]) {
         require(item->data(media_browser_ui::kMediaInfoRole).toString().contains(
                     "Format: MP4"),
                 "Media information data was not preserved.");
+        require(item->flags() & Qt::ItemIsEditable,
+                "Media items must be editable.");
 
         auto* bin_item = new QListWidgetItem("Footage", &widget);
         bin_item->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
@@ -74,7 +83,8 @@ int main(int argc, char* argv[]) {
         bin_item->setData(
             media_browser_ui::kMediaBinPathRole,
             QStringLiteral("Projects/Footage"));
-        bin_item->setFlags(bin_item->flags() & ~Qt::ItemIsDragEnabled);
+        bin_item->setFlags(
+            (bin_item->flags() | Qt::ItemIsEditable) & ~Qt::ItemIsDragEnabled);
         require(!bin_item->icon().isNull(),
                 "The Media Browser bin did not receive a folder icon.");
         require(bin_item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
@@ -85,6 +95,8 @@ int main(int argc, char* argv[]) {
                 "The Media Browser bin path was not preserved.");
         require(!(bin_item->flags() & Qt::ItemIsDragEnabled),
                 "Bins must not use the media-to-Timeline drag operation.");
+        require(bin_item->flags() & Qt::ItemIsEditable,
+                "Bin items must be editable.");
 
         widget.setDisplayMode(MediaBrowserListWidget::DisplayMode::List);
         require(widget.viewMode() == QListView::ListMode,

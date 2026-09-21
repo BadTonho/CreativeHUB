@@ -64,13 +64,15 @@ in the running Main Editor after UI or integration changes:
 - Media Browser list/block toggles, restoration of the last global mode,
   cached thumbnails, compact item descriptions, hover over the information
   icon for the complete technical tooltip, selection, bins, context actions,
-  folder items shown alongside media, folder icons, opening a bin by
-  double-click, and preventing folder items from producing media drag data,
+  folder items shown alongside media, folder icons, inline renaming with
+  double-click and F2, automatic New Bin naming without dialogs, protection of
+  All Media/Unsorted, and preventing folder items from producing media drag data,
   offline media, right-click New Bin in the media area and bin tree, creation
   of child bins, dragging media to bins, dragging bins into bins, preservation
   of empty sub-bins, rejection of All Media/blank/self/descendant/collision
   drops, project dirty state, persistence after save/reopen, and drag-and-drop
-  to the Timeline;
+  to the Timeline; confirm that invalid inline names restore the previous
+  label and report a concise status message;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement;
 - Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;

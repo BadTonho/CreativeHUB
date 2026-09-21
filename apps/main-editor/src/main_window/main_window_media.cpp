@@ -27,7 +27,6 @@
 #include <QAbstractItemView>
 #include <QListWidget>
 #include <QListWidgetItem>
-#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMetaObject>
@@ -38,6 +37,7 @@
 #include <QSlider>
 #include <QStatusBar>
 #include <QStyle>
+#include <QTimer>
 #include <QToolButton>
 #include <QPixmap>
 #include <QUrl>
@@ -80,6 +80,28 @@ QIcon mediaThumbnailIcon(const media::VideoFrame& frame) {
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation);
     return QIcon(thumbnail);
+}
+
+std::string binParentPath(std::string_view path) {
+    const auto separator = path.rfind('/');
+    return separator == std::string_view::npos
+        ? std::string()
+        : std::string(path.substr(0, separator));
+}
+
+std::string binLeafName(std::string_view path) {
+    const auto separator = path.rfind('/');
+    return std::string(path.substr(
+        separator == std::string_view::npos ? 0 : separator + 1));
+}
+
+bool validInlineBinName(const QString& value) {
+    const auto name = value.trimmed();
+    return !name.isEmpty() &&
+        name != QStringLiteral(".") &&
+        name != QStringLiteral("..") &&
+        !name.contains('/') &&
+        !name.contains('\\');
 }
 
 } // namespace
@@ -134,6 +156,8 @@ QWidget* MainWindow::createMediaBrowser() {
             this, &MainWindow::handleMediaBrowserMediaDrop);
     connect(bin_tree_, &MediaBrowserBinTreeWidget::binDropRequested,
             this, &MainWindow::handleMediaBrowserBinDrop);
+    connect(bin_tree_, &QTreeWidget::itemChanged, this,
+            &MainWindow::handleMediaBrowserBinItemChanged);
     layout->addWidget(bin_tree_);
 
     media_list_ = new MediaBrowserListWidget(container);
@@ -156,16 +180,8 @@ QWidget* MainWindow::createMediaBrowser() {
     media_list_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(media_list_, &QListWidget::customContextMenuRequested, this,
             &MainWindow::showMediaContextMenu);
-    connect(media_list_, &QListWidget::itemDoubleClicked, this,
-            [this](QListWidgetItem* item) {
-                if (item == nullptr ||
-                    item->data(media_browser_ui::kMediaItemTypeRole).toInt() !=
-                        media_browser_ui::kMediaItemTypeBin) {
-                    return;
-                }
-                selectMediaBrowserBin(
-                    item->data(media_browser_ui::kMediaBinPathRole).toString());
-            });
+    connect(media_list_, &QListWidget::itemChanged, this,
+            &MainWindow::handleMediaBrowserListItemChanged);
     layout->addWidget(media_list_, 1);
 
     media_status_label_ = new QLabel("No media imported.", container);
@@ -244,6 +260,7 @@ void MainWindow::populateMediaBrowser(
         auto* all = new QTreeWidgetItem(bin_tree_, {"All Media"});
         all->setData(0, Qt::UserRole, QString());
         all->setIcon(0, style()->standardIcon(QStyle::SP_DirHomeIcon));
+        all->setFlags(all->flags() & ~Qt::ItemIsEditable);
         bin_tree_->setCurrentItem(all);
         for (const auto& bin : bins) {
             QTreeWidgetItem* parent = all;
@@ -267,6 +284,11 @@ void MainWindow::populateMediaBrowser(
                     child = new QTreeWidgetItem(parent, {QString::fromStdString(part)});
                     child->setData(0, Qt::UserRole, QString::fromStdString(current));
                     child->setIcon(0, style()->standardIcon(QStyle::SP_DirIcon));
+                    if (current != "Unsorted") {
+                        child->setFlags(child->flags() | Qt::ItemIsEditable);
+                    } else {
+                        child->setFlags(child->flags() & ~Qt::ItemIsEditable);
+                    }
                 }
                 parent = child;
                 start = separator == std::string::npos ? bin.size() : separator + 1;
@@ -307,6 +329,11 @@ void MainWindow::populateMediaBrowser(
                 media_browser_ui::kMediaBinPathRole,
                 QString::fromStdString(bin));
             bin_item->setFlags(bin_item->flags() & ~Qt::ItemIsDragEnabled);
+            if (bin != "Unsorted") {
+                bin_item->setFlags(bin_item->flags() | Qt::ItemIsEditable);
+            } else {
+                bin_item->setFlags(bin_item->flags() & ~Qt::ItemIsEditable);
+            }
         }
 
         for (std::size_t index = 0; index < media_items_.size(); ++index) {
@@ -325,6 +352,7 @@ void MainWindow::populateMediaBrowser(
             list_item->setData(
                 media_browser_ui::kMediaItemTypeRole,
                 media_browser_ui::kMediaItemTypeMedia);
+            list_item->setFlags(list_item->flags() | Qt::ItemIsEditable);
             list_item->setData(
                 media_browser_ui::kMediaIndexRole,
                 static_cast<qint64>(index));
@@ -381,6 +409,35 @@ void MainWindow::selectMediaBrowserBin(const QString& path) {
     }
 }
 
+void MainWindow::selectMediaBrowserListBin(const QString& path) {
+    if (media_list_ == nullptr) return;
+    for (int row = 0; row < media_list_->count(); ++row) {
+        auto* item = media_list_->item(row);
+        if (item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
+                media_browser_ui::kMediaItemTypeBin &&
+            item->data(media_browser_ui::kMediaBinPathRole).toString() == path) {
+            media_list_->setCurrentItem(item);
+            return;
+        }
+    }
+}
+
+void MainWindow::beginMediaBrowserBinEdit(const QString& path) {
+    QTimer::singleShot(0, this, [this, path]() {
+        if (media_list_ == nullptr) return;
+        for (int row = 0; row < media_list_->count(); ++row) {
+            auto* item = media_list_->item(row);
+            if (item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
+                    media_browser_ui::kMediaItemTypeBin &&
+                item->data(media_browser_ui::kMediaBinPathRole).toString() == path) {
+                media_list_->setCurrentItem(item);
+                media_list_->editItem(item);
+                return;
+            }
+        }
+    });
+}
+
 void MainWindow::updateMediaBrowserFilter() {
     populateMediaBrowser();
 }
@@ -418,74 +475,152 @@ void MainWindow::applyMediaLibrary(const media::MediaLibrary& library) {
 
 void MainWindow::createBin() {
     const auto parent_bin = selectedBinPath();
-    bool accepted = false;
-    const QString value = QInputDialog::getText(
-        this,
-        "New Bin",
-        "Bin name or relative path (use / for sub-bins):",
-        QLineEdit::Normal,
-        "New Bin", &accepted);
-    if (!accepted) return;
-    const auto relative_path = value.toStdString();
-    if (!media::MediaLibrary::validBinPath(relative_path)) {
-        QMessageBox::warning(
-            this,
-            "Invalid bin",
-            "Use a non-empty bin path with / separators.");
-        return;
-    }
-
-    const std::string new_path = parent_bin.empty()
-        ? relative_path
-        : parent_bin + "/" + relative_path;
     auto library = buildMediaLibrary();
-    if (library.createBin(new_path) != media::MediaMutationResult::Changed) {
-        QMessageBox::warning(this, "Could not create bin", "That bin already exists or is invalid.");
+    std::string new_path;
+    for (std::size_t suffix = 1; suffix < 100000; ++suffix) {
+        const std::string name = suffix == 1
+            ? "New Bin"
+            : "New Bin " + std::to_string(suffix);
+        const auto candidate = parent_bin.empty()
+            ? name
+            : parent_bin + "/" + name;
+        if (library.createBin(candidate) == media::MediaMutationResult::Changed) {
+            new_path = candidate;
+            break;
+        }
+    }
+    if (new_path.empty()) {
+        statusBar()->showMessage("Could not create a new bin.");
         return;
     }
     applyMediaLibrary(library);
     updateProjectDirtyState();
-    populateMediaBrowser({}, new_path);
+    populateMediaBrowser({}, parent_bin);
+    beginMediaBrowserBinEdit(QString::fromStdString(new_path));
 }
 
-void MainWindow::renameSelectedBin() {
-    const auto old_path = selectedBinPath();
-    if (old_path.empty() || old_path == "Unsorted") return;
-    bool accepted = false;
-    const QString value = QInputDialog::getText(
-        this, "Rename Bin", "New bin path:", QLineEdit::Normal,
-        QString::fromStdString(old_path), &accepted);
-    if (!accepted) return;
-    auto library = buildMediaLibrary();
-    const auto result = library.renameBin(old_path, value.toStdString());
-    if (result != media::MediaMutationResult::Changed) {
-        QMessageBox::warning(this, "Could not rename bin", "The bin name is invalid or already exists.");
+void MainWindow::handleMediaBrowserListItemChanged(QListWidgetItem* item) {
+    if (item == nullptr || media_browser_inline_rename_pending_) return;
+
+    const auto item_type = item->data(
+        media_browser_ui::kMediaItemTypeRole).toInt();
+    const auto new_name = item->text().trimmed();
+    if (item_type == media_browser_ui::kMediaItemTypeBin) {
+        const auto old_path = item->data(
+            media_browser_ui::kMediaBinPathRole).toString().toStdString();
+        const auto old_name = QString::fromStdString(binLeafName(old_path));
+        if (new_name == old_name) return;
+
+        const auto active_bin = selectedBinPath();
+        media_browser_inline_rename_pending_ = true;
+        QMetaObject::invokeMethod(this, [this, item, old_path, old_name,
+                                         new_name, active_bin]() {
+            media_browser_inline_rename_pending_ = false;
+            const auto restore = [this, item, &old_name]() {
+                if (media_list_ == nullptr || item->listWidget() != media_list_) return;
+                const QSignalBlocker blocker(media_list_);
+                item->setText(old_name);
+            };
+            if (old_path.empty() || old_path == "Unsorted" ||
+                !validInlineBinName(new_name)) {
+                restore();
+                statusBar()->showMessage("That bin name is not valid.");
+                return;
+            }
+
+            const auto parent = binParentPath(old_path);
+            const auto new_path = parent.empty()
+                ? new_name.toStdString()
+                : parent + "/" + new_name.toStdString();
+            auto library = buildMediaLibrary();
+            if (library.renameBin(old_path, new_path) !=
+                media::MediaMutationResult::Changed) {
+                restore();
+                statusBar()->showMessage("That bin name is already in use or invalid.");
+                return;
+            }
+            applyMediaLibrary(library);
+            updateProjectDirtyState();
+            populateMediaBrowser({}, active_bin);
+            selectMediaBrowserListBin(QString::fromStdString(new_path));
+        }, Qt::QueuedConnection);
         return;
     }
-    applyMediaLibrary(library);
-    updateProjectDirtyState();
-    populateMediaBrowser({}, value.toStdString());
+
+    if (item_type != media_browser_ui::kMediaItemTypeMedia) return;
+    bool ok = false;
+    const auto value = item->data(media_browser_ui::kMediaIndexRole)
+                           .toLongLong(&ok);
+    if (!ok || value < 0 || value >= static_cast<qint64>(media_items_.size())) return;
+    const auto index = static_cast<std::size_t>(value);
+    const auto old_name = QString::fromStdString(media_items_[index].display_name);
+    if (new_name == old_name) return;
+
+    media_browser_inline_rename_pending_ = true;
+    QMetaObject::invokeMethod(this, [this, item, index, old_name, new_name]() {
+        media_browser_inline_rename_pending_ = false;
+        const auto restore = [this, item, &old_name]() {
+            if (media_list_ == nullptr || item->listWidget() != media_list_) return;
+            const QSignalBlocker blocker(media_list_);
+            item->setText(old_name);
+        };
+        if (index >= media_items_.size() || new_name.isEmpty()) {
+            restore();
+            statusBar()->showMessage("The media name cannot be empty.");
+            return;
+        }
+
+        media_items_[index].display_name = new_name.toStdString();
+        media_items_[index].metadata.display_name = media_items_[index].display_name;
+        timeline_model_.updateDisplayNameForSource(
+            media_items_[index].metadata.source_path,
+            media_items_[index].display_name);
+        const auto source_path = media_items_[index].metadata.source_path;
+        updateProjectDirtyState();
+        populateMediaBrowser(source_path);
+    }, Qt::QueuedConnection);
 }
 
-void MainWindow::renameSelectedMedia() {
-    const auto index = selectedMediaIndex();
-    if (!index.has_value()) return;
-    bool accepted = false;
-    const QString value = QInputDialog::getText(
-        this, "Rename Media", "Display name:", QLineEdit::Normal,
-        QString::fromStdString(media_items_[*index].display_name), &accepted);
-    if (!accepted) return;
-    if (value.isEmpty()) {
-        QMessageBox::warning(this, "Invalid name", "The display name cannot be empty.");
-        return;
-    }
-    media_items_[*index].display_name = value.toStdString();
-    media_items_[*index].metadata.display_name = media_items_[*index].display_name;
-    timeline_model_.updateDisplayNameForSource(
-        media_items_[*index].metadata.source_path,
-        media_items_[*index].display_name);
-    updateProjectDirtyState();
-    populateMediaBrowser(media_items_[*index].metadata.source_path);
+void MainWindow::handleMediaBrowserBinItemChanged(
+    QTreeWidgetItem* item,
+    int column) {
+    if (item == nullptr || column != 0 || media_browser_inline_rename_pending_) return;
+
+    const auto old_path = item->data(0, Qt::UserRole).toString().toStdString();
+    const auto old_name = QString::fromStdString(binLeafName(old_path));
+    const auto new_name = item->text(0).trimmed();
+    if (new_name == old_name) return;
+
+    media_browser_inline_rename_pending_ = true;
+    QMetaObject::invokeMethod(this, [this, item, old_path, old_name, new_name]() {
+        media_browser_inline_rename_pending_ = false;
+        const auto restore = [this, item, &old_name]() {
+            if (bin_tree_ == nullptr || item->treeWidget() != bin_tree_) return;
+            const QSignalBlocker blocker(bin_tree_);
+            item->setText(0, old_name);
+        };
+        if (old_path.empty() || old_path == "Unsorted" ||
+            !validInlineBinName(new_name)) {
+            restore();
+            statusBar()->showMessage("That bin name is not valid.");
+            return;
+        }
+
+        const auto parent = binParentPath(old_path);
+        const auto new_path = parent.empty()
+            ? new_name.toStdString()
+            : parent + "/" + new_name.toStdString();
+        auto library = buildMediaLibrary();
+        if (library.renameBin(old_path, new_path) !=
+            media::MediaMutationResult::Changed) {
+            restore();
+            statusBar()->showMessage("That bin name is already in use or invalid.");
+            return;
+        }
+        applyMediaLibrary(library);
+        updateProjectDirtyState();
+        populateMediaBrowser({}, new_path);
+    }, Qt::QueuedConnection);
 }
 
 void MainWindow::moveSelectedMediaToBin() {
@@ -642,8 +777,6 @@ void MainWindow::showMediaContextMenu(const QPoint& position) {
     const auto media_index = from_media_list ? selectedMediaIndex() : std::nullopt;
     if (media_index.has_value()) {
         menu.addSeparator();
-        auto* rename = menu.addAction("Rename");
-        connect(rename, &QAction::triggered, this, &MainWindow::renameSelectedMedia);
         auto* move = menu.addAction("Move to Bin");
         connect(move, &QAction::triggered, this, &MainWindow::moveSelectedMediaToBin);
         auto* remove = menu.addAction(media_items_[*media_index].offline
@@ -652,10 +785,6 @@ void MainWindow::showMediaContextMenu(const QPoint& position) {
                 media_items_[*media_index].offline
                     ? &MainWindow::restoreSelectedMedia
                     : &MainWindow::removeSelectedMedia);
-    } else if (!selectedBinPath().empty()) {
-        menu.addSeparator();
-        auto* rename = menu.addAction("Rename");
-        connect(rename, &QAction::triggered, this, &MainWindow::renameSelectedBin);
     }
     menu.exec((sender() == media_list_ ? media_list_->viewport()->mapToGlobal(position)
                                        : bin_tree_->viewport()->mapToGlobal(position)));

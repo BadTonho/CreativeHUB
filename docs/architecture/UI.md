@@ -22,15 +22,18 @@ thumbnail; changing modes does not decode frames or mark the project dirty.
 Items show a compact name and summary instead of a large technical-details
 panel. An information icon in each item's upper-right corner displays the
 complete technical metadata on hover, including offline status, bin, and path
-when applicable. Context menus provide New Bin, Rename, Move to Bin, Remove
-from Browser, and Restore Media. Removing media never deletes the file or its
+when applicable. Context menus provide New Bin, Move to Bin, Remove from
+Browser, and Restore Media. Removing media never deletes the file or its
 Timeline clips, and the existing selection and internal drag-and-drop MIME
 flow remain unchanged.
 
 The media view includes immediate child bins as folder items alongside media.
-They use the standard Qt folder icon, open on double-click, and do not produce
-the media-to-Timeline drag MIME. The existing bin tree remains available for
-navigation and filtering.
+They use the standard Qt folder icon, are excluded from the media-to-Timeline
+drag MIME, and support inline renaming. `New Bin` creates an automatically
+named child in the current bin and starts editing it without a dialog. Media
+and editable bins can be renamed with double-click or `F2`; `All Media` and
+`Unsorted` remain protected. The bin tree remains available for navigation and
+filtering.
 
 The bin tree accepts custom drag-and-drop MIME types for imported media and bin
 paths. Dropping media onto a bin changes its project bin assignment; dropping
