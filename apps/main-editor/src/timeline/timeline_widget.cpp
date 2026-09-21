@@ -184,6 +184,27 @@ bool TimelineWidget::moveRequiresAlt() const noexcept {
     return move_requires_alt_;
 }
 
+QString TimelineWidget::formatTimecode(std::int64_t frame, double frame_rate) {
+    if (!std::isfinite(frame_rate) || frame_rate <= 0.0) frame_rate = 30.0;
+    const auto nonnegative_frame = std::max<std::int64_t>(0, frame);
+    const auto milliseconds_value = std::clamp<long double>(
+        std::round(
+            static_cast<long double>(nonnegative_frame) * 1000.0L /
+            static_cast<long double>(frame_rate)),
+        0.0L,
+        static_cast<long double>(std::numeric_limits<std::int64_t>::max()));
+    const auto milliseconds = static_cast<std::int64_t>(milliseconds_value);
+    const auto hours = milliseconds / (60 * 60 * 1000);
+    const auto minutes = (milliseconds / (60 * 1000)) % 60;
+    const auto seconds = (milliseconds / 1000) % 60;
+    const auto remainder = milliseconds % 1000;
+    return QString("%1:%2:%3.%4")
+        .arg(static_cast<qlonglong>(hours), 2, 10, QChar('0'))
+        .arg(static_cast<int>(minutes), 2, 10, QChar('0'))
+        .arg(static_cast<int>(seconds), 2, 10, QChar('0'))
+        .arg(static_cast<int>(remainder), 3, 10, QChar('0'));
+}
+
 void TimelineWidget::setTimelineViewportWidth(int width) {
     const auto normalized_width = std::max(0, width);
     if (timeline_viewport_width_ == normalized_width) return;
@@ -458,11 +479,10 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         painter.drawLine(QPointF(x, ruler.bottom() - 5), ruler.bottomRight() +
             QPointF(x - ruler.right(), 0));
         painter.setPen(QColor("#9aa4b2"));
-        const auto seconds = static_cast<double>(frame) / fps;
         painter.drawText(
-            QRectF(x + 4, ruler.top(), 58, ruler.height()),
+            QRectF(x + 4, ruler.top(), 96, ruler.height()),
             Qt::AlignLeft | Qt::AlignVCenter,
-            QString("%1  %2s").arg(frame).arg(seconds, 0, 'f', 1));
+            TimelineWidget::formatTimecode(frame, fps));
         if (frame > ruler_end - tick_step) break;
     }
 

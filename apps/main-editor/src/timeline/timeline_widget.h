@@ -43,6 +43,9 @@ public:
     void setMoveRequiresAlt(bool enabled);
     [[nodiscard]] bool moveRequiresAlt() const noexcept;
     void setTimelineViewportWidth(int width);
+    [[nodiscard]] static QString formatTimecode(
+        std::int64_t frame,
+        double frame_rate);
 
 signals:
     // Compatibility signals for the original first-track UI path.

@@ -87,6 +87,13 @@ int main(int argc, char* argv[]) {
                 "The Timeline minimum height does not fit all track rows.");
         require(widget.minimumWidth() == 1000,
                 "A short timeline did not keep the standard viewport width.");
+        require(
+            timeline::TimelineWidget::formatTimecode(0, 30.0) == "00:00:00.000" &&
+                timeline::TimelineWidget::formatTimecode(30 * 60 + 15, 30.0) ==
+                    "00:01:00.500" &&
+                timeline::TimelineWidget::formatTimecode(30 * 60 * 60, 30.0) ==
+                    "01:00:00.000",
+            "The timeline ruler timecode format is incorrect.");
         require(!widget.moveRequiresAlt(),
                 "The timeline did not default to moving clips without Alt.");
         widget.setMoveRequiresAlt(true);

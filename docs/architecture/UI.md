@@ -29,7 +29,7 @@ The Timeline draws one vertical row per video track, with the top row having
 the highest visual priority. Video 1 is created first; each newly created track
 is inserted above the existing tracks. It preserves absolute positions and
 gaps, and allows overlap only across different tracks. It displays a shared
-frame-and-seconds ruler, dedicated track headers, clip counters,
+`HH:MM:SS.mmm` timecode ruler, dedicated track headers, clip counters,
 track-specific colors, and explicit drop/playhead markers. The dock
 provides Add Video Track, Rename Track, Track Up, Track Down, and Remove Track.
 Only empty tracks can be removed.

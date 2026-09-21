@@ -17,7 +17,7 @@ overlap within that track; clips on different tracks may overlap.
 TimelineModel can locate the clip visible at a frame and the top-priority clip
 when tracks overlap.
 
-TimelineWidget presents the sequence with a shared frame-and-seconds ruler,
+TimelineWidget presents the sequence with a shared `HH:MM:SS.mmm` timecode ruler,
 separate track headers, per-track clip counts, and track-specific clip colors.
 The active track and clip use a highlighted border; drop targets and the
 playhead are shown directly over the timeline content.
