@@ -43,6 +43,8 @@ folder items alongside the media entries. Folder items use the standard Qt
 folder icon, do not participate in the media-to-Timeline drag operation, and
 can be renamed inline. The bin tree remains available for direct navigation
 and filtering; the existing parent-bin filter still includes its descendants.
+The tree draws visible branch connectors in the indentation area so nested bins
+can be followed quickly without changing their navigation behavior.
 
 Each item draws a small information icon in its upper-right corner. Hovering
 that icon shows the complete technical summary: name, format, codec,

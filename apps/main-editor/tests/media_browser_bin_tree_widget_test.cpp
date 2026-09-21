@@ -7,9 +7,11 @@
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QImage>
 #include <QMimeData>
 #include <QTreeWidgetItem>
 
+#include <algorithm>
 #include <cstdio>
 #include <stdexcept>
 
@@ -39,11 +41,32 @@ int main(int argc, char* argv[]) {
         all_media->setData(0, Qt::UserRole, QString());
         auto* footage = new QTreeWidgetItem(all_media, {"Footage"});
         footage->setData(0, Qt::UserRole, QStringLiteral("Footage"));
+        auto* scenes = new QTreeWidgetItem(footage, {"Scenes"});
+        scenes->setData(0, Qt::UserRole, QStringLiteral("Footage/Scenes"));
         auto* archive = new QTreeWidgetItem(all_media, {"Archive"});
         archive->setData(0, Qt::UserRole, QStringLiteral("Archive"));
         tree.expandAll();
         tree.show();
         application.processEvents();
+
+        QImage rendered_tree(
+            tree.viewport()->size(),
+            QImage::Format_ARGB32);
+        rendered_tree.fill(tree.viewport()->palette().color(QPalette::Base));
+        tree.viewport()->render(&rendered_tree);
+        const auto scenes_rect = tree.visualItemRect(scenes);
+        const auto background = rendered_tree.pixelColor(0, scenes_rect.center().y());
+        bool connector_found = false;
+        const int connector_start = std::max(0, scenes_rect.left() - tree.indentation());
+        for (int x = connector_start; x < scenes_rect.left(); ++x) {
+            if (rendered_tree.pixelColor(x, scenes_rect.center().y()) != background) {
+                connector_found = true;
+                break;
+            }
+        }
+        require(
+            connector_found,
+            "Nested bin branch connectors were not rendered.");
 
         bool media_drop_received = false;
         QString received_media_path;

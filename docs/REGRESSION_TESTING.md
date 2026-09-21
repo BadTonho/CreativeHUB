@@ -81,7 +81,7 @@ in the running Main Editor after UI or integration changes:
   label and report a concise status message, and confirm that no Add to
   Timeline or New Bin buttons, redundant status row, or excessive top/bottom
   spacing is shown while media drag-and-drop remains available; confirm that
-  branch lines make nested bins visually distinguishable;
+  branch lines make nested bins visually distinguishable at one or more levels;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement;
 - Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;

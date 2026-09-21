@@ -40,7 +40,8 @@ drag MIME, and support inline renaming. `New Bin` creates an automatically
 named child in the current bin and starts editing it without a dialog. Media
 and editable bins can be renamed with double-click or `F2`; `All Media` and
 `Unsorted` remain protected. The bin tree remains available for navigation and
-filtering. The `Bins` and `Media` docks have their own native dock titles and
+filtering and draws visible connectors between nested levels. The `Bins` and
+`Media` docks have their own native dock titles and
 can be rearranged without changing project state.
 
 The bin tree accepts custom drag-and-drop MIME types for imported media and bin

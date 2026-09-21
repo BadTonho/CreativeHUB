@@ -54,8 +54,15 @@ void MediaBrowserBinTreeWidget::drawBranches(
     const QModelIndex& index) const {
     if (painter == nullptr) return;
 
+    QTreeWidget::drawBranches(painter, rect, index);
+
     painter->save();
-    QPen pen(palette().color(QPalette::Mid));
+    auto line_color = palette().color(QPalette::Midlight);
+    if (line_color == palette().color(QPalette::Base)) {
+        line_color = palette().color(QPalette::Text);
+    }
+    line_color.setAlpha(180);
+    QPen pen(line_color);
     pen.setWidth(1);
     painter->setPen(pen);
 
@@ -76,7 +83,6 @@ void MediaBrowserBinTreeWidget::drawBranches(
     }
 
     painter->restore();
-    QTreeWidget::drawBranches(painter, rect, index);
 }
 
 void MediaBrowserBinTreeWidget::dragEnterEvent(QDragEnterEvent* event) {
