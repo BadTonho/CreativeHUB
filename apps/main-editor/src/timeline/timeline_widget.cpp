@@ -104,6 +104,8 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
     dragging_ = false;
     seek_pending_ = false;
     drag_frame_.reset();
+    ruler_frame_.reset();
+    ruler_seeking_ = false;
     drag_hovering_ = false;
     drop_hover_track_.reset();
     drop_hover_frame_.reset();
@@ -128,6 +130,8 @@ void TimelineWidget::clearClips() {
     trimming_ = false;
     dragging_ = false;
     seek_pending_ = false;
+    ruler_frame_.reset();
+    ruler_seeking_ = false;
     drag_hovering_ = false;
     drop_hover_track_.reset();
     drop_hover_frame_.reset();
@@ -143,6 +147,7 @@ void TimelineWidget::setActiveClip(std::optional<ClipLocation> location) {
     }
     active_clip_ = location;
     drag_frame_.reset();
+    ruler_frame_.reset();
     update();
 }
 
@@ -271,6 +276,15 @@ QRectF TimelineWidget::trackRect(std::size_t index) const noexcept {
         top_margin + static_cast<double>(index) * (current_row_height + row_gap),
         width,
         current_row_height);
+}
+
+QRectF TimelineWidget::rulerRect() const noexcept {
+    return QRectF(
+        left_margin + track_header_width,
+        12.0,
+        std::max(0.0, static_cast<double>(width()) -
+            left_margin - right_margin - track_header_width),
+        25.0);
 }
 
 double TimelineWidget::rowHeight() const noexcept {
@@ -429,6 +443,15 @@ std::optional<std::int64_t> TimelineWidget::globalFrameAt(double x) const noexce
         total);
 }
 
+std::optional<std::int64_t> TimelineWidget::playheadFrameAtRulerX(
+    double x) const noexcept {
+    const auto frame = globalFrameAt(x);
+    if (!frame.has_value()) return std::nullopt;
+    const auto total = totalDuration();
+    if (total <= 0) return std::nullopt;
+    return std::clamp<std::int64_t>(*frame, 0, total - 1);
+}
+
 std::optional<std::int64_t> TimelineWidget::localFrameAt(
     const ClipLocation& location, double x) const noexcept {
     const auto rect = clipRect(location);
@@ -518,12 +541,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     painter.fillRect(rect(), QColor("#171a20"));
 
     const auto total = displayDuration();
-    const auto ruler = QRectF(
-        left_margin + track_header_width,
-        12.0,
-        std::max(0.0, static_cast<double>(width()) -
-            left_margin - right_margin - track_header_width),
-        25.0);
+    const auto ruler = rulerRect();
     painter.setPen(QColor("#4b5565"));
     painter.drawLine(ruler.bottomLeft(), ruler.bottomRight());
     const auto ruler_end = std::max<std::int64_t>(1, total);
@@ -714,15 +732,17 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         }
     }
 
-    if (active_clip_.has_value() &&
+    const bool active_clip_valid = active_clip_.has_value() &&
         active_clip_->track_index < tracks_.size() &&
-        active_clip_->clip_index < tracks_[active_clip_->track_index].clips.size()) {
-        const auto& clip = tracks_[active_clip_->track_index].clips[active_clip_->clip_index];
+        active_clip_->clip_index < tracks_[active_clip_->track_index].clips.size();
+    if (ruler_seeking_ || active_clip_valid) {
         const auto content = trackContentRect(0);
         const auto content_duration = std::max<std::int64_t>(1, totalDuration());
         const auto visual_duration = std::max<std::int64_t>(1, displayDuration());
-        auto global_frame = playhead_frame_;
-        if (drag_frame_.has_value()) {
+        auto global_frame = ruler_frame_.value_or(playhead_frame_);
+        if (!ruler_frame_.has_value() && active_clip_valid && drag_frame_.has_value()) {
+            const auto& clip = tracks_[active_clip_->track_index]
+                .clips[active_clip_->clip_index];
             global_frame = clip.timeline_start_frame + *drag_frame_;
         }
         global_frame = std::clamp<std::int64_t>(global_frame, 0, content_duration - 1);
@@ -889,6 +909,20 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         event->ignore();
         return;
     }
+    if (rulerRect().contains(event->position())) {
+        const auto frame = playheadFrameAtRulerX(event->position().x());
+        if (!frame.has_value()) {
+            event->ignore();
+            return;
+        }
+        ruler_seeking_ = true;
+        ruler_frame_ = *frame;
+        emit seekStarted();
+        grabMouse();
+        update();
+        event->accept();
+        return;
+    }
     const auto location = clipAt(event->position().x(), event->position().y());
     if (!location.has_value()) {
         if (trackAt(event->position().y()).has_value() &&
@@ -984,6 +1018,15 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (ruler_seeking_) {
+        if (const auto frame = playheadFrameAtRulerX(event->position().x());
+            frame.has_value()) {
+            ruler_frame_ = *frame;
+            update();
+        }
+        event->accept();
+        return;
+    }
     if (move_pending_ && !moving_active_) {
         if ((event->position() - move_press_position_).manhattanLength() <= 4) {
             event->accept();
@@ -1046,6 +1089,16 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
 void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() != Qt::LeftButton) {
         event->ignore();
+        return;
+    }
+    if (ruler_seeking_) {
+        const auto frame = ruler_frame_;
+        ruler_seeking_ = false;
+        ruler_frame_.reset();
+        releaseMouse();
+        if (frame.has_value()) emit seekRequested(*frame);
+        update();
+        event->accept();
         return;
     }
     if (moving_active_ || move_pending_) {

@@ -363,6 +363,29 @@ int main(int argc, char* argv[]) {
         require(widget.minimumWidth() == 800,
                 "The timeline did not return to the standard width after shrinking.");
 
+        // The upper time ruler seeks the playhead without selecting or moving
+        // a clip, and it clamps the request to the real project duration.
+        widget.setActiveClip(std::nullopt);
+        const auto selected_track_before_ruler = selected_track;
+        const auto selected_clip_before_ruler = selected_clip;
+        const auto seek_started_before_ruler = seek_started;
+        const auto seek_count_before_ruler = seek_frames.size();
+        sendMouse(widget, QEvent::MouseButtonPress, QPointF(300, 25),
+                  Qt::LeftButton);
+        sendMouse(widget, QEvent::MouseMove, QPointF(450, 25),
+                  Qt::LeftButton);
+        require(seek_started == seek_started_before_ruler + 1 &&
+                    seek_frames.size() == seek_count_before_ruler,
+                "Dragging the time ruler committed a seek before release.");
+        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(450, 25),
+                  Qt::NoButton);
+        require(seek_frames.size() == seek_count_before_ruler + 1 &&
+                    seek_frames.back() > 0 &&
+                    seek_frames.back() < test_clip_duration &&
+                    selected_track == selected_track_before_ruler &&
+                    selected_clip == selected_clip_before_ruler,
+                "Dragging the time ruler did not seek without selecting a clip.");
+
         widget.close();
         return 0;
     } catch (const std::exception& error) {

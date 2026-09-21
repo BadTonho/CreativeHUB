@@ -60,6 +60,11 @@ drag trims. Movement, splitting, trimming, and seeking do not decode during
 pointer movement. Drops report target track and frame; Add to Timeline
 appends to the active track.
 
+The upper time ruler is also a playhead scrub area. Clicking or dragging it
+updates the visible playhead without selecting a clip, then requests the seek
+when the pointer is released. Scrubbing remains bounded by the real project
+duration even when the visual timeline has empty space beyond the last clip.
+
 Delete removes the active clip. Ctrl + Left and Ctrl + Right nudge it by one
 frame when valid. Ctrl + K splits at the playhead. Undo and Redo pause
 playback, invalidate worker generations, and restore Timeline metadata,

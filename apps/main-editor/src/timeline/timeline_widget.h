@@ -101,6 +101,7 @@ private:
     enum class TrimEdge { Left, Right };
 
     [[nodiscard]] QRectF trackRect(std::size_t index) const noexcept;
+    [[nodiscard]] QRectF rulerRect() const noexcept;
     [[nodiscard]] double rowHeight() const noexcept;
     [[nodiscard]] QRectF trackContentRect(std::size_t index) const noexcept;
     [[nodiscard]] QRectF clipRect(const ClipLocation& location) const noexcept;
@@ -112,6 +113,8 @@ private:
     [[nodiscard]] std::optional<std::size_t> trackAt(double y) const noexcept;
     [[nodiscard]] std::optional<ClipLocation> clipAt(double x, double y) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> globalFrameAt(double x) const noexcept;
+    [[nodiscard]] std::optional<std::int64_t> playheadFrameAtRulerX(
+        double x) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> localFrameAt(const ClipLocation&, double x) const noexcept;
     [[nodiscard]] std::optional<TrimEdge> trimEdgeAt(const ClipLocation&, double x) const noexcept;
     [[nodiscard]] std::optional<std::pair<std::size_t, std::size_t>>
@@ -126,7 +129,9 @@ private:
     std::optional<ClipLocation> active_clip_;
     std::int64_t playhead_frame_ = 0;
     std::optional<std::int64_t> drag_frame_;
+    std::optional<std::int64_t> ruler_frame_;
     bool dragging_ = false;
+    bool ruler_seeking_ = false;
     bool move_requires_alt_ = false;
     bool move_pending_ = false;
     bool moving_active_ = false;
