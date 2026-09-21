@@ -273,6 +273,8 @@ void PlaybackWorker::setComposition(
 
     std::int64_t composition_start = std::numeric_limits<std::int64_t>::max();
     std::int64_t composition_end = 0;
+    bool has_primary_clip = false;
+    std::int64_t primary_clip_duration = 0;
 
     try {
         for (const auto& spec : composition_specs_) {
@@ -297,13 +299,18 @@ void PlaybackWorker::setComposition(
             }
             if (spec.track_index == track_index_ && spec.clip_index == clip_index_) {
                 primary_timeline_start_frame_ = spec.timeline_start_frame;
+                has_primary_clip = true;
+                primary_clip_duration = spec.segment_frame_count;
             }
             composition_sessions_.push_back(std::move(composition_session));
         }
 
-        if (source_path_.empty() && composition_start !=
-                std::numeric_limits<std::int64_t>::max() &&
-            composition_end > composition_start) {
+        if (has_primary_clip) {
+            segment_frame_count_ = primary_clip_duration;
+            current_frame_index_ = 0;
+        } else if (source_path_.empty() && composition_start !=
+                       std::numeric_limits<std::int64_t>::max() &&
+                   composition_end > composition_start) {
             primary_timeline_start_frame_ = composition_start;
             current_frame_index_ = 0;
             segment_frame_count_ = composition_end - composition_start;
@@ -322,6 +329,13 @@ void PlaybackWorker::setComposition(
     }
 }
 
+void PlaybackWorker::setActiveCompositionClip(
+    qint64 track_index,
+    qint64 clip_index) {
+    track_index_ = track_index;
+    clip_index_ = clip_index;
+}
+
 void PlaybackWorker::renderCompositionFrame(
     qint64 global_frame,
     qint64 frame_index,
@@ -329,7 +343,7 @@ void PlaybackWorker::renderCompositionFrame(
     if (generation < generation_ || !composition_enabled_) return;
     generation_ = generation;
     try {
-        if (source_path_.empty() && segment_frame_count_ > 0) {
+        if (composition_enabled_ && segment_frame_count_ > 0) {
             current_frame_index_ = std::clamp<std::int64_t>(
                 frame_index,
                 0,

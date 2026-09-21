@@ -372,13 +372,17 @@ void validateCompositionPlayback(
     playback::PlaybackWorker worker;
     bool playback_finished = false;
     bool playback_error = false;
+    bool empty_frame = false;
     int frame_count = 0;
 
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&frame_count](playback::VideoFramePtr frame, qint64, quint64) {
-            require(frame != nullptr, "Composition playback emitted an empty frame.");
+        [&frame_count, &empty_frame](playback::VideoFramePtr frame, qint64, quint64) {
+            if (frame == nullptr) {
+                empty_frame = true;
+                return;
+            }
             ++frame_count;
         });
     QObject::connect(
@@ -402,9 +406,10 @@ void validateCompositionPlayback(
     layer.timeline_start_frame = 0;
     layer.source_start_frame = 0;
     layer.segment_frame_count = 3;
-    layer.track_index = 1;
+    layer.track_index = 0;
     layer.clip_index = 0;
 
+    worker.setActiveCompositionClip(0, 0);
     worker.setComposition(
         QVector<playback::CompositionLayerSpec>{layer},
         {},
@@ -423,6 +428,8 @@ void validateCompositionPlayback(
 
     require(!playback_error,
             "Composition playback without a selected media source emitted an error.");
+    require(!empty_frame,
+            "Composition playback emitted an empty frame.");
     require(playback_finished,
             "Composition playback without a selected media source did not finish.");
     require(frame_count >= 1,

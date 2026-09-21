@@ -201,6 +201,18 @@ void MainWindow::sendCompositionToWorker() {
                 transition.kind});
         }
     }
+    const auto active_track = active_timeline_track_index_.has_value()
+        ? static_cast<qint64>(*active_timeline_track_index_)
+        : static_cast<qint64>(-1);
+    const auto active_clip = active_timeline_clip_index_.has_value()
+        ? static_cast<qint64>(*active_timeline_clip_index_)
+        : static_cast<qint64>(-1);
+    QMetaObject::invokeMethod(
+        playback_worker_,
+        "setActiveCompositionClip",
+        Qt::QueuedConnection,
+        Q_ARG(qint64, active_track),
+        Q_ARG(qint64, active_clip));
     QMetaObject::invokeMethod(
         playback_worker_,
         "setComposition",
