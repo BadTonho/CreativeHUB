@@ -254,7 +254,7 @@ void MainWindow::clearProjectState() {
     bin_paths_ = {"Unsorted"};
     populateMediaBrowser();
     if (media_status_label_ != nullptr) {
-        media_status_label_->setText("No media imported.");
+        media_status_label_->clear();
     }
     preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
     updateTimelineState();
@@ -641,7 +641,7 @@ void MainWindow::applyLoadedProject(
     populateMediaBrowser();
 
     if (media_status_label_ != nullptr) {
-        media_status_label_->setText("No media imported.");
+        media_status_label_->clear();
     }
     preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
     updateProjectDirtyState();

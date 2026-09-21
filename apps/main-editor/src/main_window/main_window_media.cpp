@@ -207,7 +207,7 @@ QWidget* MainWindow::createMediaBrowser() {
             });
     layout->addWidget(browser_splitter, 1);
 
-    media_status_label_ = new QLabel("No media imported.", container);
+    media_status_label_ = new QLabel(container);
     media_status_label_->setStyleSheet("color: #9aa4b2;");
     layout->addWidget(media_status_label_);
 
@@ -395,7 +395,7 @@ void MainWindow::populateMediaBrowser(
         updateMediaDetails(media_list_->currentRow());
     } else {
         media_status_label_->setText(
-            media_items_.empty() ? "No media imported." : "No media in this bin.");
+            media_items_.empty() ? QString() : "No media in this bin.");
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -895,7 +895,7 @@ void MainWindow::updateMediaDetails(int row) {
 
     if (row < 0 || media_list_ == nullptr || media_list_->currentItem() == nullptr) {
         active_timeline_clip_index_.reset();
-        media_status_label_->setText("No media imported.");
+        media_status_label_->clear();
         preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
         updateTimelineState();
         updatePlaybackControls();

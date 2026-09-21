@@ -27,7 +27,8 @@ Browser, and Restore Media. Removing media never deletes the file or its
 Timeline clips, and the existing selection and internal drag-and-drop MIME
 flow remain unchanged. The Media Browser does not display a separate Add to
 Timeline button; imported media can still be added through the existing
-Timeline drag-and-drop path and internal add operation.
+Timeline drag-and-drop path and internal add operation. An empty library does
+not add a redundant `No media imported` label below the browser.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline
