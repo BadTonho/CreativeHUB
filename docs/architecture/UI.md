@@ -33,7 +33,10 @@ drag MIME, and support inline renaming. `New Bin` creates an automatically
 named child in the current bin and starts editing it without a dialog. Media
 and editable bins can be renamed with double-click or `F2`; `All Media` and
 `Unsorted` remain protected. The bin tree remains available for navigation and
-filtering.
+filtering. The dock uses its own `Media Browser` title without a duplicate
+heading inside the content. A vertical splitter lets the user resize the bin
+tree and media view independently; its global `QSettings` state is restored on
+startup without changing project state.
 
 The bin tree accepts custom drag-and-drop MIME types for imported media and bin
 paths. Dropping media onto a bin changes its project bin assignment; dropping

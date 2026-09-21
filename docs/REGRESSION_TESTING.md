@@ -67,6 +67,9 @@ in the running Main Editor after UI or integration changes:
   folder items shown alongside media, folder icons, inline renaming with
   double-click and F2, automatic New Bin naming without dialogs, protection of
   All Media/Unsorted, and preventing folder items from producing media drag data,
+  one visible Media Browser title, vertical resizing between bins and media,
+  minimum pane sizes, and restoration of the splitter position without marking
+  the project dirty,
   offline media, right-click New Bin in the media area and bin tree, creation
   of child bins, dragging media to bins, dragging bins into bins, preservation
   of empty sub-bins, rejection of All Media/blank/self/descendant/collision

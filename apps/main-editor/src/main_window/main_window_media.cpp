@@ -34,8 +34,10 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QScrollArea>
+#include <QSettings>
 #include <QSlider>
 #include <QStatusBar>
+#include <QSplitter>
 #include <QStyle>
 #include <QTimer>
 #include <QToolButton>
@@ -113,9 +115,6 @@ QWidget* MainWindow::createMediaBrowser() {
     layout->setSpacing(8);
 
     auto* title_row = new QHBoxLayout;
-    auto* title = new QLabel("Media Browser", container);
-    title->setStyleSheet("font-weight: 600; font-size: 14px;");
-    title_row->addWidget(title);
     title_row->addStretch();
 
     auto* view_group = new QButtonGroup(container);
@@ -144,9 +143,13 @@ QWidget* MainWindow::createMediaBrowser() {
     browser_controls->addStretch();
     layout->addLayout(browser_controls);
 
-    bin_tree_ = new MediaBrowserBinTreeWidget(container);
+    auto* browser_splitter = new QSplitter(Qt::Vertical, container);
+    browser_splitter->setChildrenCollapsible(false);
+    browser_splitter->setHandleWidth(6);
+
+    bin_tree_ = new MediaBrowserBinTreeWidget(browser_splitter);
     bin_tree_->setHeaderHidden(true);
-    bin_tree_->setMaximumHeight(150);
+    bin_tree_->setMinimumHeight(80);
     bin_tree_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(bin_tree_, &QTreeWidget::currentItemChanged, this,
             [this](QTreeWidgetItem*, QTreeWidgetItem*) { updateMediaBrowserFilter(); });
@@ -158,9 +161,8 @@ QWidget* MainWindow::createMediaBrowser() {
             this, &MainWindow::handleMediaBrowserBinDrop);
     connect(bin_tree_, &QTreeWidget::itemChanged, this,
             &MainWindow::handleMediaBrowserBinItemChanged);
-    layout->addWidget(bin_tree_);
-
-    media_list_ = new MediaBrowserListWidget(container);
+    media_list_ = new MediaBrowserListWidget(browser_splitter);
+    media_list_->setMinimumHeight(140);
     media_list_->setSelectionMode(QAbstractItemView::SingleSelection);
     list_view_button->setChecked(
         media_list_->displayMode() == MediaBrowserListWidget::DisplayMode::List);
@@ -182,7 +184,28 @@ QWidget* MainWindow::createMediaBrowser() {
             &MainWindow::showMediaContextMenu);
     connect(media_list_, &QListWidget::itemChanged, this,
             &MainWindow::handleMediaBrowserListItemChanged);
-    layout->addWidget(media_list_, 1);
+
+    browser_splitter->addWidget(bin_tree_);
+    browser_splitter->addWidget(media_list_);
+    browser_splitter->setStretchFactor(0, 0);
+    browser_splitter->setStretchFactor(1, 1);
+
+    QSettings settings;
+    const auto saved_splitter_state = settings.value(
+        "media_browser/bin_splitter_state").toByteArray();
+    if (saved_splitter_state.isEmpty() ||
+        !browser_splitter->restoreState(saved_splitter_state)) {
+        browser_splitter->setSizes({300, 700});
+    }
+    connect(browser_splitter, &QSplitter::splitterMoved,
+            container, [browser_splitter](int, int) {
+                QSettings splitter_settings;
+                splitter_settings.setValue(
+                    "media_browser/bin_splitter_state",
+                    browser_splitter->saveState());
+                splitter_settings.sync();
+            });
+    layout->addWidget(browser_splitter, 1);
 
     media_status_label_ = new QLabel("No media imported.", container);
     media_status_label_->setStyleSheet("color: #9aa4b2;");

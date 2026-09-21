@@ -29,6 +29,12 @@ frame when the view changes. Items use compact names and video summaries; the
 large technical-details panel is intentionally not part of the Browser
 layout.
 
+The dock title is provided by the `Media Browser` dock itself; the content does
+not repeat that heading. The bin tree and media view are separated by a
+vertical, non-collapsible splitter. Its state is stored globally in
+`QSettings` at `media_browser/bin_splitter_state`, so the user's preferred
+balance between bins and files is restored when the editor opens again.
+
 The media view also includes the immediate child bins of the active location as
 folder items alongside the media entries. Folder items use the standard Qt
 folder icon, do not participate in the media-to-Timeline drag operation, and
