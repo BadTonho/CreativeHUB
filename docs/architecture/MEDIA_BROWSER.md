@@ -46,7 +46,7 @@ and sizes are restored when the editor opens again. The `Media Pool` and
 `Effects` toolbar actions switch between the two groups, while the
 `View > Media Pool` and `View > Effects` submenus retain individual dock
 visibility controls, including the three individual Effects docks. The layout
-state uses version 6; older states fall back
+state uses version 7; older states fall back
 to the default Media Pool layout.
 
 The media view also includes the immediate child bins of the active location as

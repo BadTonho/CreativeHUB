@@ -474,14 +474,43 @@ void MainWindow::restoreWorkspaceLayout() {
     QSettings settings;
     const auto saved_state = settings.value(
         "workspace/dock_layout_state").toByteArray();
-    if (!saved_state.isEmpty() && restoreState(saved_state, 6)) return;
+    if (!saved_state.isEmpty() && restoreState(saved_state, 7)) return;
 
     restoreDefaultLayout();
 }
 
 void MainWindow::saveWorkspaceLayout() {
     QSettings settings;
-    settings.setValue("workspace/dock_layout_state", saveState(6));
+    settings.setValue("workspace/dock_layout_state", saveState(7));
+    settings.sync();
+}
+
+void MainWindow::applyInitialWindowLayout() {
+    if (!initial_window_layout_pending_) return;
+    initial_window_layout_pending_ = false;
+
+    const auto window_width = std::max(1, width());
+    const auto window_height = std::max(1, height());
+    resizeDocks(
+        {bins_dock_},
+        {std::max(280, static_cast<int>(std::lround(window_width * 0.18)))},
+        Qt::Horizontal);
+    resizeDocks(
+        {inspector_dock_},
+        {std::max(280, static_cast<int>(std::lround(window_width * 0.19)))},
+        Qt::Horizontal);
+    resizeDocks(
+        {timeline_dock_},
+        {std::max(260, static_cast<int>(std::lround(window_height * 0.38)))},
+        Qt::Vertical);
+    resizeDocks({bins_dock_, media_dock_}, {300, 700}, Qt::Vertical);
+    saveWorkspaceLayout();
+}
+
+void MainWindow::saveWindowGeometry() {
+    QSettings settings;
+    settings.setValue("workspace/window_geometry", saveGeometry());
+    settings.setValue("workspace/window_maximized", isMaximized());
     settings.sync();
 }
 

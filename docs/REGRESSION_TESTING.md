@@ -116,9 +116,14 @@ in the running Main Editor after UI or integration changes:
   overlap, and participates in Undo/Redo and project dirty state; confirm the
   other effects remain non-draggable and do not change the Preview, Timeline,
   project dirty state, or Undo/Redo; close and reopen the editor to confirm
-  layout version 6 restores
+  layout version 7 restores
   the saved arrangement, and use `View > Restore Default Layout` to restore
   the Media Pool default;
+- first launch: confirm the Main Editor opens maximized with Media Pool on the
+  left, Inspector on the right, Preview in the center, and Timeline across the
+  bottom; resize or rearrange the docks, close the editor, and confirm the
+  window geometry and dock arrangement are restored without changing project
+  dirty state;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement; clear both the Media Browser and Timeline item selections,
   place the playhead over a valid clip, and confirm Play resolves that clip

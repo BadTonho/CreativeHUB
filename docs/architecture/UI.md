@@ -57,12 +57,15 @@ UI prototype only and cannot be applied from this dock to the Preview,
 Timeline, or project. The toolbar `Effects` action activates all
 three docks and hides the Media Pool pair, while `View > Effects` controls
 `Toolbox`, `Favorites`, and `Effects` individually. The workspace layout is
-stored globally in `workspace/dock_layout_state` with layout version 6 and
+stored globally in `workspace/dock_layout_state` with layout version 7 and
 does not affect project state. The default layout shows Media Pool and keeps
 the Effects docks hidden until activated. The native separators are draggable;
 the minimum widths are 20 px for `Toolbox` and `Favorites`, and 30 px for
 `Effects`. The selected dock sizes are part of the global layout state and are
-restored with the workspace.
+restored with the workspace. On first launch, the Main Editor opens maximized
+with Media Pool on the left, Inspector on the right, Preview in the center,
+and Timeline across the bottom. The window geometry and maximized state are
+then restored globally without affecting project state.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline

@@ -3,7 +3,9 @@
 #include "settings/shortcut_manager.h"
 
 #include <QCloseEvent>
+#include <QSettings>
 #include <QStatusBar>
+#include <QTimer>
 
 #include <memory>
 
@@ -11,7 +13,19 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       shortcut_manager_(std::make_unique<settings::ShortcutManager>()) {
     setWindowTitle("Main Editor");
-    resize(1280, 720);
+    QSettings settings;
+    const auto saved_geometry = settings.value(
+        "workspace/window_geometry").toByteArray();
+    const bool restored_geometry = !saved_geometry.isEmpty() &&
+        restoreGeometry(saved_geometry);
+    if (!restored_geometry) {
+        resize(1280, 720);
+        initial_window_layout_pending_ = true;
+        setWindowState(windowState() | Qt::WindowMaximized);
+    } else if (settings.value(
+                   "workspace/window_maximized", false).toBool()) {
+        setWindowState(windowState() | Qt::WindowMaximized);
+    }
     setDockOptions(QMainWindow::AnimatedDocks |
                    QMainWindow::AllowNestedDocks |
                    QMainWindow::AllowTabbedDocks |
@@ -34,6 +48,10 @@ MainWindow::MainWindow(QWidget* parent)
     updateProjectDirtyState();
 
     statusBar()->showMessage("Ready");
+
+    if (initial_window_layout_pending_) {
+        QTimer::singleShot(0, this, [this]() { applyInitialWindowLayout(); });
+    }
 }
 
 MainWindow::~MainWindow() {
@@ -47,5 +65,6 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     }
 
     saveWorkspaceLayout();
+    saveWindowGeometry();
     event->accept();
 }

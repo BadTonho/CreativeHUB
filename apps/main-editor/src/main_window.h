@@ -72,6 +72,8 @@ private:
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();
     void saveWorkspaceLayout();
+    void applyInitialWindowLayout();
+    void saveWindowGeometry();
     void activateMediaPoolGroup();
     void activateEffectsGroup();
     void updateMediaPoolActionState();
@@ -359,6 +361,7 @@ private:
     std::optional<timeline::EditState> pending_audio_edit_;
     std::optional<timeline::EditState> pending_transform_edit_;
     bool project_dirty_ = false;
+    bool initial_window_layout_pending_ = false;
     media::VideoProbe video_probe_;
     media::VideoDecoder video_decoder_;
     QThread playback_thread_;
