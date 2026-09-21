@@ -54,7 +54,10 @@ docks and hides the Media Pool pair, while `View > Effects` controls `Toolbox`
 and `Effects` individually. The workspace layout is stored globally in
 `workspace/dock_layout_state` with layout version 5 and does not affect project
 state. The default layout shows Media Pool and keeps the Effects pair hidden
-until activated.
+until activated. The native vertical separator between `Toolbox` and `Effects`
+is visibly styled and draggable; each dock keeps a minimum width so both
+panels remain usable. The selected widths are part of the global dock layout
+state and are restored with the workspace.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline

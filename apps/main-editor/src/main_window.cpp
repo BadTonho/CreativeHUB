@@ -16,6 +16,15 @@ MainWindow::MainWindow(QWidget* parent)
                    QMainWindow::AllowNestedDocks |
                    QMainWindow::AllowTabbedDocks |
                    QMainWindow::GroupedDragging);
+    setStyleSheet(
+        "QMainWindow::separator {"
+        " background: #4d4d4d;"
+        " width: 5px;"
+        " height: 5px;"
+        "}"
+        "QMainWindow::separator:hover {"
+        " background: #66b7ed;"
+        "}");
 
     createWorkspace();
     createMenus();

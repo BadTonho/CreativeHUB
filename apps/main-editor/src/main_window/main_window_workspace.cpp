@@ -96,6 +96,8 @@ void MainWindow::createWorkspace() {
         "Effects",
         "effectsDock",
         createEffectsPanel());
+    toolbox_dock_->setMinimumWidth(150);
+    effects_dock_->setMinimumWidth(260);
     addDockWidget(Qt::LeftDockWidgetArea, toolbox_dock_);
     addDockWidget(Qt::LeftDockWidgetArea, effects_dock_);
     splitDockWidget(toolbox_dock_, effects_dock_, Qt::Horizontal);
