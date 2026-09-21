@@ -481,6 +481,42 @@ set_tests_properties(creative-suite-main-editor-timeline-widget PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
+add_executable(creative-suite-main-editor-effects-panel-tests
+    effects_panel_test.cpp
+    ../src/ui/effects_catalog.cpp
+    ../src/ui/effects_catalog.h
+    ../src/ui/effects_toolbox_widget.cpp
+    ../src/ui/effects_toolbox_widget.h
+    ../src/ui/effects_list_widget.cpp
+    ../src/ui/effects_list_widget.h
+)
+
+target_include_directories(creative-suite-main-editor-effects-panel-tests PRIVATE
+    ../src
+)
+
+target_link_libraries(creative-suite-main-editor-effects-panel-tests PRIVATE
+    Qt6::Widgets
+)
+
+target_compile_features(creative-suite-main-editor-effects-panel-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-effects-panel-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-effects-panel-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+deploy_qt_test_runtime(creative-suite-main-editor-effects-panel-tests)
+
+add_test(
+    NAME creative-suite-main-editor-effects-panel
+    COMMAND creative-suite-main-editor-effects-panel-tests
+)
+set_tests_properties(creative-suite-main-editor-effects-panel PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
 add_executable(creative-suite-main-editor-media-browser-list-widget-tests
     media_browser_list_widget_test.cpp
     ../src/ui/media_browser_list_widget.cpp

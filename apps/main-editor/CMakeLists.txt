@@ -20,6 +20,7 @@ add_executable(creative-suite-main-editor
     src/main_window/main_window_support.cpp
     src/main_window/main_window_support.h
     src/main_window/main_window_workspace.cpp
+    src/main_window/main_window_effects.cpp
     src/main_window/main_window_project.cpp
     src/main_window/main_window_media.cpp
     src/main_window/main_window_timeline.cpp
@@ -74,6 +75,12 @@ add_executable(creative-suite-main-editor
     src/ui/media_browser_bin_tree_widget.cpp
     src/ui/media_browser_bin_tree_widget.h
     src/ui/media_drag_mime.h
+    src/ui/effects_catalog.cpp
+    src/ui/effects_catalog.h
+    src/ui/effects_toolbox_widget.cpp
+    src/ui/effects_toolbox_widget.h
+    src/ui/effects_list_widget.cpp
+    src/ui/effects_list_widget.h
     src/ui/system_memory_details_dialog.cpp
     src/ui/system_memory_details_dialog.h
     src/ui/system_memory_indicator.cpp

@@ -88,6 +88,19 @@ void MainWindow::createWorkspace() {
     splitDockWidget(bins_dock_, media_dock_, Qt::Vertical);
     resizeDocks({bins_dock_, media_dock_}, {300, 700}, Qt::Vertical);
 
+    toolbox_dock_ = createDock(
+        "Toolbox",
+        "toolboxDock",
+        createEffectsToolbox());
+    effects_dock_ = createDock(
+        "Effects",
+        "effectsDock",
+        createEffectsPanel());
+    addDockWidget(Qt::RightDockWidgetArea, toolbox_dock_);
+    addDockWidget(Qt::RightDockWidgetArea, effects_dock_);
+    splitDockWidget(toolbox_dock_, effects_dock_, Qt::Horizontal);
+    resizeDocks({toolbox_dock_, effects_dock_}, {180, 420}, Qt::Horizontal);
+
     populateMediaBrowser();
     updateTimelineState();
 
@@ -96,6 +109,8 @@ void MainWindow::createWorkspace() {
         "inspectorDock",
         createInspector());
     addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
+    splitDockWidget(effects_dock_, inspector_dock_, Qt::Vertical);
+    resizeDocks({effects_dock_, inspector_dock_}, {500, 300}, Qt::Vertical);
 
     timeline_dock_ = createDock(
         "Timeline",
@@ -256,6 +271,9 @@ void MainWindow::createMenus() {
     auto* media_pool_menu = view_menu->addMenu("Media Pool");
     media_pool_menu->addAction(bins_dock_->toggleViewAction());
     media_pool_menu->addAction(media_dock_->toggleViewAction());
+    auto* effects_menu = view_menu->addMenu("Effects");
+    effects_menu->addAction(toolbox_dock_->toggleViewAction());
+    effects_menu->addAction(effects_dock_->toggleViewAction());
     view_menu->addAction(inspector_dock_->toggleViewAction());
     view_menu->addAction(timeline_dock_->toggleViewAction());
     view_menu->addSeparator();
@@ -299,11 +317,9 @@ void MainWindow::createMenus() {
     media_pool_action_ = media_pool_toolbar->addAction("Media Pool");
     media_pool_action_->setCheckable(true);
     media_pool_action_->setToolTip("Show or hide the Media Pool docks");
-    auto* effects_action = media_pool_toolbar->addAction("Effects");
-    effects_action->setToolTip("Effects panel (coming soon)");
-    connect(effects_action, &QAction::triggered, this, [this]() {
-        statusBar()->showMessage("Effects panel is not available yet.");
-    });
+    effects_action_ = media_pool_toolbar->addAction("Effects");
+    effects_action_->setCheckable(true);
+    effects_action_->setToolTip("Show or hide the Effects docks");
     connect(media_pool_action_, &QAction::triggered, this, [this](bool) {
         const bool show_docks =
             !bins_dock_->isVisible() || !media_dock_->isVisible();
@@ -316,6 +332,19 @@ void MainWindow::createMenus() {
     connect(media_dock_, &QDockWidget::visibilityChanged, this,
             [this](bool) { updateMediaPoolActionState(); });
     updateMediaPoolActionState();
+
+    connect(effects_action_, &QAction::triggered, this, [this](bool) {
+        const bool show_docks =
+            !toolbox_dock_->isVisible() || !effects_dock_->isVisible();
+        toolbox_dock_->setVisible(show_docks);
+        effects_dock_->setVisible(show_docks);
+        updateEffectsActionState();
+    });
+    connect(toolbox_dock_, &QDockWidget::visibilityChanged, this,
+            [this](bool) { updateEffectsActionState(); });
+    connect(effects_dock_, &QDockWidget::visibilityChanged, this,
+            [this](bool) { updateEffectsActionState(); });
+    updateEffectsActionState();
 
     auto* settings_action = menuBar()->addAction("&Settings");
     settings_action->setToolTip("Open editor settings");
@@ -422,14 +451,14 @@ void MainWindow::restoreWorkspaceLayout() {
     QSettings settings;
     const auto saved_state = settings.value(
         "workspace/dock_layout_state").toByteArray();
-    if (!saved_state.isEmpty() && restoreState(saved_state, 3)) return;
+    if (!saved_state.isEmpty() && restoreState(saved_state, 4)) return;
 
     restoreDefaultLayout();
 }
 
 void MainWindow::saveWorkspaceLayout() {
     QSettings settings;
-    settings.setValue("workspace/dock_layout_state", saveState(3));
+    settings.setValue("workspace/dock_layout_state", saveState(4));
     settings.sync();
 }
 
@@ -444,9 +473,22 @@ void MainWindow::updateMediaPoolActionState() {
         bins_dock_->isVisible() && media_dock_->isVisible());
 }
 
+void MainWindow::updateEffectsActionState() {
+    if (effects_action_ == nullptr ||
+        toolbox_dock_ == nullptr ||
+        effects_dock_ == nullptr) {
+        return;
+    }
+    const QSignalBlocker blocker(effects_action_);
+    effects_action_->setChecked(
+        toolbox_dock_->isVisible() && effects_dock_->isVisible());
+}
+
 void MainWindow::restoreDefaultLayout() {
     bins_dock_->setFloating(false);
     media_dock_->setFloating(false);
+    toolbox_dock_->setFloating(false);
+    effects_dock_->setFloating(false);
     inspector_dock_->setFloating(false);
     timeline_dock_->setFloating(false);
 
@@ -454,13 +496,23 @@ void MainWindow::restoreDefaultLayout() {
     addDockWidget(Qt::LeftDockWidgetArea, media_dock_);
     splitDockWidget(bins_dock_, media_dock_, Qt::Vertical);
     resizeDocks({bins_dock_, media_dock_}, {300, 700}, Qt::Vertical);
+
+    addDockWidget(Qt::RightDockWidgetArea, toolbox_dock_);
+    addDockWidget(Qt::RightDockWidgetArea, effects_dock_);
+    splitDockWidget(toolbox_dock_, effects_dock_, Qt::Horizontal);
+    resizeDocks({toolbox_dock_, effects_dock_}, {180, 420}, Qt::Horizontal);
     addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
+    splitDockWidget(effects_dock_, inspector_dock_, Qt::Vertical);
+    resizeDocks({effects_dock_, inspector_dock_}, {500, 300}, Qt::Vertical);
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
 
     bins_dock_->show();
     media_dock_->show();
+    toolbox_dock_->show();
+    effects_dock_->show();
     inspector_dock_->show();
     timeline_dock_->show();
     updateMediaPoolActionState();
+    updateEffectsActionState();
     saveWorkspaceLayout();
 }

@@ -38,6 +38,7 @@ updated intentionally.
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode persistence, compact item data, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
+| Effects UI | Toolbox categories, static effect catalog, category filtering, stable effect IDs, and visual-only behavior |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
 
 ## Manual UI validation
@@ -76,11 +77,10 @@ in the running Main Editor after UI or integration changes:
   double-click and F2, automatic New Bin naming without dialogs through the
   context menu, protection of
   All Media/Unsorted, and preventing folder items from producing media drag data,
-  the `Media Pool` text button below the menu bar next to the reserved
-  `Effects` button, its global show/hide behavior, the `Media Pool` submenu
-  with independent `Bins` and `Media` actions, moving, resizing, floating,
-  closing, re-docking, and tabifying each dock, and the `Effects` placeholder
-  status message,
+  the `Media Pool` text button below the menu bar next to the `Effects` group
+  button, its global show/hide behavior, the `Media Pool` submenu with
+  independent `Bins` and `Media` actions, moving, resizing, floating, closing,
+  re-docking, and tabifying each dock,
   restoring both docks through `View > Media Pool`, restoration of the
   complete workspace layout after restarting the editor, and `View > Restore
   Default Layout` without marking the project dirty,
@@ -93,6 +93,16 @@ in the running Main Editor after UI or integration changes:
   Timeline or New Bin buttons, redundant status row, or excessive top/bottom
   spacing is shown while media drag-and-drop remains available; confirm that
   branch lines make nested bins visually distinguishable at one or more levels;
+- Effects workspace: confirm that `Toolbox` and `Effects` appear as separate
+  side-by-side docks on the right, can be moved, resized, floated, closed,
+  re-docked, and tabified independently, and are individually available in
+  `View > Effects`; confirm the toolbar `Effects` action shows or hides both
+  docks together and synchronizes its checked state; select every Toolbox
+  category and confirm the Effects list filters to the expected static entries,
+  while no effect changes the Preview, Timeline, project dirty state, or
+  Undo/Redo; close and reopen the editor to confirm layout version 4 restores
+  the saved arrangement, and use `View > Restore Default Layout` to restore
+  the side-by-side default;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement; clear both the Media Browser and Timeline item selections,
   place the playhead over a valid clip, and confirm Play resolves that clip

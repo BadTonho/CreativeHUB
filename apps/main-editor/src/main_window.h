@@ -42,6 +42,8 @@ class QListWidgetItem;
 class QTreeWidgetItem;
 class PreviewWidget;
 class SystemMemoryIndicator;
+class EffectsToolboxWidget;
+class EffectsListWidget;
 class QWidget;
 
 namespace timeline {
@@ -70,8 +72,11 @@ private:
     void restoreWorkspaceLayout();
     void saveWorkspaceLayout();
     void updateMediaPoolActionState();
+    void updateEffectsActionState();
     QWidget* createMediaBins();
     QWidget* createMediaPanel();
+    QWidget* createEffectsToolbox();
+    QWidget* createEffectsPanel();
     QWidget* createInspector();
     QWidget* createTimeline();
     void initializePlayback();
@@ -264,11 +269,15 @@ private:
 
     QDockWidget* bins_dock_ = nullptr;
     QDockWidget* media_dock_ = nullptr;
+    QDockWidget* toolbox_dock_ = nullptr;
+    QDockWidget* effects_dock_ = nullptr;
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
     MediaBrowserListWidget* media_list_ = nullptr;
     MediaBrowserBinTreeWidget* bin_tree_ = nullptr;
+    EffectsToolboxWidget* effects_toolbox_ = nullptr;
+    EffectsListWidget* effects_list_ = nullptr;
     QPushButton* previous_frame_button_ = nullptr;
     QPushButton* play_pause_button_ = nullptr;
     QPushButton* next_frame_button_ = nullptr;
@@ -310,6 +319,7 @@ private:
     QAction* require_alt_to_move_action_ = nullptr;
     QAction* move_playhead_on_clip_selection_action_ = nullptr;
     QAction* media_pool_action_ = nullptr;
+    QAction* effects_action_ = nullptr;
     QAction* add_video_track_action_ = nullptr;
     QAction* rename_track_action_ = nullptr;
     QAction* move_track_up_action_ = nullptr;
