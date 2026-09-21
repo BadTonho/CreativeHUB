@@ -275,6 +275,26 @@ void MainWindow::createMenus() {
     media_pool_toolbar->setFloatable(false);
     media_pool_toolbar->setAllowedAreas(Qt::TopToolBarArea);
     media_pool_toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    media_pool_toolbar->setStyleSheet(
+        "QToolButton {"
+        " color: #f2f2f2;"
+        " background-color: #343434;"
+        " border: 1px solid #5c5c5c;"
+        " border-radius: 3px;"
+        " padding: 3px 10px;"
+        " font-weight: 600;"
+        "}"
+        "QToolButton:hover {"
+        " background-color: #414141;"
+        "}"
+        "QToolButton:checked {"
+        " color: #ffffff;"
+        " background-color: #2878b8;"
+        " border-color: #66b7ed;"
+        "}"
+        "QToolButton:pressed {"
+        " background-color: #1f5f91;"
+        "}");
     addToolBar(Qt::TopToolBarArea, media_pool_toolbar);
     media_pool_action_ = media_pool_toolbar->addAction("Media Pool");
     media_pool_action_->setCheckable(true);
