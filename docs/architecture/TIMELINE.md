@@ -98,6 +98,15 @@ paused at the end of the last clip.
 Audio is never mixed between overlapping tracks: only the visible top-priority
 clip contributes.
 
+For composed playback, decoding and layer blending are separate worker stages.
+The worker reuses a bounded decoded-frame cache, advances sequential decoder
+requests without an unnecessary seek, and falls back to a full seek for
+random requests. The final composed payload is cached by composition
+generation and global frame, while unchanged text layers reuse their
+rasterized RGBA layer. These are playback caches only: they are invalidated
+when media or composition state changes and never alter clip data, timing,
+frame rate, or project history.
+
 Every clip and track also stores linear audio gain (`0.0` to `2.0`) and a mute
 flag. The effective gain is the product of clip and track gain. These
 parameters are Timeline edits and are restored by history, but decoded PCM is
@@ -149,10 +158,11 @@ following only the highest-priority visible clip.
 
 ## Text clips
 
-Timeline clips may be `Video` or manual `Text`. Text clips are created with
-the Add Text button on the active track at the current playhead, with a
-five-second default duration and the selected media frame rate (or 30 FPS
-when no video is selected). If no track is active, the top track is used.
+Timeline clips may be `Video` or manual `Text`. Text clips are created by
+dragging the `Text` item from the Effects dock to the active track at the
+drop frame, with a five-second default duration and the selected media frame
+rate (or 30 FPS when no video is selected). If no track is active, the top
+track is used.
 
 Within one track, text is composited above video. Video-over-video and
 text-over-text overlap is rejected, while text-over-video overlap is allowed.

@@ -50,6 +50,8 @@ void validateReference(const std::filesystem::path& path) {
     require(session->current_frame_index() == 0, "Previous frame index is incorrect.");
     require(first_seek->width == 640 && first_seek->height == 360,
             "The first seek frame dimensions are incorrect.");
+    require(session->take_cache_hit_count() >= 1,
+            "A previously decoded frame was not reused from the cache.");
 
     const auto intermediate = session->decode_frame_at(30);
     require(intermediate.has_value(), "The intermediate frame could not be decoded.");
@@ -61,6 +63,8 @@ void validateReference(const std::filesystem::path& path) {
     require(after_intermediate.has_value(), "Decoding did not continue after seeking.");
     require(session->current_frame_index() == 31,
             "The frame after an intermediate seek has the wrong index.");
+    require(session->take_cache_hit_count() == 0,
+            "Sequential decoding unexpectedly reported a cache hit.");
 
     bool negative_seek_rejected = false;
     try {

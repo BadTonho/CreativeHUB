@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 
 namespace rendering {
@@ -36,6 +37,17 @@ Color sampleNearest(const media::VideoFrame& frame, double x, double y) noexcept
 
 void blend(std::uint8_t* destination, const Color& source) noexcept {
     const double source_alpha = std::clamp(source.alpha, 0.0, 1.0);
+    if (source_alpha <= 0.0) return;
+    if (source_alpha >= 1.0) {
+        destination[0] = static_cast<std::uint8_t>(std::lround(
+            std::clamp(source.red, 0.0, 1.0) * 255.0));
+        destination[1] = static_cast<std::uint8_t>(std::lround(
+            std::clamp(source.green, 0.0, 1.0) * 255.0));
+        destination[2] = static_cast<std::uint8_t>(std::lround(
+            std::clamp(source.blue, 0.0, 1.0) * 255.0));
+        destination[3] = 255;
+        return;
+    }
     const double destination_alpha = destination[3] / 255.0;
     const double output_alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
     if (output_alpha <= 0.0) return;
@@ -52,6 +64,33 @@ void blend(std::uint8_t* destination, const Color& source) noexcept {
     destination[2] = static_cast<std::uint8_t>(std::lround(std::clamp(output(
         source.blue, destination[2] / 255.0), 0.0, 1.0) * 255.0));
     destination[3] = static_cast<std::uint8_t>(std::lround(output_alpha * 255.0));
+}
+
+bool isOpaqueFrame(const media::VideoFrame& frame) noexcept {
+    if (frame.width <= 0 || frame.height <= 0 || frame.stride < frame.width * 4 ||
+        frame.rgba_pixels.size() < static_cast<std::size_t>(frame.stride) * frame.height) {
+        return false;
+    }
+    for (int y = 0; y < frame.height; ++y) {
+        const auto* row = frame.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * frame.stride;
+        for (int x = 0; x < frame.width; ++x) {
+            if (row[static_cast<std::size_t>(x) * 4 + 3] != 255) return false;
+        }
+    }
+    return true;
+}
+
+bool isFullFrameIdentity(
+    const media::VideoFrame& frame,
+    int width,
+    int height,
+    const timeline::Transform2D& transform) noexcept {
+    return frame.width == width && frame.height == height &&
+        frame.stride == width * 4 &&
+        transform.position_x == 0.5 && transform.position_y == 0.5 &&
+        transform.scale == 1.0 && transform.rotation_degrees == 0.0 &&
+        transform.opacity == 1.0;
 }
 
 } // namespace
@@ -80,6 +119,14 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
     for (const auto& layer : layers) {
         if (layer.frame == nullptr || !timeline::validTransform(layer.transform) ||
             layer.frame->width <= 0 || layer.frame->height <= 0) {
+            continue;
+        }
+        if (isFullFrameIdentity(*layer.frame, width, height, layer.transform) &&
+            isOpaqueFrame(*layer.frame)) {
+            std::memcpy(
+                output.rgba_pixels.data(),
+                layer.frame->rgba_pixels.data(),
+                output.rgba_pixels.size());
             continue;
         }
         const double fit = std::min(

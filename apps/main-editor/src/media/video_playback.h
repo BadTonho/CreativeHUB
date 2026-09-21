@@ -29,6 +29,7 @@ public:
     std::optional<VideoFrame> decode_frame_at(
         std::int64_t frame_index,
         const CancellationPredicate& should_cancel);
+    [[nodiscard]] std::uint64_t take_cache_hit_count() noexcept;
     void reset();
 
     [[nodiscard]] std::int64_t current_frame_index() const noexcept;

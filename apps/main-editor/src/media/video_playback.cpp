@@ -257,6 +257,7 @@ struct VideoPlaybackSession::Impl {
     std::int64_t last_decoded_timestamp = AV_NOPTS_VALUE;
     std::deque<CachedFrame> frame_cache;
     std::size_t cached_bytes = 0;
+    std::uint64_t cache_hit_count = 0;
 };
 
 constexpr std::size_t max_cached_frames = 8;
@@ -290,6 +291,7 @@ std::shared_ptr<const VideoFrame> VideoPlaybackSession::takeCachedFrame(
     std::int64_t frame_index) {
     for (auto iterator = impl.frame_cache.begin(); iterator != impl.frame_cache.end(); ++iterator) {
         if (iterator->frame_index != frame_index) continue;
+        ++impl.cache_hit_count;
         auto frame = iterator->frame;
         auto entry = std::move(*iterator);
         impl.frame_cache.erase(iterator);
@@ -516,6 +518,15 @@ std::optional<VideoFrame> VideoPlaybackSession::decode_frame_at(
             return *cached;
         }
 
+        if (!impl_->decoder_position_invalid &&
+            frame_index == impl_->current_frame_index + 1) {
+            const auto frame = decodeNextFrame(*impl_);
+            if (!frame.has_value() || impl_->current_frame_index != frame_index) {
+                return std::nullopt;
+            }
+            return frame;
+        }
+
         const auto decodeFromBeginning = [&]() -> std::optional<VideoFrame> {
             reset();
             std::optional<VideoFrame> frame;
@@ -575,6 +586,12 @@ std::optional<VideoFrame> VideoPlaybackSession::decode_frame_at(
         logFailure(impl_->source_path, "playback_seek", error);
         throw;
     }
+}
+
+std::uint64_t VideoPlaybackSession::take_cache_hit_count() noexcept {
+    const auto count = impl_->cache_hit_count;
+    impl_->cache_hit_count = 0;
+    return count;
 }
 
 void VideoPlaybackSession::reset() {

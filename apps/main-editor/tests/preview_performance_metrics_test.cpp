@@ -29,8 +29,11 @@ int main() {
 
         metrics.setEnabled(true);
         metrics.recordDecodedFrame();
+        metrics.recordDecodedCacheHits(2);
+        metrics.recordTextCacheHit();
         metrics.recordSeekOperation();
         metrics.recordComposedFrame();
+        metrics.recordCompositionCacheHit();
         metrics.recordEmittedFrame();
         metrics.recordReceivedFrame();
         metrics.recordSubmittedFrame(1920, 1080);
@@ -46,10 +49,16 @@ int main() {
         const auto snapshot = metrics.takeSnapshotAndReset();
         require(snapshot.decoded_frames == 1,
                 "Decoded frame count is incorrect.");
+        require(snapshot.decoded_cache_hits == 2,
+                "Decoded cache hit count is incorrect.");
+        require(snapshot.text_cache_hits == 1,
+                "Text cache hit count is incorrect.");
         require(snapshot.seek_operations == 1,
                 "Seek operation count is incorrect.");
         require(snapshot.composed_frames == 1,
                 "Composed frame count is incorrect.");
+        require(snapshot.composition_cache_hits == 1,
+                "Composition cache hit count is incorrect.");
         require(snapshot.emitted_frames == 1,
                 "Emitted frame count is incorrect.");
         require(snapshot.received_frames == 1,

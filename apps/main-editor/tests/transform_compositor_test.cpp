@@ -39,6 +39,21 @@ media::VideoFrame solid(int red, int green, int blue, int alpha = 255) {
     return frame;
 }
 
+media::VideoFrame fullFrame(int red, int green, int blue, int alpha = 255) {
+    media::VideoFrame frame;
+    frame.width = 4;
+    frame.height = 4;
+    frame.stride = 16;
+    frame.rgba_pixels.resize(64);
+    for (std::size_t index = 0; index < frame.rgba_pixels.size(); index += 4) {
+        frame.rgba_pixels[index] = static_cast<std::uint8_t>(red);
+        frame.rgba_pixels[index + 1] = static_cast<std::uint8_t>(green);
+        frame.rgba_pixels[index + 2] = static_cast<std::uint8_t>(blue);
+        frame.rgba_pixels[index + 3] = static_cast<std::uint8_t>(alpha);
+    }
+    return frame;
+}
+
 } // namespace
 
 int main() {
@@ -111,6 +126,34 @@ int main() {
                 "The compositor did not create the expected canvas.");
         require(composed->rgba_pixels[0] > 100 && composed->rgba_pixels[1] > 100,
                 "The compositor did not blend alpha layers.");
+
+        const auto opaque_full = fullFrame(31, 63, 127);
+        const auto direct = rendering::FrameCompositor::compose(
+            4,
+            4,
+            std::vector<rendering::CompositionLayer>{{&opaque_full, identity}});
+        require(direct.has_value() && direct->rgba_pixels == opaque_full.rgba_pixels,
+                "The opaque identity composition changed the source pixels.");
+
+        auto near_identity = identity;
+        near_identity.position_x = 0.500001;
+        const auto general_equivalent = rendering::FrameCompositor::compose(
+            4,
+            4,
+            std::vector<rendering::CompositionLayer>{{&opaque_full, near_identity}});
+        require(general_equivalent.has_value() &&
+                    general_equivalent->rgba_pixels == direct->rgba_pixels,
+                "The compositor fast path differs from the general transform path.");
+
+        const auto transparent = fullFrame(0, 0, 0, 0);
+        const auto transparent_overlay = rendering::FrameCompositor::compose(
+            4,
+            4,
+            std::vector<rendering::CompositionLayer>{{&opaque_full, identity},
+                                                     {&transparent, identity}});
+        require(transparent_overlay.has_value() &&
+                    transparent_overlay->rgba_pixels == opaque_full.rgba_pixels,
+                "A transparent layer changed the composed pixels.");
 
         const std::vector<rendering::CompositionLayer> reversed_layers{
             {&top, identity},

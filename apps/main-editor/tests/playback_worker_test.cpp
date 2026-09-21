@@ -1,6 +1,7 @@
 #include "playback/playback_worker.h"
+#include "rendering/preview_performance_metrics.h"
 
-#include <QCoreApplication>
+#include <QGuiApplication>
 #include <QTimer>
 
 #include <array>
@@ -436,14 +437,75 @@ void validateCompositionPlayback(
             "Composition playback without a selected media source emitted no frames.");
 }
 
+void validateCompositionCaching() {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
+
+    playback::PlaybackWorker worker;
+    std::vector<playback::VideoFramePtr> frames;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&frames](playback::VideoFramePtr frame, qint64, quint64) {
+            frames.push_back(std::move(frame));
+        });
+
+    playback::CompositionLayerSpec text_layer;
+    text_layer.frame_rate = 30.0;
+    text_layer.timeline_start_frame = 0;
+    text_layer.source_start_frame = 0;
+    text_layer.segment_frame_count = 3;
+    text_layer.track_index = 0;
+    text_layer.clip_index = 0;
+    text_layer.kind = timeline::ClipKind::Text;
+    text_layer.transform.scale = 0.1;
+    text_layer.text.content = "Cached title";
+    text_layer.text.font_size_pixels = 32.0;
+
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{text_layer},
+        {},
+        300);
+    worker.renderCompositionFrame(0, 0, 300);
+    worker.renderCompositionFrame(1, 1, 300);
+    worker.renderCompositionFrame(1, 1, 300);
+
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    require(frames.size() == 3,
+            "Composition caching did not emit all requested frames.");
+    require(frames[0] != nullptr && frames[1] != nullptr && frames[2] != nullptr,
+            "Composition caching emitted an empty frame.");
+    require(frames[1] == frames[2],
+            "The repeated composition frame did not reuse its payload.");
+    require(snapshot.text_cache_hits == 1,
+            "The text layer was rasterized again instead of using its cache.");
+    require(snapshot.composition_cache_hits == 1,
+            "The repeated composition frame did not hit the composition cache.");
+
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{text_layer},
+        {},
+        301);
+    worker.renderCompositionFrame(1, 1, 301);
+    const auto invalidation = metrics.takeSnapshotAndReset();
+    metrics.setEnabled(false);
+    require(frames.size() == 4 && frames[2] != frames[3],
+            "Changing the composition did not invalidate the composed frame cache.");
+    require(invalidation.composition_cache_hits == 0,
+            "A new composition unexpectedly reused the previous composition cache.");
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
-    QCoreApplication application(argc, argv);
+    QGuiApplication application(argc, argv);
 
     try {
         validateMissingMedia(application);
         validateSeekWithoutMedia(application);
+        validateCompositionCaching();
         if (argc == 2) {
             validateReference(application, std::filesystem::path(argv[1]));
             validateSeekCoalescing(application, std::filesystem::path(argv[1]));

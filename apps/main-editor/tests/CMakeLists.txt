@@ -279,7 +279,7 @@ add_test(
     COMMAND creative-suite-main-editor-playback-worker-tests
 )
 set_tests_properties(creative-suite-main-editor-playback-worker-errors PROPERTIES
-    ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1"
+    ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;QT_QPA_PLATFORM=offscreen"
 )
 
 if(EXISTS "${REFERENCE_VIDEO}")
@@ -288,7 +288,7 @@ if(EXISTS "${REFERENCE_VIDEO}")
         COMMAND creative-suite-main-editor-playback-worker-tests "${REFERENCE_VIDEO}"
     )
     set_tests_properties(creative-suite-main-editor-playback-worker-reference PROPERTIES
-        ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1"
+        ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;QT_QPA_PLATFORM=offscreen"
     )
 endif()
 

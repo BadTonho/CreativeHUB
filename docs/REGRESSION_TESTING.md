@@ -24,8 +24,8 @@ updated intentionally.
 | --- | --- |
 | Structured logging | File creation, required fields, escaping, rotation, retention limit |
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions |
-| Playback session | Sequential frames, reset, optimized seeking, frame cache, EOF, segment limits |
-| Playback worker | Media activation, generation handling, seek coalescing, playback completion, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
+| Playback session | Sequential frames, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
+| Playback worker | Media activation, generation handling, seek coalescing, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
 | Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom through 51,200%, frame-level guides, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
@@ -33,7 +33,7 @@ updated intentionally.
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
 | Settings dialog | Modal shell, General, Timeline, and Shortcuts tabs, Close action, independent component construction, and editable shortcut preferences |
-| Preview performance metrics | Deterministic counter/timing aggregation, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
+| Preview performance metrics | Deterministic counter/timing aggregation, decoded/text/final-composition cache-hit counters, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
@@ -138,6 +138,13 @@ in the running Main Editor after UI or integration changes:
   boundary without an out-of-range-frame error, and that `Project opened.`,
   `Loading timeline clip...`, and other transient status messages appear beside
   the frame in one compact footer line without a separate global status row;
+- enable Preview performance metrics and compare a simple 1080p playback run
+  with the metrics disabled: confirm the one-second summaries include decode,
+  composition, decoded-frame cache hits, text-raster cache hits, and final
+  composition-cache hits; verify that a sequential run does not seek for every
+  frame, that composition remains on the CPU, and that the optimized path
+  does not change the Preview output, frame rate, project dirty state, or
+  Undo/Redo;
 - the Timeline footer RAM indicator: confirm it is aligned to the right, uses
   the `RAM: <megabytes> MB` format, refreshes approximately once per
   second, reports only the Main Editor process, and does not affect playback,

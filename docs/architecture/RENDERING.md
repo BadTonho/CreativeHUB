@@ -33,6 +33,35 @@ OpenGL resource creation, texture uploads, and drawing stay on the UI/OpenGL
 thread. The UI copies incoming frame data only into its temporary CPU fallback
 and transfers the owning frame payload to the OpenGL surface for upload.
 
+## Composition pipeline and bounded caches
+
+The playback session keeps a bounded least-recently-used cache of up to eight
+decoded RGBA frames and 64 MiB. A request for the next frame in the current
+decoder sequence advances the decoder directly, without performing another
+seek. Cache misses and non-sequential requests retain the existing seek and
+fallback behavior, including cancellation, segment limits, and error
+reporting. The cache is intentionally per playback session so memory usage
+does not grow with project duration.
+
+Composition is split into two worker-side stages. The first stage collects
+ordered decoded layers and their evaluated transforms in a backend-neutral
+representation. The second stage passes that representation to the current
+CPU `FrameCompositor`, which remains the only layer-blending backend in this
+milestone. This boundary leaves room for a future GPU compositor without
+moving FFmpeg decoding or timeline decisions into the OpenGL surface.
+
+Static text layers are rasterized once per composition session while their
+style and content remain unchanged. The worker also retains the last final
+composed payload, keyed by composition generation and global frame, so a
+repeated request can be emitted without decoding or blending again. Both
+caches are cleared when the media or composition generation changes.
+
+The CPU compositor has a fast path for an opaque, full-canvas layer with the
+identity transform and skips fully transparent samples before the general
+transform, rotation, opacity, and alpha path. The result is still one final
+RGBA frame sent to OpenGL; per-layer texture blending is deliberately deferred
+to a later milestone.
+
 ## Preview performance diagnostics
 
 Preview performance metrics are disabled by default. They can be enabled from
@@ -44,8 +73,10 @@ the project, `.csp` data, Timeline history, or Undo/Redo state.
 When enabled, the application aggregates data for one-second intervals and
 writes at most one numeric summary per interval through the existing logger
 using the `preview/performance_metrics` operation. The summary includes decoded,
-seeked, composed, emitted, received, submitted, presented, and overwritten
-frame counts; the last frame dimensions; and average/maximum milliseconds for
+decoded-frame cache hits, text-raster cache hits, seeked, composed,
+final-composition cache hits, emitted, received, submitted, presented, and
+overwritten frame counts; the last frame dimensions; and average/maximum
+milliseconds for
 decoding, seeking, composition, payload creation, the UI callback, Preview
 submission, CPU presentation, GPU texture upload, and GPU painting. No media
 paths or per-frame log entries are written. When disabled, the timer stops and

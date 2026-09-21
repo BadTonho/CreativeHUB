@@ -109,13 +109,22 @@ private slots:
     void processPendingSeek();
 
 private:
+    struct DecodedCompositionLayer {
+        std::shared_ptr<const media::VideoFrame> frame;
+        timeline::Transform2D transform;
+    };
+
     bool ensureSessionAtCurrentFrame();
     void ensureTimer();
     void finishPlayback();
     void emitFrame(std::optional<media::VideoFrame> frame);
     void emitComposedFrame();
-    [[nodiscard]] std::optional<media::VideoFrame> decodeCompositionAt(
+    [[nodiscard]] std::optional<std::vector<DecodedCompositionLayer>>
+        decodeCompositionLayers(
         std::int64_t global_frame);
+    [[nodiscard]] std::optional<media::VideoFrame> composeCompositionLayers(
+        const std::vector<DecodedCompositionLayer>& layers) const;
+    void clearCompositionCache() noexcept;
     void reportFailure(
         const media::MediaError& error,
         const char* operation,
@@ -171,12 +180,16 @@ private:
     struct CompositionSession {
         CompositionLayerSpec spec;
         std::unique_ptr<media::VideoPlaybackSession> session;
+        std::shared_ptr<const media::VideoFrame> cached_text_frame;
     };
     QVector<CompositionLayerSpec> composition_specs_;
     QVector<CompositionTransitionSpec> composition_transitions_;
     std::vector<CompositionSession> composition_sessions_;
     bool composition_enabled_ = false;
     std::int64_t primary_timeline_start_frame_ = 0;
+    quint64 cached_composition_generation_ = 0;
+    std::int64_t cached_composition_global_frame_ = -1;
+    VideoFramePtr cached_composition_frame_;
 };
 
 } // namespace playback

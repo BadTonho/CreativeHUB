@@ -80,12 +80,26 @@ void PreviewPerformanceMetrics::recordDecodedFrame() noexcept {
     if (isEnabled()) decoded_frames_.fetch_add(1, std::memory_order_relaxed);
 }
 
+void PreviewPerformanceMetrics::recordDecodedCacheHits(std::uint64_t count) noexcept {
+    if (isEnabled() && count > 0) {
+        decoded_cache_hits_.fetch_add(count, std::memory_order_relaxed);
+    }
+}
+
+void PreviewPerformanceMetrics::recordTextCacheHit() noexcept {
+    if (isEnabled()) text_cache_hits_.fetch_add(1, std::memory_order_relaxed);
+}
+
 void PreviewPerformanceMetrics::recordSeekOperation() noexcept {
     if (isEnabled()) seek_operations_.fetch_add(1, std::memory_order_relaxed);
 }
 
 void PreviewPerformanceMetrics::recordComposedFrame() noexcept {
     if (isEnabled()) composed_frames_.fetch_add(1, std::memory_order_relaxed);
+}
+
+void PreviewPerformanceMetrics::recordCompositionCacheHit() noexcept {
+    if (isEnabled()) composition_cache_hits_.fetch_add(1, std::memory_order_relaxed);
 }
 
 void PreviewPerformanceMetrics::recordEmittedFrame() noexcept {
@@ -124,8 +138,11 @@ PreviewTimingSnapshot PreviewPerformanceMetrics::takeTimingSnapshot(
 PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noexcept {
     return PreviewPerformanceSnapshot{
         decoded_frames_.exchange(0, std::memory_order_relaxed),
+        decoded_cache_hits_.exchange(0, std::memory_order_relaxed),
+        text_cache_hits_.exchange(0, std::memory_order_relaxed),
         seek_operations_.exchange(0, std::memory_order_relaxed),
         composed_frames_.exchange(0, std::memory_order_relaxed),
+        composition_cache_hits_.exchange(0, std::memory_order_relaxed),
         emitted_frames_.exchange(0, std::memory_order_relaxed),
         received_frames_.exchange(0, std::memory_order_relaxed),
         submitted_frames_.exchange(0, std::memory_order_relaxed),

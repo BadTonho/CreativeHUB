@@ -29,8 +29,11 @@ struct PreviewTimingSnapshot {
 
 struct PreviewPerformanceSnapshot {
     std::uint64_t decoded_frames = 0;
+    std::uint64_t decoded_cache_hits = 0;
+    std::uint64_t text_cache_hits = 0;
     std::uint64_t seek_operations = 0;
     std::uint64_t composed_frames = 0;
+    std::uint64_t composition_cache_hits = 0;
     std::uint64_t emitted_frames = 0;
     std::uint64_t received_frames = 0;
     std::uint64_t submitted_frames = 0;
@@ -62,8 +65,11 @@ public:
         PreviewTiming timing,
         std::chrono::nanoseconds elapsed) noexcept;
     void recordDecodedFrame() noexcept;
+    void recordDecodedCacheHits(std::uint64_t count) noexcept;
+    void recordTextCacheHit() noexcept;
     void recordSeekOperation() noexcept;
     void recordComposedFrame() noexcept;
+    void recordCompositionCacheHit() noexcept;
     void recordEmittedFrame() noexcept;
     void recordReceivedFrame() noexcept;
     void recordSubmittedFrame(int width, int height) noexcept;
@@ -84,8 +90,11 @@ private:
 
     std::atomic_bool enabled_{false};
     std::atomic<std::uint64_t> decoded_frames_{0};
+    std::atomic<std::uint64_t> decoded_cache_hits_{0};
+    std::atomic<std::uint64_t> text_cache_hits_{0};
     std::atomic<std::uint64_t> seek_operations_{0};
     std::atomic<std::uint64_t> composed_frames_{0};
+    std::atomic<std::uint64_t> composition_cache_hits_{0};
     std::atomic<std::uint64_t> emitted_frames_{0};
     std::atomic<std::uint64_t> received_frames_{0};
     std::atomic<std::uint64_t> submitted_frames_{0};
