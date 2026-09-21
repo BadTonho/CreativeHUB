@@ -23,6 +23,14 @@ File actions provide New Project, Open Project, Save Project, and Save Project
 As. Save prompts are transactional and New, Open, and close use Save, Discard,
 and Cancel when the project is dirty.
 
+## User settings
+
+The Main Editor provides a fixed top toolbar with a textual `Settings` button.
+It opens a modal settings dialog with `General` and `Timeline` tabs reserved
+for future user preferences. The existing timeline choices remain in the Edit
+menu during this foundation milestone. Opening or closing the dialog does not
+change project data, project dirty state, or the `.csp` format.
+
 ## Timeline interaction
 
 The Timeline draws one vertical row per video track, with the top row having

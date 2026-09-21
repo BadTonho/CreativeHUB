@@ -10,6 +10,8 @@
 #include <QAction>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -34,6 +36,8 @@
 #include <QSettings>
 #include <QSlider>
 #include <QStatusBar>
+#include <QTabWidget>
+#include <QToolBar>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -54,6 +58,8 @@
 using namespace main_window_detail;
 
 void MainWindow::createWorkspace() {
+    createSettingsToolbar();
+
     preview_widget_ = new PreviewWidget(this);
     setCentralWidget(preview_widget_);
     connect(
@@ -91,6 +97,54 @@ void MainWindow::createWorkspace() {
         "timelineDock",
         createTimeline());
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
+}
+void MainWindow::createSettingsToolbar() {
+    auto* toolbar = addToolBar("Main");
+    toolbar->setObjectName("mainToolbar");
+    toolbar->setMovable(false);
+    toolbar->setFloatable(false);
+    toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
+
+    auto* settings_action = toolbar->addAction("Settings");
+    settings_action->setToolTip("Open editor settings");
+    connect(settings_action, &QAction::triggered,
+            this, &MainWindow::showSettingsDialog);
+}
+void MainWindow::showSettingsDialog() {
+    QDialog dialog(this);
+    dialog.setWindowTitle("Settings");
+    dialog.setModal(true);
+    dialog.resize(420, 260);
+
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* tabs = new QTabWidget(&dialog);
+
+    auto* general_page = new QWidget(tabs);
+    auto* general_layout = new QVBoxLayout(general_page);
+    auto* general_message = new QLabel(
+        "General user preferences will be added here.", general_page);
+    general_message->setAlignment(Qt::AlignCenter);
+    general_message->setWordWrap(true);
+    general_layout->addWidget(general_message);
+    tabs->addTab(general_page, "General");
+
+    auto* timeline_page = new QWidget(tabs);
+    auto* timeline_layout = new QVBoxLayout(timeline_page);
+    auto* timeline_message = new QLabel(
+        "Timeline preferences will be added here.", timeline_page);
+    timeline_message->setAlignment(Qt::AlignCenter);
+    timeline_message->setWordWrap(true);
+    timeline_layout->addWidget(timeline_message);
+    tabs->addTab(timeline_page, "Timeline");
+
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Close, Qt::Horizontal, &dialog);
+    connect(buttons, &QDialogButtonBox::rejected,
+            &dialog, &QDialog::reject);
+
+    layout->addWidget(tabs, 1);
+    layout->addWidget(buttons);
+    dialog.exec();
 }
 void MainWindow::createMenus() {
     auto* file_menu = menuBar()->addMenu("&File");
