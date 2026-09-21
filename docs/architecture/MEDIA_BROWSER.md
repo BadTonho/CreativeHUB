@@ -36,15 +36,17 @@ layout.
 resized, floated, closed, re-docked, tabified, or split side by side through
 the native Main Editor workspace. The default layout places `Bins` above
 `Media` on the left. The Effects group uses the same left workspace area when
-activated: `Toolbox` is placed beside `Effects`, and the Media Pool pair is
-hidden. The separator between the two Effects docks is draggable, with minimum
-widths of 20 px for `Toolbox` and 30 px for `Effects`. The complete workspace
+activated: `Toolbox` is placed above the empty `Favorites` dock, with `Effects`
+beside that column, and the Media Pool pair is hidden. The separators between
+these three Effects docks are draggable, with minimum widths of 20 px for
+`Toolbox` and `Favorites`, and 30 px for `Effects`. The complete workspace
 state is stored globally in `QSettings` at
 `workspace/dock_layout_state`, so docking, visibility, floating, tabification,
 and sizes are restored when the editor opens again. The `Media Pool` and
 `Effects` toolbar actions switch between the two groups, while the
 `View > Media Pool` and `View > Effects` submenus retain individual dock
-visibility controls. The layout state uses version 5; older states fall back
+visibility controls, including the three individual Effects docks. The layout
+state uses version 6; older states fall back
 to the default Media Pool layout.
 
 The media view also includes the immediate child bins of the active location as

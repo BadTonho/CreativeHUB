@@ -1,4 +1,5 @@
 #include "ui/effects_catalog.h"
+#include "ui/effects_favorites_widget.h"
 #include "ui/effects_list_widget.h"
 #include "ui/effects_toolbox_widget.h"
 
@@ -20,8 +21,11 @@ int main(int argc, char* argv[]) {
 
     try {
         EffectsToolboxWidget toolbox;
+        EffectsFavoritesWidget favorites;
         EffectsListWidget effects_list;
 
+        require(favorites.count() == 0,
+                "Effects Favorites must initially be empty.");
         require(toolbox.count() == 5,
                 "Effects Toolbox must contain five implemented categories.");
         require(toolbox.item(0)->text() == "All",

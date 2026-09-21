@@ -42,24 +42,26 @@ individually through the
 are visible while the Effects pair is hidden, and it does not affect project
 state.
 
-The Effects workspace contains two additional native docks: `Toolbox` and
-`Effects`. They are initially placed side by side in the left workspace area,
-with the Toolbox narrower than the Effects list; both remain independently
-movable, resizable, floatable, closable, and tabifiable. The Toolbox contains
+The Effects workspace contains three additional native docks: `Toolbox`,
+`Favorites`, and `Effects`. `Toolbox` and `Favorites` form a vertical column,
+with `Favorites` below `Toolbox`, while `Effects` is placed to their right.
+All three remain independently movable, resizable, floatable, closable, and
+tabifiable. `Favorites` is intentionally empty in this prototype and has no
+favoriting behavior yet. The Toolbox contains
 the categories `All`, `Video`, `Audio`, `Transitions`, and `Text`. Selecting a
 category filters the five currently implemented entries — `Grayscale`, `Gain`,
 `Cross Dissolve`, `Fade to Black`, and `Text` — in the Effects dock. The Text
 entry represents the existing Add Text timeline feature. These
 entries are a UI prototype only: they cannot be applied from this dock to the
-Preview, Timeline, or project. The toolbar `Effects` action activates both
-docks and hides the Media Pool pair, while `View > Effects` controls `Toolbox`
-and `Effects` individually. The workspace layout is stored globally in
-`workspace/dock_layout_state` with layout version 5 and does not affect project
-state. The default layout shows Media Pool and keeps the Effects pair hidden
-until activated. The native vertical separator between `Toolbox` and `Effects`
-is visibly styled and draggable; the minimum widths are 20 px for `Toolbox`
-and 30 px for `Effects`. The selected widths are part of the global dock
-layout state and are restored with the workspace.
+Preview, Timeline, or project. The toolbar `Effects` action activates all
+three docks and hides the Media Pool pair, while `View > Effects` controls
+`Toolbox`, `Favorites`, and `Effects` individually. The workspace layout is
+stored globally in `workspace/dock_layout_state` with layout version 6 and
+does not affect project state. The default layout shows Media Pool and keeps
+the Effects docks hidden until activated. The native separators are draggable;
+the minimum widths are 20 px for `Toolbox` and `Favorites`, and 30 px for
+`Effects`. The selected dock sizes are part of the global layout state and are
+restored with the workspace.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline

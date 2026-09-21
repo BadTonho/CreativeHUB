@@ -77,6 +77,8 @@ add_executable(creative-suite-main-editor
     src/ui/media_drag_mime.h
     src/ui/effects_catalog.cpp
     src/ui/effects_catalog.h
+    src/ui/effects_favorites_widget.cpp
+    src/ui/effects_favorites_widget.h
     src/ui/effects_toolbox_widget.cpp
     src/ui/effects_toolbox_widget.h
     src/ui/effects_list_widget.cpp

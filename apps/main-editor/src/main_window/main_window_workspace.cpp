@@ -96,13 +96,22 @@ void MainWindow::createWorkspace() {
         "Effects",
         "effectsDock",
         createEffectsPanel());
+    favorites_dock_ = createDock(
+        "Favorites",
+        "favoritesDock",
+        createEffectsFavorites());
     toolbox_dock_->setMinimumWidth(20);
+    favorites_dock_->setMinimumWidth(20);
     effects_dock_->setMinimumWidth(30);
     addDockWidget(Qt::LeftDockWidgetArea, toolbox_dock_);
     addDockWidget(Qt::LeftDockWidgetArea, effects_dock_);
     splitDockWidget(toolbox_dock_, effects_dock_, Qt::Horizontal);
     resizeDocks({toolbox_dock_, effects_dock_}, {180, 420}, Qt::Horizontal);
+    addDockWidget(Qt::LeftDockWidgetArea, favorites_dock_);
+    splitDockWidget(toolbox_dock_, favorites_dock_, Qt::Vertical);
+    resizeDocks({toolbox_dock_, favorites_dock_}, {300, 300}, Qt::Vertical);
     toolbox_dock_->hide();
+    favorites_dock_->hide();
     effects_dock_->hide();
 
     populateMediaBrowser();
@@ -275,6 +284,7 @@ void MainWindow::createMenus() {
     media_pool_menu->addAction(media_dock_->toggleViewAction());
     auto* effects_menu = view_menu->addMenu("Effects");
     effects_menu->addAction(toolbox_dock_->toggleViewAction());
+    effects_menu->addAction(favorites_dock_->toggleViewAction());
     effects_menu->addAction(effects_dock_->toggleViewAction());
     view_menu->addAction(inspector_dock_->toggleViewAction());
     view_menu->addAction(timeline_dock_->toggleViewAction());
@@ -339,6 +349,11 @@ void MainWindow::createMenus() {
     connect(effects_action_, &QAction::triggered,
             this, [this](bool) { activateEffectsGroup(); });
     connect(toolbox_dock_, &QDockWidget::visibilityChanged, this,
+            [this](bool) {
+                updateMediaPoolActionState();
+                updateEffectsActionState();
+            });
+    connect(favorites_dock_, &QDockWidget::visibilityChanged, this,
             [this](bool) {
                 updateMediaPoolActionState();
                 updateEffectsActionState();
@@ -455,19 +470,20 @@ void MainWindow::restoreWorkspaceLayout() {
     QSettings settings;
     const auto saved_state = settings.value(
         "workspace/dock_layout_state").toByteArray();
-    if (!saved_state.isEmpty() && restoreState(saved_state, 5)) return;
+    if (!saved_state.isEmpty() && restoreState(saved_state, 6)) return;
 
     restoreDefaultLayout();
 }
 
 void MainWindow::saveWorkspaceLayout() {
     QSettings settings;
-    settings.setValue("workspace/dock_layout_state", saveState(5));
+    settings.setValue("workspace/dock_layout_state", saveState(6));
     settings.sync();
 }
 
 void MainWindow::activateMediaPoolGroup() {
     toolbox_dock_->hide();
+    favorites_dock_->hide();
     effects_dock_->hide();
     bins_dock_->show();
     media_dock_->show();
@@ -479,6 +495,7 @@ void MainWindow::activateEffectsGroup() {
     bins_dock_->hide();
     media_dock_->hide();
     toolbox_dock_->show();
+    favorites_dock_->show();
     effects_dock_->show();
     updateMediaPoolActionState();
     updateEffectsActionState();
@@ -493,7 +510,9 @@ void MainWindow::updateMediaPoolActionState() {
     const QSignalBlocker blocker(media_pool_action_);
     media_pool_action_->setChecked(
         bins_dock_->isVisible() && media_dock_->isVisible() &&
-        !toolbox_dock_->isVisible() && !effects_dock_->isVisible());
+        !toolbox_dock_->isVisible() &&
+        !favorites_dock_->isVisible() &&
+        !effects_dock_->isVisible());
 }
 
 void MainWindow::updateEffectsActionState() {
@@ -504,7 +523,9 @@ void MainWindow::updateEffectsActionState() {
     }
     const QSignalBlocker blocker(effects_action_);
     effects_action_->setChecked(
-        toolbox_dock_->isVisible() && effects_dock_->isVisible() &&
+        toolbox_dock_->isVisible() &&
+        favorites_dock_->isVisible() &&
+        effects_dock_->isVisible() &&
         !bins_dock_->isVisible() && !media_dock_->isVisible());
 }
 
@@ -512,6 +533,7 @@ void MainWindow::restoreDefaultLayout() {
     bins_dock_->setFloating(false);
     media_dock_->setFloating(false);
     toolbox_dock_->setFloating(false);
+    favorites_dock_->setFloating(false);
     effects_dock_->setFloating(false);
     inspector_dock_->setFloating(false);
     timeline_dock_->setFloating(false);
@@ -525,12 +547,16 @@ void MainWindow::restoreDefaultLayout() {
     addDockWidget(Qt::LeftDockWidgetArea, effects_dock_);
     splitDockWidget(toolbox_dock_, effects_dock_, Qt::Horizontal);
     resizeDocks({toolbox_dock_, effects_dock_}, {180, 420}, Qt::Horizontal);
+    addDockWidget(Qt::LeftDockWidgetArea, favorites_dock_);
+    splitDockWidget(toolbox_dock_, favorites_dock_, Qt::Vertical);
+    resizeDocks({toolbox_dock_, favorites_dock_}, {300, 300}, Qt::Vertical);
     addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
 
     bins_dock_->show();
     media_dock_->show();
     toolbox_dock_->hide();
+    favorites_dock_->hide();
     effects_dock_->hide();
     inspector_dock_->show();
     timeline_dock_->show();

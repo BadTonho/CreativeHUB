@@ -44,6 +44,7 @@ class PreviewWidget;
 class SystemMemoryIndicator;
 class EffectsToolboxWidget;
 class EffectsListWidget;
+class EffectsFavoritesWidget;
 class QWidget;
 
 namespace timeline {
@@ -79,6 +80,7 @@ private:
     QWidget* createMediaPanel();
     QWidget* createEffectsToolbox();
     QWidget* createEffectsPanel();
+    QWidget* createEffectsFavorites();
     QWidget* createInspector();
     QWidget* createTimeline();
     void initializePlayback();
@@ -272,6 +274,7 @@ private:
     QDockWidget* bins_dock_ = nullptr;
     QDockWidget* media_dock_ = nullptr;
     QDockWidget* toolbox_dock_ = nullptr;
+    QDockWidget* favorites_dock_ = nullptr;
     QDockWidget* effects_dock_ = nullptr;
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
@@ -279,6 +282,7 @@ private:
     MediaBrowserListWidget* media_list_ = nullptr;
     MediaBrowserBinTreeWidget* bin_tree_ = nullptr;
     EffectsToolboxWidget* effects_toolbox_ = nullptr;
+    EffectsFavoritesWidget* effects_favorites_ = nullptr;
     EffectsListWidget* effects_list_ = nullptr;
     QPushButton* previous_frame_button_ = nullptr;
     QPushButton* play_pause_button_ = nullptr;

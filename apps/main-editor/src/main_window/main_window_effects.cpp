@@ -1,5 +1,6 @@
 #include "main_window.h"
 
+#include "ui/effects_favorites_widget.h"
 #include "ui/effects_list_widget.h"
 #include "ui/effects_toolbox_widget.h"
 
@@ -17,4 +18,9 @@ QWidget* MainWindow::createEffectsPanel() {
         &EffectsListWidget::setCategory);
     effects_list_->setCategory(effects_toolbox_->currentCategoryId());
     return effects_list_;
+}
+
+QWidget* MainWindow::createEffectsFavorites() {
+    effects_favorites_ = new EffectsFavoritesWidget;
+    return effects_favorites_;
 }

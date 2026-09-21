@@ -93,20 +93,22 @@ in the running Main Editor after UI or integration changes:
   Timeline or New Bin buttons, redundant status row, or excessive top/bottom
   spacing is shown while media drag-and-drop remains available; confirm that
   branch lines make nested bins visually distinguishable at one or more levels;
-- Effects workspace: confirm that `Toolbox` and `Effects` appear as separate
-  side-by-side docks in the left Media Pool area, while `Bins` and `Media` are
-  hidden; confirm both effects docks can be moved, resized, floated, closed,
-  re-docked, and tabified independently; drag the visible separator between
-  them to change both widths, confirm the 20 px Toolbox and 30 px Effects
-  minimums, and verify the chosen widths return after restarting;
-  confirm the docks are individually available in
+- Effects workspace: confirm that `Toolbox` and `Favorites` appear as a
+  vertical pair in the left column, with `Favorites` below `Toolbox`, and that
+  `Effects` is beside them while `Bins` and `Media` are hidden; confirm all
+  three effects docks can be moved, resized, floated, closed, re-docked, and
+  tabified independently; confirm `Favorites` starts empty and receives no
+  effects automatically; drag the visible separators to resize the column and
+  the Effects list, confirm the 20 px Toolbox/Favorites and 30 px Effects
+  minimums, and verify the chosen sizes return after restarting;
+  confirm the three docks are individually available in
   `View > Effects`; click `Media Pool` to return to `Bins` above `Media`, and
   confirm the toolbar actions synchronize their checked state; select every
   Toolbox category and confirm the Effects list shows only the implemented
   entries (`Grayscale`, `Gain`, `Cross Dissolve`, `Fade to Black`, and `Text`),
   including the Text category for the existing Add Text feature, while no
   effect changes the Preview, Timeline, project dirty state,
-  or Undo/Redo; close and reopen the editor to confirm layout version 5 restores
+  or Undo/Redo; close and reopen the editor to confirm layout version 6 restores
   the saved arrangement, and use `View > Restore Default Layout` to restore
   the Media Pool default;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
