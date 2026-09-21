@@ -20,13 +20,11 @@ do not provide preview or playback until restored. Missing media encountered
 while opening a project is loaded as offline; an existing but unreadable media
 file remains a technical open failure and the current project is preserved.
 
-The Browser is grouped in one dockable `Media Pool` panel. Its first page,
-named `Media Pool`, contains `Bins` above `Media` in a vertical splitter.
-`Bins` contains the hierarchical bin tree, and `Media` contains a view that
-can switch between compact list mode and fixed-size block mode. The tab container
-is ready for future pages and hides its tab bar while only the current page is
-present. Bin creation remains available through the existing context menus. The
-selected view
+The Browser belongs to the logical `Media Pool` group. `Bins` and `Media`
+are independent dockable panels: `Bins` contains the hierarchical bin tree,
+and `Media` contains a view that can switch between compact list mode and
+fixed-size block mode. Bin creation remains available through the existing
+context menus. The selected view
 is a global user preference stored in `QSettings` at
 `media_browser/view_mode`; the first-run default is list mode. Block mode uses
 the cached first frame already held by the media item and does not decode a new
@@ -34,12 +32,14 @@ frame when the view changes. Items use compact names and video summaries; the
 large technical-details panel is intentionally not part of the Browser
 layout.
 
-The `Media Pool` is a `QDockWidget` panel. It can be moved, resized, floated,
-closed, or restored through the native Main Editor workspace. The default
-layout places the `Media Pool` on the left, with `Bins` above `Media`. The
-complete workspace state is stored globally in `QSettings` at
+`Bins` and `Media` are independent `QDockWidget` panels. They can be moved,
+resized, floated, closed, re-docked, tabified, or split side by side through
+the native Main Editor workspace. The default layout places `Bins` above
+`Media` on the left. The complete workspace state is stored globally in
+`QSettings` at
 `workspace/dock_layout_state`, so docking, visibility, floating, tabification,
 and sizes are restored when the editor opens again.
+The `View > Media Pool` submenu controls the visibility of both panels.
 
 The media view also includes the immediate child bins of the active location as
 folder items alongside the media entries. Folder items use the standard Qt

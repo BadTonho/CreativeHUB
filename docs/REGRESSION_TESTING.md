@@ -36,7 +36,7 @@ updated intentionally.
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
-| Media Browser UI | Media Pool dock and nested Bins/Media splitter, native workspace layout persistence, list/block modes, global mode persistence, compact item data, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
+| Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode persistence, compact item data, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
 
@@ -76,8 +76,9 @@ in the running Main Editor after UI or integration changes:
   double-click and F2, automatic New Bin naming without dialogs through the
   context menu, protection of
   All Media/Unsorted, and preventing folder items from producing media drag data,
-  the `Media Pool` dock with `Bins` above `Media`, resizing its internal
-  splitter, closing and reopening it through `View`, restoration of the
+  the `Media Pool` submenu with independent `Bins` and `Media` actions,
+  moving, resizing, floating, closing, re-docking, and tabifying each dock,
+  restoring both docks through `View > Media Pool`, restoration of the
   complete workspace layout after restarting the editor, and `View > Restore
   Default Layout` without marking the project dirty,
   offline media, right-click New Bin in the media area and bin tree, creation

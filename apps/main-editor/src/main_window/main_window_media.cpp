@@ -35,10 +35,8 @@
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QSlider>
-#include <QSplitter>
 #include <QStatusBar>
 #include <QStyle>
-#include <QTabWidget>
 #include <QTimer>
 #include <QToolButton>
 #include <QPixmap>
@@ -107,30 +105,6 @@ bool validInlineBinName(const QString& value) {
 }
 
 } // namespace
-
-QWidget* MainWindow::createMediaPool() {
-    auto* tabs = new QTabWidget;
-    media_pool_tabs_ = tabs;
-    tabs->setDocumentMode(true);
-    tabs->setTabBarAutoHide(true);
-
-    auto* media_pool_page = new QWidget(tabs);
-    auto* page_layout = new QVBoxLayout(media_pool_page);
-    page_layout->setContentsMargins(0, 0, 0, 0);
-    page_layout->setSpacing(0);
-
-    auto* splitter = new QSplitter(Qt::Vertical, media_pool_page);
-    splitter->setChildrenCollapsible(false);
-    splitter->addWidget(createMediaBins());
-    splitter->addWidget(createMediaPanel());
-    splitter->setStretchFactor(0, 3);
-    splitter->setStretchFactor(1, 7);
-    splitter->setSizes({300, 700});
-    page_layout->addWidget(splitter);
-
-    tabs->addTab(media_pool_page, "Media Pool");
-    return tabs;
-}
 
 QWidget* MainWindow::createMediaBins() {
     auto* container = new QWidget;

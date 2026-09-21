@@ -14,12 +14,10 @@ detailed rendering log.
 
 ## Media Browser and projects
 
-The Media Browser is grouped in a single dockable `Media Pool` panel. Its
-first page is the `Media Pool` tab, which contains the `Bins` hierarchy
-above the `Media` view in a vertical splitter. The tab container is prepared
-for future media-workspace pages and hides its tab bar while only one page is
-present. `Media` contains the filtered view with compact list and fixed-size
-block modes. The global `QSettings` preference
+The Media Browser belongs to the logical `Media Pool` group. `Bins` and
+`Media` are independent dock widgets: `Bins` contains the hierarchical
+tree, while `Media` contains the filtered view with compact list and
+fixed-size block modes. The global `QSettings` preference
 `media_browser/view_mode` restores the last mode, defaulting to list mode on
 first use. Block mode uses each online item's cached first frame as a
 thumbnail; changing modes does not decode frames or mark the project dirty.
@@ -34,9 +32,9 @@ Add to Timeline buttons; imported media can still be added through the existing
 Timeline drag-and-drop path and internal add operation. An empty library does
 not add a redundant status row below the media view. The workspace stores the
 native dock arrangement globally in `workspace/dock_layout_state`; the default
-arrangement places the `Media Pool` on the left, with `Bins` above `Media`.
-The dock can still be moved, resized, floated, closed, or restored through the
-native workspace.
+arrangement places `Bins` above `Media` on the left. Both docks can be
+moved, resized, floated, closed, re-docked, and tabified independently. Their
+visibility is controlled by the `View > Media Pool` submenu.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline
@@ -46,7 +44,7 @@ and editable bins can be renamed with double-click or `F2`; `All Media` and
 `Unsorted` remain protected. The bin tree remains available for navigation and
 filtering and draws visible connectors between nested levels. Selecting a bin
 keeps the current tree path and expanded branches while refreshing the media
-view. Organizing the Media Pool does not change project state.
+view. Organizing the Media Pool docks does not change project state.
 
 The bin tree accepts custom drag-and-drop MIME types for imported media and bin
 paths. Dropping media onto a bin changes its project bin assignment; dropping
