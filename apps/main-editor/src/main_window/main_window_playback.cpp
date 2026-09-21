@@ -325,6 +325,7 @@ void MainWindow::activateTimelineClipAt(
     playback_is_playing_ = false;
     updatePlaybackControls();
     updatePlaybackStatus();
+    statusBar()->showMessage("Loading timeline clip...");
     QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
     const auto& item = *media_item;
     QMetaObject::invokeMethod(
@@ -504,15 +505,7 @@ void MainWindow::updatePlaybackControls() {
 void MainWindow::updatePlaybackStatus() {
     if (playback_status_label_ == nullptr) return;
 
-    const bool timeline_loading = pending_clip_activation_.has_value();
-    if (timeline_loading_label_ != nullptr) {
-        if (timeline_loading) {
-            timeline_loading_label_->setText("Loading timeline clip...");
-            timeline_loading_label_->setVisible(true);
-        }
-    }
-
-    if (timeline_loading &&
+    if (pending_clip_activation_.has_value() &&
         pending_clip_activation_->track_index < timeline_model_.trackCount() &&
         pending_clip_activation_->clip_index < timeline_model_.clipCount(
             pending_clip_activation_->track_index)) {
@@ -762,10 +755,6 @@ void MainWindow::handlePlaybackError(
 
     playback_is_playing_ = false;
     updatePlaybackControls();
-    if (timeline_loading_label_ != nullptr) {
-        timeline_loading_label_->clear();
-        timeline_loading_label_->setVisible(false);
-    }
     if (playback_status_label_ != nullptr) {
         playback_status_label_->setText("Playback error.");
     }

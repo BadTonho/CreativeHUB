@@ -423,16 +423,28 @@ QWidget* MainWindow::createTimeline() {
         QSizePolicy::Fixed);
     playback_footer_layout->addWidget(playback_status_label_);
 
-    timeline_loading_label_ = new QLabel(playback_footer);
-    timeline_loading_label_->setStyleSheet("color: #9aa4b2;");
-    timeline_loading_label_->setSizePolicy(
+    timeline_message_label_ = new QLabel(playback_footer);
+    timeline_message_label_->setStyleSheet("color: #9aa4b2;");
+    timeline_message_label_->setSizePolicy(
         QSizePolicy::Preferred,
         QSizePolicy::Fixed);
-    timeline_loading_label_->setVisible(false);
-    playback_footer_layout->addWidget(timeline_loading_label_);
+    playback_footer_layout->addWidget(timeline_message_label_);
     playback_footer_layout->addStretch(1);
     playback_footer->setFixedHeight(playback_footer->sizeHint().height());
     layout->addWidget(playback_footer);
+
+    connect(
+        statusBar(),
+        &QStatusBar::messageChanged,
+        this,
+        [this](const QString& message) {
+            if (timeline_message_label_ == nullptr) return;
+            timeline_message_label_->setText(message);
+            timeline_message_label_->setVisible(!message.isEmpty());
+        });
+    timeline_message_label_->setText(statusBar()->currentMessage());
+    timeline_message_label_->setVisible(!statusBar()->currentMessage().isEmpty());
+    statusBar()->setVisible(false);
 
     connect(previous_frame_button_, &QPushButton::clicked, this, [this]() {
         sendPlaybackCommand("stepBackward");

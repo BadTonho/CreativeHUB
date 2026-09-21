@@ -279,7 +279,7 @@ private:
     QCheckBox* track_mute_check_ = nullptr;
     QLabel* timeline_interaction_hint_ = nullptr;
     QLabel* playback_status_label_ = nullptr;
-    QLabel* timeline_loading_label_ = nullptr;
+    QLabel* timeline_message_label_ = nullptr;
     bool media_browser_inline_rename_pending_ = false;
     std::array<QDoubleSpinBox*, 5> transform_spin_boxes_{};
     std::array<QSlider*, 5> transform_sliders_{};
