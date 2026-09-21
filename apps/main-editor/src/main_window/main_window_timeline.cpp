@@ -43,6 +43,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <functional>
@@ -54,6 +55,23 @@
 
 
 using namespace main_window_detail;
+
+namespace {
+
+constexpr std::array<double, 11> timeline_zoom_levels = {
+    0.25, 0.50, 0.75, 1.00, 1.25, 1.50,
+    2.00, 3.00, 4.00, 6.00, 8.00};
+
+int timelineZoomLevelIndex(double factor) {
+    const auto match = std::min_element(
+        timeline_zoom_levels.begin(), timeline_zoom_levels.end(),
+        [factor](double left, double right) {
+            return std::abs(left - factor) < std::abs(right - factor);
+        });
+    return static_cast<int>(std::distance(timeline_zoom_levels.begin(), match));
+}
+
+} // namespace
 
 void MainWindow::addVideoTrack() {
     bool accepted = false;
@@ -317,20 +335,31 @@ QWidget* MainWindow::createTimeline() {
     controls->addWidget(move_track_down_button);
     controls->addWidget(remove_track_button);
     controls->addSpacing(10);
-    auto* zoom_label = new QLabel("Zoom", container);
-    zoom_label->setStyleSheet("color: #9aa4b2; font-weight: 600;");
     auto* zoom_out_button = new QPushButton("−", container);
+    auto* zoom_slider = new QSlider(Qt::Horizontal, container);
     auto* zoom_indicator = new QLabel("100%", container);
     auto* zoom_in_button = new QPushButton("+", container);
     zoom_out_button->setFixedWidth(28);
     zoom_in_button->setFixedWidth(28);
+    zoom_slider->setRange(0, static_cast<int>(timeline_zoom_levels.size()) - 1);
+    zoom_slider->setValue(timelineZoomLevelIndex(1.0));
+    zoom_slider->setFixedWidth(92);
+    zoom_slider->setSingleStep(1);
+    zoom_slider->setPageStep(1);
+    zoom_slider->setToolTip("Timeline zoom level");
+    zoom_slider->setStyleSheet(
+        "QSlider::groove:horizontal { height: 2px; background: #3b4553; }"
+        "QSlider::sub-page:horizontal { height: 2px; background: #8b98aa; }"
+        "QSlider::add-page:horizontal { height: 2px; background: #252d38; }"
+        "QSlider::handle:horizontal { width: 10px; height: 10px; "
+        "margin: -4px 0; border-radius: 5px; background: #d5a94b; }");
     zoom_indicator->setAlignment(Qt::AlignCenter);
     zoom_indicator->setMinimumWidth(48);
     zoom_out_button->setToolTip("Zoom out of the timeline");
     zoom_in_button->setToolTip("Zoom in on the timeline");
     zoom_indicator->setToolTip("Current timeline zoom");
-    controls->addWidget(zoom_label);
     controls->addWidget(zoom_out_button);
+    controls->addWidget(zoom_slider);
     controls->addWidget(zoom_indicator);
     controls->addWidget(zoom_in_button);
     controls->addStretch();
@@ -447,13 +476,22 @@ QWidget* MainWindow::createTimeline() {
         timeline_widget_,
         &timeline::TimelineWidget::zoomChanged,
         this,
-        [this, zoom_indicator, zoom_out_button, zoom_in_button](double factor) {
+        [this, zoom_slider, zoom_indicator, zoom_out_button, zoom_in_button](double factor) {
+            const QSignalBlocker blocker(zoom_slider);
+            zoom_slider->setValue(timelineZoomLevelIndex(factor));
             zoom_indicator->setText(
                 QString::number(static_cast<int>(std::lround(factor * 100.0))) + "%");
             zoom_out_button->setEnabled(timeline_widget_->canZoomOut());
             zoom_in_button->setEnabled(timeline_widget_->canZoomIn());
             updateProjectDirtyState();
         });
+    connect(zoom_slider, &QSlider::valueChanged, this, [this](int level) {
+        if (timeline_widget_ == nullptr ||
+            level < 0 || level >= static_cast<int>(timeline_zoom_levels.size())) {
+            return;
+        }
+        applyTimelineZoom(timeline_zoom_levels[static_cast<std::size_t>(level)]);
+    });
     connect(zoom_out_button, &QPushButton::clicked, this, [this]() {
         if (timeline_widget_ == nullptr) return;
         applyTimelineZoom(timeline_widget_->nextZoomFactor(-1));
