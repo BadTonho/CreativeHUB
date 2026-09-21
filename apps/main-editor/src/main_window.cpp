@@ -32,9 +32,11 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
-    if (confirmProjectChange()) {
-        event->accept();
+    if (!confirmProjectChange()) {
+        event->ignore();
         return;
     }
-    event->ignore();
+
+    saveWorkspaceLayout();
+    event->accept();
 }

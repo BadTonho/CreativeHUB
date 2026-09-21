@@ -14,7 +14,8 @@ detailed rendering log.
 
 ## Media Browser and projects
 
-The Media Browser has a hierarchical bin tree and a filtered media view with
+The Media Browser is composed of independent `Bins` and `Media` docks. `Bins`
+contains the hierarchical tree, while `Media` contains the filtered view with
 compact list and fixed-size block modes. The global `QSettings` preference
 `media_browser/view_mode` restores the last mode, defaulting to list mode on
 first use. Block mode uses each online item's cached first frame as a
@@ -28,8 +29,10 @@ Timeline clips, and the existing selection and internal drag-and-drop MIME
 flow remain unchanged. The Media Browser does not display separate New Bin or
 Add to Timeline buttons; imported media can still be added through the existing
 Timeline drag-and-drop path and internal add operation. An empty library does
-not add a redundant status row below the browser; the panel keeps compact
-spacing around the header, bin tree, and media view.
+not add a redundant status row below the media view. The workspace stores the
+native dock arrangement globally in `workspace/dock_layout_state`; the default
+arrangement places `Bins` above `Media` on the left, while users can move or
+tabify either dock independently.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline
@@ -37,10 +40,8 @@ drag MIME, and support inline renaming. `New Bin` creates an automatically
 named child in the current bin and starts editing it without a dialog. Media
 and editable bins can be renamed with double-click or `F2`; `All Media` and
 `Unsorted` remain protected. The bin tree remains available for navigation and
-filtering. The dock uses its own `Media Browser` title without a duplicate
-heading inside the content. A vertical splitter lets the user resize the bin
-tree and media view independently; its global `QSettings` state is restored on
-startup without changing project state.
+filtering. The `Bins` and `Media` docks have their own native dock titles and
+can be rearranged without changing project state.
 
 The bin tree accepts custom drag-and-drop MIME types for imported media and bin
 paths. Dropping media onto a bin changes its project bin assignment; dropping

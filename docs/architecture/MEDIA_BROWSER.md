@@ -20,9 +20,10 @@ do not provide preview or playback until restored. Missing media encountered
 while opening a project is loaded as offline; an existing but unreadable media
 file remains a technical open failure and the current project is preserved.
 
-The Browser provides a bin tree and a media view that can switch between
-compact list mode and fixed-size block mode. Bin creation remains available
-through the existing context menus. The selected view
+The Browser provides two dockable panels: `Bins` contains the hierarchical bin
+tree, and `Media` contains a view that can switch between compact list mode and
+fixed-size block mode. Bin creation remains available through the existing
+context menus. The selected view
 is a global user preference stored in `QSettings` at
 `media_browser/view_mode`; the first-run default is list mode. Block mode uses
 the cached first frame already held by the media item and does not decode a new
@@ -30,11 +31,12 @@ frame when the view changes. Items use compact names and video summaries; the
 large technical-details panel is intentionally not part of the Browser
 layout.
 
-The dock title is provided by the `Media Browser` dock itself; the content does
-not repeat that heading. The bin tree and media view are separated by a
-vertical, non-collapsible splitter. Its state is stored globally in
-`QSettings` at `media_browser/bin_splitter_state`, so the user's preferred
-balance between bins and files is restored when the editor opens again.
+`Bins` and `Media` are independent `QDockWidget` panels. They can be moved,
+resized, floated, closed, tabified, or split side by side through the native
+Main Editor workspace. The default layout places `Bins` above `Media` on the
+left. The complete workspace state is stored globally in `QSettings` at
+`workspace/dock_layout_state`, so docking, visibility, floating, tabification,
+and sizes are restored when the editor opens again.
 
 The media view also includes the immediate child bins of the active location as
 folder items alongside the media entries. Folder items use the standard Qt

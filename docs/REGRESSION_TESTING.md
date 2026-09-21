@@ -34,7 +34,7 @@ updated intentionally.
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
-| Media Browser UI | List/block modes, global mode persistence, compact item data, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
+| Media Browser UI | Separate Bins and Media docks, native workspace layout persistence, list/block modes, global mode persistence, compact item data, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
 
@@ -68,8 +68,10 @@ in the running Main Editor after UI or integration changes:
   double-click and F2, automatic New Bin naming without dialogs through the
   context menu, protection of
   All Media/Unsorted, and preventing folder items from producing media drag data,
-  one visible Media Browser title, vertical resizing between bins and media,
-  minimum pane sizes, and restoration of the splitter position without marking
+  separate `Bins` and `Media` docks, the default vertical arrangement, moving
+  the docks side by side, tabifying and floating them, closing and reopening
+  them through `View`, restoration of the complete workspace layout after
+  restarting the editor, and `View > Restore Default Layout` without marking
   the project dirty,
   offline media, right-click New Bin in the media area and bin tree, creation
   of child bins, dragging media to bins, dragging bins into bins, preservation
