@@ -93,9 +93,9 @@ available through vertical scrolling. Each track row has a provisional maximum
 height of 180 pixels; extra space in the timeline remains empty until a later
 layout milestone gives it another purpose.
 The same footer shows the Main Editor process working-set memory at the right
-in the form `App RAM: <megabytes> MB`, refreshed every second. Windows reads
+in the form `RAM: <megabytes> MB`, refreshed every second. Windows reads
 the value through `GetProcessMemoryInfo`; platforms without an implementation,
-or a failed query, display `App RAM: N/A`. This indicator is display-only and
+or a failed query, display `RAM: N/A`. This indicator is display-only and
 does not affect playback, Timeline data, project dirty state, Undo/Redo, or
 `.csp` data.
 The horizontal timeline scale has a one-hour minimum range independent of

@@ -16,23 +16,23 @@ int main() {
     };
     assert(
         system_monitor::formatProcessMemoryUsage(usage) ==
-        "App RAM: 320 MB");
+        "RAM: 320 MB");
 
     const system_monitor::ProcessMemoryUsage rounded_usage{
         320 * mib + mib / 2,
     };
     assert(
         system_monitor::formatProcessMemoryUsage(rounded_usage) ==
-        "App RAM: 320.5 MB");
+        "RAM: 320.5 MB");
 
     const system_monitor::ProcessMemoryUsage zero_usage{};
     assert(
         system_monitor::formatProcessMemoryUsage(zero_usage) ==
-        "App RAM: N/A");
+        "RAM: N/A");
 
     assert(
         system_monitor::formatProcessMemoryUsage(std::nullopt) ==
-        "App RAM: N/A");
+        "RAM: N/A");
 
     return 0;
 }

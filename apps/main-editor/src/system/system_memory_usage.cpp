@@ -53,10 +53,10 @@ std::string formatMegabytes(double value) {
 std::string formatProcessMemoryUsage(
     const std::optional<ProcessMemoryUsage>& usage) {
     if (!usage.has_value() || usage->working_set_bytes == 0) {
-        return "App RAM: N/A";
+        return "RAM: N/A";
     }
 
-    return "App RAM: " +
+    return "RAM: " +
         formatMegabytes(bytesToMegabytes(usage->working_set_bytes)) + " MB";
 }
 
