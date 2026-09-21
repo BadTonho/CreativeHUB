@@ -25,11 +25,12 @@ and Cancel when the project is dirty.
 
 ## User settings
 
-The Main Editor provides a fixed top toolbar with a textual `Settings` button.
-It opens a modal settings dialog with `General` and `Timeline` tabs reserved
-for future user preferences. The existing timeline choices remain in the Edit
-menu during this foundation milestone. Opening or closing the dialog does not
-change project data, project dirty state, or the `.csp` format.
+The Main Editor provides a `Settings` action in the main menu bar immediately
+to the left of `Help`. It opens a modal settings dialog with `General` and
+`Timeline` tabs reserved for future user preferences. The existing timeline
+choices remain in the Edit menu during this foundation milestone. Opening or
+closing the dialog does not change project data, project dirty state, or the
+`.csp` format.
 
 ## Timeline interaction
 

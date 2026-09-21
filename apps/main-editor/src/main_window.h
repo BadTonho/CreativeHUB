@@ -58,7 +58,6 @@ private:
 
     void createMenus();
     void createWorkspace();
-    void createSettingsToolbar();
     void showSettingsDialog();
     void restoreDefaultLayout();
     QWidget* createMediaBrowser();

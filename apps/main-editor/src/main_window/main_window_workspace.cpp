@@ -37,7 +37,6 @@
 #include <QSlider>
 #include <QStatusBar>
 #include <QTabWidget>
-#include <QToolBar>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -58,8 +57,6 @@
 using namespace main_window_detail;
 
 void MainWindow::createWorkspace() {
-    createSettingsToolbar();
-
     preview_widget_ = new PreviewWidget(this);
     setCentralWidget(preview_widget_);
     connect(
@@ -97,18 +94,6 @@ void MainWindow::createWorkspace() {
         "timelineDock",
         createTimeline());
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
-}
-void MainWindow::createSettingsToolbar() {
-    auto* toolbar = addToolBar("Main");
-    toolbar->setObjectName("mainToolbar");
-    toolbar->setMovable(false);
-    toolbar->setFloatable(false);
-    toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
-
-    auto* settings_action = toolbar->addAction("Settings");
-    settings_action->setToolTip("Open editor settings");
-    connect(settings_action, &QAction::triggered,
-            this, &MainWindow::showSettingsDialog);
 }
 void MainWindow::showSettingsDialog() {
     QDialog dialog(this);
@@ -286,6 +271,11 @@ void MainWindow::createMenus() {
     view_menu->addSeparator();
     auto* restore_layout_action = view_menu->addAction("Restore &Default Layout");
     connect(restore_layout_action, &QAction::triggered, this, &MainWindow::restoreDefaultLayout);
+
+    auto* settings_action = menuBar()->addAction("&Settings");
+    settings_action->setToolTip("Open editor settings");
+    connect(settings_action, &QAction::triggered,
+            this, &MainWindow::showSettingsDialog);
 
     auto* help_menu = menuBar()->addMenu("&Help");
     auto* open_log_folder_action = help_menu->addAction("Open &Log Folder");

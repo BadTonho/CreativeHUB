@@ -40,9 +40,10 @@ Automated tests do not replace visual validation. The following must be checked
 in the running Main Editor after UI or integration changes:
 
 - application startup and clean shutdown;
-- Settings button: confirm the fixed top toolbar button opens a modal dialog
-  with `General` and `Timeline` tabs, closes without changing project dirty
-  state, and leaves the existing Edit menu preferences available;
+- Settings action: confirm the menu-bar action immediately left of `Help`
+  opens a modal dialog with `General` and `Timeline` tabs, closes without
+  changing project dirty state, and leaves the existing Edit menu preferences
+  available;
 - dock resizing, floating, re-docking, and restoration;
 - Timeline track height, maximum row height, vertical scrolling, stable
   one-hour horizontal scale, horizontal scrolling for longer content, zoom
