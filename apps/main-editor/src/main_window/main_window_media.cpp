@@ -117,7 +117,12 @@ QWidget* MainWindow::createMediaBins() {
     bin_tree_->setMinimumHeight(80);
     bin_tree_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(bin_tree_, &QTreeWidget::currentItemChanged, this,
-            [this](QTreeWidgetItem*, QTreeWidgetItem*) { updateMediaBrowserFilter(); });
+            [this](QTreeWidgetItem* current, QTreeWidgetItem*) {
+                if (current == nullptr) return;
+                populateMediaBrowser(
+                    {},
+                    current->data(0, Qt::UserRole).toString().toStdString());
+            });
     connect(bin_tree_, &QTreeWidget::customContextMenuRequested, this,
             &MainWindow::showMediaContextMenu);
     connect(bin_tree_, &MediaBrowserBinTreeWidget::mediaDropRequested,
@@ -211,6 +216,22 @@ void MainWindow::populateMediaBrowser(
     std::optional<std::string> selected_bin_override) {
     if (media_list_ == nullptr || bin_tree_ == nullptr) return;
 
+    std::vector<std::string> expanded_bins;
+    std::function<void(QTreeWidgetItem*)> capture_expansion =
+        [&capture_expansion, &expanded_bins](QTreeWidgetItem* item) {
+            if (item == nullptr) return;
+            if (item->isExpanded()) {
+                expanded_bins.push_back(
+                    item->data(0, Qt::UserRole).toString().toStdString());
+            }
+            for (int index = 0; index < item->childCount(); ++index) {
+                capture_expansion(item->child(index));
+            }
+        };
+    for (int index = 0; index < bin_tree_->topLevelItemCount(); ++index) {
+        capture_expansion(bin_tree_->topLevelItem(index));
+    }
+
     std::filesystem::path path_to_select = selected_path;
     if (path_to_select.empty()) {
         const auto selected = selectedMediaIndex();
@@ -293,6 +314,20 @@ void MainWindow::populateMediaBrowser(
         if (!selected_bin.empty()) {
             if (auto* found = find_bin(all); found != nullptr) bin_tree_->setCurrentItem(found);
         }
+
+        std::function<void(QTreeWidgetItem*)> restore_expansion =
+            [&restore_expansion, &expanded_bins](QTreeWidgetItem* item) {
+                if (item == nullptr) return;
+                const auto path = item->data(0, Qt::UserRole).toString().toStdString();
+                if (std::find(expanded_bins.begin(), expanded_bins.end(), path) !=
+                    expanded_bins.end()) {
+                    item->setExpanded(true);
+                }
+                for (int index = 0; index < item->childCount(); ++index) {
+                    restore_expansion(item->child(index));
+                }
+            };
+        restore_expansion(all);
     }
 
     {
@@ -422,10 +457,6 @@ void MainWindow::beginMediaBrowserBinEdit(const QString& path) {
             }
         }
     });
-}
-
-void MainWindow::updateMediaBrowserFilter() {
-    populateMediaBrowser();
 }
 
 media::MediaLibrary MainWindow::buildMediaLibrary() const {

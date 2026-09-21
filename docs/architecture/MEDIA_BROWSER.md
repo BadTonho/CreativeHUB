@@ -77,4 +77,6 @@ full manual relinking are future work.
 
 Media organization changes mark the project dirty but do not create entries in
 the Timeline Undo/Redo history. Selection, bin filtering, and tree expansion
-are view state and do not mark the project dirty.
+are view state and do not mark the project dirty. Selecting a bin preserves
+the selected path and the expansion state of the existing tree while the media
+view is refreshed.

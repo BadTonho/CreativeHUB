@@ -63,7 +63,8 @@ in the running Main Editor after UI or integration changes:
   preference, and visual order;
 - Media Browser list/block toggles, restoration of the last global mode,
   cached thumbnails, compact item descriptions, hover over the information
-  icon for the complete technical tooltip, selection, bins, context actions,
+  icon for the complete technical tooltip, selection, clicking bins without
+  losing the selected path or expanded branches, bins, context actions,
   folder items shown alongside media, folder icons, inline renaming with
   double-click and F2, automatic New Bin naming without dialogs through the
   context menu, protection of

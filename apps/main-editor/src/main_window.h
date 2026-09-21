@@ -79,7 +79,6 @@ private:
     void populateMediaBrowser(
         const std::filesystem::path& selected_path = {},
         std::optional<std::string> selected_bin = std::nullopt);
-    void updateMediaBrowserFilter();
     void selectMediaBrowserBin(const QString& path);
     void showMediaContextMenu(const QPoint& position);
     void handleMediaBrowserMediaDrop(

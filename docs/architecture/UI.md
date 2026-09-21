@@ -42,7 +42,8 @@ and editable bins can be renamed with double-click or `F2`; `All Media` and
 `Unsorted` remain protected. The bin tree remains available for navigation and
 filtering and draws visible connectors between nested levels. The `Bins` and
 `Media` docks have their own native dock titles and
-can be rearranged without changing project state.
+can be rearranged without changing project state. Selecting a bin keeps the
+current tree path and expanded branches while refreshing the media view.
 
 The bin tree accepts custom drag-and-drop MIME types for imported media and bin
 paths. Dropping media onto a bin changes its project bin assignment; dropping
