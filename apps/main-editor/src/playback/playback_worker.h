@@ -43,6 +43,15 @@ struct CompositionLayerSpec {
     timeline::TextStyle text;
 };
 
+struct CompositionTransitionSpec {
+    qint64 track_index = -1;
+    qint64 from_clip_index = -1;
+    qint64 to_clip_index = -1;
+    qint64 boundary_frame = 0;
+    qint64 duration_frames = 0;
+    timeline::TransitionKind kind = timeline::TransitionKind::CrossDissolve;
+};
+
 class PlaybackWorker final : public QObject {
     Q_OBJECT
 
@@ -74,7 +83,10 @@ public slots:
         bool track_audio_muted,
         double clip_audio_gain,
         bool clip_audio_muted);
-    void setComposition(QVector<CompositionLayerSpec> layers, quint64 generation);
+    void setComposition(
+        QVector<CompositionLayerSpec> layers,
+        QVector<CompositionTransitionSpec> transitions,
+        quint64 generation);
     void renderCompositionFrame(
         qint64 global_frame,
         qint64 frame_index,
@@ -160,6 +172,7 @@ private:
         std::unique_ptr<media::VideoPlaybackSession> session;
     };
     QVector<CompositionLayerSpec> composition_specs_;
+    QVector<CompositionTransitionSpec> composition_transitions_;
     std::vector<CompositionSession> composition_sessions_;
     bool composition_enabled_ = false;
     std::int64_t primary_timeline_start_frame_ = 0;
@@ -170,3 +183,5 @@ private:
 Q_DECLARE_METATYPE(playback::VideoFramePtr)
 Q_DECLARE_METATYPE(playback::CompositionLayerSpec)
 Q_DECLARE_METATYPE(QVector<playback::CompositionLayerSpec>)
+Q_DECLARE_METATYPE(playback::CompositionTransitionSpec)
+Q_DECLARE_METATYPE(QVector<playback::CompositionTransitionSpec>)

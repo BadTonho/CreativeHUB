@@ -90,11 +90,28 @@ Apply action, followed by the shared transform and keyframe controls. A text
 selection keeps the Media Browser selection, current video session, and
 playback clock unchanged. Text-only projects can show a static composition,
 but playback remains disabled without video media. Confirmed text/style edits
-are Timeline Undo/Redo entries and are persisted in `.csp` version 4.
+are Timeline Undo/Redo entries and are persisted by the current `.csp` version
+5 format.
 
 Text rasterization is performed with `QImage/QPainter` by the playback worker;
 the UI only edits the values and receives the composed RGBA frame. No new
 keyboard shortcut is introduced for text creation or editing.
+
+## Transition editing
+
+The Timeline marks valid clip junctions with a transition region. A junction
+context menu provides Add Cross Dissolve, Add Fade to Black, and Remove
+Transition. Selecting a junction switches the Inspector to transition controls
+for the type and duration; applying a change creates one Timeline history
+entry. The default duration is 15 frames and it is limited by the endpoint
+clips.
+
+Transitions do not create overlap or change clip placement. They are evaluated
+by the playback worker while the UI continues to present the resulting
+composed frame. Playback pauses while a transition is created, edited, or
+removed, then the current composition is requested again. Undo/Redo restores
+transition data, selection, and playhead while remaining paused. Invalid
+junctions and gaps are intentional no-op outcomes and are not logged.
 
 The `MainWindow` coordinator is implemented in responsibility-focused
 translation units under `apps/main-editor/src/main_window/`. Workspace,

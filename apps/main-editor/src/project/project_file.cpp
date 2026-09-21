@@ -14,6 +14,7 @@
 #include <limits>
 #include <string>
 #include <system_error>
+#include <utility>
 
 #include "../media/media_library.h"
 
@@ -72,6 +73,37 @@ bool validTextStyle(const timeline::TextStyle& text) {
         return true;
     }
     return false;
+}
+
+[[noreturn]] void throwJson(ProjectErrorCode code,
+                             const std::filesystem::path& project_path,
+                             const char* message);
+
+bool validTransitionKind(timeline::TransitionKind kind) {
+    switch (kind) {
+    case timeline::TransitionKind::CrossDissolve:
+    case timeline::TransitionKind::FadeToBlack:
+        return true;
+    }
+    return false;
+}
+
+timeline::TransitionKind parseTransitionKind(
+    const QJsonObject& object,
+    const std::filesystem::path& project_path) {
+    const auto value = object.value("kind");
+    if (!value.isString()) {
+        throwJson(ProjectErrorCode::MissingField, project_path,
+                  "A transition is missing its kind.");
+    }
+    if (value.toString() == QLatin1String("cross_dissolve")) {
+        return timeline::TransitionKind::CrossDissolve;
+    }
+    if (value.toString() == QLatin1String("fade_to_black")) {
+        return timeline::TransitionKind::FadeToBlack;
+    }
+    throwJson(ProjectErrorCode::InvalidValue, project_path,
+              "Project JSON contains an unsupported transition kind.");
 }
 
 bool validKeyframeList(
@@ -296,6 +328,42 @@ void validateDocument(const ProjectDocument& document,
                 }
             }
         }
+        std::vector<std::pair<std::size_t, std::size_t>> transition_pairs;
+        for (const auto& transition : track.transitions) {
+            if (!validTransitionKind(transition.kind) ||
+                transition.from_clip_index >= track.clips.size() ||
+                transition.to_clip_index >= track.clips.size()) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains a transition with invalid clip indexes.");
+            }
+            if (transition.from_clip_index + 1 != transition.to_clip_index) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains a transition between non-consecutive clips.");
+            }
+            const auto& from = track.clips[transition.from_clip_index];
+            const auto& to = track.clips[transition.to_clip_index];
+            if (from.timeline_start_frame >
+                    std::numeric_limits<std::int64_t>::max() - from.duration_frames ||
+                from.timeline_start_frame + from.duration_frames !=
+                    to.timeline_start_frame) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains a transition across a gap.");
+            }
+            const auto maximum = std::min(from.duration_frames, to.duration_frames);
+            if (transition.duration_frames <= 0 ||
+                transition.duration_frames > maximum) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains a transition with an invalid duration.");
+            }
+            const auto pair = std::make_pair(
+                transition.from_clip_index, transition.to_clip_index);
+            if (std::find(transition_pairs.begin(), transition_pairs.end(), pair) !=
+                transition_pairs.end()) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains duplicate transitions.");
+            }
+            transition_pairs.push_back(pair);
+        }
     }
     for (const auto& clip : document.timeline_clips) validate_clip(clip);
 }
@@ -344,7 +412,8 @@ ProjectDocument load(const std::filesystem::path& project_path) {
 
     const auto version = requiredInteger(root, "version", project_path);
     if (version != current_format_version && version != previous_format_version &&
-        version != older_format_version && version != legacy_format_version) {
+        version != older_format_version && version != legacy_v2_format_version &&
+        version != legacy_format_version) {
         throw ProjectError(
             ProjectErrorCode::UnsupportedVersion,
             "The project file version is not supported.",
@@ -358,7 +427,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
     }
 
     ProjectDocument document;
-    if (version >= previous_format_version) {
+    if (version >= older_format_version) {
         const auto canvas_value = root.value("canvas");
         if (!canvas_value.isObject()) {
             throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the canvas object.");
@@ -479,7 +548,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                 }
                 const auto clip_object = clip_value.toObject();
                 ProjectClip clip;
-                if (version >= current_format_version && clip_object.contains("kind")) {
+                if (version >= previous_format_version && clip_object.contains("kind")) {
                     const auto kind = clip_object.value("kind");
                     if (!kind.isString()) {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip kind.");
@@ -513,7 +582,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                     }
                     clip.audio_muted = clip_object.value("audio_muted").toBool();
                 }
-                if (version >= previous_format_version && clip_object.contains("transform")) {
+                if (version >= older_format_version && clip_object.contains("transform")) {
                     const auto transform = clip_object.value("transform");
                     if (!transform.isObject()) {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip transform.");
@@ -534,7 +603,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                     clip.transform.rotation_degrees = transform_object.value("rotation").toDouble();
                     clip.transform.opacity = transform_object.value("opacity").toDouble();
                 }
-                if (version >= previous_format_version && clip_object.contains("keyframes")) {
+                if (version >= older_format_version && clip_object.contains("keyframes")) {
                     const auto keyframes = clip_object.value("keyframes");
                     if (!keyframes.isObject()) {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains invalid clip keyframes.");
@@ -568,6 +637,39 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                 }
                 track.clips.push_back(clip);
                 document.timeline_clips.push_back(std::move(clip));
+            }
+            if (version >= current_format_version) {
+                const auto transitions_value = track_object.value("transitions");
+                if (!transitions_value.isArray()) {
+                    throwJson(ProjectErrorCode::MissingField, project_path,
+                              "Project JSON is missing a track transitions array.");
+                }
+                for (const auto& transition_value : transitions_value.toArray()) {
+                    if (!transition_value.isObject()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "Project JSON contains an invalid transition.");
+                    }
+                    const auto transition_object = transition_value.toObject();
+                    const auto from_clip = requiredInteger(
+                        transition_object, "from_clip", project_path);
+                    const auto to_clip = requiredInteger(
+                        transition_object, "to_clip", project_path);
+                    if (from_clip < 0 || to_clip < 0 ||
+                        static_cast<std::uint64_t>(from_clip) >
+                            std::numeric_limits<std::size_t>::max() ||
+                        static_cast<std::uint64_t>(to_clip) >
+                            std::numeric_limits<std::size_t>::max()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "Project JSON contains invalid transition indexes.");
+                    }
+                    ProjectTransition transition;
+                    transition.from_clip_index = static_cast<std::size_t>(from_clip);
+                    transition.to_clip_index = static_cast<std::size_t>(to_clip);
+                    transition.kind = parseTransitionKind(transition_object, project_path);
+                    transition.duration_frames = requiredInteger(
+                        transition_object, "duration_frames", project_path);
+                    track.transitions.push_back(std::move(transition));
+                }
             }
             document.timeline_tracks.push_back(std::move(track));
         }
@@ -676,6 +778,20 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
             clips.append(item);
         }
         track.insert("clips", clips);
+        QJsonArray transitions;
+        for (const auto& transition : track_source.transitions) {
+            QJsonObject item;
+            item.insert("from_clip", static_cast<qint64>(transition.from_clip_index));
+            item.insert("to_clip", static_cast<qint64>(transition.to_clip_index));
+            item.insert(
+                "kind",
+                transition.kind == timeline::TransitionKind::FadeToBlack
+                    ? "fade_to_black"
+                    : "cross_dissolve");
+            item.insert("duration_frames", static_cast<qint64>(transition.duration_frames));
+            transitions.append(item);
+        }
+        track.insert("transitions", transitions);
         track_array.append(track);
     }
 

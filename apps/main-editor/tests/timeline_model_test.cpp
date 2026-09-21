@@ -355,6 +355,89 @@ int main() {
                     timeline::TrackMutationResult::Changed,
                 "An empty track could not be removed.");
 
+        timeline::TimelineModel transition_model;
+        require(transition_model.addClip(0, first_metadata, 0) ==
+                    timeline::AddClipResult::Added &&
+                    transition_model.addClip(0, second_metadata, 120) ==
+                    timeline::AddClipResult::Added &&
+                    transition_model.addTextClip(0, 180, 30, 30.0) ==
+                    timeline::AddClipResult::Added,
+                "The transition test clips could not be created.");
+        require(transition_model.addTransition(
+                    0, 0, 1, timeline::TransitionKind::CrossDissolve) ==
+                    timeline::TransitionMutationResult::Added,
+                "A cross dissolve could not be created at a clip junction.");
+        require(transition_model.transitionBetween(0, 0, 1) != nullptr &&
+                    transition_model.tracks()[0].transitions.front().duration_frames == 15,
+                "The default transition duration was not preserved.");
+        require(transition_model.addTransition(
+                    0, 1, 2, timeline::TransitionKind::FadeToBlack, 10) ==
+                    timeline::TransitionMutationResult::Added,
+                "A fade to black could not connect video and text clips.");
+        require(transition_model.updateTransition(
+                    0, 0, 1, timeline::TransitionKind::FadeToBlack, 20) ==
+                    timeline::TransitionMutationResult::Updated,
+                "A transition could not be updated.");
+        require(transition_model.tracks()[0].transitions.front().kind ==
+                    timeline::TransitionKind::FadeToBlack &&
+                    transition_model.tracks()[0].transitions.front().duration_frames == 20,
+                "The updated transition settings were not preserved.");
+        require(transition_model.addTransition(
+                    0, 0, 2, timeline::TransitionKind::CrossDissolve, 1) ==
+                    timeline::TransitionMutationResult::InvalidBoundary,
+                "A transition between non-consecutive clips was accepted.");
+        require(transition_model.addTransition(
+                    9, 0, 1, timeline::TransitionKind::CrossDissolve, 1) ==
+                    timeline::TransitionMutationResult::InvalidIndex,
+                "A transition on an invalid track was accepted.");
+        require(transition_model.addTransition(
+                    0, 0, 1, timeline::TransitionKind::CrossDissolve, 0) ==
+                    timeline::TransitionMutationResult::InvalidRange &&
+                    transition_model.addTransition(
+                        0, 0, 1, timeline::TransitionKind::CrossDissolve, 121) ==
+                    timeline::TransitionMutationResult::InvalidRange,
+                "An invalid transition duration was accepted.");
+        require(transition_model.removeTransition(0, 0, 1) ==
+                    timeline::TransitionMutationResult::Removed &&
+                    transition_model.transitionBetween(0, 0, 1) == nullptr,
+                "A transition could not be removed.");
+
+        timeline::TimelineModel gap_transition_model;
+        require(gap_transition_model.addClip(0, first_metadata, 0) ==
+                    timeline::AddClipResult::Added &&
+                    gap_transition_model.addClip(0, second_metadata, 150) ==
+                    timeline::AddClipResult::Added,
+                "The gap transition test clips could not be created.");
+        require(gap_transition_model.addTransition(
+                    0, 0, 1, timeline::TransitionKind::CrossDissolve) ==
+                    timeline::TransitionMutationResult::InvalidBoundary,
+                "A transition across a gap was accepted.");
+
+        timeline::TimelineModel cleanup_transition_model;
+        require(cleanup_transition_model.addClip(0, first_metadata, 0) ==
+                    timeline::AddClipResult::Added &&
+                    cleanup_transition_model.addClip(0, second_metadata, 120) ==
+                    timeline::AddClipResult::Added,
+                "The transition cleanup clips could not be created.");
+        require(cleanup_transition_model.addTransition(
+                    0, 0, 1, timeline::TransitionKind::CrossDissolve) ==
+                    timeline::TransitionMutationResult::Added,
+                "The transition cleanup setup failed.");
+        const auto transition_snapshot = cleanup_transition_model.snapshot();
+        require(transition_snapshot.tracks[0].transitions.size() == 1,
+                "Transitions were not included in a timeline snapshot.");
+        require(cleanup_transition_model.splitClip(0, 0, 30) ==
+                    timeline::SplitClipResult::Split &&
+                    cleanup_transition_model.tracks()[0].transitions.empty(),
+                "Splitting a transition endpoint did not remove the invalid transition.");
+        cleanup_transition_model.restore(transition_snapshot);
+        require(cleanup_transition_model.tracks()[0].transitions.size() == 1,
+                "Restoring a snapshot did not restore its transition.");
+        require(cleanup_transition_model.trimClip(0, 0, 0, 20) ==
+                    timeline::TrimClipResult::Trimmed &&
+                    cleanup_transition_model.tracks()[0].transitions.empty(),
+                "Trimming a transition endpoint did not remove the gap transition.");
+
         timeline::TimelineModel history_model;
         require(history_model.addClip(first_metadata) == timeline::AddClipResult::Added,
                 "The history test first clip was not added.");

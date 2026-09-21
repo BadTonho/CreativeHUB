@@ -85,6 +85,25 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
                 clip.kind,
                 clip.text});
         }
+        for (const auto& transition : track.transitions) {
+            const auto from = std::find_if(
+                track.clips.begin(), track.clips.end(),
+                [&transition](const timeline::TimelineClip& clip) {
+                    return clip.clip_id == transition.from_clip_id;
+                });
+            const auto to = std::find_if(
+                track.clips.begin(), track.clips.end(),
+                [&transition](const timeline::TimelineClip& clip) {
+                    return clip.clip_id == transition.to_clip_id;
+                });
+            if (from != track.clips.end() && to != track.clips.end()) {
+                project_track.transitions.push_back(project::ProjectTransition{
+                    static_cast<std::size_t>(std::distance(track.clips.begin(), from)),
+                    static_cast<std::size_t>(std::distance(track.clips.begin(), to)),
+                    transition.kind,
+                    transition.duration_frames});
+            }
+        }
         document.timeline_tracks.push_back(std::move(project_track));
     }
     if (!document.timeline_tracks.empty()) {
@@ -376,10 +395,13 @@ void MainWindow::openProject() {
         }
 
         timeline::TimelineModel::Snapshot snapshot;
+        timeline::TrackId next_track_id = 1;
+        timeline::ClipId next_clip_id = 1;
         for (std::size_t track_index = 0; track_index < project_tracks.size(); ++track_index) {
             const auto& project_track = project_tracks[track_index];
+            const auto track_id = next_track_id++;
             snapshot.tracks.push_back(timeline::TimelineTrack{
-                0,
+                track_id,
                 project_track.name.empty() ? "Video " + std::to_string(track_index + 1)
                                            : project_track.name,
                 project_track.audio_gain,
@@ -412,6 +434,8 @@ void MainWindow::openProject() {
                     text_clip.frame_count = project_clip.duration_frames;
                     text_clip.audio_gain = project_clip.audio_gain;
                     text_clip.audio_muted = project_clip.audio_muted;
+                    text_clip.clip_id = next_clip_id++;
+                    text_clip.track_id = track_id;
                     text_clip.transform = project_clip.transform;
                     text_clip.keyframes = project_clip.keyframes;
                     text_clip.kind = timeline::ClipKind::Text;
@@ -460,15 +484,35 @@ void MainWindow::openProject() {
                 metadata.frame_count,
                 project_clip.audio_gain,
                 project_clip.audio_muted,
-                0,
-                0,
+                next_clip_id++,
+                track_id,
                 project_clip.transform,
                 project_clip.keyframes,
                 timeline::ClipKind::Video,
                 {}});
             snapshot.tracks.back().clips.push_back(snapshot.clips.back());
             }
+
+            for (const auto& transition : project_track.transitions) {
+                if (transition.from_clip_index >= snapshot.tracks.back().clips.size() ||
+                    transition.to_clip_index >= snapshot.tracks.back().clips.size()) {
+                    throw project::ProjectError(
+                        project::ProjectErrorCode::InvalidTimeline,
+                        "A timeline transition refers to an invalid clip.",
+                        std::nullopt,
+                        project_path);
+                }
+                const auto& from = snapshot.tracks.back().clips[transition.from_clip_index];
+                const auto& to = snapshot.tracks.back().clips[transition.to_clip_index];
+                snapshot.tracks.back().transitions.push_back(timeline::TimelineTransition{
+                    from.clip_id,
+                    to.clip_id,
+                    transition.kind,
+                    transition.duration_frames});
+            }
         }
+        snapshot.next_track_id = next_track_id;
+        snapshot.next_clip_id = next_clip_id;
 
         applyLoadedProject(
             std::move(loaded_media),

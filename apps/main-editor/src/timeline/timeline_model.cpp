@@ -57,6 +57,15 @@ bool TimelineModel::validTextStyle(const TextStyle& text) noexcept {
     return false;
 }
 
+bool TimelineModel::validTransitionKind(TransitionKind kind) noexcept {
+    switch (kind) {
+    case TransitionKind::CrossDissolve:
+    case TransitionKind::FadeToBlack:
+        return true;
+    }
+    return false;
+}
+
 std::filesystem::path TimelineModel::canonicalPath(const std::filesystem::path& path) {
     std::error_code error;
     const auto canonical = std::filesystem::weakly_canonical(path, error);
@@ -283,6 +292,8 @@ MoveClipResult TimelineModel::moveClip(
               [](const auto& left, const auto& right) {
                   return left.timeline_start_frame < right.timeline_start_frame;
               });
+    removeInvalidTransitions(*source_track);
+    if (target_track != source_track) removeInvalidTransitions(*target_track);
     return MoveClipResult::Moved;
 }
 
@@ -323,6 +334,7 @@ SplitClipResult TimelineModel::splitClip(
     track->clips.insert(
         track->clips.begin() + static_cast<std::ptrdiff_t>(clip_index + 1),
         std::move(right));
+    removeInvalidTransitions(*track);
     return SplitClipResult::Split;
 }
 
@@ -334,6 +346,7 @@ RemoveClipResult TimelineModel::removeClip(
         return RemoveClipResult::InvalidIndex;
     }
     track->clips.erase(track->clips.begin() + static_cast<std::ptrdiff_t>(clip_index));
+    removeInvalidTransitions(*track);
     return RemoveClipResult::Removed;
 }
 
@@ -379,6 +392,7 @@ TrimClipResult TimelineModel::trimClip(
     clip.timeline_duration_frames = new_duration_frames;
     clip.transform = trimmed_transform;
     clip.keyframes = trimmed_keyframes;
+    removeInvalidTransitions(*track);
     return TrimClipResult::Trimmed;
 }
 
@@ -426,7 +440,10 @@ TrimClipResult TimelineModel::trimClip(
 }
 
 void TimelineModel::clear() noexcept {
-    for (auto& track : tracks_) track.clips.clear();
+    for (auto& track : tracks_) {
+        track.clips.clear();
+        track.transitions.clear();
+    }
 }
 
 bool TimelineModel::hasClip() const noexcept {
@@ -513,6 +530,27 @@ std::optional<ClipLocation> TimelineModel::locateClip(ClipId clip_id) const {
     return std::nullopt;
 }
 
+const TimelineTransition* TimelineModel::transitionBetween(
+    std::size_t track_index,
+    std::size_t from_clip_index,
+    std::size_t to_clip_index) const noexcept {
+    const auto* track = trackAt(track_index);
+    if (track == nullptr || from_clip_index >= track->clips.size() ||
+        to_clip_index >= track->clips.size()) {
+        return nullptr;
+    }
+    const auto from_id = track->clips[from_clip_index].clip_id;
+    const auto to_id = track->clips[to_clip_index].clip_id;
+    const auto found = std::find_if(
+        track->transitions.begin(),
+        track->transitions.end(),
+        [from_id, to_id](const TimelineTransition& transition) {
+            return transition.from_clip_id == from_id &&
+                transition.to_clip_id == to_id;
+        });
+    return found == track->transitions.end() ? nullptr : &*found;
+}
+
 TimelineModel::Snapshot TimelineModel::snapshot() const {
     Snapshot result;
     result.tracks = tracks_;
@@ -550,6 +588,56 @@ void TimelineModel::restore(Snapshot snapshot) {
     if (tracks_.empty()) {
         tracks_.push_back({next_track_id_++, "Video 1", 1.0, false, {}});
     }
+    for (auto& track : tracks_) removeInvalidTransitions(track);
+}
+
+std::optional<std::pair<std::size_t, std::size_t>>
+TimelineModel::transitionClipIndexes(
+    const TimelineTrack& track,
+    const TimelineTransition& transition) noexcept {
+    std::optional<std::size_t> from_index;
+    std::optional<std::size_t> to_index;
+    for (std::size_t index = 0; index < track.clips.size(); ++index) {
+        if (track.clips[index].clip_id == transition.from_clip_id) {
+            from_index = index;
+        }
+        if (track.clips[index].clip_id == transition.to_clip_id) {
+            to_index = index;
+        }
+    }
+    if (!from_index.has_value() || !to_index.has_value()) return std::nullopt;
+    return std::make_pair(*from_index, *to_index);
+}
+
+void TimelineModel::removeInvalidTransitions(TimelineTrack& track) noexcept {
+    track.transitions.erase(
+        std::remove_if(
+            track.transitions.begin(),
+            track.transitions.end(),
+            [&track](const TimelineTransition& transition) {
+                if (!validTransitionKind(transition.kind) ||
+                    transition.duration_frames <= 0) {
+                    return true;
+                }
+                const auto indexes = transitionClipIndexes(track, transition);
+                if (!indexes.has_value() || indexes->second != indexes->first + 1) {
+                    return true;
+                }
+                const auto& from = track.clips[indexes->first];
+                const auto& to = track.clips[indexes->second];
+                if (from.timeline_start_frame >
+                        std::numeric_limits<std::int64_t>::max() -
+                            from.timeline_duration_frames ||
+                    from.timeline_start_frame + from.timeline_duration_frames !=
+                        to.timeline_start_frame) {
+                    return true;
+                }
+                const auto maximum = std::min(
+                    from.timeline_duration_frames,
+                    to.timeline_duration_frames);
+                return maximum <= 0 || transition.duration_frames > maximum;
+            }),
+        track.transitions.end());
 }
 
 void TimelineModel::updateDisplayNameForSource(
@@ -671,6 +759,114 @@ TextParameterResult TimelineModel::setClipText(
     clip.text = text;
     clip.display_name = text.content.empty() ? "Text" : text.content;
     return TextParameterResult::Changed;
+}
+
+TransitionMutationResult TimelineModel::addTransition(
+    std::size_t track_index,
+    std::size_t from_clip_index,
+    std::size_t to_clip_index,
+    TransitionKind kind,
+    std::int64_t duration_frames) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || from_clip_index >= track->clips.size() ||
+        to_clip_index >= track->clips.size()) {
+        return TransitionMutationResult::InvalidIndex;
+    }
+    if (!validTransitionKind(kind) || from_clip_index + 1 != to_clip_index) {
+        return TransitionMutationResult::InvalidBoundary;
+    }
+    const auto& from = track->clips[from_clip_index];
+    const auto& to = track->clips[to_clip_index];
+    if (from.timeline_start_frame >
+            std::numeric_limits<std::int64_t>::max() - from.timeline_duration_frames ||
+        from.timeline_start_frame + from.timeline_duration_frames !=
+            to.timeline_start_frame) {
+        return TransitionMutationResult::InvalidBoundary;
+    }
+    const auto maximum = std::min(from.timeline_duration_frames,
+                                  to.timeline_duration_frames);
+    if (duration_frames <= 0 || maximum <= 0 || duration_frames > maximum) {
+        return TransitionMutationResult::InvalidRange;
+    }
+    if (const auto* existing = transitionBetween(
+            track_index, from_clip_index, to_clip_index);
+        existing != nullptr) {
+        return TransitionMutationResult::NoChange;
+    }
+    track->transitions.push_back(TimelineTransition{
+        from.clip_id,
+        to.clip_id,
+        kind,
+        duration_frames});
+    return TransitionMutationResult::Added;
+}
+
+TransitionMutationResult TimelineModel::updateTransition(
+    std::size_t track_index,
+    std::size_t from_clip_index,
+    std::size_t to_clip_index,
+    TransitionKind kind,
+    std::int64_t duration_frames) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || from_clip_index >= track->clips.size() ||
+        to_clip_index >= track->clips.size()) {
+        return TransitionMutationResult::InvalidIndex;
+    }
+    if (!validTransitionKind(kind) || from_clip_index + 1 != to_clip_index) {
+        return TransitionMutationResult::InvalidBoundary;
+    }
+    const auto& from = track->clips[from_clip_index];
+    const auto& to = track->clips[to_clip_index];
+    if (from.timeline_start_frame >
+            std::numeric_limits<std::int64_t>::max() - from.timeline_duration_frames ||
+        from.timeline_start_frame + from.timeline_duration_frames !=
+            to.timeline_start_frame) {
+        return TransitionMutationResult::InvalidBoundary;
+    }
+    const auto maximum = std::min(from.timeline_duration_frames,
+                                  to.timeline_duration_frames);
+    if (duration_frames <= 0 || maximum <= 0 || duration_frames > maximum) {
+        return TransitionMutationResult::InvalidRange;
+    }
+    const auto from_id = from.clip_id;
+    const auto to_id = to.clip_id;
+    const auto found = std::find_if(
+        track->transitions.begin(),
+        track->transitions.end(),
+        [from_id, to_id](const TimelineTransition& transition) {
+            return transition.from_clip_id == from_id &&
+                transition.to_clip_id == to_id;
+        });
+    if (found == track->transitions.end()) return TransitionMutationResult::NotFound;
+    if (found->kind == kind && found->duration_frames == duration_frames) {
+        return TransitionMutationResult::NoChange;
+    }
+    found->kind = kind;
+    found->duration_frames = duration_frames;
+    return TransitionMutationResult::Updated;
+}
+
+TransitionMutationResult TimelineModel::removeTransition(
+    std::size_t track_index,
+    std::size_t from_clip_index,
+    std::size_t to_clip_index) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || from_clip_index >= track->clips.size() ||
+        to_clip_index >= track->clips.size()) {
+        return TransitionMutationResult::InvalidIndex;
+    }
+    const auto from_id = track->clips[from_clip_index].clip_id;
+    const auto to_id = track->clips[to_clip_index].clip_id;
+    const auto found = std::find_if(
+        track->transitions.begin(),
+        track->transitions.end(),
+        [from_id, to_id](const TimelineTransition& transition) {
+            return transition.from_clip_id == from_id &&
+                transition.to_clip_id == to_id;
+        });
+    if (found == track->transitions.end()) return TransitionMutationResult::NotFound;
+    track->transitions.erase(found);
+    return TransitionMutationResult::Removed;
 }
 
 } // namespace timeline

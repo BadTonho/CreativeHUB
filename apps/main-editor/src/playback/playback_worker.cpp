@@ -46,6 +46,7 @@ PlaybackWorker::~PlaybackWorker() {
     session_.reset();
     composition_sessions_.clear();
     composition_specs_.clear();
+    composition_transitions_.clear();
 }
 
 void PlaybackWorker::requestSeek(qint64 frame_index, quint64 generation) {
@@ -109,6 +110,7 @@ void PlaybackWorker::setMedia(
     session_.reset();
     composition_sessions_.clear();
     composition_specs_.clear();
+    composition_transitions_.clear();
     composition_enabled_ = false;
     primary_timeline_start_frame_ = 0;
 
@@ -247,11 +249,13 @@ void PlaybackWorker::setAudioParameters(
 
 void PlaybackWorker::setComposition(
     QVector<CompositionLayerSpec> layers,
+    QVector<CompositionTransitionSpec> transitions,
     quint64 generation) {
     if (generation < generation_) return;
     generation_ = generation;
 
     composition_specs_ = std::move(layers);
+    composition_transitions_ = std::move(transitions);
     composition_sessions_.clear();
     composition_enabled_ = !composition_specs_.isEmpty();
     primary_timeline_start_frame_ = 0;
@@ -277,10 +281,12 @@ void PlaybackWorker::setComposition(
         }
     } catch (const media::MediaError& error) {
         composition_sessions_.clear();
+        composition_transitions_.clear();
         composition_enabled_ = false;
         reportFailure(error, "compose");
     } catch (const std::exception& error) {
         composition_sessions_.clear();
+        composition_transitions_.clear();
         composition_enabled_ = false;
         reportFailure(error, "compose");
     }
@@ -715,6 +721,12 @@ std::optional<media::VideoFrame> PlaybackWorker::decodeCompositionAt(
     std::vector<rendering::CompositionLayer> layers;
     layers.reserve(composition_sessions_.size());
 
+    struct RenderRequest {
+        CompositionSession* composition = nullptr;
+        std::int64_t local_frame = 0;
+        double opacity_multiplier = 1.0;
+    };
+
     std::vector<CompositionSession*> ordered_sessions;
     ordered_sessions.reserve(composition_sessions_.size());
     for (auto& composition : composition_sessions_) {
@@ -733,35 +745,146 @@ std::optional<media::VideoFrame> PlaybackWorker::decodeCompositionAt(
             return left->spec.clip_index < right->spec.clip_index;
         });
 
+    std::vector<RenderRequest> requests;
+    requests.reserve(ordered_sessions.size() + composition_transitions_.size());
     for (auto* composition : ordered_sessions) {
         const auto& spec = composition->spec;
         if (global_frame < spec.timeline_start_frame ||
             global_frame >= spec.timeline_start_frame + spec.segment_frame_count) {
             continue;
         }
-        const auto local_frame = global_frame - spec.timeline_start_frame;
-        if (spec.source_start_frame >
-            std::numeric_limits<std::int64_t>::max() - local_frame) {
+        requests.push_back(RenderRequest{
+            composition,
+            global_frame - spec.timeline_start_frame,
+            1.0});
+    }
+
+    const auto find_session = [this](qint64 track_index,
+                                     qint64 clip_index) -> CompositionSession* {
+        for (auto& composition : composition_sessions_) {
+            if (composition.spec.track_index == track_index &&
+                composition.spec.clip_index == clip_index) {
+                return &composition;
+            }
+        }
+        return nullptr;
+    };
+    const auto remove_requests_for = [&requests](CompositionSession* composition) {
+        requests.erase(
+            std::remove_if(
+                requests.begin(),
+                requests.end(),
+                [composition](const RenderRequest& request) {
+                    return request.composition == composition;
+                }),
+            requests.end());
+    };
+    const auto append_transition_request = [&requests](
+        CompositionSession* composition,
+        std::int64_t local_frame,
+        double opacity_multiplier) {
+        if (composition != nullptr && opacity_multiplier > 0.0) {
+            requests.push_back(RenderRequest{
+                composition,
+                local_frame,
+                std::clamp(opacity_multiplier, 0.0, 1.0)});
+        }
+    };
+
+    for (const auto& transition : composition_transitions_) {
+        if (transition.duration_frames <= 0) continue;
+        auto* from = find_session(
+            transition.track_index, transition.from_clip_index);
+        auto* to = find_session(
+            transition.track_index, transition.to_clip_index);
+        if (from == nullptr || to == nullptr) continue;
+        const auto boundary = transition.boundary_frame;
+        const auto duration = transition.duration_frames;
+        if (transition.kind == timeline::TransitionKind::CrossDissolve) {
+            if (global_frame < boundary || global_frame >= boundary + duration) {
+                continue;
+            }
+            const auto offset = global_frame - boundary;
+            const auto from_local = std::max<std::int64_t>(
+                0, from->spec.segment_frame_count - 1);
+            const auto to_local = offset;
+            const double blend = duration == 1
+                ? 1.0
+                : static_cast<double>(offset + 1) / static_cast<double>(duration);
+            remove_requests_for(from);
+            remove_requests_for(to);
+            // FrameCompositor starts from an opaque black canvas. Keep the
+            // outgoing layer opaque and use the incoming layer's alpha as the
+            // blend factor; fading both layers would compound alpha against
+            // the opaque background and darken the result.
+            append_transition_request(
+                from, from_local, 1.0);
+            append_transition_request(
+                to, to_local, blend);
+        } else if (transition.kind == timeline::TransitionKind::FadeToBlack) {
+            if (global_frame >= boundary - duration && global_frame < boundary) {
+                const auto offset = global_frame - (boundary - duration);
+                const double fade = static_cast<double>(offset + 1) /
+                    static_cast<double>(duration);
+                remove_requests_for(from);
+                append_transition_request(
+                    from,
+                    global_frame - from->spec.timeline_start_frame,
+                    1.0 - fade);
+            } else if (global_frame >= boundary && global_frame < boundary + duration) {
+                const auto offset = global_frame - boundary;
+                const double fade = duration == 1
+                    ? 0.0
+                    : static_cast<double>(offset) /
+                        static_cast<double>(duration - 1);
+                remove_requests_for(to);
+                append_transition_request(
+                    to, offset, fade);
+            }
+        }
+    }
+
+    std::sort(
+        requests.begin(),
+        requests.end(),
+        [](const RenderRequest& left, const RenderRequest& right) {
+            if (left.composition->spec.track_index != right.composition->spec.track_index) {
+                return left.composition->spec.track_index > right.composition->spec.track_index;
+            }
+            if (left.composition->spec.kind != right.composition->spec.kind) {
+                return left.composition->spec.kind == timeline::ClipKind::Video;
+            }
+            return left.composition->spec.clip_index < right.composition->spec.clip_index;
+        });
+
+    for (const auto& request : requests) {
+        const auto& spec = request.composition->spec;
+        if (request.local_frame < 0 ||
+            request.local_frame >= spec.segment_frame_count ||
+            spec.source_start_frame >
+                std::numeric_limits<std::int64_t>::max() - request.local_frame) {
             continue;
         }
-        const auto source_frame = spec.source_start_frame + local_frame;
+        const auto source_frame = spec.source_start_frame + request.local_frame;
         std::optional<media::VideoFrame> frame;
         if (spec.kind == timeline::ClipKind::Text) {
             frame = rendering::renderText(spec.text);
             if (!frame.has_value()) {
                 throw media::MediaError("The text layer could not be rasterized.");
             }
-        } else if (composition->session != nullptr) {
-            frame = composition->session->decode_frame_at(source_frame);
+        } else if (request.composition->session != nullptr) {
+            frame = request.composition->session->decode_frame_at(source_frame);
         }
         if (!frame.has_value()) continue;
         decoded_frames.push_back(std::move(*frame));
+        auto transform = timeline::evaluateTransform(
+            spec.transform,
+            spec.keyframes,
+            request.local_frame);
+        transform.opacity *= request.opacity_multiplier;
         layers.push_back(rendering::CompositionLayer{
             &decoded_frames.back(),
-            timeline::evaluateTransform(
-                spec.transform,
-                spec.keyframes,
-                local_frame)});
+            transform});
     }
     return rendering::FrameCompositor::compose(1920, 1080, layers);
 }

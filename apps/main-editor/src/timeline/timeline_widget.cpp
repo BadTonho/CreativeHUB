@@ -6,15 +6,18 @@
 #include <QDragLeaveEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QContextMenuEvent>
 #include <QFont>
 #include <QFontMetrics>
 #include <QMimeData>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace timeline {
 namespace {
@@ -62,6 +65,26 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
         active_clip_.reset();
         playhead_frame_ = 0;
     }
+    if (selected_transition_.has_value()) {
+        const auto& selection = *selected_transition_;
+        bool exists = false;
+        if (selection.track_index < tracks_.size() &&
+            selection.from_clip_index < tracks_[selection.track_index].clips.size() &&
+            selection.to_clip_index < tracks_[selection.track_index].clips.size()) {
+            const auto from_id = tracks_[selection.track_index]
+                .clips[selection.from_clip_index].clip_id;
+            const auto to_id = tracks_[selection.track_index]
+                .clips[selection.to_clip_index].clip_id;
+            exists = std::any_of(
+                tracks_[selection.track_index].transitions.begin(),
+                tracks_[selection.track_index].transitions.end(),
+                [from_id, to_id](const TimelineTransition& transition) {
+                    return transition.from_clip_id == from_id &&
+                        transition.to_clip_id == to_id;
+                });
+        }
+        if (!exists) selected_transition_.reset();
+    }
     setMinimumHeight(static_cast<int>(top_margin +
         tracks_.size() * minimum_row_height +
         (tracks_.size() > 0 ? tracks_.size() - 1 : 0) * row_gap + 12.0));
@@ -95,6 +118,7 @@ void TimelineWidget::clearClips() {
     drag_hovering_ = false;
     drop_hover_track_.reset();
     drop_hover_frame_.reset();
+    selected_transition_.reset();
     update();
 }
 
@@ -266,8 +290,52 @@ std::optional<TimelineWidget::TrimEdge> TimelineWidget::trimEdgeAt(
     return std::nullopt;
 }
 
+std::optional<std::pair<std::size_t, std::size_t>>
+TimelineWidget::transitionClipIndexesAt(double x, double y) const noexcept {
+    const auto track_index = trackAt(y);
+    if (!track_index.has_value() || *track_index >= tracks_.size()) return std::nullopt;
+    const auto& track = tracks_[*track_index];
+    const auto total = totalDuration();
+    if (total <= 0) return std::nullopt;
+    const auto content = trackContentRect(*track_index);
+    for (std::size_t from_index = 0;
+         from_index + 1 < track.clips.size();
+         ++from_index) {
+        const auto& from = track.clips[from_index];
+        const auto& to = track.clips[from_index + 1];
+        if (from.timeline_start_frame >
+                std::numeric_limits<std::int64_t>::max() - from.timeline_duration_frames ||
+            from.timeline_start_frame + from.timeline_duration_frames !=
+                to.timeline_start_frame) {
+            continue;
+        }
+        const double boundary = content.left() + content.width() *
+            static_cast<double>(to.timeline_start_frame) / total;
+        const auto* transition = [&]() -> const TimelineTransition* {
+            for (const auto& candidate : track.transitions) {
+                if (candidate.from_clip_id == from.clip_id &&
+                    candidate.to_clip_id == to.clip_id) {
+                    return &candidate;
+                }
+            }
+            return nullptr;
+        }();
+        const double tolerance = transition == nullptr
+            ? 8.0
+            : std::max(
+                8.0,
+                content.width() * static_cast<double>(transition->duration_frames) / total);
+        if (std::abs(x - boundary) <= tolerance) {
+            return std::make_pair(from_index, from_index + 1);
+        }
+    }
+    return std::nullopt;
+}
+
 void TimelineWidget::emitSelected(const ClipLocation& location) {
     active_clip_ = location;
+    selected_transition_.reset();
+    emit transitionSelectedAt(-1, -1, -1);
     emit clipSelectedAt(
         static_cast<qint64>(location.track_index),
         static_cast<qint64>(location.clip_index));
@@ -452,6 +520,58 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                 }
             }
         }
+
+        for (const auto& transition : tracks_[track_index].transitions) {
+            const auto indexes = [&]() -> std::optional<std::pair<std::size_t, std::size_t>> {
+                std::optional<std::size_t> from;
+                std::optional<std::size_t> to;
+                for (std::size_t index = 0; index < tracks_[track_index].clips.size(); ++index) {
+                    if (tracks_[track_index].clips[index].clip_id == transition.from_clip_id) {
+                        from = index;
+                    }
+                    if (tracks_[track_index].clips[index].clip_id == transition.to_clip_id) {
+                        to = index;
+                    }
+                }
+                if (!from.has_value() || !to.has_value()) return std::nullopt;
+                return std::make_pair(*from, *to);
+            }();
+            if (!indexes.has_value() || indexes->second != indexes->first + 1 || total <= 0) {
+                continue;
+            }
+            const auto& to = tracks_[track_index].clips[indexes->second];
+            const auto boundary = content.left() + content.width() *
+                static_cast<double>(to.timeline_start_frame) / total;
+            const auto transition_width = content.width() *
+                static_cast<double>(transition.duration_frames) / total;
+            const auto selected = selected_transition_.has_value() &&
+                selected_transition_->track_index == track_index &&
+                selected_transition_->from_clip_index == indexes->first &&
+                selected_transition_->to_clip_index == indexes->second;
+            const auto left = transition.kind == TransitionKind::FadeToBlack
+                ? boundary - transition_width
+                : boundary;
+            const auto right = transition.kind == TransitionKind::FadeToBlack
+                ? boundary + transition_width
+                : boundary + transition_width;
+            painter.setPen(QPen(
+                selected ? QColor("#fff0a3") : QColor("#d5a94b"),
+                selected ? 2.0 : 1.0,
+                Qt::DashLine));
+            painter.setBrush(QColor(213, 169, 75, selected ? 90 : 45));
+            painter.drawRect(QRectF(
+                std::max(content.left(), left),
+                content.top() + 2,
+                std::min(content.right(), right) - std::max(content.left(), left),
+                content.height() - 4));
+            painter.setPen(QColor("#ffe08a"));
+            painter.drawText(
+                QRectF(std::max(content.left(), left), content.top() + 4,
+                       std::max(0.0, std::min(content.right(), right) -
+                           std::max(content.left(), left)), 18),
+                Qt::AlignCenter,
+                transition.kind == TransitionKind::FadeToBlack ? "Fade" : "Dissolve");
+        }
     }
 
     if (drag_hovering_) {
@@ -549,6 +669,66 @@ void TimelineWidget::dropEvent(QDropEvent* event) {
     update();
 }
 
+void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
+    const auto indexes = transitionClipIndexesAt(
+        event->pos().x(), event->pos().y());
+    const auto track_index = trackAt(event->pos().y());
+    if (!indexes.has_value() || !track_index.has_value()) {
+        event->ignore();
+        return;
+    }
+
+    selected_transition_ = SelectedTransition{
+        *track_index, indexes->first, indexes->second};
+    emit transitionSelectedAt(
+        static_cast<qint64>(*track_index),
+        static_cast<qint64>(indexes->first),
+        static_cast<qint64>(indexes->second));
+
+    const auto& track = tracks_[*track_index];
+    const auto& from = track.clips[indexes->first];
+    const auto& to = track.clips[indexes->second];
+    const auto* existing = [&]() -> const TimelineTransition* {
+        for (const auto& transition : track.transitions) {
+            if (transition.from_clip_id == from.clip_id &&
+                transition.to_clip_id == to.clip_id) {
+                return &transition;
+            }
+        }
+        return nullptr;
+    }();
+
+    QMenu menu(this);
+    auto* dissolve = menu.addAction("Add Cross Dissolve");
+    auto* fade = menu.addAction("Add Fade to Black");
+    menu.addSeparator();
+    auto* remove = menu.addAction("Remove Transition");
+    dissolve->setEnabled(existing == nullptr);
+    fade->setEnabled(existing == nullptr);
+    remove->setEnabled(existing != nullptr);
+    const auto* chosen = menu.exec(event->globalPos());
+    if (chosen == dissolve) {
+        emit transitionAddRequestedAt(
+            static_cast<qint64>(*track_index),
+            static_cast<qint64>(indexes->first),
+            static_cast<qint64>(indexes->second),
+            0);
+    } else if (chosen == fade) {
+        emit transitionAddRequestedAt(
+            static_cast<qint64>(*track_index),
+            static_cast<qint64>(indexes->first),
+            static_cast<qint64>(indexes->second),
+            1);
+    } else if (chosen == remove) {
+        emit transitionRemoveRequestedAt(
+            static_cast<qint64>(*track_index),
+            static_cast<qint64>(indexes->first),
+            static_cast<qint64>(indexes->second));
+    }
+    update();
+    event->accept();
+}
+
 void TimelineWidget::mousePressEvent(QMouseEvent* event) {
     if (event->button() != Qt::LeftButton) {
         event->ignore();
@@ -559,7 +739,9 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         if (trackAt(event->position().y()).has_value() &&
             globalFrameAt(event->position().x()).has_value()) {
             active_clip_.reset();
+            selected_transition_.reset();
             emit clipSelectedAt(-1, -1);
+            emit transitionSelectedAt(-1, -1, -1);
             update();
             event->accept();
         } else {
@@ -592,6 +774,19 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         emitSelected(*location);
         grabMouse();
         event->accept();
+        return;
+    }
+    if (const auto indexes = transitionClipIndexesAt(
+            event->position().x(), event->position().y());
+        indexes.has_value()) {
+        selected_transition_ = SelectedTransition{
+            trackAt(event->position().y()).value(), indexes->first, indexes->second};
+        emit transitionSelectedAt(
+            static_cast<qint64>(selected_transition_->track_index),
+            static_cast<qint64>(indexes->first),
+            static_cast<qint64>(indexes->second));
+        event->accept();
+        update();
         return;
     }
     if (const auto edge = trimEdgeAt(*location, event->position().x()); edge.has_value()) {

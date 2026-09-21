@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace timeline {
@@ -19,6 +20,11 @@ using ClipId = std::uint64_t;
 enum class ClipKind {
     Video,
     Text,
+};
+
+enum class TransitionKind {
+    CrossDissolve,
+    FadeToBlack,
 };
 
 enum class TextAlignment {
@@ -58,12 +64,22 @@ struct TimelineClip {
     friend bool operator==(const TimelineClip&, const TimelineClip&) = default;
 };
 
+struct TimelineTransition {
+    ClipId from_clip_id = 0;
+    ClipId to_clip_id = 0;
+    TransitionKind kind = TransitionKind::CrossDissolve;
+    std::int64_t duration_frames = 15;
+
+    friend bool operator==(const TimelineTransition&, const TimelineTransition&) = default;
+};
+
 struct TimelineTrack {
     TrackId track_id = 0;
     std::string name;
     double audio_gain = 1.0;
     bool audio_muted = false;
     std::vector<TimelineClip> clips;
+    std::vector<TimelineTransition> transitions;
 
     friend bool operator==(const TimelineTrack&, const TimelineTrack&) = default;
 };
@@ -108,6 +124,16 @@ enum class TrimClipResult { Trimmed, InvalidIndex, InvalidRange };
 enum class AudioParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class TransformParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class TextParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
+enum class TransitionMutationResult {
+    Added,
+    Updated,
+    Removed,
+    InvalidIndex,
+    InvalidBoundary,
+    InvalidRange,
+    NotFound,
+    NoChange,
+};
 
 class TimelineModel final {
 public:
@@ -190,6 +216,22 @@ public:
         std::size_t track_index,
         std::size_t clip_index,
         const TextStyle& text);
+    TransitionMutationResult addTransition(
+        std::size_t track_index,
+        std::size_t from_clip_index,
+        std::size_t to_clip_index,
+        TransitionKind kind,
+        std::int64_t duration_frames = 15);
+    TransitionMutationResult updateTransition(
+        std::size_t track_index,
+        std::size_t from_clip_index,
+        std::size_t to_clip_index,
+        TransitionKind kind,
+        std::int64_t duration_frames);
+    TransitionMutationResult removeTransition(
+        std::size_t track_index,
+        std::size_t from_clip_index,
+        std::size_t to_clip_index);
 
     void clear() noexcept;
 
@@ -208,6 +250,10 @@ public:
     [[nodiscard]] std::optional<ClipLocation> topClipAt(
         std::int64_t timeline_frame) const;
     [[nodiscard]] std::optional<ClipLocation> locateClip(ClipId clip_id) const;
+    [[nodiscard]] const TimelineTransition* transitionBetween(
+        std::size_t track_index,
+        std::size_t from_clip_index,
+        std::size_t to_clip_index) const noexcept;
     [[nodiscard]] Snapshot snapshot() const;
     void restore(Snapshot snapshot);
     void updateDisplayNameForSource(
@@ -234,6 +280,12 @@ private:
         std::int64_t duration_frames) noexcept;
     [[nodiscard]] static std::int64_t trackEnd(
         const TimelineTrack& track) noexcept;
+    [[nodiscard]] static bool validTransitionKind(TransitionKind kind) noexcept;
+    [[nodiscard]] static std::optional<std::pair<std::size_t, std::size_t>>
+    transitionClipIndexes(
+        const TimelineTrack& track,
+        const TimelineTransition& transition) noexcept;
+    static void removeInvalidTransitions(TimelineTrack& track) noexcept;
     [[nodiscard]] TimelineTrack* trackAt(std::size_t track_index) noexcept;
     [[nodiscard]] const TimelineTrack* trackAt(std::size_t track_index) const noexcept;
     void ensureIdentifiers();

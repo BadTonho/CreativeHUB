@@ -122,3 +122,28 @@ rules as video occurrences. Selecting text keeps the Media Browser selection,
 video session, and playback clock intact; the Inspector changes to text
 editing controls. Text-only timelines can show a static composition, but
 video playback controls remain disabled without a valid video source.
+
+## Essential transitions
+
+Tracks may store transitions associated with the junction between two
+consecutive clips. A transition never creates structural overlap and never
+moves or resizes either endpoint. The endpoint clips must be on the same
+track, have no gap between them, and have a positive duration. The default
+duration is 15 timeline frames and the maximum is the shorter endpoint
+duration. Video-to-video, video-to-text, and text-to-video junctions are
+supported; same-kind overlap rules remain unchanged.
+
+`Cross Dissolve` starts at the junction. The outgoing clip holds its last
+frame while the incoming clip advances from local frame zero, with a linear
+blend until the incoming clip is fully visible. `Fade to Black` fades the
+outgoing clip before the junction, is fully black at the junction, and fades
+the incoming clip in after it. Audio still cuts normally; there is no audio
+crossfade in this milestone.
+
+The Timeline displays transition regions around valid junctions. A junction
+can be selected or opened with its context menu to add Cross Dissolve, add
+Fade to Black, or remove the transition. The Inspector confirms the type and
+duration edits. Moving, splitting, trimming, or deleting an endpoint removes
+only transitions whose adjacency or endpoint validity is no longer true.
+Transitions are included in bounded Undo/Redo snapshots and are persisted in
+`.csp` version 5. Projects from earlier versions load with no transitions.

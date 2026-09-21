@@ -10,6 +10,7 @@
 #include <QAction>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -441,6 +442,21 @@ QWidget* MainWindow::createTimeline() {
         &timeline::TimelineWidget::clipSelectedAt,
         this,
         &MainWindow::handleTimelineClipSelectedAt);
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::transitionSelectedAt,
+        this,
+        &MainWindow::handleTimelineTransitionSelectedAt);
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::transitionAddRequestedAt,
+        this,
+        &MainWindow::handleTimelineTransitionAddRequestedAt);
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::transitionRemoveRequestedAt,
+        this,
+        &MainWindow::handleTimelineTransitionRemoveRequestedAt);
     connect(
         timeline_widget_,
         &timeline::TimelineWidget::clipMoveRequestedAt,
@@ -960,6 +976,7 @@ void MainWindow::handleMediaDropAt(
 }
 
 void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_index) {
+    active_transition_.reset();
     if (track_index < 0 || clip_index < 0 ||
         track_index >= static_cast<qint64>(timeline_model_.trackCount()) ||
         clip_index >= static_cast<qint64>(
@@ -1061,6 +1078,245 @@ void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_in
     updatePlaybackControls();
     updatePlaybackStatus();
     statusBar()->showMessage("Timeline clip selected.");
+}
+
+void MainWindow::handleTimelineTransitionSelectedAt(
+    qint64 track_index,
+    qint64 from_clip_index,
+    qint64 to_clip_index) {
+    active_transition_.reset();
+    if (track_index < 0 || from_clip_index < 0 || to_clip_index < 0 ||
+        track_index >= static_cast<qint64>(timeline_model_.trackCount())) {
+        updateInspector();
+        return;
+    }
+
+    const auto track = static_cast<std::size_t>(track_index);
+    const auto from = static_cast<std::size_t>(from_clip_index);
+    const auto to = static_cast<std::size_t>(to_clip_index);
+    if (from >= timeline_model_.clipCount(track) ||
+        to >= timeline_model_.clipCount(track) ||
+        timeline_model_.transitionBetween(track, from, to) == nullptr) {
+        updateInspector();
+        return;
+    }
+
+    active_transition_ = ActiveTransition{track, from, to};
+    updateInspector();
+    statusBar()->showMessage("Timeline transition selected.");
+}
+
+void MainWindow::handleTimelineTransitionAddRequestedAt(
+    qint64 track_index,
+    qint64 from_clip_index,
+    qint64 to_clip_index,
+    qint64 kind) {
+    if (track_index < 0 || from_clip_index < 0 || to_clip_index < 0 ||
+        track_index >= static_cast<qint64>(timeline_model_.trackCount()) ||
+        kind < 0 || kind > 1) {
+        return;
+    }
+
+    const auto track = static_cast<std::size_t>(track_index);
+    const auto from = static_cast<std::size_t>(from_clip_index);
+    const auto to = static_cast<std::size_t>(to_clip_index);
+    if (from >= timeline_model_.clipCount(track) ||
+        to >= timeline_model_.clipCount(track)) {
+        return;
+    }
+
+    try {
+        const auto before = captureTimelineEditState();
+        pending_clip_activation_.reset();
+        ++playback_generation_;
+        playback_is_playing_ = false;
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_, "pause", Qt::QueuedConnection);
+        }
+
+        const auto result = timeline_model_.addTransition(
+            track,
+            from,
+            to,
+            kind == 0
+                ? timeline::TransitionKind::CrossDissolve
+                : timeline::TransitionKind::FadeToBlack,
+            15);
+        if (result != timeline::TransitionMutationResult::Added) {
+            statusBar()->showMessage("The transition cannot be added here.");
+            return;
+        }
+
+        active_transition_ = ActiveTransition{track, from, to};
+        recordTimelineEdit(before);
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        sendCompositionToWorker();
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_,
+                "renderCompositionFrame",
+                Qt::QueuedConnection,
+                Q_ARG(qint64, static_cast<qint64>(timelinePlayheadFrame())),
+                Q_ARG(qint64, static_cast<qint64>(playback_frame_index_)),
+                Q_ARG(quint64, playback_generation_));
+        }
+        statusBar()->showMessage("Timeline transition added.");
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "timeline",
+            "add_transition",
+            error.what(),
+            {{"track_index", std::to_string(track_index)},
+             {"from_clip_index", std::to_string(from_clip_index)},
+             {"to_clip_index", std::to_string(to_clip_index)},
+             {"generation", std::to_string(playback_generation_)}});
+        statusBar()->showMessage("Could not add the timeline transition.");
+    }
+}
+
+void MainWindow::handleTimelineTransitionRemoveRequestedAt(
+    qint64 track_index,
+    qint64 from_clip_index,
+    qint64 to_clip_index) {
+    if (track_index < 0 || from_clip_index < 0 || to_clip_index < 0 ||
+        track_index >= static_cast<qint64>(timeline_model_.trackCount())) {
+        return;
+    }
+
+    const auto track = static_cast<std::size_t>(track_index);
+    const auto from = static_cast<std::size_t>(from_clip_index);
+    const auto to = static_cast<std::size_t>(to_clip_index);
+    if (from >= timeline_model_.clipCount(track) ||
+        to >= timeline_model_.clipCount(track)) {
+        return;
+    }
+
+    try {
+        const auto before = captureTimelineEditState();
+        pending_clip_activation_.reset();
+        ++playback_generation_;
+        playback_is_playing_ = false;
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_, "pause", Qt::QueuedConnection);
+        }
+
+        if (timeline_model_.removeTransition(track, from, to) !=
+            timeline::TransitionMutationResult::Removed) {
+            statusBar()->showMessage("No transition is present at this junction.");
+            return;
+        }
+
+        active_transition_.reset();
+        recordTimelineEdit(before);
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        sendCompositionToWorker();
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_,
+                "renderCompositionFrame",
+                Qt::QueuedConnection,
+                Q_ARG(qint64, static_cast<qint64>(timelinePlayheadFrame())),
+                Q_ARG(qint64, static_cast<qint64>(playback_frame_index_)),
+                Q_ARG(quint64, playback_generation_));
+        }
+        statusBar()->showMessage("Timeline transition removed.");
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "timeline",
+            "remove_transition",
+            error.what(),
+            {{"track_index", std::to_string(track_index)},
+             {"from_clip_index", std::to_string(from_clip_index)},
+             {"to_clip_index", std::to_string(to_clip_index)},
+             {"generation", std::to_string(playback_generation_)}});
+        statusBar()->showMessage("Could not remove the timeline transition.");
+    }
+}
+
+void MainWindow::applyTransitionSettings() {
+    if (!active_transition_.has_value() || transition_type_combo_ == nullptr ||
+        transition_duration_spin_ == nullptr) {
+        return;
+    }
+
+    const auto selection = *active_transition_;
+    if (selection.track_index >= timeline_model_.trackCount() ||
+        selection.from_clip_index >= timeline_model_.clipCount(selection.track_index) ||
+        selection.to_clip_index >= timeline_model_.clipCount(selection.track_index)) {
+        active_transition_.reset();
+        updateInspector();
+        return;
+    }
+
+    try {
+        const auto before = captureTimelineEditState();
+        pending_clip_activation_.reset();
+        ++playback_generation_;
+        playback_is_playing_ = false;
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_, "pause", Qt::QueuedConnection);
+        }
+
+        const auto kind = transition_type_combo_->currentData().toInt() == 1
+            ? timeline::TransitionKind::FadeToBlack
+            : timeline::TransitionKind::CrossDissolve;
+        const auto result = timeline_model_.updateTransition(
+            selection.track_index,
+            selection.from_clip_index,
+            selection.to_clip_index,
+            kind,
+            transition_duration_spin_->value());
+        if (result != timeline::TransitionMutationResult::Updated) {
+            statusBar()->showMessage("The transition settings were not changed.");
+            updateInspector();
+            return;
+        }
+
+        recordTimelineEdit(before);
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        sendCompositionToWorker();
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_,
+                "renderCompositionFrame",
+                Qt::QueuedConnection,
+                Q_ARG(qint64, static_cast<qint64>(timelinePlayheadFrame())),
+                Q_ARG(qint64, static_cast<qint64>(playback_frame_index_)),
+                Q_ARG(quint64, playback_generation_));
+        }
+        statusBar()->showMessage("Timeline transition updated.");
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "timeline",
+            "update_transition",
+            error.what(),
+            {{"track_index", std::to_string(selection.track_index)},
+             {"from_clip_index", std::to_string(selection.from_clip_index)},
+             {"to_clip_index", std::to_string(selection.to_clip_index)},
+             {"generation", std::to_string(playback_generation_)}});
+        statusBar()->showMessage("Could not update the timeline transition.");
+    }
+}
+
+void MainWindow::removeSelectedTransition() {
+    if (!active_transition_.has_value()) return;
+    const auto selection = *active_transition_;
+    handleTimelineTransitionRemoveRequestedAt(
+        static_cast<qint64>(selection.track_index),
+        static_cast<qint64>(selection.from_clip_index),
+        static_cast<qint64>(selection.to_clip_index));
 }
 
 void MainWindow::handleTimelineClipMoveAt(

@@ -135,6 +135,21 @@ private:
         qint64 clip_index,
         qint64 local_start_frame,
         qint64 local_end_frame);
+    void handleTimelineTransitionSelectedAt(
+        qint64 track_index,
+        qint64 from_clip_index,
+        qint64 to_clip_index);
+    void handleTimelineTransitionAddRequestedAt(
+        qint64 track_index,
+        qint64 from_clip_index,
+        qint64 to_clip_index,
+        qint64 kind);
+    void handleTimelineTransitionRemoveRequestedAt(
+        qint64 track_index,
+        qint64 from_clip_index,
+        qint64 to_clip_index);
+    void applyTransitionSettings();
+    void removeSelectedTransition();
     void undoTimelineEdit();
     void redoTimelineEdit();
     [[nodiscard]] timeline::EditState captureTimelineEditState() const;
@@ -241,6 +256,11 @@ private:
     QComboBox* text_alignment_combo_ = nullptr;
     QPushButton* text_color_button_ = nullptr;
     QPushButton* apply_text_button_ = nullptr;
+    QWidget* transition_controls_ = nullptr;
+    QComboBox* transition_type_combo_ = nullptr;
+    QSpinBox* transition_duration_spin_ = nullptr;
+    QPushButton* apply_transition_button_ = nullptr;
+    QPushButton* remove_transition_button_ = nullptr;
     QAction* new_project_action_ = nullptr;
     QAction* open_project_action_ = nullptr;
     QAction* save_project_action_ = nullptr;
@@ -261,6 +281,14 @@ private:
     timeline::TimelineHistory timeline_history_;
     std::optional<std::size_t> active_timeline_track_index_;
     std::optional<std::size_t> active_timeline_clip_index_;
+    struct ActiveTransition {
+        std::size_t track_index = 0;
+        std::size_t from_clip_index = 0;
+        std::size_t to_clip_index = 0;
+
+        friend bool operator==(const ActiveTransition&, const ActiveTransition&) = default;
+    };
+    std::optional<ActiveTransition> active_transition_;
     std::optional<PendingClipActivation> pending_clip_activation_;
     std::optional<std::filesystem::path> project_path_;
     std::optional<project::ProjectDocument> saved_project_document_;

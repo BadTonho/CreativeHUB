@@ -68,3 +68,20 @@ Text is rendered only while visible at the global playhead. Rasterization and
 composition failures preserve the last valid preview and are reported with
 the affected track, clip, frame, and rendering context. OpenGL remains only
 the final presentation path for the composed RGBA frame.
+
+## Essential transitions
+
+The playback worker receives transition specifications together with the
+composition layers. This keeps transition timing, source decoding, transform
+evaluation, and alpha composition outside the UI thread. A Cross Dissolve
+uses the outgoing endpoint's final segment frame and the incoming endpoint's
+local frame sequence after the junction. A Fade to Black applies a linear
+outgoing fade before the junction, a black junction frame, and a linear
+incoming fade afterward. Transition duration is expressed in timeline frames
+and does not change clip positions or durations.
+
+Transition failures preserve the last valid preview and use the existing
+`playback/compose` diagnostic path with track, clip, global/local frame, path,
+and available decoder error information. Audio remains on the normal cut
+path, and advanced easing, image effects, and audio crossfades are future
+work.

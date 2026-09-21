@@ -62,6 +62,12 @@ int main(int argc, char** argv) {
         title_clip.text.alignment = timeline::TextAlignment::Left;
         title_clip.text.color = {255, 200, 100, 230};
         original.timeline_tracks.front().clips.push_back(title_clip);
+        original.timeline_tracks.front().transitions.push_back(
+            project::ProjectTransition{
+                0,
+                1,
+                timeline::TransitionKind::CrossDissolve,
+                15});
         original.canvas_width = 1920;
         original.canvas_height = 1080;
         original.timeline_tracks.front().clips.front().transform.position_x = 0.25;
@@ -104,6 +110,10 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"kind\": \"text\"") != std::string::npos &&
                     saved_json.find("\"content\": \"Title\"") != std::string::npos,
                 "Text clip content and kind were not written to the project.");
+        require(saved_json.find("\"version\": 5") != std::string::npos &&
+                    saved_json.find("\"transitions\"") != std::string::npos &&
+                    saved_json.find("cross_dissolve") != std::string::npos,
+                "Transition data was not written to the version 5 project.");
 
         const auto original_contents = saved_json;
         bool failed = false;
@@ -226,6 +236,8 @@ int main(int argc, char** argv) {
                     migrated_v3.timeline_tracks.front().clips.front().text ==
                         timeline::TextStyle{},
                 "A version 3 project was not migrated to default video/text fields.");
+        require(migrated_v3.timeline_tracks.front().transitions.empty(),
+                "A version 3 project did not receive an empty transition list.");
 
         writeText(
             project_path,
@@ -236,6 +248,17 @@ int main(int argc, char** argv) {
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::InvalidValue,
                     "Invalid text style returned the wrong error category.");
+        }
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":5,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"tracks":[{"name":"Video 1","clips":[{"kind":"video","source":"a.mkv","timeline_start_frame":0,"source_start_frame":0,"duration_frames":10},{"kind":"video","source":"b.mkv","timeline_start_frame":20,"source_start_frame":0,"duration_frames":10}],"transitions":[{"from_clip":0,"to_clip":1,"kind":"cross_dissolve","duration_frames":5}]}]}})");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("A transition across a project gap was accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::InvalidTimeline,
+                    "An invalid project transition returned the wrong error category.");
         }
 
         std::error_code cleanup_error;

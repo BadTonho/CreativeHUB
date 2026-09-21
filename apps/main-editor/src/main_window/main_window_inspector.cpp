@@ -147,6 +147,32 @@ QWidget* MainWindow::createInspector() {
     text_layout->addWidget(apply_text_button_);
     layout->addWidget(text_controls_);
 
+    transition_controls_ = new QWidget(container);
+    auto* transition_layout = new QVBoxLayout(transition_controls_);
+    transition_layout->setContentsMargins(0, 8, 0, 0);
+    transition_layout->setSpacing(6);
+    auto* transition_title = new QLabel("Transition", transition_controls_);
+    transition_title->setStyleSheet("font-weight: 600;");
+    transition_layout->addWidget(transition_title);
+    auto* transition_form = new QFormLayout;
+    transition_type_combo_ = new QComboBox(transition_controls_);
+    transition_type_combo_->addItem("Cross Dissolve", 0);
+    transition_type_combo_->addItem("Fade to Black", 1);
+    transition_duration_spin_ = new QSpinBox(transition_controls_);
+    transition_duration_spin_->setRange(1, 1);
+    transition_duration_spin_->setSuffix(" frames");
+    transition_form->addRow("Type", transition_type_combo_);
+    transition_form->addRow("Duration", transition_duration_spin_);
+    transition_layout->addLayout(transition_form);
+    apply_transition_button_ = new QPushButton(
+        "Apply Transition", transition_controls_);
+    remove_transition_button_ = new QPushButton(
+        "Remove Transition", transition_controls_);
+    transition_layout->addWidget(apply_transition_button_);
+    transition_layout->addWidget(remove_transition_button_);
+    transition_controls_->setVisible(false);
+    layout->addWidget(transition_controls_);
+
     connect(text_color_button_, &QPushButton::clicked, this, [this]() {
         const QColor current(
             text_color_[0], text_color_[1], text_color_[2], text_color_[3]);
@@ -165,30 +191,104 @@ QWidget* MainWindow::createInspector() {
     });
     connect(apply_text_button_, &QPushButton::clicked,
             this, &MainWindow::applyTextStyle);
+    connect(apply_transition_button_, &QPushButton::clicked,
+            this, &MainWindow::applyTransitionSettings);
+    connect(remove_transition_button_, &QPushButton::clicked,
+            this, &MainWindow::removeSelectedTransition);
     layout->addStretch();
     updateInspector();
     return container;
 }
 void MainWindow::updateInspector() {
+    bool transition_enabled = false;
+    const timeline::TimelineTransition* selected_transition = nullptr;
+    if (active_transition_.has_value()) {
+        const auto& selection = *active_transition_;
+        if (selection.track_index < timeline_model_.trackCount() &&
+            selection.from_clip_index < timeline_model_.clipCount(selection.track_index) &&
+            selection.to_clip_index < timeline_model_.clipCount(selection.track_index)) {
+            selected_transition = timeline_model_.transitionBetween(
+                selection.track_index,
+                selection.from_clip_index,
+                selection.to_clip_index);
+            transition_enabled = selected_transition != nullptr;
+        }
+    }
+    if (!transition_enabled) active_transition_.reset();
+
     const auto location = selectedTimelineClipLocation();
     const bool enabled = location.has_value() &&
         location->track_index < timeline_model_.trackCount() &&
         location->clip_index < timeline_model_.clipCount(location->track_index);
     const std::array<QDoubleSpinBox*, 5> spins = transform_spin_boxes_;
-    for (auto* spin : spins) if (spin != nullptr) spin->setEnabled(enabled);
+    for (auto* spin : spins) {
+        if (spin != nullptr) spin->setEnabled(enabled && !transition_enabled);
+    }
     for (auto* button : transform_key_buttons_) {
-        if (button != nullptr) button->setEnabled(enabled);
+        if (button != nullptr) button->setEnabled(enabled && !transition_enabled);
     }
     const bool text_enabled = enabled &&
         timeline_model_.tracks()[location->track_index]
             .clips[location->clip_index].kind == timeline::ClipKind::Text;
-    if (text_controls_ != nullptr) text_controls_->setVisible(text_enabled);
+    if (text_controls_ != nullptr) {
+        text_controls_->setVisible(text_enabled && !transition_enabled);
+    }
     if (text_content_editor_ != nullptr) text_content_editor_->setEnabled(text_enabled);
     if (text_font_combo_ != nullptr) text_font_combo_->setEnabled(text_enabled);
     if (text_font_size_spin_ != nullptr) text_font_size_spin_->setEnabled(text_enabled);
     if (text_color_button_ != nullptr) text_color_button_->setEnabled(text_enabled);
     if (text_alignment_combo_ != nullptr) text_alignment_combo_->setEnabled(text_enabled);
-    if (apply_text_button_ != nullptr) apply_text_button_->setEnabled(text_enabled);
+    if (apply_text_button_ != nullptr) {
+        apply_text_button_->setEnabled(text_enabled && !transition_enabled);
+    }
+    if (transition_controls_ != nullptr) {
+        transition_controls_->setVisible(transition_enabled);
+    }
+    if (transition_type_combo_ != nullptr) {
+        transition_type_combo_->setEnabled(transition_enabled);
+    }
+    if (transition_duration_spin_ != nullptr) {
+        transition_duration_spin_->setEnabled(transition_enabled);
+    }
+    if (apply_transition_button_ != nullptr) {
+        apply_transition_button_->setEnabled(transition_enabled);
+    }
+    if (remove_transition_button_ != nullptr) {
+        remove_transition_button_->setEnabled(transition_enabled);
+    }
+    if (transition_enabled && selected_transition != nullptr) {
+        for (auto* button : transform_key_buttons_) {
+            if (button != nullptr) {
+                const QSignalBlocker blocker(button);
+                button->setChecked(false);
+                button->setText(QStringLiteral("◇"));
+                button->setToolTip(QStringLiteral("Select a clip to edit keyframes"));
+            }
+        }
+        const auto& track = timeline_model_.tracks()[active_transition_->track_index];
+        const auto& from = track.clips[active_transition_->from_clip_index];
+        const auto& to = track.clips[active_transition_->to_clip_index];
+        const auto maximum = std::min(
+            from.timeline_duration_frames,
+            to.timeline_duration_frames);
+        if (transition_type_combo_ != nullptr) {
+            const QSignalBlocker blocker(transition_type_combo_);
+            transition_type_combo_->setCurrentIndex(
+                selected_transition->kind == timeline::TransitionKind::FadeToBlack
+                    ? 1
+                    : 0);
+        }
+        if (transition_duration_spin_ != nullptr) {
+            const QSignalBlocker blocker(transition_duration_spin_);
+            transition_duration_spin_->setRange(
+                1,
+                static_cast<int>(std::min<std::int64_t>(
+                    maximum, std::numeric_limits<int>::max())));
+            transition_duration_spin_->setValue(
+                static_cast<int>(selected_transition->duration_frames));
+        }
+        return;
+    }
     if (location.has_value() && enabled) {
         const auto& clip = timeline_model_.tracks()[location->track_index]
             .clips[location->clip_index];

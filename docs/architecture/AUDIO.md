@@ -37,4 +37,6 @@ stored as optional fields in `.csp` version 2. Older projects use the defaults
 `1.0` and `false`.
 
 Audio-only media, independent audio tracks, mixing, waveforms, automation,
-recording, and export remain future work.
+recording, audio crossfades, and export remain future work. Timeline video and
+text transitions therefore do not change the audio cut: the visible clip's
+audio follows the normal endpoint transition at the junction.

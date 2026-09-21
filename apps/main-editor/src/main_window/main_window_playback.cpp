@@ -56,6 +56,8 @@ void MainWindow::initializePlayback() {
     qRegisterMetaType<playback::VideoFramePtr>();
     qRegisterMetaType<playback::CompositionLayerSpec>();
     qRegisterMetaType<QVector<playback::CompositionLayerSpec>>();
+    qRegisterMetaType<playback::CompositionTransitionSpec>();
+    qRegisterMetaType<QVector<playback::CompositionTransitionSpec>>();
 
     playback_worker_ = new playback::PlaybackWorker;
     playback_worker_->moveToThread(&playback_thread_);
@@ -137,6 +139,7 @@ void MainWindow::shutdownPlayback() {
 void MainWindow::sendCompositionToWorker() {
     if (playback_worker_ == nullptr) return;
     QVector<playback::CompositionLayerSpec> layers;
+    QVector<playback::CompositionTransitionSpec> transitions;
     for (std::size_t track_index = 0;
          track_index < timeline_model_.trackCount();
          ++track_index) {
@@ -174,12 +177,36 @@ void MainWindow::sendCompositionToWorker() {
                 clip.kind,
                 clip.text});
         }
+        for (const auto& transition : track.transitions) {
+            const auto from = std::find_if(
+                track.clips.begin(), track.clips.end(),
+                [&transition](const timeline::TimelineClip& clip) {
+                    return clip.clip_id == transition.from_clip_id;
+                });
+            const auto to = std::find_if(
+                track.clips.begin(), track.clips.end(),
+                [&transition](const timeline::TimelineClip& clip) {
+                    return clip.clip_id == transition.to_clip_id;
+                });
+            if (from == track.clips.end() || to == track.clips.end() ||
+                from + 1 != to) {
+                continue;
+            }
+            transitions.push_back(playback::CompositionTransitionSpec{
+                static_cast<qint64>(track_index),
+                static_cast<qint64>(std::distance(track.clips.begin(), from)),
+                static_cast<qint64>(std::distance(track.clips.begin(), to)),
+                from->timeline_start_frame + from->timeline_duration_frames,
+                transition.duration_frames,
+                transition.kind});
+        }
     }
     QMetaObject::invokeMethod(
         playback_worker_,
         "setComposition",
         Qt::QueuedConnection,
         Q_ARG(QVector<playback::CompositionLayerSpec>, layers),
+        Q_ARG(QVector<playback::CompositionTransitionSpec>, transitions),
         Q_ARG(quint64, playback_generation_));
 }
 

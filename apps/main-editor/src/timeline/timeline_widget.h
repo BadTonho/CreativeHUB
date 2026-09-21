@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <utility>
 #include <vector>
 
 class QDragEnterEvent;
@@ -18,6 +19,7 @@ class QDragMoveEvent;
 class QDropEvent;
 class QMouseEvent;
 class QPaintEvent;
+class QContextMenuEvent;
 
 namespace timeline {
 
@@ -49,6 +51,16 @@ signals:
     void clipSplitRequestedAt(qint64 track_index, qint64 clip_index, qint64 local_frame);
     void clipTrimRequestedAt(qint64 track_index, qint64 clip_index, qint64 local_start_frame, qint64 local_end_frame);
     void mediaDropRequestedAt(const QString& source_path, qint64 track_index, qint64 timeline_frame);
+    void transitionSelectedAt(qint64 track_index, qint64 from_clip_index, qint64 to_clip_index);
+    void transitionAddRequestedAt(
+        qint64 track_index,
+        qint64 from_clip_index,
+        qint64 to_clip_index,
+        qint64 kind);
+    void transitionRemoveRequestedAt(
+        qint64 track_index,
+        qint64 from_clip_index,
+        qint64 to_clip_index);
     void trimStarted();
     void seekStarted();
     void seekRequested(qint64 frame_index);
@@ -59,6 +71,7 @@ protected:
     void dragLeaveEvent(QDragLeaveEvent* event) override;
     void dragMoveEvent(QDragMoveEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
@@ -76,6 +89,8 @@ private:
     [[nodiscard]] std::optional<std::int64_t> globalFrameAt(double x) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> localFrameAt(const ClipLocation&, double x) const noexcept;
     [[nodiscard]] std::optional<TrimEdge> trimEdgeAt(const ClipLocation&, double x) const noexcept;
+    [[nodiscard]] std::optional<std::pair<std::size_t, std::size_t>>
+    transitionClipIndexesAt(double x, double y) const noexcept;
     void emitSelected(const ClipLocation& location);
     void emitLegacySelection(const ClipLocation& location);
 
@@ -105,6 +120,14 @@ private:
     bool drag_hovering_ = false;
     std::optional<std::size_t> drop_hover_track_;
     std::optional<std::int64_t> drop_hover_frame_;
+    struct SelectedTransition {
+        std::size_t track_index = 0;
+        std::size_t from_clip_index = 0;
+        std::size_t to_clip_index = 0;
+
+        friend bool operator==(const SelectedTransition&, const SelectedTransition&) = default;
+    };
+    std::optional<SelectedTransition> selected_transition_;
 };
 
 } // namespace timeline

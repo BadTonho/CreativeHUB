@@ -12,9 +12,10 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 4;
-inline constexpr int previous_format_version = 3;
-inline constexpr int older_format_version = 2;
+inline constexpr int current_format_version = 5;
+inline constexpr int previous_format_version = 4;
+inline constexpr int older_format_version = 3;
+inline constexpr int legacy_v2_format_version = 2;
 inline constexpr int legacy_format_version = 1;
 inline constexpr const char* format_identifier = "creative-suite.main-editor";
 
@@ -33,11 +34,21 @@ struct ProjectClip {
     friend bool operator==(const ProjectClip&, const ProjectClip&) = default;
 };
 
+struct ProjectTransition {
+    std::size_t from_clip_index = 0;
+    std::size_t to_clip_index = 0;
+    timeline::TransitionKind kind = timeline::TransitionKind::CrossDissolve;
+    std::int64_t duration_frames = 15;
+
+    friend bool operator==(const ProjectTransition&, const ProjectTransition&) = default;
+};
+
 struct ProjectTrack {
     std::string name;
     double audio_gain = 1.0;
     bool audio_muted = false;
     std::vector<ProjectClip> clips;
+    std::vector<ProjectTransition> transitions;
 
     friend bool operator==(const ProjectTrack&, const ProjectTrack&) = default;
 };

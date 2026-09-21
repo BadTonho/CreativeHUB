@@ -7,9 +7,9 @@ model is Qt-independent and contains imported media, bins, ordered video tracks,
 and timeline clips. It does not contain selection, playhead, layout, Undo/Redo
 history, decoded frames, FFmpeg sessions, or Qt resources.
 
-## Version 4 format
+## Version 5 format
 
-The current root uses `version: 4` and adds a fixed `canvas` object with
+The current root uses `version: 5` and adds a fixed `canvas` object with
 `width: 1920` and `height: 1080`. Timeline clips additionally persist an
 occurrence-local `transform` object and five optional keyframe arrays:
 `position_x`, `position_y`, `scale`, `rotation`, and `opacity`. Keyframe frames
@@ -24,6 +24,13 @@ source and preserve their own duration, transform, keyframes, and occurrence.
 The text defaults are Sans Serif, 48 pixels, white, and centered. Text clips
 may overlap video in the same track and are composed above it; same-kind
 overlap remains invalid.
+
+Each track also contains a `transitions` array. A transition stores
+`from_clip`, `to_clip`, `kind`, and `duration_frames`, where `kind` is either
+`cross_dissolve` or `fade_to_black`. The clip indexes must identify
+consecutive clips on that track with no gap, and the duration cannot exceed
+the shorter endpoint. Transition data is optional only for older project
+versions; version 5 files always write the array.
 
 ## Version 2 format
 
@@ -40,15 +47,17 @@ default bin is Unsorted. Missing audio fields load as `audio_gain: 1.0` and
 `audio_muted: false`, preserving compatibility with projects written before
 audio controls existed.
 
-## Version 3, version 2, and version 1 migration
+## Version 4, version 3, version 2, and version 1 migration
 
+Version 4 files receive an empty transition list and otherwise preserve their
+text clips, transforms, keyframes, audio parameters, bins, and media state.
 Version 3 files receive the identity text fields (`kind: "video"` for existing
 clips and empty/default text data) while preserving their transforms and
 keyframes. Version 2 files receive the identity transform, an empty keyframe
 set, and the 1920x1080 canvas when opened. Version 1 files containing
 `timeline.clips` remain supported; they are converted to a single Video 1
 track with sequential timeline starts computed from clip durations. The next
-successful save writes version 4.
+successful save writes version 5.
 
 ## Transactional open and save
 
