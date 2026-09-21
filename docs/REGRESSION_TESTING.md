@@ -58,6 +58,8 @@ in the running Main Editor after UI or integration changes:
 - Timeline: confirm the dock shows only its official Timeline title, without
   a duplicate internal title or the former Click to select interaction hint,
   while the playback controls, ruler, clips, and footer remain available;
+  confirm Previous Frame, Play/Pause, and Next Frame show only media icons,
+  update the Play/Pause icon correctly, and retain working tooltips;
 - Timeline track height, maximum row height, vertical scrolling, stable
   one-hour horizontal scale, horizontal scrolling for longer content, zoom
   controls from 25% through 800%, Ctrl + wheel playhead anchoring, button

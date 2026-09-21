@@ -33,6 +33,7 @@
 #include <QScrollArea>
 #include <QSlider>
 #include <QStatusBar>
+#include <QStyle>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -498,7 +499,10 @@ void MainWindow::updatePlaybackControls() {
             canPlaybackSelectedMedia() && !pending_clip_activation_.has_value());
     }
     if (play_pause_button_ != nullptr) {
-        play_pause_button_->setText(playback_is_playing_ ? "Pause" : "Play");
+        play_pause_button_->setIcon(style()->standardIcon(
+            playback_is_playing_
+                ? QStyle::SP_MediaPause
+                : QStyle::SP_MediaPlay));
     }
 }
 

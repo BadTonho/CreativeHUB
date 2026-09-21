@@ -36,6 +36,7 @@
 #include <QScrollBar>
 #include <QSlider>
 #include <QStatusBar>
+#include <QStyle>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -308,9 +309,21 @@ QWidget* MainWindow::createTimeline() {
     playback_label->setStyleSheet("color: #9aa4b2; font-weight: 600;");
     controls->addWidget(playback_label);
 
-    previous_frame_button_ = new QPushButton("Previous Frame", container);
-    play_pause_button_ = new QPushButton("Play", container);
-    next_frame_button_ = new QPushButton("Next Frame", container);
+    previous_frame_button_ = new QPushButton(container);
+    play_pause_button_ = new QPushButton(container);
+    next_frame_button_ = new QPushButton(container);
+    previous_frame_button_->setIcon(
+        style()->standardIcon(QStyle::SP_MediaSeekBackward));
+    play_pause_button_->setIcon(
+        style()->standardIcon(QStyle::SP_MediaPlay));
+    next_frame_button_->setIcon(
+        style()->standardIcon(QStyle::SP_MediaSeekForward));
+    previous_frame_button_->setIconSize(QSize(16, 16));
+    play_pause_button_->setIconSize(QSize(16, 16));
+    next_frame_button_->setIconSize(QSize(16, 16));
+    previous_frame_button_->setFixedSize(32, 28);
+    play_pause_button_->setFixedSize(32, 28);
+    next_frame_button_->setFixedSize(32, 28);
     clear_timeline_button_ = new QPushButton("Clear Timeline", container);
     razor_button_ = new QPushButton("Blade Tool", container);
     add_text_button_ = new QPushButton("Add Text", container);
@@ -375,6 +388,9 @@ QWidget* MainWindow::createTimeline() {
     previous_frame_button_->setToolTip("Step one frame backward");
     play_pause_button_->setToolTip("Play or pause the active clip");
     next_frame_button_->setToolTip("Step one frame forward");
+    previous_frame_button_->setAccessibleName("Previous Frame");
+    play_pause_button_->setAccessibleName("Play or Pause");
+    next_frame_button_->setAccessibleName("Next Frame");
     clear_timeline_button_->setToolTip("Remove all clips from every track");
     razor_button_->setToolTip("Split a clip where you click");
     add_text_button_->setToolTip("Add a five-second text clip at the current playhead");
