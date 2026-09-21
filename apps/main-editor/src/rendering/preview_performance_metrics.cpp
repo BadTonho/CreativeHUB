@@ -60,6 +60,7 @@ void PreviewPerformanceMetrics::recordTiming(
     auto* storage = &decode_;
     switch (timing) {
     case PreviewTiming::Decode: storage = &decode_; break;
+    case PreviewTiming::TextRasterization: storage = &text_rasterization_; break;
     case PreviewTiming::Seek: storage = &seek_; break;
     case PreviewTiming::Composition: storage = &composition_; break;
     case PreviewTiming::Payload: storage = &payload_; break;
@@ -151,6 +152,7 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
         last_frame_width_.exchange(0, std::memory_order_relaxed),
         last_frame_height_.exchange(0, std::memory_order_relaxed),
         takeTimingSnapshot(decode_),
+        takeTimingSnapshot(text_rasterization_),
         takeTimingSnapshot(seek_),
         takeTimingSnapshot(composition_),
         takeTimingSnapshot(payload_),

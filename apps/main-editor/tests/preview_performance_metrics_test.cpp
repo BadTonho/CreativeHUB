@@ -21,11 +21,16 @@ int main() {
         metrics.recordTiming(
             rendering::PreviewTiming::Decode,
             std::chrono::milliseconds(5));
+        metrics.recordTiming(
+            rendering::PreviewTiming::TextRasterization,
+            std::chrono::milliseconds(6));
         const auto disabled = metrics.takeSnapshotAndReset();
         require(disabled.decoded_frames == 0,
                 "Disabled metrics recorded a frame.");
         require(disabled.decode.count == 0,
                 "Disabled metrics recorded timing data.");
+        require(disabled.text_rasterization.count == 0,
+                "Disabled metrics recorded text rasterization timing data.");
 
         metrics.setEnabled(true);
         metrics.recordDecodedFrame();
@@ -45,6 +50,12 @@ int main() {
         metrics.recordTiming(
             rendering::PreviewTiming::Decode,
             std::chrono::milliseconds(4));
+        metrics.recordTiming(
+            rendering::PreviewTiming::TextRasterization,
+            std::chrono::milliseconds(3));
+        metrics.recordTiming(
+            rendering::PreviewTiming::TextRasterization,
+            std::chrono::milliseconds(7));
 
         const auto snapshot = metrics.takeSnapshotAndReset();
         require(snapshot.decoded_frames == 1,
@@ -82,9 +93,20 @@ int main() {
                 "Decode timing average is incorrect.");
         require(snapshot.decode.maximumMilliseconds() == 4.0,
                 "Decode timing maximum conversion is incorrect.");
+        require(snapshot.text_rasterization.count == 2,
+                "Text rasterization timing count is incorrect.");
+        require(snapshot.text_rasterization.total_nanoseconds == 10'000'000,
+                "Text rasterization timing total is incorrect.");
+        require(snapshot.text_rasterization.maximum_nanoseconds == 7'000'000,
+                "Text rasterization timing maximum is incorrect.");
+        require(snapshot.text_rasterization.averageMilliseconds() == 5.0,
+                "Text rasterization timing average is incorrect.");
+        require(snapshot.text_rasterization.maximumMilliseconds() == 7.0,
+                "Text rasterization timing maximum conversion is incorrect.");
 
         const auto reset = metrics.takeSnapshotAndReset();
-        require(reset.decoded_frames == 0 && reset.decode.count == 0,
+        require(reset.decoded_frames == 0 && reset.decode.count == 0 &&
+                    reset.text_rasterization.count == 0,
                 "Taking a snapshot did not reset the metrics.");
         return 0;
     } catch (const std::exception& error) {

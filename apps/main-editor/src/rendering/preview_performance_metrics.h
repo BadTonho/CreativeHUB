@@ -8,6 +8,7 @@ namespace rendering {
 
 enum class PreviewTiming {
     Decode,
+    TextRasterization,
     Seek,
     Composition,
     Payload,
@@ -43,6 +44,7 @@ struct PreviewPerformanceSnapshot {
     std::uint64_t last_frame_height = 0;
 
     PreviewTimingSnapshot decode;
+    PreviewTimingSnapshot text_rasterization;
     PreviewTimingSnapshot seek;
     PreviewTimingSnapshot composition;
     PreviewTimingSnapshot payload;
@@ -103,6 +105,7 @@ private:
     std::atomic<std::uint64_t> last_frame_width_{0};
     std::atomic<std::uint64_t> last_frame_height_{0};
     TimingStorage decode_;
+    TimingStorage text_rasterization_;
     TimingStorage seek_;
     TimingStorage composition_;
     TimingStorage payload_;

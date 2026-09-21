@@ -483,6 +483,10 @@ void validateCompositionCaching() {
             "The text layer was rasterized again instead of using its cache.");
     require(snapshot.composition_cache_hits == 1,
             "The repeated composition frame did not hit the composition cache.");
+    require(snapshot.text_rasterization.count == 1,
+            "Text rasterization was not measured exactly once.");
+    require(snapshot.text_rasterization.maximum_nanoseconds > 0,
+            "Text rasterization timing did not record an elapsed duration.");
 
     worker.setComposition(
         QVector<playback::CompositionLayerSpec>{text_layer},

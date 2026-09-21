@@ -1096,7 +1096,13 @@ PlaybackWorker::decodeCompositionLayers(
                 frame = request.composition->cached_text_frame;
                 metrics.recordTextCacheHit();
             } else {
-                const auto rendered = rendering::renderText(spec.text);
+                std::optional<media::VideoFrame> rendered;
+                {
+                    rendering::PreviewPerformanceScope timing(
+                        metrics,
+                        rendering::PreviewTiming::TextRasterization);
+                    rendered = rendering::renderText(spec.text);
+                }
                 if (!rendered.has_value()) {
                     throw media::MediaError("The text layer could not be rasterized.");
                 }

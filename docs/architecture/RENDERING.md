@@ -76,11 +76,14 @@ using the `preview/performance_metrics` operation. The summary includes decoded,
 decoded-frame cache hits, text-raster cache hits, seeked, composed,
 final-composition cache hits, emitted, received, submitted, presented, and
 overwritten frame counts; the last frame dimensions; and average/maximum
-milliseconds for
-decoding, seeking, composition, payload creation, the UI callback, Preview
-submission, CPU presentation, GPU texture upload, and GPU painting. No media
-paths or per-frame log entries are written. When disabled, the timer stops and
-the hot path does not collect detailed timings.
+milliseconds for decoding, first-time text rasterization, seeking,
+composition, payload creation, the UI callback, Preview submission, CPU
+presentation, GPU texture upload, and GPU painting. The text-rasterization
+timing is a subcomponent of the decode timing, so the existing decode values
+remain comparable with older logs; cached text frames do not create new
+rasterization samples. No media paths or per-frame log entries are written.
+When disabled, the timer stops and the hot path does not collect detailed
+timings.
 
 SDL3 and the archived SDL3 prototype are intentionally not reused by the Main
 Editor: the application already depends on Qt Widgets, and adding a second

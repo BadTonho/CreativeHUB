@@ -33,7 +33,7 @@ updated intentionally.
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
 | Settings dialog | Modal shell, General, Timeline, and Shortcuts tabs, Close action, independent component construction, and editable shortcut preferences |
-| Preview performance metrics | Deterministic counter/timing aggregation, decoded/text/final-composition cache-hit counters, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
+| Preview performance metrics | Deterministic counter/timing aggregation, first-time text-rasterization timing, decoded/text/final-composition cache-hit counters, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
