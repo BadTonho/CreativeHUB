@@ -39,6 +39,7 @@ public:
     void setActiveClip(std::optional<ClipLocation> location);
     void setActiveClipIndex(std::optional<std::size_t> clip_index);
     void setPlayheadFrame(std::int64_t frame_index);
+    [[nodiscard]] std::int64_t playheadFrame() const noexcept;
     void setRazorMode(bool enabled);
     [[nodiscard]] bool razorMode() const noexcept;
     void setMoveRequiresAlt(bool enabled);

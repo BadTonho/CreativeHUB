@@ -201,6 +201,9 @@ private:
     [[nodiscard]] bool selectedMediaMatchesTimeline() const noexcept;
     [[nodiscard]] bool canPreviewSelectedMedia() const noexcept;
     [[nodiscard]] bool canPlaybackSelectedMedia() const noexcept;
+    [[nodiscard]] std::optional<timeline::ClipLocation>
+    timelineClipAtPlayhead() const noexcept;
+    [[nodiscard]] bool canPlaybackTimelineAtPlayhead() const noexcept;
     [[nodiscard]] std::int64_t timelinePlayheadFrame() const noexcept;
     void sendPlaybackCommand(const char* command);
     void updatePlaybackControls();

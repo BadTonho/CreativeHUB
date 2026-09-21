@@ -84,9 +84,10 @@ in the running Main Editor after UI or integration changes:
   spacing is shown while media drag-and-drop remains available; confirm that
   branch lines make nested bins visually distinguishable at one or more levels;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
-  clip movement; open a project whose first active clip is text or whose Media
-  Browser has no current item, then confirm the Timeline can still play the
-  active composition;
+  clip movement; clear both the Media Browser and Timeline item selections,
+  place the playhead over a valid clip, and confirm Play resolves that clip
+  and starts playback; also confirm that playback crosses a text-to-video
+  boundary without an out-of-range-frame error;
 - Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;
   confirm that the numeric fields remain editable, values stay within their
   property ranges, keyframe edits still target the current frame, and one

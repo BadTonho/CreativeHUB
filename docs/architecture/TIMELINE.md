@@ -86,9 +86,11 @@ audio session at a time. The Main Editor chooses the highest-priority visible
 clip at the current playhead and changes both sessions when crossing a clip
 boundary. Composition playback may advance directly from the worker's
 composition frame range when the active timeline clip is text, so it does not
-depend on a Media Browser selection. Audio is the playback clock when output
-is available; videos without audio and output failures use the existing video
-timer. Playback pauses in gaps and remains paused at the end of the last clip.
+depend on a Media Browser or Timeline item selection. The Play command resolves
+the clip at the current playhead before starting the worker. Audio is the
+playback clock when output is available; videos without audio and output
+failures use the existing video timer. Playback pauses in gaps and remains
+paused at the end of the last clip.
 Audio is never mixed between overlapping tracks: only the visible top-priority
 clip contributes.
 

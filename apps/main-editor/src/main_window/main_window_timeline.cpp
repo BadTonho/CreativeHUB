@@ -656,6 +656,30 @@ bool MainWindow::canPlaybackSelectedMedia() const noexcept {
         playback_worker_ != nullptr;
 }
 
+std::optional<timeline::ClipLocation>
+MainWindow::timelineClipAtPlayhead() const noexcept {
+    if (!timeline_model_.hasClip()) return std::nullopt;
+    return timeline_model_.topClipAt(timelinePlayheadFrame());
+}
+
+bool MainWindow::canPlaybackTimelineAtPlayhead() const noexcept {
+    const auto location = timelineClipAtPlayhead();
+    if (!location.has_value() || playback_worker_ == nullptr) return false;
+
+    const auto& clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    if (clip.kind == timeline::ClipKind::Text) return true;
+
+    const auto media = std::find_if(
+        media_items_.begin(),
+        media_items_.end(),
+        [&clip](const ImportedMedia& item) {
+            return normalizedPath(item.metadata.source_path) ==
+                normalizedPath(clip.source_path);
+        });
+    return media != media_items_.end() && !media->offline;
+}
+
 std::int64_t MainWindow::timelinePlayheadFrame() const noexcept {
     if (preserved_timeline_playhead_frame_.has_value()) {
         return std::max<std::int64_t>(
@@ -666,7 +690,9 @@ std::int64_t MainWindow::timelinePlayheadFrame() const noexcept {
         *active_timeline_track_index_ >= timeline_model_.trackCount() ||
         *active_timeline_clip_index_ >= timeline_model_.clipCount(
             *active_timeline_track_index_)) {
-        return 0;
+        return timeline_widget_ != nullptr
+            ? timeline_widget_->playheadFrame()
+            : 0;
     }
     const auto& clip = timeline_model_.tracks()[*active_timeline_track_index_]
         .clips[*active_timeline_clip_index_];

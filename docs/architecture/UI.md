@@ -121,10 +121,14 @@ when the pointer is released. Scrubbing remains bounded by the real project
 duration even when the visual timeline has empty space beyond the last clip.
 The playhead keeps its pointer position while the playback worker processes the
 request, and the window converts the absolute ruler frame to the target clip's
-local playback frame. Ruler scrubbing does not require a Media Browser
-selection: video clips resolve their imported source from the timeline,
-while gaps and text clips only move the playhead and do not ask the video
-worker to decode.
+local playback frame. Ruler scrubbing does not require a Media Browser or
+Timeline item selection: video clips resolve their imported source from the
+timeline, while gaps and text clips only move the playhead and do not ask the
+video worker to decode. The Play control uses the clip under the current
+playhead as its source, so playback remains available after clearing the
+current Timeline selection. When playback crosses from a text clip to a video
+clip, the destination is published before the asynchronous worker commands
+are queued, keeping the requested local frame inside the new segment.
 
 Delete removes the active clip. Ctrl + Left and Ctrl + Right nudge it by one
 frame when valid. Ctrl + K splits at the playhead. Undo and Redo pause

@@ -263,6 +263,12 @@ void MainWindow::activateTimelineClipAt(
             Q_ARG(qint64, static_cast<qint64>(timelinePlayheadFrame())),
             Q_ARG(qint64, static_cast<qint64>(playback_frame_index_)),
             Q_ARG(quint64, playback_generation_));
+        if (resume_playback) {
+            QMetaObject::invokeMethod(
+                playback_worker_,
+                "play",
+                Qt::QueuedConnection);
+        }
         return;
     }
     const auto media_item = std::find_if(
@@ -300,6 +306,11 @@ void MainWindow::activateTimelineClipAt(
         return;
     }
 
+    // Publish the destination before queuing setMedia/setComposition. The
+    // composition command is asynchronous; leaving the previous clip active
+    // would make the worker size the new segment using the old clip.
+    active_timeline_track_index_ = track_index;
+    active_timeline_clip_index_ = clip_index;
     ++playback_generation_;
     pending_clip_activation_ = PendingClipActivation{
         clip_index,
@@ -369,9 +380,44 @@ void MainWindow::commitTimelineClipActivation(
 
 void MainWindow::sendPlaybackCommand(const char* command) {
     if (playback_worker_ == nullptr || media_list_ == nullptr ||
-        !canPlaybackSelectedMedia() || pending_clip_activation_.has_value()) {
+        pending_clip_activation_.has_value()) {
         return;
     }
+
+    if (std::string_view(command) == "pause") {
+        QMetaObject::invokeMethod(playback_worker_, command, Qt::QueuedConnection);
+        return;
+    }
+
+    if (std::string_view(command) == "play") {
+        const auto playhead_clip = timelineClipAtPlayhead();
+        if (!playhead_clip.has_value()) {
+            statusBar()->showMessage("No timeline clip at the playhead.");
+            return;
+        }
+
+        const auto& clip = timeline_model_.tracks()[playhead_clip->track_index]
+            .clips[playhead_clip->clip_index];
+        const auto local_frame = std::clamp<std::int64_t>(
+            timelinePlayheadFrame() - clip.timeline_start_frame,
+            0,
+            std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
+        const bool active_clip_matches = active_timeline_track_index_.has_value() &&
+            active_timeline_clip_index_.has_value() &&
+            *active_timeline_track_index_ == playhead_clip->track_index &&
+            *active_timeline_clip_index_ == playhead_clip->clip_index;
+        if (!active_clip_matches || !canPlaybackSelectedMedia()) {
+            activateTimelineClipAt(
+                playhead_clip->track_index,
+                playhead_clip->clip_index,
+                local_frame,
+                true,
+                true);
+            return;
+        }
+    }
+
+    if (!canPlaybackTimelineAtPlayhead()) return;
 
     const auto active_index = active_timeline_clip_index_;
     const auto active_track = active_timeline_track_index_.value_or(0);
@@ -443,7 +489,7 @@ void MainWindow::sendPlaybackCommand(const char* command) {
 }
 
 void MainWindow::updatePlaybackControls() {
-    const bool has_media = canPlaybackSelectedMedia() &&
+    const bool has_media = canPlaybackTimelineAtPlayhead() &&
         !pending_clip_activation_.has_value();
     if (previous_frame_button_ != nullptr) previous_frame_button_->setEnabled(has_media);
     if (play_pause_button_ != nullptr) play_pause_button_->setEnabled(has_media);
@@ -707,7 +753,7 @@ void MainWindow::handlePlaybackError(
 }
 
 void MainWindow::handleTimelineSeekStarted() {
-    if (!canPlaybackSelectedMedia() || pending_clip_activation_.has_value()) return;
+    if (playback_worker_ == nullptr || pending_clip_activation_.has_value()) return;
 
     playback_is_playing_ = false;
     updatePlaybackControls();
@@ -731,6 +777,7 @@ void MainWindow::handleTimelineSeek(qint64 global_frame) {
     playback_is_playing_ = false;
 
     if (!target_clip.has_value()) {
+        preserved_timeline_playhead_frame_ = target_frame;
         if (timeline_widget_ != nullptr) {
             timeline_widget_->setPlayheadFrame(target_frame);
         }

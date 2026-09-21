@@ -176,6 +176,10 @@ void TimelineWidget::setPlayheadFrame(std::int64_t frame_index) {
     update();
 }
 
+std::int64_t TimelineWidget::playheadFrame() const noexcept {
+    return playhead_frame_;
+}
+
 void TimelineWidget::setRazorMode(bool enabled) {
     razor_mode_ = enabled;
     razor_clicking_ = false;
