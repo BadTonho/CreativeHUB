@@ -111,8 +111,8 @@ bool validInlineBinName(const QString& value) {
 QWidget* MainWindow::createMediaBrowser() {
     auto* container = new QWidget;
     auto* layout = new QVBoxLayout(container);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(8);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(4);
 
     auto* title_row = new QHBoxLayout;
     title_row->addStretch();
@@ -206,10 +206,6 @@ QWidget* MainWindow::createMediaBrowser() {
                 splitter_settings.sync();
             });
     layout->addWidget(browser_splitter, 1);
-
-    media_status_label_ = new QLabel(container);
-    media_status_label_->setStyleSheet("color: #9aa4b2;");
-    layout->addWidget(media_status_label_);
 
     populateMediaBrowser();
     updateTimelineState();
@@ -394,8 +390,6 @@ void MainWindow::populateMediaBrowser(
     if (media_list_->currentRow() >= 0) {
         updateMediaDetails(media_list_->currentRow());
     } else {
-        media_status_label_->setText(
-            media_items_.empty() ? QString() : "No media in this bin.");
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -895,7 +889,6 @@ void MainWindow::updateMediaDetails(int row) {
 
     if (row < 0 || media_list_ == nullptr || media_list_->currentItem() == nullptr) {
         active_timeline_clip_index_.reset();
-        media_status_label_->clear();
         preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
         updateTimelineState();
         updatePlaybackControls();
@@ -905,7 +898,6 @@ void MainWindow::updateMediaDetails(int row) {
 
     const auto item_index = selectedMediaIndex();
     if (!item_index.has_value()) {
-        media_status_label_->setText("No media selected.");
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -920,7 +912,6 @@ void MainWindow::updateMediaDetails(int row) {
         active_timeline_track_index_.reset();
         active_timeline_clip_index_.reset();
     }
-    media_status_label_->clear();
     if (item.offline) {
         preview_widget_->clearFrame("Preview area\n\nThe selected media is offline.");
     } else {

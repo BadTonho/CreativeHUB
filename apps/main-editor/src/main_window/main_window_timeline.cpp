@@ -1817,9 +1817,6 @@ void MainWindow::restoreTimelineEditState(
             populateMediaBrowser(item.metadata.source_path);
             if (!item.offline) preview_widget_->setFrame(item.first_frame);
         } else {
-            if (media_status_label_ != nullptr) {
-                media_status_label_->clear();
-            }
             preview_widget_->clearFrame(
                 "Preview area\n\nImport media to display its first frame.");
         }

@@ -253,9 +253,6 @@ void MainWindow::clearProjectState() {
     media_items_.clear();
     bin_paths_ = {"Unsorted"};
     populateMediaBrowser();
-    if (media_status_label_ != nullptr) {
-        media_status_label_->clear();
-    }
     preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
     updateTimelineState();
     updatePlaybackControls();
@@ -640,9 +637,6 @@ void MainWindow::applyLoadedProject(
 
     populateMediaBrowser();
 
-    if (media_status_label_ != nullptr) {
-        media_status_label_->clear();
-    }
     preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
     updateProjectDirtyState();
 

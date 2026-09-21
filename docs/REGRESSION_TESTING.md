@@ -76,8 +76,8 @@ in the running Main Editor after UI or integration changes:
   drops, project dirty state, persistence after save/reopen, and drag-and-drop
   to the Timeline; confirm that invalid inline names restore the previous
   label and report a concise status message, and confirm that no Add to
-  Timeline button or redundant `No media imported` label is shown while media
-  drag-and-drop remains available;
+  Timeline button, redundant status row, or excessive top/bottom spacing is
+  shown while media drag-and-drop remains available;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement;
 - Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;

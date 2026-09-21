@@ -28,7 +28,8 @@ Timeline clips, and the existing selection and internal drag-and-drop MIME
 flow remain unchanged. The Media Browser does not display a separate Add to
 Timeline button; imported media can still be added through the existing
 Timeline drag-and-drop path and internal add operation. An empty library does
-not add a redundant `No media imported` label below the browser.
+not add a redundant status row below the browser; the panel keeps compact
+spacing around the header, bin tree, and media view.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline
