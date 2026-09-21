@@ -30,7 +30,8 @@ to the left of `Help`. It opens a modal settings dialog with `General` and
 `Timeline` tabs reserved for future user preferences. The existing timeline
 choices remain in the Edit menu during this foundation milestone. Opening or
 closing the dialog does not change project data, project dirty state, or the
-`.csp` format.
+`.csp` format. `SettingsDialog` is an independent Qt component under
+`apps/main-editor/src/settings/`; `MainWindow` only creates and opens it.
 
 ## Timeline interaction
 

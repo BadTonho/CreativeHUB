@@ -4,20 +4,18 @@
 #include "logging/logger.h"
 #include "preview_widget.h"
 #include "project/project_file.h"
+#include "settings/settings_dialog.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser_list_widget.h"
 
 #include <QAction>
 #include <QCheckBox>
 #include <QCloseEvent>
-#include <QDialog>
-#include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QDesktopServices>
 #include <QDoubleSpinBox>
-#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QKeySequence>
@@ -36,9 +34,7 @@
 #include <QSettings>
 #include <QSlider>
 #include <QStatusBar>
-#include <QTabWidget>
 #include <QUrl>
-#include <QVBoxLayout>
 #include <QWidget>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -96,39 +92,7 @@ void MainWindow::createWorkspace() {
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
 }
 void MainWindow::showSettingsDialog() {
-    QDialog dialog(this);
-    dialog.setWindowTitle("Settings");
-    dialog.setModal(true);
-    dialog.resize(420, 260);
-
-    auto* layout = new QVBoxLayout(&dialog);
-    auto* tabs = new QTabWidget(&dialog);
-
-    auto* general_page = new QWidget(tabs);
-    auto* general_layout = new QVBoxLayout(general_page);
-    auto* general_message = new QLabel(
-        "General user preferences will be added here.", general_page);
-    general_message->setAlignment(Qt::AlignCenter);
-    general_message->setWordWrap(true);
-    general_layout->addWidget(general_message);
-    tabs->addTab(general_page, "General");
-
-    auto* timeline_page = new QWidget(tabs);
-    auto* timeline_layout = new QVBoxLayout(timeline_page);
-    auto* timeline_message = new QLabel(
-        "Timeline preferences will be added here.", timeline_page);
-    timeline_message->setAlignment(Qt::AlignCenter);
-    timeline_message->setWordWrap(true);
-    timeline_layout->addWidget(timeline_message);
-    tabs->addTab(timeline_page, "Timeline");
-
-    auto* buttons = new QDialogButtonBox(
-        QDialogButtonBox::Close, Qt::Horizontal, &dialog);
-    connect(buttons, &QDialogButtonBox::rejected,
-            &dialog, &QDialog::reject);
-
-    layout->addWidget(tabs, 1);
-    layout->addWidget(buttons);
+    SettingsDialog dialog(this);
     dialog.exec();
 }
 void MainWindow::createMenus() {

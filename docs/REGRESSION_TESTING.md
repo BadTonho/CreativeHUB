@@ -30,6 +30,7 @@ updated intentionally.
 | Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
+| Settings dialog | Modal shell, General and Timeline tabs, Close action, and independent component construction |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
