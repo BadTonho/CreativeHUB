@@ -25,7 +25,7 @@ updated intentionally.
 | Structured logging | File creation, required fields, escaping, rotation, retention limit |
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions |
 | Playback session | Sequential frames, reset, optimized seeking, frame cache, EOF, segment limits |
-| Playback worker | Media activation, generation handling, seek coalescing, playback completion, errors, no-op seeks without a selected source |
+| Playback worker | Media activation, generation handling, seek coalescing, playback completion, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
 | Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
@@ -84,7 +84,9 @@ in the running Main Editor after UI or integration changes:
   spacing is shown while media drag-and-drop remains available; confirm that
   branch lines make nested bins visually distinguishable at one or more levels;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
-  clip movement;
+  clip movement; open a project whose first active clip is text or whose Media
+  Browser has no current item, then confirm the Timeline can still play the
+  active composition;
 - Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;
   confirm that the numeric fields remain editable, values stay within their
   property ranges, keyframe edits still target the current frame, and one

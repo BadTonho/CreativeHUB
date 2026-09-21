@@ -366,6 +366,69 @@ void validateCompositionTransitions(
             "Fade to black did not produce an opaque black junction frame.");
 }
 
+void validateCompositionPlayback(
+    QCoreApplication& application,
+    const std::filesystem::path& path) {
+    playback::PlaybackWorker worker;
+    bool playback_finished = false;
+    bool playback_error = false;
+    int frame_count = 0;
+
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&frame_count](playback::VideoFramePtr frame, qint64, quint64) {
+            require(frame != nullptr, "Composition playback emitted an empty frame.");
+            ++frame_count;
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackFinished,
+        [&application, &playback_finished](quint64, bool during_playback) {
+            playback_finished = during_playback;
+            application.quit();
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&application, &playback_error](const QString&, qint64, quint64) {
+            playback_error = true;
+            application.quit();
+        });
+
+    playback::CompositionLayerSpec layer;
+    layer.source_path = toQString(path);
+    layer.frame_rate = 30.0;
+    layer.timeline_start_frame = 0;
+    layer.source_start_frame = 0;
+    layer.segment_frame_count = 3;
+    layer.track_index = 1;
+    layer.clip_index = 0;
+
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{layer},
+        {},
+        200);
+    worker.play();
+
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(
+        &timeout,
+        &QTimer::timeout,
+        &application,
+        &QCoreApplication::quit);
+    timeout.start(2000);
+    application.exec();
+
+    require(!playback_error,
+            "Composition playback without a selected media source emitted an error.");
+    require(playback_finished,
+            "Composition playback without a selected media source did not finish.");
+    require(frame_count >= 1,
+            "Composition playback without a selected media source emitted no frames.");
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -379,6 +442,7 @@ int main(int argc, char* argv[]) {
             validateSeekCoalescing(application, std::filesystem::path(argv[1]));
             validateSegmentRange(application, std::filesystem::path(argv[1]));
             validateCompositionTransitions(std::filesystem::path(argv[1]));
+            validateCompositionPlayback(application, std::filesystem::path(argv[1]));
         }
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

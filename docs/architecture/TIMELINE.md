@@ -84,10 +84,13 @@ operations retain repeated source occurrences independently.
 The worker owns one FFmpeg video session and, when available, one embedded
 audio session at a time. The Main Editor chooses the highest-priority visible
 clip at the current playhead and changes both sessions when crossing a clip
-boundary. Audio is the playback clock when output is available; videos without
-audio and output failures use the existing video timer. Playback pauses in
-gaps and remains paused at the end of the last clip. Audio is never mixed
-between overlapping tracks: only the visible top-priority clip contributes.
+boundary. Composition playback may advance directly from the worker's
+composition frame range when the active timeline clip is text, so it does not
+depend on a Media Browser selection. Audio is the playback clock when output
+is available; videos without audio and output failures use the existing video
+timer. Playback pauses in gaps and remains paused at the end of the last clip.
+Audio is never mixed between overlapping tracks: only the visible top-priority
+clip contributes.
 
 Every clip and track also stores linear audio gain (`0.0` to `2.0`) and a mute
 flag. The effective gain is the product of clip and track gain. These
@@ -155,8 +158,9 @@ RGBA color, and horizontal alignment. The default is Sans Serif, 48 pixels,
 white, and centered. Its transform and local linear keyframes use the same
 rules as video occurrences. Selecting text keeps the Media Browser selection,
 video session, and playback clock intact; the Inspector changes to text
-editing controls. Text-only timelines can show a static composition, but
-video playback controls remain disabled without a valid video source.
+editing controls. Text-only timelines can advance through their valid
+composition range without a video source. Selecting text keeps the Media
+Browser selection and does not disable the Timeline playback controls.
 
 ## Essential transitions
 

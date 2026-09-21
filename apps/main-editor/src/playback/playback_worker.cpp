@@ -129,7 +129,17 @@ void PlaybackWorker::setMedia(
 }
 
 void PlaybackWorker::play() {
-    if (source_path_.empty()) return;
+    if (source_path_.empty()) {
+        if (!composition_enabled_ || segment_frame_count_ <= 0) return;
+
+        ensureTimer();
+        timer_->start(frameIntervalMilliseconds());
+        if (!playing_) {
+            playing_ = true;
+            emit playbackStateChanged(true, generation_);
+        }
+        return;
+    }
 
     try {
         if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
@@ -261,11 +271,22 @@ void PlaybackWorker::setComposition(
     primary_timeline_start_frame_ = 0;
     if (!composition_enabled_) return;
 
+    std::int64_t composition_start = std::numeric_limits<std::int64_t>::max();
+    std::int64_t composition_end = 0;
+
     try {
         for (const auto& spec : composition_specs_) {
             if (spec.timeline_start_frame < 0 ||
                 spec.source_start_frame < 0 || spec.segment_frame_count <= 0) {
                 continue;
+            }
+            composition_start = std::min(composition_start, spec.timeline_start_frame);
+            if (spec.timeline_start_frame <=
+                    std::numeric_limits<std::int64_t>::max() -
+                        spec.segment_frame_count) {
+                composition_end = std::max(
+                    composition_end,
+                    spec.timeline_start_frame + spec.segment_frame_count);
             }
             CompositionSession composition_session;
             composition_session.spec = spec;
@@ -278,6 +299,15 @@ void PlaybackWorker::setComposition(
                 primary_timeline_start_frame_ = spec.timeline_start_frame;
             }
             composition_sessions_.push_back(std::move(composition_session));
+        }
+
+        if (source_path_.empty() && composition_start !=
+                std::numeric_limits<std::int64_t>::max() &&
+            composition_end > composition_start) {
+            primary_timeline_start_frame_ = composition_start;
+            current_frame_index_ = 0;
+            segment_frame_count_ = composition_end - composition_start;
+            frame_rate_ = default_frame_rate;
         }
     } catch (const media::MediaError& error) {
         composition_sessions_.clear();
@@ -299,6 +329,12 @@ void PlaybackWorker::renderCompositionFrame(
     if (generation < generation_ || !composition_enabled_) return;
     generation_ = generation;
     try {
+        if (source_path_.empty() && segment_frame_count_ > 0) {
+            current_frame_index_ = std::clamp<std::int64_t>(
+                frame_index,
+                0,
+                segment_frame_count_ - 1);
+        }
         const auto composed = decodeCompositionAt(global_frame);
         if (!composed.has_value()) {
             throw media::MediaError("The timeline composition could not produce a frame.");
@@ -314,7 +350,16 @@ void PlaybackWorker::renderCompositionFrame(
 
 void PlaybackWorker::stepForward() {
     pause();
-    if (source_path_.empty()) return;
+    if (source_path_.empty()) {
+        if (!composition_enabled_ || segment_frame_count_ <= 0) return;
+        if (current_frame_index_ >= segment_frame_count_ - 1) {
+            finishPlayback();
+            return;
+        }
+        ++current_frame_index_;
+        emitComposedFrame();
+        return;
+    }
 
     try {
         if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
@@ -344,7 +389,12 @@ void PlaybackWorker::stepForward() {
 
 void PlaybackWorker::stepBackward() {
     pause();
-    if (source_path_.empty()) return;
+    if (source_path_.empty()) {
+        if (!composition_enabled_ || segment_frame_count_ <= 0) return;
+        current_frame_index_ = std::max<std::int64_t>(0, current_frame_index_ - 1);
+        emitComposedFrame();
+        return;
+    }
 
     try {
         if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
@@ -414,6 +464,9 @@ void PlaybackWorker::processPendingSeek() {
                 audio_position_valid_ = false;
                 pending_audio_bytes_.clear();
                 if (audio_output_ != nullptr) audio_output_->stop();
+            } else if (composition_enabled_) {
+                current_frame_index_ = frame_index;
+                emitComposedFrame();
             }
         } catch (const media::MediaError& error) {
             if (!isSeekCurrent(sequence)) continue;
@@ -438,6 +491,17 @@ void PlaybackWorker::decodeTick() {
     if (!playing_) return;
 
     try {
+        if (composition_enabled_ && source_path_.empty()) {
+            if (segment_frame_count_ > 0 &&
+                current_frame_index_ >= segment_frame_count_ - 1) {
+                finishPlayback();
+                return;
+            }
+            ++current_frame_index_;
+            emitComposedFrame();
+            return;
+        }
+
         if (!session_) {
             throw media::MediaError("Playback session is not available.");
         }

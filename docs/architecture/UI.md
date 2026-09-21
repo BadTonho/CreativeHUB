@@ -174,10 +174,11 @@ When a text occurrence is selected, the Inspector shows a multiline content
 editor, font family, pixel size, RGBA color, horizontal alignment, and an
 Apply action, followed by the shared transform and keyframe controls. A text
 selection keeps the Media Browser selection, current video session, and
-playback clock unchanged. Text-only projects can show a static composition,
-but playback remains disabled without video media. Confirmed text/style edits
-are Timeline Undo/Redo entries and are persisted by the current `.csp` version
-6 format.
+playback clock unchanged. Timeline playback is coordinated by the active
+composition and does not require a Media Browser item to remain selected;
+text-only compositions can also advance through their valid frame range.
+Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
+the current `.csp` version 6 format.
 
 Text rasterization is performed with `QImage/QPainter` by the playback worker;
 the UI only edits the values and receives the composed RGBA frame. No new

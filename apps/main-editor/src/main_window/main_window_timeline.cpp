@@ -640,7 +640,20 @@ bool MainWindow::canPlaybackSelectedMedia() const noexcept {
             *active_timeline_track_index_)) {
         return false;
     }
-    return canPreviewSelectedMedia();
+
+    const auto& clip = timeline_model_.tracks()[*active_timeline_track_index_]
+        .clips[*active_timeline_clip_index_];
+    if (clip.kind == timeline::ClipKind::Text) return playback_worker_ != nullptr;
+
+    const auto media = std::find_if(
+        media_items_.begin(),
+        media_items_.end(),
+        [&clip](const ImportedMedia& item) {
+            return normalizedPath(item.metadata.source_path) ==
+                normalizedPath(clip.source_path);
+        });
+    return media != media_items_.end() && !media->offline &&
+        playback_worker_ != nullptr;
 }
 
 std::int64_t MainWindow::timelinePlayheadFrame() const noexcept {

@@ -455,6 +455,22 @@ void MainWindow::updatePlaybackStatus() {
 
     const auto selected_index = selectedMediaIndex();
     if (!selected_index.has_value()) {
+        if (canPlaybackSelectedMedia() &&
+            active_timeline_track_index_.has_value() &&
+            active_timeline_clip_index_.has_value() &&
+            *active_timeline_track_index_ < timeline_model_.trackCount() &&
+            *active_timeline_clip_index_ < timeline_model_.clipCount(
+                *active_timeline_track_index_)) {
+            const auto& clip = timeline_model_.tracks()[*active_timeline_track_index_]
+                .clips[*active_timeline_clip_index_];
+            const QString state = playback_is_playing_ ? "Playing" : "Paused";
+            playback_status_label_->setText(
+                QString("%1 - Frame %2 / %3")
+                    .arg(state)
+                    .arg(playback_frame_index_ + 1)
+                    .arg(clip.timeline_duration_frames));
+            return;
+        }
         playback_status_label_->setText("No media selected.");
         return;
     }
