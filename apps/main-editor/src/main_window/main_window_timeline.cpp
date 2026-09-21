@@ -336,11 +336,16 @@ QWidget* MainWindow::createTimeline() {
     controls->addWidget(remove_track_button);
     controls->addSpacing(10);
     auto* zoom_out_button = new QPushButton("−", container);
-    auto* zoom_slider = new QSlider(Qt::Horizontal, container);
-    auto* zoom_indicator = new QLabel("100%", container);
+    auto* zoom_control = new QWidget(container);
+    auto* zoom_layout = new QVBoxLayout(zoom_control);
+    auto* zoom_slider = new QSlider(Qt::Horizontal, zoom_control);
+    auto* zoom_indicator = new QLabel("100%", zoom_control);
     auto* zoom_in_button = new QPushButton("+", container);
     zoom_out_button->setFixedWidth(28);
     zoom_in_button->setFixedWidth(28);
+    zoom_layout->setContentsMargins(0, 0, 0, 0);
+    zoom_layout->setSpacing(0);
+    zoom_control->setFixedWidth(92);
     zoom_slider->setRange(0, static_cast<int>(timeline_zoom_levels.size()) - 1);
     zoom_slider->setValue(timelineZoomLevelIndex(1.0));
     zoom_slider->setFixedWidth(92);
@@ -354,13 +359,14 @@ QWidget* MainWindow::createTimeline() {
         "QSlider::handle:horizontal { width: 10px; height: 10px; "
         "margin: -4px 0; border-radius: 5px; background: #d5a94b; }");
     zoom_indicator->setAlignment(Qt::AlignCenter);
-    zoom_indicator->setMinimumWidth(48);
+    zoom_indicator->setFixedWidth(92);
     zoom_out_button->setToolTip("Zoom out of the timeline");
     zoom_in_button->setToolTip("Zoom in on the timeline");
     zoom_indicator->setToolTip("Current timeline zoom");
     controls->addWidget(zoom_out_button);
-    controls->addWidget(zoom_slider);
-    controls->addWidget(zoom_indicator);
+    zoom_layout->addWidget(zoom_indicator);
+    zoom_layout->addWidget(zoom_slider);
+    controls->addWidget(zoom_control);
     controls->addWidget(zoom_in_button);
     controls->addStretch();
     layout->addLayout(controls);

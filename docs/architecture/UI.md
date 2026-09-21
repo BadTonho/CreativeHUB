@@ -45,8 +45,10 @@ short projects keep a stable scale and retain empty space after their last
 clip. Projects longer than one hour expand the timeline surface and use the
 horizontal scrollbar; the actual content duration still controls playback
 limits.
-The timeline controls expose a thin zoom slider, minus, plus, and a percentage
-indicator without an extra text label. Zoom levels range from 25% to 800%;
+The timeline controls expose a thin zoom slider with the percentage indicator
+centered above it, plus a minus button and a plus button without an extra text
+label.
+Zoom levels range from 25% to 800%;
 Ctrl + mouse wheel, the slider, and the buttons change one level around the
 playhead. Zoom affects only horizontal timeline presentation and is persisted
 per project without creating a clip-edit history entry.
