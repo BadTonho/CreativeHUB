@@ -69,6 +69,7 @@ private:
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();
     void saveWorkspaceLayout();
+    QWidget* createMediaPool();
     QWidget* createMediaBins();
     QWidget* createMediaPanel();
     QWidget* createInspector();
@@ -261,13 +262,13 @@ private:
         bool preserve_timeline_playhead = false;
     };
 
-    QDockWidget* bins_dock_ = nullptr;
-    QDockWidget* media_dock_ = nullptr;
+    QDockWidget* media_pool_dock_ = nullptr;
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
     MediaBrowserListWidget* media_list_ = nullptr;
     MediaBrowserBinTreeWidget* bin_tree_ = nullptr;
+    QTabWidget* media_pool_tabs_ = nullptr;
     QPushButton* previous_frame_button_ = nullptr;
     QPushButton* play_pause_button_ = nullptr;
     QPushButton* next_frame_button_ = nullptr;

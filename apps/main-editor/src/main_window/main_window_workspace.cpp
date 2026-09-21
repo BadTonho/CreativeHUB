@@ -74,18 +74,11 @@ void MainWindow::createWorkspace() {
             statusBar()->showMessage("GPU preview unavailable; using CPU preview.");
         });
 
-    bins_dock_ = createDock(
-        "Bins",
-        "binsDock",
-        createMediaBins());
-    media_dock_ = createDock(
-        "Media",
-        "mediaDock",
-        createMediaPanel());
-    addDockWidget(Qt::LeftDockWidgetArea, bins_dock_);
-    addDockWidget(Qt::LeftDockWidgetArea, media_dock_);
-    splitDockWidget(bins_dock_, media_dock_, Qt::Vertical);
-    resizeDocks({bins_dock_, media_dock_}, {300, 700}, Qt::Vertical);
+    media_pool_dock_ = createDock(
+        "Media Pool",
+        "mediaPoolDock",
+        createMediaPool());
+    addDockWidget(Qt::LeftDockWidgetArea, media_pool_dock_);
 
     populateMediaBrowser();
     updateTimelineState();
@@ -252,8 +245,7 @@ void MainWindow::createMenus() {
         });
 
     auto* view_menu = menuBar()->addMenu("&View");
-    view_menu->addAction(bins_dock_->toggleViewAction());
-    view_menu->addAction(media_dock_->toggleViewAction());
+    view_menu->addAction(media_pool_dock_->toggleViewAction());
     view_menu->addAction(inspector_dock_->toggleViewAction());
     view_menu->addAction(timeline_dock_->toggleViewAction());
     view_menu->addSeparator();
@@ -372,32 +364,27 @@ void MainWindow::restoreWorkspaceLayout() {
     QSettings settings;
     const auto saved_state = settings.value(
         "workspace/dock_layout_state").toByteArray();
-    if (!saved_state.isEmpty() && restoreState(saved_state, 1)) return;
+    if (!saved_state.isEmpty() && restoreState(saved_state, 2)) return;
 
     restoreDefaultLayout();
 }
 
 void MainWindow::saveWorkspaceLayout() {
     QSettings settings;
-    settings.setValue("workspace/dock_layout_state", saveState(1));
+    settings.setValue("workspace/dock_layout_state", saveState(2));
     settings.sync();
 }
 
 void MainWindow::restoreDefaultLayout() {
-    bins_dock_->setFloating(false);
-    media_dock_->setFloating(false);
+    media_pool_dock_->setFloating(false);
     inspector_dock_->setFloating(false);
     timeline_dock_->setFloating(false);
 
-    addDockWidget(Qt::LeftDockWidgetArea, bins_dock_);
-    addDockWidget(Qt::LeftDockWidgetArea, media_dock_);
-    splitDockWidget(bins_dock_, media_dock_, Qt::Vertical);
-    resizeDocks({bins_dock_, media_dock_}, {300, 700}, Qt::Vertical);
+    addDockWidget(Qt::LeftDockWidgetArea, media_pool_dock_);
     addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
 
-    bins_dock_->show();
-    media_dock_->show();
+    media_pool_dock_->show();
     inspector_dock_->show();
     timeline_dock_->show();
     saveWorkspaceLayout();
