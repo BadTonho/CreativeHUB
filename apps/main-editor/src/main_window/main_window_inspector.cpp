@@ -57,6 +57,36 @@
 
 using namespace main_window_detail;
 
+namespace {
+
+constexpr int transform_slider_resolution = 1000;
+constexpr std::array<double, 5> transform_minimums{
+    -10.0, -10.0, 0.01, -3600.0, 0.0};
+constexpr std::array<double, 5> transform_maximums{
+    10.0, 10.0, 20.0, 3600.0, 1.0};
+constexpr std::array<double, 5> transform_steps{
+    0.01, 0.01, 0.01, 1.0, 0.01};
+
+int transformSliderValue(double value, double minimum, double maximum) {
+    if (maximum <= minimum) return 0;
+    const auto fraction = std::clamp(
+        (value - minimum) / (maximum - minimum), 0.0, 1.0);
+    return static_cast<int>(std::lround(
+        fraction * transform_slider_resolution));
+}
+
+double transformValueFromSlider(int slider_value, double minimum, double maximum) {
+    if (maximum <= minimum) return minimum;
+    const auto fraction = std::clamp(
+        static_cast<double>(slider_value) /
+            transform_slider_resolution,
+        0.0,
+        1.0);
+    return minimum + fraction * (maximum - minimum);
+}
+
+} // namespace
+
 QWidget* MainWindow::createInspector() {
     auto* container = new QWidget(this);
     auto* layout = new QVBoxLayout(container);
@@ -78,22 +108,40 @@ QWidget* MainWindow::createInspector() {
     form->setVerticalSpacing(6);
     const std::array<QString, 5> labels{
         "Position X", "Position Y", "Scale", "Rotation", "Opacity"};
-    const std::array<double, 5> minimums{-10.0, -10.0, 0.01, -3600.0, 0.0};
-    const std::array<double, 5> maximums{10.0, 10.0, 20.0, 3600.0, 1.0};
-    const std::array<double, 5> steps{0.01, 0.01, 0.01, 1.0, 0.01};
     for (int index = 0; index < 5; ++index) {
         auto* row = new QWidget(container);
         auto* row_layout = new QHBoxLayout(row);
         row_layout->setContentsMargins(0, 0, 0, 0);
         row_layout->setSpacing(4);
         auto* spin = new QDoubleSpinBox(row);
-        spin->setRange(minimums[index], maximums[index]);
-        spin->setSingleStep(steps[index]);
+        spin->setRange(transform_minimums[index], transform_maximums[index]);
+        spin->setSingleStep(transform_steps[index]);
         spin->setDecimals(index == 3 ? 1 : 3);
         spin->setEnabled(false);
+        spin->setFixedWidth(82);
         transform_spin_boxes_[static_cast<std::size_t>(index)] = spin;
         auto* key = new QPushButton("◇", row);
         key->setCheckable(true);
+        auto* slider = new QSlider(Qt::Horizontal, row);
+        slider->setRange(0, transform_slider_resolution);
+        slider->setValue(transformSliderValue(
+            index == 2 ? 1.0 : index == 3 ? 0.0 : index == 4 ? 1.0 : 0.5,
+            transform_minimums[index], transform_maximums[index]));
+        slider->setSingleStep(1);
+        slider->setPageStep(100);
+        slider->setTracking(true);
+        slider->setEnabled(false);
+        slider->setToolTip(QString("Adjust %1").arg(labels[index]));
+        slider->setStyleSheet(
+            "QSlider::groove:horizontal { height: 4px; background: #303844; "
+            "border-radius: 2px; }"
+            "QSlider::sub-page:horizontal { height: 4px; background: #8b98aa; "
+            "border-radius: 2px; }"
+            "QSlider::add-page:horizontal { height: 4px; background: #252d38; "
+            "border-radius: 2px; }"
+            "QSlider::handle:horizontal { width: 10px; height: 10px; "
+            "margin: -3px 0; border-radius: 5px; background: #d5a94b; }");
+        transform_sliders_[static_cast<std::size_t>(index)] = slider;
         key->setEnabled(false);
         key->setFixedWidth(30);
         key->setStyleSheet(
@@ -101,7 +149,8 @@ QWidget* MainWindow::createInspector() {
             "QPushButton:checked { color: #171a20; background: #e8b94f; }");
         key->setToolTip("Add keyframe at the current frame");
         transform_key_buttons_[static_cast<std::size_t>(index)] = key;
-        row_layout->addWidget(spin, 1);
+        row_layout->addWidget(slider, 1);
+        row_layout->addWidget(spin);
         row_layout->addWidget(key);
         form->addRow(labels[index], row);
 
@@ -112,6 +161,17 @@ QWidget* MainWindow::createInspector() {
                     transform_spin_boxes_[static_cast<std::size_t>(index)]->value());
             }
         });
+        connect(slider, &QSlider::sliderPressed,
+                this, &MainWindow::beginTransformEdit);
+        connect(slider, &QSlider::valueChanged, this,
+                [this, index, minimum = transform_minimums[index],
+                 maximum = transform_maximums[index]](int value) {
+                    applyTransformProperty(
+                        index,
+                        transformValueFromSlider(value, minimum, maximum));
+                });
+        connect(slider, &QSlider::sliderReleased,
+                this, &MainWindow::finishTransformEdit);
         connect(key, &QPushButton::clicked, this, [this, index]() {
             toggleTransformKeyframe(index);
         });
@@ -221,8 +281,12 @@ void MainWindow::updateInspector() {
         location->track_index < timeline_model_.trackCount() &&
         location->clip_index < timeline_model_.clipCount(location->track_index);
     const std::array<QDoubleSpinBox*, 5> spins = transform_spin_boxes_;
+    const std::array<QSlider*, 5> sliders = transform_sliders_;
     for (auto* spin : spins) {
         if (spin != nullptr) spin->setEnabled(enabled && !transition_enabled);
+    }
+    for (auto* slider : sliders) {
+        if (slider != nullptr) slider->setEnabled(enabled && !transition_enabled);
     }
     for (auto* button : transform_key_buttons_) {
         if (button != nullptr) button->setEnabled(enabled && !transition_enabled);
@@ -341,6 +405,13 @@ void MainWindow::updateInspector() {
             if (spins[index] != nullptr) {
                 const QSignalBlocker blocker(spins[index]);
                 spins[index]->setValue(values[index]);
+            }
+            if (sliders[index] != nullptr) {
+                const QSignalBlocker blocker(sliders[index]);
+                sliders[index]->setValue(transformSliderValue(
+                    values[index],
+                    transform_minimums[index],
+                    transform_maximums[index]));
             }
             if (transform_key_buttons_[index] != nullptr) {
                 const auto property = static_cast<timeline::TransformProperty>(index);
@@ -474,7 +545,9 @@ void MainWindow::applyTransformProperty(int property_index, double value) {
     if (result != timeline::TransformParameterResult::Changed) {
         return;
     }
-    recordTimelineEdit(before);
+    if (!pending_transform_edit_.has_value()) {
+        recordTimelineEdit(before);
+    }
     updateProjectDirtyState();
     updateTimelineState();
     sendCompositionToWorker();

@@ -28,6 +28,7 @@ updated intentionally.
 | Playback worker | Media activation, generation handling, seek coalescing, playback completion, errors |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
 | Timeline interaction | Selection, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
+| Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
@@ -48,6 +49,10 @@ in the running Main Editor after UI or integration changes:
 - Media Browser selection, bins, context actions, and drag-and-drop;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement;
+- Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;
+  confirm that the numeric fields remain editable, values stay within their
+  property ranges, keyframe edits still target the current frame, and one
+  slider drag creates one Undo/Redo entry;
 - project prompts, Save/Open behavior, dirty-state title, and failed-open
   preservation; reopening a project restores its timeline zoom and starts at
   the beginning of the horizontal scroll;

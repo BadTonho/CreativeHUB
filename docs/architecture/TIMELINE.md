@@ -112,8 +112,10 @@ opacity use linear interpolation only. The Inspector provides one diamond
 toggle per property: it is outlined when the playhead is not on a keyframe and
 filled/highlighted when it is. Clicking it creates a keyframe at the evaluated
 value or removes the keyframe at the current local frame. Editing a property
-on an existing keyframe updates that keyframe. The Timeline shows read-only
-markers for the active clip.
+on an existing keyframe updates that keyframe. Each property also provides a
+horizontal adjustment bar beside its editable numeric value. Dragging the bar
+updates the evaluated transform live and records one history entry when the
+gesture ends. The Timeline shows read-only markers for the active clip.
 
 Splitting partitions animation curves. The right segment receives later keys
 with a new local origin and a frame-zero value evaluated at the split. Trimming

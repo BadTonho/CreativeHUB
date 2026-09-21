@@ -166,6 +166,8 @@ private:
     void updatePlaybackAudioParameters();
     void sendCompositionToWorker();
     void updateInspector();
+    void beginTransformEdit();
+    void finishTransformEdit();
     void applyTransformProperty(int property_index, double value);
     void toggleTransformKeyframe(int property_index);
     void applyTextStyle();
@@ -251,6 +253,7 @@ private:
     QLabel* timeline_interaction_hint_ = nullptr;
     QLabel* playback_status_label_ = nullptr;
     std::array<QDoubleSpinBox*, 5> transform_spin_boxes_{};
+    std::array<QSlider*, 5> transform_sliders_{};
     std::array<QPushButton*, 5> transform_key_buttons_{};
     QWidget* text_controls_ = nullptr;
     QPlainTextEdit* text_content_editor_ = nullptr;
@@ -298,6 +301,7 @@ private:
     std::optional<std::filesystem::path> project_path_;
     std::optional<project::ProjectDocument> saved_project_document_;
     std::optional<timeline::EditState> pending_audio_edit_;
+    std::optional<timeline::EditState> pending_transform_edit_;
     bool project_dirty_ = false;
     media::VideoProbe video_probe_;
     media::VideoDecoder video_decoder_;

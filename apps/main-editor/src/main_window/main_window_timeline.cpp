@@ -794,6 +794,25 @@ void MainWindow::applyTrackAudioControls() {
     }
 }
 
+void MainWindow::beginTransformEdit() {
+    if (!pending_transform_edit_.has_value() &&
+        active_timeline_track_index_.has_value() &&
+        active_timeline_clip_index_.has_value()) {
+        pending_transform_edit_ = captureTimelineEditState();
+    }
+}
+
+void MainWindow::finishTransformEdit() {
+    if (!pending_transform_edit_.has_value()) return;
+    auto before = std::move(*pending_transform_edit_);
+    pending_transform_edit_.reset();
+    if (before.timeline != timeline_model_.snapshot()) {
+        recordTimelineEdit(std::move(before));
+    }
+    updateHistoryActions();
+    updateProjectDirtyState();
+}
+
 void MainWindow::updatePlaybackAudioParameters() {
     if (playback_worker_ == nullptr ||
         !active_timeline_track_index_.has_value() ||

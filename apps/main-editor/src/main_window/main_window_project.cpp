@@ -225,6 +225,7 @@ bool MainWindow::confirmProjectChange() {
 void MainWindow::clearProjectState() {
     pending_clip_activation_.reset();
     pending_audio_edit_.reset();
+    pending_transform_edit_.reset();
     ++playback_generation_;
     playback_is_playing_ = false;
     if (playback_worker_ != nullptr) {
@@ -596,6 +597,7 @@ void MainWindow::applyLoadedProject(
     const project::ProjectDocument& saved_document) {
     pending_clip_activation_.reset();
     pending_audio_edit_.reset();
+    pending_transform_edit_.reset();
     ++playback_generation_;
     playback_is_playing_ = false;
     if (playback_worker_ != nullptr) {

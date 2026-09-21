@@ -93,7 +93,10 @@ highlighted diamond means that the playhead is on a keyframe. Clicking the
 diamond adds a keyframe at the evaluated value or removes the keyframe at the
 current frame. Editing a property while a keyframe exists at the playhead
 updates that keyframe; otherwise it changes the static base value. Timeline
-keyframe markers are visual and not draggable in this milestone.
+keyframe markers are visual and not draggable in this milestone. Each property
+also has a horizontal slider for quick adjustment and an editable numeric field
+that remains the precise value display. Slider drags update the preview while
+the pointer moves and are stored as one coalesced Undo/Redo edit.
 
 The preview composes all visible tracks in worker-owned code, from the bottom
 track to the top track, before handing one frame to the GPU/CPU preview. A gap
