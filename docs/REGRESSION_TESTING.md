@@ -28,7 +28,7 @@ updated intentionally.
 | Playback worker | Media activation, generation handling, seek coalescing, playback completion, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
 | Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
-| System memory indicator | Deterministic byte conversion, percentage calculation, rounding, normal formatting, and `RAM: N/A` fallback |
+| System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `App RAM: N/A` fallback |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
 | Settings dialog | Modal shell, General, Timeline, and Shortcuts tabs, Close action, independent component construction, and editable shortcut preferences |
@@ -92,9 +92,9 @@ in the running Main Editor after UI or integration changes:
   `Loading timeline clip...`, and other transient status messages appear beside
   the frame in one compact footer line without a separate global status row;
 - the Timeline footer RAM indicator: confirm it is aligned to the right, uses
-  the `RAM: <percent>% (<used>/<total> GB)` format, refreshes approximately
-  once per second, and does not affect playback, Timeline state, project dirty
-  state, or Undo/Redo;
+  the `App RAM: <megabytes> MB` format, refreshes approximately once per
+  second, reports only the Main Editor process, and does not affect playback,
+  Timeline state, project dirty state, or Undo/Redo;
 - Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;
   confirm that the numeric fields remain editable, values stay within their
   property ranges, keyframe edits still target the current frame, and one

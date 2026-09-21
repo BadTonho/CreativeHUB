@@ -892,6 +892,10 @@ target_include_directories(creative-suite-main-editor-system-memory-tests PRIVAT
     ../src
 )
 
+if(WIN32)
+    target_link_libraries(creative-suite-main-editor-system-memory-tests PRIVATE Psapi)
+endif()
+
 target_compile_features(creative-suite-main-editor-system-memory-tests PRIVATE cxx_std_20)
 
 if(MSVC)

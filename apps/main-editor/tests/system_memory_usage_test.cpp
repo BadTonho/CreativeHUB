@@ -6,34 +6,33 @@
 #include <optional>
 
 int main() {
-    constexpr std::uint64_t gib = 1024ULL * 1024ULL * 1024ULL;
+    constexpr std::uint64_t mib = 1024ULL * 1024ULL;
 
-    assert(std::abs(system_monitor::bytesToGigabytes(0)) < 1e-12);
-    assert(std::abs(system_monitor::bytesToGigabytes(gib) - 1.0) < 1e-12);
+    assert(std::abs(system_monitor::bytesToMegabytes(0)) < 1e-12);
+    assert(std::abs(system_monitor::bytesToMegabytes(mib) - 1.0) < 1e-12);
 
-    const system_monitor::MemoryUsage usage{
-        16 * gib,
-        6 * gib + gib / 10,
+    const system_monitor::ProcessMemoryUsage usage{
+        320 * mib,
     };
-    assert(std::abs(system_monitor::usedPercentage(usage) - 61.875) < 1e-12);
     assert(
-        system_monitor::formatMemoryUsage(usage) ==
-        "RAM: 62% (9.9/16 GB)");
+        system_monitor::formatProcessMemoryUsage(usage) ==
+        "App RAM: 320 MB");
 
-    const system_monitor::MemoryUsage rounded_usage{10 * gib, gib};
+    const system_monitor::ProcessMemoryUsage rounded_usage{
+        320 * mib + mib / 2,
+    };
     assert(
-        system_monitor::formatMemoryUsage(rounded_usage) ==
-        "RAM: 90% (9/10 GB)");
+        system_monitor::formatProcessMemoryUsage(rounded_usage) ==
+        "App RAM: 320.5 MB");
 
-    const system_monitor::MemoryUsage clamped_usage{gib, 2 * gib};
+    const system_monitor::ProcessMemoryUsage zero_usage{};
     assert(
-        system_monitor::formatMemoryUsage(clamped_usage) ==
-        "RAM: 0% (0/1 GB)");
+        system_monitor::formatProcessMemoryUsage(zero_usage) ==
+        "App RAM: N/A");
 
-    assert(system_monitor::formatMemoryUsage(std::nullopt) == "RAM: N/A");
     assert(
-        system_monitor::formatMemoryUsage(system_monitor::MemoryUsage{}) ==
-        "RAM: N/A");
+        system_monitor::formatProcessMemoryUsage(std::nullopt) ==
+        "App RAM: N/A");
 
     return 0;
 }

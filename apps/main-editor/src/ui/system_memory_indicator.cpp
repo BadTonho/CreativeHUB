@@ -8,8 +8,8 @@ SystemMemoryIndicator::SystemMemoryIndicator(QWidget* parent)
     : QLabel(parent) {
     setStyleSheet("color: #9aa4b2;");
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-    setToolTip("Total system memory currently in use.");
-    setAccessibleName("System memory usage");
+    setToolTip("Working-set memory currently used by the Main Editor.");
+    setAccessibleName("Main Editor memory usage");
 
     connect(
         &refresh_timer_,
@@ -22,5 +22,6 @@ SystemMemoryIndicator::SystemMemoryIndicator(QWidget* parent)
 
 void SystemMemoryIndicator::refresh() {
     setText(QString::fromStdString(
-        system_monitor::formatMemoryUsage(system_monitor::querySystemMemory())));
+        system_monitor::formatProcessMemoryUsage(
+            system_monitor::queryProcessMemory())));
 }

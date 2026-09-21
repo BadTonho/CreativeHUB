@@ -6,17 +6,15 @@
 
 namespace system_monitor {
 
-struct MemoryUsage {
-    std::uint64_t total_bytes = 0;
-    std::uint64_t available_bytes = 0;
+struct ProcessMemoryUsage {
+    std::uint64_t working_set_bytes = 0;
 };
 
-std::optional<MemoryUsage> querySystemMemory() noexcept;
+std::optional<ProcessMemoryUsage> queryProcessMemory() noexcept;
 
-double usedPercentage(const MemoryUsage& usage) noexcept;
+double bytesToMegabytes(std::uint64_t bytes) noexcept;
 
-double bytesToGigabytes(std::uint64_t bytes) noexcept;
-
-std::string formatMemoryUsage(const std::optional<MemoryUsage>& usage);
+std::string formatProcessMemoryUsage(
+    const std::optional<ProcessMemoryUsage>& usage);
 
 }  // namespace system_monitor

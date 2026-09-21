@@ -85,6 +85,10 @@ target_link_libraries(creative-suite-main-editor PRIVATE
     ${FFMPEG_LIBRARIES}
 )
 
+if(WIN32)
+    target_link_libraries(creative-suite-main-editor PRIVATE Psapi)
+endif()
+
 if(CREATIVE_SUITE_HAS_QT_MULTIMEDIA)
     target_link_libraries(creative-suite-main-editor PRIVATE Qt6::Multimedia)
     target_compile_definitions(creative-suite-main-editor PRIVATE CREATIVE_SUITE_HAS_QT_MULTIMEDIA=1)
