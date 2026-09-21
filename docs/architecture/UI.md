@@ -27,6 +27,11 @@ from Browser, and Restore Media. Removing media never deletes the file or its
 Timeline clips, and the existing selection and internal drag-and-drop MIME
 flow remain unchanged.
 
+The media view includes immediate child bins as folder items alongside media.
+They use the standard Qt folder icon, open on double-click, and do not produce
+the media-to-Timeline drag MIME. The existing bin tree remains available for
+navigation and filtering.
+
 The bin tree accepts custom drag-and-drop MIME types for imported media and bin
 paths. Dropping media onto a bin changes its project bin assignment; dropping
 a bin onto another bin reparents the complete subtree. `All Media`, empty tree

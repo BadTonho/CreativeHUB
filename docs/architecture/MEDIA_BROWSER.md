@@ -29,6 +29,13 @@ frame when the view changes. Items use compact names and video summaries; the
 large technical-details panel is intentionally not part of the Browser
 layout.
 
+The media view also includes the immediate child bins of the active location as
+folder items alongside the media entries. Folder items use the standard Qt
+folder icon, do not participate in the media-to-Timeline drag operation, and
+open that bin on double-click. The bin tree remains available for direct
+navigation and filtering; the existing parent-bin filter still includes its
+descendants.
+
 Each item draws a small information icon in its upper-right corner. Hovering
 that icon shows the complete technical summary: name, format, codec,
 resolution, frame rate, duration, frame count, audio, and source path, or the

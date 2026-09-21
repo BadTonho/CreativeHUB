@@ -156,6 +156,16 @@ QWidget* MainWindow::createMediaBrowser() {
     media_list_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(media_list_, &QListWidget::customContextMenuRequested, this,
             &MainWindow::showMediaContextMenu);
+    connect(media_list_, &QListWidget::itemDoubleClicked, this,
+            [this](QListWidgetItem* item) {
+                if (item == nullptr ||
+                    item->data(media_browser_ui::kMediaItemTypeRole).toInt() !=
+                        media_browser_ui::kMediaItemTypeBin) {
+                    return;
+                }
+                selectMediaBrowserBin(
+                    item->data(media_browser_ui::kMediaBinPathRole).toString());
+            });
     layout->addWidget(media_list_, 1);
 
     media_status_label_ = new QLabel("No media imported.", container);
@@ -175,9 +185,14 @@ QWidget* MainWindow::createMediaBrowser() {
 }
 std::optional<std::size_t> MainWindow::selectedMediaIndex() const noexcept {
     if (media_list_ == nullptr || media_list_->currentItem() == nullptr) return std::nullopt;
+    const auto* current_item = media_list_->currentItem();
+    if (current_item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
+        media_browser_ui::kMediaItemTypeBin) {
+        return std::nullopt;
+    }
     bool ok = false;
-    const auto value = media_list_->currentItem()->data(
-        media_browser_ui::kMediaIndexRole).toLongLong(&ok);
+    const auto value = current_item->data(media_browser_ui::kMediaIndexRole)
+                           .toLongLong(&ok);
     if (!ok || value < 0 || value >= static_cast<qint64>(media_items_.size())) return std::nullopt;
     return static_cast<std::size_t>(value);
 }
@@ -228,6 +243,7 @@ void MainWindow::populateMediaBrowser(
         bin_tree_->clear();
         auto* all = new QTreeWidgetItem(bin_tree_, {"All Media"});
         all->setData(0, Qt::UserRole, QString());
+        all->setIcon(0, style()->standardIcon(QStyle::SP_DirHomeIcon));
         bin_tree_->setCurrentItem(all);
         for (const auto& bin : bins) {
             QTreeWidgetItem* parent = all;
@@ -250,6 +266,7 @@ void MainWindow::populateMediaBrowser(
                 if (child == nullptr) {
                     child = new QTreeWidgetItem(parent, {QString::fromStdString(part)});
                     child->setData(0, Qt::UserRole, QString::fromStdString(current));
+                    child->setIcon(0, style()->standardIcon(QStyle::SP_DirIcon));
                 }
                 parent = child;
                 start = separator == std::string::npos ? bin.size() : separator + 1;
@@ -272,6 +289,26 @@ void MainWindow::populateMediaBrowser(
         const QSignalBlocker list_blocker(media_list_);
         media_list_->clear();
         const auto active_bin = selectedBinPath();
+
+        for (const auto& bin : bins) {
+            const std::string prefix = active_bin.empty() ? std::string() : active_bin + '/';
+            if (!active_bin.empty() && bin.rfind(prefix, 0) != 0) continue;
+
+            const auto relative = active_bin.empty() ? bin : bin.substr(prefix.size());
+            if (relative.empty() || relative.find('/') != std::string::npos) continue;
+
+            auto* bin_item = new QListWidgetItem(
+                QString::fromStdString(relative), media_list_);
+            bin_item->setIcon(style()->standardIcon(QStyle::SP_DirIcon));
+            bin_item->setData(
+                media_browser_ui::kMediaItemTypeRole,
+                media_browser_ui::kMediaItemTypeBin);
+            bin_item->setData(
+                media_browser_ui::kMediaBinPathRole,
+                QString::fromStdString(bin));
+            bin_item->setFlags(bin_item->flags() & ~Qt::ItemIsDragEnabled);
+        }
+
         for (std::size_t index = 0; index < media_items_.size(); ++index) {
             const auto& item = media_items_[index];
             if (!active_bin.empty() &&
@@ -285,6 +322,9 @@ void MainWindow::populateMediaBrowser(
                 media_list_);
             if (!item.offline) list_item->setIcon(mediaThumbnailIcon(item.first_frame));
             list_item->setData(Qt::UserRole, fromUtf8(pathToUtf8(item.metadata.source_path)));
+            list_item->setData(
+                media_browser_ui::kMediaItemTypeRole,
+                media_browser_ui::kMediaItemTypeMedia);
             list_item->setData(
                 media_browser_ui::kMediaIndexRole,
                 static_cast<qint64>(index));
@@ -314,6 +354,30 @@ void MainWindow::populateMediaBrowser(
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
+    }
+}
+
+void MainWindow::selectMediaBrowserBin(const QString& path) {
+    if (bin_tree_ == nullptr) return;
+
+    std::function<QTreeWidgetItem*(QTreeWidgetItem*)> find_bin =
+        [&find_bin, &path](QTreeWidgetItem* item) -> QTreeWidgetItem* {
+        if (item != nullptr && item->data(0, Qt::UserRole).toString() == path) {
+            return item;
+        }
+        if (item == nullptr) return nullptr;
+        for (int index = 0; index < item->childCount(); ++index) {
+            if (auto* found = find_bin(item->child(index)); found != nullptr) {
+                return found;
+            }
+        }
+        return nullptr;
+    };
+
+    if (auto* root = bin_tree_->topLevelItem(0); root != nullptr) {
+        if (auto* found = find_bin(root); found != nullptr) {
+            bin_tree_->setCurrentItem(found);
+        }
     }
 }
 
@@ -562,7 +626,13 @@ void MainWindow::showMediaContextMenu(const QPoint& position) {
     const bool from_media_list = sender() == media_list_;
     if (from_media_list) {
         if (auto* item = media_list_->itemAt(position); item != nullptr) {
-            media_list_->setCurrentItem(item);
+            if (item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
+                media_browser_ui::kMediaItemTypeBin) {
+                selectMediaBrowserBin(
+                    item->data(media_browser_ui::kMediaBinPathRole).toString());
+            } else {
+                media_list_->setCurrentItem(item);
+            }
         }
     } else if (bin_tree_ != nullptr) {
         if (auto* item = bin_tree_->itemAt(position); item != nullptr) {

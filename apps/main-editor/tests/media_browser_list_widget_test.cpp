@@ -6,6 +6,7 @@
 #include <QListWidgetItem>
 #include <QPixmap>
 #include <QSettings>
+#include <QStyle>
 
 #include <cstdio>
 #include <stdexcept>
@@ -64,6 +65,26 @@ int main(int argc, char* argv[]) {
         require(item->data(media_browser_ui::kMediaInfoRole).toString().contains(
                     "Format: MP4"),
                 "Media information data was not preserved.");
+
+        auto* bin_item = new QListWidgetItem("Footage", &widget);
+        bin_item->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+        bin_item->setData(
+            media_browser_ui::kMediaItemTypeRole,
+            media_browser_ui::kMediaItemTypeBin);
+        bin_item->setData(
+            media_browser_ui::kMediaBinPathRole,
+            QStringLiteral("Projects/Footage"));
+        bin_item->setFlags(bin_item->flags() & ~Qt::ItemIsDragEnabled);
+        require(!bin_item->icon().isNull(),
+                "The Media Browser bin did not receive a folder icon.");
+        require(bin_item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
+                    media_browser_ui::kMediaItemTypeBin,
+                "The Media Browser bin type was not preserved.");
+        require(bin_item->data(media_browser_ui::kMediaBinPathRole).toString() ==
+                    "Projects/Footage",
+                "The Media Browser bin path was not preserved.");
+        require(!(bin_item->flags() & Qt::ItemIsDragEnabled),
+                "Bins must not use the media-to-Timeline drag operation.");
 
         widget.setDisplayMode(MediaBrowserListWidget::DisplayMode::List);
         require(widget.viewMode() == QListView::ListMode,

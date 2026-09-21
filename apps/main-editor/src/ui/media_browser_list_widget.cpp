@@ -143,7 +143,13 @@ QMimeData* MediaBrowserListWidget::mimeData(
     auto* mime_data = new QMimeData;
     if (items.isEmpty()) return mime_data;
 
-    const QString source_path = items.front()->data(Qt::UserRole).toString();
+    const auto* item = items.front();
+    if (item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
+        media_browser_ui::kMediaItemTypeBin) {
+        return mime_data;
+    }
+
+    const QString source_path = item->data(Qt::UserRole).toString();
     if (!source_path.isEmpty()) {
         mime_data->setData(ui::kMediaPathMimeType, source_path.toUtf8());
     }
