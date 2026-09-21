@@ -439,32 +439,6 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             QPointF(row.left() + track_header_width, row.top() + 4),
             QPointF(row.left() + track_header_width, row.bottom() - 4));
 
-        std::int64_t previous_end = 0;
-        for (const auto& clip : tracks_[track_index].clips) {
-            const auto clip_start = clip.timeline_start_frame;
-            if (clip_start > previous_end && total > 0) {
-                const auto gap_left = content.left() + content.width() *
-                    static_cast<double>(previous_end) / total;
-                const auto gap_right = content.left() + content.width() *
-                    static_cast<double>(clip_start) / total;
-                const auto gap = QRectF(
-                    gap_left,
-                    content.top(),
-                    std::max(0.0, gap_right - gap_left),
-                    content.height());
-                painter.setPen(QPen(QColor("#4a5360"), 1, Qt::DotLine));
-                painter.setBrush(QColor("#171c24"));
-                painter.drawRect(gap);
-                if (gap.width() > 46.0) {
-                    painter.setPen(QColor("#667180"));
-                    painter.drawText(gap, Qt::AlignCenter, "GAP");
-                }
-            }
-            previous_end = std::max(
-                previous_end,
-                clip.timeline_start_frame + clip.timeline_duration_frames);
-        }
-
         for (std::size_t clip_index = 0;
              clip_index < tracks_[track_index].clips.size(); ++clip_index) {
             const ClipLocation location{track_index, clip_index};

@@ -39,7 +39,8 @@ in the running Main Editor after UI or integration changes:
 
 - application startup and clean shutdown;
 - dock resizing, floating, re-docking, and restoration;
-- Timeline track height, maximum row height, scrolling, gaps, and visual order;
+- Timeline track height, maximum row height, scrolling, empty gaps without
+  overlays, and visual order;
 - Media Browser selection, bins, context actions, and drag-and-drop;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement;
