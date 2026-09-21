@@ -11,7 +11,7 @@ EffectsToolboxWidget::EffectsToolboxWidget(QWidget* parent)
     setSelectionMode(QAbstractItemView::SingleSelection);
     setSelectionBehavior(QAbstractItemView::SelectRows);
     setUniformItemSizes(true);
-    setMinimumWidth(150);
+    setMinimumWidth(20);
 
     for (const auto& category : effects::categories()) {
         auto* item = new QListWidgetItem(category.name, this);

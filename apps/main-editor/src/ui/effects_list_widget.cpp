@@ -13,7 +13,7 @@ EffectsListWidget::EffectsListWidget(QWidget* parent)
     setSelectionMode(QAbstractItemView::SingleSelection);
     setSelectionBehavior(QAbstractItemView::SelectRows);
     setUniformItemSizes(true);
-    setMinimumWidth(260);
+    setMinimumWidth(30);
     setAlternatingRowColors(true);
 
     for (const auto& effect : effects::definitions()) {

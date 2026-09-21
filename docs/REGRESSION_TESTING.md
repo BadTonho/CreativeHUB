@@ -97,8 +97,8 @@ in the running Main Editor after UI or integration changes:
   side-by-side docks in the left Media Pool area, while `Bins` and `Media` are
   hidden; confirm both effects docks can be moved, resized, floated, closed,
   re-docked, and tabified independently; drag the visible separator between
-  them to change both widths, confirm neither can be collapsed below its
-  usable minimum, and verify the chosen widths return after restarting;
+  them to change both widths, confirm the 20 px Toolbox and 30 px Effects
+  minimums, and verify the chosen widths return after restarting;
   confirm the docks are individually available in
   `View > Effects`; click `Media Pool` to return to `Bins` above `Media`, and
   confirm the toolbar actions synchronize their checked state; select every
