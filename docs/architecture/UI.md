@@ -14,10 +14,18 @@ detailed rendering log.
 
 ## Media Browser and projects
 
-The Media Browser has a hierarchical bin tree, filtered media list, project
-labels, and visible online/offline state. Context menus provide New Bin,
-Rename, Move to Bin, Remove from Browser, and Restore Media. Removing media
-never deletes the file or its Timeline clips.
+The Media Browser has a hierarchical bin tree and a filtered media view with
+compact list and fixed-size block modes. The global `QSettings` preference
+`media_browser/view_mode` restores the last mode, defaulting to list mode on
+first use. Block mode uses each online item's cached first frame as a
+thumbnail; changing modes does not decode frames or mark the project dirty.
+Items show a compact name and summary instead of a large technical-details
+panel. An information icon in each item's upper-right corner displays the
+complete technical metadata on hover, including offline status, bin, and path
+when applicable. Context menus provide New Bin, Rename, Move to Bin, Remove
+from Browser, and Restore Media. Removing media never deletes the file or its
+Timeline clips, and the existing selection and internal drag-and-drop MIME
+flow remain unchanged.
 
 File actions provide New Project, Open Project, Save Project, and Save Project
 As. Save prompts are transactional and New, Open, and close use Save, Discard,

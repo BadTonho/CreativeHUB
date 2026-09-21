@@ -22,7 +22,6 @@
 #include <vector>
 
 class QDockWidget;
-class QScrollArea;
 class QAction;
 class QCloseEvent;
 class QCheckBox;
@@ -30,7 +29,6 @@ class QComboBox;
 class QDoubleSpinBox;
 class QFontComboBox;
 class QLabel;
-class QListWidget;
 class QPlainTextEdit;
 class QPushButton;
 class QPoint;
@@ -39,6 +37,8 @@ class QSpinBox;
 class QTabWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
+class QScrollArea;
+class MediaBrowserListWidget;
 class PreviewWidget;
 class QWidget;
 
@@ -245,9 +245,9 @@ private:
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
-    QListWidget* media_list_ = nullptr;
+    MediaBrowserListWidget* media_list_ = nullptr;
     QTreeWidget* bin_tree_ = nullptr;
-    QLabel* media_details_ = nullptr;
+    QLabel* media_status_label_ = nullptr;
     QPushButton* add_to_timeline_button_ = nullptr;
     QPushButton* new_bin_button_ = nullptr;
     QPushButton* previous_frame_button_ = nullptr;

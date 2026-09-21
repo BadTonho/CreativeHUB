@@ -8,6 +8,7 @@
 #include "ui/media_browser_list_widget.h"
 
 #include <QAction>
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QDockWidget>
@@ -18,6 +19,8 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QImage>
+#include <QIcon>
 #include <QKeySequence>
 #include <QLabel>
 #include <QAbstractItemView>
@@ -33,6 +36,9 @@
 #include <QScrollArea>
 #include <QSlider>
 #include <QStatusBar>
+#include <QStyle>
+#include <QToolButton>
+#include <QPixmap>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -52,15 +58,61 @@
 
 using namespace main_window_detail;
 
+namespace {
+
+QIcon mediaThumbnailIcon(const media::VideoFrame& frame) {
+    if (frame.width <= 0 || frame.height <= 0 || frame.stride < frame.width * 4 ||
+        frame.rgba_pixels.size() <
+            static_cast<std::size_t>(frame.stride) * frame.height) {
+        return {};
+    }
+
+    const QImage image(
+        frame.rgba_pixels.data(),
+        frame.width,
+        frame.height,
+        frame.stride,
+        QImage::Format_RGBA8888);
+    const auto thumbnail = QPixmap::fromImage(image.copy()).scaled(
+        128,
+        72,
+        Qt::KeepAspectRatio,
+        Qt::SmoothTransformation);
+    return QIcon(thumbnail);
+}
+
+} // namespace
+
 QWidget* MainWindow::createMediaBrowser() {
     auto* container = new QWidget;
     auto* layout = new QVBoxLayout(container);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(8);
 
+    auto* title_row = new QHBoxLayout;
     auto* title = new QLabel("Media Browser", container);
     title->setStyleSheet("font-weight: 600; font-size: 14px;");
-    layout->addWidget(title);
+    title_row->addWidget(title);
+    title_row->addStretch();
+
+    auto* view_group = new QButtonGroup(container);
+    view_group->setExclusive(true);
+    auto* list_view_button = new QToolButton(container);
+    list_view_button->setCheckable(true);
+    list_view_button->setIcon(
+        style()->standardIcon(QStyle::SP_FileDialogListView));
+    list_view_button->setToolTip("List view");
+    view_group->addButton(list_view_button);
+    title_row->addWidget(list_view_button);
+
+    auto* grid_view_button = new QToolButton(container);
+    grid_view_button->setCheckable(true);
+    grid_view_button->setIcon(
+        style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+    grid_view_button->setToolTip("Blocks view");
+    view_group->addButton(grid_view_button);
+    title_row->addWidget(grid_view_button);
+    layout->addLayout(title_row);
 
     auto* browser_controls = new QHBoxLayout;
     new_bin_button_ = new QPushButton("New Bin", container);
@@ -81,18 +133,29 @@ QWidget* MainWindow::createMediaBrowser() {
 
     media_list_ = new MediaBrowserListWidget(container);
     media_list_->setSelectionMode(QAbstractItemView::SingleSelection);
-    media_list_->setWordWrap(true);
+    list_view_button->setChecked(
+        media_list_->displayMode() == MediaBrowserListWidget::DisplayMode::List);
+    grid_view_button->setChecked(
+        media_list_->displayMode() == MediaBrowserListWidget::DisplayMode::Grid);
+    connect(list_view_button, &QToolButton::clicked, this, [this]() {
+        if (media_list_ != nullptr) {
+            media_list_->setDisplayMode(MediaBrowserListWidget::DisplayMode::List);
+        }
+    });
+    connect(grid_view_button, &QToolButton::clicked, this, [this]() {
+        if (media_list_ != nullptr) {
+            media_list_->setDisplayMode(MediaBrowserListWidget::DisplayMode::Grid);
+        }
+    });
     connect(media_list_, &QListWidget::currentRowChanged, this, &MainWindow::updateMediaDetails);
     media_list_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(media_list_, &QListWidget::customContextMenuRequested, this,
             &MainWindow::showMediaContextMenu);
     layout->addWidget(media_list_, 1);
 
-    media_details_ = new QLabel("No media imported.", container);
-    media_details_->setWordWrap(true);
-    media_details_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    media_details_->setStyleSheet("color: #9aa4b2;");
-    layout->addWidget(media_details_);
+    media_status_label_ = new QLabel("No media imported.", container);
+    media_status_label_->setStyleSheet("color: #9aa4b2;");
+    layout->addWidget(media_status_label_);
 
     add_to_timeline_button_ = new QPushButton("Add to Timeline", container);
     connect(add_to_timeline_button_, &QPushButton::clicked, this, [this]() {
@@ -108,7 +171,8 @@ QWidget* MainWindow::createMediaBrowser() {
 std::optional<std::size_t> MainWindow::selectedMediaIndex() const noexcept {
     if (media_list_ == nullptr || media_list_->currentItem() == nullptr) return std::nullopt;
     bool ok = false;
-    const auto value = media_list_->currentItem()->data(Qt::UserRole + 1).toLongLong(&ok);
+    const auto value = media_list_->currentItem()->data(
+        media_browser_ui::kMediaIndexRole).toLongLong(&ok);
     if (!ok || value < 0 || value >= static_cast<qint64>(media_items_.size())) return std::nullopt;
     return static_cast<std::size_t>(value);
 }
@@ -208,11 +272,25 @@ void MainWindow::populateMediaBrowser(const std::filesystem::path& selected_path
                 continue;
             }
             auto* list_item = new QListWidgetItem(
-                mediaItemListText(item.metadata, item.display_name, item.bin_path, item.offline),
+                compactMediaItemListText(
+                    item.metadata, item.display_name, item.offline),
                 media_list_);
-            list_item->setToolTip(fromUtf8(pathToUtf8(item.metadata.source_path)));
+            if (!item.offline) list_item->setIcon(mediaThumbnailIcon(item.first_frame));
             list_item->setData(Qt::UserRole, fromUtf8(pathToUtf8(item.metadata.source_path)));
-            list_item->setData(Qt::UserRole + 1, static_cast<qint64>(index));
+            list_item->setData(
+                media_browser_ui::kMediaIndexRole,
+                static_cast<qint64>(index));
+            list_item->setData(
+                media_browser_ui::kMediaInfoRole,
+                item.offline
+                    ? QString("Name: %1\n"
+                              "Bin: %2\n"
+                              "Status: Offline\n"
+                              "Path: %3")
+                        .arg(fromUtf8(item.display_name))
+                        .arg(fromUtf8(item.bin_path))
+                        .arg(fromUtf8(pathToUtf8(item.metadata.source_path)))
+                    : mediaDetailsText(item.metadata));
             if (!path_to_select.empty() &&
                 normalizedPath(item.metadata.source_path) == normalizedPath(path_to_select)) {
                 media_list_->setCurrentItem(list_item);
@@ -223,7 +301,8 @@ void MainWindow::populateMediaBrowser(const std::filesystem::path& selected_path
     if (media_list_->currentRow() >= 0) {
         updateMediaDetails(media_list_->currentRow());
     } else {
-        media_details_->setText(media_items_.empty() ? "No media imported." : "No media in this bin.");
+        media_status_label_->setText(
+            media_items_.empty() ? "No media imported." : "No media in this bin.");
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -494,7 +573,7 @@ void MainWindow::updateMediaDetails(int row) {
 
     if (row < 0 || media_list_ == nullptr || media_list_->currentItem() == nullptr) {
         active_timeline_clip_index_.reset();
-        media_details_->setText("No media imported.");
+        media_status_label_->setText("No media imported.");
         preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
         updateTimelineState();
         updatePlaybackControls();
@@ -504,7 +583,7 @@ void MainWindow::updateMediaDetails(int row) {
 
     const auto item_index = selectedMediaIndex();
     if (!item_index.has_value()) {
-        media_details_->setText("No media selected.");
+        media_status_label_->setText("No media selected.");
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -519,13 +598,7 @@ void MainWindow::updateMediaDetails(int row) {
         active_timeline_track_index_.reset();
         active_timeline_clip_index_.reset();
     }
-    media_details_->setText(
-        item.offline
-            ? QString("Name: %1\nBin: %2\nStatus: Offline\nPath: %3")
-                .arg(fromUtf8(item.display_name))
-                .arg(fromUtf8(item.bin_path))
-                .arg(fromUtf8(pathToUtf8(item.metadata.source_path)))
-            : mediaDetailsText(item.metadata));
+    media_status_label_->clear();
     if (item.offline) {
         preview_widget_->clearFrame("Preview area\n\nThe selected media is offline.");
     } else {

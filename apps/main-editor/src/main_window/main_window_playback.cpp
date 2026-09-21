@@ -349,7 +349,7 @@ void MainWindow::commitTimelineClipActivation(
     }
 
     const auto& item = media_items_[media_index];
-    media_details_->setText(mediaDetailsText(item.metadata));
+    if (media_status_label_ != nullptr) media_status_label_->clear();
     if (show_cached_frame) preview_widget_->setFrame(item.first_frame);
     updateTimelineState();
     updatePlaybackControls();

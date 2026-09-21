@@ -20,10 +20,24 @@ do not provide preview or playback until restored. Missing media encountered
 while opening a project is loaded as offline; an existing but unreadable media
 file remains a technical open failure and the current project is preserved.
 
-The Browser provides a bin tree, a media list, a `New Bin` button, and context
-menus for renaming media or bins, moving media, removing media from the
-Browser, and restoring an available offline item. Media Browser items can be
-dragged to the Timeline through the internal
+The Browser provides a bin tree, a `New Bin` button, and a media view that can
+switch between compact list mode and fixed-size block mode. The selected view
+is a global user preference stored in `QSettings` at
+`media_browser/view_mode`; the first-run default is list mode. Block mode uses
+the cached first frame already held by the media item and does not decode a new
+frame when the view changes. Items use compact names and video summaries; the
+large technical-details panel is intentionally not part of the Browser
+layout.
+
+Each item draws a small information icon in its upper-right corner. Hovering
+that icon shows the complete technical summary: name, format, codec,
+resolution, frame rate, duration, frame count, audio, and source path, or the
+offline status, bin, and path for unavailable media. This information is view
+state and changing list/block mode does not mark the project dirty.
+
+Context menus support renaming media or bins, moving media, removing media
+from the Browser, and restoring an available offline item. Media Browser items
+can be dragged to the Timeline through the internal
 `application/x-creative-suite-media-path` MIME type. Only already imported
 items participate in this drag-and-drop flow; operating-system file drops and
 full manual relinking are future work.

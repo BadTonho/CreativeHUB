@@ -28,6 +28,10 @@ namespace main_window_detail {
     std::string_view display_name,
     std::string_view bin_path,
     bool offline);
+[[nodiscard]] QString compactMediaItemListText(
+    const media::VideoMetadata& metadata,
+    std::string_view display_name,
+    bool offline);
 [[nodiscard]] QWidget* createPlaceholder(
     const QString& title,
     const QString& description);

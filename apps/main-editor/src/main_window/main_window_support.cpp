@@ -88,6 +88,22 @@ QString mediaItemListText(const media::VideoMetadata& metadata,
         .arg(offline ? "Unavailable" : mediaListText(metadata));
 }
 
+QString compactMediaItemListText(
+    const media::VideoMetadata& metadata,
+    std::string_view display_name,
+    bool offline) {
+    const auto name = fromUtf8(
+        display_name.empty() ? metadata.display_name : std::string(display_name));
+    if (offline) return QString("%1 [Offline]\nUnavailable").arg(name);
+
+    return QString("%1\n%2x%3 | %4 | %5")
+        .arg(name)
+        .arg(metadata.width)
+        .arg(metadata.height)
+        .arg(formatOptionalDouble(metadata.frame_rate, " FPS"))
+        .arg(formatOptionalDouble(metadata.duration_seconds, " s"));
+}
+
 QWidget* createPlaceholder(const QString& title, const QString& description) {
     auto* container = new QWidget;
     auto* layout = new QVBoxLayout(container);

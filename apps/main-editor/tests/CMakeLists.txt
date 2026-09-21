@@ -481,6 +481,70 @@ set_tests_properties(creative-suite-main-editor-timeline-widget PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
+add_executable(creative-suite-main-editor-media-browser-list-widget-tests
+    media_browser_list_widget_test.cpp
+    ../src/ui/media_browser_list_widget.cpp
+    ../src/ui/media_browser_list_widget.h
+    ../src/ui/media_drag_mime.h
+)
+
+target_include_directories(creative-suite-main-editor-media-browser-list-widget-tests PRIVATE
+    ../src
+)
+
+target_link_libraries(creative-suite-main-editor-media-browser-list-widget-tests PRIVATE
+    Qt6::Widgets
+)
+
+target_compile_features(creative-suite-main-editor-media-browser-list-widget-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-media-browser-list-widget-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-media-browser-list-widget-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(WIN32)
+    get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
+    if(NOT QT_CORE_DLL)
+        get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION)
+    endif()
+    get_target_property(QT_GUI_DLL Qt6::Gui IMPORTED_LOCATION_RELEASE)
+    if(NOT QT_GUI_DLL)
+        get_target_property(QT_GUI_DLL Qt6::Gui IMPORTED_LOCATION)
+    endif()
+    get_target_property(QT_WIDGETS_DLL Qt6::Widgets IMPORTED_LOCATION_RELEASE)
+    if(NOT QT_WIDGETS_DLL)
+        get_target_property(QT_WIDGETS_DLL Qt6::Widgets IMPORTED_LOCATION)
+    endif()
+    get_filename_component(QT_BIN_DIR "${QT_CORE_DLL}" DIRECTORY)
+    find_program(QT_DEPLOY_TOOL windeployqt HINTS "${QT_BIN_DIR}" REQUIRED)
+
+    add_custom_command(TARGET creative-suite-main-editor-media-browser-list-widget-tests POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${QT_CORE_DLL}"
+            "${QT_GUI_DLL}"
+            "${QT_WIDGETS_DLL}"
+            "$<TARGET_FILE_DIR:creative-suite-main-editor-media-browser-list-widget-tests>"
+        COMMAND "${QT_DEPLOY_TOOL}"
+            --no-translations
+            --no-compiler-runtime
+            "$<TARGET_FILE:creative-suite-main-editor-media-browser-list-widget-tests>"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${QT_BIN_DIR}/../plugins/platforms/qoffscreen.dll"
+            "$<TARGET_FILE_DIR:creative-suite-main-editor-media-browser-list-widget-tests>/platforms"
+        VERBATIM
+    )
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-media-browser-list-widget
+    COMMAND creative-suite-main-editor-media-browser-list-widget-tests
+)
+set_tests_properties(creative-suite-main-editor-media-browser-list-widget PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
 add_executable(creative-suite-main-editor-settings-dialog-tests
     settings_dialog_test.cpp
     ../src/settings/settings_dialog.cpp

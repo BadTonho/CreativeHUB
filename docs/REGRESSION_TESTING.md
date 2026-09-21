@@ -34,6 +34,7 @@ updated intentionally.
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
+| Media Browser UI | List/block modes, global mode persistence, compact item data, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
 
 ## Manual UI validation
@@ -59,7 +60,10 @@ in the running Main Editor after UI or integration changes:
   no Media Browser selection while scrubbing, selecting a clip without moving
   the playhead, and the optional Edit > Move Playhead to Selected Clip Start
   preference, and visual order;
-- Media Browser selection, bins, context actions, and drag-and-drop;
+- Media Browser list/block toggles, restoration of the last global mode,
+  cached thumbnails, compact item descriptions, hover over the information
+  icon for the complete technical tooltip, selection, bins, context actions,
+  offline media, and drag-and-drop to the Timeline;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement;
 - Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;

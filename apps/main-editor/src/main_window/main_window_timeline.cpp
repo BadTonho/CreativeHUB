@@ -1180,11 +1180,6 @@ void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_in
     }
     active_timeline_clip_index_ = static_cast<std::size_t>(clip_index);
     populateMediaBrowser(clip.source_path);
-    media_details_->setText(media->offline
-        ? QString("Name: %1\nBin: %2\nStatus: Offline")
-            .arg(fromUtf8(media->display_name))
-            .arg(fromUtf8(media->bin_path))
-        : mediaDetailsText(media->metadata));
     if (media->offline) {
         preview_widget_->clearFrame("Preview area\n\nThe selected media is offline.");
     } else {
@@ -1826,13 +1821,11 @@ void MainWindow::restoreTimelineEditState(
         if (selected_media_index.has_value()) {
             const auto& item = media_items_[*selected_media_index];
             populateMediaBrowser(item.metadata.source_path);
-            media_details_->setText(item.offline
-                ? QString("Name: %1\nBin: %2\nStatus: Offline")
-                    .arg(fromUtf8(item.display_name)).arg(fromUtf8(item.bin_path))
-                : mediaDetailsText(item.metadata));
             if (!item.offline) preview_widget_->setFrame(item.first_frame);
         } else {
-            media_details_->setText("No media imported.");
+            if (media_status_label_ != nullptr) {
+                media_status_label_->setText("No media imported.");
+            }
             preview_widget_->clearFrame(
                 "Preview area\n\nImport media to display its first frame.");
         }
@@ -2445,7 +2438,6 @@ void MainWindow::handleTimelineClipSplit(qint64 clip_index, qint64 local_frame) 
             const QSignalBlocker blocker(media_list_);
             media_list_->setCurrentRow(static_cast<int>(media_index));
         }
-        media_details_->setText(mediaDetailsText(media_item->metadata));
 
         pending_clip_activation_ = PendingClipActivation{
             right_clip_index,

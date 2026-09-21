@@ -253,7 +253,9 @@ void MainWindow::clearProjectState() {
     media_items_.clear();
     bin_paths_ = {"Unsorted"};
     populateMediaBrowser();
-    media_details_->setText("No media imported.");
+    if (media_status_label_ != nullptr) {
+        media_status_label_->setText("No media imported.");
+    }
     preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
     updateTimelineState();
     updatePlaybackControls();
@@ -638,7 +640,9 @@ void MainWindow::applyLoadedProject(
 
     populateMediaBrowser();
 
-    media_details_->setText("No media imported.");
+    if (media_status_label_ != nullptr) {
+        media_status_label_->setText("No media imported.");
+    }
     preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
     updateProjectDirtyState();
 
@@ -679,7 +683,6 @@ void MainWindow::applyLoadedProject(
         } else if (media != media_items_.end()) {
             const auto media_index = static_cast<std::size_t>(std::distance(media_items_.begin(), media));
             populateMediaBrowser(clip.source_path);
-            media_details_->setText(mediaDetailsText(media->metadata));
             if (!media->offline) preview_widget_->setFrame(media->first_frame);
             if (!media->offline) {
                 activateTimelineClipAt(
