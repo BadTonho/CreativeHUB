@@ -32,7 +32,7 @@ and must be updated whenever priorities, decisions, or project status change.
 - [ ] Define the initial target audience.
 - [ ] Define the first Main Editor MVP and its limits.
 - [ ] Define the priority operating systems and minimum hardware.
-- [ ] Choose the open-source license.
+- [x] Choose the open-source license (GPL-3.0-or-later).
 
 ## 2. Prototype Archive and Technical Validation
 
