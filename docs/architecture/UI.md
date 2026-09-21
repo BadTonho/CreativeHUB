@@ -27,6 +27,13 @@ from Browser, and Restore Media. Removing media never deletes the file or its
 Timeline clips, and the existing selection and internal drag-and-drop MIME
 flow remain unchanged.
 
+The bin tree accepts custom drag-and-drop MIME types for imported media and bin
+paths. Dropping media onto a bin changes its project bin assignment; dropping
+a bin onto another bin reparents the complete subtree. `All Media`, empty tree
+space, self/descendant destinations, collisions, and moving `Unsorted` are
+rejected. Bin creation from the context menu uses the clicked or selected bin
+as the parent, while the existing `Move to Bin` action remains available.
+
 File actions provide New Project, Open Project, Save Project, and Save Project
 As. Save prompts are transactional and New, Open, and close use Save, Discard,
 and Cancel when the project is dirty.

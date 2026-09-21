@@ -45,5 +45,11 @@ UI-only MIME type `application/x-creative-suite-media-path`. The Main Window
 resolves that canonical path back to imported metadata. Dragging does not
 decode frames or change the preview until the drop is accepted.
 
+The Browser also uses `application/x-creative-suite-media-bin-path` for bin
+drag-and-drop. Imported media can be moved onto a real bin, and a bin can be
+reparented onto another bin together with its descendants. These operations
+update the project-owned bin paths only; they do not change media decoding,
+Timeline clips, playback, or preview state.
+
 Files dragged directly from the operating system are outside the current
 milestone.

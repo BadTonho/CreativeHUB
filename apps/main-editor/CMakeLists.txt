@@ -69,6 +69,8 @@ add_executable(creative-suite-main-editor
     src/timeline/timeline_widget.h
     src/ui/media_browser_list_widget.cpp
     src/ui/media_browser_list_widget.h
+    src/ui/media_browser_bin_tree_widget.cpp
+    src/ui/media_browser_bin_tree_widget.h
     src/ui/media_drag_mime.h
 )
 

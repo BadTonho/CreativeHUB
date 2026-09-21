@@ -61,6 +61,7 @@ public:
     MediaMutationResult markOffline(std::size_t index);
     MediaMutationResult createBin(std::string bin_path);
     MediaMutationResult renameBin(std::string old_path, std::string new_path);
+    MediaMutationResult moveBin(std::string old_path, std::string new_path);
     void clear() noexcept;
 
     static std::filesystem::path canonicalPath(const std::filesystem::path& path);

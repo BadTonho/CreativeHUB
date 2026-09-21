@@ -169,17 +169,31 @@ MediaMutationResult MediaLibrary::createBin(std::string bin_path) {
 }
 
 MediaMutationResult MediaLibrary::renameBin(std::string old_path, std::string new_path) {
-    if (old_path.empty() || old_path == default_bin || !validBinPath(new_path)) {
+    return moveBin(std::move(old_path), std::move(new_path));
+}
+
+MediaMutationResult MediaLibrary::moveBin(
+    std::string old_path,
+    std::string new_path) {
+    if (old_path.empty() || old_path == default_bin ||
+        !validBinPath(new_path)) {
         return MediaMutationResult::InvalidBin;
     }
     if (std::find(bins_.begin(), bins_.end(), old_path) == bins_.end()) {
         return MediaMutationResult::InvalidBin;
     }
     if (old_path == new_path) return MediaMutationResult::NoChange;
+    if (hasPrefix(new_path, old_path)) return MediaMutationResult::InvalidBin;
     for (const auto& bin : bins_) {
-        if (bin == new_path || hasPrefix(bin, new_path)) return MediaMutationResult::InvalidBin;
+        if (bin == new_path || hasPrefix(bin, new_path)) {
+            return MediaMutationResult::InvalidBin;
+        }
     }
-    ensureBinPath(new_path);
+
+    const auto separator = new_path.rfind('/');
+    if (separator != std::string::npos) {
+        ensureBinPath(new_path.substr(0, separator));
+    }
     for (auto& bin : bins_) {
         if (bin == old_path) bin = new_path;
         else if (hasPrefix(bin, old_path)) bin = new_path + bin.substr(old_path.size());

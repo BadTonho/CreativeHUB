@@ -5,6 +5,7 @@
 #include "preview_widget.h"
 #include "project/project_file.h"
 #include "timeline/timeline_widget.h"
+#include "ui/media_browser_bin_tree_widget.h"
 #include "ui/media_browser_list_widget.h"
 
 #include <QAction>
@@ -121,7 +122,7 @@ QWidget* MainWindow::createMediaBrowser() {
     browser_controls->addStretch();
     layout->addLayout(browser_controls);
 
-    bin_tree_ = new QTreeWidget(container);
+    bin_tree_ = new MediaBrowserBinTreeWidget(container);
     bin_tree_->setHeaderHidden(true);
     bin_tree_->setMaximumHeight(150);
     bin_tree_->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -129,6 +130,10 @@ QWidget* MainWindow::createMediaBrowser() {
             [this](QTreeWidgetItem*, QTreeWidgetItem*) { updateMediaBrowserFilter(); });
     connect(bin_tree_, &QTreeWidget::customContextMenuRequested, this,
             &MainWindow::showMediaContextMenu);
+    connect(bin_tree_, &MediaBrowserBinTreeWidget::mediaDropRequested,
+            this, &MainWindow::handleMediaBrowserMediaDrop);
+    connect(bin_tree_, &MediaBrowserBinTreeWidget::binDropRequested,
+            this, &MainWindow::handleMediaBrowserBinDrop);
     layout->addWidget(bin_tree_);
 
     media_list_ = new MediaBrowserListWidget(container);
@@ -182,7 +187,9 @@ std::string MainWindow::selectedBinPath() const {
     return bin_tree_->currentItem()->data(0, Qt::UserRole).toString().toStdString();
 }
 
-void MainWindow::populateMediaBrowser(const std::filesystem::path& selected_path) {
+void MainWindow::populateMediaBrowser(
+    const std::filesystem::path& selected_path,
+    std::optional<std::string> selected_bin_override) {
     if (media_list_ == nullptr || bin_tree_ == nullptr) return;
 
     std::filesystem::path path_to_select = selected_path;
@@ -191,8 +198,9 @@ void MainWindow::populateMediaBrowser(const std::filesystem::path& selected_path
         if (selected.has_value()) path_to_select = media_items_[*selected].metadata.source_path;
     }
 
-    std::string selected_bin = selectedBinPath();
-    if (selected_bin.empty()) selected_bin = "";
+    const std::string selected_bin = selected_bin_override.has_value()
+        ? *selected_bin_override
+        : selectedBinPath();
 
     std::vector<std::string> bins;
     for (const auto& bin : bin_paths_) {
@@ -313,30 +321,67 @@ void MainWindow::updateMediaBrowserFilter() {
     populateMediaBrowser();
 }
 
+media::MediaLibrary MainWindow::buildMediaLibrary() const {
+    media::MediaLibrary library;
+    for (const auto& bin : bin_paths_) {
+        if (bin != media::default_bin && media::MediaLibrary::validBinPath(bin)) {
+            static_cast<void>(library.createBin(bin));
+        }
+    }
+    for (const auto& item : media_items_) {
+        static_cast<void>(library.addOffline(
+            item.metadata.source_path,
+            item.display_name,
+            item.bin_path));
+    }
+    return library;
+}
+
+void MainWindow::applyMediaLibrary(const media::MediaLibrary& library) {
+    bin_paths_ = library.bins();
+    if (std::find(bin_paths_.begin(), bin_paths_.end(), media::default_bin) ==
+        bin_paths_.end()) {
+        bin_paths_.emplace_back(media::default_bin);
+    }
+
+    for (auto& item : media_items_) {
+        const auto index = library.indexForPath(item.metadata.source_path);
+        if (index != library.size()) {
+            item.bin_path = library.items()[index].bin_path;
+        }
+    }
+}
+
 void MainWindow::createBin() {
+    const auto parent_bin = selectedBinPath();
     bool accepted = false;
     const QString value = QInputDialog::getText(
-        this, "New Bin", "Bin path (use / for sub-bins):", QLineEdit::Normal,
+        this,
+        "New Bin",
+        "Bin name or relative path (use / for sub-bins):",
+        QLineEdit::Normal,
         "New Bin", &accepted);
     if (!accepted) return;
-    if (!media::MediaLibrary::validBinPath(value.toStdString())) {
-        QMessageBox::warning(this, "Invalid bin", "Use a non-empty bin path with / separators.");
+    const auto relative_path = value.toStdString();
+    if (!media::MediaLibrary::validBinPath(relative_path)) {
+        QMessageBox::warning(
+            this,
+            "Invalid bin",
+            "Use a non-empty bin path with / separators.");
         return;
     }
-    const std::string current = value.toStdString();
-    if (std::find(bin_paths_.begin(), bin_paths_.end(), current) != bin_paths_.end()) return;
-    std::size_t start = 0;
-    while (start < current.size()) {
-        const auto separator = current.find('/', start);
-        const auto path = current.substr(
-            0, separator == std::string::npos ? current.size() : separator);
-        if (std::find(bin_paths_.begin(), bin_paths_.end(), path) == bin_paths_.end()) {
-            bin_paths_.push_back(path);
-        }
-        start = separator == std::string::npos ? current.size() : separator + 1;
+
+    const std::string new_path = parent_bin.empty()
+        ? relative_path
+        : parent_bin + "/" + relative_path;
+    auto library = buildMediaLibrary();
+    if (library.createBin(new_path) != media::MediaMutationResult::Changed) {
+        QMessageBox::warning(this, "Could not create bin", "That bin already exists or is invalid.");
+        return;
     }
+    applyMediaLibrary(library);
     updateProjectDirtyState();
-    populateMediaBrowser();
+    populateMediaBrowser({}, new_path);
 }
 
 void MainWindow::renameSelectedBin() {
@@ -347,28 +392,15 @@ void MainWindow::renameSelectedBin() {
         this, "Rename Bin", "New bin path:", QLineEdit::Normal,
         QString::fromStdString(old_path), &accepted);
     if (!accepted) return;
-    media::MediaLibrary library;
-    for (const auto& item : media_items_) {
-        library.addOffline(item.metadata.source_path, item.display_name, item.bin_path);
-    }
+    auto library = buildMediaLibrary();
     const auto result = library.renameBin(old_path, value.toStdString());
     if (result != media::MediaMutationResult::Changed) {
         QMessageBox::warning(this, "Could not rename bin", "The bin name is invalid or already exists.");
         return;
     }
-    for (std::size_t index = 0; index < media_items_.size(); ++index) {
-        const auto library_index = library.indexForPath(media_items_[index].metadata.source_path);
-        if (library_index != library.size()) media_items_[index].bin_path = library.items()[library_index].bin_path;
-    }
-    bin_paths_.clear();
-    bin_paths_.push_back("Unsorted");
-    for (const auto& item : media_items_) {
-        if (std::find(bin_paths_.begin(), bin_paths_.end(), item.bin_path) == bin_paths_.end()) {
-            bin_paths_.push_back(item.bin_path);
-        }
-    }
+    applyMediaLibrary(library);
     updateProjectDirtyState();
-    populateMediaBrowser();
+    populateMediaBrowser({}, value.toStdString());
 }
 
 void MainWindow::renameSelectedMedia() {
@@ -407,10 +439,84 @@ void MainWindow::moveSelectedMediaToBin() {
         this, "Move to Bin", "Bin:", choices,
         choices.indexOf(QString::fromStdString(media_items_[*index].bin_path)), false, &accepted);
     if (!accepted) return;
-    if (value.toStdString() == media_items_[*index].bin_path) return;
-    media_items_[*index].bin_path = value.toStdString();
+    const auto destination_bin = value.toStdString();
+    if (destination_bin == media_items_[*index].bin_path) return;
+    auto library = buildMediaLibrary();
+    const auto library_index = library.indexForPath(media_items_[*index].metadata.source_path);
+    if (library_index == library.size() ||
+        library.moveToBin(library_index, destination_bin) !=
+            media::MediaMutationResult::Changed) {
+        QMessageBox::warning(this, "Could not move media", "The destination bin is invalid.");
+        return;
+    }
+    applyMediaLibrary(library);
     updateProjectDirtyState();
-    populateMediaBrowser(media_items_[*index].metadata.source_path);
+    populateMediaBrowser(media_items_[*index].metadata.source_path, destination_bin);
+}
+
+void MainWindow::handleMediaBrowserMediaDrop(
+    const QString& source_path,
+    const QString& destination_bin) {
+    if (source_path.isEmpty() || destination_bin.isEmpty()) return;
+
+    const auto normalized_source = normalizedPath(
+        QFileInfo(source_path).filesystemFilePath());
+    const auto item = std::find_if(
+        media_items_.begin(),
+        media_items_.end(),
+        [&normalized_source](const ImportedMedia& media) {
+            return normalizedPath(media.metadata.source_path) == normalized_source;
+        });
+    if (item == media_items_.end()) {
+        statusBar()->showMessage("The dragged media is no longer available.");
+        return;
+    }
+
+    const auto destination = destination_bin.toStdString();
+    if (item->bin_path == destination) return;
+
+    auto library = buildMediaLibrary();
+    const auto library_index = library.indexForPath(item->metadata.source_path);
+    if (library_index == library.size() ||
+        library.moveToBin(library_index, destination) !=
+            media::MediaMutationResult::Changed) {
+        statusBar()->showMessage("Could not move media to that bin.");
+        return;
+    }
+
+    applyMediaLibrary(library);
+    updateProjectDirtyState();
+    populateMediaBrowser(normalized_source, destination);
+    statusBar()->showMessage(
+        QString("Media moved to %1.").arg(QString::fromStdString(destination)));
+}
+
+void MainWindow::handleMediaBrowserBinDrop(
+    const QString& source_bin,
+    const QString& destination_bin) {
+    const auto source = source_bin.toStdString();
+    const auto destination = destination_bin.toStdString();
+    if (source.empty() || destination.empty() || source == media::default_bin) {
+        statusBar()->showMessage("That bin cannot be moved.");
+        return;
+    }
+
+    const auto separator = source.rfind('/');
+    const auto leaf = source.substr(
+        separator == std::string::npos ? 0 : separator + 1);
+    const auto new_path = destination + "/" + leaf;
+
+    auto library = buildMediaLibrary();
+    if (library.moveBin(source, new_path) != media::MediaMutationResult::Changed) {
+        statusBar()->showMessage("That bin cannot be moved to this location.");
+        return;
+    }
+
+    applyMediaLibrary(library);
+    updateProjectDirtyState();
+    populateMediaBrowser({}, new_path);
+    statusBar()->showMessage(
+        QString("Bin moved to %1.").arg(QString::fromStdString(destination)));
 }
 
 void MainWindow::removeSelectedMedia() {

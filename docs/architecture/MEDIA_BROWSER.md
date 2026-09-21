@@ -35,6 +35,19 @@ resolution, frame rate, duration, frame count, audio, and source path, or the
 offline status, bin, and path for unavailable media. This information is view
 state and changing list/block mode does not mark the project dirty.
 
+Right-clicking the bin tree or the media area opens the existing context menu.
+`New Bin` creates a bin below the clicked or selected bin; in the media area it
+uses the currently selected bin as the parent. Slash-separated relative paths
+can create multiple child levels in one operation.
+
+Media items can be dragged one at a time from the Browser list onto a real bin
+to move them. Bins can be dragged onto another real bin to reparent the whole
+bin subtree, including empty bins and the media assigned to it. `All Media` and
+blank tree space are not drop targets. `Unsorted` can receive media but cannot
+be renamed or moved. Invalid self, descendant, and collision drops are ignored;
+the tree remains alphabetically displayed and does not support manual sibling
+reordering or bin deletion in this milestone.
+
 Context menus support renaming media or bins, moving media, removing media
 from the Browser, and restoring an available offline item. Media Browser items
 can be dragged to the Timeline through the internal

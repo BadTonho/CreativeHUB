@@ -35,9 +35,8 @@ class QPoint;
 class QSlider;
 class QSpinBox;
 class QTabWidget;
-class QTreeWidget;
-class QTreeWidgetItem;
 class QScrollArea;
+class MediaBrowserBinTreeWidget;
 class MediaBrowserListWidget;
 class PreviewWidget;
 class QWidget;
@@ -72,9 +71,17 @@ private:
     void shutdownPlayback();
     void openMedia();
     void updateMediaDetails(int row);
-    void populateMediaBrowser(const std::filesystem::path& selected_path = {});
+    void populateMediaBrowser(
+        const std::filesystem::path& selected_path = {},
+        std::optional<std::string> selected_bin = std::nullopt);
     void updateMediaBrowserFilter();
     void showMediaContextMenu(const QPoint& position);
+    void handleMediaBrowserMediaDrop(
+        const QString& source_path,
+        const QString& destination_bin);
+    void handleMediaBrowserBinDrop(
+        const QString& source_bin,
+        const QString& destination_bin);
     void createBin();
     void renameSelectedBin();
     void renameSelectedMedia();
@@ -88,6 +95,8 @@ private:
     void addTextClip();
     [[nodiscard]] std::optional<std::size_t> selectedMediaIndex() const noexcept;
     [[nodiscard]] std::string selectedBinPath() const;
+    [[nodiscard]] media::MediaLibrary buildMediaLibrary() const;
+    void applyMediaLibrary(const media::MediaLibrary& library);
     void addMediaItem(
         media::VideoMetadata metadata,
         media::VideoFrame first_frame,
@@ -246,7 +255,7 @@ private:
     QDockWidget* timeline_dock_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
     MediaBrowserListWidget* media_list_ = nullptr;
-    QTreeWidget* bin_tree_ = nullptr;
+    MediaBrowserBinTreeWidget* bin_tree_ = nullptr;
     QLabel* media_status_label_ = nullptr;
     QPushButton* add_to_timeline_button_ = nullptr;
     QPushButton* new_bin_button_ = nullptr;

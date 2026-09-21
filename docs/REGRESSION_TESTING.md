@@ -35,6 +35,7 @@ updated intentionally.
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Media Browser UI | List/block modes, global mode persistence, compact item data, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
+| Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
 
 ## Manual UI validation
@@ -63,7 +64,11 @@ in the running Main Editor after UI or integration changes:
 - Media Browser list/block toggles, restoration of the last global mode,
   cached thumbnails, compact item descriptions, hover over the information
   icon for the complete technical tooltip, selection, bins, context actions,
-  offline media, and drag-and-drop to the Timeline;
+  offline media, right-click New Bin in the media area and bin tree, creation
+  of child bins, dragging media to bins, dragging bins into bins, preservation
+  of empty sub-bins, rejection of All Media/blank/self/descendant/collision
+  drops, project dirty state, persistence after save/reopen, and drag-and-drop
+  to the Timeline;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement;
 - Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;

@@ -1,9 +1,11 @@
 #include "media/media_library.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
+#include <string_view>
 
 namespace {
 
@@ -39,6 +41,9 @@ int main() {
     require(library.createBin("Footage/Scenes/Closeups") ==
                 media::MediaMutationResult::Changed,
             "A hierarchical bin was not created.");
+    require(library.createBin("Footage/Empty") ==
+                media::MediaMutationResult::Changed,
+            "An empty bin was not created.");
     require(library.moveToBin(0, "Footage/Scenes/Closeups") ==
                 media::MediaMutationResult::Changed,
             "The media item was not moved.");
@@ -51,5 +56,32 @@ int main() {
     require(library.restore(0, metadata(source), frame) == media::MediaMutationResult::Changed,
             "The media item was not restored.");
     require(!library.items()[0].offline, "Restore did not reactivate the media item.");
+
+    require(library.createBin("Archive") == media::MediaMutationResult::Changed,
+            "The archive bin was not created.");
+    require(library.createBin("Existing/Scenes") == media::MediaMutationResult::Changed,
+            "The collision bin was not created.");
+    require(library.moveBin("Footage", "Archive/Footage") ==
+                media::MediaMutationResult::Changed,
+            "The bin subtree was not moved.");
+    const auto has_bin = [&library](std::string_view path) {
+        return std::find(library.bins().begin(), library.bins().end(), path) !=
+            library.bins().end();
+    };
+    require(has_bin("Archive/Footage/Empty"),
+            "The empty bin was not preserved while moving its parent.");
+    require(has_bin("Archive/Footage/Scenes/Closeups"),
+            "The child bin was not moved with its parent.");
+    require(library.items()[0].bin_path == "Archive/Footage/Scenes/Closeups",
+            "Media bin paths were not updated with the moved subtree.");
+    require(library.moveBin("Archive", "Archive/Footage") ==
+                media::MediaMutationResult::InvalidBin,
+            "A bin was allowed to move into its own descendant.");
+    require(library.moveBin("Archive/Footage", "Existing/Scenes") ==
+                media::MediaMutationResult::InvalidBin,
+            "A bin collision was not rejected.");
+    require(library.moveBin("Unsorted", "Archive/Unsorted") ==
+                media::MediaMutationResult::InvalidBin,
+            "The default Unsorted bin was allowed to move.");
     return 0;
 }
