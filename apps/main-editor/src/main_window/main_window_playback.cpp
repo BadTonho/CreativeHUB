@@ -676,20 +676,57 @@ void MainWindow::handleTimelineSeekStarted() {
     sendPlaybackCommand("pause");
 }
 
-void MainWindow::handleTimelineSeek(qint64 frame_index) {
+void MainWindow::handleTimelineSeek(qint64 global_frame) {
     if (playback_worker_ == nullptr ||
-        !canPlaybackSelectedMedia() ||
         pending_clip_activation_.has_value()) {
         return;
     }
 
+    const auto total = timeline_model_.totalDurationFrames();
+    if (total <= 0) return;
+    const auto target_frame = std::clamp<std::int64_t>(
+        global_frame, 0, total - 1);
+    const auto target_clip = timeline_model_.topClipAt(target_frame);
     ++playback_generation_;
     playback_is_playing_ = false;
+
+    if (!target_clip.has_value()) {
+        if (timeline_widget_ != nullptr) {
+            timeline_widget_->setPlayheadFrame(target_frame);
+        }
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        preview_widget_->clearFrame("Gap in timeline.");
+        statusBar()->showMessage("Gap in timeline.");
+        return;
+    }
+
+    const auto& clip = timeline_model_.tracks()[target_clip->track_index]
+        .clips[target_clip->clip_index];
+    const auto local_frame = target_frame - clip.timeline_start_frame;
+    const bool same_clip = active_timeline_track_index_.has_value() &&
+        active_timeline_clip_index_.has_value() &&
+        *active_timeline_track_index_ == target_clip->track_index &&
+        *active_timeline_clip_index_ == target_clip->clip_index;
+    if (!same_clip) {
+        if (timeline_widget_ != nullptr) {
+            timeline_widget_->setPlayheadFrame(target_frame);
+        }
+        activateTimelineClipAt(
+            target_clip->track_index,
+            target_clip->clip_index,
+            local_frame,
+            false);
+        return;
+    }
+
+    playback_frame_index_ = std::clamp<std::int64_t>(
+        local_frame, 0, std::max<std::int64_t>(
+            0, clip.timeline_duration_frames - 1));
     if (timeline_widget_ != nullptr) {
-        timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());
+        timeline_widget_->setPlayheadFrame(target_frame);
     }
     updatePlaybackControls();
     updatePlaybackStatus();
-
-    playback_worker_->requestSeek(frame_index, playback_generation_);
+    playback_worker_->requestSeek(playback_frame_index_, playback_generation_);
 }

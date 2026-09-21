@@ -105,6 +105,7 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
     seek_pending_ = false;
     drag_frame_.reset();
     ruler_frame_.reset();
+    ruler_content_x_.reset();
     ruler_seeking_ = false;
     drag_hovering_ = false;
     drop_hover_track_.reset();
@@ -131,6 +132,7 @@ void TimelineWidget::clearClips() {
     dragging_ = false;
     seek_pending_ = false;
     ruler_frame_.reset();
+    ruler_content_x_.reset();
     ruler_seeking_ = false;
     drag_hovering_ = false;
     drop_hover_track_.reset();
@@ -148,6 +150,7 @@ void TimelineWidget::setActiveClip(std::optional<ClipLocation> location) {
     active_clip_ = location;
     drag_frame_.reset();
     ruler_frame_.reset();
+    ruler_content_x_.reset();
     update();
 }
 
@@ -166,6 +169,10 @@ void TimelineWidget::setPlayheadFrame(std::int64_t frame_index) {
         playhead_frame_ = std::min(playhead_frame_, total - 1);
     }
     drag_frame_.reset();
+    if (ruler_frame_.has_value() && *ruler_frame_ == playhead_frame_) {
+        ruler_frame_.reset();
+        ruler_content_x_.reset();
+    }
     update();
 }
 
@@ -746,8 +753,11 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             global_frame = clip.timeline_start_frame + *drag_frame_;
         }
         global_frame = std::clamp<std::int64_t>(global_frame, 0, content_duration - 1);
-        const auto x = content.left() + content.width() *
-            static_cast<double>(global_frame) / visual_duration;
+        const auto x = std::clamp(
+            ruler_content_x_.value_or(content.left() + content.width() *
+                static_cast<double>(global_frame) / visual_duration),
+            content.left(),
+            content.right());
         painter.setPen(QPen(QColor("#ffcf5c"), 2));
         painter.drawLine(
             QPointF(x, trackRect(0).top() - 20),
@@ -910,13 +920,17 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         return;
     }
     if (rulerRect().contains(event->position())) {
-        const auto frame = playheadFrameAtRulerX(event->position().x());
+        const auto ruler = rulerRect();
+        const auto ruler_x = std::clamp(
+            event->position().x(), ruler.left(), ruler.right());
+        const auto frame = playheadFrameAtRulerX(ruler_x);
         if (!frame.has_value()) {
             event->ignore();
             return;
         }
         ruler_seeking_ = true;
         ruler_frame_ = *frame;
+        ruler_content_x_ = ruler_x;
         emit seekStarted();
         grabMouse();
         update();
@@ -1019,9 +1033,13 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
 
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
     if (ruler_seeking_) {
-        if (const auto frame = playheadFrameAtRulerX(event->position().x());
+        const auto ruler = rulerRect();
+        const auto ruler_x = std::clamp(
+            event->position().x(), ruler.left(), ruler.right());
+        if (const auto frame = playheadFrameAtRulerX(ruler_x);
             frame.has_value()) {
             ruler_frame_ = *frame;
+            ruler_content_x_ = ruler_x;
             update();
         }
         event->accept();
@@ -1094,7 +1112,6 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
     if (ruler_seeking_) {
         const auto frame = ruler_frame_;
         ruler_seeking_ = false;
-        ruler_frame_.reset();
         releaseMouse();
         if (frame.has_value()) emit seekRequested(*frame);
         update();
@@ -1175,7 +1192,13 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
         seek_pending_ = false;
         drag_frame_.reset();
         releaseMouse();
-        if (frame.has_value()) emit seekRequested(*frame);
+        if (frame.has_value() &&
+            seek_clip_.track_index < tracks_.size() &&
+            seek_clip_.clip_index < tracks_[seek_clip_.track_index].clips.size()) {
+            const auto& clip = tracks_[seek_clip_.track_index]
+                .clips[seek_clip_.clip_index];
+            emit seekRequested(clip.timeline_start_frame + *frame);
+        }
         update();
         event->accept();
         return;

@@ -55,7 +55,9 @@ The upper time ruler is independent from clip hit testing: clicking or dragging
 there scrubs the playhead without selecting or moving a clip. Ruler scrubbing
 shows the playhead immediately, commits the seek on release, and clamps the
 requested frame to the real project duration even when the visual one-hour
-range continues through empty space.
+range continues through empty space. The ruler reports an absolute timeline
+frame; the Main Window resolves the clip and converts it to that clip's local
+frame only when asking the playback worker to seek.
 
 The Edit > Require Alt to Move Clips option is disabled by default and is
 stored as a user preference. When enabled, Alt + drag moves a clip and a

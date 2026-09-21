@@ -386,6 +386,27 @@ int main(int argc, char* argv[]) {
                     selected_clip == selected_clip_before_ruler,
                 "Dragging the time ruler did not seek without selecting a clip.");
 
+        // Ruler requests use absolute timeline frames even when the clip does
+        // not start at frame zero.
+        const auto offset_track = timeline::TimelineTrack{
+            1,
+            "Video 1",
+            1.0,
+            false,
+            {makeClip("offset.mkv", 600, test_clip_duration, "offset.mkv")}};
+        widget.setTracks({offset_track});
+        widget.setActiveClip(timeline::ClipLocation{0, 0});
+        const auto absolute_target = std::int64_t{12000};
+        const auto target_x = widget.contentXForFrame(absolute_target);
+        const auto seek_count_before_offset = seek_frames.size();
+        sendMouse(widget, QEvent::MouseButtonPress, QPointF(target_x, 25),
+                  Qt::LeftButton);
+        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(target_x, 25),
+                  Qt::NoButton);
+        require(seek_frames.size() == seek_count_before_offset + 1 &&
+                    std::abs(seek_frames.back() - absolute_target) <= 1,
+                "The time ruler did not report an absolute timeline frame.");
+
         widget.close();
         return 0;
     } catch (const std::exception& error) {

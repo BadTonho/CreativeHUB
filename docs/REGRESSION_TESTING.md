@@ -27,7 +27,7 @@ updated intentionally.
 | Playback session | Sequential frames, reset, optimized seeking, frame cache, EOF, segment limits |
 | Playback worker | Media activation, generation handling, seek coalescing, playback completion, errors |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
-| Timeline interaction | Selection, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, upper-ruler playhead scrubbing, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
+| Timeline interaction | Selection, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |

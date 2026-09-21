@@ -193,7 +193,7 @@ private:
         quint64 generation);
     void handleTimelineClipSelected(qint64 clip_index);
     void handleTimelineSeekStarted();
-    void handleTimelineSeek(qint64 frame_index);
+    void handleTimelineSeek(qint64 global_frame);
     void activateTimelineClip(
         std::size_t clip_index,
         std::int64_t target_frame,

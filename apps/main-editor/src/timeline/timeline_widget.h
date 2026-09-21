@@ -130,6 +130,7 @@ private:
     std::int64_t playhead_frame_ = 0;
     std::optional<std::int64_t> drag_frame_;
     std::optional<std::int64_t> ruler_frame_;
+    std::optional<double> ruler_content_x_;
     bool dragging_ = false;
     bool ruler_seeking_ = false;
     bool move_requires_alt_ = false;

@@ -64,6 +64,9 @@ The upper time ruler is also a playhead scrub area. Clicking or dragging it
 updates the visible playhead without selecting a clip, then requests the seek
 when the pointer is released. Scrubbing remains bounded by the real project
 duration even when the visual timeline has empty space beyond the last clip.
+The playhead keeps its pointer position while the playback worker processes the
+request, and the window converts the absolute ruler frame to the selected
+target clip's local playback frame.
 
 Delete removes the active clip. Ctrl + Left and Ctrl + Right nudge it by one
 frame when valid. Ctrl + K splits at the playhead. Undo and Redo pause
