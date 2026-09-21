@@ -71,6 +71,8 @@ private:
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();
     void saveWorkspaceLayout();
+    void activateMediaPoolGroup();
+    void activateEffectsGroup();
     void updateMediaPoolActionState();
     void updateEffectsActionState();
     QWidget* createMediaBins();

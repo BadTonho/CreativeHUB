@@ -33,25 +33,28 @@ Timeline drag-and-drop path and internal add operation. An empty library does
 not add a redundant status row below the media view. The workspace stores the
 native dock arrangement globally in `workspace/dock_layout_state`; the default
 arrangement places `Bins` above `Media` on the left. Both docks can be
-moved, resized, floated, closed, re-docked, and tabified independently. Their
-visibility can be toggled together by the `Media Pool` text button in the
-toolbar below the menu bar, next to the `Effects` group button. The docks can
-also be controlled individually through the
+moved, resized, floated, closed, re-docked, and tabified independently. The
+`Media Pool` text button in the toolbar below the menu bar activates this pair
+and hides the Effects pair. The adjacent `Effects` button activates the
+Effects pair in the same left workspace area. The docks can also be controlled
+individually through the
 `View > Media Pool` submenu. The global action is checked only when both docks
-are visible and does not affect project state.
+are visible while the Effects pair is hidden, and it does not affect project
+state.
 
 The Effects workspace contains two additional native docks: `Toolbox` and
-`Effects`. They are initially placed side by side in the right workspace area,
+`Effects`. They are initially placed side by side in the left workspace area,
 with the Toolbox narrower than the Effects list; both remain independently
 movable, resizable, floatable, closable, and tabifiable. The Toolbox contains
 the static categories `All`, `Video`, `Audio`, `Transitions`, `Generators`,
 and `Text`. Selecting a category filters the 17 visual effect entries in the
 Effects dock. These entries are a UI prototype only: they cannot be applied to
-the Preview, Timeline, or project. The toolbar `Effects` action toggles both
-docks together, while `View > Effects` controls `Toolbox` and `Effects`
-individually. The workspace layout is stored globally in
-`workspace/dock_layout_state` with layout version 4 and does not affect project
-state.
+the Preview, Timeline, or project. The toolbar `Effects` action activates both
+docks and hides the Media Pool pair, while `View > Effects` controls `Toolbox`
+and `Effects` individually. The workspace layout is stored globally in
+`workspace/dock_layout_state` with layout version 5 and does not affect project
+state. The default layout shows Media Pool and keeps the Effects pair hidden
+until activated.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline
