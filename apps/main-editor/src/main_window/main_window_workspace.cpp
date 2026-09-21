@@ -35,6 +35,7 @@
 #include <QSettings>
 #include <QSlider>
 #include <QStatusBar>
+#include <QToolBar>
 #include <QUrl>
 #include <QWidget>
 #include <QTreeWidget>
@@ -268,7 +269,14 @@ void MainWindow::createMenus() {
     auto* restore_layout_action = view_menu->addAction("Restore &Default Layout");
     connect(restore_layout_action, &QAction::triggered, this, &MainWindow::restoreDefaultLayout);
 
-    media_pool_action_ = menuBar()->addAction("&Media Pool");
+    auto* media_pool_toolbar = new QToolBar("Media Pool", this);
+    media_pool_toolbar->setObjectName("mediaPoolToolbar");
+    media_pool_toolbar->setMovable(false);
+    media_pool_toolbar->setFloatable(false);
+    media_pool_toolbar->setAllowedAreas(Qt::TopToolBarArea);
+    media_pool_toolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    addToolBar(Qt::TopToolBarArea, media_pool_toolbar);
+    media_pool_action_ = media_pool_toolbar->addAction("Media Pool");
     media_pool_action_->setCheckable(true);
     media_pool_action_->setToolTip("Show or hide the Media Pool docks");
     connect(media_pool_action_, &QAction::triggered, this, [this](bool) {

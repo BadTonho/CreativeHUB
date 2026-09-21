@@ -76,10 +76,10 @@ in the running Main Editor after UI or integration changes:
   double-click and F2, automatic New Bin naming without dialogs through the
   context menu, protection of
   All Media/Unsorted, and preventing folder items from producing media drag data,
-  the top-level `Media Pool` action between `View` and `Settings`, its global
-  show/hide behavior, the `Media Pool` submenu with independent `Bins` and
-  `Media` actions, moving, resizing, floating, closing, re-docking, and
-  tabifying each dock,
+  the `Media Pool` text button below the menu bar, its global show/hide
+  behavior, the `Media Pool` submenu with independent `Bins` and `Media`
+  actions, moving, resizing, floating, closing, re-docking, and tabifying
+  each dock,
   restoring both docks through `View > Media Pool`, restoration of the
   complete workspace layout after restarting the editor, and `View > Restore
   Default Layout` without marking the project dirty,
