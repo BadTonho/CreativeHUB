@@ -76,6 +76,10 @@ actions, and only creates and opens the dialog.
 
 ## Timeline interaction
 
+The dock uses its native Timeline title as the only heading. It does not
+render a duplicate internal title or the former click-to-select interaction
+hint row; the controls and timeline content remain directly below the dock
+title.
 The Timeline draws one vertical row per video track, with the top row having
 the highest visual priority. Video 1 is created first; each newly created track
 is inserted above the existing tracks. It preserves absolute positions and

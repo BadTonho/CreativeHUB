@@ -301,16 +301,6 @@ QWidget* MainWindow::createTimeline() {
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(8);
 
-    auto* title = new QLabel("Timeline", container);
-    title->setStyleSheet("font-weight: 600; font-size: 14px;");
-    layout->addWidget(title);
-
-    timeline_interaction_hint_ = new QLabel(
-        "Click to select  •  drag to move clips between tracks  •  Alt + drag to seek",
-        container);
-    timeline_interaction_hint_->setStyleSheet("color: #7e8999; font-size: 11px;");
-    layout->addWidget(timeline_interaction_hint_);
-
     auto* controls = new QHBoxLayout;
     controls->setSpacing(6);
 

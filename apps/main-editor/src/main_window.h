@@ -278,7 +278,6 @@ private:
     QSlider* track_volume_slider_ = nullptr;
     QCheckBox* clip_mute_check_ = nullptr;
     QCheckBox* track_mute_check_ = nullptr;
-    QLabel* timeline_interaction_hint_ = nullptr;
     QLabel* playback_status_label_ = nullptr;
     QLabel* timeline_message_label_ = nullptr;
     SystemMemoryIndicator* system_memory_indicator_ = nullptr;

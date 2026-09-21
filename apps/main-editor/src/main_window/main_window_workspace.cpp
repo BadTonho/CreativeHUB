@@ -224,20 +224,10 @@ void MainWindow::createMenus() {
     if (timeline_widget_ != nullptr) {
         timeline_widget_->setMoveRequiresAlt(require_alt_to_move);
     }
-    if (timeline_interaction_hint_ != nullptr) {
-        timeline_interaction_hint_->setText(require_alt_to_move
-            ? "Click to select  •  drag to seek  •  Alt + drag to move clips between tracks"
-            : "Click to select  •  drag to move clips between tracks  •  Alt + drag to seek");
-    }
     connect(require_alt_to_move_action_, &QAction::toggled, this, [this](bool enabled) {
         QSettings settings;
         settings.setValue("timeline/require_alt_to_move", enabled);
         if (timeline_widget_ != nullptr) timeline_widget_->setMoveRequiresAlt(enabled);
-        if (timeline_interaction_hint_ != nullptr) {
-            timeline_interaction_hint_->setText(enabled
-                ? "Click to select  •  drag to seek  •  Alt + drag to move clips between tracks"
-                : "Click to select  •  drag to move clips between tracks  •  Alt + drag to seek");
-        }
         statusBar()->showMessage(enabled
             ? "Alt is required to move timeline clips."
             : "Timeline clips can be moved by dragging.");

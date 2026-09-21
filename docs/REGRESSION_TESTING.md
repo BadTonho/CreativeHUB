@@ -55,6 +55,9 @@ in the running Main Editor after UI or integration changes:
   duplicate combinations are rejected and the previous value is restored, and
   validate both individual `Reset` and confirmed `Reset All`;
 - dock resizing, floating, re-docking, and restoration;
+- Timeline: confirm the dock shows only its official Timeline title, without
+  a duplicate internal title or the former Click to select interaction hint,
+  while the playback controls, ruler, clips, and footer remain available;
 - Timeline track height, maximum row height, vertical scrolling, stable
   one-hour horizontal scale, horizontal scrolling for longer content, zoom
   controls from 25% through 800%, Ctrl + wheel playhead anchoring, button
