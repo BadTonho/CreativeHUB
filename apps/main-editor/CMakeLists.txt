@@ -29,6 +29,8 @@ add_executable(creative-suite-main-editor
     src/settings/settings_dialog.h
     src/settings/shortcut_manager.cpp
     src/settings/shortcut_manager.h
+    src/system/system_memory_usage.cpp
+    src/system/system_memory_usage.h
     src/preview_widget.cpp
     src/preview_widget.h
     src/rendering/opengl_preview_surface.cpp
@@ -72,6 +74,8 @@ add_executable(creative-suite-main-editor
     src/ui/media_browser_bin_tree_widget.cpp
     src/ui/media_browser_bin_tree_widget.h
     src/ui/media_drag_mime.h
+    src/ui/system_memory_indicator.cpp
+    src/ui/system_memory_indicator.h
 )
 
 target_link_libraries(creative-suite-main-editor PRIVATE

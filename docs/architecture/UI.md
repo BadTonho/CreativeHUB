@@ -92,6 +92,12 @@ expandable dock space, and its track rows grow within that space while additiona
 available through vertical scrolling. Each track row has a provisional maximum
 height of 180 pixels; extra space in the timeline remains empty until a later
 layout milestone gives it another purpose.
+The same footer shows total system memory usage at the right in the form
+`RAM: <percent>% (<used>/<total> GB)`, refreshed every second. Windows reads
+the value through `GlobalMemoryStatusEx`; platforms without an implementation,
+or a failed query, display `RAM: N/A`. This indicator is display-only and does
+not affect playback, Timeline data, project dirty state, Undo/Redo, or `.csp`
+data.
 The horizontal timeline scale has a one-hour minimum range independent of
 the actual clip duration. The one-hour range fills the visible viewport so
 short projects keep a stable scale and retain empty space after their last

@@ -881,3 +881,26 @@ add_test(
 set_tests_properties(creative-suite-main-editor-preview PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1"
 )
+
+add_executable(creative-suite-main-editor-system-memory-tests
+    system_memory_usage_test.cpp
+    ../src/system/system_memory_usage.cpp
+    ../src/system/system_memory_usage.h
+)
+
+target_include_directories(creative-suite-main-editor-system-memory-tests PRIVATE
+    ../src
+)
+
+target_compile_features(creative-suite-main-editor-system-memory-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-system-memory-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-system-memory-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-system-memory
+    COMMAND creative-suite-main-editor-system-memory-tests
+)

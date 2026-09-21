@@ -6,6 +6,7 @@
 #include "project/project_file.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser_list_widget.h"
+#include "ui/system_memory_indicator.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -430,6 +431,8 @@ QWidget* MainWindow::createTimeline() {
         QSizePolicy::Fixed);
     playback_footer_layout->addWidget(timeline_message_label_);
     playback_footer_layout->addStretch(1);
+    system_memory_indicator_ = new SystemMemoryIndicator(playback_footer);
+    playback_footer_layout->addWidget(system_memory_indicator_);
     playback_footer->setFixedHeight(playback_footer->sizeHint().height());
     layout->addWidget(playback_footer);
 
