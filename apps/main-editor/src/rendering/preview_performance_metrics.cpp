@@ -91,6 +91,12 @@ void PreviewPerformanceMetrics::recordTextCacheHit() noexcept {
     if (isEnabled()) text_cache_hits_.fetch_add(1, std::memory_order_relaxed);
 }
 
+void PreviewPerformanceMetrics::recordTextCompositionFastPathHit() noexcept {
+    if (isEnabled()) {
+        text_composition_fast_path_hits_.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
 void PreviewPerformanceMetrics::recordSeekOperation() noexcept {
     if (isEnabled()) seek_operations_.fetch_add(1, std::memory_order_relaxed);
 }
@@ -141,6 +147,7 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
         decoded_frames_.exchange(0, std::memory_order_relaxed),
         decoded_cache_hits_.exchange(0, std::memory_order_relaxed),
         text_cache_hits_.exchange(0, std::memory_order_relaxed),
+        text_composition_fast_path_hits_.exchange(0, std::memory_order_relaxed),
         seek_operations_.exchange(0, std::memory_order_relaxed),
         composed_frames_.exchange(0, std::memory_order_relaxed),
         composition_cache_hits_.exchange(0, std::memory_order_relaxed),

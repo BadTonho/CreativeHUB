@@ -32,6 +32,7 @@ struct PreviewPerformanceSnapshot {
     std::uint64_t decoded_frames = 0;
     std::uint64_t decoded_cache_hits = 0;
     std::uint64_t text_cache_hits = 0;
+    std::uint64_t text_composition_fast_path_hits = 0;
     std::uint64_t seek_operations = 0;
     std::uint64_t composed_frames = 0;
     std::uint64_t composition_cache_hits = 0;
@@ -69,6 +70,7 @@ public:
     void recordDecodedFrame() noexcept;
     void recordDecodedCacheHits(std::uint64_t count) noexcept;
     void recordTextCacheHit() noexcept;
+    void recordTextCompositionFastPathHit() noexcept;
     void recordSeekOperation() noexcept;
     void recordComposedFrame() noexcept;
     void recordCompositionCacheHit() noexcept;
@@ -94,6 +96,7 @@ private:
     std::atomic<std::uint64_t> decoded_frames_{0};
     std::atomic<std::uint64_t> decoded_cache_hits_{0};
     std::atomic<std::uint64_t> text_cache_hits_{0};
+    std::atomic<std::uint64_t> text_composition_fast_path_hits_{0};
     std::atomic<std::uint64_t> seek_operations_{0};
     std::atomic<std::uint64_t> composed_frames_{0};
     std::atomic<std::uint64_t> composition_cache_hits_{0};

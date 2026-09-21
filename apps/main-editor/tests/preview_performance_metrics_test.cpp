@@ -31,11 +31,15 @@ int main() {
                 "Disabled metrics recorded timing data.");
         require(disabled.text_rasterization.count == 0,
                 "Disabled metrics recorded text rasterization timing data.");
+        metrics.recordTextCompositionFastPathHit();
+        require(metrics.takeSnapshotAndReset().text_composition_fast_path_hits == 0,
+                "Disabled metrics recorded text composition fast-path data.");
 
         metrics.setEnabled(true);
         metrics.recordDecodedFrame();
         metrics.recordDecodedCacheHits(2);
         metrics.recordTextCacheHit();
+        metrics.recordTextCompositionFastPathHit();
         metrics.recordSeekOperation();
         metrics.recordComposedFrame();
         metrics.recordCompositionCacheHit();
@@ -64,6 +68,8 @@ int main() {
                 "Decoded cache hit count is incorrect.");
         require(snapshot.text_cache_hits == 1,
                 "Text cache hit count is incorrect.");
+        require(snapshot.text_composition_fast_path_hits == 1,
+                "Text composition fast-path hit count is incorrect.");
         require(snapshot.seek_operations == 1,
                 "Seek operation count is incorrect.");
         require(snapshot.composed_frames == 1,
@@ -106,7 +112,8 @@ int main() {
 
         const auto reset = metrics.takeSnapshotAndReset();
         require(reset.decoded_frames == 0 && reset.decode.count == 0 &&
-                    reset.text_rasterization.count == 0,
+                    reset.text_rasterization.count == 0 &&
+                    reset.text_composition_fast_path_hits == 0,
                 "Taking a snapshot did not reset the metrics.");
         return 0;
     } catch (const std::exception& error) {

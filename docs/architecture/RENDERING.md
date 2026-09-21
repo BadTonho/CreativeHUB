@@ -57,10 +57,13 @@ repeated request can be emitted without decoding or blending again. Both
 caches are cleared when the media or composition generation changes.
 
 The CPU compositor has a fast path for an opaque, full-canvas layer with the
-identity transform and skips fully transparent samples before the general
-transform, rotation, opacity, and alpha path. The result is still one final
-RGBA frame sent to OpenGL; per-layer texture blending is deliberately deferred
-to a later milestone.
+identity transform. Cached text layers also retain immutable per-row alpha
+coverage. When a text layer has no rotation, the compositor maps only the
+non-transparent source spans and reuses the existing sampling and blending
+formulas, preserving the previous pixels while avoiding transparent work.
+Rotated or unsupported layers use the general transform, rotation, opacity,
+and alpha path. The result is still one final RGBA frame sent to OpenGL;
+per-layer texture blending is deliberately deferred to a later milestone.
 
 ## Preview performance diagnostics
 
@@ -81,7 +84,9 @@ composition, payload creation, the UI callback, Preview submission, CPU
 presentation, GPU texture upload, and GPU painting. The text-rasterization
 timing is a subcomponent of the decode timing, so the existing decode values
 remain comparable with older logs; cached text frames do not create new
-rasterization samples. No media paths or per-frame log entries are written.
+rasterization samples. The summary also includes the aggregate
+`text_composition_fast_path_hits` counter. No media paths or per-frame log
+entries are written.
 When disabled, the timer stops and the hot path does not collect detailed
 timings.
 

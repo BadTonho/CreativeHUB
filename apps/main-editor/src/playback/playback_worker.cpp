@@ -1108,6 +1108,9 @@ PlaybackWorker::decodeCompositionLayers(
                 }
                 request.composition->cached_text_frame =
                     std::make_shared<const media::VideoFrame>(std::move(*rendered));
+                request.composition->cached_text_alpha_coverage =
+                    rendering::FrameCompositor::buildAlphaCoverage(
+                        *request.composition->cached_text_frame);
                 frame = request.composition->cached_text_frame;
             }
         } else if (request.composition->session != nullptr) {
@@ -1124,7 +1127,12 @@ PlaybackWorker::decodeCompositionLayers(
             spec.keyframes,
             request.local_frame);
         transform.opacity *= request.opacity_multiplier;
-        layers.push_back(DecodedCompositionLayer{std::move(frame), transform});
+        layers.push_back(DecodedCompositionLayer{
+            std::move(frame),
+            transform,
+            spec.kind == timeline::ClipKind::Text
+                ? request.composition->cached_text_alpha_coverage
+                : rendering::AlphaCoveragePtr{}});
     }
     return layers;
 }
@@ -1133,11 +1141,17 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     const std::vector<DecodedCompositionLayer>& decoded_layers) const {
     std::vector<rendering::CompositionLayer> layers;
     layers.reserve(decoded_layers.size());
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     for (const auto& decoded : decoded_layers) {
         if (decoded.frame == nullptr) continue;
-        layers.push_back(rendering::CompositionLayer{
+        rendering::CompositionLayer layer{
             decoded.frame.get(),
-            decoded.transform});
+            decoded.transform,
+            decoded.alpha_coverage};
+        if (rendering::FrameCompositor::canUseAlphaCoverageFastPath(layer)) {
+            metrics.recordTextCompositionFastPathHit();
+        }
+        layers.push_back(std::move(layer));
     }
     return rendering::FrameCompositor::compose(1920, 1080, layers);
 }

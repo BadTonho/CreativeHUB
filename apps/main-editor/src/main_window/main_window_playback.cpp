@@ -82,6 +82,9 @@ void appendPerformanceContext(
     context.emplace_back(
         "text_cache_hits", std::to_string(snapshot.text_cache_hits));
     context.emplace_back(
+        "text_composition_fast_path_hits",
+        std::to_string(snapshot.text_composition_fast_path_hits));
+    context.emplace_back(
         "seek_operations", std::to_string(snapshot.seek_operations));
     context.emplace_back(
         "composed_frames", std::to_string(snapshot.composed_frames));

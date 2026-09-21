@@ -3,6 +3,7 @@
 #include "timeline/timeline_model.h"
 #include "timeline/timeline_transform.h"
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -51,6 +52,31 @@ media::VideoFrame fullFrame(int red, int green, int blue, int alpha = 255) {
         frame.rgba_pixels[index + 2] = static_cast<std::uint8_t>(blue);
         frame.rgba_pixels[index + 3] = static_cast<std::uint8_t>(alpha);
     }
+    return frame;
+}
+
+media::VideoFrame sparseAlphaFrame() {
+    media::VideoFrame frame;
+    frame.width = 5;
+    frame.height = 4;
+    frame.stride = 20;
+    frame.rgba_pixels.assign(80, 0);
+    const auto setPixel = [&frame](int x, int y, int red, int green, int blue, int alpha) {
+        auto* pixel = frame.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * frame.stride +
+            static_cast<std::size_t>(x) * 4;
+        pixel[0] = static_cast<std::uint8_t>(red);
+        pixel[1] = static_cast<std::uint8_t>(green);
+        pixel[2] = static_cast<std::uint8_t>(blue);
+        pixel[3] = static_cast<std::uint8_t>(alpha);
+    };
+    setPixel(1, 0, 255, 0, 0, 255);
+    setPixel(3, 0, 0, 255, 0, 128);
+    setPixel(0, 1, 0, 0, 255, 200);
+    setPixel(1, 1, 0, 0, 255, 200);
+    setPixel(2, 1, 0, 0, 255, 200);
+    setPixel(4, 2, 255, 255, 0, 96);
+    setPixel(2, 3, 255, 0, 255, 255);
     return frame;
 }
 
@@ -162,6 +188,73 @@ int main() {
         require(reversed.has_value() && reversed->rgba_pixels[0] > 200 &&
                     reversed->rgba_pixels[1] < 20,
                 "The compositor did not preserve layer order.");
+
+        const auto sparse = sparseAlphaFrame();
+        const auto coverage = rendering::FrameCompositor::buildAlphaCoverage(sparse);
+        require(coverage != nullptr && coverage->rows.size() == 4 &&
+                    coverage->rows[0].size() == 2 &&
+                    coverage->rows[1].size() == 1,
+                "Alpha coverage did not preserve transparent spans.");
+        auto text_transform = identity;
+        text_transform.position_x = 0.4;
+        text_transform.position_y = 0.6;
+        text_transform.scale = 0.75;
+        text_transform.opacity = 0.73;
+        require(rendering::FrameCompositor::canUseAlphaCoverageFastPath(
+                    rendering::CompositionLayer{&sparse, text_transform, coverage}),
+                "The unrotated alpha coverage layer was not eligible for the fast path.");
+        const auto optimized = rendering::FrameCompositor::compose(
+            32,
+            24,
+            std::vector<rendering::CompositionLayer>{{
+                &sparse,
+                text_transform,
+                coverage}});
+        const auto general = rendering::FrameCompositor::compose(
+            32,
+            24,
+            std::vector<rendering::CompositionLayer>{{&sparse, text_transform}});
+        require(optimized.has_value() && general.has_value() &&
+                    optimized->rgba_pixels == general->rgba_pixels,
+                "The alpha coverage fast path changed composed pixels.");
+
+        auto rotated = text_transform;
+        rotated.rotation_degrees = 15.0;
+        require(!rendering::FrameCompositor::canUseAlphaCoverageFastPath(
+                    rendering::CompositionLayer{&sparse, rotated, coverage}),
+                "A rotated alpha coverage layer incorrectly used the fast path.");
+        const auto rotated_with_coverage = rendering::FrameCompositor::compose(
+            32,
+            24,
+            std::vector<rendering::CompositionLayer>{{
+                &sparse,
+                rotated,
+                coverage}});
+        const auto rotated_general = rendering::FrameCompositor::compose(
+            32,
+            24,
+            std::vector<rendering::CompositionLayer>{{&sparse, rotated}});
+        require(rotated_with_coverage.has_value() && rotated_general.has_value() &&
+                    rotated_with_coverage->rgba_pixels == rotated_general->rgba_pixels,
+                "Rotated alpha coverage did not use the general compositor path.");
+
+        media::VideoFrame empty = sparse;
+        std::fill(
+            empty.rgba_pixels.begin(),
+            empty.rgba_pixels.end(),
+            static_cast<std::uint8_t>(0));
+        const auto empty_coverage = rendering::FrameCompositor::buildAlphaCoverage(empty);
+        const auto empty_composed = rendering::FrameCompositor::compose(
+            32,
+            24,
+            std::vector<rendering::CompositionLayer>{{
+                &empty,
+                text_transform,
+                empty_coverage}});
+        const auto empty_general = rendering::FrameCompositor::compose(32, 24, {});
+        require(empty_composed.has_value() && empty_general.has_value() &&
+                    empty_composed->rgba_pixels == empty_general->rgba_pixels,
+                "Empty alpha coverage changed the destination.");
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;

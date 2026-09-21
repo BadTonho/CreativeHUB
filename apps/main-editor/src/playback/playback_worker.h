@@ -112,6 +112,7 @@ private:
     struct DecodedCompositionLayer {
         std::shared_ptr<const media::VideoFrame> frame;
         timeline::Transform2D transform;
+        rendering::AlphaCoveragePtr alpha_coverage;
     };
 
     bool ensureSessionAtCurrentFrame();
@@ -181,6 +182,7 @@ private:
         CompositionLayerSpec spec;
         std::unique_ptr<media::VideoPlaybackSession> session;
         std::shared_ptr<const media::VideoFrame> cached_text_frame;
+        rendering::AlphaCoveragePtr cached_text_alpha_coverage;
     };
     QVector<CompositionLayerSpec> composition_specs_;
     QVector<CompositionTransitionSpec> composition_transitions_;

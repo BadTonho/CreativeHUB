@@ -103,9 +103,14 @@ The worker reuses a bounded decoded-frame cache, advances sequential decoder
 requests without an unnecessary seek, and falls back to a full seek for
 random requests. The final composed payload is cached by composition
 generation and global frame, while unchanged text layers reuse their
-rasterized RGBA layer. These are playback caches only: they are invalidated
-when media or composition state changes and never alter clip data, timing,
-frame rate, or project history.
+rasterized RGBA layer and its immutable per-row alpha coverage. These are
+playback caches only: they are invalidated when media or composition state
+changes and never alter clip data, timing, frame rate, or project history.
+
+Unrotated cached text layers use the alpha coverage to skip transparent spans
+during CPU composition. The existing general compositor remains the fallback
+for rotated or unsupported layers, so the optimization does not change the
+visual result or the Timeline model.
 
 Every clip and track also stores linear audio gain (`0.0` to `2.0`) and a mute
 flag. The effective gain is the product of clip and track gain. These

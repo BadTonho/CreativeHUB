@@ -481,6 +481,8 @@ void validateCompositionCaching() {
             "The repeated composition frame did not reuse its payload.");
     require(snapshot.text_cache_hits == 1,
             "The text layer was rasterized again instead of using its cache.");
+    require(snapshot.text_composition_fast_path_hits == 2,
+            "The text composition fast path was not used for both composed frames.");
     require(snapshot.composition_cache_hits == 1,
             "The repeated composition frame did not hit the composition cache.");
     require(snapshot.text_rasterization.count == 1,
@@ -499,6 +501,8 @@ void validateCompositionCaching() {
             "Changing the composition did not invalidate the composed frame cache.");
     require(invalidation.composition_cache_hits == 0,
             "A new composition unexpectedly reused the previous composition cache.");
+    require(invalidation.text_composition_fast_path_hits == 1,
+            "The new composition did not rebuild the text composition fast path state.");
 }
 
 } // namespace
