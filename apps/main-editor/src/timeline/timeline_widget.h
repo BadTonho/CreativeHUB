@@ -1,6 +1,7 @@
 #pragma once
 
 #include "timeline_model.h"
+#include "timeline_zoom.h"
 
 #include <QString>
 #include <QPointF>
@@ -111,6 +112,7 @@ private:
     [[nodiscard]] std::int64_t standardDuration() const noexcept;
     [[nodiscard]] std::int64_t displayDuration() const noexcept;
     [[nodiscard]] std::int64_t totalDuration() const noexcept;
+    [[nodiscard]] double pixelsPerFrame() const noexcept;
     void updateHorizontalExtent();
     [[nodiscard]] std::optional<std::size_t> trackAt(double y) const noexcept;
     [[nodiscard]] std::optional<ClipLocation> clipAt(double x, double y) const noexcept;

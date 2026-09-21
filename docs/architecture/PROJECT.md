@@ -33,10 +33,11 @@ the shorter endpoint. Transition data is optional only for older project
 versions; version 5 and newer files always write the array.
 
 The `timeline` object also stores the per-project horizontal timeline view as
-`zoom`, a finite value from `0.25` through `8.0`. The default is `1.0`, where
-one hour is the reference range. This view setting is persisted with the
-project but is not part of Timeline Undo/Redo history; selection, playhead,
-layout, decoded frames, FFmpeg sessions, and Qt resources remain excluded.
+`zoom`, a finite value from `0.25` through `512.0`. The default is `1.0`, where
+one hour is the reference range. Values above `8.0` enable high-density and
+frame-level inspection. This view setting is persisted with the project but is
+not part of Timeline Undo/Redo history; selection, playhead, layout, decoded
+frames, FFmpeg sessions, and Qt resources remain excluded.
 
 ## Version 2 format
 

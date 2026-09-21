@@ -5,6 +5,7 @@
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QImage>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPointingDevice>
@@ -271,22 +272,55 @@ int main(int argc, char* argv[]) {
         require(widget.zoomFactor() == 0.25 && !widget.canZoomOut() &&
                     widget.minimumWidth() == 1000,
                 "The minimum timeline zoom did not preserve the viewport width.");
-        widget.setZoomFactor(8.0);
-        require(widget.zoomFactor() == 8.0 && !widget.canZoomIn() &&
-                    widget.minimumWidth() == 8000,
+        widget.setZoomFactor(512.0);
+        require(widget.zoomFactor() == 512.0 && !widget.canZoomIn() &&
+                    widget.minimumWidth() == 512000,
                 "The maximum timeline zoom did not expand the timeline surface.");
+        widget.setZoomFactor(999.0);
+        require(widget.zoomFactor() == 512.0,
+                "Timeline zoom did not clamp values above the frame-level maximum.");
         const auto anchor_frame = widget.frameAtContentX(600.0);
         require(anchor_frame.has_value(),
                 "The timeline could not resolve a frame at a content coordinate.");
         const auto anchored_x = widget.contentXForFrame(*anchor_frame);
         require(std::abs(anchored_x - 600.0) < 2.0,
                 "Timeline frame/content coordinate conversion lost its anchor.");
-        for (const auto level : {0.25, 0.50, 0.75, 1.00, 1.25, 1.50,
-                                 2.00, 3.00, 4.00, 6.00, 8.00}) {
+        for (const auto level : timeline::kTimelineZoomLevels) {
             widget.setZoomFactor(level);
             require(widget.zoomFactor() == level,
                     "A documented timeline zoom level was not applied.");
         }
+        const auto frame_zero_x = widget.contentXForFrame(0);
+        const auto frame_one_x = widget.contentXForFrame(1);
+        require(frame_one_x - frame_zero_x >= 1.0,
+                "Frame-level zoom did not separate consecutive frames.");
+
+        timeline::TimelineWidget frame_grid_widget;
+        frame_grid_widget.resize(400, 300);
+        frame_grid_widget.setTimelineViewportWidth(400);
+        frame_grid_widget.setTracks({timeline::TimelineTrack{
+            1, "Video 1", 1.0, false,
+            {makeClip("grid.mkv", 0, 30, "grid")}}});
+        frame_grid_widget.setZoomFactor(512.0);
+        // Keep the offscreen render small while preserving the frame density
+        // needed for this deterministic paint check.
+        frame_grid_widget.setMinimumWidth(400);
+        frame_grid_widget.resize(400, 300);
+        frame_grid_widget.show();
+        application.processEvents();
+        QImage frame_grid_image(400, 300, QImage::Format_ARGB32);
+        frame_grid_image.fill(Qt::transparent);
+        frame_grid_widget.render(&frame_grid_image);
+        const auto row_background = frame_grid_image.pixelColor(210, 100);
+        int frame_grid_pixels = 0;
+        for (int x = 154; x < 195; ++x) {
+            if (frame_grid_image.pixelColor(x, 100) != row_background) {
+                ++frame_grid_pixels;
+            }
+        }
+        require(frame_grid_pixels >= 4,
+                "Frame-level zoom did not render individual frame guides.");
+        frame_grid_widget.close();
         widget.setZoomFactor(1.0);
         widget.resize(1000, 500);
         application.processEvents();

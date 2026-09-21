@@ -19,7 +19,6 @@
 #include <QWheelEvent>
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <limits>
 
@@ -35,10 +34,6 @@ constexpr double row_gap = 10.0;
 constexpr double track_header_width = 142.0;
 constexpr double edge_width = 8.0;
 constexpr double standard_timeline_duration_seconds = 60.0 * 60.0;
-constexpr std::array<double, 11> zoom_levels = {
-    0.25, 0.50, 0.75, 1.00, 1.25, 1.50,
-    2.00, 3.00, 4.00, 6.00, 8.00};
-
 QString text(const std::string& value) {
     return QString::fromUtf8(value.data(), static_cast<int>(value.size()));
 }
@@ -211,7 +206,8 @@ double TimelineWidget::zoomFactor() const noexcept {
 
 void TimelineWidget::setZoomFactor(double factor) {
     if (!std::isfinite(factor)) return;
-    const auto normalized = std::clamp(factor, zoom_levels.front(), zoom_levels.back());
+    const auto normalized = std::clamp(
+        factor, kMinTimelineZoomFactor, kMaxTimelineZoomFactor);
     if (std::abs(normalized - zoom_factor_) < 0.000001) return;
     zoom_factor_ = normalized;
     updateHorizontalExtent();
@@ -222,23 +218,25 @@ void TimelineWidget::setZoomFactor(double factor) {
 double TimelineWidget::nextZoomFactor(int direction) const noexcept {
     if (direction == 0) return zoom_factor_;
     if (direction > 0) {
-        for (const auto level : zoom_levels) {
+        for (const auto level : kTimelineZoomLevels) {
             if (level > zoom_factor_ + 0.000001) return level;
         }
-        return zoom_levels.back();
+        return kTimelineZoomLevels.back();
     }
-    for (auto index = zoom_levels.size(); index-- > 0;) {
-        if (zoom_levels[index] < zoom_factor_ - 0.000001) return zoom_levels[index];
+    for (auto index = kTimelineZoomLevels.size(); index-- > 0;) {
+        if (kTimelineZoomLevels[index] < zoom_factor_ - 0.000001) {
+            return kTimelineZoomLevels[index];
+        }
     }
-    return zoom_levels.front();
+    return kTimelineZoomLevels.front();
 }
 
 bool TimelineWidget::canZoomIn() const noexcept {
-    return zoom_factor_ < zoom_levels.back() - 0.000001;
+    return zoom_factor_ < kMaxTimelineZoomFactor - 0.000001;
 }
 
 bool TimelineWidget::canZoomOut() const noexcept {
-    return zoom_factor_ > zoom_levels.front() + 0.000001;
+    return zoom_factor_ > kMinTimelineZoomFactor + 0.000001;
 }
 
 QString TimelineWidget::formatTimecode(std::int64_t frame, double frame_rate) {
@@ -374,6 +372,13 @@ std::int64_t TimelineWidget::totalDuration() const noexcept {
         }
     }
     return result;
+}
+
+double TimelineWidget::pixelsPerFrame() const noexcept {
+    const auto content = trackContentRect(0);
+    const auto duration = displayDuration();
+    if (content.width() <= 0.0 || duration <= 0) return 0.0;
+    return content.width() / static_cast<double>(duration);
 }
 
 void TimelineWidget::updateHorizontalExtent() {
@@ -546,7 +551,6 @@ void TimelineWidget::emitLegacySelection(const ClipLocation& location) {
 }
 
 void TimelineWidget::paintEvent(QPaintEvent* event) {
-    Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(rect(), QColor("#171a20"));
@@ -727,6 +731,43 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                 Qt::AlignCenter,
                 transition.kind == TransitionKind::FadeToBlack ? "Fade" : "Dissolve");
         }
+    }
+
+    // At frame-level zoom, draw only the frame boundaries that intersect the
+    // current paint region. This keeps long timelines responsive while making
+    // adjacent frames visibly distinct in the timeline content.
+    const auto frame_grid_content = trackContentRect(0);
+    const auto frame_grid_visual_duration = displayDuration();
+    const auto actual_duration = totalDuration();
+    const auto frame_width = pixelsPerFrame();
+    if (actual_duration > 0 && frame_grid_visual_duration > 0 && frame_width >= 1.0 &&
+        frame_grid_content.width() > 0.0) {
+        const auto dirty = event != nullptr
+            ? QRectF(event->rect())
+            : QRectF(rect());
+        const auto first_x = std::max(frame_grid_content.left(), dirty.left());
+        const auto last_x = std::min(frame_grid_content.right(), dirty.right());
+        const auto first_frame = std::max<std::int64_t>(
+            0,
+            static_cast<std::int64_t>(std::floor(
+                (first_x - frame_grid_content.left()) / frame_width)) - 1);
+        const auto last_frame = std::min<std::int64_t>(
+            actual_duration,
+            static_cast<std::int64_t>(std::ceil(
+                (last_x - frame_grid_content.left()) / frame_width)) + 1);
+        const auto grid_bottom = trackRect(tracks_.size() - 1).bottom() - 6.0;
+
+        painter.save();
+        painter.setPen(QPen(QColor(92, 105, 122, 105), 1.0));
+        for (auto frame = first_frame; frame <= last_frame; ++frame) {
+            const auto x = frame_grid_content.left() +
+                frame_width * static_cast<double>(frame);
+            painter.drawLine(
+                QPointF(x, frame_grid_content.top()),
+                QPointF(x, grid_bottom));
+            if (frame == last_frame) break;
+        }
+        painter.restore();
     }
 
     if (drag_hovering_) {

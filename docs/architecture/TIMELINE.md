@@ -27,9 +27,11 @@ scale and show empty space after the last clip. The one-hour range fills the
 available viewport; content longer than one hour expands the timeline
 surface proportionally and is accessed with horizontal scrolling. The actual
 content duration remains authoritative for playback and project behavior.
-The horizontal view can be zoomed to 25%, 50%, 75%, 100%, 125%, 150%, 200%,
-300%, 400%, 600%, or 800%. Ctrl + mouse wheel and the visible minus and plus
-controls zoom around the playhead, keeping that timeline instant in place.
+The horizontal view can be zoomed from 25% through 51,200% using discrete
+levels. The levels after 800% provide frame-level inspection; when the scale
+reaches at least one pixel per frame, a subtle guide is drawn for each visible
+frame without adding text labels. Ctrl + mouse wheel and the visible minus and
+plus controls zoom around the playhead, keeping that timeline instant in place.
 Zoom changes only the timeline's horizontal presentation and are saved in the
 project; they do not change clip frames, playback, preview, or Undo/Redo.
 The timeline surface grows only as much as its track rows require; additional

@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "../media/media_library.h"
+#include "../timeline/timeline_zoom.h"
 
 namespace project {
 namespace {
@@ -246,9 +247,10 @@ void validateDocument(const ProjectDocument& document,
         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an unsupported canvas size; only 1920x1080 is supported.");
     }
     if (!std::isfinite(document.timeline_zoom) ||
-        document.timeline_zoom < 0.25 || document.timeline_zoom > 8.0) {
+        document.timeline_zoom < timeline::kMinTimelineZoomFactor ||
+        document.timeline_zoom > timeline::kMaxTimelineZoomFactor) {
         throwJson(ProjectErrorCode::InvalidValue, project_path,
-                  "Project JSON contains an invalid timeline zoom; expected a value from 0.25 to 8.0.");
+                  "Project JSON contains an invalid timeline zoom; expected a value from 0.25 to 512.0.");
     }
     std::vector<std::filesystem::path> media_paths;
     for (const auto& media : document.media) {
@@ -499,9 +501,10 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                       "Project JSON is missing the timeline zoom value.");
         }
         if (!zoom_value.isDouble() || !std::isfinite(zoom_value.toDouble()) ||
-            zoom_value.toDouble() < 0.25 || zoom_value.toDouble() > 8.0) {
+            zoom_value.toDouble() < timeline::kMinTimelineZoomFactor ||
+            zoom_value.toDouble() > timeline::kMaxTimelineZoomFactor) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
-                      "Project JSON contains an invalid timeline zoom; expected a value from 0.25 to 8.0.");
+                      "Project JSON contains an invalid timeline zoom; expected a value from 0.25 to 512.0.");
         }
         document.timeline_zoom = zoom_value.toDouble();
     }

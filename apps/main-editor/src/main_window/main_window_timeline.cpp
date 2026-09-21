@@ -4,6 +4,7 @@
 #include "logging/logger.h"
 #include "preview_widget.h"
 #include "project/project_file.h"
+#include "timeline/timeline_zoom.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser_list_widget.h"
 #include "ui/system_memory_indicator.h"
@@ -48,7 +49,6 @@
 #include <QTimer>
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <filesystem>
 #include <functional>
@@ -63,17 +63,14 @@ using namespace main_window_detail;
 
 namespace {
 
-constexpr std::array<double, 11> timeline_zoom_levels = {
-    0.25, 0.50, 0.75, 1.00, 1.25, 1.50,
-    2.00, 3.00, 4.00, 6.00, 8.00};
-
 int timelineZoomLevelIndex(double factor) {
     const auto match = std::min_element(
-        timeline_zoom_levels.begin(), timeline_zoom_levels.end(),
+        timeline::kTimelineZoomLevels.begin(), timeline::kTimelineZoomLevels.end(),
         [factor](double left, double right) {
             return std::abs(left - factor) < std::abs(right - factor);
         });
-    return static_cast<int>(std::distance(timeline_zoom_levels.begin(), match));
+    return static_cast<int>(std::distance(
+        timeline::kTimelineZoomLevels.begin(), match));
 }
 
 std::int64_t localFrameAtTimelinePlayhead(
@@ -400,7 +397,8 @@ QWidget* MainWindow::createTimeline() {
     zoom_layout->setContentsMargins(0, 0, 0, 0);
     zoom_layout->setSpacing(0);
     zoom_control->setFixedWidth(92);
-    zoom_slider->setRange(0, static_cast<int>(timeline_zoom_levels.size()) - 1);
+    zoom_slider->setRange(
+        0, static_cast<int>(timeline::kTimelineZoomLevels.size()) - 1);
     zoom_slider->setValue(timelineZoomLevelIndex(1.0));
     zoom_slider->setFixedWidth(92);
     zoom_slider->setSingleStep(1);
@@ -558,10 +556,11 @@ QWidget* MainWindow::createTimeline() {
         });
     connect(zoom_slider, &QSlider::valueChanged, this, [this](int level) {
         if (timeline_widget_ == nullptr ||
-            level < 0 || level >= static_cast<int>(timeline_zoom_levels.size())) {
+            level < 0 || level >= static_cast<int>(timeline::kTimelineZoomLevels.size())) {
             return;
         }
-        applyTimelineZoom(timeline_zoom_levels[static_cast<std::size_t>(level)]);
+        applyTimelineZoom(
+            timeline::kTimelineZoomLevels[static_cast<std::size_t>(level)]);
     });
     connect(zoom_out_button, &QPushButton::clicked, this, [this]() {
         if (timeline_widget_ == nullptr) return;
