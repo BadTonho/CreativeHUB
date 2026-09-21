@@ -1,10 +1,15 @@
 #include "main_window.h"
 
+#include "settings/shortcut_manager.h"
+
 #include <QCloseEvent>
 #include <QStatusBar>
 
+#include <memory>
+
 MainWindow::MainWindow(QWidget* parent)
-    : QMainWindow(parent) {
+    : QMainWindow(parent),
+      shortcut_manager_(std::make_unique<settings::ShortcutManager>()) {
     setWindowTitle("Main Editor");
     resize(1280, 720);
     setDockOptions(QMainWindow::AnimatedDocks |

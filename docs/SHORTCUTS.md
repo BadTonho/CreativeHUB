@@ -29,3 +29,9 @@ requirement; in that mode, Alt + dragging moves clips and normal dragging
 seeks. Edge dragging trims, and the persistent Blade Tool changes a click into
 a split request. Playback shortcuts are disabled when no playable selected
 media is available.
+
+Keyboard shortcuts can be customized in `Settings > Shortcuts`. Changes apply
+immediately and are stored as global user preferences. Clear a shortcut to
+disable that command; duplicate combinations are rejected. Each command can
+be reset individually, or all commands can be restored with `Reset All`.
+Mouse gestures remain outside the customizable shortcut list.

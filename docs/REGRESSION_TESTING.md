@@ -30,7 +30,8 @@ updated intentionally.
 | Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
-| Settings dialog | Modal shell, General and Timeline tabs, Close action, and independent component construction |
+| Settings dialog | Modal shell, General, Timeline, and Shortcuts tabs, Close action, independent component construction, and editable shortcut preferences |
+| Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
@@ -42,9 +43,13 @@ in the running Main Editor after UI or integration changes:
 
 - application startup and clean shutdown;
 - Settings action: confirm the menu-bar action immediately left of `Help`
-  opens a modal dialog with `General` and `Timeline` tabs, closes without
-  changing project dirty state, and leaves the existing Edit menu preferences
-  available;
+  opens a modal dialog with `General`, `Timeline`, and `Shortcuts` tabs, closes
+  without changing project dirty state, and leaves the existing Edit menu
+  preferences available;
+- Settings > Shortcuts: edit a shortcut, confirm it applies immediately and
+  persists after reopening the editor, clear a shortcut to disable it, confirm
+  duplicate combinations are rejected and the previous value is restored, and
+  validate both individual `Reset` and confirmed `Reset All`;
 - dock resizing, floating, re-docking, and restoration;
 - Timeline track height, maximum row height, vertical scrolling, stable
   one-hour horizontal scale, horizontal scrolling for longer content, zoom

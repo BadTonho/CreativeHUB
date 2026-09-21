@@ -27,6 +27,8 @@ add_executable(creative-suite-main-editor
     src/main_window/main_window_inspector.cpp
     src/settings/settings_dialog.cpp
     src/settings/settings_dialog.h
+    src/settings/shortcut_manager.cpp
+    src/settings/shortcut_manager.h
     src/preview_widget.cpp
     src/preview_widget.h
     src/rendering/opengl_preview_surface.cpp

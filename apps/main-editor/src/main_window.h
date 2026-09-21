@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <array>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -43,6 +44,10 @@ class QWidget;
 
 namespace timeline {
 class TimelineWidget;
+}
+
+namespace settings {
+class ShortcutManager;
 }
 
 class MainWindow final : public QMainWindow {
@@ -288,6 +293,7 @@ private:
     QAction* move_track_up_action_ = nullptr;
     QAction* move_track_down_action_ = nullptr;
     QAction* remove_track_action_ = nullptr;
+    std::unique_ptr<settings::ShortcutManager> shortcut_manager_;
     timeline::TimelineWidget* timeline_widget_ = nullptr;
     QScrollArea* timeline_scroll_ = nullptr;
     std::vector<ImportedMedia> media_items_;
