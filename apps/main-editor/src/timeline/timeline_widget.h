@@ -20,6 +20,7 @@ class QDropEvent;
 class QMouseEvent;
 class QPaintEvent;
 class QContextMenuEvent;
+class QPoint;
 
 namespace timeline {
 
@@ -91,6 +92,7 @@ private:
     [[nodiscard]] std::optional<TrimEdge> trimEdgeAt(const ClipLocation&, double x) const noexcept;
     [[nodiscard]] std::optional<std::pair<std::size_t, std::size_t>>
     transitionClipIndexesAt(double x, double y) const noexcept;
+    void showTransitionMenu(const QPoint& position, const QPoint& global_position);
     void emitSelected(const ClipLocation& location);
     void emitLegacySelection(const ClipLocation& location);
 
@@ -128,6 +130,7 @@ private:
         friend bool operator==(const SelectedTransition&, const SelectedTransition&) = default;
     };
     std::optional<SelectedTransition> selected_transition_;
+    bool suppress_next_context_menu_ = false;
 };
 
 } // namespace timeline

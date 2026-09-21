@@ -54,6 +54,7 @@ TimelineWidget::TimelineWidget(QWidget* parent)
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setAcceptDrops(true);
     setMouseTracking(true);
+    setContextMenuPolicy(Qt::DefaultContextMenu);
 }
 
 void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
@@ -669,14 +670,12 @@ void TimelineWidget::dropEvent(QDropEvent* event) {
     update();
 }
 
-void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
-    const auto indexes = transitionClipIndexesAt(
-        event->pos().x(), event->pos().y());
-    const auto track_index = trackAt(event->pos().y());
-    if (!indexes.has_value() || !track_index.has_value()) {
-        event->ignore();
-        return;
-    }
+void TimelineWidget::showTransitionMenu(
+    const QPoint& position,
+    const QPoint& global_position) {
+    const auto indexes = transitionClipIndexesAt(position.x(), position.y());
+    const auto track_index = trackAt(position.y());
+    if (!indexes.has_value() || !track_index.has_value()) return;
 
     selected_transition_ = SelectedTransition{
         *track_index, indexes->first, indexes->second};
@@ -706,7 +705,7 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
     dissolve->setEnabled(existing == nullptr);
     fade->setEnabled(existing == nullptr);
     remove->setEnabled(existing != nullptr);
-    const auto* chosen = menu.exec(event->globalPos());
+    const auto* chosen = menu.exec(global_position);
     if (chosen == dissolve) {
         emit transitionAddRequestedAt(
             static_cast<qint64>(*track_index),
@@ -726,10 +725,40 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
             static_cast<qint64>(indexes->second));
     }
     update();
+}
+
+void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
+    if (suppress_next_context_menu_) {
+        suppress_next_context_menu_ = false;
+        event->accept();
+        return;
+    }
+    const auto indexes = transitionClipIndexesAt(
+        event->pos().x(), event->pos().y());
+    const auto track_index = trackAt(event->pos().y());
+    if (!indexes.has_value() || !track_index.has_value()) {
+        event->ignore();
+        return;
+    }
+    showTransitionMenu(event->pos(), event->globalPos());
     event->accept();
 }
 
 void TimelineWidget::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::RightButton) {
+        const auto indexes = transitionClipIndexesAt(
+            event->position().x(), event->position().y());
+        if (indexes.has_value() && trackAt(event->position().y()).has_value()) {
+            suppress_next_context_menu_ = true;
+            showTransitionMenu(
+                event->position().toPoint(),
+                event->globalPosition().toPoint());
+            event->accept();
+        } else {
+            event->ignore();
+        }
+        return;
+    }
     if (event->button() != Qt::LeftButton) {
         event->ignore();
         return;

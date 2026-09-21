@@ -93,6 +93,9 @@ int main(int argc, char* argv[]) {
         qint64 split_frame = -1;
         qint64 trim_start = -1;
         qint64 trim_end = -1;
+        int transition_track = -1;
+        int transition_from = -1;
+        int transition_to = -1;
 
         QObject::connect(
             &widget,
@@ -133,6 +136,15 @@ int main(int argc, char* argv[]) {
             [&trim_start, &trim_end](qint64, qint64, qint64 start, qint64 end) {
                 trim_start = start;
                 trim_end = end;
+            });
+        QObject::connect(
+            &widget,
+            &timeline::TimelineWidget::transitionSelectedAt,
+            [&transition_track, &transition_from, &transition_to](
+                qint64 track, qint64 from, qint64 to) {
+                transition_track = static_cast<int>(track);
+                transition_from = static_cast<int>(from);
+                transition_to = static_cast<int>(to);
             });
 
         // Clicking an inactive clip selects it without starting a seek.
@@ -193,6 +205,25 @@ int main(int argc, char* argv[]) {
                   Qt::NoButton);
         require(trim_start > 0 && trim_end == 100,
                 "The left edge did not request a bounded trim.");
+
+        // A contiguous junction is selectable through the same hit area used
+        // by the transition context menu.
+        timeline::TimelineTrack junction_track{
+            1,
+            "Video 1",
+            1.0,
+            false,
+            {makeClip("first.mkv", 0, 50, "first.mkv"),
+             makeClip("second.mkv", 50, 50, "second.mkv")}};
+        widget.setTracks({junction_track});
+        widget.setActiveClip(std::nullopt);
+        application.processEvents();
+        sendMouse(widget, QEvent::MouseButtonPress, QPointF(568, 120),
+                  Qt::LeftButton);
+        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(568, 120),
+                  Qt::NoButton);
+        require(transition_track == 0 && transition_from == 0 && transition_to == 1,
+                "The contiguous junction was not detected for transition selection.");
 
         widget.close();
         return 0;
