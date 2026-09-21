@@ -74,6 +74,8 @@ add_executable(creative-suite-main-editor
     src/ui/media_browser_bin_tree_widget.cpp
     src/ui/media_browser_bin_tree_widget.h
     src/ui/media_drag_mime.h
+    src/ui/system_memory_details_dialog.cpp
+    src/ui/system_memory_details_dialog.h
     src/ui/system_memory_indicator.cpp
     src/ui/system_memory_indicator.h
 )

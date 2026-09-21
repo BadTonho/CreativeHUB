@@ -98,6 +98,12 @@ the value through `GetProcessMemoryInfo`; platforms without an implementation,
 or a failed query, display `RAM: N/A`. This indicator is display-only and
 does not affect playback, Timeline data, project dirty state, Undo/Redo, or
 `.csp` data.
+Clicking the indicator opens a non-modal `Memory Usage` window with separate
+System Memory and Main Editor sections. The system section shows total, used,
+and available memory in GB with the exact MB value. The Main Editor section
+shows Working Set and Private Usage. The window refreshes every second and is
+organized so future CPU and GPU sections can be added without changing the
+Timeline footer.
 The horizontal timeline scale has a one-hour minimum range independent of
 the actual clip duration. The one-hour range fills the visible viewport so
 short projects keep a stable scale and retain empty space after their last

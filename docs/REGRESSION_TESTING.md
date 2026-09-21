@@ -29,6 +29,7 @@ updated intentionally.
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
 | Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
+| System memory details | Offscreen non-modal dialog, System Memory and Main Editor sections, click-to-open behavior, Working Set, Private Usage, GB/MB formatting, and per-metric `N/A` handling |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
 | Settings dialog | Modal shell, General, Timeline, and Shortcuts tabs, Close action, independent component construction, and editable shortcut preferences |
@@ -95,6 +96,12 @@ in the running Main Editor after UI or integration changes:
   the `RAM: <megabytes> MB` format, refreshes approximately once per
   second, reports only the Main Editor process, and does not affect playback,
   Timeline state, project dirty state, or Undo/Redo;
+- clicking the Timeline footer RAM indicator: confirm the non-modal `Memory
+  Usage` window opens and can remain open during playback and editing; verify
+  System Memory shows total, used, and available values, Main Editor shows
+  Working Set and Private Usage, values refresh approximately once per second,
+  failed metrics show `N/A`, and closing the window leaves project state
+  unchanged;
 - Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;
   confirm that the numeric fields remain editable, values stay within their
   property ranges, keyframe edits still target the current frame, and one
