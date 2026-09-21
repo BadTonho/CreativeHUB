@@ -35,9 +35,12 @@ native dock arrangement globally in `workspace/dock_layout_state`; the default
 arrangement places `Bins` above `Media` on the left. Both docks can be
 moved, resized, floated, closed, re-docked, and tabified independently. Their
 visibility can be toggled together by the `Media Pool` text button in the
-toolbar below the menu bar, or controlled individually through the
+toolbar below the menu bar, next to the reserved `Effects` button. The docks
+can also be controlled individually through the
 `View > Media Pool` submenu. The global action is checked only when both docks
 are visible and does not affect project state.
+The `Effects` button is a visual entry point for a future effects panel and
+currently reports that the panel is not available.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline

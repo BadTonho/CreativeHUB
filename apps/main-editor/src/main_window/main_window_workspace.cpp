@@ -299,6 +299,11 @@ void MainWindow::createMenus() {
     media_pool_action_ = media_pool_toolbar->addAction("Media Pool");
     media_pool_action_->setCheckable(true);
     media_pool_action_->setToolTip("Show or hide the Media Pool docks");
+    auto* effects_action = media_pool_toolbar->addAction("Effects");
+    effects_action->setToolTip("Effects panel (coming soon)");
+    connect(effects_action, &QAction::triggered, this, [this]() {
+        statusBar()->showMessage("Effects panel is not available yet.");
+    });
     connect(media_pool_action_, &QAction::triggered, this, [this](bool) {
         const bool show_docks =
             !bins_dock_->isVisible() || !media_dock_->isVisible();
