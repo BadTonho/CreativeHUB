@@ -797,13 +797,7 @@ void MainWindow::updatePlaybackAudioParameters() {
 }
 
 void MainWindow::updateTimelineState() {
-    const bool selected = hasSelectedMedia() && !media_items_[*selectedMediaIndex()].offline;
     const bool occupied = timeline_model_.hasClip();
-
-    if (add_to_timeline_button_ != nullptr) {
-        add_to_timeline_button_->setEnabled(selected);
-        add_to_timeline_button_->setText("Add to Timeline");
-    }
 
     if (clear_timeline_button_ != nullptr) {
         clear_timeline_button_->setEnabled(occupied);

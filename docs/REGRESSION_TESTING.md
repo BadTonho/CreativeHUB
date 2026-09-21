@@ -75,7 +75,8 @@ in the running Main Editor after UI or integration changes:
   of empty sub-bins, rejection of All Media/blank/self/descendant/collision
   drops, project dirty state, persistence after save/reopen, and drag-and-drop
   to the Timeline; confirm that invalid inline names restore the previous
-  label and report a concise status message;
+  label and report a concise status message, and confirm that no Add to
+  Timeline button is shown while media drag-and-drop remains available;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement;
 - Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;

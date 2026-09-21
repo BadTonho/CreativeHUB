@@ -262,7 +262,6 @@ private:
     MediaBrowserListWidget* media_list_ = nullptr;
     MediaBrowserBinTreeWidget* bin_tree_ = nullptr;
     QLabel* media_status_label_ = nullptr;
-    QPushButton* add_to_timeline_button_ = nullptr;
     QPushButton* new_bin_button_ = nullptr;
     QPushButton* previous_frame_button_ = nullptr;
     QPushButton* play_pause_button_ = nullptr;

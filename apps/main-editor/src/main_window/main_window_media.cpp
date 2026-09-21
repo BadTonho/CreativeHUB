@@ -211,12 +211,6 @@ QWidget* MainWindow::createMediaBrowser() {
     media_status_label_->setStyleSheet("color: #9aa4b2;");
     layout->addWidget(media_status_label_);
 
-    add_to_timeline_button_ = new QPushButton("Add to Timeline", container);
-    connect(add_to_timeline_button_, &QPushButton::clicked, this, [this]() {
-        addSelectedMediaToTimeline();
-    });
-    layout->addWidget(add_to_timeline_button_);
-
     populateMediaBrowser();
     updateTimelineState();
 

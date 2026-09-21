@@ -35,8 +35,9 @@ project; they do not change clip frames, playback, preview, or Undo/Redo.
 The timeline surface grows only as much as its track rows require; additional
 tracks are available through vertical scrolling.
 
-Add to Timeline appends to the active track. A drop from the imported Media
-Browser provides a target track and absolute timeline frame. The same source
+The internal add-to-timeline operation appends media to the active track. A
+drop from the imported Media Browser provides a target track and absolute
+timeline frame. The same source
 may appear repeatedly as independent occurrences. Direct selection in the
 Timeline changes the active clip and Media Browser selection. A gap pauses
 playback and clears the preview without creating an error log entry.

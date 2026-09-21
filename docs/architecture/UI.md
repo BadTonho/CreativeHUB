@@ -25,7 +25,9 @@ complete technical metadata on hover, including offline status, bin, and path
 when applicable. Context menus provide New Bin, Move to Bin, Remove from
 Browser, and Restore Media. Removing media never deletes the file or its
 Timeline clips, and the existing selection and internal drag-and-drop MIME
-flow remain unchanged.
+flow remain unchanged. The Media Browser does not display a separate Add to
+Timeline button; imported media can still be added through the existing
+Timeline drag-and-drop path and internal add operation.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline
@@ -101,8 +103,8 @@ Gesture priority is configurable: by default, normal drag moves clips and
 Alt + drag seeks; when the Edit > Require Alt to Move Clips option is enabled,
 Alt + drag moves clips and normal drag seeks. Blade Tool click splits and edge
 drag trims. Movement, splitting, trimming, and seeking do not decode during
-pointer movement. Drops report target track and frame; Add to Timeline
-appends to the active track.
+pointer movement. Drops report target track and frame; the internal add-to-
+timeline operation appends to the active track.
 
 Selecting a timeline clip does not move the playhead by default. The Edit >
 Move Playhead to Selected Clip Start preference restores the optional behavior
