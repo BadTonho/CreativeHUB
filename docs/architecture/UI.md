@@ -65,8 +65,11 @@ updates the visible playhead without selecting a clip, then requests the seek
 when the pointer is released. Scrubbing remains bounded by the real project
 duration even when the visual timeline has empty space beyond the last clip.
 The playhead keeps its pointer position while the playback worker processes the
-request, and the window converts the absolute ruler frame to the selected
-target clip's local playback frame.
+request, and the window converts the absolute ruler frame to the target clip's
+local playback frame. Ruler scrubbing does not require a Media Browser
+selection: video clips resolve their imported source from the timeline,
+while gaps and text clips only move the playhead and do not ask the video
+worker to decode.
 
 Delete removes the active clip. Ctrl + Left and Ctrl + Right nudge it by one
 frame when valid. Ctrl + K splits at the playhead. Undo and Redo pause

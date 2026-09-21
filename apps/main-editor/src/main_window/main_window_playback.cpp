@@ -708,7 +708,13 @@ void MainWindow::handleTimelineSeek(qint64 global_frame) {
         active_timeline_clip_index_.has_value() &&
         *active_timeline_track_index_ == target_clip->track_index &&
         *active_timeline_clip_index_ == target_clip->clip_index;
-    if (!same_clip) {
+    // Timeline navigation is independent from the current Media Browser
+    // selection. Resolve a different clip (or a text clip) through the
+    // timeline instead of asking the video worker to seek blindly. A video
+    // clip that is still active but no longer selected must be activated too;
+    // activateTimelineClipAt resolves its source from the clip itself.
+    if (!same_clip || clip.kind == timeline::ClipKind::Text ||
+        !canPlaybackSelectedMedia()) {
         if (timeline_widget_ != nullptr) {
             timeline_widget_->setPlayheadFrame(target_frame);
         }

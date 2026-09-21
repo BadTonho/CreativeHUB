@@ -393,24 +393,28 @@ void PlaybackWorker::processPendingSeek() {
             if (!isLocalFrameInRange(frame_index)) {
                 throw media::MediaError("The requested frame is outside the playback segment.");
             }
-            if (source_path_.empty()) {
-                throw media::MediaError("Cannot seek without selected media.");
-            }
-            if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
+            // The timeline can be scrubbed before a video source is selected.
+            // There is no frame to decode in that state, but it is not a
+            // playback error and the Main Window keeps the visual playhead.
+            if (!source_path_.empty()) {
+                if (!session_) {
+                    session_ = media::VideoPlaybackSession::open(source_path_);
+                }
 
-            const auto source_frame = sourceFrameForLocal(frame_index);
-            if (!source_frame.has_value()) {
-                throw media::MediaError("The requested source frame is outside the media range.");
+                const auto source_frame = sourceFrameForLocal(frame_index);
+                if (!source_frame.has_value()) {
+                    throw media::MediaError("The requested source frame is outside the media range.");
+                }
+                auto frame = session_->decode_frame_at(source_frame.value(), seek_is_current);
+                if (!isSeekCurrent(sequence)) continue;
+                if (!frame.has_value()) {
+                    throw media::MediaError("The requested frame is outside the media range.");
+                }
+                emitFrame(std::move(frame));
+                audio_position_valid_ = false;
+                pending_audio_bytes_.clear();
+                if (audio_output_ != nullptr) audio_output_->stop();
             }
-            auto frame = session_->decode_frame_at(*source_frame, seek_is_current);
-            if (!isSeekCurrent(sequence)) continue;
-            if (!frame.has_value()) {
-                throw media::MediaError("The requested frame is outside the media range.");
-            }
-            emitFrame(std::move(frame));
-            audio_position_valid_ = false;
-            pending_audio_bytes_.clear();
-            if (audio_output_ != nullptr) audio_output_->stop();
         } catch (const media::MediaError& error) {
             if (!isSeekCurrent(sequence)) continue;
             reportFailure(error, "seek", frame_index);

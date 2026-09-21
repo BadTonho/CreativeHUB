@@ -53,6 +53,31 @@ void validateMissingMedia(QCoreApplication& application) {
     Q_UNUSED(application);
 }
 
+void validateSeekWithoutMedia(QCoreApplication& application) {
+    playback::PlaybackWorker worker;
+    bool received_error = false;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&received_error](const QString&, qint64, quint64) {
+            received_error = true;
+        });
+
+    worker.requestSeek(0, 2);
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(
+        &timeout,
+        &QTimer::timeout,
+        &application,
+        &QCoreApplication::quit);
+    timeout.start(100);
+    application.exec();
+
+    require(!received_error,
+            "Seeking without a selected media source produced an error.");
+}
+
 void validateReference(QCoreApplication& application, const std::filesystem::path& path) {
     playback::PlaybackWorker worker;
     bool media_ready = false;
@@ -348,6 +373,7 @@ int main(int argc, char* argv[]) {
 
     try {
         validateMissingMedia(application);
+        validateSeekWithoutMedia(application);
         if (argc == 2) {
             validateReference(application, std::filesystem::path(argv[1]));
             validateSeekCoalescing(application, std::filesystem::path(argv[1]));

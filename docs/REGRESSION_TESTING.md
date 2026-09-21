@@ -25,7 +25,7 @@ updated intentionally.
 | Structured logging | File creation, required fields, escaping, rotation, retention limit |
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions |
 | Playback session | Sequential frames, reset, optimized seeking, frame cache, EOF, segment limits |
-| Playback worker | Media activation, generation handling, seek coalescing, playback completion, errors |
+| Playback worker | Media activation, generation handling, seek coalescing, playback completion, errors, no-op seeks without a selected source |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
 | Timeline interaction | Selection, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
@@ -45,7 +45,7 @@ in the running Main Editor after UI or integration changes:
   controls from 25% through 800%, Ctrl + wheel playhead anchoring, button
   playhead anchoring, timecode labels in `HH:MM:SS.mmm`, click-and-drag
   playhead scrubbing on the upper time ruler, empty gaps without overlays,
-  and visual order;
+  no Media Browser selection while scrubbing, and visual order;
 - Media Browser selection, bins, context actions, and drag-and-drop;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement;
