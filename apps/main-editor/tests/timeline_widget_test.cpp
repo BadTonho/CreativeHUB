@@ -28,9 +28,9 @@ timeline::TimelineClip makeClip(
     clip.timeline_duration_frames = duration;
     clip.source_path = path;
     clip.display_name = name;
-    clip.duration_seconds = 4.0;
+    clip.duration_seconds = static_cast<double>(duration) / 30.0;
     clip.frame_rate = 30.0;
-    clip.frame_count = 120;
+    clip.frame_count = duration;
     return clip;
 }
 
@@ -64,24 +64,29 @@ int main(int argc, char* argv[]) {
         widget.resize(1000, 500);
         widget.show();
         application.processEvents();
+        widget.setTimelineViewportWidth(1000);
+
+        constexpr std::int64_t test_clip_duration = 9000;
 
         timeline::TimelineTrack top_track{
             2,
             "Video 2",
             1.0,
             false,
-            {makeClip("top.mkv", 0, 100, "top.mkv")}};
+            {makeClip("top.mkv", 0, test_clip_duration, "top.mkv")}};
         timeline::TimelineTrack lower_track{
             1,
             "Video 1",
             1.0,
             false,
-            {makeClip("lower.mkv", 0, 100, "lower.mkv")}};
+            {makeClip("lower.mkv", 0, test_clip_duration, "lower.mkv")}};
         widget.setTracks({top_track, lower_track});
         application.processEvents();
 
         require(widget.minimumHeight() >= 48 + 2 * 72 + 10 + 12,
                 "The Timeline minimum height does not fit all track rows.");
+        require(widget.minimumWidth() == 1000,
+                "A short timeline did not keep the standard viewport width.");
         require(!widget.moveRequiresAlt(),
                 "The timeline did not default to moving clips without Alt.");
         widget.setMoveRequiresAlt(true);
@@ -172,7 +177,7 @@ int main(int argc, char* argv[]) {
         sendMouse(widget, QEvent::MouseButtonRelease, QPointF(700, 120),
                   Qt::NoButton);
         require(seek_frames.size() == 1 && seek_frames.front() > 0 &&
-                    seek_frames.front() < 100,
+                    seek_frames.front() < test_clip_duration,
                 "Interior dragging did not request an in-range seek frame.");
 
         // Alt-drag moves a clip between tracks and does not request seeking.
@@ -222,16 +227,16 @@ int main(int argc, char* argv[]) {
         sendMouse(widget, QEvent::MouseButtonRelease, QPointF(700, 120),
                   Qt::NoButton, Qt::AltModifier);
         require(seek_frames.size() == 2 && seek_frames.back() > 0 &&
-                    seek_frames.back() < 100,
+                    seek_frames.back() < test_clip_duration,
                 "Alt-drag did not seek after disabling the movement requirement.");
 
         // Blade Tool uses a click, not a drag, and reports the local frame.
         widget.setRazorMode(true);
-        sendMouse(widget, QEvent::MouseButtonPress, QPointF(600, 120),
+        sendMouse(widget, QEvent::MouseButtonPress, QPointF(500, 120),
                   Qt::LeftButton);
-        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(600, 120),
+        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(500, 120),
                   Qt::NoButton);
-        require(split_count == 1 && split_frame > 0 && split_frame < 100,
+        require(split_count == 1 && split_frame > 0 && split_frame < test_clip_duration,
                 "Blade Tool did not request an interior split.");
 
         // Edge dragging requests a trim only when the pointer is released.
@@ -244,7 +249,7 @@ int main(int argc, char* argv[]) {
                 "Trimming was committed before mouse release.");
         sendMouse(widget, QEvent::MouseButtonRelease, QPointF(200, 120),
                   Qt::NoButton);
-        require(trim_start > 0 && trim_end == 100,
+        require(trim_start > 0 && trim_end == test_clip_duration,
                 "The left edge did not request a bounded trim.");
 
         // A contiguous junction is selectable through the same hit area used
@@ -254,8 +259,8 @@ int main(int argc, char* argv[]) {
             "Video 1",
             1.0,
             false,
-            {makeClip("first.mkv", 0, 50, "first.mkv"),
-             makeClip("second.mkv", 50, 50, "second.mkv")}};
+            {makeClip("first.mkv", 0, test_clip_duration, "first.mkv"),
+             makeClip("second.mkv", test_clip_duration, test_clip_duration, "second.mkv")}};
         widget.setTracks({junction_track});
         widget.setActiveClip(std::nullopt);
         application.processEvents();
@@ -265,6 +270,25 @@ int main(int argc, char* argv[]) {
                   Qt::NoButton);
         require(transition_track == 0 && transition_from == 0 && transition_to == 1,
                 "The contiguous junction was not detected for transition selection.");
+
+        // The viewport is the scale reference for the standard ten-minute
+        // range, while longer content expands the scrollable surface.
+        widget.setTimelineViewportWidth(800);
+        widget.setTracks({top_track, lower_track});
+        require(widget.minimumWidth() == 800,
+                "The standard timeline width did not follow the viewport.");
+        const auto long_track = timeline::TimelineTrack{
+            1,
+            "Video 1",
+            1.0,
+            false,
+            {makeClip("long.mkv", 0, 36000, "long.mkv")}};
+        widget.setTracks({long_track});
+        require(widget.minimumWidth() >= 1600,
+                "A timeline longer than ten minutes did not expand horizontally.");
+        widget.setTracks({top_track, lower_track});
+        require(widget.minimumWidth() == 800,
+                "The timeline did not return to the standard width after shrinking.");
 
         widget.close();
         return 0;

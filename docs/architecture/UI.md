@@ -39,6 +39,12 @@ space, and its track rows grow within that space while additional rows remain
 available through vertical scrolling. Each track row has a provisional maximum
 height of 180 pixels; extra space in the timeline remains empty until a later
 layout milestone gives it another purpose.
+The horizontal timeline scale has a ten-minute minimum range independent of
+the actual clip duration. The ten-minute range fills the visible viewport so
+short projects keep a stable scale and retain empty space after their last
+clip. Projects longer than ten minutes expand the timeline surface and use the
+horizontal scrollbar; the actual content duration still controls playback
+limits.
 
 Gesture priority is configurable: by default, normal drag moves clips and
 Alt + drag seeks; when the Edit > Require Alt to Move Clips option is enabled,

@@ -21,6 +21,8 @@ class QMouseEvent;
 class QPaintEvent;
 class QContextMenuEvent;
 class QPoint;
+class QEvent;
+class QObject;
 
 namespace timeline {
 
@@ -40,6 +42,7 @@ public:
     [[nodiscard]] bool razorMode() const noexcept;
     void setMoveRequiresAlt(bool enabled);
     [[nodiscard]] bool moveRequiresAlt() const noexcept;
+    void setTimelineViewportWidth(int width);
 
 signals:
     // Compatibility signals for the original first-track UI path.
@@ -69,6 +72,7 @@ signals:
     void seekRequested(qint64 frame_index);
 
 protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dragLeaveEvent(QDragLeaveEvent* event) override;
@@ -86,7 +90,11 @@ private:
     [[nodiscard]] double rowHeight() const noexcept;
     [[nodiscard]] QRectF trackContentRect(std::size_t index) const noexcept;
     [[nodiscard]] QRectF clipRect(const ClipLocation& location) const noexcept;
+    [[nodiscard]] double frameRate() const noexcept;
+    [[nodiscard]] std::int64_t standardDuration() const noexcept;
+    [[nodiscard]] std::int64_t displayDuration() const noexcept;
     [[nodiscard]] std::int64_t totalDuration() const noexcept;
+    void updateHorizontalExtent();
     [[nodiscard]] std::optional<std::size_t> trackAt(double y) const noexcept;
     [[nodiscard]] std::optional<ClipLocation> clipAt(double x, double y) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> globalFrameAt(double x) const noexcept;
@@ -99,6 +107,7 @@ private:
     void emitLegacySelection(const ClipLocation& location);
 
     std::vector<TimelineTrack> tracks_;
+    int timeline_viewport_width_ = 0;
     std::optional<ClipLocation> active_clip_;
     std::int64_t playhead_frame_ = 0;
     std::optional<std::int64_t> drag_frame_;

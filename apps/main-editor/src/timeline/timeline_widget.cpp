@@ -7,6 +7,7 @@
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QContextMenuEvent>
+#include <QEvent>
 #include <QFont>
 #include <QFontMetrics>
 #include <QMimeData>
@@ -14,6 +15,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QResizeEvent>
 
 #include <algorithm>
 #include <cmath>
@@ -30,6 +32,7 @@ constexpr double maximum_row_height = 180.0;
 constexpr double row_gap = 10.0;
 constexpr double track_header_width = 142.0;
 constexpr double edge_width = 8.0;
+constexpr double standard_timeline_duration_seconds = 10.0 * 60.0;
 
 QString text(const std::string& value) {
     return QString::fromUtf8(value.data(), static_cast<int>(value.size()));
@@ -89,6 +92,7 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
     setMinimumHeight(static_cast<int>(top_margin +
         tracks_.size() * minimum_row_height +
         (tracks_.size() > 0 ? tracks_.size() - 1 : 0) * row_gap + 12.0));
+    updateHorizontalExtent();
     moving_active_ = false;
     move_pending_ = false;
     trimming_ = false;
@@ -110,6 +114,7 @@ void TimelineWidget::clearClips() {
     tracks_.clear();
     tracks_.push_back(TimelineTrack{1, "Video 1", 1.0, false, {}});
     setMinimumHeight(static_cast<int>(top_margin + minimum_row_height + 12.0));
+    updateHorizontalExtent();
     active_clip_.reset();
     playhead_frame_ = 0;
     drag_frame_.reset();
@@ -179,6 +184,22 @@ bool TimelineWidget::moveRequiresAlt() const noexcept {
     return move_requires_alt_;
 }
 
+void TimelineWidget::setTimelineViewportWidth(int width) {
+    const auto normalized_width = std::max(0, width);
+    if (timeline_viewport_width_ == normalized_width) return;
+    timeline_viewport_width_ = normalized_width;
+    updateHorizontalExtent();
+}
+
+bool TimelineWidget::eventFilter(QObject* watched, QEvent* event) {
+    Q_UNUSED(watched);
+    if (event != nullptr && event->type() == QEvent::Resize) {
+        const auto* resize_event = static_cast<const QResizeEvent*>(event);
+        setTimelineViewportWidth(resize_event->size().width());
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
 QRectF TimelineWidget::trackRect(std::size_t index) const noexcept {
     const double width = std::max(0.0,
         static_cast<double>(this->width()) - left_margin - right_margin);
@@ -211,7 +232,7 @@ QRectF TimelineWidget::clipRect(const ClipLocation& location) const noexcept {
         location.clip_index >= tracks_[location.track_index].clips.size()) {
         return {};
     }
-    const auto total = totalDuration();
+    const auto total = displayDuration();
     if (total <= 0) return {};
     const auto& clip = tracks_[location.track_index].clips[location.clip_index];
     const auto track = trackContentRect(location.track_index);
@@ -225,6 +246,29 @@ QRectF TimelineWidget::clipRect(const ClipLocation& location) const noexcept {
         track.height());
 }
 
+double TimelineWidget::frameRate() const noexcept {
+    for (const auto& track : tracks_) {
+        for (const auto& clip : track.clips) {
+            if (clip.frame_rate.has_value() &&
+                std::isfinite(*clip.frame_rate) && *clip.frame_rate > 0.0) {
+                return *clip.frame_rate;
+            }
+        }
+    }
+    return 30.0;
+}
+
+std::int64_t TimelineWidget::standardDuration() const noexcept {
+    return std::max<std::int64_t>(
+        1,
+        static_cast<std::int64_t>(std::ceil(
+            frameRate() * standard_timeline_duration_seconds)));
+}
+
+std::int64_t TimelineWidget::displayDuration() const noexcept {
+    return std::max(totalDuration(), standardDuration());
+}
+
 std::int64_t TimelineWidget::totalDuration() const noexcept {
     std::int64_t result = 0;
     for (const auto& track : tracks_) {
@@ -234,6 +278,22 @@ std::int64_t TimelineWidget::totalDuration() const noexcept {
         }
     }
     return result;
+}
+
+void TimelineWidget::updateHorizontalExtent() {
+    const auto base_width = std::max(
+        1,
+        timeline_viewport_width_ > 0 ? timeline_viewport_width_ : width());
+    const auto standard = standardDuration();
+    const auto visual_duration = displayDuration();
+    const auto scaled_width = std::ceil(
+        static_cast<long double>(base_width) *
+        static_cast<long double>(visual_duration) /
+        static_cast<long double>(standard));
+    const auto max_width = static_cast<long double>(std::numeric_limits<int>::max());
+    const auto required_width = static_cast<int>(std::min(scaled_width, max_width));
+    setMinimumWidth(std::max(base_width, required_width));
+    updateGeometry();
 }
 
 std::optional<std::size_t> TimelineWidget::trackAt(double y) const noexcept {
@@ -271,7 +331,7 @@ std::optional<ClipLocation> TimelineWidget::clipAt(double x, double y) const noe
 }
 
 std::optional<std::int64_t> TimelineWidget::globalFrameAt(double x) const noexcept {
-    const auto total = totalDuration();
+    const auto total = displayDuration();
     const auto track = trackContentRect(0);
     if (track.width() <= 0.0 || x < track.left() || x > track.right()) {
         return std::nullopt;
@@ -313,7 +373,7 @@ TimelineWidget::transitionClipIndexesAt(double x, double y) const noexcept {
     const auto track_index = trackAt(y);
     if (!track_index.has_value() || *track_index >= tracks_.size()) return std::nullopt;
     const auto& track = tracks_[*track_index];
-    const auto total = totalDuration();
+    const auto total = displayDuration();
     if (total <= 0) return std::nullopt;
     const auto content = trackContentRect(*track_index);
     for (std::size_t from_index = 0;
@@ -372,7 +432,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(rect(), QColor("#171a20"));
 
-    const auto total = totalDuration();
+    const auto total = displayDuration();
     const auto ruler = QRectF(
         left_margin + track_header_width,
         12.0,
@@ -389,17 +449,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     const auto tick_step = std::max<std::int64_t>(
         1,
         (ruler_end + tick_count - 1) / tick_count);
-    const auto fps = [&]() {
-        for (const auto& track : tracks_) {
-            for (const auto& clip : track.clips) {
-                if (clip.frame_rate.has_value() &&
-                    std::isfinite(*clip.frame_rate) && *clip.frame_rate > 0.0) {
-                    return *clip.frame_rate;
-                }
-            }
-        }
-        return 30.0;
-    }();
+    const auto fps = frameRate();
     painter.setFont(QFont(painter.font().family(), 8));
     for (std::int64_t frame = 0; frame <= ruler_end; frame += tick_step) {
         const auto fraction = static_cast<double>(frame) / ruler_end;
@@ -585,14 +635,15 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         active_clip_->clip_index < tracks_[active_clip_->track_index].clips.size()) {
         const auto& clip = tracks_[active_clip_->track_index].clips[active_clip_->clip_index];
         const auto content = trackContentRect(0);
-        const auto total_frames = std::max<std::int64_t>(1, totalDuration());
+        const auto content_duration = std::max<std::int64_t>(1, totalDuration());
+        const auto visual_duration = std::max<std::int64_t>(1, displayDuration());
         auto global_frame = playhead_frame_;
         if (drag_frame_.has_value()) {
             global_frame = clip.timeline_start_frame + *drag_frame_;
         }
-        global_frame = std::clamp<std::int64_t>(global_frame, 0, total_frames - 1);
+        global_frame = std::clamp<std::int64_t>(global_frame, 0, content_duration - 1);
         const auto x = content.left() + content.width() *
-            static_cast<double>(global_frame) / total_frames;
+            static_cast<double>(global_frame) / visual_duration;
         painter.setPen(QPen(QColor("#ffcf5c"), 2));
         painter.drawLine(
             QPointF(x, trackRect(0).top() - 20),

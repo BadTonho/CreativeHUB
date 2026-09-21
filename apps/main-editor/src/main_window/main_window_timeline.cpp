@@ -364,13 +364,15 @@ QWidget* MainWindow::createTimeline() {
     timeline_scroll->setWidgetResizable(true);
     timeline_scroll->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
     timeline_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    timeline_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    timeline_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     timeline_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     timeline_scroll->setFrameShape(QFrame::NoFrame);
     timeline_scroll->setStyleSheet(
         "QScrollArea { background: transparent; border: none; }"
         "QScrollArea > QWidget > QWidget { background: transparent; }");
     timeline_scroll->setWidget(timeline_widget_);
+    timeline_scroll->viewport()->installEventFilter(timeline_widget_);
+    timeline_widget_->setTimelineViewportWidth(timeline_scroll->viewport()->width());
     layout->addWidget(timeline_scroll, 1);
 
     // Keep the playback status as a compact footer while giving the timeline
