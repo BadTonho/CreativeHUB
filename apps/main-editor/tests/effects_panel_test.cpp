@@ -22,8 +22,8 @@ int main(int argc, char* argv[]) {
         EffectsToolboxWidget toolbox;
         EffectsListWidget effects_list;
 
-        require(toolbox.count() == 6,
-                "Effects Toolbox must contain six categories.");
+        require(toolbox.count() == 4,
+                "Effects Toolbox must contain four implemented categories.");
         require(toolbox.item(0)->text() == "All",
                 "All category must be first.");
         require(toolbox.item(1)->text() == "Video",
@@ -32,20 +32,16 @@ int main(int argc, char* argv[]) {
                 "Audio category is missing.");
         require(toolbox.item(3)->text() == "Transitions",
                 "Transitions category is missing.");
-        require(toolbox.item(4)->text() == "Generators",
-                "Generators category is missing.");
-        require(toolbox.item(5)->text() == "Text",
-                "Text category is missing.");
         require(toolbox.currentCategoryId() == "all",
                 "Effects Toolbox must initially select All.");
-        require(effects_list.count() == 17,
-                "Effects list must contain seventeen visual effects.");
+        require(effects_list.count() == 4,
+                "Effects list must contain four implemented effects.");
         require(effects_list.categoryId() == "all",
                 "Effects list must initially show All.");
-        require(effects_list.visibleEffectCount() == 17,
+        require(effects_list.visibleEffectCount() == 4,
                 "All category must show every effect.");
         require(effects_list.item(0)->data(Qt::UserRole).toString() ==
-                    "video.blur",
+                    "video.grayscale",
                 "Effect IDs must be stable.");
 
         bool changed = false;
@@ -64,29 +60,23 @@ int main(int argc, char* argv[]) {
         effects_list.setCategory(toolbox.currentCategoryId());
         require(effects_list.categoryId() == "video",
                 "Effects list category did not change to Video.");
-        require(effects_list.visibleEffectCount() == 5,
-                "Video category must show five effects.");
+        require(effects_list.visibleEffectCount() == 1,
+                "Video category must show one effect.");
 
         effects_list.setCategory("audio");
-        require(effects_list.visibleEffectCount() == 3,
-                "Audio category must show three effects.");
+        require(effects_list.visibleEffectCount() == 1,
+                "Audio category must show one effect.");
         effects_list.setCategory("transitions");
-        require(effects_list.visibleEffectCount() == 3,
-                "Transitions category must show three effects.");
-        effects_list.setCategory("generators");
-        require(effects_list.visibleEffectCount() == 3,
-                "Generators category must show three effects.");
-        effects_list.setCategory("text");
-        require(effects_list.visibleEffectCount() == 3,
-                "Text category must show three effects.");
+        require(effects_list.visibleEffectCount() == 2,
+                "Transitions category must show two effects.");
         effects_list.setCategory("unknown");
         require(effects_list.categoryId() == "all" &&
-                    effects_list.visibleEffectCount() == 17,
+                    effects_list.visibleEffectCount() == 4,
                 "Unknown categories must fall back to All.");
 
-        require(effects::categories().size() == 6,
-                "Shared effect catalog categories are incomplete.");
-        require(effects::definitions().size() == 17,
+        require(effects::categories().size() == 4,
+                "Shared effect catalog contains unimplemented categories.");
+        require(effects::definitions().size() == 4,
                 "Shared effect catalog definitions are incomplete.");
         return 0;
     } catch (const std::exception& error) {

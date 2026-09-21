@@ -38,7 +38,7 @@ updated intentionally.
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode persistence, compact item data, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
-| Effects UI | Toolbox categories, static effect catalog, category filtering, stable effect IDs, and visual-only behavior |
+| Effects UI | Implemented Toolbox categories, current effect catalog, category filtering, stable effect IDs, and visual-only behavior |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
 
 ## Manual UI validation
@@ -102,8 +102,9 @@ in the running Main Editor after UI or integration changes:
   confirm the docks are individually available in
   `View > Effects`; click `Media Pool` to return to `Bins` above `Media`, and
   confirm the toolbar actions synchronize their checked state; select every
-  Toolbox category and confirm the Effects list filters to the expected static
-  entries, while no effect changes the Preview, Timeline, project dirty state,
+  Toolbox category and confirm the Effects list shows only the implemented
+  entries (`Grayscale`, `Gain`, `Cross Dissolve`, and `Fade to Black`), while no
+  effect changes the Preview, Timeline, project dirty state,
   or Undo/Redo; close and reopen the editor to confirm layout version 5 restores
   the saved arrangement, and use `View > Restore Default Layout` to restore
   the Media Pool default;

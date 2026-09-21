@@ -46,10 +46,11 @@ The Effects workspace contains two additional native docks: `Toolbox` and
 `Effects`. They are initially placed side by side in the left workspace area,
 with the Toolbox narrower than the Effects list; both remain independently
 movable, resizable, floatable, closable, and tabifiable. The Toolbox contains
-the static categories `All`, `Video`, `Audio`, `Transitions`, `Generators`,
-and `Text`. Selecting a category filters the 17 visual effect entries in the
-Effects dock. These entries are a UI prototype only: they cannot be applied to
-the Preview, Timeline, or project. The toolbar `Effects` action activates both
+the categories `All`, `Video`, `Audio`, and `Transitions`. Selecting a
+category filters the four currently implemented entries — `Grayscale`,
+`Gain`, `Cross Dissolve`, and `Fade to Black` — in the Effects dock. These
+entries are a UI prototype only: they cannot be applied from this dock to the
+Preview, Timeline, or project. The toolbar `Effects` action activates both
 docks and hides the Media Pool pair, while `View > Effects` controls `Toolbox`
 and `Effects` individually. The workspace layout is stored globally in
 `workspace/dock_layout_state` with layout version 5 and does not affect project
