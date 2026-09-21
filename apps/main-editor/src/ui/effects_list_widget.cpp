@@ -1,8 +1,10 @@
 #include "ui/effects_list_widget.h"
 
 #include "ui/effects_catalog.h"
+#include "ui/media_drag_mime.h"
 
 #include <QAbstractItemView>
+#include <QMimeData>
 #include <QListWidgetItem>
 
 #include <algorithm>
@@ -15,11 +17,17 @@ EffectsListWidget::EffectsListWidget(QWidget* parent)
     setUniformItemSizes(true);
     setMinimumWidth(30);
     setAlternatingRowColors(true);
+    setDragEnabled(true);
+    setDragDropMode(QAbstractItemView::DragOnly);
+    setDefaultDropAction(Qt::CopyAction);
 
     for (const auto& effect : effects::definitions()) {
         auto* item = new QListWidgetItem(effect.name, this);
         item->setData(Qt::UserRole, effect.id);
         item->setData(Qt::UserRole + 1, effect.category_id);
+        if (effect.id != QStringLiteral("text.text")) {
+            item->setFlags(item->flags() & ~Qt::ItemIsDragEnabled);
+        }
     }
 
     updateVisibility();
@@ -51,6 +59,21 @@ int EffectsListWidget::visibleEffectCount() const {
         if (!item(index)->isHidden()) ++visible_count;
     }
     return visible_count;
+}
+
+QMimeData* EffectsListWidget::mimeData(
+    const QList<QListWidgetItem*>& items) const {
+    if (items.size() != 1 || items.front() == nullptr ||
+        items.front()->data(Qt::UserRole).toString() !=
+            QStringLiteral("text.text")) {
+        return nullptr;
+    }
+
+    auto* mime_data = new QMimeData;
+    mime_data->setData(
+        ui::kEffectIdMimeType,
+        items.front()->data(Qt::UserRole).toString().toUtf8());
+    return mime_data;
 }
 
 void EffectsListWidget::updateVisibility() {

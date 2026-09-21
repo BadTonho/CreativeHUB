@@ -51,9 +51,10 @@ favoriting behavior yet. The Toolbox contains
 the categories `All`, `Video`, `Audio`, `Transitions`, and `Text`. Selecting a
 category filters the five currently implemented entries — `Grayscale`, `Gain`,
 `Cross Dissolve`, `Fade to Black`, and `Text` — in the Effects dock. The Text
-entry represents the existing Add Text timeline feature. These
-entries are a UI prototype only: they cannot be applied from this dock to the
-Preview, Timeline, or project. The toolbar `Effects` action activates all
+entry is the Timeline text-clip tool: it can be dragged to a track and frame
+in the Timeline to create a five-second text clip. The other entries remain a
+UI prototype only and cannot be applied from this dock to the Preview,
+Timeline, or project. The toolbar `Effects` action activates all
 three docks and hides the Media Pool pair, while `View > Effects` controls
 `Toolbox`, `Favorites`, and `Effects` individually. The workspace layout is
 stored globally in `workspace/dock_layout_state` with layout version 6 and
@@ -111,6 +112,10 @@ title.
 The Previous Frame, Play/Pause, and Next Frame controls use standard Qt media
 icons without visible text; their tooltips and accessible names retain the
 full action descriptions.
+The normal Selection Tool uses a mouse icon, is selected by default, and
+restores ordinary clip selection, movement, trimming, and seeking. The Blade
+Tool uses a blade icon without visible text; the two tools are mutually
+exclusive, while the existing `Edit > Blade Tool` action remains available.
 The Timeline draws one vertical row per video track, with the top row having
 the highest visual priority. Video 1 is created first; each newly created track
 is inserted above the existing tracks. It preserves absolute positions and
@@ -157,8 +162,8 @@ Gesture priority is configurable: by default, normal drag moves clips and
 Alt + drag seeks; when the Edit > Require Alt to Move Clips option is enabled,
 Alt + drag moves clips and normal drag seeks. Blade Tool click splits and edge
 drag trims. Movement, splitting, trimming, and seeking do not decode during
-pointer movement. Drops report target track and frame; the internal add-to-
-timeline operation appends to the active track.
+pointer movement. Media drops and the `Text` Effects drop report the target
+track and frame; a Text drop creates the five-second clip at that position.
 
 Selecting a timeline clip does not move the playhead by default. The Edit >
 Move Playhead to Selected Clip Start preference restores the optional behavior
@@ -218,10 +223,10 @@ or an empty canvas is not an error and uses the dark preview background.
 
 ## Text clip editing
 
-The Timeline dock also provides Add Text. It creates a five-second manual text
-clip at the current playhead on the active track, using the selected media FPS
-or a 30 FPS fallback. Text clips have a distinct visual style and may sit
-above a video clip in the same track; same-kind overlap is rejected.
+The Effects dock provides the `Text` tool. Dragging it to a Timeline track
+creates a five-second manual text clip at the drop frame, using the selected
+media FPS or a 30 FPS fallback. Text clips have a distinct visual style and
+may sit above a video clip in the same track; same-kind overlap is rejected.
 
 When a text occurrence is selected, the Inspector shows a multiline content
 editor, font family, pixel size, RGBA color, horizontal alignment, and an

@@ -775,7 +775,8 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
 }
 
 void TimelineWidget::dragEnterEvent(QDragEnterEvent* event) {
-    if (event->mimeData()->hasFormat(ui::kMediaPathMimeType)) {
+    if (event->mimeData()->hasFormat(ui::kMediaPathMimeType) ||
+        event->mimeData()->hasFormat(ui::kEffectIdMimeType)) {
         event->acceptProposedAction();
     } else {
         event->ignore();
@@ -793,8 +794,10 @@ void TimelineWidget::dragLeaveEvent(QDragLeaveEvent* event) {
 void TimelineWidget::dragMoveEvent(QDragMoveEvent* event) {
     const auto track = trackAt(event->position().y());
     const auto frame = globalFrameAt(event->position().x());
-    const bool accepted = event->mimeData()->hasFormat(ui::kMediaPathMimeType) &&
-        track.has_value() && frame.has_value();
+    const bool supported_drop =
+        event->mimeData()->hasFormat(ui::kMediaPathMimeType) ||
+        event->mimeData()->hasFormat(ui::kEffectIdMimeType);
+    const bool accepted = supported_drop && track.has_value() && frame.has_value();
     drag_hovering_ = accepted;
     if (accepted) {
         drop_hover_track_ = track;
@@ -811,21 +814,34 @@ void TimelineWidget::dragMoveEvent(QDragMoveEvent* event) {
 void TimelineWidget::dropEvent(QDropEvent* event) {
     const auto track = trackAt(event->position().y());
     const auto frame = globalFrameAt(event->position().x());
-    if (!event->mimeData()->hasFormat(ui::kMediaPathMimeType) ||
+    const bool is_media_drop = event->mimeData()->hasFormat(ui::kMediaPathMimeType);
+    const bool is_effect_drop = event->mimeData()->hasFormat(ui::kEffectIdMimeType);
+    if ((!is_media_drop && !is_effect_drop) ||
         !track.has_value() || !frame.has_value()) {
-        event->ignore();
-        return;
-    }
-    const auto path = QString::fromUtf8(
-        event->mimeData()->data(ui::kMediaPathMimeType));
-    if (path.isEmpty()) {
         event->ignore();
         return;
     }
     drag_hovering_ = false;
     drop_hover_track_.reset();
     drop_hover_frame_.reset();
-    emit mediaDropRequestedAt(path, static_cast<qint64>(*track), *frame);
+    if (is_media_drop) {
+        const auto path = QString::fromUtf8(
+            event->mimeData()->data(ui::kMediaPathMimeType));
+        if (path.isEmpty()) {
+            event->ignore();
+            return;
+        }
+        emit mediaDropRequestedAt(path, static_cast<qint64>(*track), *frame);
+    } else {
+        const auto effect_id = QString::fromUtf8(
+            event->mimeData()->data(ui::kEffectIdMimeType));
+        if (effect_id.isEmpty()) {
+            event->ignore();
+            return;
+        }
+        emit effectDropRequestedAt(
+            effect_id, static_cast<qint64>(*track), *frame);
+    }
     event->acceptProposedAction();
     update();
 }

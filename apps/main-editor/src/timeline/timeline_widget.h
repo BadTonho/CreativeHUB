@@ -69,6 +69,7 @@ signals:
     void clipSplitRequestedAt(qint64 track_index, qint64 clip_index, qint64 local_frame);
     void clipTrimRequestedAt(qint64 track_index, qint64 clip_index, qint64 local_start_frame, qint64 local_end_frame);
     void mediaDropRequestedAt(const QString& source_path, qint64 track_index, qint64 timeline_frame);
+    void effectDropRequestedAt(const QString& effect_id, qint64 track_index, qint64 timeline_frame);
     void transitionSelectedAt(qint64 track_index, qint64 from_clip_index, qint64 to_clip_index);
     void transitionAddRequestedAt(
         qint64 track_index,

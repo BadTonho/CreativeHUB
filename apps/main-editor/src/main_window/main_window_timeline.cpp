@@ -20,6 +20,7 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QIcon>
 #include <QKeySequence>
 #include <QLabel>
 #include <QAbstractItemView>
@@ -30,6 +31,8 @@
 #include <QMenuBar>
 #include <QMetaObject>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPixmap>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QScrollArea>
@@ -81,6 +84,32 @@ std::int64_t localFrameAtTimelinePlayhead(
     return local_frame >= 0 && local_frame < clip.timeline_duration_frames
         ? local_frame
         : 0;
+}
+
+QIcon timelineToolIcon(bool blade) {
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(QColor("#f2f2f2"), 1.6, Qt::SolidLine, Qt::RoundCap,
+                        Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+
+    if (blade) {
+        painter.drawLine(QPointF(4.0, 15.5), QPointF(15.5, 4.0));
+        painter.drawLine(QPointF(3.5, 16.0), QPointF(8.0, 16.5));
+        painter.drawLine(QPointF(3.5, 16.0), QPointF(4.0, 11.5));
+        painter.drawLine(QPointF(7.0, 13.0), QPointF(10.0, 16.0));
+    } else {
+        painter.drawRoundedRect(QRectF(6.0, 2.0, 8.0, 16.0), 4.0, 4.0);
+        painter.drawLine(QPointF(10.0, 2.5), QPointF(10.0, 7.0));
+        painter.drawLine(QPointF(8.0, 4.5), QPointF(8.0, 7.0));
+        painter.drawLine(QPointF(12.0, 4.5), QPointF(12.0, 7.0));
+        painter.drawLine(QPointF(10.0, 7.0), QPointF(10.0, 9.5));
+    }
+
+    return QIcon(pixmap);
 }
 
 } // namespace
@@ -213,12 +242,13 @@ void MainWindow::removeActiveTrack() {
     }
 }
 
-void MainWindow::addTextClip() {
-    const auto track_index = active_timeline_track_index_.value_or(0);
-    if (track_index >= timeline_model_.trackCount()) {
+void MainWindow::addTextClipAt(qint64 requested_track_index, qint64 requested_frame) {
+    if (requested_track_index < 0 || requested_frame < 0 ||
+        requested_track_index >= static_cast<qint64>(timeline_model_.trackCount())) {
         statusBar()->showMessage("No video track is available for text.");
         return;
     }
+    const auto track_index = static_cast<std::size_t>(requested_track_index);
 
     double frame_rate = 30.0;
     if (const auto selected_index = selectedMediaIndex(); selected_index.has_value()) {
@@ -230,7 +260,7 @@ void MainWindow::addTextClip() {
     }
     const auto duration_frames = std::max<std::int64_t>(
         1, static_cast<std::int64_t>(std::ceil(frame_rate * 5.0)));
-    const auto start_frame = std::max<std::int64_t>(0, timelinePlayheadFrame());
+    const auto start_frame = std::max<std::int64_t>(0, requested_frame);
 
     try {
         const auto before = captureTimelineEditState();
@@ -325,15 +355,25 @@ QWidget* MainWindow::createTimeline() {
     play_pause_button_->setFixedSize(32, 28);
     next_frame_button_->setFixedSize(32, 28);
     clear_timeline_button_ = new QPushButton("Clear Timeline", container);
-    razor_button_ = new QPushButton("Blade Tool", container);
-    add_text_button_ = new QPushButton("Add Text", container);
+    selection_button_ = new QPushButton(container);
+    razor_button_ = new QPushButton(container);
+    selection_button_->setIcon(timelineToolIcon(false));
+    razor_button_->setIcon(timelineToolIcon(true));
+    selection_button_->setIconSize(QSize(16, 16));
+    razor_button_->setIconSize(QSize(16, 16));
+    selection_button_->setFixedSize(32, 28);
+    razor_button_->setFixedSize(32, 28);
+    selection_button_->setCheckable(true);
     razor_button_->setCheckable(true);
+    selection_button_->setAutoExclusive(true);
+    razor_button_->setAutoExclusive(true);
+    selection_button_->setChecked(true);
     controls->addWidget(previous_frame_button_);
     controls->addWidget(play_pause_button_);
     controls->addWidget(next_frame_button_);
     controls->addWidget(clear_timeline_button_);
+    controls->addWidget(selection_button_);
     controls->addWidget(razor_button_);
-    controls->addWidget(add_text_button_);
     controls->addSpacing(10);
     auto* tracks_label = new QLabel("Tracks", container);
     tracks_label->setStyleSheet("color: #9aa4b2; font-weight: 600;");
@@ -392,8 +432,10 @@ QWidget* MainWindow::createTimeline() {
     play_pause_button_->setAccessibleName("Play or Pause");
     next_frame_button_->setAccessibleName("Next Frame");
     clear_timeline_button_->setToolTip("Remove all clips from every track");
+    selection_button_->setToolTip("Select and move timeline clips");
+    selection_button_->setAccessibleName("Selection Tool");
     razor_button_->setToolTip("Split a clip where you click");
-    add_text_button_->setToolTip("Add a five-second text clip at the current playhead");
+    razor_button_->setAccessibleName("Blade Tool");
     add_track_button->setToolTip("Create a new empty video track");
     rename_track_button->setToolTip("Rename the active track");
     move_track_up_button->setToolTip("Move the active track toward the top");
@@ -467,15 +509,23 @@ QWidget* MainWindow::createTimeline() {
     connect(clear_timeline_button_, &QPushButton::clicked, this, [this]() {
         clearTimeline();
     });
+    connect(selection_button_, &QPushButton::clicked, this, [this]() {
+        if (razor_tool_action_ != nullptr) {
+            razor_tool_action_->setChecked(false);
+        }
+        if (timeline_widget_ != nullptr) timeline_widget_->setRazorMode(false);
+    });
     connect(razor_button_, &QPushButton::toggled, this, [this](bool enabled) {
         if (razor_tool_action_ != nullptr &&
             razor_tool_action_->isChecked() != enabled) {
             razor_tool_action_->setChecked(enabled);
         }
+        if (selection_button_ != nullptr &&
+            selection_button_->isChecked() == enabled) {
+            selection_button_->setChecked(!enabled);
+        }
         if (timeline_widget_ != nullptr) timeline_widget_->setRazorMode(enabled);
     });
-    connect(add_text_button_, &QPushButton::clicked,
-            this, &MainWindow::addTextClip);
     connect(add_track_button, &QPushButton::clicked,
             this, &MainWindow::addVideoTrack);
     connect(rename_track_button, &QPushButton::clicked,
@@ -578,6 +628,11 @@ QWidget* MainWindow::createTimeline() {
         &timeline::TimelineWidget::mediaDropRequestedAt,
         this,
         &MainWindow::handleMediaDropAt);
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::effectDropRequestedAt,
+        this,
+        &MainWindow::handleEffectDropAt);
 
     updateTimelineState();
     updatePlaybackControls();
@@ -1140,6 +1195,17 @@ void MainWindow::handleMediaDropAt(
         QMessageBox::warning(this, "Could not add media",
                              "The dropped media could not be added to the timeline.");
     }
+}
+
+void MainWindow::handleEffectDropAt(
+    const QString& effect_id,
+    qint64 track_index,
+    qint64 timeline_frame) {
+    if (effect_id != QStringLiteral("text.text")) {
+        statusBar()->showMessage("This effect cannot be added to the timeline.");
+        return;
+    }
+    addTextClipAt(track_index, timeline_frame);
 }
 
 void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_index) {

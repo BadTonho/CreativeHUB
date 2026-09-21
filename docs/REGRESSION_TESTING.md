@@ -60,7 +60,10 @@ in the running Main Editor after UI or integration changes:
   a duplicate internal title or the former Click to select interaction hint,
   while the playback controls, ruler, clips, and footer remain available;
   confirm Previous Frame, Play/Pause, and Next Frame show only media icons,
-  update the Play/Pause icon correctly, and retain working tooltips;
+  update the Play/Pause icon correctly, and retain working tooltips; confirm
+  the mouse Selection Tool icon is checked initially, the Blade Tool is an
+  icon-only mutually exclusive mode, and both accessible names and tooltips
+  remain available; confirm no Add Text button is shown;
 - Timeline track height, maximum row height, vertical scrolling, stable
   one-hour horizontal scale, horizontal scrolling for longer content, zoom
   controls from 25% through 800%, Ctrl + wheel playhead anchoring, button
@@ -106,9 +109,12 @@ in the running Main Editor after UI or integration changes:
   confirm the toolbar actions synchronize their checked state; select every
   Toolbox category and confirm the Effects list shows only the implemented
   entries (`Grayscale`, `Gain`, `Cross Dissolve`, `Fade to Black`, and `Text`),
-  including the Text category for the existing Add Text feature, while no
-  effect changes the Preview, Timeline, project dirty state,
-  or Undo/Redo; close and reopen the editor to confirm layout version 6 restores
+  including the draggable Text tool; drag Text to multiple tracks and frames,
+  confirm it creates a five-second text clip at the drop position, rejects
+  overlap, and participates in Undo/Redo and project dirty state; confirm the
+  other effects remain non-draggable and do not change the Preview, Timeline,
+  project dirty state, or Undo/Redo; close and reopen the editor to confirm
+  layout version 6 restores
   the saved arrangement, and use `View > Restore Default Layout` to restore
   the Media Pool default;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and

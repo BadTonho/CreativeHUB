@@ -110,7 +110,11 @@ private:
     void renameActiveTrack();
     void moveActiveTrack(int direction);
     void removeActiveTrack();
-    void addTextClip();
+    void addTextClipAt(qint64 track_index, qint64 timeline_frame);
+    void handleEffectDropAt(
+        const QString& effect_id,
+        qint64 track_index,
+        qint64 timeline_frame);
     [[nodiscard]] std::optional<std::size_t> selectedMediaIndex() const noexcept;
     [[nodiscard]] std::string selectedBinPath() const;
     [[nodiscard]] media::MediaLibrary buildMediaLibrary() const;
@@ -288,8 +292,8 @@ private:
     QPushButton* play_pause_button_ = nullptr;
     QPushButton* next_frame_button_ = nullptr;
     QPushButton* clear_timeline_button_ = nullptr;
+    QPushButton* selection_button_ = nullptr;
     QPushButton* razor_button_ = nullptr;
-    QPushButton* add_text_button_ = nullptr;
     QSlider* clip_volume_slider_ = nullptr;
     QSlider* track_volume_slider_ = nullptr;
     QCheckBox* clip_mute_check_ = nullptr;

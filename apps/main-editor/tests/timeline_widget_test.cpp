@@ -1,6 +1,11 @@
 #include "timeline/timeline_widget.h"
+#include "ui/media_drag_mime.h"
 
 #include <QApplication>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPointingDevice>
 #include <QWheelEvent>
@@ -102,6 +107,64 @@ int main(int argc, char* argv[]) {
             {makeClip("lower.mkv", 0, test_clip_duration, "lower.mkv")}};
         widget.setTracks({top_track, lower_track});
         application.processEvents();
+
+        bool effect_drop_received = false;
+        qint64 effect_drop_track = -1;
+        qint64 effect_drop_frame = -1;
+        QObject::connect(
+            &widget,
+            &timeline::TimelineWidget::effectDropRequestedAt,
+            [&effect_drop_received, &effect_drop_track, &effect_drop_frame](
+                const QString& effect_id,
+                qint64 track_index,
+                qint64 timeline_frame) {
+                effect_drop_received = effect_id == "text.text";
+                effect_drop_track = track_index;
+                effect_drop_frame = timeline_frame;
+            });
+        const QPointF effect_drop_position(500.0, 120.0);
+        QMimeData text_effect_mime;
+        text_effect_mime.setData(
+            ui::kEffectIdMimeType,
+            QByteArrayLiteral("text.text"));
+        QDragEnterEvent effect_enter(
+            effect_drop_position.toPoint(),
+            Qt::CopyAction,
+            &text_effect_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&widget, &effect_enter);
+        QDragMoveEvent effect_move(
+            effect_drop_position.toPoint(),
+            Qt::CopyAction,
+            &text_effect_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&widget, &effect_move);
+        QDropEvent effect_drop(
+            effect_drop_position,
+            Qt::CopyAction,
+            &text_effect_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&widget, &effect_drop);
+        require(effect_drop_received && effect_drop_track == 0 &&
+                    effect_drop_frame > 0,
+                "Text effect drop did not preserve the target track and frame.");
+
+        QMimeData invalid_mime;
+        invalid_mime.setData(
+            "application/x-creative-suite-unknown",
+            QByteArrayLiteral("invalid"));
+        QDropEvent invalid_drop(
+            effect_drop_position,
+            Qt::CopyAction,
+            &invalid_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&widget, &invalid_drop);
+        require(!invalid_drop.isAccepted(),
+                "Timeline accepted an unsupported effect drop.");
 
         require(widget.minimumHeight() >= 48 + 2 * 72 + 10 + 12,
                 "The Timeline minimum height does not fit all track rows.");

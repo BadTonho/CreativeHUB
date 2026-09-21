@@ -239,6 +239,10 @@ void MainWindow::createMenus() {
         if (razor_button_ != nullptr && razor_button_->isChecked() != enabled) {
             razor_button_->setChecked(enabled);
         }
+        if (selection_button_ != nullptr &&
+            selection_button_->isChecked() == enabled) {
+            selection_button_->setChecked(!enabled);
+        }
         if (timeline_widget_ != nullptr) timeline_widget_->setRazorMode(enabled);
     });
     edit_menu->addSeparator();

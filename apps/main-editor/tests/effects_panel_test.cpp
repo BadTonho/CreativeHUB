@@ -1,9 +1,11 @@
 #include "ui/effects_catalog.h"
 #include "ui/effects_favorites_widget.h"
 #include "ui/effects_list_widget.h"
+#include "ui/media_drag_mime.h"
 #include "ui/effects_toolbox_widget.h"
 
 #include <QApplication>
+#include <QMimeData>
 
 #include <cstdio>
 #include <stdexcept>
@@ -49,6 +51,27 @@ int main(int argc, char* argv[]) {
         require(effects_list.item(0)->data(Qt::UserRole).toString() ==
                     "video.grayscale",
                 "Effect IDs must be stable.");
+
+        const auto text_items = effects_list.findItems(
+            "Text", Qt::MatchExactly);
+        require(text_items.size() == 1,
+                "Text effect must be available for dragging.");
+        require(effects_list.dragEnabled() &&
+                    text_items.front()->flags().testFlag(Qt::ItemIsDragEnabled),
+                "Text effect drag support is not enabled.");
+        for (int index = 0; index < effects_list.count(); ++index) {
+            if (effects_list.item(index) != text_items.front()) {
+                require(!effects_list.item(index)->flags().testFlag(
+                            Qt::ItemIsDragEnabled),
+                        "Non-Text effects must not be draggable.");
+            }
+        }
+        auto* text_mime = effects_list.mimeData(text_items);
+        require(text_mime != nullptr &&
+                    text_mime->hasFormat(ui::kEffectIdMimeType) &&
+                    text_mime->data(ui::kEffectIdMimeType) == "text.text",
+                "Text effect drag data is invalid.");
+        delete text_mime;
 
         bool changed = false;
         QString changed_category;
