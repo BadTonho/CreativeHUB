@@ -72,7 +72,8 @@ in the running Main Editor after UI or integration changes:
   playhead scrubbing on the upper time ruler, empty gaps without overlays,
   no Media Browser selection while scrubbing, selecting a clip without moving
   the playhead, and the optional Edit > Move Playhead to Selected Clip Start
-  preference, and visual order;
+  preference, visual order, and release of any active Timeline mouse grab when
+  clips are deleted or the track model is refreshed;
 - Media Browser list/block toggles, restoration of the last global mode,
   cached thumbnails, compact item descriptions, hover over the information
   icon for the complete technical tooltip, selection, clicking bins without

@@ -109,6 +109,14 @@ int main(int argc, char* argv[]) {
         widget.setTracks({top_track, lower_track});
         application.processEvents();
 
+        widget.grabMouse();
+        if (QWidget::mouseGrabber() == &widget) {
+            widget.setTracks({top_track, lower_track});
+            require(
+                QWidget::mouseGrabber() != &widget,
+                "Replacing timeline tracks must release a stale mouse grab.");
+        }
+
         bool effect_drop_received = false;
         qint64 effect_drop_track = -1;
         qint64 effect_drop_frame = -1;

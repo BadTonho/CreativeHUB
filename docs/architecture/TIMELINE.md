@@ -76,7 +76,9 @@ and keeps the current timeline frame.
 Movement, splitting, and trimming do not decode while the pointer moves.
 Seeking decodes only after release. Delete removes the active clip without
 moving remaining clips. Ctrl + Left and Ctrl + Right nudge the active clip by
-one frame when the new position is valid.
+one frame when the new position is valid. When a model update replaces the
+tracks during an active pointer gesture, the Timeline releases its mouse grab
+before resetting the gesture so the rest of the editor remains clickable.
 
 Split and trim preserve source offsets and do not compact later clips. All
 operations retain repeated source occurrences independently.

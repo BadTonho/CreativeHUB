@@ -61,6 +61,12 @@ TimelineWidget::TimelineWidget(QWidget* parent)
 }
 
 void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
+    // Model changes can arrive while this widget owns the mouse grab for a
+    // seek, move, trim, or blade gesture. Resetting the gesture flags alone
+    // would leave the grab active and route every subsequent click back to
+    // the timeline instead of the rest of the editor.
+    if (QWidget::mouseGrabber() == this) releaseMouse();
+
     tracks_ = tracks;
     if (tracks_.empty()) tracks_.push_back(TimelineTrack{1, "Video 1", 1.0, false, {}});
     if (active_clip_.has_value() &&
