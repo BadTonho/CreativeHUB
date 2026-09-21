@@ -21,10 +21,10 @@ TimelineWidget presents the sequence with a shared frame-and-seconds ruler,
 separate track headers, per-track clip counts, and track-specific clip colors.
 The active track and clip use a highlighted border; drop targets and the
 playhead are shown directly over the timeline content.
-The visual timeline uses a minimum ten-minute range, independent of the
+The visual timeline uses a minimum one-hour range, independent of the
 actual content duration. Shorter projects therefore keep a stable horizontal
-scale and show empty space after the last clip. The ten-minute range fills the
-available viewport; content longer than ten minutes expands the timeline
+scale and show empty space after the last clip. The one-hour range fills the
+available viewport; content longer than one hour expands the timeline
 surface proportionally and is accessed with horizontal scrolling. The actual
 content duration remains authoritative for playback and project behavior.
 The timeline surface grows only as much as its track rows require; additional

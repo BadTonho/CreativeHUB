@@ -66,7 +66,7 @@ int main(int argc, char* argv[]) {
         application.processEvents();
         widget.setTimelineViewportWidth(1000);
 
-        constexpr std::int64_t test_clip_duration = 9000;
+        constexpr std::int64_t test_clip_duration = 54000;
 
         timeline::TimelineTrack top_track{
             2,
@@ -271,7 +271,7 @@ int main(int argc, char* argv[]) {
         require(transition_track == 0 && transition_from == 0 && transition_to == 1,
                 "The contiguous junction was not detected for transition selection.");
 
-        // The viewport is the scale reference for the standard ten-minute
+        // The viewport is the scale reference for the standard one-hour
         // range, while longer content expands the scrollable surface.
         widget.setTimelineViewportWidth(800);
         widget.setTracks({top_track, lower_track});
@@ -282,10 +282,10 @@ int main(int argc, char* argv[]) {
             "Video 1",
             1.0,
             false,
-            {makeClip("long.mkv", 0, 36000, "long.mkv")}};
+            {makeClip("long.mkv", 0, 216000, "long.mkv")}};
         widget.setTracks({long_track});
         require(widget.minimumWidth() >= 1600,
-                "A timeline longer than ten minutes did not expand horizontally.");
+                "A timeline longer than one hour did not expand horizontally.");
         widget.setTracks({top_track, lower_track});
         require(widget.minimumWidth() == 800,
                 "The timeline did not return to the standard width after shrinking.");

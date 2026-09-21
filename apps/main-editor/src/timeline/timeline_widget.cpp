@@ -32,7 +32,7 @@ constexpr double maximum_row_height = 180.0;
 constexpr double row_gap = 10.0;
 constexpr double track_header_width = 142.0;
 constexpr double edge_width = 8.0;
-constexpr double standard_timeline_duration_seconds = 10.0 * 60.0;
+constexpr double standard_timeline_duration_seconds = 60.0 * 60.0;
 
 QString text(const std::string& value) {
     return QString::fromUtf8(value.data(), static_cast<int>(value.size()));
