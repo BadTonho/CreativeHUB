@@ -22,8 +22,8 @@ int main(int argc, char* argv[]) {
         EffectsToolboxWidget toolbox;
         EffectsListWidget effects_list;
 
-        require(toolbox.count() == 4,
-                "Effects Toolbox must contain four implemented categories.");
+        require(toolbox.count() == 5,
+                "Effects Toolbox must contain five implemented categories.");
         require(toolbox.item(0)->text() == "All",
                 "All category must be first.");
         require(toolbox.item(1)->text() == "Video",
@@ -32,13 +32,15 @@ int main(int argc, char* argv[]) {
                 "Audio category is missing.");
         require(toolbox.item(3)->text() == "Transitions",
                 "Transitions category is missing.");
+        require(toolbox.item(4)->text() == "Text",
+                "Text category is missing.");
         require(toolbox.currentCategoryId() == "all",
                 "Effects Toolbox must initially select All.");
-        require(effects_list.count() == 4,
-                "Effects list must contain four implemented effects.");
+        require(effects_list.count() == 5,
+                "Effects list must contain five implemented effects.");
         require(effects_list.categoryId() == "all",
                 "Effects list must initially show All.");
-        require(effects_list.visibleEffectCount() == 4,
+        require(effects_list.visibleEffectCount() == 5,
                 "All category must show every effect.");
         require(effects_list.item(0)->data(Qt::UserRole).toString() ==
                     "video.grayscale",
@@ -69,14 +71,17 @@ int main(int argc, char* argv[]) {
         effects_list.setCategory("transitions");
         require(effects_list.visibleEffectCount() == 2,
                 "Transitions category must show two effects.");
+        effects_list.setCategory("text");
+        require(effects_list.visibleEffectCount() == 1,
+                "Text category must show one effect.");
         effects_list.setCategory("unknown");
         require(effects_list.categoryId() == "all" &&
-                    effects_list.visibleEffectCount() == 4,
+                    effects_list.visibleEffectCount() == 5,
                 "Unknown categories must fall back to All.");
 
-        require(effects::categories().size() == 4,
+        require(effects::categories().size() == 5,
                 "Shared effect catalog contains unimplemented categories.");
-        require(effects::definitions().size() == 4,
+        require(effects::definitions().size() == 5,
                 "Shared effect catalog definitions are incomplete.");
         return 0;
     } catch (const std::exception& error) {

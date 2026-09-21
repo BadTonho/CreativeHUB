@@ -8,6 +8,7 @@ const QVector<Category>& categories() {
         {QStringLiteral("video"), QStringLiteral("Video")},
         {QStringLiteral("audio"), QStringLiteral("Audio")},
         {QStringLiteral("transitions"), QStringLiteral("Transitions")},
+        {QStringLiteral("text"), QStringLiteral("Text")},
     };
     return values;
 }
@@ -18,6 +19,7 @@ const QVector<Definition>& definitions() {
         {QStringLiteral("audio.gain"), QStringLiteral("Gain"), QStringLiteral("audio")},
         {QStringLiteral("transitions.cross_dissolve"), QStringLiteral("Cross Dissolve"), QStringLiteral("transitions")},
         {QStringLiteral("transitions.fade_to_black"), QStringLiteral("Fade to Black"), QStringLiteral("transitions")},
+        {QStringLiteral("text.text"), QStringLiteral("Text"), QStringLiteral("text")},
     };
     return values;
 }

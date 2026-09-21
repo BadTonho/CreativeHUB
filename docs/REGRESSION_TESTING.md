@@ -103,7 +103,8 @@ in the running Main Editor after UI or integration changes:
   `View > Effects`; click `Media Pool` to return to `Bins` above `Media`, and
   confirm the toolbar actions synchronize their checked state; select every
   Toolbox category and confirm the Effects list shows only the implemented
-  entries (`Grayscale`, `Gain`, `Cross Dissolve`, and `Fade to Black`), while no
+  entries (`Grayscale`, `Gain`, `Cross Dissolve`, `Fade to Black`, and `Text`),
+  including the Text category for the existing Add Text feature, while no
   effect changes the Preview, Timeline, project dirty state,
   or Undo/Redo; close and reopen the editor to confirm layout version 5 restores
   the saved arrangement, and use `View > Restore Default Layout` to restore

@@ -46,9 +46,10 @@ The Effects workspace contains two additional native docks: `Toolbox` and
 `Effects`. They are initially placed side by side in the left workspace area,
 with the Toolbox narrower than the Effects list; both remain independently
 movable, resizable, floatable, closable, and tabifiable. The Toolbox contains
-the categories `All`, `Video`, `Audio`, and `Transitions`. Selecting a
-category filters the four currently implemented entries — `Grayscale`,
-`Gain`, `Cross Dissolve`, and `Fade to Black` — in the Effects dock. These
+the categories `All`, `Video`, `Audio`, `Transitions`, and `Text`. Selecting a
+category filters the five currently implemented entries — `Grayscale`, `Gain`,
+`Cross Dissolve`, `Fade to Black`, and `Text` — in the Effects dock. The Text
+entry represents the existing Add Text timeline feature. These
 entries are a UI prototype only: they cannot be applied from this dock to the
 Preview, Timeline, or project. The toolbar `Effects` action activates both
 docks and hides the Media Pool pair, while `View > Effects` controls `Toolbox`
