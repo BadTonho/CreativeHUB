@@ -29,8 +29,8 @@ The Timeline draws one vertical row per video track, with the top row having
 the highest visual priority. Video 1 is created first; each newly created track
 is inserted above the existing tracks. It preserves absolute positions and
 gaps, and allows overlap only across different tracks. It displays a shared
-frame-and-seconds ruler, dedicated track headers, clip counters, track-specific
-colors, visible gap regions, and explicit drop/playhead markers. The dock
+frame-and-seconds ruler, dedicated track headers, clip counters,
+track-specific colors, and explicit drop/playhead markers. The dock
 provides Add Video Track, Rename Track, Track Up, Track Down, and Remove Track.
 Only empty tracks can be removed.
 Playback state is shown in a compact fixed footer below the timeline content;
@@ -40,9 +40,10 @@ available through vertical scrolling. Each track row has a provisional maximum
 height of 180 pixels; extra space in the timeline remains empty until a later
 layout milestone gives it another purpose.
 
-Gesture priority is Alt + drag for moving, Blade Tool click for splitting,
-edge drag for trimming, interior drag for seeking, and simple click for
-selection. Movement, splitting, trimming, and seeking do not decode during
+Gesture priority is configurable: by default, normal drag moves clips and
+Alt + drag seeks; when the Edit > Require Alt to Move Clips option is enabled,
+Alt + drag moves clips and normal drag seeks. Blade Tool click splits and edge
+drag trims. Movement, splitting, trimming, and seeking do not decode during
 pointer movement. Drops report target track and frame; Add to Timeline
 appends to the active track.
 

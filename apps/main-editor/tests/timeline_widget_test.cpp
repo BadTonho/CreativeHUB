@@ -82,6 +82,9 @@ int main(int argc, char* argv[]) {
 
         require(widget.minimumHeight() >= 48 + 2 * 72 + 10 + 12,
                 "The Timeline minimum height does not fit all track rows.");
+        require(!widget.moveRequiresAlt(),
+                "The timeline did not default to moving clips without Alt.");
+        widget.setMoveRequiresAlt(true);
 
         int selected_track = -1;
         int selected_clip = -1;
@@ -183,6 +186,44 @@ int main(int argc, char* argv[]) {
                 "Alt-drag did not request a move to the lower track.");
         require(seek_frames.size() == 1,
                 "Alt-drag was incorrectly treated as seeking.");
+
+        // The user can disable the Alt requirement and move with a normal drag.
+        require(widget.moveRequiresAlt(),
+                "The timeline movement preference could not be enabled.");
+        widget.setMoveRequiresAlt(false);
+        require(!widget.moveRequiresAlt(),
+                "The timeline movement preference could not be disabled.");
+        move_from_track = -1;
+        move_to_track = -1;
+        widget.setActiveClip(std::nullopt);
+        sendMouse(widget, QEvent::MouseButtonPress, QPointF(500, 120),
+                  Qt::LeftButton);
+        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(500, 120),
+                  Qt::NoButton);
+        require(selected_track == 0 && selected_clip == 0 &&
+                    move_from_track == -1 && move_to_track == -1,
+                "A normal click in movement mode did not select without moving.");
+        sendMouse(widget, QEvent::MouseButtonPress, QPointF(500, 120),
+                  Qt::LeftButton);
+        sendMouse(widget, QEvent::MouseMove, QPointF(500, 320),
+                  Qt::LeftButton);
+        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(500, 320),
+                  Qt::NoButton);
+        require(move_from_track == 0 && move_to_track == 1,
+                "A normal drag did not move the clip after disabling Alt requirement.");
+        require(seek_frames.size() == 1,
+                "A normal move drag was incorrectly treated as seeking.");
+
+        // Alt becomes the seek override when movement no longer requires it.
+        sendMouse(widget, QEvent::MouseButtonPress, QPointF(400, 120),
+                  Qt::LeftButton, Qt::AltModifier);
+        sendMouse(widget, QEvent::MouseMove, QPointF(700, 120),
+                  Qt::LeftButton, Qt::AltModifier);
+        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(700, 120),
+                  Qt::NoButton, Qt::AltModifier);
+        require(seek_frames.size() == 2 && seek_frames.back() > 0 &&
+                    seek_frames.back() < 100,
+                "Alt-drag did not seek after disabling the movement requirement.");
 
         // Blade Tool uses a click, not a drag, and reports the local frame.
         widget.setRazorMode(true);

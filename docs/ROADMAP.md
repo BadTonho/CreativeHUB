@@ -92,8 +92,9 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   remain pending.
 - [x] Add the multi-clip Timeline foundation with absolute positions, gaps,
   multiple tracks, and continuous playback within the active track.
-- [x] Add clip movement between video tracks and absolute positions with `Alt + drag`;
-  Ctrl + Left and Ctrl + Right now nudge the active clip by one frame.
+- [x] Add clip movement between video tracks and absolute positions with
+  configurable `Alt + drag`; Ctrl + Left and Ctrl + Right now nudge the active
+  clip by one frame.
 - [x] Add real clip splitting at the playhead and with the persistent Blade
   Tool; source offsets and segment-limited playback were manually validated.
 - [x] Add basic clip deletion and edge trimming with absolute placement;

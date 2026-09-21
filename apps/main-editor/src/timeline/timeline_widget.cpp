@@ -90,6 +90,7 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
         tracks_.size() * minimum_row_height +
         (tracks_.size() > 0 ? tracks_.size() - 1 : 0) * row_gap + 12.0));
     moving_active_ = false;
+    move_pending_ = false;
     trimming_ = false;
     dragging_ = false;
     seek_pending_ = false;
@@ -113,6 +114,7 @@ void TimelineWidget::clearClips() {
     playhead_frame_ = 0;
     drag_frame_.reset();
     moving_active_ = false;
+    move_pending_ = false;
     trimming_ = false;
     dragging_ = false;
     seek_pending_ = false;
@@ -160,6 +162,21 @@ void TimelineWidget::setRazorMode(bool enabled) {
 
 bool TimelineWidget::razorMode() const noexcept {
     return razor_mode_;
+}
+
+void TimelineWidget::setMoveRequiresAlt(bool enabled) {
+    move_requires_alt_ = enabled;
+    if (moving_active_ || move_pending_) {
+        move_pending_ = false;
+        moving_active_ = false;
+        move_target_track_.reset();
+        releaseMouse();
+    }
+    update();
+}
+
+bool TimelineWidget::moveRequiresAlt() const noexcept {
+    return move_requires_alt_;
 }
 
 QRectF TimelineWidget::trackRect(std::size_t index) const noexcept {
@@ -752,17 +769,7 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         }
         return;
     }
-    if (event->modifiers().testFlag(Qt::AltModifier)) {
-        moving_active_ = true;
-        moving_clip_ = *location;
-        move_target_track_ = location->track_index;
-        move_target_frame_ = tracks_[location->track_index].clips[location->clip_index].timeline_start_frame;
-        emit trimStarted();
-        grabMouse();
-        event->accept();
-        update();
-        return;
-    }
+    const bool alt_pressed = event->modifiers().testFlag(Qt::AltModifier);
     if (razor_mode_) {
         const auto frame = localFrameAt(*location, event->position().x());
         if (!frame.has_value()) {
@@ -805,6 +812,23 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if ((alt_pressed == move_requires_alt_) &&
+        !transitionClipIndexesAt(event->position().x(), event->position().y()).has_value() &&
+        !trimEdgeAt(*location, event->position().x()).has_value()) {
+        if (!active_clip_.has_value() || *active_clip_ != *location) {
+            emitSelected(*location);
+        }
+        move_pending_ = true;
+        moving_active_ = false;
+        moving_clip_ = *location;
+        move_press_position_ = event->position();
+        move_target_track_ = location->track_index;
+        move_target_frame_ = tracks_[location->track_index].clips[location->clip_index].timeline_start_frame;
+        grabMouse();
+        event->accept();
+        update();
+        return;
+    }
     if (!active_clip_.has_value() || *active_clip_ != *location) {
         emitSelected(*location);
         event->accept();
@@ -825,6 +849,15 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (move_pending_ && !moving_active_) {
+        if ((event->position() - move_press_position_).manhattanLength() <= 4) {
+            event->accept();
+            return;
+        }
+        move_pending_ = false;
+        moving_active_ = true;
+        emit trimStarted();
+    }
     if (moving_active_) {
         move_target_track_ = trackAt(event->position().y());
         if (move_target_track_.has_value()) {
@@ -880,14 +913,16 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
         event->ignore();
         return;
     }
-    if (moving_active_) {
+    if (moving_active_ || move_pending_) {
         const auto from = moving_clip_;
         const auto target_track = move_target_track_;
         const auto target_frame = move_target_frame_;
+        const bool moved = moving_active_;
+        move_pending_ = false;
         moving_active_ = false;
         move_target_track_.reset();
         releaseMouse();
-        if (target_track.has_value()) {
+        if (moved && target_track.has_value()) {
             emit clipMoveRequestedAt(
                 static_cast<qint64>(from.track_index),
                 static_cast<qint64>(from.clip_index),

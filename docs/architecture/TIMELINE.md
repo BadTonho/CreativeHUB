@@ -18,9 +18,9 @@ TimelineModel can locate the clip visible at a frame and the top-priority clip
 when tracks overlap.
 
 TimelineWidget presents the sequence with a shared frame-and-seconds ruler,
-separate track headers, per-track clip counts, visible gap regions, and
-track-specific clip colors. The active track and clip use a highlighted border;
-drop targets and the playhead are shown directly over the timeline content.
+separate track headers, per-track clip counts, and track-specific clip colors.
+The active track and clip use a highlighted border; drop targets and the
+playhead are shown directly over the timeline content.
 The timeline surface grows only as much as its track rows require; additional
 tracks are available through vertical scrolling.
 
@@ -32,13 +32,17 @@ playback and clears the preview without creating an error log entry.
 
 ## Editing gestures
 
-TimelineWidget draws one row per track and uses this priority:
+TimelineWidget draws one row per track and uses this priority by default:
 
-1. Alt + drag moves a clip between tracks and absolute positions.
+1. Normal drag moves a clip between tracks and absolute positions.
 2. Blade Tool splits at the frame under the cursor.
 3. An edge drag trims the current segment.
-4. An interior drag seeks the active clip.
+4. Alt + drag seeks the active clip.
 5. A simple click selects a clip.
+
+The Edit > Require Alt to Move Clips option is disabled by default and is
+stored as a user preference. When enabled, Alt + drag moves a clip and a
+normal drag seeks the active clip.
 
 Movement, splitting, and trimming do not decode while the pointer moves.
 Seeking decodes only after release. Delete removes the active clip without

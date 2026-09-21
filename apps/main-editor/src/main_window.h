@@ -246,6 +246,7 @@ private:
     QSlider* track_volume_slider_ = nullptr;
     QCheckBox* clip_mute_check_ = nullptr;
     QCheckBox* track_mute_check_ = nullptr;
+    QLabel* timeline_interaction_hint_ = nullptr;
     QLabel* playback_status_label_ = nullptr;
     std::array<QDoubleSpinBox*, 5> transform_spin_boxes_{};
     std::array<QPushButton*, 5> transform_key_buttons_{};
@@ -269,6 +270,7 @@ private:
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
     QAction* razor_tool_action_ = nullptr;
+    QAction* require_alt_to_move_action_ = nullptr;
     QAction* add_video_track_action_ = nullptr;
     QAction* rename_track_action_ = nullptr;
     QAction* move_track_up_action_ = nullptr;

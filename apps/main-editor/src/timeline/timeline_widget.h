@@ -38,6 +38,8 @@ public:
     void setPlayheadFrame(std::int64_t frame_index);
     void setRazorMode(bool enabled);
     [[nodiscard]] bool razorMode() const noexcept;
+    void setMoveRequiresAlt(bool enabled);
+    [[nodiscard]] bool moveRequiresAlt() const noexcept;
 
 signals:
     // Compatibility signals for the original first-track UI path.
@@ -101,8 +103,11 @@ private:
     std::int64_t playhead_frame_ = 0;
     std::optional<std::int64_t> drag_frame_;
     bool dragging_ = false;
+    bool move_requires_alt_ = false;
+    bool move_pending_ = false;
     bool moving_active_ = false;
     ClipLocation moving_clip_{};
+    QPointF move_press_position_{};
     std::optional<std::size_t> move_target_track_;
     std::int64_t move_target_frame_ = 0;
     bool trimming_ = false;
