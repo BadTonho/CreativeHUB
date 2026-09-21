@@ -440,8 +440,8 @@ QWidget* MainWindow::createTimeline() {
         timeline_widget_,
         &timeline::TimelineWidget::zoomRequested,
         this,
-        [this](double factor, double anchor_content_x) {
-            applyTimelineZoom(factor, anchor_content_x);
+        [this](double factor) {
+            applyTimelineZoom(factor);
         });
     connect(
         timeline_widget_,
@@ -455,16 +455,12 @@ QWidget* MainWindow::createTimeline() {
             updateProjectDirtyState();
         });
     connect(zoom_out_button, &QPushButton::clicked, this, [this]() {
-        if (timeline_widget_ == nullptr || timeline_scroll_ == nullptr) return;
-        const auto anchor = timeline_scroll_->horizontalScrollBar()->value() +
-            timeline_scroll_->viewport()->width() / 2.0;
-        applyTimelineZoom(timeline_widget_->nextZoomFactor(-1), anchor);
+        if (timeline_widget_ == nullptr) return;
+        applyTimelineZoom(timeline_widget_->nextZoomFactor(-1));
     });
     connect(zoom_in_button, &QPushButton::clicked, this, [this]() {
-        if (timeline_widget_ == nullptr || timeline_scroll_ == nullptr) return;
-        const auto anchor = timeline_scroll_->horizontalScrollBar()->value() +
-            timeline_scroll_->viewport()->width() / 2.0;
-        applyTimelineZoom(timeline_widget_->nextZoomFactor(1), anchor);
+        if (timeline_widget_ == nullptr) return;
+        applyTimelineZoom(timeline_widget_->nextZoomFactor(1));
     });
     zoom_out_button->setEnabled(timeline_widget_->canZoomOut());
     zoom_in_button->setEnabled(timeline_widget_->canZoomIn());
@@ -551,21 +547,25 @@ QWidget* MainWindow::createTimeline() {
     return container;
 }
 
-void MainWindow::applyTimelineZoom(double factor, double anchor_content_x) {
+void MainWindow::applyTimelineZoom(double factor) {
     if (timeline_widget_ == nullptr || timeline_scroll_ == nullptr) return;
 
     auto* scroll_bar = timeline_scroll_->horizontalScrollBar();
     const auto old_scroll = scroll_bar->value();
-    const auto anchor_frame = timeline_widget_->frameAtContentX(anchor_content_x);
-    const auto anchor_viewport_x = anchor_content_x - static_cast<double>(old_scroll);
+    const auto anchor_frame = timelinePlayheadFrame();
+    const auto anchor_content_x = timeline_widget_->contentXForFrame(anchor_frame);
+    const auto raw_anchor_viewport_x = anchor_content_x - static_cast<double>(old_scroll);
+    const auto viewport_width = static_cast<double>(timeline_scroll_->viewport()->width());
+    const auto anchor_viewport_x = raw_anchor_viewport_x >= 0.0 &&
+            raw_anchor_viewport_x <= viewport_width
+        ? raw_anchor_viewport_x
+        : viewport_width / 2.0;
     timeline_widget_->setZoomFactor(factor);
 
     QTimer::singleShot(0, timeline_scroll_, [this, anchor_frame, anchor_viewport_x]() {
         if (timeline_widget_ == nullptr || timeline_scroll_ == nullptr) return;
         auto* bar = timeline_scroll_->horizontalScrollBar();
-        const auto new_anchor_content_x = anchor_frame.has_value()
-            ? timeline_widget_->contentXForFrame(*anchor_frame)
-            : anchor_viewport_x + static_cast<double>(bar->value());
+        const auto new_anchor_content_x = timeline_widget_->contentXForFrame(anchor_frame);
         const auto target = static_cast<int>(std::llround(
             new_anchor_content_x - anchor_viewport_x));
         bar->setValue(target);

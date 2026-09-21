@@ -1154,7 +1154,7 @@ void TimelineWidget::wheelEvent(QWheelEvent* event) {
         event->accept();
         return;
     }
-    emit zoomRequested(next_factor, event->position().x());
+    emit zoomRequested(next_factor);
     event->accept();
 }
 

@@ -41,8 +41,8 @@ in the running Main Editor after UI or integration changes:
 - dock resizing, floating, re-docking, and restoration;
 - Timeline track height, maximum row height, vertical scrolling, stable
   one-hour horizontal scale, horizontal scrolling for longer content, zoom
-  controls from 25% through 800%, Ctrl + wheel pointer anchoring, center
-  anchoring from the buttons, timecode labels in `HH:MM:SS.mmm`, empty gaps
+  controls from 25% through 800%, Ctrl + wheel playhead anchoring, button
+  playhead anchoring, timecode labels in `HH:MM:SS.mmm`, empty gaps
   without overlays, and visual order;
 - Media Browser selection, bins, context actions, and drag-and-drop;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and

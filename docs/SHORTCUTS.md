@@ -18,7 +18,7 @@ It must change in the same commit as any shortcut change.
 | Ctrl + O | Open a project | Main Editor |
 | Ctrl + S | Save the current project or open Save As | Main Editor |
 | Ctrl + Shift + S | Save the current project under a new path | Main Editor |
-| Ctrl + Mouse Wheel | Zoom the timeline around the pointer | Timeline |
+| Ctrl + Mouse Wheel | Zoom the timeline around the playhead | Timeline |
 
 Alt + drag is a mouse gesture, not a keyboard shortcut. Ctrl + mouse wheel is
 documented here because it is the timeline zoom gesture. By default, normal

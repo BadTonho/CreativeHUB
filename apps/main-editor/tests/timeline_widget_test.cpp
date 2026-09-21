@@ -140,7 +140,6 @@ int main(int argc, char* argv[]) {
         int transition_to = -1;
         int zoom_requests = 0;
         double requested_zoom = 0.0;
-        double requested_anchor = 0.0;
 
         QObject::connect(
             &widget,
@@ -194,16 +193,13 @@ int main(int argc, char* argv[]) {
         QObject::connect(
             &widget,
             &timeline::TimelineWidget::zoomRequested,
-            [&zoom_requests, &requested_zoom, &requested_anchor](
-                double factor, double anchor) {
+            [&zoom_requests, &requested_zoom](double factor) {
                 ++zoom_requests;
                 requested_zoom = factor;
-                requested_anchor = anchor;
             });
 
         sendWheel(widget, QPointF(600, 120), 120, Qt::ControlModifier);
-        require(zoom_requests == 1 && requested_zoom == 1.25 &&
-                    requested_anchor == 600.0,
+        require(zoom_requests == 1 && requested_zoom == 1.25,
                 "Ctrl + wheel did not request the next timeline zoom level.");
         sendWheel(widget, QPointF(600, 120), -120);
         require(zoom_requests == 1,

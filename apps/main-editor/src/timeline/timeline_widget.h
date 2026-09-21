@@ -81,7 +81,7 @@ signals:
     void trimStarted();
     void seekStarted();
     void seekRequested(qint64 frame_index);
-    void zoomRequested(double factor, double anchor_content_x);
+    void zoomRequested(double factor);
     void zoomChanged(double factor);
 
 protected:

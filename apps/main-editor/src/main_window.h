@@ -158,7 +158,7 @@ private:
     void recordTimelineEdit(timeline::EditState state);
     void updateHistoryActions();
     void updateTimelineState();
-    void applyTimelineZoom(double factor, double anchor_content_x);
+    void applyTimelineZoom(double factor);
     void beginAudioEdit();
     void finishAudioEdit();
     void applyClipAudioControls();
