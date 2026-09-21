@@ -25,8 +25,8 @@ complete technical metadata on hover, including offline status, bin, and path
 when applicable. Context menus provide New Bin, Move to Bin, Remove from
 Browser, and Restore Media. Removing media never deletes the file or its
 Timeline clips, and the existing selection and internal drag-and-drop MIME
-flow remain unchanged. The Media Browser does not display a separate Add to
-Timeline button; imported media can still be added through the existing
+flow remain unchanged. The Media Browser does not display separate New Bin or
+Add to Timeline buttons; imported media can still be added through the existing
 Timeline drag-and-drop path and internal add operation. An empty library does
 not add a redundant status row below the browser; the panel keeps compact
 spacing around the header, bin tree, and media view.

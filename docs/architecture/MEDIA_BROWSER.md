@@ -20,8 +20,9 @@ do not provide preview or playback until restored. Missing media encountered
 while opening a project is loaded as offline; an existing but unreadable media
 file remains a technical open failure and the current project is preserved.
 
-The Browser provides a bin tree, a `New Bin` button, and a media view that can
-switch between compact list mode and fixed-size block mode. The selected view
+The Browser provides a bin tree and a media view that can switch between
+compact list mode and fixed-size block mode. Bin creation remains available
+through the existing context menus. The selected view
 is a global user preference stored in `QSettings` at
 `media_browser/view_mode`; the first-run default is list mode. Block mode uses
 the cached first frame already held by the media item and does not decode a new

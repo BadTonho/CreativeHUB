@@ -136,13 +136,6 @@ QWidget* MainWindow::createMediaBrowser() {
     title_row->addWidget(grid_view_button);
     layout->addLayout(title_row);
 
-    auto* browser_controls = new QHBoxLayout;
-    new_bin_button_ = new QPushButton("New Bin", container);
-    connect(new_bin_button_, &QPushButton::clicked, this, &MainWindow::createBin);
-    browser_controls->addWidget(new_bin_button_);
-    browser_controls->addStretch();
-    layout->addLayout(browser_controls);
-
     auto* browser_splitter = new QSplitter(Qt::Vertical, container);
     browser_splitter->setChildrenCollapsible(false);
     browser_splitter->setHandleWidth(6);

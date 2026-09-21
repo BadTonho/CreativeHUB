@@ -6,6 +6,7 @@
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QMimeData>
+#include <QPainter>
 
 namespace {
 
@@ -45,6 +46,37 @@ QMimeData* MediaBrowserBinTreeWidget::mimeData(
             bin_path.toUtf8());
     }
     return mime_data;
+}
+
+void MediaBrowserBinTreeWidget::drawBranches(
+    QPainter* painter,
+    const QRect& rect,
+    const QModelIndex& index) const {
+    if (painter == nullptr) return;
+
+    painter->save();
+    QPen pen(palette().color(QPalette::Mid));
+    pen.setWidth(1);
+    painter->setPen(pen);
+
+    const int indent = indentation();
+    if (indent > 1) {
+        const int firstLine = rect.left() + indent / 2;
+        const int lastLine = rect.right() - indent / 2;
+        if (lastLine >= firstLine) {
+            for (int x = firstLine; x <= lastLine; x += indent) {
+                painter->drawLine(x, rect.top(), x, rect.bottom());
+            }
+            painter->drawLine(
+                lastLine,
+                rect.center().y(),
+                rect.right(),
+                rect.center().y());
+        }
+    }
+
+    painter->restore();
+    QTreeWidget::drawBranches(painter, rect, index);
 }
 
 void MediaBrowserBinTreeWidget::dragEnterEvent(QDragEnterEvent* event) {

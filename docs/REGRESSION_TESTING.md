@@ -65,7 +65,8 @@ in the running Main Editor after UI or integration changes:
   cached thumbnails, compact item descriptions, hover over the information
   icon for the complete technical tooltip, selection, bins, context actions,
   folder items shown alongside media, folder icons, inline renaming with
-  double-click and F2, automatic New Bin naming without dialogs, protection of
+  double-click and F2, automatic New Bin naming without dialogs through the
+  context menu, protection of
   All Media/Unsorted, and preventing folder items from producing media drag data,
   one visible Media Browser title, vertical resizing between bins and media,
   minimum pane sizes, and restoration of the splitter position without marking
@@ -76,8 +77,9 @@ in the running Main Editor after UI or integration changes:
   drops, project dirty state, persistence after save/reopen, and drag-and-drop
   to the Timeline; confirm that invalid inline names restore the previous
   label and report a concise status message, and confirm that no Add to
-  Timeline button, redundant status row, or excessive top/bottom spacing is
-  shown while media drag-and-drop remains available;
+  Timeline or New Bin buttons, redundant status row, or excessive top/bottom
+  spacing is shown while media drag-and-drop remains available; confirm that
+  branch lines make nested bins visually distinguishable;
 - playback controls, keyboard shortcuts, seeking, trimming, Blade Tool, and
   clip movement;
 - Transform Inspector sliders for Position X/Y, Scale, Rotation, and Opacity;

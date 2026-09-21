@@ -261,7 +261,6 @@ private:
     PreviewWidget* preview_widget_ = nullptr;
     MediaBrowserListWidget* media_list_ = nullptr;
     MediaBrowserBinTreeWidget* bin_tree_ = nullptr;
-    QPushButton* new_bin_button_ = nullptr;
     QPushButton* previous_frame_button_ = nullptr;
     QPushButton* play_pause_button_ = nullptr;
     QPushButton* next_frame_button_ = nullptr;
