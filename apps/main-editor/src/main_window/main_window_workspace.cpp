@@ -133,6 +133,11 @@ void MainWindow::createWorkspace() {
 }
 void MainWindow::showSettingsDialog() {
     settings::SettingsDialog dialog(this, *shortcut_manager_);
+    connect(
+        &dialog,
+        &settings::SettingsDialog::previewPerformanceMetricsEnabledChanged,
+        this,
+        &MainWindow::configurePreviewPerformanceMetrics);
     dialog.exec();
 }
 void MainWindow::createMenus() {

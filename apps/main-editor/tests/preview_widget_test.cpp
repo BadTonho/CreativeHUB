@@ -1,5 +1,7 @@
 #include "preview_widget.h"
 
+#include "rendering/preview_performance_metrics.h"
+
 #include <QApplication>
 
 #include <cstdint>
@@ -40,7 +42,16 @@ int main(int argc, char* argv[]) {
         widget.show();
 
         const auto frame = makeFrame();
+        auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+        metrics.setEnabled(true);
+        metrics.reset();
         widget.setFrame(frame);
+        const auto preview_snapshot = metrics.takeSnapshotAndReset();
+        require(preview_snapshot.submitted_frames == 1,
+                "Preview metrics did not record the submitted frame.");
+        require(preview_snapshot.preview_submit.count == 1,
+                "Preview metrics did not time frame submission.");
+        metrics.setEnabled(false);
         widget.setGrayscaleEnabled(true);
         require(widget.isGrayscaleEnabled(), "Grayscale state was not enabled.");
         widget.resize(320, 240);

@@ -4,6 +4,7 @@
 #include "logging/logger.h"
 #include "preview_widget.h"
 #include "project/project_file.h"
+#include "rendering/preview_performance_metrics.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser_list_widget.h"
 
@@ -34,6 +35,7 @@
 #include <QSlider>
 #include <QStatusBar>
 #include <QStyle>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -52,6 +54,103 @@
 
 
 using namespace main_window_detail;
+
+namespace {
+
+using rendering::PreviewPerformanceSnapshot;
+using rendering::PreviewTimingSnapshot;
+
+void appendTimingContext(
+    logging::Context& context,
+    const char* name,
+    const PreviewTimingSnapshot& timing) {
+    const std::string prefix(name);
+    context.emplace_back(prefix + "_count", std::to_string(timing.count));
+    context.emplace_back(
+        prefix + "_avg_ms", std::to_string(timing.averageMilliseconds()));
+    context.emplace_back(
+        prefix + "_max_ms", std::to_string(timing.maximumMilliseconds()));
+}
+
+void appendPerformanceContext(
+    logging::Context& context,
+    const PreviewPerformanceSnapshot& snapshot) {
+    context.emplace_back(
+        "decoded_frames", std::to_string(snapshot.decoded_frames));
+    context.emplace_back(
+        "seek_operations", std::to_string(snapshot.seek_operations));
+    context.emplace_back(
+        "composed_frames", std::to_string(snapshot.composed_frames));
+    context.emplace_back(
+        "emitted_frames", std::to_string(snapshot.emitted_frames));
+    context.emplace_back(
+        "received_frames", std::to_string(snapshot.received_frames));
+    context.emplace_back(
+        "submitted_frames", std::to_string(snapshot.submitted_frames));
+    context.emplace_back(
+        "gpu_presented_frames", std::to_string(snapshot.gpu_presented_frames));
+    context.emplace_back(
+        "overwritten_frames", std::to_string(snapshot.overwritten_frames));
+    context.emplace_back(
+        "last_frame_width", std::to_string(snapshot.last_frame_width));
+    context.emplace_back(
+        "last_frame_height", std::to_string(snapshot.last_frame_height));
+    appendTimingContext(context, "decode", snapshot.decode);
+    appendTimingContext(context, "seek", snapshot.seek);
+    appendTimingContext(context, "composition", snapshot.composition);
+    appendTimingContext(context, "payload", snapshot.payload);
+    appendTimingContext(context, "ui_callback", snapshot.ui_callback);
+    appendTimingContext(context, "preview_submit", snapshot.preview_submit);
+    appendTimingContext(context, "cpu_surface", snapshot.cpu_surface);
+    appendTimingContext(context, "gpu_upload", snapshot.gpu_upload);
+    appendTimingContext(context, "gpu_paint", snapshot.gpu_paint);
+}
+
+} // namespace
+
+void MainWindow::configurePreviewPerformanceMetrics(bool enabled) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(false);
+    metrics.reset();
+
+    if (!enabled) {
+        if (preview_metrics_timer_ != nullptr) preview_metrics_timer_->stop();
+        return;
+    }
+
+    if (preview_metrics_timer_ == nullptr) {
+        preview_metrics_timer_ = new QTimer(this);
+        preview_metrics_timer_->setInterval(1000);
+        connect(
+            preview_metrics_timer_,
+            &QTimer::timeout,
+            this,
+            &MainWindow::flushPreviewPerformanceMetrics);
+    }
+
+    metrics.setEnabled(true);
+    preview_metrics_timer_->start();
+}
+
+void MainWindow::flushPreviewPerformanceMetrics() {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    if (!metrics.isEnabled()) return;
+
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    if (snapshot.emitted_frames == 0 && snapshot.received_frames == 0 &&
+        snapshot.submitted_frames == 0) {
+        return;
+    }
+
+    logging::Context context;
+    appendPerformanceContext(context, snapshot);
+    logging::Logger::instance().log(
+        logging::Level::Info,
+        "preview",
+        "performance_metrics",
+        "Preview performance sample.",
+        context);
+}
 
 void MainWindow::initializePlayback() {
     qRegisterMetaType<playback::VideoFramePtr>();
@@ -581,6 +680,12 @@ void MainWindow::handlePlaybackFrame(
     qint64 frame_index,
     quint64 generation) {
     if (generation != playback_generation_ || frame == nullptr) return;
+
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    rendering::PreviewPerformanceScope timing(
+        metrics,
+        rendering::PreviewTiming::UiCallback);
+    metrics.recordReceivedFrame();
 
     if (pending_clip_activation_.has_value() &&
         pending_clip_activation_->generation == generation) {

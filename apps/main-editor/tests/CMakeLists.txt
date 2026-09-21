@@ -179,6 +179,8 @@ add_executable(creative-suite-main-editor-playback-worker-tests
     ../src/playback/playback_worker.h
     ../src/rendering/frame_compositor.cpp
     ../src/rendering/frame_compositor.h
+    ../src/rendering/preview_performance_metrics.cpp
+    ../src/rendering/preview_performance_metrics.h
     ../src/rendering/text_renderer.cpp
     ../src/rendering/text_renderer.h
     ../src/timeline/timeline_model.cpp
@@ -653,6 +655,8 @@ add_executable(creative-suite-main-editor-settings-dialog-tests
     ../src/settings/settings_dialog.h
     ../src/settings/shortcut_manager.cpp
     ../src/settings/shortcut_manager.h
+    ../src/settings/user_preferences.cpp
+    ../src/settings/user_preferences.h
 )
 
 target_include_directories(creative-suite-main-editor-settings-dialog-tests PRIVATE
@@ -852,6 +856,8 @@ add_executable(creative-suite-main-editor-preview-tests
     ../src/preview_widget.h
     ../src/rendering/opengl_preview_surface.cpp
     ../src/rendering/opengl_preview_surface.h
+    ../src/rendering/preview_performance_metrics.cpp
+    ../src/rendering/preview_performance_metrics.h
     ../src/media/video_frame.h
 )
 
@@ -918,6 +924,29 @@ add_test(
 )
 set_tests_properties(creative-suite-main-editor-preview PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1"
+)
+
+add_executable(creative-suite-main-editor-preview-performance-metrics-tests
+    preview_performance_metrics_test.cpp
+    ../src/rendering/preview_performance_metrics.cpp
+    ../src/rendering/preview_performance_metrics.h
+)
+
+target_include_directories(creative-suite-main-editor-preview-performance-metrics-tests PRIVATE
+    ../src
+)
+
+target_compile_features(creative-suite-main-editor-preview-performance-metrics-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-preview-performance-metrics-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-preview-performance-metrics-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-preview-performance-metrics
+    COMMAND creative-suite-main-editor-preview-performance-metrics-tests
 )
 
 add_executable(creative-suite-main-editor-system-memory-tests

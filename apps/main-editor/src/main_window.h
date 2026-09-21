@@ -36,6 +36,7 @@ class QSlider;
 class QSpinBox;
 class QTabWidget;
 class QScrollArea;
+class QTimer;
 class MediaBrowserBinTreeWidget;
 class MediaBrowserListWidget;
 class QListWidgetItem;
@@ -87,6 +88,8 @@ private:
     QWidget* createTimeline();
     void initializePlayback();
     void shutdownPlayback();
+    void configurePreviewPerformanceMetrics(bool enabled);
+    void flushPreviewPerformanceMetrics();
     void openMedia();
     void updateMediaDetails(int row);
     void populateMediaBrowser(
@@ -303,6 +306,7 @@ private:
     QLabel* playback_status_label_ = nullptr;
     QLabel* timeline_message_label_ = nullptr;
     SystemMemoryIndicator* system_memory_indicator_ = nullptr;
+    QTimer* preview_metrics_timer_ = nullptr;
     bool media_browser_inline_rename_pending_ = false;
     std::array<QDoubleSpinBox*, 5> transform_spin_boxes_{};
     std::array<QSlider*, 5> transform_sliders_{};

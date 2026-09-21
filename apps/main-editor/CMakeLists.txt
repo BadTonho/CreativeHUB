@@ -30,6 +30,8 @@ add_executable(creative-suite-main-editor
     src/settings/settings_dialog.h
     src/settings/shortcut_manager.cpp
     src/settings/shortcut_manager.h
+    src/settings/user_preferences.cpp
+    src/settings/user_preferences.h
     src/system/system_memory_usage.cpp
     src/system/system_memory_usage.h
     src/preview_widget.cpp
@@ -38,6 +40,8 @@ add_executable(creative-suite-main-editor
     src/rendering/opengl_preview_surface.h
     src/rendering/frame_compositor.cpp
     src/rendering/frame_compositor.h
+    src/rendering/preview_performance_metrics.cpp
+    src/rendering/preview_performance_metrics.h
     src/rendering/text_renderer.cpp
     src/rendering/text_renderer.h
     src/playback/playback_worker.cpp

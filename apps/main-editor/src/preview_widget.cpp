@@ -1,6 +1,7 @@
 #include "preview_widget.h"
 
 #include "rendering/opengl_preview_surface.h"
+#include "rendering/preview_performance_metrics.h"
 
 #include <QImage>
 #include <QLabel>
@@ -54,6 +55,12 @@ void PreviewWidget::setFrame(const media::VideoFrame& frame) {
         clearFrame("Preview frame is unavailable.");
         return;
     }
+
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    rendering::PreviewPerformanceScope timing(
+        metrics,
+        rendering::PreviewTiming::PreviewSubmit);
+    metrics.recordSubmittedFrame(frame.width, frame.height);
 
     const QImage image(
         frame.rgba_pixels.data(),
@@ -113,6 +120,11 @@ void PreviewWidget::updateCpuPixmap() {
     const auto image = grayscale_enabled_ ? grayscaleImage() : frame_image_;
     const auto available_size = cpu_surface_->contentsRect().size();
     if (!available_size.isValid()) return;
+
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    rendering::PreviewPerformanceScope timing(
+        metrics,
+        rendering::PreviewTiming::CpuSurface);
 
     cpu_surface_->setText({});
     cpu_surface_->setPixmap(QPixmap::fromImage(

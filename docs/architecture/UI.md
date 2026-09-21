@@ -99,6 +99,11 @@ global reset actions. The dialog opens at a larger 960x720 layout so the
 shortcut list is easier to review. Shortcut values are global user preferences
 stored by `QSettings` under `shortcuts/<id>`; mouse gestures are intentionally
 excluded.
+The `General` tab also provides the disabled-by-default `Enable preview
+performance metrics` preference. It is stored globally under
+`performance/preview_metrics_enabled` and applies immediately. When enabled,
+the Preview writes one aggregated numeric performance sample per second to the
+application log; it never becomes project data or marks the project dirty.
 The existing timeline choices remain in the Edit menu. Opening or closing the
 dialog, or changing a shortcut, does not change project data, project dirty
 state, undo/redo history, or the `.csp` format. `SettingsDialog` and

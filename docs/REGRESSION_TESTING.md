@@ -33,6 +33,7 @@ updated intentionally.
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
 | Settings dialog | Modal shell, General, Timeline, and Shortcuts tabs, Close action, independent component construction, and editable shortcut preferences |
+| Preview performance metrics | Deterministic counter/timing aggregation, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
@@ -51,6 +52,12 @@ in the running Main Editor after UI or integration changes:
   opens a modal dialog with `General`, `Timeline`, and `Shortcuts` tabs, closes
   without changing project dirty state, and leaves the existing Edit menu
   preferences available;
+- Settings > General: confirm preview performance metrics are disabled by
+  default, can be enabled immediately, persist globally after reopening the
+  editor, write aggregated numeric `preview/performance_metrics` samples about
+  once per second while Preview is active, and stop logging when disabled;
+  confirm this preference does not modify project dirty state, `.csp` data, or
+  Undo/Redo;
 - Settings > Shortcuts: edit a shortcut, confirm it applies immediately and
   persists after reopening the editor, clear a shortcut to disable it, confirm
   duplicate combinations are rejected and the previous value is restored, and

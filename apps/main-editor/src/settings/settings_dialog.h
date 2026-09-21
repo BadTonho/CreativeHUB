@@ -16,6 +16,9 @@ public:
         QWidget* parent,
         ShortcutManager& shortcut_manager);
 
+signals:
+    void previewPerformanceMetricsEnabledChanged(bool enabled);
+
 private:
     [[nodiscard]] QWidget* createGeneralPage();
     [[nodiscard]] QWidget* createTimelinePage();

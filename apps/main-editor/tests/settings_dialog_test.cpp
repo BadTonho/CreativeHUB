@@ -1,8 +1,11 @@
 #include "settings/settings_dialog.h"
 #include "settings/shortcut_manager.h"
+#include "settings/user_preferences.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QDialogButtonBox>
+#include <QSettings>
 #include <QTabWidget>
 
 #include <cstdio>
@@ -20,6 +23,11 @@ int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
 
     try {
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings settings;
+        settings.clear();
+        settings.sync();
+
         settings::ShortcutManager shortcut_manager;
         settings::SettingsDialog dialog(nullptr, shortcut_manager);
         require(dialog.windowTitle() == "Settings",
@@ -44,7 +52,31 @@ int main(int argc, char* argv[]) {
         require(buttons->button(QDialogButtonBox::Close) != nullptr,
                 "Settings dialog Close button is missing.");
 
+        auto* metrics_check = dialog.findChild<QCheckBox*>(
+            "previewMetricsCheckBox");
+        require(metrics_check != nullptr,
+                "Preview metrics checkbox is missing.");
+        require(!metrics_check->isChecked(),
+                "Preview metrics must be disabled by default.");
+
+        bool signal_emitted = false;
+        bool signal_value = false;
+        QObject::connect(
+            &dialog,
+            &settings::SettingsDialog::previewPerformanceMetricsEnabledChanged,
+            [&signal_emitted, &signal_value](bool enabled) {
+                signal_emitted = true;
+                signal_value = enabled;
+            });
+        metrics_check->setChecked(true);
+        require(signal_emitted && signal_value,
+                "Enabling preview metrics did not emit its signal.");
+        require(
+            settings.value(settings::kPreviewMetricsEnabledKey).toBool(),
+            "Preview metrics preference was not persisted.");
+
         dialog.close();
+        settings.clear();
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

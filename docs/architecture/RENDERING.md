@@ -33,6 +33,24 @@ OpenGL resource creation, texture uploads, and drawing stay on the UI/OpenGL
 thread. The UI copies incoming frame data only into its temporary CPU fallback
 and transfers the owning frame payload to the OpenGL surface for upload.
 
+## Preview performance diagnostics
+
+Preview performance metrics are disabled by default. They can be enabled from
+`Settings > General` with `Enable preview performance metrics`. The global
+preference is stored in `QSettings` under
+`performance/preview_metrics_enabled` and applies immediately without changing
+the project, `.csp` data, Timeline history, or Undo/Redo state.
+
+When enabled, the application aggregates data for one-second intervals and
+writes at most one numeric summary per interval through the existing logger
+using the `preview/performance_metrics` operation. The summary includes decoded,
+seeked, composed, emitted, received, submitted, presented, and overwritten
+frame counts; the last frame dimensions; and average/maximum milliseconds for
+decoding, seeking, composition, payload creation, the UI callback, Preview
+submission, CPU presentation, GPU texture upload, and GPU painting. No media
+paths or per-frame log entries are written. When disabled, the timer stops and
+the hot path does not collect detailed timings.
+
 SDL3 and the archived SDL3 prototype are intentionally not reused by the Main
 Editor: the application already depends on Qt Widgets, and adding a second
 window/input/GPU stack would increase deployment and boundary complexity before

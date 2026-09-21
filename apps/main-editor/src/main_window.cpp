@@ -1,6 +1,8 @@
 #include "main_window.h"
 
 #include "settings/shortcut_manager.h"
+#include "settings/user_preferences.h"
+#include "rendering/preview_performance_metrics.h"
 
 #include <QCloseEvent>
 #include <QSettings>
@@ -43,6 +45,8 @@ MainWindow::MainWindow(QWidget* parent)
     createWorkspace();
     createMenus();
     initializePlayback();
+    configurePreviewPerformanceMetrics(
+        settings::previewPerformanceMetricsEnabled());
 
     saved_project_document_ = currentProjectDocument();
     updateProjectDirtyState();
@@ -55,6 +59,7 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 MainWindow::~MainWindow() {
+    configurePreviewPerformanceMetrics(false);
     shutdownPlayback();
 }
 

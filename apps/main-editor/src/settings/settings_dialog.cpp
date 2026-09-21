@@ -1,7 +1,9 @@
 #include "settings/settings_dialog.h"
 
 #include "settings/shortcut_manager.h"
+#include "settings/user_preferences.h"
 
+#include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QHash>
 #include <QHBoxLayout>
@@ -42,11 +44,27 @@ SettingsDialog::SettingsDialog(
 QWidget* SettingsDialog::createGeneralPage() {
     auto* page = new QWidget(this);
     auto* layout = new QVBoxLayout(page);
-    auto* message = new QLabel(
-        "General user preferences will be added here.", page);
-    message->setAlignment(Qt::AlignCenter);
-    message->setWordWrap(true);
-    layout->addWidget(message);
+    auto* metrics_check = new QCheckBox(
+        "Enable preview performance metrics", page);
+    metrics_check->setObjectName("previewMetricsCheckBox");
+    metrics_check->setToolTip(
+        "Collect one aggregated Preview performance sample per second in the application log.");
+    metrics_check->setChecked(settings::previewPerformanceMetricsEnabled());
+
+    auto* description = new QLabel(
+        "When enabled, the Main Editor records aggregated decoding, composition, UI, and GPU timing data. "
+        "This preference is global and does not modify projects.",
+        page);
+    description->setWordWrap(true);
+
+    layout->addWidget(metrics_check);
+    layout->addWidget(description);
+    layout->addStretch();
+
+    connect(metrics_check, &QCheckBox::toggled, this, [this](bool enabled) {
+        settings::setPreviewPerformanceMetricsEnabled(enabled);
+        emit previewPerformanceMetricsEnabledChanged(enabled);
+    });
     return page;
 }
 

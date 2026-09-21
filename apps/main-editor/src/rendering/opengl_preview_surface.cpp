@@ -1,5 +1,7 @@
 #include "opengl_preview_surface.h"
 
+#include "preview_performance_metrics.h"
+
 #include <QOpenGLContext>
 #include <QOpenGLFunctions_3_2_Core>
 #include <QOpenGLShaderProgram>
@@ -87,6 +89,8 @@ void OpenGLPreviewSurface::setFrame(const media::VideoFrame& frame) {
         return;
     }
 
+    auto& metrics = PreviewPerformanceMetrics::instance();
+    if (pending_frame_valid_) metrics.recordOverwrittenFrame();
     pending_frame_ = frame;
     pending_frame_valid_ = true;
     update();
@@ -161,6 +165,9 @@ void OpenGLPreviewSurface::paintGL() {
     if (pending_frame_valid_ && !uploadPendingFrame()) return;
     if (!frame_available_ || shader_program_ == nullptr) return;
 
+    auto& metrics = PreviewPerformanceMetrics::instance();
+    PreviewPerformanceScope timing(metrics, PreviewTiming::GpuPaint);
+
     shader_program_->bind();
     shader_program_->setUniformValue("u_texture", 0);
     shader_program_->setUniformValue("u_grayscale", grayscale_enabled_);
@@ -172,6 +179,7 @@ void OpenGLPreviewSurface::paintGL() {
     functions_->glBindVertexArray(0);
     functions_->glBindTexture(GL_TEXTURE_2D, 0);
     shader_program_->release();
+    metrics.recordGpuPresentedFrame();
 
     const auto error = functions_->glGetError();
     if (error != GL_NO_ERROR) {
@@ -206,6 +214,9 @@ bool OpenGLPreviewSurface::uploadPendingFrame() {
         frame_available_ = false;
         return true;
     }
+
+    auto& metrics = PreviewPerformanceMetrics::instance();
+    PreviewPerformanceScope timing(metrics, PreviewTiming::GpuUpload);
 
     std::vector<std::uint8_t> packed_pixels;
     const std::uint8_t* pixels = frame.rgba_pixels.data();

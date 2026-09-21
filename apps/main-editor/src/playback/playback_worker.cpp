@@ -1,6 +1,7 @@
 #include "playback_worker.h"
 
 #include "../logging/logger.h"
+#include "../rendering/preview_performance_metrics.h"
 #include "../rendering/text_renderer.h"
 
 #include <QFileInfo>
@@ -349,11 +350,26 @@ void PlaybackWorker::renderCompositionFrame(
                 0,
                 segment_frame_count_ - 1);
         }
-        const auto composed = decodeCompositionAt(global_frame);
+        auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+        std::optional<media::VideoFrame> composed;
+        {
+            rendering::PreviewPerformanceScope timing(
+                metrics,
+                rendering::PreviewTiming::Composition);
+            composed = decodeCompositionAt(global_frame);
+        }
         if (!composed.has_value()) {
             throw media::MediaError("The timeline composition could not produce a frame.");
         }
-        auto payload = std::make_shared<const media::VideoFrame>(*composed);
+        metrics.recordComposedFrame();
+        std::shared_ptr<const media::VideoFrame> payload;
+        {
+            rendering::PreviewPerformanceScope timing(
+                metrics,
+                rendering::PreviewTiming::Payload);
+            payload = std::make_shared<const media::VideoFrame>(*composed);
+        }
+        metrics.recordEmittedFrame();
         emit frameReady(std::move(payload), frame_index, generation_);
     } catch (const media::MediaError& error) {
         reportFailure(error, "compose", frame_index);
@@ -386,7 +402,15 @@ void PlaybackWorker::stepForward() {
             finishPlayback();
             return;
         }
-        const auto frame = session_->decode_next_frame();
+        auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+        std::optional<media::VideoFrame> frame;
+        {
+            rendering::PreviewPerformanceScope timing(
+                metrics,
+                rendering::PreviewTiming::Decode);
+            frame = session_->decode_next_frame();
+        }
+        if (frame.has_value()) metrics.recordDecodedFrame();
         if (!frame.has_value() ||
             !isSourceFrameInRange(session_->current_frame_index())) {
             finishPlayback();
@@ -417,7 +441,17 @@ void PlaybackWorker::stepBackward() {
         if (!source_frame.has_value()) {
             throw media::MediaError("The requested previous frame is outside the playback segment.");
         }
-        emitFrame(session_->decode_frame_at(*source_frame));
+        auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+        std::optional<media::VideoFrame> frame;
+        {
+            rendering::PreviewPerformanceScope timing(
+                metrics,
+                rendering::PreviewTiming::Seek);
+            frame = session_->decode_frame_at(*source_frame);
+        }
+        metrics.recordSeekOperation();
+        if (frame.has_value()) metrics.recordDecodedFrame();
+        emitFrame(std::move(frame));
         audio_position_valid_ = false;
     } catch (const media::MediaError& error) {
         reportFailure(error, "step_backward");
@@ -469,11 +503,22 @@ void PlaybackWorker::processPendingSeek() {
                 if (!source_frame.has_value()) {
                     throw media::MediaError("The requested source frame is outside the media range.");
                 }
-                auto frame = session_->decode_frame_at(source_frame.value(), seek_is_current);
+                auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+                std::optional<media::VideoFrame> frame;
+                {
+                    rendering::PreviewPerformanceScope timing(
+                        metrics,
+                        rendering::PreviewTiming::Seek);
+                    frame = session_->decode_frame_at(
+                        source_frame.value(),
+                        seek_is_current);
+                }
+                metrics.recordSeekOperation();
                 if (!isSeekCurrent(sequence)) continue;
                 if (!frame.has_value()) {
                     throw media::MediaError("The requested frame is outside the media range.");
                 }
+                metrics.recordDecodedFrame();
                 emitFrame(std::move(frame));
                 audio_position_valid_ = false;
                 pending_audio_bytes_.clear();
@@ -542,23 +587,39 @@ void PlaybackWorker::decodeTick() {
                 audio_clock_origin_frame_ + static_cast<std::int64_t>(
                     std::floor(static_cast<double>(elapsed_usecs) * frame_rate_ / 1000000.0)));
             if (target_frame <= current_frame_index_) return;
+            auto& metrics = rendering::PreviewPerformanceMetrics::instance();
             while (current_frame_index_ < target_frame) {
-                const auto frame = session_->decode_next_frame();
+                std::optional<media::VideoFrame> frame;
+                {
+                    rendering::PreviewPerformanceScope timing(
+                        metrics,
+                        rendering::PreviewTiming::Decode);
+                    frame = session_->decode_next_frame();
+                }
                 if (!frame.has_value() ||
                     !isSourceFrameInRange(session_->current_frame_index())) {
                     finishPlayback();
                     return;
                 }
+                metrics.recordDecodedFrame();
                 emitFrame(frame);
             }
             return;
         }
-        const auto frame = session_->decode_next_frame();
+        auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+        std::optional<media::VideoFrame> frame;
+        {
+            rendering::PreviewPerformanceScope timing(
+                metrics,
+                rendering::PreviewTiming::Decode);
+            frame = session_->decode_next_frame();
+        }
         if (!frame.has_value() ||
             !isSourceFrameInRange(session_->current_frame_index())) {
             finishPlayback();
             return;
         }
+        metrics.recordDecodedFrame();
         emitFrame(frame);
     } catch (const media::MediaError& error) {
         reportFailure(error, "decode_tick");
@@ -782,17 +843,40 @@ void PlaybackWorker::emitFrame(std::optional<media::VideoFrame> frame) {
         emitComposedFrame();
         return;
     }
-    auto payload = std::make_shared<const media::VideoFrame>(std::move(*frame));
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    std::shared_ptr<const media::VideoFrame> payload;
+    {
+        rendering::PreviewPerformanceScope timing(
+            metrics,
+            rendering::PreviewTiming::Payload);
+        payload = std::make_shared<const media::VideoFrame>(std::move(*frame));
+    }
+    metrics.recordEmittedFrame();
     emit frameReady(std::move(payload), current_frame_index_, generation_);
 }
 
 void PlaybackWorker::emitComposedFrame() {
-    const auto composed = decodeCompositionAt(
-        primary_timeline_start_frame_ + current_frame_index_);
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    std::optional<media::VideoFrame> composed;
+    {
+        rendering::PreviewPerformanceScope timing(
+            metrics,
+            rendering::PreviewTiming::Composition);
+        composed = decodeCompositionAt(
+            primary_timeline_start_frame_ + current_frame_index_);
+    }
     if (!composed.has_value()) {
         throw media::MediaError("The timeline composition could not produce a frame.");
     }
-    auto payload = std::make_shared<const media::VideoFrame>(*composed);
+    metrics.recordComposedFrame();
+    std::shared_ptr<const media::VideoFrame> payload;
+    {
+        rendering::PreviewPerformanceScope timing(
+            metrics,
+            rendering::PreviewTiming::Payload);
+        payload = std::make_shared<const media::VideoFrame>(*composed);
+    }
+    metrics.recordEmittedFrame();
     emit frameReady(std::move(payload), current_frame_index_, generation_);
 }
 
@@ -956,6 +1040,9 @@ std::optional<media::VideoFrame> PlaybackWorker::decodeCompositionAt(
             }
         } else if (request.composition->session != nullptr) {
             frame = request.composition->session->decode_frame_at(source_frame);
+            if (frame.has_value()) {
+                rendering::PreviewPerformanceMetrics::instance().recordDecodedFrame();
+            }
         }
         if (!frame.has_value()) continue;
         decoded_frames.push_back(std::move(*frame));
