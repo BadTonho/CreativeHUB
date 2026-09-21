@@ -22,7 +22,7 @@ SettingsDialog::SettingsDialog(
     : QDialog(parent), shortcut_manager_(shortcut_manager) {
     setWindowTitle("Settings");
     setModal(true);
-    resize(720, 560);
+    resize(960, 720);
 
     auto* layout = new QVBoxLayout(this);
     auto* tabs = new QTabWidget(this);

@@ -25,6 +25,8 @@ int main(int argc, char* argv[]) {
         require(dialog.windowTitle() == "Settings",
                 "Settings dialog title is incorrect.");
         require(dialog.isModal(), "Settings dialog must be modal.");
+        require(dialog.width() >= 900 && dialog.height() >= 680,
+                "Settings dialog default size is too small.");
 
         const auto* tabs = dialog.findChild<QTabWidget*>();
         require(tabs != nullptr, "Settings dialog tabs are missing.");

@@ -30,8 +30,10 @@ to the left of `Help`. It opens a modal settings dialog with `General`,
 `Timeline`, and `Shortcuts` tabs. The `Shortcuts` tab exposes every current
 Main Editor keyboard action, applies valid changes immediately, permits empty
 assignments, rejects duplicate combinations, and provides individual and
-global reset actions. Shortcut values are global user preferences stored by
-`QSettings` under `shortcuts/<id>`; mouse gestures are intentionally excluded.
+global reset actions. The dialog opens at a larger 960x720 layout so the
+shortcut list is easier to review. Shortcut values are global user preferences
+stored by `QSettings` under `shortcuts/<id>`; mouse gestures are intentionally
+excluded.
 The existing timeline choices remain in the Edit menu. Opening or closing the
 dialog, or changing a shortcut, does not change project data, project dirty
 state, undo/redo history, or the `.csp` format. `SettingsDialog` and
