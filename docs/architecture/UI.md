@@ -85,8 +85,8 @@ track-specific colors, and explicit drop/playhead markers. The dock
 provides Add Video Track, Rename Track, Track Up, Track Down, and Remove Track.
 Only empty tracks can be removed.
 Playback state is shown in a compact fixed footer below the timeline content;
-it does not expand with the dock. The current frame and transient `Loading
-timeline clip...` state share one line in that footer instead of creating a
+it does not expand with the dock. The current frame and `Loading timeline
+clip...` state share one line in that footer instead of creating a
 second global status-bar row. The timeline receives the expandable dock space,
 and its track rows grow within that space while additional rows remain
 available through vertical scrolling. Each track row has a provisional maximum

@@ -506,11 +506,10 @@ void MainWindow::updatePlaybackStatus() {
 
     const bool timeline_loading = pending_clip_activation_.has_value();
     if (timeline_loading_label_ != nullptr) {
-        timeline_loading_label_->setText(
-            timeline_loading
-                ? QStringLiteral("Loading timeline clip...")
-                : QString());
-        timeline_loading_label_->setVisible(timeline_loading);
+        if (timeline_loading) {
+            timeline_loading_label_->setText("Loading timeline clip...");
+            timeline_loading_label_->setVisible(true);
+        }
     }
 
     if (timeline_loading &&
