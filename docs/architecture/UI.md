@@ -80,12 +80,15 @@ frame when valid. Ctrl + K splits at the playhead. Undo and Redo pause
 playback, invalidate worker generations, and restore Timeline metadata,
 selection, active track, and playhead without storing decoded frames.
 
-The Timeline audio row exposes independent Clip and Track gain sliders and
-mute checkboxes for the active clip. Gains are shown as 0% to 200%; dragging a
-slider creates one coalesced Timeline history entry. Audio output follows the
-worker playback clock when possible. Missing audio, disabled output, or an
-unavailable device keeps the video fallback running and reports a short status
-message while the detailed cause goes to the local log.
+The Inspector provides `Inspector` and `Audio` tabs. The `Audio` tab exposes
+independent Clip and Track gain sliders and mute checkboxes for the active
+video clip and its track, grouped vertically. Gains are shown as 0% to 200%;
+dragging a slider creates one coalesced Timeline history entry. The active tab
+is restored from the global user settings and does not affect project dirty
+state or `.csp` data. Audio output follows the worker playback clock when
+possible. Missing audio, disabled output, or an unavailable device keeps the
+video fallback running and reports a short status message while the detailed
+cause goes to the local log.
 
 User-facing keyboard shortcuts are maintained in docs/SHORTCUTS.md and must be
 updated in the same change as any shortcut change.

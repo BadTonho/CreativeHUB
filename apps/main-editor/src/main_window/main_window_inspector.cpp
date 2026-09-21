@@ -19,6 +19,7 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QFontComboBox>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QKeySequence>
@@ -34,10 +35,12 @@
 #include <QPushButton>
 #include <QPlainTextEdit>
 #include <QSignalBlocker>
+#include <QSettings>
 #include <QSpinBox>
 #include <QScrollArea>
 #include <QSlider>
 #include <QStatusBar>
+#include <QTabWidget>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -89,16 +92,22 @@ double transformValueFromSlider(int slider_value, double minimum, double maximum
 
 QWidget* MainWindow::createInspector() {
     auto* container = new QWidget(this);
-    auto* layout = new QVBoxLayout(container);
+    auto* outer_layout = new QVBoxLayout(container);
+    outer_layout->setContentsMargins(0, 0, 0, 0);
+    outer_layout->setSpacing(0);
+
+    inspector_tabs_ = new QTabWidget(container);
+    auto* inspector_page = new QWidget(inspector_tabs_);
+    auto* layout = new QVBoxLayout(inspector_page);
     layout->setContentsMargins(12, 12, 12, 12);
     layout->setSpacing(8);
 
-    auto* title = new QLabel("Transform", container);
+    auto* title = new QLabel("Transform", inspector_page);
     title->setStyleSheet("font-weight: 600; font-size: 14px;");
     layout->addWidget(title);
 
     auto* description = new QLabel(
-        "Values are normalized to the 1920×1080 project canvas.", container);
+        "Values are normalized to the 1920×1080 project canvas.", inspector_page);
     description->setWordWrap(true);
     description->setStyleSheet("color: #9aa4b2;");
     layout->addWidget(description);
@@ -109,7 +118,7 @@ QWidget* MainWindow::createInspector() {
     const std::array<QString, 5> labels{
         "Position X", "Position Y", "Scale", "Rotation", "Opacity"};
     for (int index = 0; index < 5; ++index) {
-        auto* row = new QWidget(container);
+        auto* row = new QWidget(inspector_page);
         auto* row_layout = new QHBoxLayout(row);
         row_layout->setContentsMargins(0, 0, 0, 0);
         row_layout->setSpacing(4);
@@ -178,7 +187,7 @@ QWidget* MainWindow::createInspector() {
     }
     layout->addLayout(form);
 
-    text_controls_ = new QWidget(container);
+    text_controls_ = new QWidget(inspector_page);
     auto* text_layout = new QVBoxLayout(text_controls_);
     text_layout->setContentsMargins(0, 8, 0, 0);
     text_layout->setSpacing(6);
@@ -207,7 +216,7 @@ QWidget* MainWindow::createInspector() {
     text_layout->addWidget(apply_text_button_);
     layout->addWidget(text_controls_);
 
-    transition_controls_ = new QWidget(container);
+    transition_controls_ = new QWidget(inspector_page);
     auto* transition_layout = new QVBoxLayout(transition_controls_);
     transition_layout->setContentsMargins(0, 8, 0, 0);
     transition_layout->setSpacing(6);
@@ -233,6 +242,51 @@ QWidget* MainWindow::createInspector() {
     transition_controls_->setVisible(false);
     layout->addWidget(transition_controls_);
 
+    auto* audio_page = new QWidget(inspector_tabs_);
+    auto* audio_layout = new QVBoxLayout(audio_page);
+    audio_layout->setContentsMargins(12, 12, 12, 12);
+    audio_layout->setSpacing(8);
+
+    auto* clip_audio_group = new QGroupBox("Clip", audio_page);
+    auto* clip_audio_layout = new QFormLayout(clip_audio_group);
+    clip_volume_slider_ = new QSlider(Qt::Horizontal, clip_audio_group);
+    clip_volume_slider_->setRange(0, 200);
+    clip_volume_slider_->setValue(100);
+    clip_volume_slider_->setToolTip("Active clip volume (0% to 200%)");
+    clip_volume_slider_->setEnabled(false);
+    clip_mute_check_ = new QCheckBox("Mute clip", clip_audio_group);
+    clip_mute_check_->setEnabled(false);
+    clip_audio_layout->addRow("Volume", clip_volume_slider_);
+    clip_audio_layout->addRow("Mute", clip_mute_check_);
+    audio_layout->addWidget(clip_audio_group);
+
+    auto* track_audio_group = new QGroupBox("Track", audio_page);
+    auto* track_audio_layout = new QFormLayout(track_audio_group);
+    track_volume_slider_ = new QSlider(Qt::Horizontal, track_audio_group);
+    track_volume_slider_->setRange(0, 200);
+    track_volume_slider_->setValue(100);
+    track_volume_slider_->setToolTip("Active track volume (0% to 200%)");
+    track_volume_slider_->setEnabled(false);
+    track_mute_check_ = new QCheckBox("Mute track", track_audio_group);
+    track_mute_check_->setEnabled(false);
+    track_audio_layout->addRow("Volume", track_volume_slider_);
+    track_audio_layout->addRow("Mute", track_mute_check_);
+    audio_layout->addWidget(track_audio_group);
+    audio_layout->addStretch();
+
+    inspector_tabs_->addTab(inspector_page, "Inspector");
+    inspector_tabs_->addTab(audio_page, "Audio");
+    outer_layout->addWidget(inspector_tabs_);
+
+    QSettings settings;
+    const auto saved_tab = settings.value("inspector/active_tab", 0).toInt();
+    inspector_tabs_->setCurrentIndex(std::clamp(
+        saved_tab, 0, inspector_tabs_->count() - 1));
+    connect(inspector_tabs_, &QTabWidget::currentChanged, this, [](int index) {
+        QSettings tab_settings;
+        tab_settings.setValue("inspector/active_tab", index);
+    });
+
     connect(text_color_button_, &QPushButton::clicked, this, [this]() {
         const QColor current(
             text_color_[0], text_color_[1], text_color_[2], text_color_[3]);
@@ -255,6 +309,28 @@ QWidget* MainWindow::createInspector() {
             this, &MainWindow::applyTransitionSettings);
     connect(remove_transition_button_, &QPushButton::clicked,
             this, &MainWindow::removeSelectedTransition);
+    connect(clip_volume_slider_, &QSlider::sliderPressed,
+            this, &MainWindow::beginAudioEdit);
+    connect(clip_volume_slider_, &QSlider::valueChanged, this,
+            [this](int) { applyClipAudioControls(); });
+    connect(clip_volume_slider_, &QSlider::sliderReleased,
+            this, &MainWindow::finishAudioEdit);
+    connect(track_volume_slider_, &QSlider::sliderPressed,
+            this, &MainWindow::beginAudioEdit);
+    connect(track_volume_slider_, &QSlider::valueChanged, this,
+            [this](int) { applyTrackAudioControls(); });
+    connect(track_volume_slider_, &QSlider::sliderReleased,
+            this, &MainWindow::finishAudioEdit);
+    connect(clip_mute_check_, &QCheckBox::toggled, this, [this](bool) {
+        beginAudioEdit();
+        applyClipAudioControls();
+        finishAudioEdit();
+    });
+    connect(track_mute_check_, &QCheckBox::toggled, this, [this](bool) {
+        beginAudioEdit();
+        applyTrackAudioControls();
+        finishAudioEdit();
+    });
     layout->addStretch();
     updateInspector();
     return container;

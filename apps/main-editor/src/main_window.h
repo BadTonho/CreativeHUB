@@ -35,6 +35,7 @@ class QPushButton;
 class QPoint;
 class QSlider;
 class QSpinBox;
+class QTabWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
 class PreviewWidget;
@@ -270,6 +271,7 @@ private:
     QSpinBox* transition_duration_spin_ = nullptr;
     QPushButton* apply_transition_button_ = nullptr;
     QPushButton* remove_transition_button_ = nullptr;
+    QTabWidget* inspector_tabs_ = nullptr;
     QAction* new_project_action_ = nullptr;
     QAction* open_project_action_ = nullptr;
     QAction* save_project_action_ = nullptr;

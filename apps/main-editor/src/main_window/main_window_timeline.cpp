@@ -381,36 +381,6 @@ QWidget* MainWindow::createTimeline() {
     controls->addStretch();
     layout->addLayout(controls);
 
-    auto* audio_controls = new QHBoxLayout;
-    audio_controls->setSpacing(6);
-    auto* audio_label = new QLabel("Audio", container);
-    audio_label->setStyleSheet("color: #9aa4b2; font-weight: 600;");
-    audio_controls->addWidget(audio_label);
-
-    auto* clip_volume_label = new QLabel("Clip", container);
-    clip_volume_slider_ = new QSlider(Qt::Horizontal, container);
-    clip_volume_slider_->setRange(0, 200);
-    clip_volume_slider_->setValue(100);
-    clip_volume_slider_->setFixedWidth(130);
-    clip_volume_slider_->setToolTip("Active clip volume (0% to 200%)");
-    clip_mute_check_ = new QCheckBox("Mute clip", container);
-    audio_controls->addWidget(clip_volume_label);
-    audio_controls->addWidget(clip_volume_slider_);
-    audio_controls->addWidget(clip_mute_check_);
-
-    auto* track_volume_label = new QLabel("Track", container);
-    track_volume_slider_ = new QSlider(Qt::Horizontal, container);
-    track_volume_slider_->setRange(0, 200);
-    track_volume_slider_->setValue(100);
-    track_volume_slider_->setFixedWidth(130);
-    track_volume_slider_->setToolTip("Active track volume (0% to 200%)");
-    track_mute_check_ = new QCheckBox("Mute track", container);
-    audio_controls->addWidget(track_volume_label);
-    audio_controls->addWidget(track_volume_slider_);
-    audio_controls->addWidget(track_mute_check_);
-    audio_controls->addStretch();
-    layout->addLayout(audio_controls);
-
     previous_frame_button_->setToolTip("Step one frame backward");
     play_pause_button_->setToolTip("Play or pause the active clip");
     next_frame_button_->setToolTip("Step one frame forward");
@@ -518,28 +488,6 @@ QWidget* MainWindow::createTimeline() {
     });
     zoom_out_button->setEnabled(timeline_widget_->canZoomOut());
     zoom_in_button->setEnabled(timeline_widget_->canZoomIn());
-    connect(clip_volume_slider_, &QSlider::sliderPressed,
-            this, &MainWindow::beginAudioEdit);
-    connect(clip_volume_slider_, &QSlider::valueChanged,
-            this, [this](int) { applyClipAudioControls(); });
-    connect(clip_volume_slider_, &QSlider::sliderReleased,
-            this, &MainWindow::finishAudioEdit);
-    connect(track_volume_slider_, &QSlider::sliderPressed,
-            this, &MainWindow::beginAudioEdit);
-    connect(track_volume_slider_, &QSlider::valueChanged,
-            this, [this](int) { applyTrackAudioControls(); });
-    connect(track_volume_slider_, &QSlider::sliderReleased,
-            this, &MainWindow::finishAudioEdit);
-    connect(clip_mute_check_, &QCheckBox::toggled, this, [this](bool) {
-        beginAudioEdit();
-        applyClipAudioControls();
-        finishAudioEdit();
-    });
-    connect(track_mute_check_, &QCheckBox::toggled, this, [this](bool) {
-        beginAudioEdit();
-        applyTrackAudioControls();
-        finishAudioEdit();
-    });
     connect(
         timeline_widget_,
         &timeline::TimelineWidget::clipSelectedAt,

@@ -91,7 +91,9 @@ between overlapping tracks: only the visible top-priority clip contributes.
 Every clip and track also stores linear audio gain (`0.0` to `2.0`) and a mute
 flag. The effective gain is the product of clip and track gain. These
 parameters are Timeline edits and are restored by history, but decoded PCM is
-never stored in a snapshot.
+never stored in a snapshot. The Main Editor exposes these existing parameters
+in the Inspector's Audio tab; moving the controls does not change their model,
+history, persistence, or playback semantics.
 
 ## History and persistence
 

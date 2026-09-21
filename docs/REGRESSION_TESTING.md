@@ -29,6 +29,7 @@ updated intentionally.
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
 | Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
+| Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
@@ -55,6 +56,13 @@ in the running Main Editor after UI or integration changes:
   confirm that the numeric fields remain editable, values stay within their
   property ranges, keyframe edits still target the current frame, and one
   slider drag creates one Undo/Redo entry;
+- Inspector tabs: switch between `Inspector` and `Audio`, close and reopen the
+  application to confirm the last active tab is restored, and select clips
+  without an automatic tab change;
+- Audio tab: confirm the vertical Clip and Track blocks expose volume and mute
+  controls, edits update playback, and Undo/Redo restores both properties;
+  confirm all four controls are disabled for text clips, gaps, and no
+  selection, and that the Timeline no longer contains an audio-control row;
 - project prompts, Save/Open behavior, dirty-state title, and failed-open
   preservation; reopening a project restores its timeline zoom and starts at
   the beginning of the horizontal scroll;
