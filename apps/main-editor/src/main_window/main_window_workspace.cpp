@@ -200,6 +200,24 @@ void MainWindow::createMenus() {
             : "Timeline clips can be moved by dragging.");
     });
 
+    move_playhead_on_clip_selection_action_ = edit_menu->addAction(
+        "Move Playhead to Selected Clip Start");
+    move_playhead_on_clip_selection_action_->setCheckable(true);
+    QSettings timeline_selection_settings;
+    const bool move_playhead_on_selection = timeline_selection_settings.value(
+        "timeline/move_playhead_on_clip_selection", false).toBool();
+    move_playhead_on_clip_selection_action_->setChecked(
+        move_playhead_on_selection);
+    connect(
+        move_playhead_on_clip_selection_action_,
+        &QAction::toggled,
+        this,
+        [](bool enabled) {
+            QSettings settings;
+            settings.setValue(
+                "timeline/move_playhead_on_clip_selection", enabled);
+        });
+
     auto* view_menu = menuBar()->addMenu("&View");
     view_menu->addAction(media_browser_dock_->toggleViewAction());
     view_menu->addAction(inspector_dock_->toggleViewAction());

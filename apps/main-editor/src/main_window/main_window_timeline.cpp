@@ -71,6 +71,16 @@ int timelineZoomLevelIndex(double factor) {
     return static_cast<int>(std::distance(timeline_zoom_levels.begin(), match));
 }
 
+std::int64_t localFrameAtTimelinePlayhead(
+    const timeline::TimelineClip& clip,
+    std::int64_t playhead_frame) {
+    if (playhead_frame < clip.timeline_start_frame) return 0;
+    const auto local_frame = playhead_frame - clip.timeline_start_frame;
+    return local_frame >= 0 && local_frame < clip.timeline_duration_frames
+        ? local_frame
+        : 0;
+}
+
 } // namespace
 
 void MainWindow::addVideoTrack() {
@@ -686,6 +696,10 @@ bool MainWindow::canPlaybackSelectedMedia() const noexcept {
 }
 
 std::int64_t MainWindow::timelinePlayheadFrame() const noexcept {
+    if (preserved_timeline_playhead_frame_.has_value()) {
+        return std::max<std::int64_t>(
+            0, *preserved_timeline_playhead_frame_);
+    }
     if (!active_timeline_track_index_.has_value() ||
         !active_timeline_clip_index_.has_value() ||
         *active_timeline_track_index_ >= timeline_model_.trackCount() ||
@@ -1114,6 +1128,10 @@ void MainWindow::handleMediaDropAt(
 
 void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_index) {
     active_transition_.reset();
+    const auto previous_playhead = timelinePlayheadFrame();
+    const bool move_playhead =
+        move_playhead_on_clip_selection_action_ != nullptr &&
+        move_playhead_on_clip_selection_action_->isChecked();
     if (track_index < 0 || clip_index < 0 ||
         track_index >= static_cast<qint64>(timeline_model_.trackCount()) ||
         clip_index >= static_cast<qint64>(
@@ -1130,6 +1148,11 @@ void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_in
         active_timeline_track_index_.reset();
         active_timeline_clip_index_.reset();
         playback_frame_index_ = 0;
+        if (move_playhead || previous_playhead == 0) {
+            preserved_timeline_playhead_frame_.reset();
+        } else {
+            preserved_timeline_playhead_frame_ = previous_playhead;
+        }
         preview_widget_->clearFrame("Gap in timeline.");
         updateTimelineState();
         updatePlaybackControls();
@@ -1137,15 +1160,34 @@ void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_in
         statusBar()->showMessage("Gap in timeline.");
         return;
     }
-    active_timeline_track_index_ = static_cast<std::size_t>(track_index);
-    const auto& selected_clip = timeline_model_.tracks()
-        [*active_timeline_track_index_].clips[static_cast<std::size_t>(clip_index)];
+    const auto selected_track = static_cast<std::size_t>(track_index);
+    const auto& selected_clip = timeline_model_.tracks()[selected_track]
+        .clips[static_cast<std::size_t>(clip_index)];
+    if (selected_track == 0 && selected_clip.kind == timeline::ClipKind::Video) {
+        handleTimelineClipSelected(clip_index);
+        return;
+    }
+    active_timeline_track_index_ = selected_track;
+    const auto selected_local_frame = move_playhead
+        ? std::int64_t{0}
+        : localFrameAtTimelinePlayhead(selected_clip, previous_playhead);
+    if (move_playhead) {
+        preserved_timeline_playhead_frame_.reset();
+    } else if (selected_clip.timeline_start_frame + selected_local_frame !=
+               previous_playhead) {
+        preserved_timeline_playhead_frame_ = previous_playhead;
+    } else {
+        preserved_timeline_playhead_frame_.reset();
+    }
     if (selected_clip.kind == timeline::ClipKind::Text) {
         active_timeline_clip_index_ = static_cast<std::size_t>(clip_index);
         pending_clip_activation_.reset();
         ++playback_generation_;
         playback_is_playing_ = false;
-        playback_frame_index_ = 0;
+        playback_frame_index_ = selected_local_frame;
+        if (move_playhead) {
+            preserved_timeline_playhead_frame_.reset();
+        }
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -1162,11 +1204,6 @@ void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_in
         statusBar()->showMessage("Text clip selected.");
         return;
     }
-    if (*active_timeline_track_index_ == 0) {
-        handleTimelineClipSelected(clip_index);
-        return;
-    }
-
     pending_clip_activation_.reset();
     ++playback_generation_;
     playback_is_playing_ = false;
@@ -1207,10 +1244,11 @@ void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_in
         activateTimelineClipAt(
             static_cast<std::size_t>(track_index),
             static_cast<std::size_t>(clip_index),
-            0,
-            false);
+            selected_local_frame,
+            false,
+            !move_playhead);
     }
-    playback_frame_index_ = 0;
+    playback_frame_index_ = selected_local_frame;
     updateTimelineState();
     updatePlaybackControls();
     updatePlaybackStatus();
@@ -1653,6 +1691,10 @@ void MainWindow::handleTimelineClipSelected(qint64 clip_index) {
         return;
     }
 
+    const auto previous_playhead = timelinePlayheadFrame();
+    const bool move_playhead =
+        move_playhead_on_clip_selection_action_ != nullptr &&
+        move_playhead_on_clip_selection_action_->isChecked();
     active_timeline_track_index_ = 0;
     const bool had_pending_activation = pending_clip_activation_.has_value();
     if (had_pending_activation) {
@@ -1691,7 +1733,20 @@ void MainWindow::handleTimelineClipSelected(qint64 clip_index) {
     if (!selected_after_filter && had_pending_activation) updateMediaDetails(-1);
 
     active_timeline_clip_index_ = static_cast<std::size_t>(clip_index);
-    playback_frame_index_ = 0;
+    const auto& selected_clip =
+        timeline_model_.clips()[static_cast<std::size_t>(clip_index)];
+    const auto selected_local_frame = move_playhead
+        ? std::int64_t{0}
+        : localFrameAtTimelinePlayhead(selected_clip, previous_playhead);
+    if (move_playhead) {
+        preserved_timeline_playhead_frame_.reset();
+    } else if (selected_clip.timeline_start_frame + selected_local_frame !=
+               previous_playhead) {
+        preserved_timeline_playhead_frame_ = previous_playhead;
+    } else {
+        preserved_timeline_playhead_frame_.reset();
+    }
+    playback_frame_index_ = selected_local_frame;
     if (!media_item->offline) {
         preview_widget_->setFrame(media_item->first_frame);
     }
@@ -1699,7 +1754,12 @@ void MainWindow::handleTimelineClipSelected(qint64 clip_index) {
     updatePlaybackControls();
     updatePlaybackStatus();
     if (!media_item->offline) {
-        activateTimelineClipAt(0, static_cast<std::size_t>(clip_index), 0, false);
+        activateTimelineClipAt(
+            0,
+            static_cast<std::size_t>(clip_index),
+            selected_local_frame,
+            false,
+            !move_playhead);
     }
     statusBar()->showMessage("Timeline clip selected.");
 }
@@ -1724,6 +1784,7 @@ void MainWindow::clearTimeline() {
         recordTimelineEdit(before_edit);
         sendCompositionToWorker();
         active_timeline_clip_index_.reset();
+        preserved_timeline_playhead_frame_.reset();
         playback_frame_index_ = 0;
         const int selected_row = media_list_ != nullptr ? media_list_->currentRow() : -1;
         if (selected_row >= 0) {

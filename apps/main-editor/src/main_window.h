@@ -204,13 +204,15 @@ private:
         std::size_t track_index,
         std::size_t clip_index,
         std::int64_t target_frame,
-        bool resume_playback);
+        bool resume_playback,
+        bool preserve_timeline_playhead = false);
     void commitTimelineClipActivation(
         std::size_t track_index,
         std::size_t clip_index,
         std::size_t media_index,
         std::int64_t frame_index,
-        bool show_cached_frame);
+        bool show_cached_frame,
+        bool preserve_timeline_playhead = false);
 
     struct ImportedMedia {
         media::VideoMetadata metadata;
@@ -229,6 +231,7 @@ private:
         bool resume_playback = false;
         quint64 generation = 0;
         std::size_t track_index = 0;
+        bool preserve_timeline_playhead = false;
     };
 
     QDockWidget* media_browser_dock_ = nullptr;
@@ -276,6 +279,7 @@ private:
     QAction* redo_action_ = nullptr;
     QAction* razor_tool_action_ = nullptr;
     QAction* require_alt_to_move_action_ = nullptr;
+    QAction* move_playhead_on_clip_selection_action_ = nullptr;
     QAction* add_video_track_action_ = nullptr;
     QAction* rename_track_action_ = nullptr;
     QAction* move_track_up_action_ = nullptr;
@@ -289,6 +293,7 @@ private:
     timeline::TimelineHistory timeline_history_;
     std::optional<std::size_t> active_timeline_track_index_;
     std::optional<std::size_t> active_timeline_clip_index_;
+    std::optional<std::int64_t> preserved_timeline_playhead_frame_;
     struct ActiveTransition {
         std::size_t track_index = 0;
         std::size_t from_clip_index = 0;

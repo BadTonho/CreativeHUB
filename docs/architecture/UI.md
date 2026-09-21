@@ -60,6 +60,10 @@ drag trims. Movement, splitting, trimming, and seeking do not decode during
 pointer movement. Drops report target track and frame; Add to Timeline
 appends to the active track.
 
+Selecting a timeline clip does not move the playhead by default. The Edit >
+Move Playhead to Selected Clip Start preference restores the optional behavior
+and is stored as a user preference.
+
 The upper time ruler is also a playhead scrub area. Clicking or dragging it
 updates the visible playhead without selecting a clip, then requests the seek
 when the pointer is released. Scrubbing remains bounded by the real project

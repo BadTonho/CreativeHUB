@@ -49,7 +49,7 @@ TimelineWidget draws one row per track and uses this priority by default:
 2. Blade Tool splits at the frame under the cursor.
 3. An edge drag trims the current segment.
 4. Alt + drag seeks the active clip.
-5. A simple click selects a clip.
+5. A simple click selects a clip without moving the playhead.
 
 The upper time ruler is independent from clip hit testing: clicking or dragging
 there scrubs the playhead without selecting or moving a clip. Ruler scrubbing
@@ -64,6 +64,11 @@ a video seek to the worker.
 The Edit > Require Alt to Move Clips option is disabled by default and is
 stored as a user preference. When enabled, Alt + drag moves a clip and a
 normal drag seeks the active clip.
+
+The Edit > Move Playhead to Selected Clip Start option is also disabled by
+default and is stored as a user preference. When enabled, selecting a clip
+starts at its first frame; otherwise selection changes only the active clip
+and keeps the current timeline frame.
 
 Movement, splitting, and trimming do not decode while the pointer moves.
 Seeking decodes only after release. Delete removes the active clip without

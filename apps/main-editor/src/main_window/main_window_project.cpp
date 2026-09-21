@@ -236,6 +236,7 @@ void MainWindow::clearProjectState() {
     timeline_history_.clear();
     active_timeline_track_index_.reset();
     active_timeline_clip_index_.reset();
+    preserved_timeline_playhead_frame_.reset();
     playback_frame_index_ = 0;
     project_path_.reset();
     saved_project_document_ = project::ProjectDocument{};
@@ -624,6 +625,7 @@ void MainWindow::applyLoadedProject(
     }
     active_timeline_track_index_.reset();
     active_timeline_clip_index_.reset();
+    preserved_timeline_playhead_frame_.reset();
     playback_frame_index_ = 0;
     project_path_ = normalizedPath(project_path);
     saved_project_document_ = saved_document;

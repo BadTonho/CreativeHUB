@@ -221,7 +221,8 @@ void MainWindow::activateTimelineClipAt(
     std::size_t track_index,
     std::size_t clip_index,
     std::int64_t target_frame,
-    bool resume_playback) {
+    bool resume_playback,
+    bool preserve_timeline_playhead) {
     if (playback_worker_ == nullptr ||
         track_index >= timeline_model_.trackCount() ||
         clip_index >= timeline_model_.clipCount(track_index)) {
@@ -229,6 +230,9 @@ void MainWindow::activateTimelineClipAt(
     }
 
     const auto& clip = timeline_model_.tracks()[track_index].clips[clip_index];
+    if (!preserve_timeline_playhead) {
+        preserved_timeline_playhead_frame_.reset();
+    }
     if (clip.kind == timeline::ClipKind::Text) {
         active_timeline_track_index_ = track_index;
         active_timeline_clip_index_ = clip_index;
@@ -293,7 +297,8 @@ void MainWindow::activateTimelineClipAt(
         clip.timeline_duration_frames,
         resume_playback,
         playback_generation_,
-        track_index};
+        track_index,
+        preserve_timeline_playhead};
     playback_is_playing_ = false;
     updatePlaybackControls();
     updatePlaybackStatus();
@@ -324,7 +329,8 @@ void MainWindow::commitTimelineClipActivation(
     std::size_t clip_index,
     std::size_t media_index,
     std::int64_t frame_index,
-    bool show_cached_frame) {
+    bool show_cached_frame,
+    bool preserve_timeline_playhead) {
     if (track_index >= timeline_model_.trackCount() ||
         clip_index >= timeline_model_.clipCount(track_index) ||
         media_index >= media_items_.size()) {
@@ -334,6 +340,9 @@ void MainWindow::commitTimelineClipActivation(
     active_timeline_track_index_ = track_index;
     active_timeline_clip_index_ = clip_index;
     playback_frame_index_ = frame_index;
+    if (!preserve_timeline_playhead) {
+        preserved_timeline_playhead_frame_.reset();
+    }
     {
         const QSignalBlocker blocker(media_list_);
         media_list_->setCurrentRow(static_cast<int>(media_index));
@@ -493,7 +502,8 @@ void MainWindow::handlePlaybackFrame(
             pending.clip_index,
             pending.media_index,
             frame_index,
-            false);
+            false,
+            pending.preserve_timeline_playhead);
         preview_widget_->setFrame(*frame);
         if (timeline_widget_ != nullptr) {
             timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());
@@ -506,6 +516,7 @@ void MainWindow::handlePlaybackFrame(
         return;
     }
 
+    preserved_timeline_playhead_frame_.reset();
     playback_frame_index_ = frame_index;
     preview_widget_->setFrame(*frame);
     if (timeline_widget_ != nullptr && selectedMediaMatchesTimeline()) {
@@ -536,7 +547,8 @@ void MainWindow::handlePlaybackMediaReady(quint64 generation) {
         pending.clip_index,
         pending.media_index,
         0,
-        true);
+        true,
+        pending.preserve_timeline_playhead);
 
     if (playback_worker_ != nullptr) {
         playback_worker_->requestSeek(0, generation);
@@ -686,6 +698,7 @@ void MainWindow::handleTimelineSeek(qint64 global_frame) {
     if (total <= 0) return;
     const auto target_frame = std::clamp<std::int64_t>(
         global_frame, 0, total - 1);
+    preserved_timeline_playhead_frame_.reset();
     const auto target_clip = timeline_model_.topClipAt(target_frame);
     ++playback_generation_;
     playback_is_playing_ = false;
