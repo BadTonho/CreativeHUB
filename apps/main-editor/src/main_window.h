@@ -69,6 +69,7 @@ private:
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();
     void saveWorkspaceLayout();
+    void updateMediaPoolActionState();
     QWidget* createMediaBins();
     QWidget* createMediaPanel();
     QWidget* createInspector();
@@ -308,6 +309,7 @@ private:
     QAction* razor_tool_action_ = nullptr;
     QAction* require_alt_to_move_action_ = nullptr;
     QAction* move_playhead_on_clip_selection_action_ = nullptr;
+    QAction* media_pool_action_ = nullptr;
     QAction* add_video_track_action_ = nullptr;
     QAction* rename_track_action_ = nullptr;
     QAction* move_track_up_action_ = nullptr;

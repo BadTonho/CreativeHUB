@@ -268,6 +268,22 @@ void MainWindow::createMenus() {
     auto* restore_layout_action = view_menu->addAction("Restore &Default Layout");
     connect(restore_layout_action, &QAction::triggered, this, &MainWindow::restoreDefaultLayout);
 
+    media_pool_action_ = menuBar()->addAction("&Media Pool");
+    media_pool_action_->setCheckable(true);
+    media_pool_action_->setToolTip("Show or hide the Media Pool docks");
+    connect(media_pool_action_, &QAction::triggered, this, [this](bool) {
+        const bool show_docks =
+            !bins_dock_->isVisible() || !media_dock_->isVisible();
+        bins_dock_->setVisible(show_docks);
+        media_dock_->setVisible(show_docks);
+        updateMediaPoolActionState();
+    });
+    connect(bins_dock_, &QDockWidget::visibilityChanged, this,
+            [this](bool) { updateMediaPoolActionState(); });
+    connect(media_dock_, &QDockWidget::visibilityChanged, this,
+            [this](bool) { updateMediaPoolActionState(); });
+    updateMediaPoolActionState();
+
     auto* settings_action = menuBar()->addAction("&Settings");
     settings_action->setToolTip("Open editor settings");
     connect(settings_action, &QAction::triggered,
@@ -384,6 +400,17 @@ void MainWindow::saveWorkspaceLayout() {
     settings.sync();
 }
 
+void MainWindow::updateMediaPoolActionState() {
+    if (media_pool_action_ == nullptr ||
+        bins_dock_ == nullptr ||
+        media_dock_ == nullptr) {
+        return;
+    }
+    const QSignalBlocker blocker(media_pool_action_);
+    media_pool_action_->setChecked(
+        bins_dock_->isVisible() && media_dock_->isVisible());
+}
+
 void MainWindow::restoreDefaultLayout() {
     bins_dock_->setFloating(false);
     media_dock_->setFloating(false);
@@ -401,5 +428,6 @@ void MainWindow::restoreDefaultLayout() {
     media_dock_->show();
     inspector_dock_->show();
     timeline_dock_->show();
+    updateMediaPoolActionState();
     saveWorkspaceLayout();
 }

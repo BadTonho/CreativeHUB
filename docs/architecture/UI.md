@@ -34,7 +34,10 @@ not add a redundant status row below the media view. The workspace stores the
 native dock arrangement globally in `workspace/dock_layout_state`; the default
 arrangement places `Bins` above `Media` on the left. Both docks can be
 moved, resized, floated, closed, re-docked, and tabified independently. Their
-visibility is controlled by the `View > Media Pool` submenu.
+visibility can be toggled together by the top-level `Media Pool` menu-bar
+action between `View` and `Settings`, or controlled individually through the
+`View > Media Pool` submenu. The global action is checked only when both
+docks are visible and does not affect project state.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline
