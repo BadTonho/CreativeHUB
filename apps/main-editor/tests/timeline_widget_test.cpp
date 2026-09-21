@@ -3,8 +3,10 @@
 #include <QApplication>
 #include <QMouseEvent>
 #include <QPointingDevice>
+#include <QWheelEvent>
 
 #include <cstdint>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -53,6 +55,24 @@ void sendMouse(
     QApplication::sendEvent(&widget, &event);
 }
 
+void sendWheel(
+    QWidget& widget,
+    const QPointF& position,
+    int angle_delta,
+    Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+    QWheelEvent event(
+        position,
+        position,
+        QPoint(0, 0),
+        QPoint(0, angle_delta),
+        Qt::NoButton,
+        modifiers,
+        Qt::NoScrollPhase,
+        false,
+        Qt::MouseEventNotSynthesized);
+    QApplication::sendEvent(&widget, &event);
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -87,6 +107,13 @@ int main(int argc, char* argv[]) {
                 "The Timeline minimum height does not fit all track rows.");
         require(widget.minimumWidth() == 1000,
                 "A short timeline did not keep the standard viewport width.");
+        require(widget.zoomFactor() == 1.0,
+                "The timeline did not start at the expected zoom level.");
+        require(widget.canZoomOut() && widget.canZoomIn(),
+                "The timeline zoom limits were not initialized correctly.");
+        require(widget.nextZoomFactor(-1) == 0.75 &&
+                    widget.nextZoomFactor(1) == 1.25,
+                "The timeline did not expose the expected adjacent zoom levels.");
         require(
             timeline::TimelineWidget::formatTimecode(0, 30.0) == "00:00:00.000" &&
                 timeline::TimelineWidget::formatTimecode(30 * 60 + 15, 30.0) ==
@@ -111,6 +138,9 @@ int main(int argc, char* argv[]) {
         int transition_track = -1;
         int transition_from = -1;
         int transition_to = -1;
+        int zoom_requests = 0;
+        double requested_zoom = 0.0;
+        double requested_anchor = 0.0;
 
         QObject::connect(
             &widget,
@@ -161,6 +191,46 @@ int main(int argc, char* argv[]) {
                 transition_from = static_cast<int>(from);
                 transition_to = static_cast<int>(to);
             });
+        QObject::connect(
+            &widget,
+            &timeline::TimelineWidget::zoomRequested,
+            [&zoom_requests, &requested_zoom, &requested_anchor](
+                double factor, double anchor) {
+                ++zoom_requests;
+                requested_zoom = factor;
+                requested_anchor = anchor;
+            });
+
+        sendWheel(widget, QPointF(600, 120), 120, Qt::ControlModifier);
+        require(zoom_requests == 1 && requested_zoom == 1.25 &&
+                    requested_anchor == 600.0,
+                "Ctrl + wheel did not request the next timeline zoom level.");
+        sendWheel(widget, QPointF(600, 120), -120);
+        require(zoom_requests == 1,
+                "Normal wheel scrolling was incorrectly treated as timeline zoom.");
+        widget.setZoomFactor(0.25);
+        require(widget.zoomFactor() == 0.25 && !widget.canZoomOut() &&
+                    widget.minimumWidth() == 1000,
+                "The minimum timeline zoom did not preserve the viewport width.");
+        widget.setZoomFactor(8.0);
+        require(widget.zoomFactor() == 8.0 && !widget.canZoomIn() &&
+                    widget.minimumWidth() == 8000,
+                "The maximum timeline zoom did not expand the timeline surface.");
+        const auto anchor_frame = widget.frameAtContentX(600.0);
+        require(anchor_frame.has_value(),
+                "The timeline could not resolve a frame at a content coordinate.");
+        const auto anchored_x = widget.contentXForFrame(*anchor_frame);
+        require(std::abs(anchored_x - 600.0) < 2.0,
+                "Timeline frame/content coordinate conversion lost its anchor.");
+        for (const auto level : {0.25, 0.50, 0.75, 1.00, 1.25, 1.50,
+                                 2.00, 3.00, 4.00, 6.00, 8.00}) {
+            widget.setZoomFactor(level);
+            require(widget.zoomFactor() == level,
+                    "A documented timeline zoom level was not applied.");
+        }
+        widget.setZoomFactor(1.0);
+        widget.resize(1000, 500);
+        application.processEvents();
 
         // Clicking an inactive clip selects it without starting a seek.
         widget.setActiveClip(std::nullopt);

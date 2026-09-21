@@ -27,6 +27,11 @@ scale and show empty space after the last clip. The one-hour range fills the
 available viewport; content longer than one hour expands the timeline
 surface proportionally and is accessed with horizontal scrolling. The actual
 content duration remains authoritative for playback and project behavior.
+The horizontal view can be zoomed to 25%, 50%, 75%, 100%, 125%, 150%, 200%,
+300%, 400%, 600%, or 800%. Ctrl + mouse wheel zooms around the pointer, while
+the visible minus and plus controls zoom around the center of the viewport.
+Zoom changes only the timeline's horizontal presentation and are saved in the
+project; they do not change clip frames, playback, preview, or Undo/Redo.
 The timeline surface grows only as much as its track rows require; additional
 tracks are available through vertical scrolling.
 
@@ -80,8 +85,8 @@ Undo/Redo snapshots. Snapshots restore tracks, order, names, clip identifiers,
 positions, active track and clip, selected media, and playhead. Decoded frames,
 FFmpeg sessions, and GPU resources are never stored.
 
-The versioned .csp project format stores the same track, clip, and optional
-audio parameter structure.
+The versioned .csp project format stores the same track, clip, optional audio
+parameter, and per-project timeline zoom structure.
 Version 1 sequential clips migrate to Video 1 when opened. Advanced ripple
 editing, multiple media types, audio-only sources, project-wide history, and
 export remain future work.
@@ -156,4 +161,5 @@ Fade to Black, or remove the transition. The Inspector confirms the type and
 duration edits. Moving, splitting, trimming, or deleting an endpoint removes
 only transitions whose adjacency or endpoint validity is no longer true.
 Transitions are included in bounded Undo/Redo snapshots and are persisted in
-`.csp` version 5. Projects from earlier versions load with no transitions.
+`.csp` version 6. Projects from earlier versions load with no transitions and
+use 100% timeline zoom.

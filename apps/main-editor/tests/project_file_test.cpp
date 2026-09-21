@@ -3,9 +3,11 @@
 #include <QCoreApplication>
 
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -70,6 +72,7 @@ int main(int argc, char** argv) {
                 15});
         original.canvas_width = 1920;
         original.canvas_height = 1080;
+        original.timeline_zoom = 2.0;
         original.timeline_tracks.front().clips.front().transform.position_x = 0.25;
         original.timeline_tracks.front().clips.front().transform.rotation_degrees = 12.0;
         original.timeline_tracks.front().clips.front().keyframes.position_x = {{0, 0.25}, {30, 0.75}};
@@ -110,10 +113,11 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"kind\": \"text\"") != std::string::npos &&
                     saved_json.find("\"content\": \"Title\"") != std::string::npos,
                 "Text clip content and kind were not written to the project.");
-        require(saved_json.find("\"version\": 5") != std::string::npos &&
+        require(saved_json.find("\"version\": 6") != std::string::npos &&
+                    saved_json.find("\"zoom\": 2") != std::string::npos &&
                     saved_json.find("\"transitions\"") != std::string::npos &&
                     saved_json.find("cross_dissolve") != std::string::npos,
-                "Transition data was not written to the version 5 project.");
+                "Timeline zoom and transition data were not written to the version 6 project.");
 
         const auto original_contents = saved_json;
         bool failed = false;
@@ -259,6 +263,31 @@ int main(int argc, char** argv) {
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::InvalidTimeline,
                     "An invalid project transition returned the wrong error category.");
+        }
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":5,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"tracks":[{"name":"Video 1","clips":[],"transitions":[]}]}})");
+        const auto migrated_v5 = project::load(project_path);
+        require(migrated_v5.timeline_zoom == 1.0,
+                "A version 5 project without timeline zoom did not default to 100%.");
+
+        for (const auto invalid_zoom : {0.24, 8.01, std::numeric_limits<double>::quiet_NaN()}) {
+            const auto zoom_json = std::isnan(invalid_zoom)
+                ? std::string("null")
+                : std::to_string(invalid_zoom);
+            writeText(
+                project_path,
+                std::string(R"({"format":"creative-suite.main-editor","version":6,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"zoom":)") +
+                    zoom_json +
+                    R"(,"tracks":[{"name":"Video 1","clips":[],"transitions":[]}]}})");
+            try {
+                static_cast<void>(project::load(project_path));
+                throw std::runtime_error("An invalid timeline zoom was accepted.");
+            } catch (const project::ProjectError& error) {
+                require(error.code() == project::ProjectErrorCode::InvalidValue,
+                        "Invalid timeline zoom returned the wrong error category.");
+            }
         }
 
         std::error_code cleanup_error;

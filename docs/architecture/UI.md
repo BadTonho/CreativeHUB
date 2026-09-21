@@ -45,6 +45,11 @@ short projects keep a stable scale and retain empty space after their last
 clip. Projects longer than one hour expand the timeline surface and use the
 horizontal scrollbar; the actual content duration still controls playback
 limits.
+The timeline controls expose minus, plus, and a percentage indicator. Zoom
+levels range from 25% to 800%; Ctrl + mouse wheel changes one level around the
+pointer, and the buttons use the visible center as their anchor. Zoom affects
+only horizontal timeline presentation and is persisted per project without
+creating a clip-edit history entry.
 
 Gesture priority is configurable: by default, normal drag moves clips and
 Alt + drag seeks; when the Edit > Require Alt to Move Clips option is enabled,
@@ -98,7 +103,7 @@ selection keeps the Media Browser selection, current video session, and
 playback clock unchanged. Text-only projects can show a static composition,
 but playback remains disabled without video media. Confirmed text/style edits
 are Timeline Undo/Redo entries and are persisted by the current `.csp` version
-5 format.
+6 format.
 
 Text rasterization is performed with `QImage/QPainter` by the playback worker;
 the UI only edits the values and receives the composed RGBA frame. No new

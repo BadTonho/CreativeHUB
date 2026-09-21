@@ -20,6 +20,7 @@ class QDropEvent;
 class QMouseEvent;
 class QPaintEvent;
 class QContextMenuEvent;
+class QWheelEvent;
 class QPoint;
 class QEvent;
 class QObject;
@@ -43,6 +44,13 @@ public:
     void setMoveRequiresAlt(bool enabled);
     [[nodiscard]] bool moveRequiresAlt() const noexcept;
     void setTimelineViewportWidth(int width);
+    [[nodiscard]] double zoomFactor() const noexcept;
+    void setZoomFactor(double factor);
+    [[nodiscard]] double nextZoomFactor(int direction) const noexcept;
+    [[nodiscard]] bool canZoomIn() const noexcept;
+    [[nodiscard]] bool canZoomOut() const noexcept;
+    [[nodiscard]] std::optional<std::int64_t> frameAtContentX(double x) const noexcept;
+    [[nodiscard]] double contentXForFrame(std::int64_t frame) const noexcept;
     [[nodiscard]] static QString formatTimecode(
         std::int64_t frame,
         double frame_rate);
@@ -73,6 +81,8 @@ signals:
     void trimStarted();
     void seekStarted();
     void seekRequested(qint64 frame_index);
+    void zoomRequested(double factor, double anchor_content_x);
+    void zoomChanged(double factor);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -85,6 +95,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
 
 private:
     enum class TrimEdge { Left, Right };
@@ -111,6 +122,7 @@ private:
 
     std::vector<TimelineTrack> tracks_;
     int timeline_viewport_width_ = 0;
+    double zoom_factor_ = 1.0;
     std::optional<ClipLocation> active_clip_;
     std::int64_t playhead_frame_ = 0;
     std::optional<std::int64_t> drag_frame_;

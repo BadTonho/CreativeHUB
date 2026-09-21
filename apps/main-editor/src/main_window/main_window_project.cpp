@@ -31,6 +31,7 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSlider>
 #include <QStatusBar>
 #include <QUrl>
@@ -54,6 +55,9 @@ using namespace main_window_detail;
 
 project::ProjectDocument MainWindow::currentProjectDocument() const {
     project::ProjectDocument document;
+    document.timeline_zoom = timeline_widget_ != nullptr
+        ? timeline_widget_->zoomFactor()
+        : 1.0;
     document.media.reserve(media_items_.size());
     document.bins = bin_paths_;
     for (const auto& item : media_items_) {
@@ -235,6 +239,10 @@ void MainWindow::clearProjectState() {
     project_path_.reset();
     saved_project_document_ = project::ProjectDocument{};
     project_dirty_ = false;
+    if (timeline_widget_ != nullptr) timeline_widget_->setZoomFactor(1.0);
+    if (timeline_scroll_ != nullptr) {
+        timeline_scroll_->horizontalScrollBar()->setValue(0);
+    }
 
     {
         const QSignalBlocker blocker(media_list_);
@@ -617,6 +625,12 @@ void MainWindow::applyLoadedProject(
     playback_frame_index_ = 0;
     project_path_ = normalizedPath(project_path);
     saved_project_document_ = saved_document;
+    if (timeline_widget_ != nullptr) {
+        timeline_widget_->setZoomFactor(saved_document.timeline_zoom);
+    }
+    if (timeline_scroll_ != nullptr) {
+        timeline_scroll_->horizontalScrollBar()->setValue(0);
+    }
 
     populateMediaBrowser();
 

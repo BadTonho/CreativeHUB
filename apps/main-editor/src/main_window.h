@@ -21,6 +21,7 @@
 #include <vector>
 
 class QDockWidget;
+class QScrollArea;
 class QAction;
 class QCloseEvent;
 class QCheckBox;
@@ -157,6 +158,7 @@ private:
     void recordTimelineEdit(timeline::EditState state);
     void updateHistoryActions();
     void updateTimelineState();
+    void applyTimelineZoom(double factor, double anchor_content_x);
     void beginAudioEdit();
     void finishAudioEdit();
     void applyClipAudioControls();
@@ -277,6 +279,7 @@ private:
     QAction* move_track_down_action_ = nullptr;
     QAction* remove_track_action_ = nullptr;
     timeline::TimelineWidget* timeline_widget_ = nullptr;
+    QScrollArea* timeline_scroll_ = nullptr;
     std::vector<ImportedMedia> media_items_;
     std::vector<std::string> bin_paths_{"Unsorted"};
     timeline::TimelineModel timeline_model_;

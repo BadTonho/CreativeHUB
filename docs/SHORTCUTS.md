@@ -18,8 +18,10 @@ It must change in the same commit as any shortcut change.
 | Ctrl + O | Open a project | Main Editor |
 | Ctrl + S | Save the current project or open Save As | Main Editor |
 | Ctrl + Shift + S | Save the current project under a new path | Main Editor |
+| Ctrl + Mouse Wheel | Zoom the timeline around the pointer | Timeline |
 
-Alt + drag is a mouse gesture, not a keyboard shortcut. By default, normal
+Alt + drag is a mouse gesture, not a keyboard shortcut. Ctrl + mouse wheel is
+documented here because it is the timeline zoom gesture. By default, normal
 dragging moves a clip between tracks and absolute positions while Alt + drag
 seeks. The Edit > Require Alt to Move Clips option can enable the modifier
 requirement; in that mode, Alt + dragging moves clips and normal dragging

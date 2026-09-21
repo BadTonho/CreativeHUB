@@ -32,6 +32,7 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSlider>
 #include <QStatusBar>
 #include <QUrl>
@@ -39,6 +40,7 @@
 #include <QWidget>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
+#include <QTimer>
 
 #include <algorithm>
 #include <cmath>
@@ -314,6 +316,23 @@ QWidget* MainWindow::createTimeline() {
     controls->addWidget(move_track_up_button);
     controls->addWidget(move_track_down_button);
     controls->addWidget(remove_track_button);
+    controls->addSpacing(10);
+    auto* zoom_label = new QLabel("Zoom", container);
+    zoom_label->setStyleSheet("color: #9aa4b2; font-weight: 600;");
+    auto* zoom_out_button = new QPushButton("−", container);
+    auto* zoom_indicator = new QLabel("100%", container);
+    auto* zoom_in_button = new QPushButton("+", container);
+    zoom_out_button->setFixedWidth(28);
+    zoom_in_button->setFixedWidth(28);
+    zoom_indicator->setAlignment(Qt::AlignCenter);
+    zoom_indicator->setMinimumWidth(48);
+    zoom_out_button->setToolTip("Zoom out of the timeline");
+    zoom_in_button->setToolTip("Zoom in on the timeline");
+    zoom_indicator->setToolTip("Current timeline zoom");
+    controls->addWidget(zoom_label);
+    controls->addWidget(zoom_out_button);
+    controls->addWidget(zoom_indicator);
+    controls->addWidget(zoom_in_button);
     controls->addStretch();
     layout->addLayout(controls);
 
@@ -360,20 +379,20 @@ QWidget* MainWindow::createTimeline() {
     remove_track_button->setToolTip("Remove the active track when it is empty");
 
     timeline_widget_ = new timeline::TimelineWidget(container);
-    auto* timeline_scroll = new QScrollArea(container);
-    timeline_scroll->setWidgetResizable(true);
-    timeline_scroll->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
-    timeline_scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    timeline_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    timeline_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    timeline_scroll->setFrameShape(QFrame::NoFrame);
-    timeline_scroll->setStyleSheet(
+    timeline_scroll_ = new QScrollArea(container);
+    timeline_scroll_->setWidgetResizable(true);
+    timeline_scroll_->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
+    timeline_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    timeline_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    timeline_scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    timeline_scroll_->setFrameShape(QFrame::NoFrame);
+    timeline_scroll_->setStyleSheet(
         "QScrollArea { background: transparent; border: none; }"
         "QScrollArea > QWidget > QWidget { background: transparent; }");
-    timeline_scroll->setWidget(timeline_widget_);
-    timeline_scroll->viewport()->installEventFilter(timeline_widget_);
-    timeline_widget_->setTimelineViewportWidth(timeline_scroll->viewport()->width());
-    layout->addWidget(timeline_scroll, 1);
+    timeline_scroll_->setWidget(timeline_widget_);
+    timeline_scroll_->viewport()->installEventFilter(timeline_widget_);
+    timeline_widget_->setTimelineViewportWidth(timeline_scroll_->viewport()->width());
+    layout->addWidget(timeline_scroll_, 1);
 
     // Keep the playback status as a compact footer while giving the timeline
     // the expandable space in the dock.
@@ -417,6 +436,38 @@ QWidget* MainWindow::createTimeline() {
             this, [this]() { moveActiveTrack(1); });
     connect(remove_track_button, &QPushButton::clicked,
             this, &MainWindow::removeActiveTrack);
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::zoomRequested,
+        this,
+        [this](double factor, double anchor_content_x) {
+            applyTimelineZoom(factor, anchor_content_x);
+        });
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::zoomChanged,
+        this,
+        [this, zoom_indicator, zoom_out_button, zoom_in_button](double factor) {
+            zoom_indicator->setText(
+                QString::number(static_cast<int>(std::lround(factor * 100.0))) + "%");
+            zoom_out_button->setEnabled(timeline_widget_->canZoomOut());
+            zoom_in_button->setEnabled(timeline_widget_->canZoomIn());
+            updateProjectDirtyState();
+        });
+    connect(zoom_out_button, &QPushButton::clicked, this, [this]() {
+        if (timeline_widget_ == nullptr || timeline_scroll_ == nullptr) return;
+        const auto anchor = timeline_scroll_->horizontalScrollBar()->value() +
+            timeline_scroll_->viewport()->width() / 2.0;
+        applyTimelineZoom(timeline_widget_->nextZoomFactor(-1), anchor);
+    });
+    connect(zoom_in_button, &QPushButton::clicked, this, [this]() {
+        if (timeline_widget_ == nullptr || timeline_scroll_ == nullptr) return;
+        const auto anchor = timeline_scroll_->horizontalScrollBar()->value() +
+            timeline_scroll_->viewport()->width() / 2.0;
+        applyTimelineZoom(timeline_widget_->nextZoomFactor(1), anchor);
+    });
+    zoom_out_button->setEnabled(timeline_widget_->canZoomOut());
+    zoom_in_button->setEnabled(timeline_widget_->canZoomIn());
     connect(clip_volume_slider_, &QSlider::sliderPressed,
             this, &MainWindow::beginAudioEdit);
     connect(clip_volume_slider_, &QSlider::valueChanged,
@@ -498,6 +549,27 @@ QWidget* MainWindow::createTimeline() {
     updateTimelineState();
     updatePlaybackControls();
     return container;
+}
+
+void MainWindow::applyTimelineZoom(double factor, double anchor_content_x) {
+    if (timeline_widget_ == nullptr || timeline_scroll_ == nullptr) return;
+
+    auto* scroll_bar = timeline_scroll_->horizontalScrollBar();
+    const auto old_scroll = scroll_bar->value();
+    const auto anchor_frame = timeline_widget_->frameAtContentX(anchor_content_x);
+    const auto anchor_viewport_x = anchor_content_x - static_cast<double>(old_scroll);
+    timeline_widget_->setZoomFactor(factor);
+
+    QTimer::singleShot(0, timeline_scroll_, [this, anchor_frame, anchor_viewport_x]() {
+        if (timeline_widget_ == nullptr || timeline_scroll_ == nullptr) return;
+        auto* bar = timeline_scroll_->horizontalScrollBar();
+        const auto new_anchor_content_x = anchor_frame.has_value()
+            ? timeline_widget_->contentXForFrame(*anchor_frame)
+            : anchor_viewport_x + static_cast<double>(bar->value());
+        const auto target = static_cast<int>(std::llround(
+            new_anchor_content_x - anchor_viewport_x));
+        bar->setValue(target);
+    });
 }
 
 bool MainWindow::hasSelectedMedia() const noexcept {

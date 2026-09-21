@@ -16,8 +16,10 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <QResizeEvent>
+#include <QWheelEvent>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -33,6 +35,9 @@ constexpr double row_gap = 10.0;
 constexpr double track_header_width = 142.0;
 constexpr double edge_width = 8.0;
 constexpr double standard_timeline_duration_seconds = 60.0 * 60.0;
+constexpr std::array<double, 11> zoom_levels = {
+    0.25, 0.50, 0.75, 1.00, 1.25, 1.50,
+    2.00, 3.00, 4.00, 6.00, 8.00};
 
 QString text(const std::string& value) {
     return QString::fromUtf8(value.data(), static_cast<int>(value.size()));
@@ -184,6 +189,42 @@ bool TimelineWidget::moveRequiresAlt() const noexcept {
     return move_requires_alt_;
 }
 
+double TimelineWidget::zoomFactor() const noexcept {
+    return zoom_factor_;
+}
+
+void TimelineWidget::setZoomFactor(double factor) {
+    if (!std::isfinite(factor)) return;
+    const auto normalized = std::clamp(factor, zoom_levels.front(), zoom_levels.back());
+    if (std::abs(normalized - zoom_factor_) < 0.000001) return;
+    zoom_factor_ = normalized;
+    updateHorizontalExtent();
+    update();
+    emit zoomChanged(zoom_factor_);
+}
+
+double TimelineWidget::nextZoomFactor(int direction) const noexcept {
+    if (direction == 0) return zoom_factor_;
+    if (direction > 0) {
+        for (const auto level : zoom_levels) {
+            if (level > zoom_factor_ + 0.000001) return level;
+        }
+        return zoom_levels.back();
+    }
+    for (auto index = zoom_levels.size(); index-- > 0;) {
+        if (zoom_levels[index] < zoom_factor_ - 0.000001) return zoom_levels[index];
+    }
+    return zoom_levels.front();
+}
+
+bool TimelineWidget::canZoomIn() const noexcept {
+    return zoom_factor_ < zoom_levels.back() - 0.000001;
+}
+
+bool TimelineWidget::canZoomOut() const noexcept {
+    return zoom_factor_ > zoom_levels.front() + 0.000001;
+}
+
 QString TimelineWidget::formatTimecode(std::int64_t frame, double frame_rate) {
     if (!std::isfinite(frame_rate) || frame_rate <= 0.0) frame_rate = 30.0;
     const auto nonnegative_frame = std::max<std::int64_t>(0, frame);
@@ -287,7 +328,16 @@ std::int64_t TimelineWidget::standardDuration() const noexcept {
 }
 
 std::int64_t TimelineWidget::displayDuration() const noexcept {
-    return std::max(totalDuration(), standardDuration());
+    const auto standard = standardDuration();
+    const auto zoom_duration = std::max<long double>(
+        1.0L,
+        std::ceil(static_cast<long double>(standard) /
+                  static_cast<long double>(zoom_factor_)));
+    const auto max_duration = static_cast<long double>(
+        std::numeric_limits<std::int64_t>::max());
+    return std::max(
+        totalDuration(),
+        static_cast<std::int64_t>(std::min(zoom_duration, max_duration)));
 }
 
 std::int64_t TimelineWidget::totalDuration() const noexcept {
@@ -306,15 +356,29 @@ void TimelineWidget::updateHorizontalExtent() {
         1,
         timeline_viewport_width_ > 0 ? timeline_viewport_width_ : width());
     const auto standard = standardDuration();
-    const auto visual_duration = displayDuration();
+    const auto base_duration = std::max(totalDuration(), standard);
     const auto scaled_width = std::ceil(
         static_cast<long double>(base_width) *
-        static_cast<long double>(visual_duration) /
+        static_cast<long double>(base_duration) *
+        static_cast<long double>(zoom_factor_) /
         static_cast<long double>(standard));
     const auto max_width = static_cast<long double>(std::numeric_limits<int>::max());
     const auto required_width = static_cast<int>(std::min(scaled_width, max_width));
     setMinimumWidth(std::max(base_width, required_width));
     updateGeometry();
+}
+
+std::optional<std::int64_t> TimelineWidget::frameAtContentX(double x) const noexcept {
+    return globalFrameAt(x);
+}
+
+double TimelineWidget::contentXForFrame(std::int64_t frame) const noexcept {
+    const auto content = trackContentRect(0);
+    const auto duration = displayDuration();
+    if (content.width() <= 0.0 || duration <= 0) return content.left();
+    const auto bounded_frame = std::clamp<std::int64_t>(frame, 0, duration);
+    return content.left() + content.width() *
+        static_cast<double>(bounded_frame) / static_cast<double>(duration);
 }
 
 std::optional<std::size_t> TimelineWidget::trackAt(double y) const noexcept {
@@ -1072,6 +1136,26 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
         return;
     }
     event->ignore();
+}
+
+void TimelineWidget::wheelEvent(QWheelEvent* event) {
+    if (event == nullptr) return;
+    if (!event->modifiers().testFlag(Qt::ControlModifier)) {
+        event->ignore();
+        return;
+    }
+    const auto vertical_delta = event->angleDelta().y();
+    if (vertical_delta == 0) {
+        event->ignore();
+        return;
+    }
+    const auto next_factor = nextZoomFactor(vertical_delta > 0 ? 1 : -1);
+    if (std::abs(next_factor - zoom_factor_) < 0.000001) {
+        event->accept();
+        return;
+    }
+    emit zoomRequested(next_factor, event->position().x());
+    event->accept();
 }
 
 } // namespace timeline

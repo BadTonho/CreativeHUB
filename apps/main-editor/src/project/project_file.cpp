@@ -245,6 +245,11 @@ void validateDocument(const ProjectDocument& document,
     if (document.canvas_width != 1920 || document.canvas_height != 1080) {
         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an unsupported canvas size; only 1920x1080 is supported.");
     }
+    if (!std::isfinite(document.timeline_zoom) ||
+        document.timeline_zoom < 0.25 || document.timeline_zoom > 8.0) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid timeline zoom; expected a value from 0.25 to 8.0.");
+    }
     std::vector<std::filesystem::path> media_paths;
     for (const auto& media : document.media) {
         if (media.source_path.empty()) {
@@ -411,9 +416,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
     }
 
     const auto version = requiredInteger(root, "version", project_path);
-    if (version != current_format_version && version != previous_format_version &&
-        version != older_format_version && version != legacy_v2_format_version &&
-        version != legacy_format_version) {
+    if (version < legacy_format_version || version > current_format_version) {
         throw ProjectError(
             ProjectErrorCode::UnsupportedVersion,
             "The project file version is not supported.",
@@ -427,7 +430,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
     }
 
     ProjectDocument document;
-    if (version >= older_format_version) {
+    if (version >= canvas_format_version) {
         const auto canvas_value = root.value("canvas");
         if (!canvas_value.isObject()) {
             throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the canvas object.");
@@ -489,6 +492,19 @@ ProjectDocument load(const std::filesystem::path& project_path) {
         throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the timeline object.");
     }
     const auto timeline_object = timeline_value.toObject();
+    if (version >= timeline_zoom_format_version) {
+        const auto zoom_value = timeline_object.value("zoom");
+        if (zoom_value.isUndefined()) {
+            throwJson(ProjectErrorCode::MissingField, project_path,
+                      "Project JSON is missing the timeline zoom value.");
+        }
+        if (!zoom_value.isDouble() || !std::isfinite(zoom_value.toDouble()) ||
+            zoom_value.toDouble() < 0.25 || zoom_value.toDouble() > 8.0) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid timeline zoom; expected a value from 0.25 to 8.0.");
+        }
+        document.timeline_zoom = zoom_value.toDouble();
+    }
     if (version == legacy_format_version) {
         const auto clips_value = timeline_object.value("clips");
         if (!clips_value.isArray()) {
@@ -548,7 +564,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                 }
                 const auto clip_object = clip_value.toObject();
                 ProjectClip clip;
-                if (version >= previous_format_version && clip_object.contains("kind")) {
+                if (version >= clip_kind_format_version && clip_object.contains("kind")) {
                     const auto kind = clip_object.value("kind");
                     if (!kind.isString()) {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip kind.");
@@ -582,7 +598,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                     }
                     clip.audio_muted = clip_object.value("audio_muted").toBool();
                 }
-                if (version >= older_format_version && clip_object.contains("transform")) {
+                if (version >= canvas_format_version && clip_object.contains("transform")) {
                     const auto transform = clip_object.value("transform");
                     if (!transform.isObject()) {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip transform.");
@@ -603,7 +619,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                     clip.transform.rotation_degrees = transform_object.value("rotation").toDouble();
                     clip.transform.opacity = transform_object.value("opacity").toDouble();
                 }
-                if (version >= older_format_version && clip_object.contains("keyframes")) {
+                if (version >= canvas_format_version && clip_object.contains("keyframes")) {
                     const auto keyframes = clip_object.value("keyframes");
                     if (!keyframes.isObject()) {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains invalid clip keyframes.");
@@ -638,7 +654,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                 track.clips.push_back(clip);
                 document.timeline_clips.push_back(std::move(clip));
             }
-            if (version >= current_format_version) {
+            if (version >= transitions_format_version) {
                 const auto transitions_value = track_object.value("transitions");
                 if (!transitions_value.isArray()) {
                     throwJson(ProjectErrorCode::MissingField, project_path,
@@ -797,6 +813,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
 
     QJsonObject timeline;
     timeline.insert("tracks", track_array);
+    timeline.insert("zoom", document.timeline_zoom);
     QJsonObject root;
     root.insert("format", QString::fromLatin1(format_identifier));
     root.insert("version", current_format_version);

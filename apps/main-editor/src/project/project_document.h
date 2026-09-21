@@ -12,9 +12,11 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 5;
-inline constexpr int previous_format_version = 4;
-inline constexpr int older_format_version = 3;
+inline constexpr int current_format_version = 6;
+inline constexpr int timeline_zoom_format_version = 6;
+inline constexpr int transitions_format_version = 5;
+inline constexpr int clip_kind_format_version = 4;
+inline constexpr int canvas_format_version = 3;
 inline constexpr int legacy_v2_format_version = 2;
 inline constexpr int legacy_format_version = 1;
 inline constexpr const char* format_identifier = "creative-suite.main-editor";
@@ -65,6 +67,7 @@ struct ProjectMedia {
 struct ProjectDocument {
     int canvas_width = 1920;
     int canvas_height = 1080;
+    double timeline_zoom = 1.0;
     std::vector<ProjectMedia> media;
     std::vector<std::string> bins;
     std::vector<ProjectTrack> timeline_tracks;

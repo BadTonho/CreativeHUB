@@ -7,9 +7,9 @@ model is Qt-independent and contains imported media, bins, ordered video tracks,
 and timeline clips. It does not contain selection, playhead, layout, Undo/Redo
 history, decoded frames, FFmpeg sessions, or Qt resources.
 
-## Version 5 format
+## Version 6 format
 
-The current root uses `version: 5` and adds a fixed `canvas` object with
+The current root uses `version: 6` and adds a fixed `canvas` object with
 `width: 1920` and `height: 1080`. Timeline clips additionally persist an
 occurrence-local `transform` object and five optional keyframe arrays:
 `position_x`, `position_y`, `scale`, `rotation`, and `opacity`. Keyframe frames
@@ -30,7 +30,13 @@ Each track also contains a `transitions` array. A transition stores
 `cross_dissolve` or `fade_to_black`. The clip indexes must identify
 consecutive clips on that track with no gap, and the duration cannot exceed
 the shorter endpoint. Transition data is optional only for older project
-versions; version 5 files always write the array.
+versions; version 5 and newer files always write the array.
+
+The `timeline` object also stores the per-project horizontal timeline view as
+`zoom`, a finite value from `0.25` through `8.0`. The default is `1.0`, where
+one hour is the reference range. This view setting is persisted with the
+project but is not part of Timeline Undo/Redo history; selection, playhead,
+layout, decoded frames, FFmpeg sessions, and Qt resources remain excluded.
 
 ## Version 2 format
 
@@ -47,9 +53,9 @@ default bin is Unsorted. Missing audio fields load as `audio_gain: 1.0` and
 `audio_muted: false`, preserving compatibility with projects written before
 audio controls existed.
 
-## Version 4, version 3, version 2, and version 1 migration
+## Version 5, version 4, version 3, version 2, and version 1 migration
 
-Version 4 files receive an empty transition list and otherwise preserve their
+Version 5 files load with `zoom: 1.0` when the field is absent. Version 4 files receive an empty transition list and otherwise preserve their
 text clips, transforms, keyframes, audio parameters, bins, and media state.
 Version 3 files receive the identity text fields (`kind: "video"` for existing
 clips and empty/default text data) while preserving their transforms and
@@ -57,7 +63,7 @@ keyframes. Version 2 files receive the identity transform, an empty keyframe
 set, and the 1920x1080 canvas when opened. Version 1 files containing
 `timeline.clips` remain supported; they are converted to a single Video 1
 track with sequential timeline starts computed from clip durations. The next
-successful save writes version 5.
+successful save writes version 6 and includes the default timeline zoom.
 
 ## Transactional open and save
 
