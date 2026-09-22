@@ -24,9 +24,9 @@ public:
     VideoPlaybackSession(VideoPlaybackSession&&) noexcept;
     VideoPlaybackSession& operator=(VideoPlaybackSession&&) noexcept;
 
-    std::optional<VideoFrame> decode_next_frame();
-    std::optional<VideoFrame> decode_frame_at(std::int64_t frame_index);
-    std::optional<VideoFrame> decode_frame_at(
+    std::optional<VideoFramePtr> decode_next_frame();
+    std::optional<VideoFramePtr> decode_frame_at(std::int64_t frame_index);
+    std::optional<VideoFramePtr> decode_frame_at(
         std::int64_t frame_index,
         const CancellationPredicate& should_cancel);
     [[nodiscard]] std::uint64_t take_cache_hit_count() noexcept;
@@ -41,9 +41,12 @@ private:
     explicit VideoPlaybackSession(std::unique_ptr<Impl> impl);
 
     static std::unique_ptr<Impl> openImpl(const std::filesystem::path& source_path);
-    static std::optional<VideoFrame> decodeNextFrame(Impl& impl);
-    static void cacheFrame(Impl& impl, std::int64_t frame_index, const VideoFrame& frame);
-    static std::shared_ptr<const VideoFrame> takeCachedFrame(
+    static std::optional<VideoFramePtr> decodeNextFrame(Impl& impl);
+    static void cacheFrame(
+        Impl& impl,
+        std::int64_t frame_index,
+        const VideoFramePtr& frame);
+    static VideoFramePtr takeCachedFrame(
         Impl& impl,
         std::int64_t frame_index);
     static void resetDecoderPosition(Impl& impl);

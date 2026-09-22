@@ -108,9 +108,13 @@ playback caches only: they are invalidated when media or composition state
 changes and never alter clip data, timing, frame rate, or project history.
 
 Preview diagnostics separate total decode time into packet read/send, codec
-receive, RGBA conversion, and cache-copy timings. Sequential playback reuses
-the decoder's cached FFmpeg `SwsContext`; a format or dimension change rebuilds
-that conversion context without changing the resulting `VideoFrame`.
+receive, RGBA conversion, and cache-copy timings. Decoded frames are exposed
+as immutable shared pointers, so sequential playback and cache hits reuse the
+same pixel allocation instead of copying a complete frame into the cache.
+Sequential playback reuses the decoder's cached FFmpeg `SwsContext`; a format
+or dimension change rebuilds that conversion context without changing the
+resulting `VideoFrame`. The compatibility `frame_cache_copy_*` metric remains
+available and is expected to stay at zero for this path.
 
 Playback frames cross the worker/UI boundary as immutable shared payloads. The
 GPU Preview retains that payload until its upload instead of copying the RGBA

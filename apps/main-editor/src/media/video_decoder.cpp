@@ -48,10 +48,10 @@ VideoFrame VideoDecoder::decode_first_frame(const std::filesystem::path& source_
     try {
         auto session = VideoPlaybackSession::open(source_path);
         auto frame = session->decode_next_frame();
-        if (!frame.has_value()) {
+        if (!frame.has_value() || *frame == nullptr) {
             throw MediaError("The video ended before a frame could be decoded.");
         }
-        return std::move(*frame);
+        return *(*frame);
     } catch (const MediaError& error) {
         logFailure(source_path, error);
         throw;

@@ -1,5 +1,6 @@
 #include "media/video_metadata.h"
 #include "media/video_playback.h"
+#include "rendering/preview_performance_metrics.h"
 
 #include <chrono>
 #include <filesystem>
@@ -33,37 +34,47 @@ void expectMediaError(const std::filesystem::path& path, const std::string& expe
 }
 
 void validateReference(const std::filesystem::path& path) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
+
     auto session = media::VideoPlaybackSession::open(path);
     require(session->current_frame_index() == -1, "Session did not start before the first frame.");
 
     const auto first = session->decode_next_frame();
-    require(first.has_value(), "The first frame was not decoded.");
-    require(first->width == 640 && first->height == 360, "Unexpected first frame dimensions.");
-    const auto first_pixels = first->rgba_pixels;
+    require(first.has_value() && *first != nullptr, "The first frame was not decoded.");
+    require((*first)->width == 640 && (*first)->height == 360,
+            "Unexpected first frame dimensions.");
+    const auto first_pixels = (*first)->rgba_pixels;
     require(session->current_frame_index() == 0, "First frame index is incorrect.");
 
     const auto second = session->decode_next_frame();
-    require(second.has_value(), "The second frame was not decoded.");
+    require(second.has_value() && *second != nullptr, "The second frame was not decoded.");
     require(session->current_frame_index() == 1, "Second frame index is incorrect.");
 
     const auto first_seek = session->decode_frame_at(0);
-    require(first_seek.has_value(), "Seeking to the first frame failed.");
+    require(first_seek.has_value() && *first_seek != nullptr,
+            "Seeking to the first frame failed.");
     require(session->current_frame_index() == 0, "Previous frame index is incorrect.");
-    require(first_seek->width == 640 && first_seek->height == 360,
+    require((*first_seek)->width == 640 && (*first_seek)->height == 360,
             "The first seek frame dimensions are incorrect.");
-    require(first_seek->rgba_pixels == first_pixels,
+    require((*first_seek)->rgba_pixels == first_pixels,
             "Seeking back to the first frame changed the converted RGBA pixels.");
+    require(*first_seek == *first,
+            "A cache hit did not return the original shared video frame.");
     require(session->take_cache_hit_count() >= 1,
             "A previously decoded frame was not reused from the cache.");
 
     const auto intermediate = session->decode_frame_at(30);
-    require(intermediate.has_value(), "The intermediate frame could not be decoded.");
+    require(intermediate.has_value() && *intermediate != nullptr,
+            "The intermediate frame could not be decoded.");
     require(session->current_frame_index() == 30, "Intermediate frame index is incorrect.");
-    require(intermediate->width == 640 && intermediate->height == 360,
+    require((*intermediate)->width == 640 && (*intermediate)->height == 360,
             "The intermediate frame dimensions are incorrect.");
 
     const auto after_intermediate = session->decode_next_frame();
-    require(after_intermediate.has_value(), "Decoding did not continue after seeking.");
+    require(after_intermediate.has_value() && *after_intermediate != nullptr,
+            "Decoding did not continue after seeking.");
     require(session->current_frame_index() == 31,
             "The frame after an intermediate seek has the wrong index.");
     require(session->take_cache_hit_count() == 0,
@@ -83,7 +94,7 @@ void validateReference(const std::filesystem::path& path) {
     std::int64_t final_frame_index = -1;
     std::size_t decoded_frames = 0;
     while (const auto frame = session->decode_next_frame()) {
-        require(frame->width == 640 && frame->height == 360,
+        require(*frame != nullptr && (*frame)->width == 640 && (*frame)->height == 360,
                 "A sequential frame has unexpected dimensions.");
         final_frame_index = session->current_frame_index();
         ++decoded_frames;
@@ -94,10 +105,11 @@ void validateReference(const std::filesystem::path& path) {
 
     session->reset();
     const auto final_frame = session->decode_frame_at(final_frame_index);
-    require(final_frame.has_value(), "Seeking to the final frame failed.");
+    require(final_frame.has_value() && *final_frame != nullptr,
+            "Seeking to the final frame failed.");
     require(session->current_frame_index() == final_frame_index,
             "Final seek frame index is incorrect.");
-    require(final_frame->width == 640 && final_frame->height == 360,
+    require((*final_frame)->width == 640 && (*final_frame)->height == 360,
             "The final seek frame dimensions are incorrect.");
 
     const auto after_final = session->decode_next_frame();
@@ -110,6 +122,11 @@ void validateReference(const std::filesystem::path& path) {
 
     session->reset();
     require(session->current_frame_index() == -1, "Reset did not restore the initial index.");
+
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    require(snapshot.frame_cache_copy.count == 0,
+            "The shared playback path still copied pixels into the frame cache.");
+    metrics.setEnabled(false);
 }
 
 } // namespace

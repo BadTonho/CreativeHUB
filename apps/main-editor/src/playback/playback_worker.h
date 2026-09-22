@@ -118,7 +118,7 @@ private:
     bool ensureSessionAtCurrentFrame();
     void ensureTimer();
     void finishPlayback();
-    void emitFrame(std::optional<media::VideoFrame> frame);
+    void emitFrame(std::optional<media::VideoFramePtr> frame);
     void emitComposedFrame();
     [[nodiscard]] std::optional<std::vector<DecodedCompositionLayer>>
         decodeCompositionLayers(

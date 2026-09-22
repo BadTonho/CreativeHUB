@@ -80,6 +80,10 @@ void validateSeekWithoutMedia(QCoreApplication& application) {
 }
 
 void validateReference(QCoreApplication& application, const std::filesystem::path& path) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
+
     playback::PlaybackWorker worker;
     bool media_ready = false;
     bool playback_finished = false;
@@ -142,8 +146,13 @@ void validateReference(QCoreApplication& application, const std::filesystem::pat
     require(frame_count >= 2, "Worker playback emitted too few frames.");
     require(last_frame_index >= 0, "Worker playback did not expose the final frame index.");
 
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    require(snapshot.payload.count == 0,
+            "Source playback created a copied payload instead of sharing the decoded frame.");
+
     worker.setMedia(toQString(path), 30.0, 0, 0, 1.0, false, 1.0, false, 0, 0, 8);
     require(ready_count == 2, "Reactivating media did not emit mediaReady again.");
+    metrics.setEnabled(false);
 }
 
 void validateSeekCoalescing(QCoreApplication& application, const std::filesystem::path& path) {

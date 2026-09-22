@@ -39,12 +39,15 @@ staging buffer instead of allocating a new buffer for every upload.
 ## Composition pipeline and bounded caches
 
 The playback session keeps a bounded least-recently-used cache of up to eight
-decoded RGBA frames and 64 MiB. A request for the next frame in the current
-decoder sequence advances the decoder directly, without performing another
-seek. Cache misses and non-sequential requests retain the existing seek and
-fallback behavior, including cancellation, segment limits, and error
-reporting. The cache is intentionally per playback session so memory usage
-does not grow with project duration.
+decoded RGBA frames and 64 MiB. Cache entries are immutable shared pointers:
+the frame returned by the decoder, the cache entry, and the playback worker
+share the same RGBA allocation. Sequential playback and cache hits therefore
+avoid a full pixel copy. A request for the next frame in the current decoder
+sequence advances the decoder directly, without performing another seek.
+Cache misses and non-sequential requests retain the existing seek and fallback
+behavior, including cancellation, segment limits, and error reporting. The
+cache is intentionally per playback session so memory usage does not grow with
+project duration.
 
 Composition is split into two worker-side stages. The first stage collects
 ordered decoded layers and their evaluated transforms in a backend-neutral
@@ -98,7 +101,10 @@ conversion, and decoded-frame cache-copy submetrics. The total `decode_*`
 values remain the compatibility metric; the submetrics may have different
 counts because one decoded frame can require multiple packet or codec calls.
 The playback session reuses its FFmpeg `SwsContext` for compatible frames and
-lets FFmpeg replace it when the source format or dimensions change.
+lets FFmpeg replace it when the source format or dimensions change. The
+`frame_cache_copy_*` fields remain in the log for historical comparison and
+should be zero on the shared playback path because cache insertion no longer
+copies RGBA pixels.
 
 SDL3 and the archived SDL3 prototype are intentionally not reused by the Main
 Editor: the application already depends on Qt Widgets, and adding a second
