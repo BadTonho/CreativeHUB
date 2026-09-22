@@ -165,7 +165,8 @@ messages, including `Loading timeline clip...`, share one line in that footer;
 the separate global status-bar row is hidden. The timeline receives the
 expandable dock space, and its track rows grow within that space while additional rows remain
 available through vertical scrolling. Each track row has a maximum height of
-180 pixels and a minimum height of 30 pixels. Holding Shift while scrolling
+180 pixels, a minimum height of 30 pixels, and a default height of 70 pixels
+for new projects. Holding Shift while scrolling
 over the Timeline changes every row uniformly using smooth wheel deltas. When
 the rows require more space than the viewport, the existing vertical scroll
 bar exposes the remaining tracks. The selected row height is persisted per

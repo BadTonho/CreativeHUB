@@ -45,6 +45,8 @@ int main(int argc, char** argv) {
         std::ofstream(outside_source, std::ios::binary).close();
 
         project::ProjectDocument original;
+        require(original.timeline_row_height == 70.0,
+                "A new project document did not start with the 70-pixel default row height.");
         original.media = {
             {first_source, "First Video", "Footage/Scenes", false},
             {outside_source, "Offline Asset", "Unsorted", true},
@@ -273,15 +275,15 @@ int main(int argc, char** argv) {
         const auto migrated_v5 = project::load(project_path);
         require(migrated_v5.timeline_zoom == 1.0,
                 "A version 5 project without timeline zoom did not default to 100%.");
-        require(migrated_v5.timeline_row_height == timeline::kDefaultTrackRowHeight,
-                "An older project without row height did not use the default Timeline height.");
+        require(migrated_v5.timeline_row_height == 70.0,
+                "An older project without row height did not migrate to 70-pixel Timeline rows.");
 
         writeText(
             project_path,
             R"({"format":"creative-suite.main-editor","version":6,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"zoom":1,"tracks":[{"name":"Video 1","clips":[],"transitions":[]}]}})");
         const auto migrated_v6 = project::load(project_path);
-        require(migrated_v6.timeline_row_height == timeline::kDefaultTrackRowHeight,
-                "A version 6 project without row height did not migrate to the default Timeline height.");
+        require(migrated_v6.timeline_row_height == 70.0,
+                "A version 6 project without row height did not migrate to 70-pixel Timeline rows.");
 
         for (const auto invalid_zoom : {
                  0.24, 512.01, std::numeric_limits<double>::quiet_NaN()}) {

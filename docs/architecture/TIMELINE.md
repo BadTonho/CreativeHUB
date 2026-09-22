@@ -43,7 +43,8 @@ Zoom changes only the timeline's horizontal presentation and are saved in the
 project; they do not change clip frames, playback, preview, or Undo/Redo.
 The timeline surface grows only as much as its track rows require; additional
 tracks are available through vertical scrolling. Shift + mouse wheel changes
-the height of every track row uniformly, from 30 to 180 pixels. The gesture
+the height of every track row uniformly, from 30 to 180 pixels; new projects
+start at 70 pixels. The gesture
 uses pixel wheel deltas when available and angle deltas as a smooth fallback.
 The selected height is a per-project view setting; Ctrl + mouse wheel remains
 reserved for horizontal zoom and an unmodified wheel remains available to the
@@ -263,4 +264,4 @@ duration edits. Moving, splitting, trimming, or deleting an endpoint removes
 only transitions whose adjacency or endpoint validity is no longer true.
 Transitions are included in bounded Undo/Redo snapshots and are persisted in
 `.csp` version 7. Projects from earlier versions load with no transitions,
-100% timeline zoom, and the default 180-pixel track-row height.
+100% timeline zoom, and the default 70-pixel track-row height.

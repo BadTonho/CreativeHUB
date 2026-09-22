@@ -245,6 +245,9 @@ in the running Main Editor after UI or integration changes:
 - hold Shift and scroll over the Timeline content and ruler at low, medium, and
   maximum row heights; confirm all rows change uniformly, the 30–180 pixel
   limits are respected, and the vertical scrollbar appears when needed;
+- confirm that new projects start with 70-pixel Timeline rows, while saved
+  `row_height` values remain unchanged and projects without that field migrate
+  to 70 pixels;
 - confirm that Ctrl + scroll still changes only horizontal zoom and normal
   scrolling still moves the scroll area;
 - GPU preview, CPU fallback, grayscale, aspect-ratio preservation, and logs;

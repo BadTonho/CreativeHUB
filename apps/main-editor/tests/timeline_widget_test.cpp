@@ -103,6 +103,8 @@ int main(int argc, char* argv[]) {
 
     try {
         timeline::TimelineWidget widget;
+        require(widget.trackRowHeight() == 70.0,
+                "A new Timeline widget did not start with the 70-pixel default row height.");
         widget.resize(1000, 500);
         widget.show();
         application.processEvents();
@@ -123,6 +125,11 @@ int main(int argc, char* argv[]) {
             false,
             {makeClip("lower.mkv", 0, test_clip_duration, "lower.mkv")}};
         widget.setTracks({top_track, lower_track});
+        application.processEvents();
+
+        // Keep the drag/drop coordinate below independent from the default row
+        // height so the behavior test remains focused on track/frame mapping.
+        widget.setTrackRowHeight(timeline::kMaximumTrackRowHeight);
         application.processEvents();
 
         widget.grabMouse();
@@ -338,6 +345,8 @@ int main(int argc, char* argv[]) {
         QApplication::sendEvent(&widget, &invalid_drop);
         require(!invalid_drop.isAccepted(),
                 "Timeline accepted an unsupported effect drop.");
+
+        widget.setTrackRowHeight(timeline::kDefaultTrackRowHeight);
 
         require(widget.minimumHeight() >=
                     48 + 2 * static_cast<int>(timeline::kDefaultTrackRowHeight) +
@@ -624,6 +633,7 @@ int main(int argc, char* argv[]) {
                 "A stale ruler seek position prevented the live playhead from advancing.");
         playhead_widget.close();
         widget.setZoomFactor(1.0);
+        widget.setTrackRowHeight(timeline::kMaximumTrackRowHeight);
         widget.resize(1000, 500);
         application.processEvents();
 

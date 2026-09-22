@@ -35,7 +35,7 @@ versions; version 5 and newer files always write the array.
 The `timeline` object also stores the per-project horizontal timeline view as
 `zoom`, a finite value from `0.25` through `512.0`, and the uniform track
 `row_height`, a finite value from `30.0` through `180.0` pixels. The defaults
-are `1.0` zoom and `180.0` pixels, where one hour is the reference range.
+are `1.0` zoom and `70.0` pixels, where one hour is the reference range.
 Values above `8.0` enable high-density and frame-level inspection. These view
 settings are persisted with the project but are not part of Timeline Undo/Redo
 history; selection, playhead, decoded frames, FFmpeg sessions, and Qt
@@ -58,7 +58,7 @@ audio controls existed.
 
 ## Version 6, version 5, version 4, version 3, version 2, and version 1 migration
 
-Version 6 and earlier files load with `row_height: 180.0`. Version 5 files
+Version 6 and earlier files load with `row_height: 70.0`. Version 5 files
 load with `zoom: 1.0` when the field is absent. Version 4 files receive an empty transition list and otherwise preserve their
 text clips, transforms, keyframes, audio parameters, bins, and media state.
 Version 3 files receive the identity text fields (`kind: "video"` for existing
