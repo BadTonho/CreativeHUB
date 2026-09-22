@@ -219,6 +219,12 @@ short projects keep a stable scale and retain empty space after their last
 clip. Projects longer than one hour expand the timeline surface and use the
 horizontal scrollbar; the actual content duration still controls playback
 limits.
+The Timeline track-header column is fixed to the left side of the scroll
+viewport. Track names, clip counts, and the active-track highlight remain
+stationary during horizontal scrolling, while the ruler and clip content move
+normally. The header follows vertical scrolling so its rows remain aligned;
+the transparent overlay does not intercept mouse, drag-and-drop, seek, or
+editing events.
 The timeline controls expose a thin zoom slider with the percentage indicator
 centered above it, plus a minus button and a plus button without an extra text
 label. Zoom levels range from 25% to 51,200%, including frame-level levels

@@ -53,6 +53,7 @@ class QWidget;
 
 namespace timeline {
 class TimelineWidget;
+class TimelineTrackHeaderOverlay;
 }
 
 namespace settings {
@@ -374,6 +375,7 @@ private:
     std::unique_ptr<settings::ShortcutManager> shortcut_manager_;
     project::AutosaveManager autosave_manager_;
     timeline::TimelineWidget* timeline_widget_ = nullptr;
+    timeline::TimelineTrackHeaderOverlay* timeline_header_overlay_ = nullptr;
     QScrollArea* timeline_scroll_ = nullptr;
     std::vector<ImportedMedia> media_items_;
     std::vector<std::string> bin_paths_{"Unsorted"};

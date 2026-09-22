@@ -452,6 +452,8 @@ add_executable(creative-suite-main-editor-timeline-widget-tests
     ../src/timeline/timeline_model.cpp
     ../src/timeline/timeline_model.h
     ../src/timeline/timeline_layout.h
+    ../src/timeline/timeline_track_header_overlay.cpp
+    ../src/timeline/timeline_track_header_overlay.h
     ../src/timeline/timeline_widget.cpp
     ../src/timeline/timeline_widget.h
     ../src/timeline/timeline_transform.cpp

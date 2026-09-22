@@ -22,6 +22,7 @@ class QDropEvent;
 class QMimeData;
 class QMouseEvent;
 class QPaintEvent;
+class QPainter;
 class QContextMenuEvent;
 class QWheelEvent;
 class QPoint;
@@ -29,6 +30,8 @@ class QEvent;
 class QObject;
 
 namespace timeline {
+
+class TimelineTrackHeaderOverlay;
 
 class TimelineWidget final : public QWidget {
     Q_OBJECT
@@ -49,6 +52,10 @@ public:
     [[nodiscard]] bool moveRequiresAlt() const noexcept;
     void setSnapEnabled(bool enabled);
     [[nodiscard]] bool snapEnabled() const noexcept;
+    // Rendering bridge used by the fixed header overlay hosted by the
+    // Timeline scroll area's viewport.
+    [[nodiscard]] int trackHeaderOverlayWidth() const noexcept;
+    void paintTrackHeaderOverlay(QPainter& painter, int vertical_offset) const;
     void setTimelineViewportWidth(int width);
     [[nodiscard]] double zoomFactor() const noexcept;
     void setZoomFactor(double factor);
@@ -94,6 +101,7 @@ signals:
     void zoomChanged(double factor);
     void trackRowHeightChanged(double height);
     void snapEnabledChanged(bool enabled);
+    void trackHeaderVisualsChanged();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -120,6 +128,10 @@ private:
     [[nodiscard]] double rowHeight() const noexcept;
     [[nodiscard]] QRectF trackContentRect(std::size_t index) const noexcept;
     [[nodiscard]] QRectF clipRect(const ClipLocation& location) const noexcept;
+    void paintTrackHeaderCell(
+        QPainter& painter,
+        std::size_t track_index,
+        const QRectF& row) const;
     [[nodiscard]] double frameRate() const noexcept;
     [[nodiscard]] std::int64_t standardDuration() const noexcept;
     [[nodiscard]] std::int64_t displayDuration() const noexcept;

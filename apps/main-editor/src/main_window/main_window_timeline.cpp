@@ -4,6 +4,7 @@
 #include "logging/logger.h"
 #include "preview_widget.h"
 #include "project/project_file.h"
+#include "timeline/timeline_track_header_overlay.h"
 #include "timeline/timeline_zoom.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser_list_widget.h"
@@ -483,6 +484,16 @@ QWidget* MainWindow::createTimeline() {
     timeline_widget_->setAcceptDrops(false);
     timeline_scroll_->viewport()->installEventFilter(timeline_widget_);
     timeline_widget_->setTimelineViewportWidth(timeline_scroll_->viewport()->width());
+    timeline_header_overlay_ = new timeline::TimelineTrackHeaderOverlay(
+        timeline_widget_,
+        timeline_scroll_->viewport());
+    timeline_header_overlay_->setVerticalScrollOffset(
+        timeline_scroll_->verticalScrollBar()->value());
+    connect(
+        timeline_scroll_->verticalScrollBar(),
+        &QScrollBar::valueChanged,
+        timeline_header_overlay_,
+        &timeline::TimelineTrackHeaderOverlay::setVerticalScrollOffset);
     snap_button_->setChecked(timeline_widget_->snapEnabled());
     layout->addWidget(timeline_scroll_, 1);
 

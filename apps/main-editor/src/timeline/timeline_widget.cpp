@@ -15,6 +15,7 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPaintEvent>
 #include <QResizeEvent>
 #include <QWheelEvent>
@@ -142,6 +143,7 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
     drop_hover_track_.reset();
     drop_hover_frame_.reset();
     clearDragPreview();
+    emit trackHeaderVisualsChanged();
     update();
 }
 
@@ -171,6 +173,7 @@ void TimelineWidget::clearClips() {
     drop_hover_frame_.reset();
     clearDragPreview();
     selected_transition_.reset();
+    emit trackHeaderVisualsChanged();
     update();
 }
 
@@ -184,6 +187,7 @@ void TimelineWidget::setActiveClip(std::optional<ClipLocation> location) {
     drag_frame_.reset();
     ruler_frame_.reset();
     ruler_content_x_.reset();
+    emit trackHeaderVisualsChanged();
     update();
 }
 
@@ -311,6 +315,7 @@ void TimelineWidget::setTrackRowHeight(double height) {
     if (std::abs(normalized - track_row_height_) < 0.000001) return;
     track_row_height_ = normalized;
     updateVerticalExtent();
+    emit trackHeaderVisualsChanged();
     update();
     emit trackRowHeightChanged(track_row_height_);
 }
@@ -365,6 +370,111 @@ void TimelineWidget::setTimelineViewportWidth(int width) {
     if (timeline_viewport_width_ == normalized_width) return;
     timeline_viewport_width_ = normalized_width;
     updateHorizontalExtent();
+}
+
+int TimelineWidget::trackHeaderOverlayWidth() const noexcept {
+    return static_cast<int>(std::ceil(left_margin + track_header_width));
+}
+
+void TimelineWidget::paintTrackHeaderCell(
+    QPainter& painter,
+    std::size_t track_index,
+    const QRectF& row) const {
+    if (track_index >= tracks_.size()) return;
+
+    const auto header = QRectF(
+        row.left(),
+        row.top(),
+        track_header_width,
+        row.height());
+    const bool active_track = active_clip_.has_value() &&
+        active_clip_->track_index == track_index;
+
+    painter.setPen(active_track ? QColor("#d5a94b") : QColor("#3d4654"));
+    painter.setBrush(active_track ? QColor("#252d3a") : QColor("#202631"));
+    QPainterPath header_path;
+    constexpr double header_corner_radius = 4.0;
+    header_path.moveTo(header.right(), header.top());
+    header_path.lineTo(
+        header.left() + header_corner_radius,
+        header.top());
+    header_path.quadTo(
+        header.left(),
+        header.top(),
+        header.left(),
+        header.top() + header_corner_radius);
+    header_path.lineTo(
+        header.left(),
+        header.bottom() - header_corner_radius);
+    header_path.quadTo(
+        header.left(),
+        header.bottom(),
+        header.left() + header_corner_radius,
+        header.bottom());
+    header_path.lineTo(header.right(), header.bottom());
+    header_path.closeSubpath();
+    painter.drawPath(header_path);
+
+    painter.setPen(active_track ? QColor("#ffcf5c") : QColor("#b8c2d1"));
+    painter.drawText(
+        header.adjusted(10, 7, -8, -header.height() + 40),
+        Qt::AlignLeft | Qt::AlignVCenter,
+        QString("V%1  %2")
+            .arg(track_index + 1)
+            .arg(text(tracks_[track_index].name)));
+
+    painter.setPen(QColor("#7e8999"));
+    painter.setFont(QFont(painter.font().family(), 8));
+    painter.drawText(
+        header.adjusted(10, 38, -8, -7),
+        Qt::AlignLeft | Qt::AlignVCenter,
+        QString("%1 clip%2")
+            .arg(tracks_[track_index].clips.size())
+            .arg(tracks_[track_index].clips.size() == 1 ? "" : "s"));
+
+    painter.setPen(QColor("#384250"));
+    painter.drawLine(
+        QPointF(row.left() + track_header_width, row.top() + 4),
+        QPointF(row.left() + track_header_width, row.bottom() - 4));
+}
+
+void TimelineWidget::paintTrackHeaderOverlay(
+    QPainter& painter,
+    int vertical_offset) const {
+    const auto normalized_offset = std::max(0, vertical_offset);
+    const auto overlay_width = static_cast<double>(trackHeaderOverlayWidth());
+    const auto first_row_top = top_margin - normalized_offset;
+    const auto last_row_bottom = tracks_.empty()
+        ? first_row_top
+        : trackRect(tracks_.size() - 1).bottom() - normalized_offset;
+
+    painter.save();
+    painter.setClipRect(QRectF(
+        0.0,
+        0.0,
+        overlay_width,
+        static_cast<double>(painter.viewport().height())));
+    if (last_row_bottom > first_row_top) {
+        painter.fillRect(
+            QRectF(0.0, first_row_top, overlay_width, last_row_bottom - first_row_top),
+            QColor("#171a20"));
+    }
+
+    for (std::size_t track_index = 0;
+         track_index < tracks_.size();
+         ++track_index) {
+        auto row = trackRect(track_index);
+        row.moveTop(row.top() - normalized_offset);
+        paintTrackHeaderCell(painter, track_index, row);
+        // The overlay ends at the content boundary so the frame-zero
+        // playhead remains visible. Draw the fixed divider one pixel inside
+        // that boundary instead of relying on the scrolled widget's divider.
+        painter.setPen(QColor("#384250"));
+        painter.drawLine(
+            QPointF(overlay_width - 1.0, row.top() + 4),
+            QPointF(overlay_width - 1.0, row.bottom() - 4));
+    }
+    painter.restore();
 }
 
 bool TimelineWidget::eventFilter(QObject* watched, QEvent* event) {
@@ -975,24 +1085,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         painter.setPen(active_track ? QColor("#d5a94b") : QColor("#3d4654"));
         painter.setBrush(active_track ? QColor("#252d3a") : QColor("#202631"));
         painter.drawRoundedRect(row, 4, 4);
-        painter.setPen(active_track ? QColor("#ffcf5c") : QColor("#b8c2d1"));
-        painter.drawText(row.adjusted(10, 7, -row.width() + track_header_width - 8, -row.height() + 40),
-            Qt::AlignLeft | Qt::AlignVCenter,
-            QString("V%1  %2")
-                .arg(track_index + 1)
-                .arg(text(tracks_[track_index].name)));
-        painter.setPen(QColor("#7e8999"));
-        painter.setFont(QFont(painter.font().family(), 8));
-        painter.drawText(
-            row.adjusted(10, 38, -row.width() + track_header_width - 8, -7),
-            Qt::AlignLeft | Qt::AlignVCenter,
-            QString("%1 clip%2")
-                .arg(tracks_[track_index].clips.size())
-                .arg(tracks_[track_index].clips.size() == 1 ? "" : "s"));
-        painter.setPen(QColor("#384250"));
-        painter.drawLine(
-            QPointF(row.left() + track_header_width, row.top() + 4),
-            QPointF(row.left() + track_header_width, row.bottom() - 4));
+        paintTrackHeaderCell(painter, track_index, row);
 
         for (std::size_t clip_index = 0;
              clip_index < tracks_[track_index].clips.size(); ++clip_index) {

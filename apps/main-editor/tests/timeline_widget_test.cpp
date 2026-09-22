@@ -1,4 +1,5 @@
 #include "timeline/timeline_widget.h"
+#include "timeline/timeline_track_header_overlay.h"
 #include "ui/media_drag_mime.h"
 
 #include <QApplication>
@@ -257,13 +258,22 @@ int main(int argc, char* argv[]) {
         scroll_area.resize(360, 220);
         scroll_area.setWidgetResizable(true);
         auto* viewport_timeline = new timeline::TimelineWidget;
-        viewport_timeline->setTracks({lower_track});
+        viewport_timeline->setTracks({top_track, lower_track});
         viewport_timeline->setZoomFactor(2.0);
+        viewport_timeline->setActiveClip(timeline::ClipLocation{0, 0});
         viewport_timeline->setAcceptDrops(false);
         scroll_area.setWidget(viewport_timeline);
         scroll_area.setAcceptDrops(true);
         scroll_area.viewport()->setAcceptDrops(true);
         scroll_area.viewport()->installEventFilter(viewport_timeline);
+        auto* header_overlay = new timeline::TimelineTrackHeaderOverlay(
+            viewport_timeline,
+            scroll_area.viewport());
+        QObject::connect(
+            scroll_area.verticalScrollBar(),
+            &QScrollBar::valueChanged,
+            header_overlay,
+            &timeline::TimelineTrackHeaderOverlay::setVerticalScrollOffset);
         scroll_area.show();
         application.processEvents();
         viewport_timeline->setTrackRowHeight(timeline::kMinimumTrackRowHeight);
@@ -276,7 +286,52 @@ int main(int argc, char* argv[]) {
                 "Increasing Timeline row height did not use the vertical scroll area.");
         viewport_timeline->setTimelineViewportWidth(
             scroll_area.viewport()->width());
+        require(
+            header_overlay->geometry().x() == 0 &&
+                header_overlay->geometry().width() == 154,
+            "The Timeline header overlay did not stay anchored to the viewport.");
+        QImage header_before_scroll(360, 220, QImage::Format_ARGB32);
+        header_before_scroll.fill(Qt::transparent);
+        scroll_area.horizontalScrollBar()->setValue(0);
+        application.processEvents();
+        scroll_area.viewport()->render(&header_before_scroll);
         scroll_area.horizontalScrollBar()->setValue(100);
+        application.processEvents();
+        QImage header_after_scroll(360, 220, QImage::Format_ARGB32);
+        header_after_scroll.fill(Qt::transparent);
+        scroll_area.viewport()->render(&header_after_scroll);
+        require(
+            header_before_scroll.copy(0, 48, 154, 160) ==
+                header_after_scroll.copy(0, 48, 154, 160),
+            "The Timeline track header moved during horizontal scrolling.");
+        require(
+            header_after_scroll.pixelColor(120, 60) == QColor("#252d3a"),
+            "The fixed header did not cover horizontally scrolled clip content.");
+        const auto horizontal_frame_before = viewport_timeline->frameAtContentX(220.0);
+        scroll_area.horizontalScrollBar()->setValue(160);
+        application.processEvents();
+        const auto horizontal_frame_after = viewport_timeline->frameAtContentX(220.0);
+        require(
+            horizontal_frame_before.has_value() && horizontal_frame_after.has_value() &&
+                *horizontal_frame_before == *horizontal_frame_after,
+            "Horizontal scrolling changed Timeline coordinate behavior.");
+        scroll_area.verticalScrollBar()->setValue(
+            scroll_area.verticalScrollBar()->maximum());
+        application.processEvents();
+        QImage header_after_vertical_scroll(360, 220, QImage::Format_ARGB32);
+        header_after_vertical_scroll.fill(Qt::transparent);
+        scroll_area.viewport()->render(&header_after_vertical_scroll);
+        require(
+            header_overlay->geometry().x() == 0 &&
+                header_overlay->geometry().width() == 154,
+            "Vertical scrolling changed the fixed header column geometry.");
+        require(
+            header_after_vertical_scroll.pixelColor(120, 60) == QColor("#202631"),
+            "The fixed header did not follow the Timeline's vertical scroll: pixel=" +
+                header_after_vertical_scroll.pixelColor(120, 60).name().toStdString() +
+                " max=" +
+                std::to_string(scroll_area.verticalScrollBar()->maximum()));
+        scroll_area.verticalScrollBar()->setValue(0);
         application.processEvents();
 
         bool viewport_media_drop_received = false;
