@@ -260,6 +260,17 @@ in the running Main Editor after UI or integration changes:
 - confirm that new projects start with 70-pixel Timeline rows, while saved
   `row_height` values remain unchanged and projects without that field migrate
   to 70 pixels;
+- project autosave: with a dirty saved project, confirm that the default
+  30-second timer creates snapshots in the sibling `<project>.autosave`
+  directory without changing the `.csp` file, dirty indicator, or playback;
+  repeat with an unsaved project and confirm snapshots use the application
+  data recovery directory; verify Settings changes for enablement, 10–300
+  second interval, and 5–20 snapshot retention;
+- recovery: leave a newer snapshot, restart the editor, and confirm the
+  dialog lists snapshots by date; Restore opens dirty working data without
+  replacing the original `.csp`, Ignore leaves the snapshots available, and
+  Delete removes only the selected snapshot; malformed snapshots must be
+  ignored and logged without blocking project open;
 - confirm that Ctrl + scroll still changes only horizontal zoom and normal
   scrolling still moves the scroll area;
 - GPU preview, CPU fallback, grayscale, aspect-ratio preservation, and logs;

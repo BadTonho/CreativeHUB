@@ -70,6 +70,8 @@ add_executable(creative-suite-main-editor
     src/media/video_probe.cpp
     src/media/video_probe.h
     src/project/project_document.h
+    src/project/autosave_manager.cpp
+    src/project/autosave_manager.h
     src/project/project_file.cpp
     src/project/project_file.h
     src/timeline/timeline_model.cpp

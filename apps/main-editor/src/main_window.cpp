@@ -1,15 +1,40 @@
 #include "main_window.h"
 
+#include "logging/logger.h"
+#include "main_window/main_window_support.h"
 #include "settings/shortcut_manager.h"
 #include "settings/user_preferences.h"
 #include "rendering/preview_performance_metrics.h"
 
+#include <QDateTime>
+#include <QDialog>
+#include <QAbstractItemView>
+#include <QFileInfo>
 #include <QCloseEvent>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QListWidget>
+#include <QPushButton>
 #include <QSettings>
 #include <QStatusBar>
 #include <QTimer>
+#include <QVBoxLayout>
 
+#include <algorithm>
 #include <memory>
+
+namespace {
+
+QString snapshotDateText(const project::AutosaveSnapshot& snapshot) {
+    const auto modified = QFileInfo(
+        main_window_detail::fromUtf8(
+            main_window_detail::pathToUtf8(snapshot.path))).lastModified();
+    return modified.isValid()
+        ? modified.toLocalTime().toString(Qt::TextDate)
+        : QStringLiteral("Unknown time");
+}
+
+} // namespace
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
@@ -51,14 +76,20 @@ MainWindow::MainWindow(QWidget* parent)
     saved_project_document_ = currentProjectDocument();
     updateProjectDirtyState();
 
+    configureProjectAutosave(
+        settings::projectAutosaveEnabled(),
+        settings::projectAutosaveIntervalSeconds());
+
     statusBar()->showMessage("Ready");
 
     if (initial_window_layout_pending_) {
         QTimer::singleShot(0, this, [this]() { applyInitialWindowLayout(); });
     }
+    QTimer::singleShot(0, this, [this]() { offerUnsavedProjectRecovery(); });
 }
 
 MainWindow::~MainWindow() {
+    if (autosave_timer_ != nullptr) autosave_timer_->stop();
     configurePreviewPerformanceMetrics(false);
     shutdownPlayback();
 }
@@ -69,7 +100,130 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         return;
     }
 
+    try {
+        autosave_manager_.removeCurrentUnsavedSnapshots();
+    } catch (const project::ProjectError& error) {
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "project",
+            "autosave_cleanup",
+            error.what(),
+            { {"cause", error.what()} });
+    }
     saveWorkspaceLayout();
     saveWindowGeometry();
     event->accept();
+}
+
+void MainWindow::configureProjectAutosave(bool enabled, int interval_seconds) {
+    if (autosave_timer_ == nullptr) {
+        autosave_timer_ = new QTimer(this);
+        connect(autosave_timer_, &QTimer::timeout,
+                this, &MainWindow::autosaveProject);
+    }
+
+    autosave_timer_->setInterval(std::max(1, interval_seconds) * 1000);
+    if (enabled) autosave_timer_->start();
+    else autosave_timer_->stop();
+}
+
+std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
+    const std::vector<project::AutosaveSnapshot>& snapshots,
+    const QString& project_name) {
+    if (snapshots.empty()) return std::nullopt;
+
+    QDialog dialog(this);
+    dialog.setWindowTitle("Project Recovery");
+    dialog.setModal(true);
+    dialog.resize(620, 360);
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* description = new QLabel(
+        QString("Recovery snapshots were found for %1. Select one to restore, "
+                "or ignore them for now.").arg(project_name),
+        &dialog);
+    description->setWordWrap(true);
+    auto* list = new QListWidget(&dialog);
+    list->setSelectionMode(QAbstractItemView::SingleSelection);
+
+    auto available_snapshots = snapshots;
+    for (const auto& snapshot : available_snapshots) {
+        new QListWidgetItem(
+            QString("%1 — %2")
+                .arg(snapshotDateText(snapshot),
+                     main_window_detail::fromUtf8(
+                         main_window_detail::pathToUtf8(snapshot.path.filename()))),
+            list);
+    }
+    if (list->count() > 0) list->setCurrentRow(0);
+
+    auto* buttons = new QHBoxLayout();
+    auto* restore = new QPushButton("Restore", &dialog);
+    auto* ignore = new QPushButton("Ignore", &dialog);
+    auto* remove = new QPushButton("Delete", &dialog);
+    buttons->addWidget(restore);
+    buttons->addWidget(remove);
+    buttons->addStretch();
+    buttons->addWidget(ignore);
+    layout->addWidget(description);
+    layout->addWidget(list, 1);
+    layout->addLayout(buttons);
+
+    std::optional<std::filesystem::path> selected_path;
+    connect(restore, &QPushButton::clicked, &dialog, [&]() {
+        const auto row = list->currentRow();
+        if (row < 0 || row >= static_cast<int>(available_snapshots.size())) return;
+        selected_path = available_snapshots[static_cast<std::size_t>(row)].path;
+        dialog.accept();
+    });
+    connect(ignore, &QPushButton::clicked, &dialog, &QDialog::reject);
+    connect(remove, &QPushButton::clicked, &dialog, [&]() {
+        auto* item = list->currentItem();
+        if (item == nullptr) return;
+        const auto row = list->row(item);
+        if (row < 0 || row >= static_cast<int>(available_snapshots.size())) return;
+        const auto path = available_snapshots[static_cast<std::size_t>(row)].path;
+        try {
+            autosave_manager_.removeSnapshot(path);
+            available_snapshots.erase(
+                available_snapshots.begin() + row);
+            delete list->takeItem(row);
+            if (list->count() == 0) dialog.reject();
+            else list->setCurrentRow(0);
+        } catch (const project::ProjectError& error) {
+            logging::Logger::instance().log(
+                logging::Level::Warning,
+                "project",
+                "autosave_remove",
+                error.what(),
+                {{"snapshot_path", main_window_detail::pathToUtf8(path)}});
+        }
+    });
+
+    if (dialog.exec() != QDialog::Accepted) return std::nullopt;
+    return selected_path;
+}
+
+void MainWindow::offerUnsavedProjectRecovery() {
+    if (!settings::projectAutosaveEnabled()) return;
+    const auto snapshots = autosave_manager_.unsavedSnapshots();
+    if (snapshots.empty()) return;
+
+    const auto selected = chooseRecoverySnapshot(
+        snapshots, QStringLiteral("an unsaved project"));
+    if (!selected.has_value()) return;
+
+    project::ProjectDocument blank_document;
+    blank_document.bins = {"Unsorted"};
+    if (openProjectPath(*selected, std::nullopt, std::move(blank_document))) {
+        try {
+            autosave_manager_.removeUnsavedSnapshotsForSession(*selected);
+        } catch (const project::ProjectError& error) {
+            logging::Logger::instance().log(
+                logging::Level::Warning,
+                "project",
+                "autosave_cleanup",
+                error.what(),
+                { {"cause", error.what()} });
+        }
+    }
 }

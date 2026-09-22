@@ -65,8 +65,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   first-frame preview, playback, seeking, sequential timeline playback, and
   basic Media Browser management are implemented. Advanced organization and
   relinking remain future work.
-- [ ] Create autosave, recovery, and project-wide history systems; basic Save
-  and Open persistence is implemented separately.
+- [x] Create autosave and recovery snapshots; project-wide history remains
+  future work.
 - [x] Define and validate the initial versioned `.csp` project format.
 - [ ] Add automated tests for the core and module boundaries.
 - [ ] Track dependencies, licenses, codecs, and third-party assets.

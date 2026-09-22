@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QSettings>
+#include <QSpinBox>
 #include <QTabWidget>
 
 #include <cstdio>
@@ -59,6 +60,21 @@ int main(int argc, char* argv[]) {
         require(metrics_check->isChecked(),
                 "Preview metrics must be enabled by default.");
 
+        auto* autosave_check = dialog.findChild<QCheckBox*>(
+            "projectAutosaveCheckBox");
+        require(autosave_check != nullptr,
+                "Project autosave checkbox is missing.");
+        require(autosave_check->isChecked(),
+                "Project autosave must be enabled by default.");
+        auto* interval_spin = dialog.findChild<QSpinBox*>(
+            "projectAutosaveIntervalSpinBox");
+        auto* retention_spin = dialog.findChild<QSpinBox*>(
+            "projectAutosaveRetentionSpinBox");
+        require(interval_spin != nullptr && retention_spin != nullptr,
+                "Project autosave controls are missing.");
+        require(interval_spin->value() == 30 && retention_spin->value() == 5,
+                "Project autosave defaults are incorrect.");
+
         bool signal_emitted = false;
         bool signal_value = false;
         QObject::connect(
@@ -82,6 +98,24 @@ int main(int argc, char* argv[]) {
         require(
             settings.value(settings::kPreviewMetricsEnabledKey).toBool(),
             "Enabling preview metrics was not persisted.");
+
+        autosave_check->setChecked(false);
+        interval_spin->setValue(60);
+        retention_spin->setValue(10);
+        require(
+            !settings.value(settings::kProjectAutosaveEnabledKey).toBool() &&
+                settings.value(settings::kProjectAutosaveIntervalSecondsKey).toInt() == 60 &&
+                settings.value(settings::kProjectAutosaveRetentionKey).toInt() == 10,
+            "Project autosave settings were not persisted.");
+
+        settings::setProjectAutosaveIntervalSeconds(1);
+        settings::setProjectAutosaveRetention(100);
+        require(
+            settings::projectAutosaveIntervalSeconds() ==
+                    settings::kMinimumProjectAutosaveIntervalSeconds &&
+                settings::projectAutosaveRetention() ==
+                    settings::kMaximumProjectAutosaveRetention,
+            "Project autosave settings did not clamp invalid values.");
 
         dialog.close();
         settings.clear();

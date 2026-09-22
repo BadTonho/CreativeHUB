@@ -860,6 +860,55 @@ add_test(
     COMMAND creative-suite-main-editor-project-tests
 )
 
+add_executable(creative-suite-main-editor-autosave-tests
+    autosave_manager_test.cpp
+    ../src/project/autosave_manager.cpp
+    ../src/project/autosave_manager.h
+    ../src/project/project_file.cpp
+    ../src/project/project_file.h
+    ../src/project/project_document.h
+    ../src/media/media_library.cpp
+    ../src/media/media_library.h
+    ../src/timeline/timeline_layout.h
+    ../src/timeline/timeline_transform.cpp
+    ../src/timeline/timeline_transform.h
+)
+
+target_include_directories(creative-suite-main-editor-autosave-tests PRIVATE
+    ../src
+)
+
+target_link_libraries(creative-suite-main-editor-autosave-tests PRIVATE
+    Qt6::Core
+)
+
+target_compile_features(creative-suite-main-editor-autosave-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-autosave-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-autosave-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(WIN32)
+    get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
+    if(NOT QT_CORE_DLL)
+        get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION)
+    endif()
+
+    add_custom_command(TARGET creative-suite-main-editor-autosave-tests POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${QT_CORE_DLL}"
+            "$<TARGET_FILE_DIR:creative-suite-main-editor-autosave-tests>"
+        VERBATIM
+    )
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-autosave
+    COMMAND creative-suite-main-editor-autosave-tests
+)
+
 add_executable(creative-suite-main-editor-media-library-tests
     media_library_test.cpp
     ../src/media/media_library.cpp

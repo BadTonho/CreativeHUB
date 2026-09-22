@@ -6,6 +6,7 @@
 #include "media/video_probe.h"
 #include "playback/playback_worker.h"
 #include "playback/playback_frame_mailbox.h"
+#include "project/autosave_manager.h"
 #include "project/project_document.h"
 #include "system/performance_usage.h"
 #include "timeline/timeline_history.h"
@@ -92,6 +93,12 @@ private:
     void shutdownPlayback();
     void configurePreviewPerformanceMetrics(bool enabled);
     void flushPreviewPerformanceMetrics();
+    void configureProjectAutosave(bool enabled, int interval_seconds);
+    void autosaveProject();
+    void offerUnsavedProjectRecovery();
+    [[nodiscard]] std::optional<std::filesystem::path> chooseRecoverySnapshot(
+        const std::vector<project::AutosaveSnapshot>& snapshots,
+        const QString& project_name);
     void openMedia();
     void updateMediaDetails(int row);
     void populateMediaBrowser(
@@ -137,6 +144,10 @@ private:
     void openProject();
     void saveProject();
     void saveProjectAs();
+    [[nodiscard]] bool openProjectPath(
+        const std::filesystem::path& source_path,
+        std::optional<std::filesystem::path> active_project_path = std::nullopt,
+        std::optional<project::ProjectDocument> saved_baseline = std::nullopt);
     [[nodiscard]] bool confirmProjectChange();
     [[nodiscard]] bool saveProjectTo(
         const std::filesystem::path& project_path,
@@ -147,8 +158,9 @@ private:
     void applyLoadedProject(
         std::vector<ImportedMedia> media_items,
         timeline::TimelineModel::Snapshot timeline_snapshot,
-        const std::filesystem::path& project_path,
-        const project::ProjectDocument& saved_document);
+        std::optional<std::filesystem::path> project_path,
+        const project::ProjectDocument& loaded_document,
+        std::optional<project::ProjectDocument> saved_baseline = std::nullopt);
     void addSelectedMediaToTimeline();
     void handleMediaDrop(const QString& source_path);
     void handleMediaDropAt(
@@ -315,6 +327,7 @@ private:
     QLabel* timeline_message_label_ = nullptr;
     SystemMemoryIndicator* system_memory_indicator_ = nullptr;
     QTimer* preview_metrics_timer_ = nullptr;
+    QTimer* autosave_timer_ = nullptr;
     system_monitor::PerformanceSampler performance_sampler_;
     bool media_browser_inline_rename_pending_ = false;
     std::array<QDoubleSpinBox*, 5> transform_spin_boxes_{};
@@ -351,6 +364,7 @@ private:
     QAction* move_track_down_action_ = nullptr;
     QAction* remove_track_action_ = nullptr;
     std::unique_ptr<settings::ShortcutManager> shortcut_manager_;
+    project::AutosaveManager autosave_manager_;
     timeline::TimelineWidget* timeline_widget_ = nullptr;
     QScrollArea* timeline_scroll_ = nullptr;
     std::vector<ImportedMedia> media_items_;
@@ -371,6 +385,7 @@ private:
     std::optional<PendingClipActivation> pending_clip_activation_;
     std::optional<std::filesystem::path> project_path_;
     std::optional<project::ProjectDocument> saved_project_document_;
+    std::optional<project::ProjectDocument> last_autosaved_document_;
     std::optional<timeline::EditState> pending_audio_edit_;
     std::optional<timeline::EditState> pending_transform_edit_;
     bool project_dirty_ = false;

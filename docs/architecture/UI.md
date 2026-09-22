@@ -133,6 +133,13 @@ testing. It is stored globally under `performance/preview_metrics_enabled` and
 applies immediately. When enabled,
 the Preview writes one aggregated numeric performance sample per second to the
 application log; it never becomes project data or marks the project dirty.
+The same tab provides the enabled-by-default `Enable project autosave` option,
+an interval from 10 to 300 seconds (30 by default), and a retention limit from
+5 to 20 snapshots (5 by default). These global settings apply immediately.
+Autosave writes atomic recovery snapshots beside a saved project, or under
+the application data recovery directory for an unsaved project; it never
+overwrites the main `.csp` file or clears the dirty state. A recovery dialog
+lists snapshots by date and provides Restore, Ignore, and Delete actions.
 The existing timeline choices remain in the Edit menu. Opening or closing the
 dialog, or changing a shortcut, does not change project data, project dirty
 state, undo/redo history, or the `.csp` format. `SettingsDialog` and

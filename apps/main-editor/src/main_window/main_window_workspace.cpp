@@ -139,6 +139,13 @@ void MainWindow::showSettingsDialog() {
         &settings::SettingsDialog::previewPerformanceMetricsEnabledChanged,
         this,
         &MainWindow::configurePreviewPerformanceMetrics);
+    connect(
+        &dialog,
+        &settings::SettingsDialog::projectAutosaveSettingsChanged,
+        this,
+        [this](bool enabled, int interval_seconds, int) {
+            configureProjectAutosave(enabled, interval_seconds);
+        });
     dialog.exec();
 }
 void MainWindow::createMenus() {

@@ -25,6 +25,8 @@ The Main Editor currently includes:
 - essential Cross Dissolve and Fade to Black transitions between consecutive
   clips, with worker-side composition, Inspector editing, bounded history, and
   version 7 project persistence;
+- atomic project autosave and recovery snapshots with configurable global
+  interval and retention;
 - local structured diagnostic logging.
 
 The current application does not include:
@@ -35,7 +37,7 @@ The current application does not include:
 - advanced compositing, GPU per-layer playback, easing, masks, 3D layers,
   audio crossfades, and transition effects beyond the essential pair;
 - ripple editing, automatic gap management, or project-wide history;
-- thumbnails, proxies, autosave, recovery, or complete relinking;
+- thumbnails, proxies, or complete relinking;
 - Motion Studio or Rust integration.
 
 The architecture remains application-local until a second real consumer

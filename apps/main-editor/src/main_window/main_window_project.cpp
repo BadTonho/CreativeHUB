@@ -4,6 +4,7 @@
 #include "logging/logger.h"
 #include "preview_widget.h"
 #include "project/project_file.h"
+#include "settings/user_preferences.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser_list_widget.h"
 
@@ -118,6 +119,47 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
     }
     return document;
 }
+
+void MainWindow::autosaveProject() {
+    if (!settings::projectAutosaveEnabled() || !project_dirty_) return;
+
+    const auto document = currentProjectDocument();
+    if (last_autosaved_document_.has_value() &&
+        *last_autosaved_document_ == document) {
+        return;
+    }
+
+    try {
+        const auto retention = settings::projectAutosaveRetention();
+        if (project_path_.has_value()) {
+            autosave_manager_.saveSnapshot(
+                document, *project_path_, retention);
+        } else {
+            autosave_manager_.saveSnapshot(document, retention);
+        }
+        last_autosaved_document_ = document;
+    } catch (const project::ProjectError& error) {
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "project",
+            "autosave",
+            error.what(),
+            { {"project_path", project_path_.has_value()
+                    ? pathToUtf8(*project_path_)
+                    : ""},
+              {"cause", error.what()} });
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "project",
+            "autosave",
+            error.what(),
+            { {"project_path", project_path_.has_value()
+                    ? pathToUtf8(*project_path_)
+                    : ""} });
+    }
+}
+
 void MainWindow::updateProjectDirtyState() {
     if (!saved_project_document_.has_value()) {
         project_dirty_ = false;
@@ -140,6 +182,17 @@ bool MainWindow::saveProjectTo(
         project::save(project_path, document);
         project_path_ = normalizedPath(project_path);
         saved_project_document_ = document;
+        last_autosaved_document_ = document;
+        try {
+            autosave_manager_.removeCurrentUnsavedSnapshots();
+        } catch (const project::ProjectError& error) {
+            logging::Logger::instance().log(
+                logging::Level::Warning,
+                "project",
+                "autosave_cleanup",
+                error.what(),
+                { {"cause", error.what()} });
+        }
         updateProjectDirtyState();
         statusBar()->showMessage(
             std::string_view(operation) == "save_as"
@@ -226,6 +279,16 @@ bool MainWindow::confirmProjectChange() {
 }
 
 void MainWindow::clearProjectState() {
+    try {
+        autosave_manager_.removeCurrentUnsavedSnapshots();
+    } catch (const project::ProjectError& error) {
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "project",
+            "autosave_cleanup",
+            error.what(),
+            { {"cause", error.what()} });
+    }
     pending_clip_activation_.reset();
     pending_audio_edit_.reset();
     pending_transform_edit_.reset();
@@ -243,6 +306,7 @@ void MainWindow::clearProjectState() {
     playback_frame_index_ = 0;
     project_path_.reset();
     saved_project_document_ = project::ProjectDocument{};
+    last_autosaved_document_.reset();
     project_dirty_ = false;
     if (timeline_widget_ != nullptr) {
         timeline_widget_->setZoomFactor(1.0);
@@ -297,12 +361,72 @@ void MainWindow::openProject() {
 
     if (!confirmProjectChange()) return;
 
-    const auto project_path = normalizedPath(
+    const auto selected_project_path = normalizedPath(
         QFileInfo(selected_file).filesystemFilePath());
+    std::filesystem::path source_path = selected_project_path;
+    if (settings::projectAutosaveEnabled()) {
+        const auto snapshots = autosave_manager_.recoverableSnapshotsForProject(
+            selected_project_path);
+        if (const auto selected_snapshot = chooseRecoverySnapshot(
+                snapshots,
+                main_window_detail::fromUtf8(
+                    pathToUtf8(selected_project_path.filename())));
+            selected_snapshot.has_value()) {
+            source_path = *selected_snapshot;
+        }
+    }
+
+    try {
+        autosave_manager_.removeCurrentUnsavedSnapshots();
+    } catch (const project::ProjectError& error) {
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "project",
+            "autosave_cleanup",
+            error.what(),
+            { {"cause", error.what()} });
+    }
+    const auto recovered = source_path != selected_project_path;
+    if (openProjectPath(source_path, selected_project_path) && recovered) {
+        try {
+            autosave_manager_.removeSnapshotsForProject(selected_project_path);
+        } catch (const project::ProjectError& error) {
+            logging::Logger::instance().log(
+                logging::Level::Warning,
+                "project",
+                "autosave_cleanup",
+                error.what(),
+                { {"cause", error.what()} });
+        }
+    }
+}
+
+bool MainWindow::openProjectPath(
+    const std::filesystem::path& source_path,
+    std::optional<std::filesystem::path> active_project_path,
+    std::optional<project::ProjectDocument> saved_baseline) {
+    const auto project_path = normalizedPath(source_path);
     std::filesystem::path current_media_path;
     std::optional<std::size_t> current_clip_index;
     try {
-        const auto document = project::load(project_path);
+        auto document = project::load(project_path);
+        if (!saved_baseline.has_value() && active_project_path.has_value() &&
+            normalizedPath(*active_project_path) != project_path) {
+            try {
+                saved_baseline = project::load(*active_project_path);
+            } catch (const project::ProjectError& error) {
+                logging::Logger::instance().log(
+                    logging::Level::Warning,
+                    "project",
+                    "autosave_baseline",
+                    "The original project could not be loaded; recovery will continue as a new dirty document.",
+                    { {"project_path", pathToUtf8(*active_project_path)},
+                      {"cause", error.what()} });
+                project::ProjectDocument blank_document;
+                blank_document.bins = {"Unsorted"};
+                saved_baseline = std::move(blank_document);
+            }
+        }
         auto normalized_document = document;
         std::vector<ImportedMedia> loaded_media;
         loaded_media.reserve(document.media.size());
@@ -532,9 +656,14 @@ void MainWindow::openProject() {
         applyLoadedProject(
             std::move(loaded_media),
             std::move(snapshot),
-            project_path,
-            normalized_document);
+            active_project_path.has_value()
+                ? std::optional<std::filesystem::path>(
+                      normalizedPath(*active_project_path))
+                : std::nullopt,
+            normalized_document,
+            std::move(saved_baseline));
         statusBar()->showMessage("Project opened.");
+        return true;
     } catch (const project::ProjectError& error) {
         logging::Context context{
             {"project_path", pathToUtf8(project_path)},
@@ -561,6 +690,7 @@ void MainWindow::openProject() {
             context);
         QMessageBox::warning(this, "Could not open project", fromUtf8(error.what()));
         statusBar()->showMessage("Could not open project.");
+        return false;
     } catch (const media::MediaError& error) {
         logging::Context context{
             {"project_path", pathToUtf8(project_path)},
@@ -580,6 +710,7 @@ void MainWindow::openProject() {
             context);
         QMessageBox::warning(this, "Could not open project", fromUtf8(error.what()));
         statusBar()->showMessage("Could not open project.");
+        return false;
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
             logging::Level::Error,
@@ -593,14 +724,16 @@ void MainWindow::openProject() {
                     : "none"} });
         QMessageBox::warning(this, "Could not open project", "The project could not be opened.");
         statusBar()->showMessage("Could not open project.");
+        return false;
     }
 }
 
 void MainWindow::applyLoadedProject(
     std::vector<ImportedMedia> media_items,
     timeline::TimelineModel::Snapshot timeline_snapshot,
-    const std::filesystem::path& project_path,
-    const project::ProjectDocument& saved_document) {
+    std::optional<std::filesystem::path> project_path,
+    const project::ProjectDocument& loaded_document,
+    std::optional<project::ProjectDocument> saved_baseline) {
     pending_clip_activation_.reset();
     pending_audio_edit_.reset();
     pending_transform_edit_.reset();
@@ -613,9 +746,9 @@ void MainWindow::applyLoadedProject(
     timeline_model_.restore(std::move(timeline_snapshot));
     timeline_history_.clear();
     media_items_ = std::move(media_items);
-    bin_paths_ = saved_document.bins.empty()
+    bin_paths_ = loaded_document.bins.empty()
         ? std::vector<std::string>{"Unsorted"}
-        : saved_document.bins;
+        : loaded_document.bins;
     for (const auto& item : media_items_) {
         std::size_t start = 0;
         while (start < item.bin_path.size()) {
@@ -632,11 +765,16 @@ void MainWindow::applyLoadedProject(
     active_timeline_clip_index_.reset();
     preserved_timeline_playhead_frame_.reset();
     playback_frame_index_ = 0;
-    project_path_ = normalizedPath(project_path);
-    saved_project_document_ = saved_document;
+    project_path_ = project_path.has_value()
+        ? std::optional<std::filesystem::path>(normalizedPath(*project_path))
+        : std::nullopt;
+    saved_project_document_ = saved_baseline.has_value()
+        ? std::move(saved_baseline)
+        : std::optional<project::ProjectDocument>(loaded_document);
+    last_autosaved_document_.reset();
     if (timeline_widget_ != nullptr) {
-        timeline_widget_->setZoomFactor(saved_document.timeline_zoom);
-        timeline_widget_->setTrackRowHeight(saved_document.timeline_row_height);
+        timeline_widget_->setZoomFactor(loaded_document.timeline_zoom);
+        timeline_widget_->setTrackRowHeight(loaded_document.timeline_row_height);
     }
     if (timeline_scroll_ != nullptr) {
         timeline_scroll_->horizontalScrollBar()->setValue(0);

@@ -13,6 +13,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
@@ -59,12 +60,70 @@ QWidget* SettingsDialog::createGeneralPage() {
 
     layout->addWidget(metrics_check);
     layout->addWidget(description);
+
+    auto* autosave_check = new QCheckBox(
+        "Enable project autosave", page);
+    autosave_check->setObjectName("projectAutosaveCheckBox");
+    autosave_check->setToolTip(
+        "Save recovery snapshots without overwriting the project file.");
+    autosave_check->setChecked(settings::projectAutosaveEnabled());
+
+    auto* autosave_options = new QWidget(page);
+    auto* autosave_options_layout = new QHBoxLayout(autosave_options);
+    autosave_options_layout->setContentsMargins(0, 0, 0, 0);
+    auto* interval_label = new QLabel("Interval (seconds):", autosave_options);
+    auto* interval_spin = new QSpinBox(autosave_options);
+    interval_spin->setObjectName("projectAutosaveIntervalSpinBox");
+    interval_spin->setRange(
+        settings::kMinimumProjectAutosaveIntervalSeconds,
+        settings::kMaximumProjectAutosaveIntervalSeconds);
+    interval_spin->setValue(settings::projectAutosaveIntervalSeconds());
+    interval_spin->setSuffix(" s");
+    auto* retention_label = new QLabel("Snapshots:", autosave_options);
+    auto* retention_spin = new QSpinBox(autosave_options);
+    retention_spin->setObjectName("projectAutosaveRetentionSpinBox");
+    retention_spin->setRange(
+        settings::kMinimumProjectAutosaveRetention,
+        settings::kMaximumProjectAutosaveRetention);
+    retention_spin->setValue(settings::projectAutosaveRetention());
+    autosave_options_layout->addWidget(interval_label);
+    autosave_options_layout->addWidget(interval_spin);
+    autosave_options_layout->addSpacing(16);
+    autosave_options_layout->addWidget(retention_label);
+    autosave_options_layout->addWidget(retention_spin);
+    autosave_options_layout->addStretch();
+
+    auto* autosave_description = new QLabel(
+        "Autosave keeps recovery snapshots in a separate folder and never replaces the main .csp file. "
+        "The default is every 30 seconds with 5 snapshots retained.",
+        page);
+    autosave_description->setWordWrap(true);
+
+    layout->addWidget(autosave_check);
+    layout->addWidget(autosave_options);
+    layout->addWidget(autosave_description);
     layout->addStretch();
 
     connect(metrics_check, &QCheckBox::toggled, this, [this](bool enabled) {
         settings::setPreviewPerformanceMetricsEnabled(enabled);
         emit previewPerformanceMetricsEnabledChanged(enabled);
     });
+    const auto emit_autosave_settings = [this, autosave_check, interval_spin,
+                                         retention_spin]() {
+        settings::setProjectAutosaveEnabled(autosave_check->isChecked());
+        settings::setProjectAutosaveIntervalSeconds(interval_spin->value());
+        settings::setProjectAutosaveRetention(retention_spin->value());
+        emit projectAutosaveSettingsChanged(
+            autosave_check->isChecked(),
+            interval_spin->value(),
+            retention_spin->value());
+    };
+    connect(autosave_check, &QCheckBox::toggled,
+            this, emit_autosave_settings);
+    connect(interval_spin, qOverload<int>(&QSpinBox::valueChanged),
+            this, emit_autosave_settings);
+    connect(retention_spin, qOverload<int>(&QSpinBox::valueChanged),
+            this, emit_autosave_settings);
     return page;
 }
 

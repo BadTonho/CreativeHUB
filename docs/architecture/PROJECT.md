@@ -86,5 +86,25 @@ Technical failures are logged under the project subsystem with the project
 path, related media path or clip index, cause, and error code when available.
 Cancel and Discard are intentional control-flow outcomes and are not errors.
 
-Autosave, recovery, media copying, complete relinking, shared projects, and
-project-wide history remain future work.
+## Autosave and recovery
+
+Project autosave is enabled by default and runs every 30 seconds while the
+document is dirty. It writes only the `ProjectDocument` to an atomic recovery
+snapshot; decoded frames, selection, playhead, playback sessions, and
+Undo/Redo history are not included. Autosave never replaces the main `.csp`
+file and does not clear the dirty indicator.
+
+Saved projects use a sibling `<project>.autosave` directory. Projects that
+have not received a Save As path use the application's
+`QStandardPaths::AppDataLocation/autosave/unsaved` directory. Up to five
+snapshots are retained by default, configurable globally from 5 through 20.
+The interval is configurable from 10 through 300 seconds.
+
+When the editor opens a project with a newer valid snapshot, or finds a
+snapshot from an unsaved project after a previous session ended unexpectedly,
+it asks whether to restore, ignore, or delete the snapshot. Restoring loads
+the snapshot as dirty working data while leaving the original `.csp` untouched.
+Invalid or incomplete snapshots are ignored and technical failures are logged.
+
+Media paths in snapshots use the same serialization rules as normal projects;
+no new media or personal data is added by autosave.

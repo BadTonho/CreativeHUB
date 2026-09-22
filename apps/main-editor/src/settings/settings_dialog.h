@@ -18,6 +18,10 @@ public:
 
 signals:
     void previewPerformanceMetricsEnabledChanged(bool enabled);
+    void projectAutosaveSettingsChanged(
+        bool enabled,
+        int interval_seconds,
+        int retention);
 
 private:
     [[nodiscard]] QWidget* createGeneralPage();
