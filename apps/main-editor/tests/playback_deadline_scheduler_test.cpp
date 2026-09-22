@@ -83,12 +83,15 @@ void validateAudioTargetDoesNotChangeCadence() {
     const auto callback_time = origin + std::chrono::milliseconds(42);
     const auto deadline_target = scheduler.targetFrame(callback_time);
     const auto audio_target = std::int64_t{4};
+    const auto current_frame_index = audio_target;
     require(
-        deadline_target == 1 && audio_target > deadline_target,
+        deadline_target == 1 && current_frame_index == 4 &&
+            audio_target == current_frame_index &&
+            audio_target > deadline_target,
         "The audio cadence test did not create an ahead-of-deadline target.");
 
-    // The audio-selected frame must not move the scheduler past the next
-    // absolute video deadline.
+    // The audio-selected frame may already be displayed, but it must not move
+    // the scheduler past the next absolute video deadline.
     scheduler.advanceAfterTarget(deadline_target);
     const auto expected = std::chrono::duration<double>(2.0 / 24.0);
     const auto actual = scheduler.nextDeadline() - origin;
