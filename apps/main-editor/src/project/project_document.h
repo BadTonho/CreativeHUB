@@ -9,11 +9,13 @@
 #include <vector>
 
 #include "../timeline/timeline_model.h"
+#include "../timeline/timeline_layout.h"
 
 namespace project {
 
-inline constexpr int current_format_version = 6;
+inline constexpr int current_format_version = 7;
 inline constexpr int timeline_zoom_format_version = 6;
+inline constexpr int timeline_row_height_format_version = 7;
 inline constexpr int transitions_format_version = 5;
 inline constexpr int clip_kind_format_version = 4;
 inline constexpr int canvas_format_version = 3;
@@ -68,6 +70,7 @@ struct ProjectDocument {
     int canvas_width = 1920;
     int canvas_height = 1080;
     double timeline_zoom = 1.0;
+    double timeline_row_height = timeline::kDefaultTrackRowHeight;
     std::vector<ProjectMedia> media;
     std::vector<std::string> bins;
     std::vector<ProjectTrack> timeline_tracks;

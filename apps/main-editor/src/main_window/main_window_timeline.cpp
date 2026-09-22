@@ -557,6 +557,11 @@ QWidget* MainWindow::createTimeline() {
             zoom_in_button->setEnabled(timeline_widget_->canZoomIn());
             updateProjectDirtyState();
         });
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::trackRowHeightChanged,
+        this,
+        [this](double) { updateProjectDirtyState(); });
     connect(zoom_slider, &QSlider::valueChanged, this, [this](int level) {
         if (timeline_widget_ == nullptr ||
             level < 0 || level >= static_cast<int>(timeline::kTimelineZoomLevels.size())) {

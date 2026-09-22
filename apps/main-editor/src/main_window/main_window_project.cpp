@@ -58,6 +58,9 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
     document.timeline_zoom = timeline_widget_ != nullptr
         ? timeline_widget_->zoomFactor()
         : 1.0;
+    document.timeline_row_height = timeline_widget_ != nullptr
+        ? timeline_widget_->trackRowHeight()
+        : timeline::kDefaultTrackRowHeight;
     document.media.reserve(media_items_.size());
     document.bins = bin_paths_;
     for (const auto& item : media_items_) {
@@ -241,7 +244,10 @@ void MainWindow::clearProjectState() {
     project_path_.reset();
     saved_project_document_ = project::ProjectDocument{};
     project_dirty_ = false;
-    if (timeline_widget_ != nullptr) timeline_widget_->setZoomFactor(1.0);
+    if (timeline_widget_ != nullptr) {
+        timeline_widget_->setZoomFactor(1.0);
+        timeline_widget_->setTrackRowHeight(timeline::kDefaultTrackRowHeight);
+    }
     if (timeline_scroll_ != nullptr) {
         timeline_scroll_->horizontalScrollBar()->setValue(0);
     }
@@ -630,6 +636,7 @@ void MainWindow::applyLoadedProject(
     saved_project_document_ = saved_document;
     if (timeline_widget_ != nullptr) {
         timeline_widget_->setZoomFactor(saved_document.timeline_zoom);
+        timeline_widget_->setTrackRowHeight(saved_document.timeline_row_height);
     }
     if (timeline_scroll_ != nullptr) {
         timeline_scroll_->horizontalScrollBar()->setValue(0);

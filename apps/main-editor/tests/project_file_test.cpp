@@ -73,6 +73,7 @@ int main(int argc, char** argv) {
         original.canvas_width = 1920;
         original.canvas_height = 1080;
         original.timeline_zoom = 512.0;
+        original.timeline_row_height = 123.5;
         original.timeline_tracks.front().clips.front().transform.position_x = 0.25;
         original.timeline_tracks.front().clips.front().transform.rotation_degrees = 12.0;
         original.timeline_tracks.front().clips.front().keyframes.position_x = {{0, 0.25}, {30, 0.75}};
@@ -113,11 +114,12 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"kind\": \"text\"") != std::string::npos &&
                     saved_json.find("\"content\": \"Title\"") != std::string::npos,
                 "Text clip content and kind were not written to the project.");
-        require(saved_json.find("\"version\": 6") != std::string::npos &&
+        require(saved_json.find("\"version\": 7") != std::string::npos &&
                     saved_json.find("\"zoom\": 512") != std::string::npos &&
+                    saved_json.find("\"row_height\": 123.5") != std::string::npos &&
                     saved_json.find("\"transitions\"") != std::string::npos &&
                     saved_json.find("cross_dissolve") != std::string::npos,
-                "Timeline zoom and transition data were not written to the version 6 project.");
+                "Timeline zoom, row height, and transition data were not written to the version 7 project.");
 
         const auto original_contents = saved_json;
         bool failed = false;
@@ -271,6 +273,15 @@ int main(int argc, char** argv) {
         const auto migrated_v5 = project::load(project_path);
         require(migrated_v5.timeline_zoom == 1.0,
                 "A version 5 project without timeline zoom did not default to 100%.");
+        require(migrated_v5.timeline_row_height == timeline::kDefaultTrackRowHeight,
+                "An older project without row height did not use the default Timeline height.");
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":6,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"zoom":1,"tracks":[{"name":"Video 1","clips":[],"transitions":[]}]}})");
+        const auto migrated_v6 = project::load(project_path);
+        require(migrated_v6.timeline_row_height == timeline::kDefaultTrackRowHeight,
+                "A version 6 project without row height did not migrate to the default Timeline height.");
 
         for (const auto invalid_zoom : {
                  0.24, 512.01, std::numeric_limits<double>::quiet_NaN()}) {
@@ -288,6 +299,25 @@ int main(int argc, char** argv) {
             } catch (const project::ProjectError& error) {
                 require(error.code() == project::ProjectErrorCode::InvalidValue,
                         "Invalid timeline zoom returned the wrong error category.");
+            }
+        }
+
+        for (const auto invalid_row_height : {
+                 71.99, 180.01, std::numeric_limits<double>::quiet_NaN()}) {
+            const auto row_height_json = std::isnan(invalid_row_height)
+                ? std::string("null")
+                : std::to_string(invalid_row_height);
+            writeText(
+                project_path,
+                std::string(R"({"format":"creative-suite.main-editor","version":7,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"zoom":1,"row_height":)") +
+                    row_height_json +
+                    R"(,"tracks":[{"name":"Video 1","clips":[],"transitions":[]}]}})");
+            try {
+                static_cast<void>(project::load(project_path));
+                throw std::runtime_error("An invalid timeline row height was accepted.");
+            } catch (const project::ProjectError& error) {
+                require(error.code() == project::ProjectErrorCode::InvalidValue,
+                        "Invalid timeline row height returned the wrong error category.");
             }
         }
 

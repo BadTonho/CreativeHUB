@@ -42,7 +42,12 @@ in place.
 Zoom changes only the timeline's horizontal presentation and are saved in the
 project; they do not change clip frames, playback, preview, or Undo/Redo.
 The timeline surface grows only as much as its track rows require; additional
-tracks are available through vertical scrolling.
+tracks are available through vertical scrolling. Shift + mouse wheel changes
+the height of every track row uniformly, from 72 to 180 pixels. The gesture
+uses pixel wheel deltas when available and angle deltas as a smooth fallback.
+The selected height is a per-project view setting; Ctrl + mouse wheel remains
+reserved for horizontal zoom and an unmodified wheel remains available to the
+scroll area.
 
 The internal add-to-timeline operation appends media to the active track. A
 drop from the imported Media Browser provides a target track and absolute
@@ -177,8 +182,9 @@ positions, active track and clip, selected media, and playhead. Decoded frames,
 FFmpeg sessions, and GPU resources are never stored.
 
 The versioned .csp project format stores the same track, clip, optional audio
-parameter, and per-project timeline zoom structure.
-Version 1 sequential clips migrate to Video 1 when opened. Advanced ripple
+parameter, and per-project timeline zoom and uniform track-row-height
+structure. Version 1 sequential clips migrate to Video 1 when opened.
+Advanced ripple
 editing, multiple media types, audio-only sources, project-wide history, and
 export remain future work.
 
@@ -256,5 +262,5 @@ Fade to Black, or remove the transition. The Inspector confirms the type and
 duration edits. Moving, splitting, trimming, or deleting an endpoint removes
 only transitions whose adjacency or endpoint validity is no longer true.
 Transitions are included in bounded Undo/Redo snapshots and are persisted in
-`.csp` version 6. Projects from earlier versions load with no transitions and
-use 100% timeline zoom.
+`.csp` version 7. Projects from earlier versions load with no transitions,
+100% timeline zoom, and the default 180-pixel track-row height.

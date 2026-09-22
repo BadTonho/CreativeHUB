@@ -4,12 +4,12 @@ Status: provisional.
 
 The Main Editor stores editable content in a versioned .csp file. The document
 model is Qt-independent and contains imported media, bins, ordered video tracks,
-and timeline clips. It does not contain selection, playhead, layout, Undo/Redo
-history, decoded frames, FFmpeg sessions, or Qt resources.
+and timeline clips. It does not contain selection, playhead, dock geometry,
+Undo/Redo history, decoded frames, FFmpeg sessions, or Qt resources.
 
-## Version 6 format
+## Version 7 format
 
-The current root uses `version: 6` and adds a fixed `canvas` object with
+The current root uses `version: 7` and adds a fixed `canvas` object with
 `width: 1920` and `height: 1080`. Timeline clips additionally persist an
 occurrence-local `transform` object and five optional keyframe arrays:
 `position_x`, `position_y`, `scale`, `rotation`, and `opacity`. Keyframe frames
@@ -33,11 +33,13 @@ the shorter endpoint. Transition data is optional only for older project
 versions; version 5 and newer files always write the array.
 
 The `timeline` object also stores the per-project horizontal timeline view as
-`zoom`, a finite value from `0.25` through `512.0`. The default is `1.0`, where
-one hour is the reference range. Values above `8.0` enable high-density and
-frame-level inspection. This view setting is persisted with the project but is
-not part of Timeline Undo/Redo history; selection, playhead, layout, decoded
-frames, FFmpeg sessions, and Qt resources remain excluded.
+`zoom`, a finite value from `0.25` through `512.0`, and the uniform track
+`row_height`, a finite value from `72.0` through `180.0` pixels. The defaults
+are `1.0` zoom and `180.0` pixels, where one hour is the reference range.
+Values above `8.0` enable high-density and frame-level inspection. These view
+settings are persisted with the project but are not part of Timeline Undo/Redo
+history; selection, playhead, decoded frames, FFmpeg sessions, and Qt
+resources remain excluded.
 
 ## Version 2 format
 
@@ -54,9 +56,10 @@ default bin is Unsorted. Missing audio fields load as `audio_gain: 1.0` and
 `audio_muted: false`, preserving compatibility with projects written before
 audio controls existed.
 
-## Version 5, version 4, version 3, version 2, and version 1 migration
+## Version 6, version 5, version 4, version 3, version 2, and version 1 migration
 
-Version 5 files load with `zoom: 1.0` when the field is absent. Version 4 files receive an empty transition list and otherwise preserve their
+Version 6 and earlier files load with `row_height: 180.0`. Version 5 files
+load with `zoom: 1.0` when the field is absent. Version 4 files receive an empty transition list and otherwise preserve their
 text clips, transforms, keyframes, audio parameters, bins, and media state.
 Version 3 files receive the identity text fields (`kind: "video"` for existing
 clips and empty/default text data) while preserving their transforms and
@@ -64,7 +67,7 @@ keyframes. Version 2 files receive the identity transform, an empty keyframe
 set, and the 1920x1080 canvas when opened. Version 1 files containing
 `timeline.clips` remain supported; they are converted to a single Video 1
 track with sequential timeline starts computed from clip durations. The next
-successful save writes version 6 and includes the default timeline zoom.
+successful save writes version 7 and includes the timeline zoom and row height.
 
 ## Transactional open and save
 

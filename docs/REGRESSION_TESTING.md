@@ -27,7 +27,7 @@ updated intentionally.
 | Playback session | Sequential frames, forward catch-up without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
 | Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
-| Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
+| Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
 | System memory details | Offscreen non-modal dialog, System Memory and Main Editor sections, click-to-open behavior, Working Set, Private Usage, GB/MB formatting, and per-metric `N/A` handling |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
@@ -35,7 +35,7 @@ updated intentionally.
 | Settings dialog | Modal shell, General, Timeline, and Shortcuts tabs, Close action, independent component construction, and editable shortcut preferences |
 | Preview performance metrics | Deterministic counter/timing aggregation, bounded p95/p99 timing histograms, decoded/stale-frame counters, playback delivery-rate derivation, failure counters, cache state, workload context, process-resource sampling, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
-| Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
+| Project persistence | Versioned JSON, round-trip, timeline zoom and row-height persistence, version 1-6 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode and icon-scale persistence, bounded 50%-150% icon resizing, seven-character media and folder labels, full-name inline editing, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
@@ -235,12 +235,18 @@ in the running Main Editor after UI or integration changes:
   confirm all four controls are disabled for text clips, gaps, and no
   selection, and that the Timeline no longer contains an audio-control row;
 - project prompts, Save/Open behavior, dirty-state title, and failed-open
-  preservation; reopening a project restores its timeline zoom and starts at
+  preservation; reopening a project restores its timeline zoom, uniform track
+  height, and starts at
   the beginning of the horizontal scroll;
 - confirm that timeline zoom changes the timeline only: preview dimensions,
   playback limits, frame rate, clip data, and Undo/Redo remain unchanged; at
   the highest levels, adjacent frames are visibly separated and the horizontal
   scrollbar remains usable for short and long projects;
+- hold Shift and scroll over the Timeline content and ruler at low, medium, and
+  maximum row heights; confirm all rows change uniformly, the 72–180 pixel
+  limits are respected, and the vertical scrollbar appears when needed;
+- confirm that Ctrl + scroll still changes only horizontal zoom and normal
+  scrolling still moves the scroll area;
 - GPU preview, CPU fallback, grayscale, aspect-ratio preservation, and logs;
 - GPU playback frame handoff: with metrics enabled, confirm normal GPU playback
   does not repeatedly update the hidden CPU surface, Preview submission does

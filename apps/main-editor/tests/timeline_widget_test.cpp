@@ -67,11 +67,12 @@ void sendWheel(
     QWidget& widget,
     const QPointF& position,
     int angle_delta,
-    Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+    Qt::KeyboardModifiers modifiers = Qt::NoModifier,
+    const QPoint& pixel_delta = QPoint()) {
     QWheelEvent event(
         position,
         position,
-        QPoint(0, 0),
+        pixel_delta,
         QPoint(0, angle_delta),
         Qt::NoButton,
         modifiers,
@@ -256,6 +257,14 @@ int main(int argc, char* argv[]) {
         scroll_area.viewport()->installEventFilter(viewport_timeline);
         scroll_area.show();
         application.processEvents();
+        viewport_timeline->setTrackRowHeight(timeline::kMinimumTrackRowHeight);
+        application.processEvents();
+        require(scroll_area.verticalScrollBar()->maximum() == 0,
+                "The minimum Timeline row height unexpectedly required vertical scrolling.");
+        viewport_timeline->setTrackRowHeight(timeline::kMaximumTrackRowHeight);
+        application.processEvents();
+        require(scroll_area.verticalScrollBar()->maximum() > 0,
+                "Increasing Timeline row height did not use the vertical scroll area.");
         viewport_timeline->setTimelineViewportWidth(
             scroll_area.viewport()->width());
         scroll_area.horizontalScrollBar()->setValue(100);
@@ -428,9 +437,46 @@ int main(int argc, char* argv[]) {
         sendWheel(widget, QPointF(600, 120), 120, Qt::ControlModifier);
         require(zoom_requests == 1 && requested_zoom == 1.25,
                 "Ctrl + wheel did not request the next timeline zoom level.");
+        require(widget.trackRowHeight() == timeline::kDefaultTrackRowHeight,
+                "Ctrl + wheel unexpectedly changed the Timeline row height.");
         sendWheel(widget, QPointF(600, 120), -120);
         require(zoom_requests == 1,
                 "Normal wheel scrolling was incorrectly treated as timeline zoom.");
+        require(widget.trackRowHeight() == timeline::kDefaultTrackRowHeight,
+                "Normal wheel scrolling unexpectedly changed the Timeline row height.");
+        sendWheel(
+            widget,
+            QPointF(600, 120),
+            120,
+            Qt::ControlModifier | Qt::ShiftModifier);
+        require(zoom_requests == 2 &&
+                    requested_zoom == 1.25 &&
+                    widget.trackRowHeight() == timeline::kDefaultTrackRowHeight,
+                "Ctrl + Shift + wheel did not preserve the existing zoom behavior.");
+        const auto frame_before_row_resize = widget.frameAtContentX(600.0);
+        const auto width_before_row_resize = widget.minimumWidth();
+        widget.setTrackRowHeight(120.0);
+        sendWheel(widget, QPointF(600, 120), 0, Qt::ShiftModifier, QPoint(0, 12));
+        require(std::abs(widget.trackRowHeight() - 132.0) < 0.000001,
+                "Shift + pixel wheel did not adjust the Timeline row height smoothly.");
+        sendWheel(widget, QPointF(600, 120), 120, Qt::ShiftModifier);
+        require(std::abs(widget.trackRowHeight() - 147.0) < 0.000001,
+                "Shift + angle wheel did not use the smooth angle fallback.");
+        sendWheel(widget, QPointF(600, 120), -120, Qt::ShiftModifier);
+        require(std::abs(widget.trackRowHeight() - 132.0) < 0.000001,
+                "Shift + angle wheel did not reduce the Timeline row height.");
+        widget.setTrackRowHeight(999.0);
+        require(widget.trackRowHeight() == timeline::kMaximumTrackRowHeight,
+                "Timeline row height did not clamp the upper bound.");
+        widget.setTrackRowHeight(1.0);
+        require(widget.trackRowHeight() == timeline::kMinimumTrackRowHeight,
+                "Timeline row height did not clamp the lower bound.");
+        require(widget.minimumHeight() >= 48 + 2 * 72 + 10 + 12,
+                "Timeline minimum height did not include every track row.");
+        require(widget.minimumWidth() == width_before_row_resize &&
+                    widget.frameAtContentX(600.0) == frame_before_row_resize,
+                "Changing row height altered horizontal Timeline geometry.");
+        widget.setTrackRowHeight(timeline::kDefaultTrackRowHeight);
         widget.setZoomFactor(0.25);
         require(widget.zoomFactor() == 0.25 && !widget.canZoomOut() &&
                     widget.minimumWidth() == 1000,

@@ -19,10 +19,11 @@ It must change in the same commit as any shortcut change.
 | Ctrl + S | Save the current project or open Save As | Main Editor |
 | Ctrl + Shift + S | Save the current project under a new path | Main Editor |
 | Ctrl + Mouse Wheel | Zoom the timeline around the playhead | Timeline |
+| Shift + Mouse Wheel | Adjust the height of all Timeline track rows | Timeline |
 | Drag the time ruler | Scrub the playhead without selecting a clip | Timeline |
 
-Alt + drag is a mouse gesture, not a keyboard shortcut. Ctrl + mouse wheel is
-documented here because it is the timeline zoom gesture. By default, normal
+Alt + drag is a mouse gesture, not a keyboard shortcut. Ctrl and Shift + mouse
+wheel are documented here because they are Timeline gestures. By default, normal
 dragging moves a clip between tracks and absolute positions while Alt + drag
 seeks. The Edit > Require Alt to Move Clips option can enable the modifier
 requirement; in that mode, Alt + dragging moves clips and normal dragging

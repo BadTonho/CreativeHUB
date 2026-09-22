@@ -1,6 +1,7 @@
 #pragma once
 
 #include "timeline_model.h"
+#include "timeline_layout.h"
 #include "timeline_zoom.h"
 
 #include <QString>
@@ -49,6 +50,8 @@ public:
     void setTimelineViewportWidth(int width);
     [[nodiscard]] double zoomFactor() const noexcept;
     void setZoomFactor(double factor);
+    [[nodiscard]] double trackRowHeight() const noexcept;
+    void setTrackRowHeight(double height);
     [[nodiscard]] double nextZoomFactor(int direction) const noexcept;
     [[nodiscard]] bool canZoomIn() const noexcept;
     [[nodiscard]] bool canZoomOut() const noexcept;
@@ -87,6 +90,7 @@ signals:
     void seekRequested(qint64 frame_index);
     void zoomRequested(double factor);
     void zoomChanged(double factor);
+    void trackRowHeightChanged(double height);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -114,6 +118,7 @@ private:
     [[nodiscard]] std::int64_t displayDuration() const noexcept;
     [[nodiscard]] std::int64_t totalDuration() const noexcept;
     [[nodiscard]] double pixelsPerFrame() const noexcept;
+    void updateVerticalExtent();
     void updateHorizontalExtent();
     [[nodiscard]] std::optional<std::size_t> trackAt(double y) const noexcept;
     [[nodiscard]] std::optional<ClipLocation> clipAt(double x, double y) const noexcept;
@@ -140,6 +145,7 @@ private:
     std::vector<TimelineTrack> tracks_;
     int timeline_viewport_width_ = 0;
     double zoom_factor_ = 1.0;
+    double track_row_height_ = kDefaultTrackRowHeight;
     std::optional<ClipLocation> active_clip_;
     std::int64_t playhead_frame_ = 0;
     std::optional<std::int64_t> drag_frame_;

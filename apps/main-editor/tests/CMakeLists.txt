@@ -451,6 +451,7 @@ add_executable(creative-suite-main-editor-timeline-widget-tests
     ../src/media/video_metadata.h
     ../src/timeline/timeline_model.cpp
     ../src/timeline/timeline_model.h
+    ../src/timeline/timeline_layout.h
     ../src/timeline/timeline_widget.cpp
     ../src/timeline/timeline_widget.h
     ../src/timeline/timeline_transform.cpp
@@ -817,6 +818,7 @@ add_executable(creative-suite-main-editor-project-tests
     ../src/media/media_library.cpp
     ../src/media/media_library.h
     ../src/project/project_document.h
+    ../src/timeline/timeline_layout.h
     ../src/project/project_file.cpp
     ../src/project/project_file.h
     ../src/timeline/timeline_transform.cpp

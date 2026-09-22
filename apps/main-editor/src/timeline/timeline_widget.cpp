@@ -28,8 +28,6 @@ namespace {
 constexpr double left_margin = 12.0;
 constexpr double right_margin = 12.0;
 constexpr double top_margin = 48.0;
-constexpr double minimum_row_height = 72.0;
-constexpr double maximum_row_height = 180.0;
 constexpr double row_gap = 10.0;
 constexpr double track_header_width = 142.0;
 constexpr double edge_width = 8.0;
@@ -126,9 +124,7 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
         }
         if (!exists) selected_transition_.reset();
     }
-    setMinimumHeight(static_cast<int>(top_margin +
-        tracks_.size() * minimum_row_height +
-        (tracks_.size() > 0 ? tracks_.size() - 1 : 0) * row_gap + 12.0));
+    updateVerticalExtent();
     updateHorizontalExtent();
     moving_active_ = false;
     move_pending_ = false;
@@ -153,7 +149,7 @@ void TimelineWidget::setClips(const std::vector<TimelineClip>& clips) {
 void TimelineWidget::clearClips() {
     tracks_.clear();
     tracks_.push_back(TimelineTrack{1, "Video 1", 1.0, false, {}});
-    setMinimumHeight(static_cast<int>(top_margin + minimum_row_height + 12.0));
+    updateVerticalExtent();
     updateHorizontalExtent();
     active_clip_.reset();
     playhead_frame_ = 0;
@@ -254,6 +250,21 @@ void TimelineWidget::setZoomFactor(double factor) {
     updateHorizontalExtent();
     update();
     emit zoomChanged(zoom_factor_);
+}
+
+double TimelineWidget::trackRowHeight() const noexcept {
+    return track_row_height_;
+}
+
+void TimelineWidget::setTrackRowHeight(double height) {
+    if (!std::isfinite(height)) return;
+    const auto normalized = std::clamp(
+        height, kMinimumTrackRowHeight, kMaximumTrackRowHeight);
+    if (std::abs(normalized - track_row_height_) < 0.000001) return;
+    track_row_height_ = normalized;
+    updateVerticalExtent();
+    update();
+    emit trackRowHeightChanged(track_row_height_);
 }
 
 double TimelineWidget::nextZoomFactor(int direction) const noexcept {
@@ -385,15 +396,16 @@ QRectF TimelineWidget::rulerRect() const noexcept {
 }
 
 double TimelineWidget::rowHeight() const noexcept {
+    return track_row_height_;
+}
+
+void TimelineWidget::updateVerticalExtent() {
     const auto track_count = std::max<std::size_t>(1, tracks_.size());
-    const double available = static_cast<double>(height()) - top_margin - 12.0 -
-        static_cast<double>(track_count - 1) * row_gap;
-    if (available <= 0.0) return minimum_row_height;
-    return std::min(
-        maximum_row_height,
-        std::max(
-        minimum_row_height,
-        available / static_cast<double>(track_count)));
+    const auto required_height = top_margin +
+        static_cast<double>(track_count) * track_row_height_ +
+        static_cast<double>(track_count - 1) * row_gap + 12.0;
+    setMinimumHeight(std::max(100, static_cast<int>(std::ceil(required_height))));
+    updateGeometry();
 }
 
 QRectF TimelineWidget::trackContentRect(std::size_t index) const noexcept {
@@ -1416,22 +1428,37 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
 
 void TimelineWidget::wheelEvent(QWheelEvent* event) {
     if (event == nullptr) return;
-    if (!event->modifiers().testFlag(Qt::ControlModifier)) {
-        event->ignore();
-        return;
-    }
-    const auto vertical_delta = event->angleDelta().y();
-    if (vertical_delta == 0) {
-        event->ignore();
-        return;
-    }
-    const auto next_factor = nextZoomFactor(vertical_delta > 0 ? 1 : -1);
-    if (std::abs(next_factor - zoom_factor_) < 0.000001) {
+    const auto modifiers = event->modifiers();
+    if (modifiers.testFlag(Qt::ControlModifier)) {
+        const auto vertical_delta = event->angleDelta().y();
+        if (vertical_delta == 0) {
+            event->ignore();
+            return;
+        }
+        const auto next_factor = nextZoomFactor(vertical_delta > 0 ? 1 : -1);
+        if (std::abs(next_factor - zoom_factor_) < 0.000001) {
+            event->accept();
+            return;
+        }
+        emit zoomRequested(next_factor);
         event->accept();
         return;
     }
-    emit zoomRequested(next_factor);
-    event->accept();
+    if (modifiers.testFlag(Qt::ShiftModifier)) {
+        const auto pixel_delta = event->pixelDelta().y();
+        const auto angle_delta = event->angleDelta().y();
+        const auto height_delta = pixel_delta != 0
+            ? static_cast<double>(pixel_delta)
+            : static_cast<double>(angle_delta) / 8.0;
+        if (std::abs(height_delta) < 0.000001) {
+            event->ignore();
+            return;
+        }
+        setTrackRowHeight(track_row_height_ + height_delta);
+        event->accept();
+        return;
+    }
+    event->ignore();
 }
 
 } // namespace timeline

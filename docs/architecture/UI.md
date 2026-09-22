@@ -164,9 +164,12 @@ it does not expand with the dock. The current frame and transient Main Window
 messages, including `Loading timeline clip...`, share one line in that footer;
 the separate global status-bar row is hidden. The timeline receives the
 expandable dock space, and its track rows grow within that space while additional rows remain
-available through vertical scrolling. Each track row has a provisional maximum
-height of 180 pixels; extra space in the timeline remains empty until a later
-layout milestone gives it another purpose.
+available through vertical scrolling. Each track row has a maximum height of
+180 pixels and a minimum height of 72 pixels. Holding Shift while scrolling
+over the Timeline changes every row uniformly using smooth wheel deltas. When
+the rows require more space than the viewport, the existing vertical scroll
+bar exposes the remaining tracks. The selected row height is persisted per
+project; Ctrl + scroll continues to control horizontal timeline zoom.
 The same footer shows the Main Editor process working-set memory at the right
 in the form `RAM: <megabytes> MB`, refreshed every second. Windows reads
 the value through `GetProcessMemoryInfo`; platforms without an implementation,
@@ -278,7 +281,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 6 format.
+the current `.csp` version 7 format.
 
 Text rasterization is performed with `QImage/QPainter` by the playback worker;
 the UI only edits the values and receives the composed RGBA frame. No new

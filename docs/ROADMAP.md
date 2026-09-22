@@ -130,7 +130,7 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   worker-side rasterization, and `.csp` version 4 migration; automated model,
   compositor, persistence, and interactive validation passed.
 - [-] Add essential Cross Dissolve and Fade to Black transitions with worker
-  composition and `.csp` version 6 persistence; automated validation is in
+  composition and `.csp` version 7 persistence; automated validation is in
   progress and manual validation is still required before marking complete.
 - [ ] Add common video export formats.
 - [ ] Ensure projects are stable, recoverable, and tested with small, medium,

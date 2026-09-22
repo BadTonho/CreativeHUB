@@ -252,6 +252,12 @@ void validateDocument(const ProjectDocument& document,
         throwJson(ProjectErrorCode::InvalidValue, project_path,
                   "Project JSON contains an invalid timeline zoom; expected a value from 0.25 to 512.0.");
     }
+    if (!std::isfinite(document.timeline_row_height) ||
+        document.timeline_row_height < timeline::kMinimumTrackRowHeight ||
+        document.timeline_row_height > timeline::kMaximumTrackRowHeight) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid timeline row height; expected a value from 72.0 to 180.0.");
+    }
     std::vector<std::filesystem::path> media_paths;
     for (const auto& media : document.media) {
         if (media.source_path.empty()) {
@@ -507,6 +513,20 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                       "Project JSON contains an invalid timeline zoom; expected a value from 0.25 to 512.0.");
         }
         document.timeline_zoom = zoom_value.toDouble();
+    }
+    if (version >= timeline_row_height_format_version) {
+        const auto row_height_value = timeline_object.value("row_height");
+        if (row_height_value.isUndefined()) {
+            throwJson(ProjectErrorCode::MissingField, project_path,
+                      "Project JSON is missing the timeline row height value.");
+        }
+        if (!row_height_value.isDouble() || !std::isfinite(row_height_value.toDouble()) ||
+            row_height_value.toDouble() < timeline::kMinimumTrackRowHeight ||
+            row_height_value.toDouble() > timeline::kMaximumTrackRowHeight) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid timeline row height; expected a value from 72.0 to 180.0.");
+        }
+        document.timeline_row_height = row_height_value.toDouble();
     }
     if (version == legacy_format_version) {
         const auto clips_value = timeline_object.value("clips");
@@ -817,6 +837,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
     QJsonObject timeline;
     timeline.insert("tracks", track_array);
     timeline.insert("zoom", document.timeline_zoom);
+    timeline.insert("row_height", document.timeline_row_height);
     QJsonObject root;
     root.insert("format", QString::fromLatin1(format_identifier));
     root.insert("version", current_format_version);
