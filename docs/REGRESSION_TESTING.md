@@ -48,6 +48,10 @@ Automated tests do not replace visual validation. The following must be checked
 in the running Main Editor after UI or integration changes:
 
 - application startup and clean shutdown;
+- Help > System: confirm the dialog shows project version `0.1` and the full
+  path of the executable currently running; after a Release build, confirm the
+  path points to the intended updated binary rather than an older installed
+  copy;
 - Settings action: confirm the menu-bar action immediately left of `Help`
   opens a modal dialog with `General`, `Timeline`, and `Shortcuts` tabs, closes
   without changing project dirty state, and leaves the existing Edit menu

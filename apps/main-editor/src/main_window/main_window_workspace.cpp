@@ -12,6 +12,7 @@
 #include <QAction>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QCoreApplication>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -380,6 +381,19 @@ void MainWindow::createMenus() {
             this, &MainWindow::showSettingsDialog);
 
     auto* help_menu = menuBar()->addMenu("&Help");
+    auto* system_action = help_menu->addAction("&System");
+    connect(system_action, &QAction::triggered, this, [this]() {
+        const auto version = QCoreApplication::applicationVersion();
+        const auto executable_path = QCoreApplication::applicationFilePath();
+        QMessageBox::information(
+            this,
+            "System",
+            QString("Main Editor\n\nVersion: %1\nExecutable: %2")
+                .arg(version.isEmpty() ? QStringLiteral("N/A") : version,
+                     executable_path.isEmpty()
+                         ? QStringLiteral("N/A")
+                         : executable_path));
+    });
     auto* open_log_folder_action = help_menu->addAction("Open &Log Folder");
     connect(open_log_folder_action, &QAction::triggered, this, [this]() {
         auto& logger = logging::Logger::instance();
