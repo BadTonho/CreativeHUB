@@ -56,8 +56,8 @@ int main(int argc, char* argv[]) {
             "previewMetricsCheckBox");
         require(metrics_check != nullptr,
                 "Preview metrics checkbox is missing.");
-        require(!metrics_check->isChecked(),
-                "Preview metrics must be disabled by default.");
+        require(metrics_check->isChecked(),
+                "Preview metrics must be enabled by default.");
 
         bool signal_emitted = false;
         bool signal_value = false;
@@ -68,12 +68,20 @@ int main(int argc, char* argv[]) {
                 signal_emitted = true;
                 signal_value = enabled;
             });
+        metrics_check->setChecked(false);
+        require(signal_emitted && !signal_value,
+                "Disabling preview metrics did not emit its signal.");
+        require(
+            !settings.value(settings::kPreviewMetricsEnabledKey).toBool(),
+            "Disabling preview metrics was not persisted.");
+
+        signal_emitted = false;
         metrics_check->setChecked(true);
         require(signal_emitted && signal_value,
                 "Enabling preview metrics did not emit its signal.");
         require(
             settings.value(settings::kPreviewMetricsEnabledKey).toBool(),
-            "Preview metrics preference was not persisted.");
+            "Enabling preview metrics was not persisted.");
 
         dialog.close();
         settings.clear();

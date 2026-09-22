@@ -138,7 +138,8 @@ in the running Main Editor after UI or integration changes:
   boundary without an out-of-range-frame error, and that `Project opened.`,
   `Loading timeline clip...`, and other transient status messages appear beside
   the frame in one compact footer line without a separate global status row;
-- enable Preview performance metrics and compare a simple 1080p playback run
+- use the default-enabled Preview performance metrics (or enable them in
+  Settings) and compare a simple 1080p playback run
   with the metrics disabled: confirm the one-second summaries include decode,
   composition, decoded-frame cache hits, text-raster cache hits, and final
   composition-cache hits, `metrics_schema_version="3"`, p95/p99 timings,

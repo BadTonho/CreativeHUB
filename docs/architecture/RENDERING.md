@@ -93,9 +93,10 @@ per-layer texture blending is deliberately deferred to a later milestone.
 
 ## Preview performance diagnostics
 
-Preview performance metrics are disabled by default. They can be enabled from
-`Settings > General` with `Enable preview performance metrics`. The global
-preference is stored in `QSettings` under
+Preview performance metrics are enabled by default while the Preview is under
+active diagnostic testing. They can be disabled from `Settings > General` with
+`Enable preview performance metrics`. The global preference is stored in
+`QSettings` under
 `performance/preview_metrics_enabled` and applies immediately without changing
 the project, `.csp` data, Timeline history, or Undo/Redo state.
 

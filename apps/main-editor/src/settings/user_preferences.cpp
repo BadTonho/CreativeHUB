@@ -5,8 +5,9 @@
 namespace settings {
 
 bool previewPerformanceMetricsEnabled() {
+    constexpr bool default_enabled = true;
     QSettings settings;
-    return settings.value(kPreviewMetricsEnabledKey, false).toBool();
+    return settings.value(kPreviewMetricsEnabledKey, default_enabled).toBool();
 }
 
 void setPreviewPerformanceMetricsEnabled(bool enabled) {
