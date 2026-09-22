@@ -84,7 +84,8 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
             normalizedPath(item.metadata.source_path),
             item.display_name,
             item.bin_path,
-            item.offline});
+            item.offline,
+            item.metadata.kind});
     }
 
     for (const auto& track : timeline_model_.tracks()) {
@@ -95,7 +96,7 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
         project_track.clips.reserve(track.clips.size());
         for (const auto& clip : track.clips) {
             project_track.clips.push_back(project::ProjectClip{
-                clip.kind == timeline::ClipKind::Video
+                timeline::isMediaClipKind(clip.kind)
                     ? normalizedPath(clip.source_path)
                     : std::filesystem::path{},
                 clip.timeline_start_frame,
@@ -597,6 +598,7 @@ bool MainWindow::openProjectPath(
                          {"offline", "true"}});
                 }
                 media::VideoMetadata metadata;
+                metadata.kind = project_media.kind;
                 metadata.source_path = normalizedPath(project_media.source_path);
                 metadata.display_name = project_media.display_name.empty()
                     ? media::MediaLibrary::defaultDisplayName(metadata.source_path)
@@ -612,8 +614,12 @@ bool MainWindow::openProjectPath(
                 continue;
             }
 
-            auto metadata = video_probe_.probe(project_media.source_path);
-            auto first_frame = video_decoder_.decode_first_frame(project_media.source_path);
+            auto metadata = project_media.kind == media::MediaKind::Image
+                ? still_image_decoder_.probe(project_media.source_path)
+                : video_probe_.probe(project_media.source_path);
+            auto first_frame = project_media.kind == media::MediaKind::Image
+                ? still_image_decoder_.decode_first_frame(project_media.source_path)
+                : video_decoder_.decode_first_frame(project_media.source_path);
             const auto display_name = project_media.display_name.empty()
                 ? metadata.display_name
                 : project_media.display_name;
@@ -770,7 +776,9 @@ bool MainWindow::openProjectPath(
                 track_id,
                 project_clip.transform,
                 project_clip.keyframes,
-                timeline::ClipKind::Video,
+                metadata.kind == media::MediaKind::Image
+                    ? timeline::ClipKind::Image
+                    : timeline::ClipKind::Video,
                 {}});
             snapshot.tracks.back().clips.push_back(snapshot.clips.back());
             }

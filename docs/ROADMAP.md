@@ -106,8 +106,10 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Add the first project document and persistence workflow with transactional
   Save, Save As, New, and Open; automated and manual validation confirmed.
 - [ ] Create a full functional timeline with editing.
-- [x] Support video, text, and embedded-audio clips in the current Timeline;
-  image clips and additional media types remain future work.
+- [x] Support video, static raster-image, text, and embedded-audio clips in the
+  current Timeline. PNG, JPEG, BMP, WebP, and TIFF images use a five-second,
+  150-frame static default; animated GIF and additional media types remain
+  future work.
 - [ ] Add advanced ripple editing beyond the current bounded Timeline history.
 - [x] Add a provisional real-time GPU video preview with shader grayscale and a
   validated CPU fallback; automated, startup, and interactive visual
@@ -130,7 +132,7 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   worker-side rasterization, and `.csp` version 4 migration; automated model,
   compositor, persistence, and interactive validation passed.
 - [-] Add essential Cross Dissolve and Fade to Black transitions with worker
-  composition and `.csp` version 7 persistence; automated validation is in
+  composition and `.csp` version 8 persistence; automated validation is in
   progress and manual validation is still required before marking complete.
 - [ ] Add common video export formats.
 - [ ] Ensure projects are stable, recoverable, and tested with small, medium,

@@ -79,6 +79,23 @@ int main() {
         require(first_clip.frame_count == first_metadata.frame_count,
                 "The first clip frame count was not preserved.");
 
+        media::VideoMetadata image_metadata;
+        image_metadata.kind = media::MediaKind::Image;
+        image_metadata.source_path = directory / "media" / "still.png";
+        image_metadata.display_name = "still.png";
+        image_metadata.duration_seconds = 5.0;
+        image_metadata.frame_rate = 30.0;
+        image_metadata.frame_count = 150;
+        timeline::TimelineModel image_model;
+        require(image_model.addClip(image_metadata) == timeline::AddClipResult::Added,
+                "A still image was not accepted as a timeline clip.");
+        require(image_model.clips().front().kind == timeline::ClipKind::Image &&
+                    image_model.clips().front().timeline_duration_frames == 150,
+                "The still image did not become a 150-frame image clip.");
+        require(image_model.addClip(0, first_metadata, 30) ==
+                    timeline::AddClipResult::Overlap,
+                "A video was allowed to overlap a still image on the same track.");
+
         timeline::TimelineModel audio_model;
         require(audio_model.addClip(first_metadata) == timeline::AddClipResult::Added,
                 "The audio parameter test source was not added.");

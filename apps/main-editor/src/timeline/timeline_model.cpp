@@ -116,7 +116,10 @@ bool TimelineModel::overlapsSameKind(
     ClipKind kind,
     std::int64_t start_frame,
     std::int64_t duration_frames) noexcept {
-    return left.kind == kind && overlaps(left, start_frame, duration_frames);
+    const bool same_visual_media_kind = isMediaClipKind(left.kind) &&
+        isMediaClipKind(kind);
+    return (left.kind == kind || same_visual_media_kind) &&
+        overlaps(left, start_frame, duration_frames);
 }
 
 std::int64_t TimelineModel::trackEnd(const TimelineTrack& track) noexcept {
@@ -213,7 +216,11 @@ AddClipResult TimelineModel::addClip(
         1.0,
         false,
         next_clip_id_++,
-        track->track_id};
+        track->track_id,
+        {},
+        {},
+        metadata.kind == media::MediaKind::Image ? ClipKind::Image : ClipKind::Video,
+        {}};
     track->clips.push_back(std::move(clip));
     std::sort(track->clips.begin(), track->clips.end(),
               [](const auto& left, const auto& right) {
@@ -646,7 +653,7 @@ void TimelineModel::updateDisplayNameForSource(
     const auto canonical_source = canonicalPath(source_path);
     for (auto& track : tracks_) {
         for (auto& clip : track.clips) {
-            if (clip.kind == ClipKind::Video &&
+            if (isMediaClipKind(clip.kind) &&
                 canonicalPath(clip.source_path) == canonical_source) {
                 clip.display_name = display_name;
             }

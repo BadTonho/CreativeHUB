@@ -96,6 +96,13 @@ preview image area is capped at 128x72 and is created only when the drag starts.
 Folder items display the same style using the standard folder icon, but carry no
 media MIME and are therefore rejected by the Timeline.
 
+Open Media accepts multiple video and raster-image files in one dialog. PNG,
+JPEG, BMP, WebP, and TIFF files become static image media with a five-second,
+150-frame default at 30 FPS; they preserve RGBA transparency, have no audio,
+and reuse their imported frame during composition playback. Animated GIF is
+not part of the current import scope. Import failures are logged per path and
+do not discard valid files selected in the same operation.
+
 The Timeline is hosted inside a scrollable viewport. Media and effect drops are
 handled through that viewport and their coordinates are converted back to the
 Timeline content before the target track and frame are resolved. Only the
@@ -318,7 +325,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 7 format.
+the current `.csp` version 8 format.
 
 Text rasterization is performed with `QImage/QPainter` by the playback worker;
 the UI only edits the values and receives the composed RGBA frame. No new

@@ -44,6 +44,7 @@ struct CompositionLayerSpec {
     timeline::TransformKeyframes keyframes;
     timeline::ClipKind kind = timeline::ClipKind::Video;
     timeline::TextStyle text;
+    VideoFramePtr still_frame;
 };
 
 struct CompositionTransitionSpec {
@@ -193,6 +194,7 @@ private:
     struct CompositionSession {
         CompositionLayerSpec spec;
         std::unique_ptr<media::VideoPlaybackSession> session;
+        VideoFramePtr static_frame;
         std::shared_ptr<const media::VideoFrame> cached_text_frame;
         rendering::AlphaCoveragePtr cached_text_alpha_coverage;
     };

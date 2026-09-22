@@ -4,7 +4,8 @@ Status: **provisional**.
 
 The Main Editor keeps an application-local, Qt-independent media library. Each
 entry contains a canonical source path, a project-owned display name, a
-hierarchical bin path, and an online/offline state. The default bin is
+hierarchical bin path, a media kind, and an online/offline state. The default
+bin is
 `Unsorted`; bin paths use `/`, and selecting a parent bin includes all of its
 sub-bins.
 
@@ -14,8 +15,9 @@ visible, does not delete a file, and does not remove Timeline clips. If the
 same canonical path is imported again, the existing offline entry is restored
 instead of creating a duplicate.
 
-Online entries keep their metadata and cached first frame in the application
-session. Offline entries retain their path, name, bin, and Timeline context but
+Online video and still-image entries keep their metadata and cached first frame
+in the application session. Offline entries retain their path, name, bin, and
+Timeline context but
 do not provide preview or playback until restored. Missing media encountered
 while opening a project is loaded as offline; an existing but unreadable media
 file remains a technical open failure and the current project is preserved.
@@ -94,6 +96,12 @@ dragged to the Timeline through the internal
 `application/x-creative-suite-media-path` MIME type. Only already imported
 items participate in this drag-and-drop flow; operating-system file drops and
 full manual relinking are future work.
+
+Still images imported through Open Media use the cached RGBA frame as a visual
+thumbnail and can be dropped into the Timeline as five-second static clips.
+They have no audio and the same frame is reused during playback. The supported
+formats are PNG, JPEG, BMP, WebP, and TIFF; animated GIF is intentionally
+excluded.
 
 After a left-button press moves past the platform drag threshold, the Browser
 starts the native drag explicitly and supplies a native Qt drag preview

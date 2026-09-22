@@ -9,6 +9,11 @@
 
 namespace media {
 
+enum class MediaKind {
+    Video,
+    Image,
+};
+
 struct AudioMetadata {
     std::string codec;
     int sample_rate = 0;
@@ -19,6 +24,7 @@ struct AudioMetadata {
 };
 
 struct VideoMetadata {
+    MediaKind kind = MediaKind::Video;
     std::filesystem::path source_path;
     std::string display_name;
     std::string container_format;

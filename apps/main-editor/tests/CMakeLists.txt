@@ -29,6 +29,8 @@ add_executable(creative-suite-main-editor-video-decoder-tests
     ../src/media/video_decoder.h
     ../src/media/video_frame.h
     ../src/media/video_metadata.h
+    ../src/media/still_image_decoder.cpp
+    ../src/media/still_image_decoder.h
     ../src/media/video_probe.cpp
     ../src/media/video_probe.h
     ../src/media/video_playback.cpp
@@ -47,6 +49,7 @@ target_link_directories(creative-suite-main-editor-video-decoder-tests PRIVATE
 )
 
 target_link_libraries(creative-suite-main-editor-video-decoder-tests PRIVATE
+    Qt6::Gui
     ${FFMPEG_LIBRARIES}
 )
 

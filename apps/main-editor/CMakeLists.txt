@@ -59,6 +59,8 @@ add_executable(creative-suite-main-editor
     src/media/video_decoder.cpp
     src/media/video_decoder.h
     src/media/video_frame.h
+    src/media/still_image_decoder.cpp
+    src/media/still_image_decoder.h
     src/media/audio_frame.h
     src/media/audio_playback.cpp
     src/media/audio_playback.h

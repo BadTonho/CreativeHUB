@@ -35,6 +35,7 @@
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QSlider>
+#include <QStringList>
 #include <QStatusBar>
 #include <QStyle>
 #include <QTimer>
@@ -809,8 +810,13 @@ void MainWindow::restoreSelectedMedia() {
     if (!index.has_value() || !media_items_[*index].offline) return;
     const auto path = media_items_[*index].metadata.source_path;
     try {
-        auto metadata = video_probe_.probe(path);
-        auto frame = video_decoder_.decode_first_frame(path);
+        const bool is_image = media::StillImageDecoder::supportsPath(path);
+        auto metadata = is_image
+            ? still_image_decoder_.probe(path)
+            : video_probe_.probe(path);
+        auto frame = is_image
+            ? still_image_decoder_.decode_first_frame(path)
+            : video_decoder_.decode_first_frame(path);
         metadata.display_name = media_items_[*index].display_name;
         media_items_[*index].metadata = std::move(metadata);
         media_items_[*index].first_frame = std::move(frame);
@@ -863,79 +869,115 @@ void MainWindow::showMediaContextMenu(const QPoint& position) {
 }
 
 void MainWindow::openMedia() {
-    const QString selected_file = QFileDialog::getOpenFileName(
+    const QStringList selected_files = QFileDialog::getOpenFileNames(
         this,
         "Open Media",
         QString(),
-        "Video Files (*.avi *.mkv *.mov *.mp4 *.mxf *.webm);;All Files (*)");
-    if (selected_file.isEmpty()) return;
+        "Video Files (*.avi *.mkv *.mov *.mp4 *.mxf *.webm);;"
+        "Image Files (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff);;"
+        "All Files (*)");
+    if (selected_files.isEmpty()) return;
 
-    const std::filesystem::path source_path = normalizedPath(
-        QFileInfo(selected_file).filesystemFilePath());
+    int imported_count = 0;
+    int restored_count = 0;
+    int duplicate_count = 0;
+    QStringList failures;
 
-    const auto existing = std::find_if(
-        media_items_.begin(),
-        media_items_.end(),
-        [&source_path](const ImportedMedia& item) {
-            return item.metadata.source_path == source_path;
-        });
-    if (existing != media_items_.end()) {
-        const auto index = static_cast<std::size_t>(std::distance(media_items_.begin(), existing));
-        if (existing->offline) {
-            try {
-                auto metadata = video_probe_.probe(source_path);
-                auto first_frame = video_decoder_.decode_first_frame(source_path);
-                existing->metadata = std::move(metadata);
-                existing->metadata.display_name = existing->display_name;
-                existing->first_frame = std::move(first_frame);
-                existing->offline = false;
-                updateProjectDirtyState();
-                populateMediaBrowser(source_path);
-                statusBar()->showMessage("Offline media restored.");
-            } catch (const media::MediaError& error) {
-                logging::Context context{{"path", pathToUtf8(source_path)}, {"cause", error.what()}};
-                if (error.error_code().has_value()) context.emplace_back("error_code", std::to_string(*error.error_code()));
-                logging::Logger::instance().log(logging::Level::Error, "media", "restore", error.what(), context);
-                QMessageBox::warning(this, "Could not restore media", fromUtf8(error.what()));
+    for (const auto& selected_file : selected_files) {
+        const std::filesystem::path source_path = normalizedPath(
+            QFileInfo(selected_file).filesystemFilePath());
+        try {
+            const auto existing = std::find_if(
+                media_items_.begin(),
+                media_items_.end(),
+                [&source_path](const ImportedMedia& item) {
+                    return item.metadata.source_path == source_path;
+                });
+            const bool is_gif = source_path.extension() == ".gif" ||
+                source_path.extension() == ".GIF";
+            const bool is_image = media::StillImageDecoder::supportsPath(source_path);
+            if (is_gif) {
+                throw media::MediaError("Animated GIF files are not supported.");
             }
-        } else {
-            populateMediaBrowser(source_path);
-            static_cast<void>(index);
-            statusBar()->showMessage("Media is already imported.");
+
+            auto probe = [&]() {
+                return is_image
+                    ? still_image_decoder_.probe(source_path)
+                    : video_probe_.probe(source_path);
+            };
+            auto decode = [&]() {
+                return is_image
+                    ? still_image_decoder_.decode_first_frame(source_path)
+                    : video_decoder_.decode_first_frame(source_path);
+            };
+
+            if (existing != media_items_.end()) {
+                if (existing->offline) {
+                    auto metadata = probe();
+                    auto first_frame = decode();
+                    existing->metadata = std::move(metadata);
+                    existing->metadata.display_name = existing->display_name;
+                    existing->first_frame = std::move(first_frame);
+                    existing->offline = false;
+                    ++restored_count;
+                    updateProjectDirtyState();
+                    populateMediaBrowser(source_path);
+                } else {
+                    ++duplicate_count;
+                    populateMediaBrowser(source_path);
+                }
+                continue;
+            }
+
+            auto metadata = probe();
+            auto first_frame = decode();
+            addMediaItem(std::move(metadata), std::move(first_frame));
+            ++imported_count;
+            logging::Logger::instance().log(
+                logging::Level::Info,
+                "media",
+                "import",
+                "Media metadata and first preview frame imported.",
+                {{"path", pathToUtf8(source_path)},
+                 {"width", std::to_string(media_items_.back().first_frame.width)},
+                 {"height", std::to_string(media_items_.back().first_frame.height)},
+                 {"kind", media_items_.back().metadata.kind == media::MediaKind::Image
+                     ? "image" : "video"}});
+        } catch (const media::MediaError& error) {
+            logging::Context context{{"path", pathToUtf8(source_path)}, {"cause", error.what()}};
+            if (error.error_code().has_value()) {
+                context.emplace_back("error_code", std::to_string(*error.error_code()));
+            }
+            logging::Logger::instance().log(
+                logging::Level::Error, "media", "import", error.what(), context);
+            failures.push_back(
+                QFileInfo(selected_file).fileName() + ": " + fromUtf8(error.what()));
+        } catch (const std::exception& error) {
+            logging::Logger::instance().log(
+                logging::Level::Error,
+                "ui",
+                "media_import",
+                error.what(),
+                {{"path", pathToUtf8(source_path)}});
+            failures.push_back(
+                QFileInfo(selected_file).fileName() + ": " + fromUtf8(error.what()));
         }
-        return;
     }
 
-    try {
-        auto metadata = video_probe_.probe(source_path);
-        auto first_frame = video_decoder_.decode_first_frame(source_path);
-        addMediaItem(std::move(metadata), std::move(first_frame));
-        logging::Logger::instance().log(
-            logging::Level::Info,
-            "media",
-            "import",
-            "Media metadata and first preview frame imported.",
-            {{"path", pathToUtf8(source_path)},
-             {"width", std::to_string(media_items_.back().first_frame.width)},
-             {"height", std::to_string(media_items_.back().first_frame.height)}});
+    const int success_count = imported_count + restored_count;
+    statusBar()->showMessage(
+        QString("Media import complete: %1 imported, %2 restored, %3 duplicate(s), %4 failed.")
+            .arg(imported_count)
+            .arg(restored_count)
+            .arg(duplicate_count)
+            .arg(failures.size()));
+    if (!failures.isEmpty()) {
+        QMessageBox::warning(
+            this,
+            "Some media could not be imported",
+            failures.join('\n'));
+    } else if (success_count == 1 && duplicate_count == 0) {
         statusBar()->showMessage("Media imported with preview frame.");
-    } catch (const media::MediaError& error) {
-        logging::Context context{{"path", pathToUtf8(source_path)}, {"cause", error.what()}};
-        if (error.error_code().has_value()) context.emplace_back("error_code", std::to_string(*error.error_code()));
-        logging::Logger::instance().log(logging::Level::Error, "media", "import", error.what(), context);
-        const QString message = fromUtf8(error.what());
-        QMessageBox::warning(this, "Could not open media", message);
-        statusBar()->showMessage("Could not import media.");
-    } catch (const std::exception& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error,
-            "ui",
-            "media_import",
-            error.what(),
-            {{"path", pathToUtf8(source_path)}});
-        const QString message = fromUtf8(error.what());
-        QMessageBox::warning(this, "Could not open media", message);
-        statusBar()->showMessage("Could not import media.");
     }
 }
 
@@ -983,6 +1025,10 @@ void MainWindow::updateMediaDetails(int row) {
     updatePlaybackStatus();
 
     if (playback_worker_ != nullptr && canPlaybackSelectedMedia()) {
+        if (item.metadata.kind == media::MediaKind::Image) {
+            sendCompositionToWorker();
+            return;
+        }
         const QString source_path = fromUtf8(pathToUtf8(item.metadata.source_path));
         const double frame_rate = item.metadata.frame_rate.value_or(30.0);
         std::int64_t source_start_frame = 0;

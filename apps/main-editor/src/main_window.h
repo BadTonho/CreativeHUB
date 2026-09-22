@@ -1,6 +1,7 @@
 #pragma once
 
 #include "media/video_decoder.h"
+#include "media/still_image_decoder.h"
 #include "media/media_library.h"
 #include "media/video_metadata.h"
 #include "media/video_probe.h"
@@ -401,6 +402,7 @@ private:
     bool project_dirty_ = false;
     bool initial_window_layout_pending_ = false;
     media::VideoProbe video_probe_;
+    media::StillImageDecoder still_image_decoder_;
     media::VideoDecoder video_decoder_;
     QThread playback_thread_;
     playback::PlaybackWorker* playback_worker_ = nullptr;

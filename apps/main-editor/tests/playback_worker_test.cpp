@@ -788,6 +788,42 @@ void validateCompositionCaching() {
             "The new composition did not rebuild the text composition fast path state.");
 }
 
+void validateStaticImageComposition() {
+    playback::PlaybackWorker worker;
+    std::vector<playback::VideoFramePtr> frames;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&frames](playback::VideoFramePtr frame, qint64, quint64) {
+            frames.push_back(std::move(frame));
+        });
+
+    auto still = std::make_shared<const media::VideoFrame>(media::VideoFrame{
+        2, 1, 8, std::vector<std::uint8_t>{10, 20, 30, 255, 40, 50, 60, 128}});
+    playback::CompositionLayerSpec image_layer;
+    image_layer.frame_rate = 30.0;
+    image_layer.timeline_start_frame = 0;
+    image_layer.segment_frame_count = 150;
+    image_layer.track_index = 0;
+    image_layer.clip_index = 0;
+    image_layer.kind = timeline::ClipKind::Image;
+    image_layer.still_frame = still;
+
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{image_layer},
+        {},
+        500);
+    worker.renderCompositionFrame(0, 0, 500);
+    worker.renderCompositionFrame(1, 1, 500);
+
+    require(frames.size() == 2 && frames[0] != nullptr && frames[1] != nullptr,
+            "Static image composition did not emit both frames.");
+    require(frames[0]->width == 1920 && frames[0]->height == 1080 &&
+                frames[0]->rgba_pixels == frames[1]->rgba_pixels,
+            "Static image composition did not reuse the same image pixels.");
+}
+
 void validatePlaybackFrameMailbox() {
     playback::PlaybackFrameMailbox mailbox;
     auto first = std::make_shared<const media::VideoFrame>(media::VideoFrame{
@@ -979,6 +1015,7 @@ int main(int argc, char* argv[]) {
         validateCompositionPacing(application);
         validateNormalCompositionPacing(application);
         validateCompositionCaching();
+        validateStaticImageComposition();
         if (argc == 2) {
             validateReference(application, std::filesystem::path(argv[1]));
             validateSeekCoalescing(application, std::filesystem::path(argv[1]));

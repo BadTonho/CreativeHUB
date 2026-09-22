@@ -23,9 +23,9 @@ updated intentionally.
 | Area | Test coverage |
 | --- | --- |
 | Structured logging | File creation, required fields, escaping, rotation, retention limit |
-| Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions |
+| Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions, PNG/JPEG/BMP/WebP/TIFF still-image probing, RGBA transparency, 150-frame defaults, and animated-GIF rejection |
 | Playback session | Sequential frames, forward catch-up without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
-| Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
+| Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
 | Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, checked-by-default Magnetic Snap with eight-pixel tolerance, clip-edge and Timeline-boundary snapping, aligned snap guides, enable/disable behavior, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, one-frame fallback metadata, cancellation cleanup, no pre-release model signal, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, frozen track-header overlay during horizontal scrolling, vertical header alignment during vertical scrolling, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
@@ -35,7 +35,7 @@ updated intentionally.
 | Settings dialog | Modal shell, General, Autosave, Timeline, and Shortcuts tabs, empty and populated autosave snapshot table, refresh/restore/delete/open-folder requests, Close action, independent component construction, and editable shortcut preferences |
 | Preview performance metrics | Deterministic counter/timing aggregation, bounded p95/p99 timing histograms, decoded/stale-frame counters, playback delivery-rate derivation, failure counters, cache state, workload context, process-resource sampling, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
-| Project persistence | Versioned JSON, round-trip, timeline zoom and row-height persistence, version 1-6 migration, invalid input, offline media, transactional open |
+| Project persistence | Versioned JSON v8, video/image/text kind round-trip, timeline zoom and row-height persistence, version 1-7 migration with legacy media defaulting to video, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode and icon-scale persistence, bounded 50%-150% icon resizing, seven-character media and folder labels, full-name inline editing, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
@@ -250,6 +250,14 @@ in the running Main Editor after UI or integration changes:
   preservation; reopening a project restores its timeline zoom, uniform track
   height, and starts at
   the beginning of the horizontal scroll;
+- Open Media: select multiple video and still-image files together; confirm
+  valid files are imported when another file fails, duplicate paths are
+  ignored, PNG/JPEG/BMP/WebP/TIFF transparency and original dimensions are
+  preserved, animated GIF is rejected, and the summary names the failures;
+  drag an image from list and block modes to the Timeline, confirm it creates
+  a five-second static clip with no audio, plays the same frame across seeks,
+  participates in snapping, trim, transforms, transitions, and save/reopen,
+  and reopens as offline when its source is unavailable;
 - confirm that timeline zoom changes the timeline only: preview dimensions,
   playback limits, frame rate, clip data, and Undo/Redo remain unchanged; at
   the highest levels, adjacent frames are visibly separated and the horizontal

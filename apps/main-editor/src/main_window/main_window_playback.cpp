@@ -432,7 +432,8 @@ void MainWindow::flushPreviewPerformanceMetrics() {
         if (clip.kind == timeline::ClipKind::Text) {
             context[source_kind_index].second = "text";
         } else {
-            context[source_kind_index].second = "video";
+            context[source_kind_index].second = clip.kind == timeline::ClipKind::Image
+                ? "image" : "video";
             const auto media_item = std::find_if(
                 media_items_.begin(),
                 media_items_.end(),
@@ -623,8 +624,8 @@ void MainWindow::sendCompositionToWorker() {
              clip_index < track.clips.size();
              ++clip_index) {
             const auto& clip = track.clips[clip_index];
-            std::optional<ImportedMedia> imported;
-            if (clip.kind == timeline::ClipKind::Video) {
+            const ImportedMedia* imported = nullptr;
+            if (timeline::isMediaClipKind(clip.kind)) {
                 const auto found = std::find_if(
                     media_items_.begin(), media_items_.end(),
                     [&clip](const ImportedMedia& item) {
@@ -632,14 +633,14 @@ void MainWindow::sendCompositionToWorker() {
                             normalizedPath(clip.source_path);
                     });
                 if (found == media_items_.end() || found->offline) continue;
-                imported = *found;
+                imported = &*found;
             }
             layers.push_back(playback::CompositionLayerSpec{
-                clip.kind == timeline::ClipKind::Video
+                timeline::isMediaClipKind(clip.kind)
                     ? fromUtf8(pathToUtf8(clip.source_path))
                     : QString(),
                 clip.frame_rate.value_or(
-                    imported.has_value() && imported->metadata.frame_rate.has_value()
+                    imported != nullptr && imported->metadata.frame_rate.has_value()
                         ? *imported->metadata.frame_rate
                         : 30.0),
                 clip.timeline_start_frame,
@@ -650,7 +651,10 @@ void MainWindow::sendCompositionToWorker() {
                 clip.transform,
                 clip.keyframes,
                 clip.kind,
-                clip.text});
+                clip.text,
+                imported != nullptr && imported->metadata.kind == media::MediaKind::Image
+                    ? std::make_shared<const media::VideoFrame>(imported->first_frame)
+                    : playback::VideoFramePtr{} });
         }
         for (const auto& transition : track.transitions) {
             const auto from = std::find_if(
@@ -720,7 +724,8 @@ void MainWindow::activateTimelineClipAt(
     if (!preserve_timeline_playhead) {
         preserved_timeline_playhead_frame_.reset();
     }
-    if (clip.kind == timeline::ClipKind::Text) {
+    if (clip.kind == timeline::ClipKind::Text ||
+        clip.kind == timeline::ClipKind::Image) {
         active_timeline_track_index_ = track_index;
         active_timeline_clip_index_ = clip_index;
         playback_frame_index_ = std::clamp<std::int64_t>(
@@ -1305,6 +1310,7 @@ void MainWindow::handleTimelineSeek(qint64 global_frame) {
     // clip that is still active but no longer selected must be activated too;
     // activateTimelineClipAt resolves its source from the clip itself.
     if (!same_clip || clip.kind == timeline::ClipKind::Text ||
+        clip.kind == timeline::ClipKind::Image ||
         !canPlaybackSelectedMedia()) {
         if (timeline_widget_ != nullptr) {
             timeline_widget_->setPlayheadFrame(target_frame);

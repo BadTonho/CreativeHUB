@@ -7,6 +7,11 @@ video tracks and clips with stable identifiers, canonical source paths, media
 metadata, explicit timeline positions, source offsets, and segment durations.
 It does not own decoded frames, FFmpeg resources, or Qt objects.
 
+Media clips can be videos or static raster images. Image clips use the cached
+first frame for every timeline frame, default to 150 frames at 30 FPS (five
+seconds), participate in the same movement, trim, overlap, snapping, history,
+and transform rules as videos, and never create an audio playback session.
+
 ## Multi-track behavior
 
 Video 1 is created by default. Each newly created track is inserted above the
@@ -292,5 +297,5 @@ Fade to Black, or remove the transition. The Inspector confirms the type and
 duration edits. Moving, splitting, trimming, or deleting an endpoint removes
 only transitions whose adjacency or endpoint validity is no longer true.
 Transitions are included in bounded Undo/Redo snapshots and are persisted in
-`.csp` version 7. Projects from earlier versions load with no transitions,
+`.csp` version 8. Projects from earlier versions load with no transitions,
 100% timeline zoom, and the default 70-pixel track-row height.

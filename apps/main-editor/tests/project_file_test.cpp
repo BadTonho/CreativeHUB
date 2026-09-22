@@ -38,10 +38,12 @@ int main(int argc, char** argv) {
         std::filesystem::create_directories(directory / "media");
         const auto project_path = directory / "project.csp";
         const auto first_source = directory / "media" / "first video.mkv";
+        const auto image_source = directory / "media" / "still.png";
         const auto outside_source = std::filesystem::temp_directory_path() /
             ("creative-suite-project-outside-" + std::to_string(
                 std::chrono::steady_clock::now().time_since_epoch().count()) + ".mkv");
         std::ofstream(first_source, std::ios::binary).close();
+        std::ofstream(image_source, std::ios::binary).close();
         std::ofstream(outside_source, std::ios::binary).close();
 
         project::ProjectDocument original;
@@ -50,6 +52,7 @@ int main(int argc, char** argv) {
         original.media = {
             {first_source, "First Video", "Footage/Scenes", false},
             {outside_source, "Offline Asset", "Unsorted", true},
+            {image_source, "Still Image", "Footage/Stills", false, media::MediaKind::Image},
         };
         original.timeline_tracks = {
             {"Video 1", 0.75, true, {
@@ -66,6 +69,12 @@ int main(int argc, char** argv) {
         title_clip.text.alignment = timeline::TextAlignment::Left;
         title_clip.text.color = {255, 200, 100, 230};
         original.timeline_tracks.front().clips.push_back(title_clip);
+        project::ProjectClip image_clip;
+        image_clip.source_path = image_source;
+        image_clip.timeline_start_frame = 100;
+        image_clip.duration_frames = 150;
+        image_clip.kind = timeline::ClipKind::Image;
+        original.timeline_tracks.front().clips.push_back(image_clip);
         original.timeline_tracks.front().transitions.push_back(
             project::ProjectTransition{
                 0,
@@ -116,12 +125,16 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"kind\": \"text\"") != std::string::npos &&
                     saved_json.find("\"content\": \"Title\"") != std::string::npos,
                 "Text clip content and kind were not written to the project.");
-        require(saved_json.find("\"version\": 7") != std::string::npos &&
+        require(saved_json.find("\"version\": 8") != std::string::npos &&
                     saved_json.find("\"zoom\": 512") != std::string::npos &&
                     saved_json.find("\"row_height\": 123.5") != std::string::npos &&
                     saved_json.find("\"transitions\"") != std::string::npos &&
                     saved_json.find("cross_dissolve") != std::string::npos,
-                "Timeline zoom, row height, and transition data were not written to the version 7 project.");
+                "Timeline zoom, row height, image, and transition data were not written to the version 8 project.");
+        require(saved_json.find("\"kind\": \"image\"") != std::string::npos &&
+                    loaded.media.back().kind == media::MediaKind::Image &&
+                    loaded.timeline_tracks.front().clips.back().kind == timeline::ClipKind::Image,
+                "Image media and image clip kinds were not persisted.");
 
         const auto original_contents = saved_json;
         bool failed = false;
@@ -194,7 +207,8 @@ int main(int argc, char** argv) {
         const auto legacy = project::load(project_path);
         require(legacy.media.front().display_name.empty() &&
                     legacy.media.front().bin_path == "Unsorted" &&
-                    !legacy.media.front().offline,
+                    !legacy.media.front().offline &&
+                    legacy.media.front().kind == media::MediaKind::Video,
                 "A path-only version 1 media entry was not kept backward compatible.");
         require(legacy.timeline_tracks.front().audio_gain == 1.0 &&
                     !legacy.timeline_tracks.front().audio_muted &&

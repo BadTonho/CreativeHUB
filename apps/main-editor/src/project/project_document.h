@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 7;
+inline constexpr int current_format_version = 8;
+inline constexpr int media_kind_format_version = 8;
 inline constexpr int timeline_zoom_format_version = 6;
 inline constexpr int timeline_row_height_format_version = 7;
 inline constexpr int transitions_format_version = 5;
@@ -62,6 +63,7 @@ struct ProjectMedia {
     std::string display_name;
     std::string bin_path = "Unsorted";
     bool offline = false;
+    media::MediaKind kind = media::MediaKind::Video;
 
     friend bool operator==(const ProjectMedia&, const ProjectMedia&) = default;
 };

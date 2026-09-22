@@ -89,6 +89,28 @@ bool validTransitionKind(timeline::TransitionKind kind) {
     return false;
 }
 
+const char* mediaKindName(media::MediaKind kind) {
+    return kind == media::MediaKind::Image ? "image" : "video";
+}
+
+media::MediaKind parseMediaKind(
+    const QJsonObject& object,
+    const std::filesystem::path& project_path,
+    int version) {
+    if (version < media_kind_format_version || !object.contains("kind")) {
+        return media::MediaKind::Video;
+    }
+    const auto value = object.value("kind");
+    if (!value.isString()) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid media kind.");
+    }
+    if (value.toString() == QLatin1String("video")) return media::MediaKind::Video;
+    if (value.toString() == QLatin1String("image")) return media::MediaKind::Image;
+    throwJson(ProjectErrorCode::InvalidValue, project_path,
+              "Project JSON contains an unsupported media kind.");
+}
+
 timeline::TransitionKind parseTransitionKind(
     const QJsonObject& object,
     const std::filesystem::path& project_path) {
@@ -280,8 +302,8 @@ void validateDocument(const ProjectDocument& document,
     }
 
     auto validate_clip = [&project_path](const ProjectClip& clip) {
-        if (clip.kind == timeline::ClipKind::Video && clip.source_path.empty()) {
-            throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains a video clip without a source.");
+        if (timeline::isMediaClipKind(clip.kind) && clip.source_path.empty()) {
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains a media clip without a source.");
         }
         if (clip.timeline_start_frame < 0 ||
             clip.source_start_frame < 0 || clip.duration_frames <= 0) {
@@ -471,6 +493,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
         }
         const auto object = media_value_item.toObject();
         ProjectMedia media;
+        media.kind = parseMediaKind(object, project_path, static_cast<int>(version));
         media.source_path = resolvedPath(
             project_path,
             requiredString(object, "path", project_path));
@@ -594,13 +617,15 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                     }
                     if (kind.toString() == QLatin1String("video")) {
                         clip.kind = timeline::ClipKind::Video;
+                    } else if (kind.toString() == QLatin1String("image")) {
+                        clip.kind = timeline::ClipKind::Image;
                     } else if (kind.toString() == QLatin1String("text")) {
                         clip.kind = timeline::ClipKind::Text;
                     } else {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an unsupported clip kind.");
                     }
                 }
-                if (clip.kind == timeline::ClipKind::Video) {
+                if (timeline::isMediaClipKind(clip.kind)) {
                     clip.source_path = resolvedPath(
                         project_path, requiredString(clip_object, "source", project_path));
                 } else {
@@ -735,6 +760,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
         item.insert("bin", QString::fromUtf8(media_source.bin_path.data(),
                                                static_cast<int>(media_source.bin_path.size())));
         item.insert("offline", media_source.offline);
+        item.insert("kind", mediaKindName(media_source.kind));
         media.append(item);
     }
 
@@ -760,8 +786,11 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
         QJsonArray clips;
         for (const auto& clip : track_source.clips) {
             QJsonObject item;
-            item.insert("kind", clip.kind == timeline::ClipKind::Text ? "text" : "video");
-            if (clip.kind == timeline::ClipKind::Video) {
+            const char* clip_kind = clip.kind == timeline::ClipKind::Text
+                ? "text"
+                : clip.kind == timeline::ClipKind::Image ? "image" : "video";
+            item.insert("kind", clip_kind);
+            if (timeline::isMediaClipKind(clip.kind)) {
                 item.insert("source", storedPath(project_path, clip.source_path));
             } else {
                 QJsonObject text;

@@ -19,8 +19,13 @@ using ClipId = std::uint64_t;
 
 enum class ClipKind {
     Video,
+    Image,
     Text,
 };
+
+[[nodiscard]] constexpr bool isMediaClipKind(ClipKind kind) noexcept {
+    return kind == ClipKind::Video || kind == ClipKind::Image;
+}
 
 enum class TransitionKind {
     CrossDissolve,

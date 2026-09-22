@@ -378,6 +378,7 @@ void PlaybackWorker::setComposition(
     std::int64_t composition_start = std::numeric_limits<std::int64_t>::max();
     std::int64_t composition_end = 0;
     bool has_primary_clip = false;
+    bool primary_is_static = false;
     std::int64_t primary_clip_duration = 0;
 
     try {
@@ -400,10 +401,14 @@ void PlaybackWorker::setComposition(
                 if (spec.source_path.isEmpty()) continue;
                 composition_session.session = openVideoPlaybackSession(
                     QFileInfo(spec.source_path).filesystemFilePath());
+            } else if (spec.kind == timeline::ClipKind::Image) {
+                if (spec.still_frame == nullptr) continue;
+                composition_session.static_frame = spec.still_frame;
             }
             if (spec.track_index == track_index_ && spec.clip_index == clip_index_) {
                 primary_timeline_start_frame_ = spec.timeline_start_frame;
                 has_primary_clip = true;
+                primary_is_static = spec.kind != timeline::ClipKind::Video;
                 primary_clip_duration = spec.segment_frame_count;
                 if (std::isfinite(spec.frame_rate) && spec.frame_rate > 0.0) {
                     frame_rate_ = spec.frame_rate;
@@ -413,6 +418,13 @@ void PlaybackWorker::setComposition(
         }
 
         if (has_primary_clip) {
+            if (primary_is_static) {
+                source_path_.clear();
+                session_.reset();
+                audio_enabled_ = false;
+                audio_session_.reset();
+                disableAudioOutput();
+            }
             segment_frame_count_ = primary_clip_duration;
             current_frame_index_ = 0;
         } else if (source_path_.empty() && composition_start !=
@@ -1133,7 +1145,7 @@ PlaybackWorker::decodeCompositionLayers(
                 return left->spec.track_index > right->spec.track_index;
             }
             if (left->spec.kind != right->spec.kind) {
-                return left->spec.kind == timeline::ClipKind::Video;
+                return timeline::isMediaClipKind(left->spec.kind);
             }
             return left->spec.clip_index < right->spec.clip_index;
         });
@@ -1247,7 +1259,7 @@ PlaybackWorker::decodeCompositionLayers(
                 return left.composition->spec.track_index > right.composition->spec.track_index;
             }
             if (left.composition->spec.kind != right.composition->spec.kind) {
-                return left.composition->spec.kind == timeline::ClipKind::Video;
+                return timeline::isMediaClipKind(left.composition->spec.kind);
             }
             return left.composition->spec.clip_index < right.composition->spec.clip_index;
         });
@@ -1286,6 +1298,8 @@ PlaybackWorker::decodeCompositionLayers(
                         *request.composition->cached_text_frame);
                 frame = request.composition->cached_text_frame;
             }
+        } else if (spec.kind == timeline::ClipKind::Image) {
+            frame = request.composition->static_frame;
         } else if (request.composition->session != nullptr) {
             std::optional<media::VideoFramePtr> decoded;
             const auto current_source_frame =

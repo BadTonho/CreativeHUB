@@ -757,7 +757,7 @@ MainWindow::selectedTimelineClipLocation() const noexcept {
     for (std::size_t track = 0; track < timeline_model_.trackCount(); ++track) {
         const auto& clips = timeline_model_.tracks()[track].clips;
         for (std::size_t index = 0; index < clips.size(); ++index) {
-            if (clips[index].kind == timeline::ClipKind::Video &&
+            if (timeline::isMediaClipKind(clips[index].kind) &&
                 clips[index].source_path == selected.metadata.source_path) {
                 return timeline::ClipLocation{track, index};
             }
@@ -1307,7 +1307,7 @@ void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_in
     const auto selected_track = static_cast<std::size_t>(track_index);
     const auto& selected_clip = timeline_model_.tracks()[selected_track]
         .clips[static_cast<std::size_t>(clip_index)];
-    if (selected_track == 0 && selected_clip.kind == timeline::ClipKind::Video) {
+    if (selected_track == 0 && timeline::isMediaClipKind(selected_clip.kind)) {
         handleTimelineClipSelected(clip_index);
         return;
     }
@@ -1699,8 +1699,8 @@ void MainWindow::handleTimelineClipSplitAt(
     if (track_index == 0 &&
         clip_index >= 0 &&
         clip_index < static_cast<qint64>(timeline_model_.clipCount(0)) &&
-        timeline_model_.tracks()[0].clips[static_cast<std::size_t>(clip_index)].kind ==
-            timeline::ClipKind::Video) {
+        timeline::isMediaClipKind(
+            timeline_model_.tracks()[0].clips[static_cast<std::size_t>(clip_index)].kind)) {
         active_timeline_track_index_ = 0;
         handleTimelineClipSplit(clip_index, local_frame);
         return;
@@ -1767,8 +1767,8 @@ void MainWindow::handleTimelineClipTrimAt(
     if (track_index == 0 &&
         clip_index >= 0 &&
         clip_index < static_cast<qint64>(timeline_model_.clipCount(0)) &&
-        timeline_model_.tracks()[0].clips[static_cast<std::size_t>(clip_index)].kind ==
-            timeline::ClipKind::Video) {
+        timeline::isMediaClipKind(
+            timeline_model_.tracks()[0].clips[static_cast<std::size_t>(clip_index)].kind)) {
         active_timeline_track_index_ = 0;
         handleTimelineClipTrim(clip_index, local_start_frame, local_end_frame);
         return;
@@ -2229,7 +2229,7 @@ void MainWindow::deleteActiveTimelineClip() {
     const auto track_index = *active_timeline_track_index_;
     const auto clip_index = *active_timeline_clip_index_;
     const auto clip = timeline_model_.tracks()[track_index].clips[clip_index];
-    if (clip.kind == timeline::ClipKind::Video && !canPlaybackSelectedMedia()) return;
+    if (timeline::isMediaClipKind(clip.kind) && !canPlaybackSelectedMedia()) return;
     timeline::EditState before_edit;
 
     try {
@@ -2288,8 +2288,8 @@ void MainWindow::deleteActiveTimelineClip() {
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
-        if (timeline_model_.tracks()[next_track].clips[next_index].kind ==
-            timeline::ClipKind::Video) {
+        if (timeline::isMediaClipKind(
+                timeline_model_.tracks()[next_track].clips[next_index].kind)) {
             activateTimelineClipAt(next_track, next_index, 0, false);
         } else {
             active_timeline_track_index_ = next_track;
@@ -2335,7 +2335,7 @@ void MainWindow::splitActiveClipAtPlayhead() {
 
     const auto& active_clip = timeline_model_.tracks()
         [*active_timeline_track_index_].clips[*active_timeline_clip_index_];
-    if (active_clip.kind == timeline::ClipKind::Video &&
+    if (timeline::isMediaClipKind(active_clip.kind) &&
         !canPlaybackSelectedMedia()) {
         return;
     }

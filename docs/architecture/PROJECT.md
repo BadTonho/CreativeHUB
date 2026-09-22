@@ -7,16 +7,20 @@ model is Qt-independent and contains imported media, bins, ordered video tracks,
 and timeline clips. It does not contain selection, playhead, dock geometry,
 Undo/Redo history, decoded frames, FFmpeg sessions, or Qt resources.
 
-## Version 7 format
+## Version 8 format
 
-The current root uses `version: 7` and adds a fixed `canvas` object with
+The current root uses `version: 8` and adds a fixed `canvas` object with
 `width: 1920` and `height: 1080`. Timeline clips additionally persist an
 occurrence-local `transform` object and five optional keyframe arrays:
 `position_x`, `position_y`, `scale`, `rotation`, and `opacity`. Keyframe frames
 are local to the clip segment and values use linear interpolation at runtime.
 All existing media, bin, track, source-offset, timing, and audio fields remain
-compatible. Each clip has `kind: "video"` or `kind: "text"`; missing `kind`
-is treated as video for compatibility. Text clips persist a `text` object with
+compatible. Media entries persist `kind: "video"` or `kind: "image"`; missing
+media kind is treated as video for compatibility. Each clip has `kind:
+"video"`, `"image"`, or `"text"`; missing `kind` is treated as video for
+compatibility. Image clips keep their source path, timing, transforms, and
+occurrence data but reconstruct their first RGBA frame from the source on open.
+Text clips persist a `text` object with
 UTF-8 `content`, `font_family`, `font_size_pixels`, RGBA `color`, and
 `alignment` (`left`, `center`, or `right`). Text clips do not require a media
 source and preserve their own duration, transform, keyframes, and occurrence.
@@ -67,7 +71,10 @@ keyframes. Version 2 files receive the identity transform, an empty keyframe
 set, and the 1920x1080 canvas when opened. Version 1 files containing
 `timeline.clips` remain supported; they are converted to a single Video 1
 track with sequential timeline starts computed from clip durations. The next
-successful save writes version 7 and includes the timeline zoom and row height.
+successful save writes version 8 and includes the timeline zoom, row height,
+and explicit media/clip kinds. Existing version 1 through 7 projects continue
+to load; their media entries default to video unless a version 8 image kind is
+present.
 
 ## Transactional open and save
 
