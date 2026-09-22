@@ -74,6 +74,9 @@ int main(int argc, char* argv[]) {
                 "Project autosave controls are missing.");
         require(interval_spin->value() == 30 && retention_spin->value() == 5,
                 "Project autosave defaults are incorrect.");
+        require(interval_spin->minimumWidth() >= 96 &&
+                        retention_spin->minimumWidth() >= 96,
+                "Project autosave numeric controls are too narrow to read.");
 
         bool signal_emitted = false;
         bool signal_value = false;

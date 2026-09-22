@@ -79,6 +79,7 @@ QWidget* SettingsDialog::createGeneralPage() {
         settings::kMaximumProjectAutosaveIntervalSeconds);
     interval_spin->setValue(settings::projectAutosaveIntervalSeconds());
     interval_spin->setSuffix(" s");
+    interval_spin->setMinimumWidth(96);
     auto* retention_label = new QLabel("Snapshots:", autosave_options);
     auto* retention_spin = new QSpinBox(autosave_options);
     retention_spin->setObjectName("projectAutosaveRetentionSpinBox");
@@ -86,6 +87,7 @@ QWidget* SettingsDialog::createGeneralPage() {
         settings::kMinimumProjectAutosaveRetention,
         settings::kMaximumProjectAutosaveRetention);
     retention_spin->setValue(settings::projectAutosaveRetention());
+    retention_spin->setMinimumWidth(96);
     autosave_options_layout->addWidget(interval_label);
     autosave_options_layout->addWidget(interval_spin);
     autosave_options_layout->addSpacing(16);
