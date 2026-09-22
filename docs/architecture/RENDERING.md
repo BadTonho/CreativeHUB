@@ -60,10 +60,14 @@ the frame returned by the decoder, the cache entry, and the playback worker
 share the same RGBA allocation. Sequential playback and cache hits therefore
 avoid a full pixel copy. A request for the next frame in the current decoder
 sequence advances the decoder directly, without performing another seek.
-Cache misses and non-sequential requests retain the existing seek and fallback
-behavior, including cancellation, segment limits, and error reporting. The
-cache is intentionally per playback session so memory usage does not grow with
-project duration.
+When playback is late, a forward-only request drains the required codec frames
+without converting intermediate outputs to RGBA or adding them to the cache;
+only the newest target frame is materialized. This avoids a seek when a
+composition merely advances several frames. Initial, backward, cached-position
+invalid, random, and transition-held-frame requests retain the existing seek
+and fallback behavior, including cancellation, segment limits, and error
+reporting. The cache is intentionally per playback session so memory usage does
+not grow with project duration.
 
 Composition is split into two worker-side stages. The first stage collects
 ordered decoded layers and their evaluated transforms in a backend-neutral
@@ -124,6 +128,10 @@ Decode timing also exposes packet read/send, codec frame receive, RGBA pixel
 conversion, and decoded-frame cache-copy submetrics. The total `decode_*`
 values remain the compatibility metric; the submetrics may have different
 counts because one decoded frame can require multiple packet or codec calls.
+`decode_discarded_frames` counts codec frames intentionally drained during
+forward playback catch-up without RGBA materialization. In a late interval,
+`decode_receive_count` can therefore exceed `pixel_conversion_count` without
+indicating extra displayed frames.
 The playback session reuses its FFmpeg `SwsContext` for compatible frames and
 lets FFmpeg replace it when the source format or dimensions change. The
 `frame_cache_copy_*` fields remain in the log for historical comparison and

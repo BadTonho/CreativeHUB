@@ -78,6 +78,9 @@ void appendPerformanceContext(
     context.emplace_back(
         "decoded_frames", std::to_string(snapshot.decoded_frames));
     context.emplace_back(
+        "decode_discarded_frames",
+        std::to_string(snapshot.decode_discarded_frames));
+    context.emplace_back(
         "decoded_cache_hits", std::to_string(snapshot.decoded_cache_hits));
     context.emplace_back(
         "text_cache_hits", std::to_string(snapshot.text_cache_hits));

@@ -123,7 +123,8 @@ private:
     void emitComposedFrame();
     [[nodiscard]] std::optional<std::vector<DecodedCompositionLayer>>
         decodeCompositionLayers(
-        std::int64_t global_frame);
+        std::int64_t global_frame,
+        const media::VideoPlaybackSession::CancellationPredicate& should_cancel);
     [[nodiscard]] std::optional<media::VideoFrame> composeCompositionLayers(
         const std::vector<DecodedCompositionLayer>& layers) const;
     void clearCompositionCache() noexcept;

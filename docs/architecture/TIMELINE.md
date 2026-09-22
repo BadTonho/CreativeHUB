@@ -124,6 +124,13 @@ rasterized RGBA layer and its immutable per-row alpha coverage. These are
 playback caches only: they are invalidated when media or composition state
 changes and never alter clip data, timing, frame rate, or project history.
 
+When the playback target moves forward by more than one frame, ordinary video
+layers keep decoding in sequence but discard intermediate codec outputs before
+RGBA conversion and cache insertion. This is distinct from random Timeline
+seeks and transition requests that intentionally hold a non-sequential source
+frame, which retain the seek path. The newest target remains the only frame
+rendered and published for that tick.
+
 Preview diagnostics separate total decode time into packet read/send, codec
 receive, RGBA conversion, and cache-copy timings. Decoded frames are exposed
 as immutable shared pointers, so sequential playback and cache hits reuse the
@@ -132,6 +139,8 @@ Sequential playback reuses the decoder's cached FFmpeg `SwsContext`; a format
 or dimension change rebuilds that conversion context without changing the
 resulting `VideoFrame`. The compatibility `frame_cache_copy_*` metric remains
 available and is expected to stay at zero for this path.
+`decode_discarded_frames` records intermediate codec frames drained during
+forward catch-up without creating an RGBA `VideoFrame`.
 
 Playback frames cross the worker/UI boundary as immutable shared payloads. The
 GPU Preview retains that payload until its upload instead of copying the RGBA

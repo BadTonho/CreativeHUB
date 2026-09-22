@@ -25,6 +25,12 @@ public:
     VideoPlaybackSession& operator=(VideoPlaybackSession&&) noexcept;
 
     std::optional<VideoFramePtr> decode_next_frame();
+    // Advances an already-valid sequential decoder state without seeking.
+    // Only the requested final frame is materialized; cancelled, backward,
+    // initial, or invalid decoder-position requests return no frame.
+    std::optional<VideoFramePtr> decode_forward_to(
+        std::int64_t frame_index,
+        const CancellationPredicate& should_cancel = {});
     std::optional<VideoFramePtr> decode_frame_at(std::int64_t frame_index);
     std::optional<VideoFramePtr> decode_frame_at(
         std::int64_t frame_index,
@@ -41,7 +47,8 @@ private:
     explicit VideoPlaybackSession(std::unique_ptr<Impl> impl);
 
     static std::unique_ptr<Impl> openImpl(const std::filesystem::path& source_path);
-    static std::optional<VideoFramePtr> decodeNextFrame(Impl& impl);
+    static bool decodeNextFrame(Impl& impl, VideoFramePtr* output_frame);
+    static bool discardNextFrame(Impl& impl);
     static void cacheFrame(
         Impl& impl,
         std::int64_t frame_index,

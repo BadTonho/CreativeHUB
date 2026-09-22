@@ -384,13 +384,18 @@ void PlaybackWorker::renderCompositionFrame(
             return;
         }
 
+        const auto seek_sequence = pending_seek_sequence_.load(std::memory_order_acquire);
+        const auto should_cancel = [this, seek_sequence]() {
+            return !isSeekCurrent(seek_sequence);
+        };
         std::optional<std::vector<DecodedCompositionLayer>> decoded_layers;
         {
             rendering::PreviewPerformanceScope timing(
                 metrics,
                 rendering::PreviewTiming::Decode);
-            decoded_layers = decodeCompositionLayers(global_frame);
+            decoded_layers = decodeCompositionLayers(global_frame, should_cancel);
         }
+        if (should_cancel()) return;
         if (!decoded_layers.has_value()) {
             throw media::MediaError("The timeline composition could not produce a frame.");
         }
@@ -402,6 +407,7 @@ void PlaybackWorker::renderCompositionFrame(
                 rendering::PreviewTiming::Composition);
             composed = composeCompositionLayers(*decoded_layers);
         }
+        if (should_cancel()) return;
         if (!composed.has_value()) {
             throw media::MediaError("The timeline composition could not produce a frame.");
         }
@@ -672,31 +678,47 @@ void PlaybackWorker::decodeTick() {
         }
         if (target_frame <= current_frame_index_) return;
 
-        metrics.recordPacingSkippedFrames(static_cast<std::uint64_t>(
-            target_frame - current_frame_index_ - 1));
         if (composition_enabled_) {
+            metrics.recordPacingSkippedFrames(static_cast<std::uint64_t>(
+                target_frame - current_frame_index_ - 1));
             current_frame_index_ = target_frame;
             emitComposedFrame();
             return;
         }
 
-        std::optional<media::VideoFramePtr> frame;
-        while (current_frame_index_ < target_frame) {
-            {
-                rendering::PreviewPerformanceScope timing(
-                    metrics,
-                    rendering::PreviewTiming::Decode);
-                frame = session_->decode_next_frame();
-            }
-            consumeDecodeCacheHits(*session_);
-            if (!frame.has_value() ||
-                !isSourceFrameInRange(session_->current_frame_index())) {
-                finishPlayback();
-                return;
-            }
-            metrics.recordDecodedFrame();
-            ++current_frame_index_;
+        const auto source_target_frame = sourceFrameForLocal(target_frame);
+        if (!source_target_frame.has_value()) {
+            throw media::MediaError("The playback target frame is outside the media range.");
         }
+        const auto seek_sequence = pending_seek_sequence_.load(std::memory_order_acquire);
+        const auto should_cancel = [this, seek_sequence]() {
+            return !isSeekCurrent(seek_sequence);
+        };
+
+        std::optional<media::VideoFramePtr> frame;
+        {
+            rendering::PreviewPerformanceScope timing(
+                metrics,
+                rendering::PreviewTiming::Decode);
+            frame = session_->decode_forward_to(*source_target_frame, should_cancel);
+        }
+        if (!frame.has_value() && should_cancel()) return;
+        if (!frame.has_value() && !session_->at_end()) {
+            rendering::PreviewPerformanceScope timing(
+                metrics,
+                rendering::PreviewTiming::Decode);
+            frame = session_->decode_frame_at(*source_target_frame, should_cancel);
+        }
+        if (should_cancel()) return;
+        consumeDecodeCacheHits(*session_);
+        if (!frame.has_value() ||
+            !isSourceFrameInRange(session_->current_frame_index())) {
+            finishPlayback();
+            return;
+        }
+        metrics.recordDecodedFrame();
+        metrics.recordPacingSkippedFrames(static_cast<std::uint64_t>(
+            target_frame - current_frame_index_ - 1));
         emitFrame(std::move(frame));
     } catch (const media::MediaError& error) {
         reportFailure(error, "decode_tick");
@@ -936,7 +958,8 @@ void PlaybackWorker::emitComposedFrame() {
 
 std::optional<std::vector<PlaybackWorker::DecodedCompositionLayer>>
 PlaybackWorker::decodeCompositionLayers(
-    std::int64_t global_frame) {
+    std::int64_t global_frame,
+    const media::VideoPlaybackSession::CancellationPredicate& should_cancel) {
     std::vector<DecodedCompositionLayer> layers;
     layers.reserve(composition_sessions_.size());
 
@@ -944,6 +967,7 @@ PlaybackWorker::decodeCompositionLayers(
         CompositionSession* composition = nullptr;
         std::int64_t local_frame = 0;
         double opacity_multiplier = 1.0;
+        bool allow_forward_decode = true;
     };
 
     std::vector<CompositionSession*> ordered_sessions;
@@ -1001,12 +1025,14 @@ PlaybackWorker::decodeCompositionLayers(
     const auto append_transition_request = [&requests](
         CompositionSession* composition,
         std::int64_t local_frame,
-        double opacity_multiplier) {
+        double opacity_multiplier,
+        bool allow_forward_decode = true) {
         if (composition != nullptr && opacity_multiplier > 0.0) {
             requests.push_back(RenderRequest{
                 composition,
                 local_frame,
-                std::clamp(opacity_multiplier, 0.0, 1.0)});
+                std::clamp(opacity_multiplier, 0.0, 1.0),
+                allow_forward_decode});
         }
     };
 
@@ -1037,7 +1063,7 @@ PlaybackWorker::decodeCompositionLayers(
             // blend factor; fading both layers would compound alpha against
             // the opaque background and darken the result.
             append_transition_request(
-                from, from_local, 1.0);
+                from, from_local, 1.0, false);
             append_transition_request(
                 to, to_local, blend);
         } else if (transition.kind == timeline::TransitionKind::FadeToBlack) {
@@ -1087,6 +1113,7 @@ PlaybackWorker::decodeCompositionLayers(
         const auto source_frame = spec.source_start_frame + request.local_frame;
         std::shared_ptr<const media::VideoFrame> frame;
         auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+        if (should_cancel && should_cancel()) return std::nullopt;
         if (spec.kind == timeline::ClipKind::Text) {
             if (request.composition->cached_text_frame != nullptr) {
                 frame = request.composition->cached_text_frame;
@@ -1110,7 +1137,22 @@ PlaybackWorker::decodeCompositionLayers(
                 frame = request.composition->cached_text_frame;
             }
         } else if (request.composition->session != nullptr) {
-            auto decoded = request.composition->session->decode_frame_at(source_frame);
+            std::optional<media::VideoFramePtr> decoded;
+            const auto current_source_frame =
+                request.composition->session->current_frame_index();
+            if (playing_ && request.allow_forward_decode && current_source_frame >= 0 &&
+                source_frame > current_source_frame) {
+                decoded = request.composition->session->decode_forward_to(
+                    source_frame,
+                    should_cancel);
+            }
+            if (!decoded.has_value() && !request.composition->session->at_end() &&
+                !(should_cancel && should_cancel())) {
+                decoded = request.composition->session->decode_frame_at(
+                    source_frame,
+                    should_cancel);
+            }
+            if (should_cancel && should_cancel()) return std::nullopt;
             consumeDecodeCacheHits(*request.composition->session);
             if (decoded.has_value()) {
                 metrics.recordDecodedFrame();

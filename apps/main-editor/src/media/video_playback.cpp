@@ -430,8 +430,8 @@ std::unique_ptr<VideoPlaybackSession::Impl> VideoPlaybackSession::openImpl(
     return impl;
 }
 
-std::optional<VideoFramePtr> VideoPlaybackSession::decodeNextFrame(Impl& impl) {
-    if (impl.end_reached) return std::nullopt;
+bool VideoPlaybackSession::decodeNextFrame(Impl& impl, VideoFramePtr* output_frame) {
+    if (impl.end_reached) return false;
 
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     while (true) {
@@ -474,28 +474,37 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decodeNextFrame(Impl& impl) {
         if (receive_result == 0) {
             ++impl.current_frame_index;
             impl.last_decoded_timestamp = impl.frame->best_effort_timestamp;
-            auto decoded_frame = copyRgbaFrame(*impl.frame, impl.scaler, metrics);
-            if (impl.cache_decoded_frames) {
-                VideoPlaybackSession::cacheFrame(
-                    impl,
-                    impl.current_frame_index,
-                    decoded_frame);
+            if (output_frame != nullptr) {
+                auto decoded_frame = copyRgbaFrame(*impl.frame, impl.scaler, metrics);
+                if (impl.cache_decoded_frames) {
+                    VideoPlaybackSession::cacheFrame(
+                        impl,
+                        impl.current_frame_index,
+                        decoded_frame);
+                }
+                *output_frame = std::move(decoded_frame);
+            } else {
+                metrics.recordDecodeDiscardedFrame();
             }
-            return decoded_frame;
+            return true;
         }
         if (receive_result == AVERROR(EAGAIN)) {
             if (impl.flush_sent) {
                 impl.end_reached = true;
-                return std::nullopt;
+                return false;
             }
             continue;
         }
         if (receive_result == AVERROR_EOF) {
             impl.end_reached = true;
-            return std::nullopt;
+            return false;
         }
         throwFfmpegError(receive_result, "Receiving decoded video frame");
     }
+}
+
+bool VideoPlaybackSession::discardNextFrame(Impl& impl) {
+    return decodeNextFrame(impl, nullptr);
 }
 
 std::optional<VideoFramePtr> VideoPlaybackSession::decode_next_frame() {
@@ -503,12 +512,49 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_next_frame() {
         if (impl_->decoder_position_invalid && impl_->current_frame_index >= 0) {
             return decode_frame_at(impl_->current_frame_index + 1);
         }
-        return decodeNextFrame(*impl_);
+        VideoFramePtr frame;
+        if (!decodeNextFrame(*impl_, &frame)) return std::nullopt;
+        return frame;
     } catch (const MediaError& error) {
         logFailure(impl_->source_path, "playback_decode", error);
         throw;
     } catch (const std::exception& error) {
         logFailure(impl_->source_path, "playback_decode", error);
+        throw;
+    }
+}
+
+std::optional<VideoFramePtr> VideoPlaybackSession::decode_forward_to(
+    std::int64_t frame_index,
+    const CancellationPredicate& should_cancel) {
+    try {
+        if (frame_index < 0) {
+            throw MediaError("The requested frame index is negative.");
+        }
+        if (impl_->decoder_position_invalid || impl_->current_frame_index < 0 ||
+            frame_index <= impl_->current_frame_index) {
+            return std::nullopt;
+        }
+
+        const auto cancelled = [&should_cancel]() {
+            return should_cancel && should_cancel();
+        };
+        while (impl_->current_frame_index < frame_index - 1) {
+            if (cancelled() || !discardNextFrame(*impl_)) return std::nullopt;
+        }
+        if (cancelled()) return std::nullopt;
+
+        VideoFramePtr frame;
+        if (!decodeNextFrame(*impl_, &frame) ||
+            impl_->current_frame_index != frame_index) {
+            return std::nullopt;
+        }
+        return frame;
+    } catch (const MediaError& error) {
+        logFailure(impl_->source_path, "playback_forward_decode", error);
+        throw;
+    } catch (const std::exception& error) {
+        logFailure(impl_->source_path, "playback_forward_decode", error);
         throw;
     }
 }
@@ -540,8 +586,9 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_frame_at(
 
         if (!impl_->decoder_position_invalid &&
             frame_index == impl_->current_frame_index + 1) {
-            const auto frame = decodeNextFrame(*impl_);
-            if (!frame.has_value() || impl_->current_frame_index != frame_index) {
+            VideoFramePtr frame;
+            if (!decodeNextFrame(*impl_, &frame) ||
+                impl_->current_frame_index != frame_index) {
                 return std::nullopt;
             }
             return frame;
@@ -552,8 +599,9 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_frame_at(
             std::optional<VideoFramePtr> frame;
             for (std::int64_t index = 0; index <= frame_index; ++index) {
                 if (cancelled()) return std::nullopt;
-                frame = decodeNextFrame(*impl_);
-                if (!frame.has_value()) return std::nullopt;
+                VideoFramePtr decoded_frame;
+                if (!decodeNextFrame(*impl_, &decoded_frame)) return std::nullopt;
+                frame = std::move(decoded_frame);
             }
             return frame;
         };
@@ -574,8 +622,8 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_frame_at(
                 return std::nullopt;
             }
 
-            auto frame = decodeNextFrame(*impl_);
-            if (!frame.has_value()) {
+            VideoFramePtr frame;
+            if (!decodeNextFrame(*impl_, &frame)) {
                 impl_->cache_decoded_frames = true;
                 return std::nullopt;
             }
@@ -590,7 +638,7 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_frame_at(
             }
 
             impl_->current_frame_index = *decoded_index;
-            cacheFrame(*impl_, *decoded_index, *frame);
+            cacheFrame(*impl_, *decoded_index, frame);
             if (*decoded_index == frame_index) {
                 impl_->cache_decoded_frames = true;
                 impl_->decoder_position_invalid = false;

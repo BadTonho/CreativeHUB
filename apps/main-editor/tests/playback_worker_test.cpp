@@ -449,6 +449,152 @@ void validateCompositionPlayback(
             "Composition playback without a selected media source emitted no frames.");
 }
 
+void validateDirectDecodeCatchup(
+    QCoreApplication& application,
+    const std::filesystem::path& path) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
+
+    playback::PlaybackWorker worker;
+    std::vector<qint64> frame_indices;
+    bool playback_finished = false;
+    bool playback_error = false;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&frame_indices](playback::VideoFramePtr frame, qint64 frame_index, quint64) {
+            require(frame != nullptr, "Direct catch-up emitted an empty frame.");
+            frame_indices.push_back(frame_index);
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackFinished,
+        [&application, &playback_finished](quint64, bool during_playback) {
+            playback_finished = during_playback;
+            application.quit();
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&application, &playback_error](const QString&, qint64, quint64) {
+            playback_error = true;
+            application.quit();
+        });
+
+    worker.setMedia(toQString(path), 30.0, 0, 30, 1.0, false, 1.0, false, 0, 0, 501);
+    worker.play();
+
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(
+        &timeout,
+        &QTimer::timeout,
+        &application,
+        &QCoreApplication::quit);
+    timeout.start(6000);
+    application.exec();
+
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    metrics.setEnabled(false);
+    require(!playback_error && playback_finished,
+            "Delayed direct playback did not finish cleanly.");
+    require(frame_indices.size() >= 2,
+            "Delayed direct playback emitted too few frames.");
+    require(snapshot.pacing_skipped_frames > 0,
+            "Delayed direct playback did not record skipped frames.");
+    require(snapshot.decode_discarded_frames > 0,
+            "Delayed direct playback did not discard intermediate decoder frames.");
+    require(snapshot.pixel_conversion.count <= frame_indices.size() + 1,
+            "Direct catch-up converted frames that were not published.");
+    for (std::size_t index = 1; index < frame_indices.size(); ++index) {
+        require(frame_indices[index] > frame_indices[index - 1],
+                "Direct catch-up emitted non-monotonic frame indices.");
+    }
+}
+
+void validateCompositionDecodeCatchup(
+    QCoreApplication& application,
+    const std::filesystem::path& path) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
+
+    playback::PlaybackWorker worker;
+    std::vector<qint64> frame_indices;
+    bool playback_finished = false;
+    bool playback_error = false;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&frame_indices](playback::VideoFramePtr frame, qint64 frame_index, quint64) {
+            require(frame != nullptr, "Composition catch-up emitted an empty frame.");
+            frame_indices.push_back(frame_index);
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackFinished,
+        [&application, &playback_finished](quint64, bool during_playback) {
+            playback_finished = during_playback;
+            application.quit();
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&application, &playback_error](const QString&, qint64, quint64) {
+            playback_error = true;
+            application.quit();
+        });
+
+    playback::CompositionLayerSpec layer;
+    layer.source_path = toQString(path);
+    layer.frame_rate = 30.0;
+    layer.timeline_start_frame = 0;
+    layer.source_start_frame = 0;
+    layer.segment_frame_count = 30;
+    layer.track_index = 0;
+    layer.clip_index = 0;
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{layer},
+        {},
+        502);
+    worker.play();
+
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(
+        &timeout,
+        &QTimer::timeout,
+        &application,
+        &QCoreApplication::quit);
+    timeout.start(6000);
+    application.exec();
+
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    metrics.setEnabled(false);
+    require(!playback_error && playback_finished,
+            "Delayed video composition playback did not finish cleanly; frames=" +
+                std::to_string(frame_indices.size()) +
+                ", ticks=" + std::to_string(snapshot.playback_ticks) +
+                ", skipped=" + std::to_string(snapshot.pacing_skipped_frames) +
+                ", discarded=" + std::to_string(snapshot.decode_discarded_frames));
+    require(frame_indices.size() >= 2,
+            "Delayed composition playback emitted too few frames.");
+    require(snapshot.pacing_skipped_frames > 0,
+            "Delayed composition playback did not record skipped frames.");
+    require(snapshot.decode_discarded_frames > 0,
+            "Delayed composition playback did not discard intermediate decoder frames.");
+    require(snapshot.pixel_conversion.count <= frame_indices.size() + 4,
+            "Composition catch-up converted frames that were not published.");
+    for (std::size_t index = 1; index < frame_indices.size(); ++index) {
+        require(frame_indices[index] > frame_indices[index - 1],
+                "Composition catch-up emitted non-monotonic frame indices.");
+    }
+}
+
 void validateCompositionCaching() {
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     metrics.setEnabled(true);
@@ -608,7 +754,7 @@ void validateCompositionPacing(QCoreApplication& application) {
     const auto snapshot = metrics.takeSnapshotAndReset();
     metrics.setEnabled(false);
     require(!playback_error && playback_finished,
-            "Delayed composition playback did not finish cleanly.");
+            "Text-only delayed composition playback did not finish cleanly.");
     require(frame_indices.size() >= 2,
             "Delayed composition playback emitted too few frames.");
     require(snapshot.playback_ticks >= frame_indices.size(),
@@ -638,6 +784,8 @@ int main(int argc, char* argv[]) {
             validateSegmentRange(application, std::filesystem::path(argv[1]));
             validateCompositionTransitions(std::filesystem::path(argv[1]));
             validateCompositionPlayback(application, std::filesystem::path(argv[1]));
+            validateCompositionDecodeCatchup(application, std::filesystem::path(argv[1]));
+            validateDirectDecodeCatchup(application, std::filesystem::path(argv[1]));
         }
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

@@ -33,9 +33,79 @@ void expectMediaError(const std::filesystem::path& path, const std::string& expe
     throw std::runtime_error("Expected VideoPlaybackSession to reject the input.");
 }
 
+void validateForwardDecode(
+    const std::filesystem::path& path,
+    rendering::PreviewPerformanceMetrics& metrics) {
+    constexpr std::int64_t target_frame = 8;
+
+    auto reference_session = media::VideoPlaybackSession::open(path);
+    media::VideoFramePtr reference;
+    for (std::int64_t index = 0; index <= target_frame; ++index) {
+        const auto frame = reference_session->decode_next_frame();
+        require(frame.has_value() && *frame != nullptr,
+                "The reference frame for forward decode was not available.");
+        reference = *frame;
+    }
+
+    auto session = media::VideoPlaybackSession::open(path);
+    const auto first = session->decode_next_frame();
+    require(first.has_value() && *first != nullptr,
+            "Forward decode could not initialize its decoder position.");
+
+    metrics.reset();
+    const auto advanced = session->decode_forward_to(target_frame);
+    require(advanced.has_value() && *advanced != nullptr,
+            "Forward decode did not return its target frame.");
+    require(session->current_frame_index() == target_frame,
+            "Forward decode finished at the wrong frame.");
+    require((*advanced)->width == reference->width &&
+                (*advanced)->height == reference->height &&
+                (*advanced)->stride == reference->stride &&
+                (*advanced)->rgba_pixels == reference->rgba_pixels,
+            "Forward decode changed the target RGBA frame.");
+
+    const auto forward_snapshot = metrics.takeSnapshotAndReset();
+    require(forward_snapshot.decode_discarded_frames == target_frame - 1,
+            "Forward decode did not discard the expected intermediate frames.");
+    require(forward_snapshot.pixel_conversion.count == 1,
+            "Forward decode converted an intermediate frame to RGBA.");
+
+    const auto cached_target = session->decode_frame_at(target_frame);
+    require(cached_target.has_value() && *cached_target == *advanced,
+            "Forward decode did not cache its final shared frame.");
+    require(session->take_cache_hit_count() >= 1,
+            "Forward decode did not reuse its final cached frame.");
+
+    const auto uncached_intermediate = session->decode_frame_at(target_frame - 1);
+    require(uncached_intermediate.has_value() && *uncached_intermediate != nullptr,
+            "The frame before a forward target could not be decoded.");
+    require(session->take_cache_hit_count() == 0,
+            "Forward decode cached a discarded intermediate frame.");
+
+    auto cancelled_session = media::VideoPlaybackSession::open(path);
+    require(cancelled_session->decode_next_frame().has_value(),
+            "The cancellation test could not initialize its decoder position.");
+    int cancellation_checks = 0;
+    const auto cancelled = cancelled_session->decode_forward_to(
+        target_frame,
+        [&cancellation_checks]() {
+            return ++cancellation_checks >= 3;
+        });
+    require(!cancelled.has_value(),
+            "Forward decode ignored its cancellation predicate.");
+    require(cancelled_session->current_frame_index() < target_frame,
+            "Cancelled forward decode reached its target frame.");
+    const auto recovered = cancelled_session->decode_frame_at(target_frame);
+    require(recovered.has_value() && *recovered != nullptr,
+            "A random seek did not recover after forward decode cancellation.");
+}
+
 void validateReference(const std::filesystem::path& path) {
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     metrics.setEnabled(true);
+    metrics.reset();
+
+    validateForwardDecode(path, metrics);
     metrics.reset();
 
     auto session = media::VideoPlaybackSession::open(path);

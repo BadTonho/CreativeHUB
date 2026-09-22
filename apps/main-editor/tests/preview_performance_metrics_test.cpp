@@ -18,6 +18,7 @@ int main() {
 
         metrics.setEnabled(false);
         metrics.recordDecodedFrame();
+        metrics.recordDecodeDiscardedFrame();
         metrics.recordTiming(
             rendering::PreviewTiming::Decode,
             std::chrono::milliseconds(5));
@@ -37,8 +38,9 @@ int main() {
             rendering::PreviewTiming::TextRasterization,
             std::chrono::milliseconds(6));
         const auto disabled = metrics.takeSnapshotAndReset();
-        require(disabled.decoded_frames == 0,
-                "Disabled metrics recorded a frame.");
+        require(disabled.decoded_frames == 0 &&
+                    disabled.decode_discarded_frames == 0,
+                "Disabled metrics recorded decoded-frame data.");
         require(disabled.decode.count == 0,
                 "Disabled metrics recorded timing data.");
         require(disabled.decode_packet.count == 0 &&
@@ -65,6 +67,8 @@ int main() {
 
         metrics.setEnabled(true);
         metrics.recordDecodedFrame();
+        metrics.recordDecodeDiscardedFrame();
+        metrics.recordDecodeDiscardedFrame();
         metrics.recordDecodedCacheHits(2);
         metrics.recordTextCacheHit();
         metrics.recordTextCompositionFastPathHit();
@@ -119,6 +123,8 @@ int main() {
         const auto snapshot = metrics.takeSnapshotAndReset();
         require(snapshot.decoded_frames == 1,
                 "Decoded frame count is incorrect.");
+        require(snapshot.decode_discarded_frames == 2,
+                "Discarded decode frame count is incorrect.");
         require(snapshot.decoded_cache_hits == 2,
                 "Decoded cache hit count is incorrect.");
         require(snapshot.text_cache_hits == 1,
@@ -200,7 +206,9 @@ int main() {
                 "Pacing lag timing aggregation is incorrect.");
 
         const auto reset = metrics.takeSnapshotAndReset();
-        require(reset.decoded_frames == 0 && reset.decode.count == 0 &&
+        require(reset.decoded_frames == 0 &&
+                    reset.decode_discarded_frames == 0 &&
+                    reset.decode.count == 0 &&
                     reset.decode_packet.count == 0 &&
                     reset.decode_receive.count == 0 &&
                     reset.pixel_conversion.count == 0 &&

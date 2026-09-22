@@ -35,6 +35,7 @@ struct PreviewTimingSnapshot {
 
 struct PreviewPerformanceSnapshot {
     std::uint64_t decoded_frames = 0;
+    std::uint64_t decode_discarded_frames = 0;
     std::uint64_t decoded_cache_hits = 0;
     std::uint64_t text_cache_hits = 0;
     std::uint64_t text_composition_fast_path_hits = 0;
@@ -81,6 +82,7 @@ public:
         PreviewTiming timing,
         std::chrono::nanoseconds elapsed) noexcept;
     void recordDecodedFrame() noexcept;
+    void recordDecodeDiscardedFrame() noexcept;
     void recordDecodedCacheHits(std::uint64_t count) noexcept;
     void recordTextCacheHit() noexcept;
     void recordTextCompositionFastPathHit() noexcept;
@@ -110,6 +112,7 @@ private:
 
     std::atomic_bool enabled_{false};
     std::atomic<std::uint64_t> decoded_frames_{0};
+    std::atomic<std::uint64_t> decode_discarded_frames_{0};
     std::atomic<std::uint64_t> decoded_cache_hits_{0};
     std::atomic<std::uint64_t> text_cache_hits_{0};
     std::atomic<std::uint64_t> text_composition_fast_path_hits_{0};
