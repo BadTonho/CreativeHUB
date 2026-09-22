@@ -90,6 +90,10 @@ int countRulerGuides(const QImage& image, int first_x, int last_x, int y) {
     return guide_count;
 }
 
+bool isPlayheadPixel(const QColor& color) {
+    return color.red() > 220 && color.green() > 170 && color.blue() < 150;
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -510,6 +514,38 @@ int main(int argc, char* argv[]) {
         require(track_grid_pixels == 0,
                 "Frame-level guides must not be drawn across timeline clips.");
         frame_grid_widget.close();
+
+        timeline::TimelineWidget playhead_widget;
+        playhead_widget.resize(400, 300);
+        playhead_widget.setTimelineViewportWidth(400);
+        playhead_widget.setTracks({timeline::TimelineTrack{
+            1, "Video 1", 1.0, false,
+            {makeClip("playhead.mkv", 0, 30, "playhead")}}});
+        playhead_widget.setZoomFactor(512.0);
+        playhead_widget.setMinimumWidth(400);
+        playhead_widget.resize(400, 300);
+        playhead_widget.setActiveClip(timeline::ClipLocation{0, 0});
+        playhead_widget.show();
+        application.processEvents();
+        playhead_widget.setPlayheadFrame(5);
+        const auto ruler_frame_x = playhead_widget.contentXForFrame(15);
+        sendMouse(playhead_widget, QEvent::MouseButtonPress,
+                  QPointF(ruler_frame_x, 25), Qt::LeftButton);
+        sendMouse(playhead_widget, QEvent::MouseButtonRelease,
+                  QPointF(ruler_frame_x, 25), Qt::NoButton);
+        playhead_widget.setPlayheadFrame(18);
+        application.processEvents();
+        QImage playhead_image(400, 300, QImage::Format_ARGB32);
+        playhead_image.fill(Qt::transparent);
+        playhead_widget.render(&playhead_image);
+        const auto live_playhead_x = static_cast<int>(std::lround(
+            playhead_widget.contentXForFrame(18)));
+        const auto stale_ruler_x = static_cast<int>(std::lround(
+            playhead_widget.contentXForFrame(15)));
+        require(isPlayheadPixel(playhead_image.pixelColor(live_playhead_x, 100)) &&
+                    !isPlayheadPixel(playhead_image.pixelColor(stale_ruler_x, 100)),
+                "A stale ruler seek position prevented the live playhead from advancing.");
+        playhead_widget.close();
         widget.setZoomFactor(1.0);
         widget.resize(1000, 500);
         application.processEvents();

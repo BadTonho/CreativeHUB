@@ -213,7 +213,9 @@ when the pointer is released. Scrubbing remains bounded by the real project
 duration even when the visual timeline has empty space beyond the last clip.
 The playhead keeps its pointer position while the playback worker processes the
 request, and the window converts the absolute ruler frame to the target clip's
-local playback frame. Ruler scrubbing does not require a Media Browser or
+local playback frame. Once scrubbing ends, incoming playback frames replace
+the temporary ruler position, including when an intermediate frame is skipped.
+Ruler scrubbing does not require a Media Browser or
 Timeline item selection: video clips resolve their imported source from the
 timeline, while gaps and text clips only move the playhead and do not ask the
 video worker to decode. The Play control uses the clip under the current

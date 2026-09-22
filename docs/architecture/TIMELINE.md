@@ -67,7 +67,9 @@ range continues through empty space. The ruler reports an absolute timeline
 frame; it can also position the playhead when no Media Browser item is
 selected. For a video target, the Main Window resolves the source from the
 timeline clip itself; gaps and text clips update the playhead without issuing
-a video seek to the worker.
+a video seek to the worker. After the ruler gesture ends, incoming playback
+frames are authoritative even when decoding skips the exact frame selected by
+the ruler, so a transient scrub position cannot freeze the live playhead.
 
 The Edit > Require Alt to Move Clips option is disabled by default and is
 stored as a user preference. When enabled, Alt + drag moves a clip and a

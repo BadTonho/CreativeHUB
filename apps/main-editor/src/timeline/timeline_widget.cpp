@@ -201,7 +201,11 @@ void TimelineWidget::setPlayheadFrame(std::int64_t frame_index) {
         playhead_frame_ = std::min(playhead_frame_, total - 1);
     }
     drag_frame_.reset();
-    if (ruler_frame_.has_value() && *ruler_frame_ == playhead_frame_) {
+    // The ruler position is only a transient visual override while the user
+    // is dragging it. Once an external playback/seek update arrives, the
+    // live playhead must win even if the decoder skipped over that exact
+    // frame.
+    if (!ruler_seeking_) {
         ruler_frame_.reset();
         ruler_content_x_.reset();
     }

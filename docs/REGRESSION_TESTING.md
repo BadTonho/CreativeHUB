@@ -82,7 +82,8 @@ in the running Main Editor after UI or integration changes:
   text over clips, and no vertical grid lines crossing clip content,
   Ctrl + wheel playhead anchoring, button playhead anchoring, timecode labels in
   `HH:MM:SS.mmm`, click-and-drag
-  playhead scrubbing on the upper time ruler, empty gaps without overlays,
+  playhead scrubbing on the upper time ruler, live playhead movement after a
+  seek even when an intermediate frame is skipped, empty gaps without overlays,
   no Media Browser selection while scrubbing, selecting a clip without moving
   the playhead, and the optional Edit > Move Playhead to Selected Clip Start
   preference, visual order, and release of any active Timeline mouse grab when
