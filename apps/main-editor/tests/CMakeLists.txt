@@ -1005,6 +1005,35 @@ add_test(
     COMMAND creative-suite-main-editor-system-memory-tests
 )
 
+add_executable(creative-suite-main-editor-performance-usage-tests
+    performance_usage_test.cpp
+    ../src/system/performance_usage.cpp
+    ../src/system/performance_usage.h
+    ../src/system/system_memory_usage.cpp
+    ../src/system/system_memory_usage.h
+)
+
+target_include_directories(creative-suite-main-editor-performance-usage-tests PRIVATE
+    ../src
+)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-performance-usage-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-performance-usage-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(WIN32)
+    target_link_libraries(creative-suite-main-editor-performance-usage-tests PRIVATE Psapi)
+endif()
+
+target_compile_features(creative-suite-main-editor-performance-usage-tests PRIVATE cxx_std_20)
+
+add_test(
+    NAME creative-suite-main-editor-performance-usage
+    COMMAND creative-suite-main-editor-performance-usage-tests
+)
+
 add_executable(creative-suite-main-editor-system-memory-details-tests
     system_memory_details_dialog_test.cpp
     ../src/system/system_memory_usage.cpp

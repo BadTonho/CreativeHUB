@@ -10,9 +10,34 @@
 #endif
 #include <windows.h>
 #include <psapi.h>
+#elif defined(__APPLE__)
+#include <mach/mach.h>
+#include <sys/sysctl.h>
+#elif defined(__linux__)
+#include <fstream>
+#include <string>
 #endif
 
 namespace system_monitor {
+
+#if defined(__linux__)
+namespace {
+
+std::optional<std::uint64_t> parseProcBytesLine(
+    const std::string& line,
+    const char* expected_name) noexcept {
+    std::istringstream stream(line);
+    std::string name;
+    std::uint64_t value = 0;
+    std::string unit;
+    if (!(stream >> name >> value)) return std::nullopt;
+    if (name != expected_name) return std::nullopt;
+    stream >> unit;
+    return unit == "kB" ? value * 1024ULL : value;
+}
+
+}  // namespace
+#endif
 
 MemorySnapshot queryMemorySnapshot() noexcept {
     MemorySnapshot snapshot;
@@ -37,6 +62,92 @@ MemorySnapshot queryMemorySnapshot() noexcept {
         snapshot.process_private_usage_bytes =
             static_cast<std::uint64_t>(process_counters.PrivateUsage);
     }
+#elif defined(__APPLE__)
+    std::uint64_t total_memory = 0;
+    std::size_t total_size = sizeof(total_memory);
+    if (sysctlbyname(
+            "hw.memsize",
+            &total_memory,
+            &total_size,
+            nullptr,
+            0) == 0) {
+        snapshot.system_total_bytes = total_memory;
+    }
+
+    mach_port_t host = mach_host_self();
+    vm_size_t page_size = 0;
+    if (host_page_size(host, &page_size) == KERN_SUCCESS) {
+        vm_statistics64_data_t vm_stats{};
+        mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+        if (host_statistics64(
+                host,
+                HOST_VM_INFO64,
+                reinterpret_cast<host_info64_t>(&vm_stats),
+                &count) == KERN_SUCCESS) {
+            const auto available_pages = static_cast<std::uint64_t>(
+                vm_stats.free_count + vm_stats.inactive_count +
+                vm_stats.speculative_count);
+            snapshot.system_available_bytes = available_pages * page_size;
+        }
+    }
+
+    mach_task_basic_info_data_t task_info_data{};
+    mach_msg_type_number_t task_count = MACH_TASK_BASIC_INFO_COUNT;
+    if (task_info(
+            mach_task_self(),
+            MACH_TASK_BASIC_INFO,
+            reinterpret_cast<task_info_t>(&task_info_data),
+            &task_count) == KERN_SUCCESS) {
+        snapshot.process_working_set_bytes =
+            static_cast<std::uint64_t>(task_info_data.resident_size);
+    }
+
+    task_vm_info_data_t vm_info{};
+    mach_msg_type_number_t vm_count = TASK_VM_INFO_COUNT;
+    if (task_info(
+            mach_task_self(),
+            TASK_VM_INFO,
+            reinterpret_cast<task_info_t>(&vm_info),
+            &vm_count) == KERN_SUCCESS) {
+        snapshot.process_private_usage_bytes =
+            static_cast<std::uint64_t>(vm_info.phys_footprint);
+    }
+    mach_port_deallocate(mach_task_self(), host);
+#elif defined(__linux__)
+    std::ifstream memory_info("/proc/meminfo");
+    std::string line;
+    while (std::getline(memory_info, line)) {
+        if (const auto bytes = parseProcBytesLine(line, "MemTotal:");
+            bytes.has_value()) {
+            snapshot.system_total_bytes = *bytes;
+        }
+        if (const auto bytes = parseProcBytesLine(line, "MemAvailable:");
+            bytes.has_value()) {
+            snapshot.system_available_bytes = *bytes;
+        }
+    }
+
+    std::ifstream process_status("/proc/self/status");
+    while (std::getline(process_status, line)) {
+        if (const auto bytes = parseProcBytesLine(line, "VmRSS:");
+            bytes.has_value()) {
+            snapshot.process_working_set_bytes = *bytes;
+        }
+    }
+
+    std::ifstream private_memory("/proc/self/smaps_rollup");
+    std::uint64_t private_bytes = 0;
+    while (std::getline(private_memory, line)) {
+        if (const auto bytes = parseProcBytesLine(line, "Private_Clean:");
+            bytes.has_value()) {
+            private_bytes += *bytes;
+        }
+        if (const auto bytes = parseProcBytesLine(line, "Private_Dirty:");
+            bytes.has_value()) {
+            private_bytes += *bytes;
+        }
+    }
+    if (private_bytes > 0) snapshot.process_private_usage_bytes = private_bytes;
 #endif
 
     return snapshot;

@@ -39,10 +39,19 @@ int main() {
             std::chrono::milliseconds(6));
         const auto disabled = metrics.takeSnapshotAndReset();
         require(disabled.decoded_frames == 0 &&
-                    disabled.decode_discarded_frames == 0,
+                    disabled.decode_discarded_frames == 0 &&
+                    disabled.stale_frames_discarded == 0 &&
+                    disabled.cpu_presented_frames == 0 &&
+                    disabled.decode_failures == 0 &&
+                    disabled.seek_failures == 0 &&
+                    disabled.composition_failures == 0 &&
+                    disabled.gpu_failures == 0,
                 "Disabled metrics recorded decoded-frame data.");
         require(disabled.decode.count == 0,
                 "Disabled metrics recorded timing data.");
+        require(disabled.decode.percentile95_nanoseconds == 0 &&
+                    disabled.decode.percentile99_nanoseconds == 0,
+                "Disabled metrics recorded percentile data.");
         require(disabled.decode_packet.count == 0 &&
                     disabled.decode_receive.count == 0 &&
                     disabled.pixel_conversion.count == 0 &&
@@ -69,7 +78,9 @@ int main() {
         metrics.recordDecodedFrame();
         metrics.recordDecodeDiscardedFrame();
         metrics.recordDecodeDiscardedFrame();
+        metrics.recordStaleFrameDiscarded();
         metrics.recordDecodedCacheHits(2);
+        metrics.recordDecodedCacheState(3, 4096);
         metrics.recordTextCacheHit();
         metrics.recordTextCompositionFastPathHit();
         metrics.recordSeekOperation();
@@ -78,12 +89,21 @@ int main() {
         metrics.recordEmittedFrame();
         metrics.recordReceivedFrame();
         metrics.recordSubmittedFrame(1920, 1080);
+        metrics.recordCpuPresentedFrame();
         metrics.recordGpuPresentedFrame();
         metrics.recordOverwrittenFrame();
+        metrics.recordDecodeFailure();
+        metrics.recordSeekFailure();
+        metrics.recordCompositionFailure();
+        metrics.recordGpuFailure();
         metrics.recordPlaybackTick();
         metrics.recordPacingSkippedFrames(2);
         metrics.recordPacingCoalescedFrame();
         metrics.setPlaybackWorkerThreadId(12345);
+        metrics.setTargetFrameRate(23.976);
+        metrics.setCompositionWorkload(4, 1, 2, true);
+        metrics.setAudioEnabled(true);
+        metrics.setPlaybackActive(true);
         metrics.recordTiming(
             rendering::PreviewTiming::Decode,
             std::chrono::milliseconds(2));
@@ -126,8 +146,13 @@ int main() {
                 "Decoded frame count is incorrect.");
         require(snapshot.decode_discarded_frames == 2,
                 "Discarded decode frame count is incorrect.");
+        require(snapshot.stale_frames_discarded == 1,
+                "Stale frame count is incorrect.");
         require(snapshot.decoded_cache_hits == 2,
                 "Decoded cache hit count is incorrect.");
+        require(snapshot.decoded_cache_entries == 3 &&
+                    snapshot.decoded_cache_bytes == 4096,
+                "Decoded cache state is incorrect.");
         require(snapshot.text_cache_hits == 1,
                 "Text cache hit count is incorrect.");
         require(snapshot.text_composition_fast_path_hits == 1,
@@ -144,10 +169,17 @@ int main() {
                 "Received frame count is incorrect.");
         require(snapshot.submitted_frames == 1,
                 "Submitted frame count is incorrect.");
+        require(snapshot.cpu_presented_frames == 1,
+                "CPU presented frame count is incorrect.");
         require(snapshot.gpu_presented_frames == 1,
                 "GPU presented frame count is incorrect.");
         require(snapshot.overwritten_frames == 1,
                 "Overwritten frame count is incorrect.");
+        require(snapshot.decode_failures == 1 &&
+                    snapshot.seek_failures == 1 &&
+                    snapshot.composition_failures == 1 &&
+                    snapshot.gpu_failures == 1,
+                "Failure counters are incorrect.");
         require(snapshot.playback_ticks == 1,
                 "Playback tick count is incorrect.");
         require(snapshot.pacing_skipped_frames == 2,
@@ -159,6 +191,17 @@ int main() {
         require(snapshot.last_frame_width == 1920 &&
                     snapshot.last_frame_height == 1080,
                 "Last frame dimensions are incorrect.");
+        require(snapshot.target_frame_rate_milli == 23976 &&
+                    snapshot.composition_layer_count == 4 &&
+                    snapshot.composition_text_layer_count == 1 &&
+                    snapshot.composition_transition_count == 2 &&
+                    snapshot.composition_enabled && snapshot.audio_enabled,
+                "Workload context is incorrect.");
+        require(snapshot.first_frame_nanoseconds <=
+                    snapshot.preview_window_elapsed_nanoseconds,
+                "First-frame latency is outside the metrics window.");
+        require(snapshot.seek_to_presentation.count == 1,
+                "Seek-to-presentation latency was not recorded.");
         require(snapshot.decode.count == 2,
                 "Decode timing count is incorrect.");
         require(snapshot.decode.total_nanoseconds == 6'000'000,
@@ -169,6 +212,9 @@ int main() {
                 "Decode timing average is incorrect.");
         require(snapshot.decode.maximumMilliseconds() == 4.0,
                 "Decode timing maximum conversion is incorrect.");
+        require(snapshot.decode.percentile95_nanoseconds == 4'194'303 &&
+                    snapshot.decode.percentile99_nanoseconds == 4'194'303,
+                "Decode timing percentiles are incorrect.");
         require(snapshot.decode_packet.count == 2 &&
                     snapshot.decode_packet.total_nanoseconds == 4'000'000 &&
                     snapshot.decode_packet.maximum_nanoseconds == 3'000'000 &&
@@ -222,7 +268,11 @@ int main() {
                     reset.pacing_coalesced_frames == 0 &&
                     reset.playback_worker_thread_id == 12345 &&
                     reset.pacing_lag.count == 0 &&
-                    reset.text_composition_fast_path_hits == 0,
+                    reset.text_composition_fast_path_hits == 0 &&
+                    reset.stale_frames_discarded == 0 &&
+                    reset.cpu_presented_frames == 0 &&
+                    reset.decode_failures == 0 &&
+                    reset.seek_to_presentation.count == 0,
                 "Taking a snapshot did not reset the metrics.");
         return 0;
     } catch (const std::exception& error) {

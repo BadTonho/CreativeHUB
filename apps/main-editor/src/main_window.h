@@ -7,6 +7,7 @@
 #include "playback/playback_worker.h"
 #include "playback/playback_frame_mailbox.h"
 #include "project/project_document.h"
+#include "system/performance_usage.h"
 #include "timeline/timeline_history.h"
 #include "timeline/timeline_model.h"
 
@@ -313,6 +314,7 @@ private:
     QLabel* timeline_message_label_ = nullptr;
     SystemMemoryIndicator* system_memory_indicator_ = nullptr;
     QTimer* preview_metrics_timer_ = nullptr;
+    system_monitor::PerformanceSampler performance_sampler_;
     bool media_browser_inline_rename_pending_ = false;
     std::array<QDoubleSpinBox*, 5> transform_spin_boxes_{};
     std::array<QSlider*, 5> transform_sliders_{};

@@ -32,6 +32,8 @@ add_executable(creative-suite-main-editor
     src/settings/shortcut_manager.h
     src/settings/user_preferences.cpp
     src/settings/user_preferences.h
+    src/system/performance_usage.cpp
+    src/system/performance_usage.h
     src/system/system_memory_usage.cpp
     src/system/system_memory_usage.h
     src/preview_widget.cpp

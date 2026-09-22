@@ -38,6 +38,8 @@ std::string safePathForLog(const std::filesystem::path& path) noexcept {
 void consumeDecodeCacheHits(media::VideoPlaybackSession& session) noexcept {
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     metrics.recordDecodedCacheHits(session.take_cache_hit_count());
+    const auto cache = session.cache_snapshot();
+    metrics.recordDecodedCacheState(cache.entries, cache.bytes);
 }
 
 } // namespace
@@ -108,6 +110,7 @@ void PlaybackWorker::setMedia(
 
     if (timer_ != nullptr) timer_->stop();
     if (playing_) {
+        rendering::PreviewPerformanceMetrics::instance().setPlaybackActive(false);
         playing_ = false;
         emit playbackStateChanged(false, generation_);
     }
@@ -117,6 +120,7 @@ void PlaybackWorker::setMedia(
     frame_rate_ = std::isfinite(frame_rate) && frame_rate > 0.0
         ? frame_rate
         : default_frame_rate;
+    rendering::PreviewPerformanceMetrics::instance().setTargetFrameRate(frame_rate_);
     source_start_frame_ = source_start_frame;
     segment_frame_count_ = segment_frame_count;
     current_frame_index_ = 0;
@@ -166,6 +170,7 @@ void PlaybackWorker::play() {
         if (!playing_) {
             startPlaybackClock();
             playing_ = true;
+            rendering::PreviewPerformanceMetrics::instance().setPlaybackActive(true);
             emit playbackStateChanged(true, generation_);
         }
         scheduleNextPlaybackTick();
@@ -240,6 +245,7 @@ void PlaybackWorker::play() {
         if (!playing_) {
             startPlaybackClock();
             playing_ = true;
+            rendering::PreviewPerformanceMetrics::instance().setPlaybackActive(true);
             emit playbackStateChanged(true, generation_);
         }
         scheduleNextPlaybackTick();
@@ -254,6 +260,7 @@ void PlaybackWorker::pause() {
     if (timer_ != nullptr) timer_->stop();
     if (audio_output_ != nullptr) audio_output_->pause();
     resetPlaybackClock();
+    rendering::PreviewPerformanceMetrics::instance().setPlaybackActive(false);
     if (!playing_) return;
 
     playing_ = false;
@@ -305,6 +312,18 @@ void PlaybackWorker::setComposition(
     composition_transitions_ = std::move(transitions);
     composition_sessions_.clear();
     composition_enabled_ = !composition_specs_.isEmpty();
+    const auto text_layer_count = static_cast<std::uint64_t>(std::count_if(
+        composition_specs_.cbegin(),
+        composition_specs_.cend(),
+        [](const CompositionLayerSpec& spec) {
+            return spec.kind == timeline::ClipKind::Text;
+        }));
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setCompositionWorkload(
+        static_cast<std::uint64_t>(composition_specs_.size()),
+        text_layer_count,
+        static_cast<std::uint64_t>(composition_transitions_.size()),
+        composition_enabled_);
     primary_timeline_start_frame_ = 0;
     if (!composition_enabled_) return;
 
@@ -356,15 +375,18 @@ void PlaybackWorker::setComposition(
             segment_frame_count_ = composition_end - composition_start;
             frame_rate_ = default_frame_rate;
         }
+        metrics.setTargetFrameRate(frame_rate_);
     } catch (const media::MediaError& error) {
         composition_sessions_.clear();
         composition_transitions_.clear();
         composition_enabled_ = false;
+        metrics.setCompositionWorkload(0, 0, 0, false);
         reportFailure(error, "compose");
     } catch (const std::exception& error) {
         composition_sessions_.clear();
         composition_transitions_.clear();
         composition_enabled_ = false;
+        metrics.setCompositionWorkload(0, 0, 0, false);
         reportFailure(error, "compose");
     }
 }
@@ -772,6 +794,7 @@ bool PlaybackWorker::ensureSessionAtCurrentFrame() {
 
 void PlaybackWorker::configureAudio() {
     audio_enabled_ = false;
+    rendering::PreviewPerformanceMetrics::instance().setAudioEnabled(false);
     audio_output_ = std::make_unique<AudioOutput>();
 
     // Probe the media before touching the system audio device. A video-only
@@ -819,6 +842,7 @@ void PlaybackWorker::configureAudio() {
         audio_session_->seek_to_source_frame(*source_frame, frame_rate_);
         audio_position_valid_ = true;
         audio_enabled_ = true;
+        rendering::PreviewPerformanceMetrics::instance().setAudioEnabled(true);
     } catch (const media::MediaError& error) {
         reportAudioFailure(error, "open");
     } catch (const std::exception& error) {
@@ -884,6 +908,7 @@ void PlaybackWorker::fillAudioOutput() {
 
 void PlaybackWorker::disableAudioOutput() noexcept {
     audio_enabled_ = false;
+    rendering::PreviewPerformanceMetrics::instance().setAudioEnabled(false);
     audio_position_valid_ = false;
     pending_audio_bytes_.clear();
     if (audio_output_ != nullptr) audio_output_->stop();
@@ -957,6 +982,7 @@ void PlaybackWorker::finishPlayback() {
     if (timer_ != nullptr) timer_->stop();
     if (audio_output_ != nullptr) audio_output_->stop();
     resetPlaybackClock();
+    rendering::PreviewPerformanceMetrics::instance().setPlaybackActive(false);
     audio_position_valid_ = false;
     pending_audio_bytes_.clear();
     const bool was_playing = playing_;
@@ -1235,6 +1261,15 @@ void PlaybackWorker::reportFailure(
     const media::MediaError& error,
     const char* operation,
     std::optional<std::int64_t> requested_frame) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    if (std::string_view(operation) == "decode_tick" ||
+        std::string_view(operation) == "set_media") {
+        metrics.recordDecodeFailure();
+    } else if (std::string_view(operation) == "seek") {
+        metrics.recordSeekFailure();
+    } else if (std::string_view(operation) == "compose") {
+        metrics.recordCompositionFailure();
+    }
     try {
         logging::Context context{
             {"path", safePathForLog(source_path_)},
@@ -1259,6 +1294,7 @@ void PlaybackWorker::reportFailure(
 
     if (timer_ != nullptr) timer_->stop();
     resetPlaybackClock();
+    rendering::PreviewPerformanceMetrics::instance().setPlaybackActive(false);
     playing_ = false;
     session_.reset();
     emit playbackError(
@@ -1271,6 +1307,15 @@ void PlaybackWorker::reportFailure(
     const std::exception& error,
     const char* operation,
     std::optional<std::int64_t> requested_frame) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    if (std::string_view(operation) == "decode_tick" ||
+        std::string_view(operation) == "set_media") {
+        metrics.recordDecodeFailure();
+    } else if (std::string_view(operation) == "seek") {
+        metrics.recordSeekFailure();
+    } else if (std::string_view(operation) == "compose") {
+        metrics.recordCompositionFailure();
+    }
     try {
         logging::Context context{
             {"path", safePathForLog(source_path_)},
@@ -1292,6 +1337,7 @@ void PlaybackWorker::reportFailure(
 
     if (timer_ != nullptr) timer_->stop();
     resetPlaybackClock();
+    rendering::PreviewPerformanceMetrics::instance().setPlaybackActive(false);
     playing_ = false;
     session_.reset();
     emit playbackError(QString::fromUtf8(error.what()), -1, generation_);

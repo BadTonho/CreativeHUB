@@ -14,6 +14,11 @@ class VideoPlaybackSession final {
 public:
     using CancellationPredicate = std::function<bool()>;
 
+    struct CacheSnapshot {
+        std::uint64_t entries = 0;
+        std::uint64_t bytes = 0;
+    };
+
     static std::unique_ptr<VideoPlaybackSession> open(
         const std::filesystem::path& source_path);
 
@@ -36,6 +41,7 @@ public:
         std::int64_t frame_index,
         const CancellationPredicate& should_cancel);
     [[nodiscard]] std::uint64_t take_cache_hit_count() noexcept;
+    [[nodiscard]] CacheSnapshot cache_snapshot() const noexcept;
     void reset();
 
     [[nodiscard]] std::int64_t current_frame_index() const noexcept;

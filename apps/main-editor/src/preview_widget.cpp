@@ -78,6 +78,7 @@ void PreviewWidget::setFrame(media::VideoFramePtr frame) {
     frame_image_ = {};
     ensureCpuImage();
     updateCpuPixmap();
+    metrics.recordCpuPresentedFrame();
 }
 
 void PreviewWidget::clearFrame(const QString& message) {
@@ -102,6 +103,10 @@ void PreviewWidget::setGrayscaleEnabled(bool enabled) {
 
 bool PreviewWidget::isGrayscaleEnabled() const noexcept {
     return grayscale_enabled_;
+}
+
+bool PreviewWidget::usesGpuPreview() const noexcept {
+    return gpu_enabled_ && gpu_surface_ != nullptr;
 }
 
 void PreviewWidget::resizeEvent(QResizeEvent* event) {

@@ -25,6 +25,7 @@ public:
     void clearFrame(const QString& message);
     void setGrayscaleEnabled(bool enabled);
     [[nodiscard]] bool isGrayscaleEnabled() const noexcept;
+    [[nodiscard]] bool usesGpuPreview() const noexcept;
 
 signals:
     void gpuFallbackRequested(const QString& reason, qint64 error_code);

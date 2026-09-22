@@ -33,7 +33,7 @@ updated intentionally.
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
 | Settings dialog | Modal shell, General, Timeline, and Shortcuts tabs, Close action, independent component construction, and editable shortcut preferences |
-| Preview performance metrics | Deterministic counter/timing aggregation, decoded-frame discard counter, playback tick/skipped/coalesced counters, pacing-lag averages and maxima, first-time text-rasterization timing, text composition fast-path counters, decoded/text/final-composition cache-hit counters, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
+| Preview performance metrics | Deterministic counter/timing aggregation, bounded p95/p99 timing histograms, decoded/stale-frame counters, playback delivery-rate derivation, failure counters, cache state, workload context, process-resource sampling, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
@@ -141,10 +141,11 @@ in the running Main Editor after UI or integration changes:
 - enable Preview performance metrics and compare a simple 1080p playback run
   with the metrics disabled: confirm the one-second summaries include decode,
   composition, decoded-frame cache hits, text-raster cache hits, and final
-  composition-cache hits; verify that a sequential run does not seek for every
-  frame, that composition remains on the CPU, and that the optimized path
-  does not change the Preview output, frame rate, project dirty state, or
-  Undo/Redo;
+  composition-cache hits, `metrics_schema_version="2"`, p95/p99 timings,
+  delivery FPS, first-frame latency, cache bytes, and process-resource fields;
+  verify that a sequential run does not seek for every frame, that composition
+  remains on the CPU, and that the optimized path does not change the Preview
+  output, frame rate, project dirty state, or Undo/Redo;
 - with Preview metrics enabled, compare `decode_avg_ms` with
   `decode_packet_avg_ms`, `decode_receive_avg_ms`, `pixel_conversion_avg_ms`,
   `frame_cache_copy_avg_ms`, and `decode_discarded_frames`; confirm that
@@ -153,11 +154,24 @@ in the running Main Editor after UI or integration changes:
   same frame counts, and does not add overwritten frames or visual differences;
 - with Preview metrics enabled during playback, compare `playback_ticks`,
   `pacing_skipped_frames`, `pacing_coalesced_frames`, `pacing_lag_avg_ms`,
-  `pacing_lag_max_ms`, `emitted_frames`, `received_frames`,
-  `submitted_frames`, `gpu_presented_frames`, and `overwritten_frames`;
-  confirm that a simple run stays close to the source FPS, that intentional
-  catch-up reports skipped frames instead of emitting a burst, and that the
-  one-slot mailbox prevents unnecessary UI queue growth;
+  `pacing_lag_max_ms`, `pacing_lag_p95_ms`, `pacing_lag_p99_ms`,
+  `emitted_frames`, `received_frames`, `submitted_frames`,
+  `cpu_presented_frames`, `gpu_presented_frames`, `presented_fps`,
+  `presentation_ratio_percent`, and `overwritten_frames`; confirm that a
+  simple run stays close to the source FPS, that intentional catch-up reports
+  skipped frames instead of emitting a burst, stale frames are counted after a
+  seek/generation change, and the one-slot mailbox prevents unnecessary UI
+  queue growth;
+- with Preview metrics enabled, exercise decode, seek, composition, and GPU
+  failures; confirm their counters increase in the next aggregate sample while
+  the detailed technical error remains in its normal error log entry;
+- with Preview metrics enabled, verify `preview_backend` changes between
+  `opengl` and `cpu_fallback` when GPU preview is disabled or fails, and verify
+  unsupported `gpu_utilization_percent` and `gpu_memory_used_bytes` values are
+  written as `N/A` rather than guessed;
+- with Preview metrics enabled, verify source width/height/FPS/codec/container,
+  preview dimensions, composition layer/text/transition counts, audio state,
+  and active generation/clip context contain no media paths or frame data;
 - with Preview metrics enabled, confirm every log entry contains numeric
   `process_id` and `thread_id` values plus a stable `process_instance_id`;
   confirm `playback/worker_ready` identifies `thread_role="playback_worker"`,

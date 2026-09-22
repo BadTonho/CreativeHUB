@@ -662,6 +662,14 @@ std::uint64_t VideoPlaybackSession::take_cache_hit_count() noexcept {
     return count;
 }
 
+VideoPlaybackSession::CacheSnapshot
+VideoPlaybackSession::cache_snapshot() const noexcept {
+    if (impl_ == nullptr) return {};
+    return CacheSnapshot{
+        static_cast<std::uint64_t>(impl_->frame_cache.size()),
+        static_cast<std::uint64_t>(impl_->cached_bytes)};
+}
+
 void VideoPlaybackSession::reset() {
     const auto source_path = impl_->source_path;
     impl_ = openImpl(source_path);

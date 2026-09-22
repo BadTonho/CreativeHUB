@@ -100,21 +100,37 @@ preference is stored in `QSettings` under
 the project, `.csp` data, Timeline history, or Undo/Redo state.
 
 When enabled, the application aggregates data for one-second intervals and
-writes at most one numeric summary per interval through the existing logger
-using the `preview/performance_metrics` operation. The summary includes decoded,
-decoded-frame cache hits, text-raster cache hits, seeked, composed,
-final-composition cache hits, emitted, received, submitted, presented, and
-overwritten frame counts; the last frame dimensions; and average/maximum
-milliseconds for decoding, first-time text rasterization, seeking,
-composition, payload creation, the UI callback, Preview submission, CPU
-presentation, GPU texture upload, and GPU painting. The text-rasterization
-timing is a subcomponent of the decode timing, so the existing decode values
-remain comparable with older logs; cached text frames do not create new
-rasterization samples. The summary also includes the aggregate
-`text_composition_fast_path_hits` counter. No media paths or per-frame log
-entries are written.
-When disabled, the timer stops and the hot path does not collect detailed
-timings.
+writes at most one summary per interval through the existing logger using the
+`preview/performance_metrics` operation. `metrics_schema_version` identifies
+the current field set while existing fields retain their previous meaning.
+The summary includes decoded, decoded-frame cache hits, text-raster cache hits,
+seeked, composed, final-composition cache hits, emitted, received, submitted,
+CPU-presented, GPU-presented, overwritten, stale, skipped, and coalesced frame
+counts; the last frame dimensions; cache entry/byte counts; and the active
+composition workload. The text-rasterization timing is a subcomponent of the
+decode timing, so the existing decode values remain comparable with older
+logs; cached text frames do not create new rasterization samples. No media
+paths, frame contents, or per-frame log entries are written.
+
+Each timing summary contains count, average, maximum, and bounded-histogram
+approximations for the p95 and p99 milliseconds. The timings cover decoding,
+decode packet/receive stages, pixel conversion, cache copies, text
+rasterization, seeking, composition, payload creation, the UI callback,
+Preview submission, CPU presentation, GPU upload, GPU painting, pacing lag,
+and seek-to-presentation latency. Derived delivery fields include the actual
+window duration, active playback duration, target FPS, expected frames,
+emitted/received/presented FPS, frame budget, presentation ratio, and first
+frame latency.
+
+The same summary records decode, seek, composition, and GPU failure counters,
+the source and preview dimensions, source FPS/codec/container when available,
+the active preview backend, composition/audio state, and the playback
+generation. Process CPU, working set, private usage, and system memory are
+sampled at flush time through platform adapters for Windows, macOS, and Linux.
+Unsupported values are written as `N/A`. GPU utilization and GPU memory are
+optional fields and remain `N/A` unless a future renderer adapter can provide
+them reliably. When disabled, the timer stops and the hot path does not
+collect detailed timings.
 
 Every logger entry also includes the numeric `process_id`, the native
 `thread_id` that emitted the entry, and a `process_instance_id` that remains
@@ -128,12 +144,13 @@ indices, and the current playback frame. Missing track or clip selections use
 without writing a per-frame diagnostic entry.
 
 The same summaries include playback pacing data: `playback_ticks`,
-`pacing_skipped_frames`, `pacing_coalesced_frames`, and average/maximum
-`pacing_lag`. The existing emitted, received, submitted, and GPU-presented
-counts provide the effective per-second playback rate. A skipped frame was
-not published because the worker caught up to a newer target; a coalesced
-frame was replaced in the worker/UI mailbox. These counters are diagnostic
-only and do not alter the Timeline or project state.
+`pacing_skipped_frames`, `pacing_coalesced_frames`, and average/maximum/p95/p99
+`pacing_lag`. The emitted, received, CPU-presented, and GPU-presented counts
+provide the effective per-second playback rate. A skipped frame was not
+published because the worker caught up to a newer target; a coalesced frame
+was replaced in the worker/UI mailbox; a stale frame was rejected after a
+seek or generation change. These counters are diagnostic only and do not
+alter the Timeline or project state.
 
 Playback cadence uses an internal monotonic, absolute-deadline scheduler. The
 worker starts a `steady_clock` origin for each playback run and computes the

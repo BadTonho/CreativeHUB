@@ -359,6 +359,7 @@ void OpenGLPreviewSurface::updateVertexBuffer() {
 
 void OpenGLPreviewSurface::failGpu(const QString& message, unsigned int error_code) {
     if (gpu_failed_) return;
+    PreviewPerformanceMetrics::instance().recordGpuFailure();
     gpu_failed_ = true;
     initialized_ = false;
     emit gpuFailure(message, static_cast<qint64>(error_code));

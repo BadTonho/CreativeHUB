@@ -70,18 +70,50 @@ void appendTimingContext(
         prefix + "_avg_ms", std::to_string(timing.averageMilliseconds()));
     context.emplace_back(
         prefix + "_max_ms", std::to_string(timing.maximumMilliseconds()));
+    context.emplace_back(
+        prefix + "_p95_ms", std::to_string(timing.percentile95Milliseconds()));
+    context.emplace_back(
+        prefix + "_p99_ms", std::to_string(timing.percentile99Milliseconds()));
+}
+
+void appendOptionalDoubleContext(
+    logging::Context& context,
+    const char* name,
+    const std::optional<double>& value) {
+    context.emplace_back(
+        name,
+        value.has_value() ? std::to_string(*value) : "N/A");
+}
+
+void appendOptionalUint64Context(
+    logging::Context& context,
+    const char* name,
+    const std::optional<std::uint64_t>& value) {
+    context.emplace_back(
+        name,
+        value.has_value() ? std::to_string(*value) : "N/A");
 }
 
 void appendPerformanceContext(
     logging::Context& context,
     const PreviewPerformanceSnapshot& snapshot) {
+    context.emplace_back("metrics_schema_version", "2");
     context.emplace_back(
         "decoded_frames", std::to_string(snapshot.decoded_frames));
     context.emplace_back(
         "decode_discarded_frames",
         std::to_string(snapshot.decode_discarded_frames));
     context.emplace_back(
+        "stale_frames_discarded",
+        std::to_string(snapshot.stale_frames_discarded));
+    context.emplace_back(
         "decoded_cache_hits", std::to_string(snapshot.decoded_cache_hits));
+    context.emplace_back(
+        "decoded_cache_entries",
+        std::to_string(snapshot.decoded_cache_entries));
+    context.emplace_back(
+        "decoded_cache_bytes",
+        std::to_string(snapshot.decoded_cache_bytes));
     context.emplace_back(
         "text_cache_hits", std::to_string(snapshot.text_cache_hits));
     context.emplace_back(
@@ -100,9 +132,21 @@ void appendPerformanceContext(
     context.emplace_back(
         "submitted_frames", std::to_string(snapshot.submitted_frames));
     context.emplace_back(
+        "cpu_presented_frames",
+        std::to_string(snapshot.cpu_presented_frames));
+    context.emplace_back(
         "gpu_presented_frames", std::to_string(snapshot.gpu_presented_frames));
     context.emplace_back(
         "overwritten_frames", std::to_string(snapshot.overwritten_frames));
+    context.emplace_back(
+        "decode_failures", std::to_string(snapshot.decode_failures));
+    context.emplace_back(
+        "seek_failures", std::to_string(snapshot.seek_failures));
+    context.emplace_back(
+        "composition_failures",
+        std::to_string(snapshot.composition_failures));
+    context.emplace_back(
+        "gpu_failures", std::to_string(snapshot.gpu_failures));
     context.emplace_back(
         "playback_ticks", std::to_string(snapshot.playback_ticks));
     context.emplace_back(
@@ -115,6 +159,86 @@ void appendPerformanceContext(
         "last_frame_width", std::to_string(snapshot.last_frame_width));
     context.emplace_back(
         "last_frame_height", std::to_string(snapshot.last_frame_height));
+    context.emplace_back(
+        "composition_layer_count",
+        std::to_string(snapshot.composition_layer_count));
+    context.emplace_back(
+        "composition_text_layer_count",
+        std::to_string(snapshot.composition_text_layer_count));
+    context.emplace_back(
+        "composition_transition_count",
+        std::to_string(snapshot.composition_transition_count));
+    context.emplace_back(
+        "composition_enabled",
+        snapshot.composition_enabled ? "true" : "false");
+    context.emplace_back(
+        "audio_enabled",
+        snapshot.audio_enabled ? "true" : "false");
+
+    const auto window_seconds = static_cast<double>(
+        snapshot.preview_window_elapsed_nanoseconds) / 1'000'000'000.0;
+    const auto active_seconds = static_cast<double>(
+        snapshot.playback_active_nanoseconds) / 1'000'000'000.0;
+    const auto target_fps = static_cast<double>(snapshot.target_frame_rate_milli) /
+        1000.0;
+    const auto presented_frames = snapshot.cpu_presented_frames +
+        snapshot.gpu_presented_frames;
+    const auto expected_frames = target_fps > 0.0 && active_seconds > 0.0
+        ? static_cast<std::uint64_t>(std::llround(target_fps * active_seconds))
+        : 0U;
+    context.emplace_back(
+        "preview_window_ms",
+        std::to_string(window_seconds * 1000.0));
+    context.emplace_back(
+        "playback_active_ms",
+        std::to_string(active_seconds * 1000.0));
+    appendOptionalDoubleContext(
+        context,
+        "target_fps",
+        target_fps > 0.0 ? std::optional<double>(target_fps) : std::nullopt);
+    context.emplace_back(
+        "expected_frames", std::to_string(expected_frames));
+    appendOptionalDoubleContext(
+        context,
+        "frame_budget_ms",
+        target_fps > 0.0
+            ? std::optional<double>(1000.0 / target_fps)
+            : std::nullopt);
+    appendOptionalDoubleContext(
+        context,
+        "emitted_fps",
+        window_seconds > 0.0
+            ? std::optional<double>(static_cast<double>(snapshot.emitted_frames) /
+                window_seconds)
+            : std::nullopt);
+    appendOptionalDoubleContext(
+        context,
+        "received_fps",
+        window_seconds > 0.0
+            ? std::optional<double>(static_cast<double>(snapshot.received_frames) /
+                window_seconds)
+            : std::nullopt);
+    appendOptionalDoubleContext(
+        context,
+        "presented_fps",
+        window_seconds > 0.0
+            ? std::optional<double>(static_cast<double>(presented_frames) /
+                window_seconds)
+            : std::nullopt);
+    appendOptionalDoubleContext(
+        context,
+        "presentation_ratio_percent",
+        expected_frames > 0
+            ? std::optional<double>(static_cast<double>(presented_frames) * 100.0 /
+                static_cast<double>(expected_frames))
+            : std::nullopt);
+    appendOptionalDoubleContext(
+        context,
+        "first_frame_ms",
+        snapshot.first_frame_nanoseconds > 0
+            ? std::optional<double>(static_cast<double>(snapshot.first_frame_nanoseconds) /
+                1'000'000.0)
+            : std::nullopt);
     appendTimingContext(context, "decode", snapshot.decode);
     appendTimingContext(context, "decode_packet", snapshot.decode_packet);
     appendTimingContext(context, "decode_receive", snapshot.decode_receive);
@@ -133,6 +257,10 @@ void appendPerformanceContext(
     appendTimingContext(context, "gpu_upload", snapshot.gpu_upload);
     appendTimingContext(context, "gpu_paint", snapshot.gpu_paint);
     appendTimingContext(context, "pacing_lag", snapshot.pacing_lag);
+    appendTimingContext(
+        context,
+        "seek_to_presentation",
+        snapshot.seek_to_presentation);
 }
 
 } // namespace
@@ -141,6 +269,7 @@ void MainWindow::configurePreviewPerformanceMetrics(bool enabled) {
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     metrics.setEnabled(false);
     metrics.reset();
+    performance_sampler_.reset();
 
     if (!enabled) {
         if (preview_metrics_timer_ != nullptr) preview_metrics_timer_->stop();
@@ -158,6 +287,7 @@ void MainWindow::configurePreviewPerformanceMetrics(bool enabled) {
     }
 
     metrics.setEnabled(true);
+    metrics.setPlaybackActive(playback_is_playing_);
     preview_metrics_timer_->start();
 }
 
@@ -167,12 +297,100 @@ void MainWindow::flushPreviewPerformanceMetrics() {
 
     const auto snapshot = metrics.takeSnapshotAndReset();
     if (snapshot.playback_ticks == 0 && snapshot.emitted_frames == 0 &&
-        snapshot.received_frames == 0 && snapshot.submitted_frames == 0) {
+        snapshot.received_frames == 0 && snapshot.submitted_frames == 0 &&
+        snapshot.playback_active_nanoseconds == 0 &&
+        snapshot.seek_operations == 0 &&
+        snapshot.decode_failures == 0 &&
+        snapshot.seek_failures == 0 &&
+        snapshot.composition_failures == 0 &&
+        snapshot.gpu_failures == 0) {
         return;
     }
 
     logging::Context context;
     appendPerformanceContext(context, snapshot);
+    const auto resources = performance_sampler_.sample();
+    appendOptionalDoubleContext(
+        context,
+        "process_cpu_percent",
+        resources.process_cpu_percent);
+    appendOptionalUint64Context(
+        context,
+        "process_working_set_bytes",
+        resources.process_working_set_bytes);
+    appendOptionalUint64Context(
+        context,
+        "process_private_usage_bytes",
+        resources.process_private_usage_bytes);
+    appendOptionalUint64Context(
+        context,
+        "system_total_bytes",
+        resources.system_total_bytes);
+    appendOptionalUint64Context(
+        context,
+        "system_available_bytes",
+        resources.system_available_bytes);
+    appendOptionalDoubleContext(
+        context,
+        "gpu_utilization_percent",
+        resources.gpu_utilization_percent);
+    appendOptionalUint64Context(
+        context,
+        "gpu_memory_used_bytes",
+        resources.gpu_memory_used_bytes);
+    context.emplace_back(
+        "preview_backend",
+        preview_widget_ == nullptr
+            ? "N/A"
+            : preview_widget_->usesGpuPreview() ? "opengl" : "cpu_fallback");
+
+    const auto source_kind_index = context.size();
+    context.emplace_back("source_kind", "N/A");
+    const auto source_width_index = context.size();
+    context.emplace_back("source_width", "N/A");
+    const auto source_height_index = context.size();
+    context.emplace_back("source_height", "N/A");
+    const auto source_fps_index = context.size();
+    context.emplace_back("source_fps", "N/A");
+    const auto source_codec_index = context.size();
+    context.emplace_back("source_video_codec", "N/A");
+    const auto source_container_index = context.size();
+    context.emplace_back("source_container_format", "N/A");
+    const auto source_audio_index = context.size();
+    context.emplace_back("source_has_audio", "N/A");
+    if (active_timeline_track_index_.has_value() &&
+        active_timeline_clip_index_.has_value() &&
+        *active_timeline_track_index_ < timeline_model_.trackCount() &&
+        *active_timeline_clip_index_ < timeline_model_.clipCount(
+            *active_timeline_track_index_)) {
+        const auto& clip = timeline_model_.tracks()[
+            *active_timeline_track_index_].clips[*active_timeline_clip_index_];
+        if (clip.kind == timeline::ClipKind::Text) {
+            context[source_kind_index].second = "text";
+        } else {
+            context[source_kind_index].second = "video";
+            const auto media_item = std::find_if(
+                media_items_.begin(),
+                media_items_.end(),
+                [&clip](const ImportedMedia& item) {
+                    return normalizedPath(item.metadata.source_path) ==
+                        normalizedPath(clip.source_path);
+                });
+            if (media_item != media_items_.end()) {
+                const auto& metadata = media_item->metadata;
+                context[source_width_index].second = std::to_string(metadata.width);
+                context[source_height_index].second = std::to_string(metadata.height);
+                context[source_fps_index].second = metadata.frame_rate.has_value()
+                    ? std::to_string(*metadata.frame_rate)
+                    : "N/A";
+                context[source_codec_index].second = metadata.video_codec;
+                context[source_container_index].second = metadata.container_format;
+                context[source_audio_index].second = metadata.audio.has_value()
+                    ? "true"
+                    : "false";
+            }
+        }
+    }
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back(
         "playback_generation",
@@ -772,7 +990,12 @@ void MainWindow::handlePlaybackFrame(
     playback::VideoFramePtr frame,
     qint64 frame_index,
     quint64 generation) {
-    if (generation != playback_generation_ || frame == nullptr) return;
+    if (generation != playback_generation_) {
+        rendering::PreviewPerformanceMetrics::instance()
+            .recordStaleFrameDiscarded();
+        return;
+    }
+    if (frame == nullptr) return;
 
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     rendering::PreviewPerformanceScope timing(

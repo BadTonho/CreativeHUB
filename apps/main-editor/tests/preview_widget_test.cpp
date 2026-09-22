@@ -55,6 +55,8 @@ int main(int argc, char* argv[]) {
         const auto preview_snapshot = metrics.takeSnapshotAndReset();
         require(preview_snapshot.submitted_frames == 1,
                 "Preview metrics did not record the submitted frame.");
+        require(preview_snapshot.cpu_presented_frames == 1,
+                "Preview metrics did not record the CPU-presented frame.");
         require(preview_snapshot.preview_submit.count == 1,
                 "Preview metrics did not time frame submission.");
         metrics.setEnabled(false);
