@@ -816,6 +816,238 @@ int main(int argc, char* argv[]) {
                     std::abs(seek_frames.back() - absolute_target) <= 1,
                 "The time ruler did not report an absolute timeline frame.");
 
+        // Internal clip movement keeps the source visible but dimmed and
+        // paints a destination ghost without changing the model until release.
+        timeline::TimelineWidget drag_preview_widget;
+        drag_preview_widget.resize(900, 260);
+        drag_preview_widget.setMoveRequiresAlt(false);
+        const auto preview_source_track = timeline::TimelineTrack{
+            2,
+            "Video 2",
+            1.0,
+            false,
+            {makeClip("preview-source.mkv", 0, 12000, "Preview source")}};
+        const auto preview_empty_track = timeline::TimelineTrack{
+            1,
+            "Video 1",
+            1.0,
+            false,
+            {}};
+        drag_preview_widget.setTracks(
+            {preview_source_track, preview_empty_track});
+        drag_preview_widget.show();
+        application.processEvents();
+        drag_preview_widget.setTimelineViewportWidth(900);
+        application.processEvents();
+
+        QImage preview_before(900, 260, QImage::Format_ARGB32);
+        preview_before.fill(Qt::transparent);
+        drag_preview_widget.render(&preview_before);
+        const auto source_sample_x = static_cast<int>(
+            std::lround(drag_preview_widget.contentXForFrame(6000)));
+        const auto destination_sample_x = static_cast<int>(
+            std::lround(drag_preview_widget.contentXForFrame(36000)));
+        const auto source_sample_y = 48 + 35;
+        const auto destination_sample_y = 48 + 70 + 10 + 35;
+        const auto source_before = preview_before.pixelColor(
+            source_sample_x, source_sample_y);
+        const auto destination_before = preview_before.pixelColor(
+            destination_sample_x, destination_sample_y);
+
+        int preview_move_count = 0;
+        QObject::connect(
+            &drag_preview_widget,
+            &timeline::TimelineWidget::clipMoveRequestedAt,
+            [&preview_move_count](qint64, qint64, qint64, qint64) {
+                ++preview_move_count;
+            });
+        const auto source_press = QPointF(
+            drag_preview_widget.contentXForFrame(6000), source_sample_y);
+        const auto destination_move = QPointF(
+            drag_preview_widget.contentXForFrame(30000), destination_sample_y);
+        sendMouse(
+            drag_preview_widget,
+            QEvent::MouseButtonPress,
+            source_press,
+            Qt::LeftButton);
+        sendMouse(
+            drag_preview_widget,
+            QEvent::MouseMove,
+            destination_move,
+            Qt::LeftButton);
+        require(
+            preview_move_count == 0,
+            "Moving a clip emitted its model change before release.");
+
+        QImage preview_moving(900, 260, QImage::Format_ARGB32);
+        preview_moving.fill(Qt::transparent);
+        drag_preview_widget.render(&preview_moving);
+        require(
+            preview_moving.pixelColor(source_sample_x, source_sample_y) !=
+                source_before,
+            "The source clip was not visually dimmed during movement.");
+        require(
+            preview_moving.pixelColor(destination_sample_x, destination_sample_y) !=
+                destination_before,
+            "The internal clip movement ghost was not painted at its destination.");
+
+        sendMouse(
+            drag_preview_widget,
+            QEvent::MouseButtonRelease,
+            destination_move,
+            Qt::NoButton);
+        require(
+            preview_move_count == 1,
+            "The internal clip movement did not emit exactly once on release.");
+        QImage preview_after_release(900, 260, QImage::Format_ARGB32);
+        preview_after_release.fill(Qt::transparent);
+        drag_preview_widget.render(&preview_after_release);
+        require(
+            preview_after_release.pixelColor(
+                destination_sample_x, destination_sample_y) ==
+                destination_before,
+            "The internal movement ghost was not cleared after release.");
+
+        // An occupied destination keeps the existing drop/move policy but is
+        // shown as a red translucent ghost so the conflict is visible.
+        const auto preview_occupied_track = timeline::TimelineTrack{
+            1,
+            "Video 1",
+            1.0,
+            false,
+            {makeClip("occupied.mkv", 30000, 12000, "Occupied")}};
+        drag_preview_widget.setTracks(
+            {preview_source_track, preview_occupied_track});
+        application.processEvents();
+        sendMouse(
+            drag_preview_widget,
+            QEvent::MouseButtonPress,
+            source_press,
+            Qt::LeftButton);
+        sendMouse(
+            drag_preview_widget,
+            QEvent::MouseMove,
+            destination_move,
+            Qt::LeftButton);
+        QImage preview_occupied(900, 260, QImage::Format_ARGB32);
+        preview_occupied.fill(Qt::transparent);
+        drag_preview_widget.render(&preview_occupied);
+        const auto occupied_color = preview_occupied.pixelColor(
+            destination_sample_x, destination_sample_y);
+        require(
+            occupied_color.red() > occupied_color.green() &&
+                occupied_color.red() > occupied_color.blue(),
+            "An occupied movement destination was not painted as an invalid red ghost.");
+        sendMouse(
+            drag_preview_widget,
+            QEvent::MouseButtonRelease,
+            destination_move,
+            Qt::NoButton);
+
+        // Media drops use optional metadata for an exact ghost duration while
+        // retaining the existing path MIME and drop behavior.
+        timeline::TimelineWidget media_preview_widget;
+        media_preview_widget.resize(900, 180);
+        media_preview_widget.setTracks({preview_empty_track});
+        media_preview_widget.show();
+        application.processEvents();
+        media_preview_widget.setTimelineViewportWidth(900);
+        QMimeData preview_media_mime;
+        preview_media_mime.setData(
+            ui::kMediaPathMimeType,
+            QByteArrayLiteral("preview-media.mp4"));
+        preview_media_mime.setData(
+            ui::kMediaFrameCountMimeType,
+            QByteArrayLiteral("12000"));
+        preview_media_mime.setData(
+            ui::kMediaFrameRateMimeType,
+            QByteArrayLiteral("30"));
+        preview_media_mime.setData(
+            ui::kMediaDisplayNameMimeType,
+            QByteArrayLiteral("Preview media"));
+        const auto media_preview_position = QPointF(
+            media_preview_widget.contentXForFrame(30000),
+            48 + 35);
+        QImage media_preview_before(900, 180, QImage::Format_ARGB32);
+        media_preview_before.fill(Qt::transparent);
+        media_preview_widget.render(&media_preview_before);
+        const auto media_preview_sample_x = static_cast<int>(std::lround(
+            media_preview_widget.contentXForFrame(36000)));
+        const auto media_preview_sample_y = 48 + 35;
+        const auto media_before = media_preview_before.pixelColor(
+            media_preview_sample_x, media_preview_sample_y);
+        QDragEnterEvent media_preview_enter(
+            media_preview_position.toPoint(),
+            Qt::CopyAction,
+            &preview_media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&media_preview_widget, &media_preview_enter);
+        QDragMoveEvent media_preview_move(
+            media_preview_position.toPoint(),
+            Qt::CopyAction,
+            &preview_media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&media_preview_widget, &media_preview_move);
+        QImage media_preview_active(900, 180, QImage::Format_ARGB32);
+        media_preview_active.fill(Qt::transparent);
+        media_preview_widget.render(&media_preview_active);
+        require(
+            media_preview_active.pixelColor(
+                media_preview_sample_x, media_preview_sample_y) != media_before,
+            "The media drop ghost was not painted from the MIME metadata.");
+        QDragLeaveEvent media_preview_leave;
+        QApplication::sendEvent(&media_preview_widget, &media_preview_leave);
+        QImage media_preview_after_leave(900, 180, QImage::Format_ARGB32);
+        media_preview_after_leave.fill(Qt::transparent);
+        media_preview_widget.render(&media_preview_after_leave);
+        require(
+            media_preview_after_leave.pixelColor(
+                media_preview_sample_x, media_preview_sample_y) == media_before,
+            "The media drop ghost was not cleared after cancellation.");
+
+        QMimeData preview_media_without_metadata;
+        preview_media_without_metadata.setData(
+            ui::kMediaPathMimeType,
+            QByteArrayLiteral("metadata-free.mp4"));
+        const auto fallback_preview_position = QPointF(
+            media_preview_widget.contentXForFrame(42000),
+            media_preview_sample_y);
+        QDragEnterEvent fallback_media_enter(
+            fallback_preview_position.toPoint(),
+            Qt::CopyAction,
+            &preview_media_without_metadata,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(
+            &media_preview_widget,
+            &fallback_media_enter);
+        QDragMoveEvent fallback_media_move(
+            fallback_preview_position.toPoint(),
+            Qt::CopyAction,
+            &preview_media_without_metadata,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(
+            &media_preview_widget,
+            &fallback_media_move);
+        QImage fallback_media_preview(900, 180, QImage::Format_ARGB32);
+        fallback_media_preview.fill(Qt::transparent);
+        media_preview_widget.render(&fallback_media_preview);
+        require(
+            fallback_media_preview.pixelColor(
+                static_cast<int>(std::lround(
+                    media_preview_widget.contentXForFrame(42000))),
+                media_preview_sample_y) != media_before,
+            "A media drag without metadata did not show its one-frame fallback ghost.");
+        QDragLeaveEvent fallback_media_leave;
+        QApplication::sendEvent(
+            &media_preview_widget,
+            &fallback_media_leave);
+        media_preview_widget.close();
+        drag_preview_widget.close();
+
         widget.close();
         return 0;
     } catch (const std::exception& error) {

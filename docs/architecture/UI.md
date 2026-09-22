@@ -102,6 +102,16 @@ Timeline content before the target track and frame are resolved. Only the
 content area of a track accepts a drop; the track header, ruler, and empty
 viewport space remain invalid targets.
 
+During a media drop, the Timeline paints a semitransparent ghost at the
+calculated track, frame, and duration. A valid target uses the track color; an
+occupied or invalid target is shown in translucent red, while a pointer
+outside a valid track uses a red vertical marker. The same ghost is shown
+while moving an existing clip, with the source occurrence dimmed until
+release. These previews do not mutate the project and do not emit the move or
+drop operation early. Optional drag metadata carries frame count, frame rate,
+duration, and display name for the preview only; the original media-path MIME
+continues to drive the actual drop. Effect drags retain their existing marker.
+
 File actions provide New Project, Open Project, Save Project, and Save Project
 As. Save prompts are transactional and New, Open, and close use Save, Discard,
 and Cancel when the project is dirty.

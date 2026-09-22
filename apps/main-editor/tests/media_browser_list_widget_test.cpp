@@ -86,6 +86,15 @@ int main(int argc, char* argv[]) {
         item->setData(
             media_browser_ui::kMediaFullDisplayNameRole,
             QStringLiteral("Sample clip with a longer original name"));
+        item->setData(
+            media_browser_ui::kMediaFrameCountRole,
+            static_cast<qlonglong>(2400));
+        item->setData(
+            media_browser_ui::kMediaFrameRateRole,
+            24.0);
+        item->setData(
+            media_browser_ui::kMediaDurationSecondsRole,
+            100.0);
         item->setFlags(item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
         QPixmap thumbnail(16, 16);
         thumbnail.fill(Qt::blue);
@@ -124,6 +133,22 @@ int main(int argc, char* argv[]) {
             QString::fromUtf8(media_mime->data(ui::kMediaPathMimeType)) ==
                 "sample.mp4",
             "Media drag data changed the source path.");
+        require(
+            QString::fromUtf8(media_mime->data(ui::kMediaFrameCountMimeType)) ==
+                "2400",
+            "Media drag data did not preserve the frame count metadata.");
+        require(
+            QString::fromUtf8(media_mime->data(ui::kMediaFrameRateMimeType)) ==
+                "24",
+            "Media drag data did not preserve the frame rate metadata.");
+        require(
+            QString::fromUtf8(media_mime->data(ui::kMediaDurationSecondsMimeType)) ==
+                "100",
+            "Media drag data did not preserve the duration metadata.");
+        require(
+            QString::fromUtf8(media_mime->data(ui::kMediaDisplayNameMimeType)) ==
+                "Sample clip with a longer original name",
+            "Media drag data did not preserve the original display name.");
         delete media_mime;
         require(settings.value("media_browser/view_mode").toString() == "grid",
                 "Grid mode was not persisted.");

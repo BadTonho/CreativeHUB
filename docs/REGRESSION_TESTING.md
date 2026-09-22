@@ -27,7 +27,7 @@ updated intentionally.
 | Playback session | Sequential frames, forward catch-up without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
 | Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
-| Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
+| Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, cancellation cleanup, no pre-release model signal, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
 | System memory details | Offscreen non-modal dialog, System Memory and Main Editor sections, click-to-open behavior, Working Set, Private Usage, GB/MB formatting, and per-metric `N/A` handling |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
@@ -89,7 +89,13 @@ in the running Main Editor after UI or integration changes:
   the playhead, playback playhead movement while a bin or different Media
   Browser item is selected, and the optional Edit > Move Playhead to Selected Clip Start
   preference, visual order, and release of any active Timeline mouse grab when
-  clips are deleted or the track model is refreshed;
+  clips are deleted or the track model is refreshed; drag a clip between rows
+  and within the same row to confirm that the source is dimmed, the ghost
+  follows the cursor, an occupied target is red, and no project change occurs
+  before release; cancel the gesture and confirm the ghost disappears; drag a
+  media item from both Media Browser modes and confirm that its duration-sized
+  ghost follows the cursor, invalid areas show a red marker, folders remain
+  rejected, and the existing drop creates exactly one clip only on release;
 - Media Browser list/block toggles, restoration of the last global mode and icon
   scale, slider adjustment from 50% to 150% in 10% steps, default 100% sizing,
   cached thumbnails, seven-character labels with ellipses, no technical second

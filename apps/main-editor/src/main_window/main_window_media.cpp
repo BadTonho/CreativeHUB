@@ -419,6 +419,21 @@ void MainWindow::populateMediaBrowser(
             list_item->setData(
                 media_browser_ui::kMediaIndexRole,
                 static_cast<qint64>(index));
+            if (item.metadata.frame_count.has_value()) {
+                list_item->setData(
+                    media_browser_ui::kMediaFrameCountRole,
+                    static_cast<qlonglong>(*item.metadata.frame_count));
+            }
+            if (item.metadata.frame_rate.has_value()) {
+                list_item->setData(
+                    media_browser_ui::kMediaFrameRateRole,
+                    *item.metadata.frame_rate);
+            }
+            if (item.metadata.duration_seconds.has_value()) {
+                list_item->setData(
+                    media_browser_ui::kMediaDurationSecondsRole,
+                    *item.metadata.duration_seconds);
+            }
             list_item->setData(
                 media_browser_ui::kMediaInfoRole,
                 item.offline

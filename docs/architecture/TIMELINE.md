@@ -95,6 +95,18 @@ one frame when the new position is valid. When a model update replaces the
 tracks during an active pointer gesture, the Timeline releases its mouse grab
 before resetting the gesture so the rest of the editor remains clickable.
 
+While a clip is being moved, the original occurrence remains visible with a
+dimmed treatment and a semitransparent ghost follows the calculated target
+track and frame. The ghost uses the source duration and label, and turns red
+when the destination overlaps an existing clip or is otherwise invalid. A
+media drag from the Media Browser uses the same visual treatment, using
+optional frame-count, frame-rate, and display-name metadata when present; the
+existing path MIME remains the authoritative drop payload. Outside a valid
+track content area, the preview is reduced to a red position marker. Effects
+keep their existing position marker. These previews are paint-only: no clip is
+moved, created, marked dirty, or added to history until the pointer is
+released and the existing drop/move operation is accepted.
+
 Split and trim preserve source offsets and do not compact later clips. All
 operations retain repeated source occurrences independently.
 

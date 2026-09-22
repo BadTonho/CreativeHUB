@@ -8,6 +8,7 @@
 #include <QDropEvent>
 #include <QContextMenuEvent>
 #include <QEvent>
+#include <QFileInfo>
 #include <QFont>
 #include <QFontMetrics>
 #include <QMimeData>
@@ -20,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <limits>
 
 namespace timeline {
@@ -138,6 +140,7 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
     drag_hovering_ = false;
     drop_hover_track_.reset();
     drop_hover_frame_.reset();
+    clearDragPreview();
     update();
 }
 
@@ -165,6 +168,7 @@ void TimelineWidget::clearClips() {
     drag_hovering_ = false;
     drop_hover_track_.reset();
     drop_hover_frame_.reset();
+    clearDragPreview();
     selected_transition_.reset();
     update();
 }
@@ -228,6 +232,7 @@ void TimelineWidget::setMoveRequiresAlt(bool enabled) {
         move_pending_ = false;
         moving_active_ = false;
         move_target_track_.reset();
+        clearDragPreview();
         releaseMouse();
     }
     update();
@@ -432,6 +437,111 @@ QRectF TimelineWidget::clipRect(const ClipLocation& location) const noexcept {
         track.top(),
         std::max(2.0, track.width() * (end - begin)),
         track.height());
+}
+
+std::int64_t TimelineWidget::mediaDropDuration(
+    const QMimeData* mime_data) const noexcept {
+    if (mime_data == nullptr) return 1;
+
+    const auto readInteger = [mime_data](const char* mime_type)
+        -> std::optional<std::int64_t> {
+        if (!mime_data->hasFormat(mime_type)) return std::nullopt;
+        bool ok = false;
+        const auto value = QString::fromUtf8(mime_data->data(mime_type))
+            .toLongLong(&ok);
+        return ok && value > 0 ? std::optional<std::int64_t>(value) : std::nullopt;
+    };
+    const auto readDouble = [mime_data](const char* mime_type)
+        -> std::optional<double> {
+        if (!mime_data->hasFormat(mime_type)) return std::nullopt;
+        bool ok = false;
+        const auto value = QString::fromUtf8(mime_data->data(mime_type))
+            .toDouble(&ok);
+        return ok && std::isfinite(value) && value > 0.0
+            ? std::optional<double>(value)
+            : std::nullopt;
+    };
+
+    if (const auto frame_count = readInteger(ui::kMediaFrameCountMimeType);
+        frame_count.has_value()) {
+        return *frame_count;
+    }
+    const auto duration_seconds = readDouble(ui::kMediaDurationSecondsMimeType);
+    const auto frame_rate = readDouble(ui::kMediaFrameRateMimeType);
+    if (!duration_seconds.has_value() || !frame_rate.has_value()) return 1;
+
+    const auto estimated = static_cast<long double>(*duration_seconds) *
+        static_cast<long double>(*frame_rate);
+    if (!std::isfinite(estimated) ||
+        estimated >= static_cast<long double>(std::numeric_limits<std::int64_t>::max())) {
+        return 1;
+    }
+    return std::max<std::int64_t>(
+        1,
+        static_cast<std::int64_t>(std::ceil(estimated)));
+}
+
+QString TimelineWidget::mediaDropLabel(const QMimeData* mime_data) const {
+    if (mime_data == nullptr) return "Media";
+    const auto name = QString::fromUtf8(
+        mime_data->data(ui::kMediaDisplayNameMimeType));
+    if (!name.isEmpty()) return name;
+    const auto path = QString::fromUtf8(
+        mime_data->data(ui::kMediaPathMimeType));
+    const auto file_name = QFileInfo(path).fileName();
+    return file_name.isEmpty() ? QStringLiteral("Media") : file_name;
+}
+
+bool TimelineWidget::placementOverlaps(
+    std::size_t track_index,
+    std::int64_t start_frame,
+    std::int64_t duration_frames,
+    std::optional<ClipLocation> excluded) const noexcept {
+    if (track_index >= tracks_.size() || start_frame < 0 || duration_frames <= 0) {
+        return true;
+    }
+    const auto max_frame = std::numeric_limits<std::int64_t>::max();
+    const auto end_frame = start_frame > max_frame - duration_frames
+        ? max_frame
+        : start_frame + duration_frames;
+    for (std::size_t clip_index = 0;
+         clip_index < tracks_[track_index].clips.size();
+         ++clip_index) {
+        if (excluded.has_value() &&
+            excluded->track_index == track_index &&
+            excluded->clip_index == clip_index) {
+            continue;
+        }
+        const auto& clip = tracks_[track_index].clips[clip_index];
+        const auto clip_end = clip.timeline_start_frame >
+                max_frame - clip.timeline_duration_frames
+            ? max_frame
+            : clip.timeline_start_frame + clip.timeline_duration_frames;
+        if (start_frame < clip_end && clip.timeline_start_frame < end_frame) {
+            return true;
+        }
+    }
+    return false;
+}
+
+QRectF TimelineWidget::previewRect(
+    std::size_t track_index,
+    std::int64_t start_frame,
+    std::int64_t duration_frames) const noexcept {
+    if (track_index >= tracks_.size() || duration_frames <= 0) return {};
+    const auto content = trackContentRect(track_index);
+    const auto max_frame = std::numeric_limits<std::int64_t>::max();
+    const auto bounded_start = std::max<std::int64_t>(0, start_frame);
+    const auto bounded_end = bounded_start > max_frame - duration_frames
+        ? max_frame
+        : bounded_start + duration_frames;
+    const auto left = contentXForFrame(bounded_start);
+    const auto right = contentXForFrame(bounded_end);
+    return QRectF(
+        left,
+        content.top(),
+        std::max(2.0, right - left),
+        content.height());
 }
 
 double TimelineWidget::frameRate() const noexcept {
@@ -769,12 +879,18 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             const auto clip_color = clip.kind == ClipKind::Text
                 ? QColor("#8c5fb3")
                 : track_colors[track_index % 4];
-            painter.setPen(active ? QColor("#ffcf5c") : clip_color.lighter(135));
-            painter.setBrush(moving || trimming
-                ? QColor("#8a5a2f")
-                : active ? clip_color.lighter(115) : clip_color);
+            if (moving) {
+                painter.setPen(QColor(255, 255, 255, 90));
+                painter.setBrush(QColor(
+                    clip_color.red(), clip_color.green(), clip_color.blue(), 55));
+            } else {
+                painter.setPen(active ? QColor("#ffcf5c") : clip_color.lighter(135));
+                painter.setBrush(trimming
+                    ? QColor("#8a5a2f")
+                    : active ? clip_color.lighter(115) : clip_color);
+            }
             painter.drawRoundedRect(rect, 3, 3);
-            painter.setPen(QColor("#f4f7fb"));
+            painter.setPen(moving ? QColor(244, 247, 251, 100) : QColor("#f4f7fb"));
             const auto label = QString("%1  %2%3")
                 .arg(clip_index + 1)
                 .arg(clip.kind == ClipKind::Text ? "[Text] " : "")
@@ -901,18 +1017,96 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         }
     }
 
-    if (drag_hovering_) {
-        if (drop_hover_track_.has_value() && drop_hover_frame_.has_value() && total > 0) {
-            const auto content = trackContentRect(*drop_hover_track_);
-            const auto x = content.left() + content.width() *
-                static_cast<double>(*drop_hover_frame_) / total;
-            painter.setPen(QPen(QColor("#9ed8ff"), 2, Qt::DashLine));
-            painter.drawLine(
-                QPointF(x, content.top() - 4),
-                QPointF(x, content.bottom() + 4));
-            painter.setBrush(QColor("#9ed8ff"));
-            painter.drawEllipse(QPointF(x, content.top() - 5), 3, 3);
+    const QColor track_colors[] = {
+        QColor("#3c75ae"), QColor("#357f70"),
+        QColor("#6d5ca8"), QColor("#9b6943")};
+    const auto drawGhost = [&](std::size_t track_index,
+                               std::int64_t start_frame,
+                               std::int64_t duration_frames,
+                               const QString& label,
+                               bool valid) {
+        const auto ghost = previewRect(track_index, start_frame, duration_frames);
+        if (ghost.isEmpty()) return;
+        const auto base = valid
+            ? track_colors[track_index % std::size(track_colors)]
+            : QColor("#d85a5a");
+        painter.save();
+        painter.setPen(QPen(
+            valid ? QColor("#9ed8ff") : QColor("#ff7777"),
+            2.0,
+            Qt::DashLine));
+        painter.setBrush(QColor(
+            base.red(), base.green(), base.blue(), valid ? 92 : 115));
+        painter.drawRoundedRect(ghost, 3, 3);
+        if (!label.isEmpty()) {
+            painter.setPen(QColor(244, 247, 251, 210));
+            painter.drawText(
+                ghost.adjusted(6, 0, -6, 0),
+                Qt::AlignVCenter,
+                QFontMetrics(painter.font()).elidedText(
+                    label,
+                    Qt::ElideRight,
+                    std::max(1, static_cast<int>(ghost.width() - 12))));
         }
+        painter.restore();
+    };
+    const auto drawInvalidMarker = [&](const QPointF& position) {
+        if (tracks_.empty()) return;
+        const auto content = trackContentRect(0);
+        const auto x = std::clamp(position.x(), content.left(), content.right());
+        painter.save();
+        painter.setPen(QPen(QColor("#ff7777"), 2.0, Qt::DashLine));
+        painter.drawLine(
+            QPointF(x, trackRect(0).top() - 4),
+            QPointF(x, trackRect(tracks_.size() - 1).bottom() + 4));
+        painter.restore();
+    };
+
+    if (moving_active_) {
+        const auto& clip = tracks_[moving_clip_.track_index]
+            .clips[moving_clip_.clip_index];
+        if (move_target_track_.has_value()) {
+            const auto valid = !placementOverlaps(
+                *move_target_track_,
+                move_target_frame_,
+                clip.timeline_duration_frames,
+                moving_clip_);
+            auto label = clip.kind == ClipKind::Text
+                ? QStringLiteral("[Text] ")
+                : QString{};
+            label += text(clip.display_name);
+            drawGhost(
+                *move_target_track_,
+                move_target_frame_,
+                clip.timeline_duration_frames,
+                label,
+                valid);
+        } else {
+            drawInvalidMarker(drag_preview_position_);
+        }
+    }
+    if (drag_hovering_ && drag_preview_kind_ == DragPreviewKind::MediaDrop) {
+        if (drop_hover_track_.has_value() && drop_hover_frame_.has_value()) {
+            drawGhost(
+                *drop_hover_track_,
+                *drop_hover_frame_,
+                drag_preview_duration_frames_,
+                drag_preview_label_,
+                drag_preview_valid_);
+        } else {
+            drawInvalidMarker(drag_preview_position_);
+        }
+    } else if (drag_hovering_ && drop_hover_track_.has_value() &&
+               drop_hover_frame_.has_value() && total > 0) {
+        const auto content = trackContentRect(*drop_hover_track_);
+        const auto x = content.left() + content.width() *
+            static_cast<double>(*drop_hover_frame_) / total;
+        painter.setPen(QPen(QColor("#9ed8ff"), 2, Qt::DashLine));
+        painter.drawLine(
+            QPointF(x, content.top() - 4),
+            QPointF(x, content.bottom() + 4));
+        painter.setBrush(QColor("#9ed8ff"));
+        painter.drawEllipse(QPointF(x, content.top() - 5), 3, 3);
     }
 
     const bool active_clip_valid = active_clip_.has_value() &&
@@ -972,6 +1166,7 @@ void TimelineWidget::dropEvent(QDropEvent* event) {
         event->acceptProposedAction();
         update();
     } else {
+        clearDropHover();
         event->ignore();
     }
 }
@@ -982,10 +1177,19 @@ bool TimelineWidget::isSupportedDrop(const QMimeData* mime_data) const noexcept 
          mime_data->hasFormat(ui::kEffectIdMimeType));
 }
 
+void TimelineWidget::clearDragPreview() {
+    drag_preview_kind_ = DragPreviewKind::None;
+    drag_preview_position_ = {};
+    drag_preview_duration_frames_ = 1;
+    drag_preview_label_.clear();
+    drag_preview_valid_ = false;
+}
+
 void TimelineWidget::clearDropHover() {
     drag_hovering_ = false;
     drop_hover_track_.reset();
     drop_hover_frame_.reset();
+    clearDragPreview();
     update();
 }
 
@@ -994,15 +1198,29 @@ bool TimelineWidget::updateDropHover(
     const QPointF& position) {
     const auto track = trackAt(position.y());
     const auto frame = globalFrameAt(position.x());
-    const bool accepted = isSupportedDrop(mime_data) &&
+    const bool supported = isSupportedDrop(mime_data);
+    const bool accepted = supported &&
         track.has_value() && frame.has_value();
-    drag_hovering_ = accepted;
+    drag_hovering_ = supported;
+    drag_preview_position_ = position;
     if (accepted) {
         drop_hover_track_ = track;
         drop_hover_frame_ = frame;
     } else {
         drop_hover_track_.reset();
         drop_hover_frame_.reset();
+    }
+    if (supported && mime_data->hasFormat(ui::kMediaPathMimeType)) {
+        drag_preview_kind_ = DragPreviewKind::MediaDrop;
+        drag_preview_duration_frames_ = mediaDropDuration(mime_data);
+        drag_preview_label_ = mediaDropLabel(mime_data);
+        drag_preview_valid_ = accepted &&
+            !placementOverlaps(
+                *track,
+                *frame,
+                drag_preview_duration_frames_);
+    } else {
+        clearDragPreview();
     }
     update();
     return accepted;
@@ -1217,6 +1435,7 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         moving_active_ = false;
         moving_clip_ = *location;
         move_press_position_ = event->position();
+        drag_preview_position_ = event->position();
         move_target_track_ = location->track_index;
         move_target_frame_ = tracks_[location->track_index].clips[location->clip_index].timeline_start_frame;
         grabMouse();
@@ -1267,6 +1486,7 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
         emit trimStarted();
     }
     if (moving_active_) {
+        drag_preview_position_ = event->position();
         move_target_track_ = trackAt(event->position().y());
         if (move_target_track_.has_value()) {
             move_target_frame_ = globalFrameAt(event->position().x()).value_or(0);
@@ -1338,6 +1558,7 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
         move_pending_ = false;
         moving_active_ = false;
         move_target_track_.reset();
+        clearDragPreview();
         releaseMouse();
         if (moved && target_track.has_value()) {
             emit clipMoveRequestedAt(

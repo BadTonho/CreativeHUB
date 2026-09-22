@@ -134,6 +134,20 @@ private:
     void emitLegacySelection(const ClipLocation& location);
     [[nodiscard]] bool isSupportedDrop(
         const QMimeData* mime_data) const noexcept;
+    [[nodiscard]] std::int64_t mediaDropDuration(
+        const QMimeData* mime_data) const noexcept;
+    [[nodiscard]] QString mediaDropLabel(
+        const QMimeData* mime_data) const;
+    [[nodiscard]] bool placementOverlaps(
+        std::size_t track_index,
+        std::int64_t start_frame,
+        std::int64_t duration_frames,
+        std::optional<ClipLocation> excluded = std::nullopt) const noexcept;
+    [[nodiscard]] QRectF previewRect(
+        std::size_t track_index,
+        std::int64_t start_frame,
+        std::int64_t duration_frames) const noexcept;
+    void clearDragPreview();
     void clearDropHover();
     [[nodiscard]] bool updateDropHover(
         const QMimeData* mime_data,
@@ -174,6 +188,12 @@ private:
     bool seek_pending_ = false;
     QPointF seek_press_position_{};
     ClipLocation seek_clip_{};
+    enum class DragPreviewKind { None, MediaDrop };
+    DragPreviewKind drag_preview_kind_ = DragPreviewKind::None;
+    QPointF drag_preview_position_{};
+    std::int64_t drag_preview_duration_frames_ = 1;
+    QString drag_preview_label_;
+    bool drag_preview_valid_ = false;
     bool drag_hovering_ = false;
     std::optional<std::size_t> drop_hover_track_;
     std::optional<std::int64_t> drop_hover_frame_;

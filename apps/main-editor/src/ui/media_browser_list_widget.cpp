@@ -166,6 +166,19 @@ QMimeData* createMediaBrowserDragMimeData(
     if (!source_path.isEmpty()) {
         mime_data->setData(ui::kMediaPathMimeType, source_path.toUtf8());
     }
+    const auto setOptionalRole = [item, mime_data](int role, const char* mime_type) {
+        const auto value = item->data(role);
+        if (value.isValid() && !value.isNull()) {
+            mime_data->setData(mime_type, value.toString().toUtf8());
+        }
+    };
+    setOptionalRole(kMediaFrameCountRole, ui::kMediaFrameCountMimeType);
+    setOptionalRole(kMediaFrameRateRole, ui::kMediaFrameRateMimeType);
+    setOptionalRole(kMediaDurationSecondsRole, ui::kMediaDurationSecondsMimeType);
+    const auto display_name = item->data(kMediaFullDisplayNameRole).toString();
+    if (!display_name.isEmpty()) {
+        mime_data->setData(ui::kMediaDisplayNameMimeType, display_name.toUtf8());
+    }
     return mime_data;
 }
 

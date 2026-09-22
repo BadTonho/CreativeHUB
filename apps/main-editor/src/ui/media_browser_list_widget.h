@@ -15,6 +15,9 @@ inline constexpr int kMediaInfoRole = Qt::UserRole + 2;
 inline constexpr int kMediaItemTypeRole = Qt::UserRole + 3;
 inline constexpr int kMediaBinPathRole = Qt::UserRole + 4;
 inline constexpr int kMediaFullDisplayNameRole = Qt::UserRole + 5;
+inline constexpr int kMediaFrameCountRole = Qt::UserRole + 6;
+inline constexpr int kMediaFrameRateRole = Qt::UserRole + 7;
+inline constexpr int kMediaDurationSecondsRole = Qt::UserRole + 8;
 
 inline constexpr int kMediaItemTypeMedia = 0;
 inline constexpr int kMediaItemTypeBin = 1;
