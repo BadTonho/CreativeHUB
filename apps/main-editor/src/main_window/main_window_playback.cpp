@@ -1093,7 +1093,10 @@ void MainWindow::handlePlaybackFrame(
     preserved_timeline_playhead_frame_.reset();
     playback_frame_index_ = frame_index;
     preview_widget_->setFrame(frame);
-    if (timeline_widget_ != nullptr && selectedMediaMatchesTimeline()) {
+    // Playback follows the active timeline clip even when the Media Browser
+    // selection is a bin or a different media item. Gating this update on the
+    // browser selection leaves the playhead frozen while frame_index advances.
+    if (timeline_widget_ != nullptr && canPlaybackSelectedMedia()) {
         timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());
     }
     updateInspector();
