@@ -25,7 +25,7 @@ updated intentionally.
 | Structured logging | File creation, required fields, escaping, rotation, retention limit |
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions |
 | Playback session | Sequential frames, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
-| Playback worker | Media activation, generation handling, seek coalescing, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
+| Playback worker | Media activation, generation handling, seek coalescing, precise clock pacing, latest-frame mailbox behavior, controlled intermediate-frame skipping, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
 | Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom through 51,200%, frame-level guides, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
@@ -33,7 +33,7 @@ updated intentionally.
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
 | Settings dialog | Modal shell, General, Timeline, and Shortcuts tabs, Close action, independent component construction, and editable shortcut preferences |
-| Preview performance metrics | Deterministic counter/timing aggregation, first-time text-rasterization timing, text composition fast-path counters, decoded/text/final-composition cache-hit counters, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
+| Preview performance metrics | Deterministic counter/timing aggregation, playback tick/skipped/coalesced counters, pacing-lag averages and maxima, first-time text-rasterization timing, text composition fast-path counters, decoded/text/final-composition cache-hit counters, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
@@ -150,6 +150,13 @@ in the running Main Editor after UI or integration changes:
   and `frame_cache_copy_avg_ms`; confirm that sequential playback reuses the
   pixel converter, reports zero `frame_cache_copy_count`, keeps the same frame
   counts, and does not add overwritten frames or visual differences;
+- with Preview metrics enabled during playback, compare `playback_ticks`,
+  `pacing_skipped_frames`, `pacing_coalesced_frames`, `pacing_lag_avg_ms`,
+  `pacing_lag_max_ms`, `emitted_frames`, `received_frames`,
+  `submitted_frames`, `gpu_presented_frames`, and `overwritten_frames`;
+  confirm that a simple run stays close to the source FPS, that intentional
+  catch-up reports skipped frames instead of emitting a burst, and that the
+  one-slot mailbox prevents unnecessary UI queue growth;
 - the Timeline footer RAM indicator: confirm it is aligned to the right, uses
   the `RAM: <megabytes> MB` format, refreshes approximately once per
   second, reports only the Main Editor process, and does not affect playback,
@@ -184,6 +191,13 @@ in the running Main Editor after UI or integration changes:
   not retain stale frames after clear, and the shared frame handoff preserves
   the same visual output; repeat with `CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1`
   to confirm the lazy CPU fallback, grayscale, and invalid-frame behavior.
+- playback pacing: run a video with and without audio, then add a text layer
+  and repeat; confirm the Preview follows the newest target frame, audio stays
+  synchronized when available, intermediate frames are skipped only when the
+  worker is late, `pacing_coalesced_frames` identifies UI pressure, and
+  `overwritten_frames` is not confused with mailbox coalescing. Verify seek,
+  Previous Frame, Next Frame, Blade Tool, selection, playback completion, and
+  project dirty state remain unchanged.
 
 Record a manual result in the task or commit description when a milestone
 changes one of these behaviors.

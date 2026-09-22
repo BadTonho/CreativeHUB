@@ -181,6 +181,8 @@ add_executable(creative-suite-main-editor-playback-worker-tests
     ../src/playback/audio_output.h
     ../src/playback/playback_worker.cpp
     ../src/playback/playback_worker.h
+    ../src/playback/playback_frame_mailbox.cpp
+    ../src/playback/playback_frame_mailbox.h
     ../src/rendering/frame_compositor.cpp
     ../src/rendering/frame_compositor.h
     ../src/rendering/preview_performance_metrics.cpp

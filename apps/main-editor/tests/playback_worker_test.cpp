@@ -1,15 +1,18 @@
 #include "playback/playback_worker.h"
+#include "playback/playback_frame_mailbox.h"
 #include "rendering/preview_performance_metrics.h"
 
 #include <QGuiApplication>
 #include <QTimer>
 
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 #include <optional>
@@ -514,6 +517,110 @@ void validateCompositionCaching() {
             "The new composition did not rebuild the text composition fast path state.");
 }
 
+void validatePlaybackFrameMailbox() {
+    playback::PlaybackFrameMailbox mailbox;
+    auto first = std::make_shared<const media::VideoFrame>(media::VideoFrame{
+        1, 1, 4, std::vector<std::uint8_t>{1, 2, 3, 4}});
+    auto second = std::make_shared<const media::VideoFrame>(media::VideoFrame{
+        1, 1, 4, std::vector<std::uint8_t>{5, 6, 7, 8}});
+
+    require(
+        !mailbox.publish(playback::PlaybackFramePacket{first, 1, 10}),
+        "The first mailbox packet was incorrectly reported as replaced.");
+    require(mailbox.acquireDispatch(),
+            "The mailbox did not reserve its first UI dispatch.");
+    require(
+        mailbox.publish(playback::PlaybackFramePacket{second, 2, 11}),
+        "The mailbox did not replace an older pending packet.");
+
+    const auto packet = mailbox.take();
+    require(packet.has_value() && packet->frame == second &&
+                packet->frame_index == 2 && packet->generation == 11,
+            "The mailbox did not retain the newest shared frame packet.");
+    require(!mailbox.finishDispatch(),
+            "The mailbox kept a dispatch scheduled after draining its packet.");
+    require(mailbox.acquireDispatch(),
+            "The mailbox could not reserve a subsequent dispatch.");
+    mailbox.clearPending();
+    require(!mailbox.finishDispatch(),
+            "Clearing the mailbox did not remove the pending packet.");
+}
+
+void validateCompositionPacing(QCoreApplication& application) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
+
+    playback::PlaybackWorker worker;
+    std::vector<qint64> frame_indices;
+    bool playback_finished = false;
+    bool playback_error = false;
+
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&frame_indices](playback::VideoFramePtr frame, qint64 frame_index, quint64) {
+            require(frame != nullptr, "Pacing emitted an empty composition frame.");
+            frame_indices.push_back(frame_index);
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackFinished,
+        [&application, &playback_finished](quint64, bool during_playback) {
+            playback_finished = during_playback;
+            application.quit();
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&application, &playback_error](const QString&, qint64, quint64) {
+            playback_error = true;
+            application.quit();
+        });
+
+    playback::CompositionLayerSpec layer;
+    layer.kind = timeline::ClipKind::Text;
+    layer.frame_rate = 30.0;
+    layer.timeline_start_frame = 0;
+    layer.segment_frame_count = 6;
+    layer.track_index = 0;
+    layer.clip_index = 0;
+    layer.text.content = "Pacing";
+
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{layer},
+        {},
+        401);
+    worker.play();
+
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(
+        &timeout,
+        &QTimer::timeout,
+        &application,
+        &QCoreApplication::quit);
+    timeout.start(2000);
+    application.exec();
+
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    metrics.setEnabled(false);
+    require(!playback_error && playback_finished,
+            "Delayed composition playback did not finish cleanly.");
+    require(frame_indices.size() >= 2,
+            "Delayed composition playback emitted too few frames.");
+    require(snapshot.playback_ticks >= frame_indices.size(),
+            "Playback tick metrics did not cover composition playback.");
+    require(snapshot.pacing_skipped_frames > 0,
+            "Delayed composition playback did not record skipped frames.");
+    for (std::size_t index = 1; index < frame_indices.size(); ++index) {
+        require(frame_indices[index] > frame_indices[index - 1],
+                "Pacing emitted non-monotonic frame indices.");
+    }
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -522,6 +629,8 @@ int main(int argc, char* argv[]) {
     try {
         validateMissingMedia(application);
         validateSeekWithoutMedia(application);
+        validatePlaybackFrameMailbox();
+        validateCompositionPacing(application);
         validateCompositionCaching();
         if (argc == 2) {
             validateReference(application, std::filesystem::path(argv[1]));

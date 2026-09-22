@@ -105,6 +105,7 @@ void PlaybackWorker::setMedia(
     source_start_frame_ = source_start_frame;
     segment_frame_count_ = segment_frame_count;
     current_frame_index_ = 0;
+    resetPlaybackClock();
     track_audio_gain_ = std::isfinite(track_audio_gain) && track_audio_gain >= 0.0 && track_audio_gain <= 2.0
         ? track_audio_gain : 1.0;
     track_audio_muted_ = track_audio_muted;
@@ -147,6 +148,8 @@ void PlaybackWorker::play() {
         if (!composition_enabled_ || segment_frame_count_ <= 0) return;
 
         ensureTimer();
+        if (!playing_) startPlaybackClock();
+        timer_->setTimerType(Qt::PreciseTimer);
         timer_->start(frameIntervalMilliseconds());
         if (!playing_) {
             playing_ = true;
@@ -220,6 +223,8 @@ void PlaybackWorker::play() {
         }
 
         ensureTimer();
+        if (!playing_) startPlaybackClock();
+        timer_->setTimerType(Qt::PreciseTimer);
         timer_->start(frameIntervalMilliseconds());
         if (!playing_) {
             playing_ = true;
@@ -235,6 +240,7 @@ void PlaybackWorker::play() {
 void PlaybackWorker::pause() {
     if (timer_ != nullptr) timer_->stop();
     if (audio_output_ != nullptr) audio_output_->pause();
+    resetPlaybackClock();
     if (!playing_) return;
 
     playing_ = false;
@@ -599,6 +605,21 @@ void PlaybackWorker::processPendingSeek() {
 void PlaybackWorker::decodeTick() {
     if (!playing_) return;
 
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    const auto now = Clock::now();
+    metrics.recordPlaybackTick();
+    if (last_playback_tick_valid_) {
+        const auto elapsed = now - last_playback_tick_at_;
+        const auto expected = std::chrono::milliseconds(frameIntervalMilliseconds());
+        if (elapsed > expected) {
+            metrics.recordTiming(
+                rendering::PreviewTiming::PacingLag,
+                elapsed - expected);
+        }
+    }
+    last_playback_tick_at_ = now;
+    last_playback_tick_valid_ = true;
+
     try {
         if (composition_enabled_ && source_path_.empty()) {
             if (segment_frame_count_ > 0 &&
@@ -606,7 +627,15 @@ void PlaybackWorker::decodeTick() {
                 finishPlayback();
                 return;
             }
-            ++current_frame_index_;
+
+            const auto wall_target_frame = wallClockTargetFrame(now);
+            const auto target_frame = segment_frame_count_ > 0
+                ? std::min(segment_frame_count_ - 1, wall_target_frame)
+                : wall_target_frame;
+            if (target_frame <= current_frame_index_) return;
+            metrics.recordPacingSkippedFrames(static_cast<std::uint64_t>(
+                target_frame - current_frame_index_ - 1));
+            current_frame_index_ = target_frame;
             emitComposedFrame();
             return;
         }
@@ -628,73 +657,46 @@ void PlaybackWorker::decodeTick() {
             finishPlayback();
             return;
         }
-        if (composition_enabled_) {
-            if (audio_enabled_ && audio_output_ != nullptr) {
-                const auto elapsed_usecs = std::max<qint64>(
-                    0,
-                    audio_output_->processedUsecs() - audio_clock_origin_usecs_);
-                const auto target_frame = std::min<std::int64_t>(
-                    segment_frame_count_ > 0
-                        ? segment_frame_count_ - 1
-                        : current_frame_index_ + 1,
-                    audio_clock_origin_frame_ + static_cast<std::int64_t>(
-                        std::floor(static_cast<double>(elapsed_usecs) *
-                            frame_rate_ / 1000000.0)));
-                if (target_frame <= current_frame_index_) return;
-                while (current_frame_index_ < target_frame) {
-                    ++current_frame_index_;
-                    emitComposedFrame();
-                }
-            } else {
-                ++current_frame_index_;
-                emitComposedFrame();
-            }
-            return;
-        }
+
+        std::int64_t target_frame = wallClockTargetFrame(now);
         if (audio_enabled_ && audio_output_ != nullptr) {
             const auto elapsed_usecs = std::max<qint64>(
                 0,
                 audio_output_->processedUsecs() - audio_clock_origin_usecs_);
-            const auto target_frame = std::min<std::int64_t>(
-                segment_frame_count_ > 0 ? segment_frame_count_ - 1 : current_frame_index_ + 1,
-                audio_clock_origin_frame_ + static_cast<std::int64_t>(
-                    std::floor(static_cast<double>(elapsed_usecs) * frame_rate_ / 1000000.0)));
-            if (target_frame <= current_frame_index_) return;
-            auto& metrics = rendering::PreviewPerformanceMetrics::instance();
-            while (current_frame_index_ < target_frame) {
-                std::optional<media::VideoFramePtr> frame;
-                {
-                    rendering::PreviewPerformanceScope timing(
-                        metrics,
-                        rendering::PreviewTiming::Decode);
-                    frame = session_->decode_next_frame();
-                }
-                consumeDecodeCacheHits(*session_);
-                if (!frame.has_value() ||
-                    !isSourceFrameInRange(session_->current_frame_index())) {
-                    finishPlayback();
-                    return;
-                }
-                metrics.recordDecodedFrame();
-                emitFrame(std::move(frame));
-            }
+            target_frame = audio_clock_origin_frame_ + static_cast<std::int64_t>(
+                std::floor(static_cast<double>(elapsed_usecs) *
+                    frame_rate_ / 1000000.0));
+        }
+        if (segment_frame_count_ > 0) {
+            target_frame = std::min(target_frame, segment_frame_count_ - 1);
+        }
+        if (target_frame <= current_frame_index_) return;
+
+        metrics.recordPacingSkippedFrames(static_cast<std::uint64_t>(
+            target_frame - current_frame_index_ - 1));
+        if (composition_enabled_) {
+            current_frame_index_ = target_frame;
+            emitComposedFrame();
             return;
         }
-        auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+
         std::optional<media::VideoFramePtr> frame;
-        {
-            rendering::PreviewPerformanceScope timing(
-                metrics,
-                rendering::PreviewTiming::Decode);
-            frame = session_->decode_next_frame();
+        while (current_frame_index_ < target_frame) {
+            {
+                rendering::PreviewPerformanceScope timing(
+                    metrics,
+                    rendering::PreviewTiming::Decode);
+                frame = session_->decode_next_frame();
+            }
+            consumeDecodeCacheHits(*session_);
+            if (!frame.has_value() ||
+                !isSourceFrameInRange(session_->current_frame_index())) {
+                finishPlayback();
+                return;
+            }
+            metrics.recordDecodedFrame();
+            ++current_frame_index_;
         }
-        consumeDecodeCacheHits(*session_);
-        if (!frame.has_value() ||
-            !isSourceFrameInRange(session_->current_frame_index())) {
-            finishPlayback();
-            return;
-        }
-        metrics.recordDecodedFrame();
         emitFrame(std::move(frame));
     } catch (const media::MediaError& error) {
         reportFailure(error, "decode_tick");
@@ -895,6 +897,7 @@ void PlaybackWorker::ensureTimer() {
 void PlaybackWorker::finishPlayback() {
     if (timer_ != nullptr) timer_->stop();
     if (audio_output_ != nullptr) audio_output_->stop();
+    resetPlaybackClock();
     audio_position_valid_ = false;
     pending_audio_bytes_.clear();
     const bool was_playing = playing_;
@@ -1238,6 +1241,36 @@ int PlaybackWorker::frameIntervalMilliseconds() const noexcept {
     const double interval = 1000.0 / frame_rate_;
     const auto rounded = static_cast<int>(std::lround(interval));
     return std::clamp(rounded, 1, 1000);
+}
+
+void PlaybackWorker::startPlaybackClock() noexcept {
+    playback_clock_started_at_ = Clock::now();
+    last_playback_tick_at_ = playback_clock_started_at_;
+    playback_clock_origin_frame_ = current_frame_index_;
+    playback_clock_valid_ = true;
+    last_playback_tick_valid_ = false;
+}
+
+void PlaybackWorker::resetPlaybackClock() noexcept {
+    playback_clock_valid_ = false;
+    last_playback_tick_valid_ = false;
+}
+
+std::int64_t PlaybackWorker::wallClockTargetFrame(
+    Clock::time_point now) const noexcept {
+    if (!playback_clock_valid_ || now <= playback_clock_started_at_) {
+        return playback_clock_origin_frame_;
+    }
+
+    const auto elapsed = std::chrono::duration<double>(
+        now - playback_clock_started_at_).count();
+    const auto frame_offset = static_cast<std::int64_t>(std::llround(
+        std::max(0.0, elapsed * frame_rate_)));
+    if (frame_offset > std::numeric_limits<std::int64_t>::max() -
+            playback_clock_origin_frame_) {
+        return std::numeric_limits<std::int64_t>::max();
+    }
+    return playback_clock_origin_frame_ + frame_offset;
 }
 
 } // namespace playback

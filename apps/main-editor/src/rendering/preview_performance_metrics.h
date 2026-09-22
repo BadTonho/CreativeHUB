@@ -21,6 +21,7 @@ enum class PreviewTiming {
     CpuSurface,
     GpuUpload,
     GpuPaint,
+    PacingLag,
 };
 
 struct PreviewTimingSnapshot {
@@ -45,6 +46,9 @@ struct PreviewPerformanceSnapshot {
     std::uint64_t submitted_frames = 0;
     std::uint64_t gpu_presented_frames = 0;
     std::uint64_t overwritten_frames = 0;
+    std::uint64_t playback_ticks = 0;
+    std::uint64_t pacing_skipped_frames = 0;
+    std::uint64_t pacing_coalesced_frames = 0;
     std::uint64_t last_frame_width = 0;
     std::uint64_t last_frame_height = 0;
 
@@ -62,6 +66,7 @@ struct PreviewPerformanceSnapshot {
     PreviewTimingSnapshot cpu_surface;
     PreviewTimingSnapshot gpu_upload;
     PreviewTimingSnapshot gpu_paint;
+    PreviewTimingSnapshot pacing_lag;
 };
 
 class PreviewPerformanceMetrics final {
@@ -87,6 +92,9 @@ public:
     void recordSubmittedFrame(int width, int height) noexcept;
     void recordGpuPresentedFrame() noexcept;
     void recordOverwrittenFrame() noexcept;
+    void recordPlaybackTick() noexcept;
+    void recordPacingSkippedFrames(std::uint64_t count) noexcept;
+    void recordPacingCoalescedFrame() noexcept;
 
     [[nodiscard]] PreviewPerformanceSnapshot takeSnapshotAndReset() noexcept;
 
@@ -113,6 +121,9 @@ private:
     std::atomic<std::uint64_t> submitted_frames_{0};
     std::atomic<std::uint64_t> gpu_presented_frames_{0};
     std::atomic<std::uint64_t> overwritten_frames_{0};
+    std::atomic<std::uint64_t> playback_ticks_{0};
+    std::atomic<std::uint64_t> pacing_skipped_frames_{0};
+    std::atomic<std::uint64_t> pacing_coalesced_frames_{0};
     std::atomic<std::uint64_t> last_frame_width_{0};
     std::atomic<std::uint64_t> last_frame_height_{0};
     TimingStorage decode_;
@@ -129,6 +140,7 @@ private:
     TimingStorage cpu_surface_;
     TimingStorage gpu_upload_;
     TimingStorage gpu_paint_;
+    TimingStorage pacing_lag_;
 };
 
 class PreviewPerformanceScope final {

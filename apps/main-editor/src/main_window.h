@@ -5,6 +5,7 @@
 #include "media/video_metadata.h"
 #include "media/video_probe.h"
 #include "playback/playback_worker.h"
+#include "playback/playback_frame_mailbox.h"
 #include "project/project_document.h"
 #include "timeline/timeline_history.h"
 #include "timeline/timeline_model.h"
@@ -232,6 +233,11 @@ private:
         playback::VideoFramePtr frame,
         qint64 frame_index,
         quint64 generation);
+    void queuePlaybackFrame(
+        playback::VideoFramePtr frame,
+        qint64 frame_index,
+        quint64 generation);
+    void drainPlaybackFrameMailbox();
     void handlePlaybackMediaReady(quint64 generation);
     void handlePlaybackStateChanged(bool playing, quint64 generation);
     void handlePlaybackFinished(quint64 generation, bool during_playback);
@@ -370,6 +376,7 @@ private:
     media::VideoDecoder video_decoder_;
     QThread playback_thread_;
     playback::PlaybackWorker* playback_worker_ = nullptr;
+    playback::PlaybackFrameMailbox playback_frame_mailbox_;
     std::int64_t playback_frame_index_ = 0;
     quint64 playback_generation_ = 0;
     bool playback_is_playing_ = false;

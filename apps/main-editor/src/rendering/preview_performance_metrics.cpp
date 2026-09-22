@@ -73,6 +73,7 @@ void PreviewPerformanceMetrics::recordTiming(
     case PreviewTiming::CpuSurface: storage = &cpu_surface_; break;
     case PreviewTiming::GpuUpload: storage = &gpu_upload_; break;
     case PreviewTiming::GpuPaint: storage = &gpu_paint_; break;
+    case PreviewTiming::PacingLag: storage = &pacing_lag_; break;
     }
 
     const auto nanoseconds = toNanoseconds(elapsed);
@@ -138,6 +139,23 @@ void PreviewPerformanceMetrics::recordOverwrittenFrame() noexcept {
     if (isEnabled()) overwritten_frames_.fetch_add(1, std::memory_order_relaxed);
 }
 
+void PreviewPerformanceMetrics::recordPlaybackTick() noexcept {
+    if (isEnabled()) playback_ticks_.fetch_add(1, std::memory_order_relaxed);
+}
+
+void PreviewPerformanceMetrics::recordPacingSkippedFrames(
+    std::uint64_t count) noexcept {
+    if (isEnabled() && count > 0) {
+        pacing_skipped_frames_.fetch_add(count, std::memory_order_relaxed);
+    }
+}
+
+void PreviewPerformanceMetrics::recordPacingCoalescedFrame() noexcept {
+    if (isEnabled()) {
+        pacing_coalesced_frames_.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
 PreviewTimingSnapshot PreviewPerformanceMetrics::takeTimingSnapshot(
     TimingStorage& storage) noexcept {
     return PreviewTimingSnapshot{
@@ -160,6 +178,9 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
         submitted_frames_.exchange(0, std::memory_order_relaxed),
         gpu_presented_frames_.exchange(0, std::memory_order_relaxed),
         overwritten_frames_.exchange(0, std::memory_order_relaxed),
+        playback_ticks_.exchange(0, std::memory_order_relaxed),
+        pacing_skipped_frames_.exchange(0, std::memory_order_relaxed),
+        pacing_coalesced_frames_.exchange(0, std::memory_order_relaxed),
         last_frame_width_.exchange(0, std::memory_order_relaxed),
         last_frame_height_.exchange(0, std::memory_order_relaxed),
         takeTimingSnapshot(decode_),
@@ -175,7 +196,8 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
         takeTimingSnapshot(preview_submit_),
         takeTimingSnapshot(cpu_surface_),
         takeTimingSnapshot(gpu_upload_),
-        takeTimingSnapshot(gpu_paint_)};
+        takeTimingSnapshot(gpu_paint_),
+        takeTimingSnapshot(pacing_lag_)};
 }
 
 PreviewPerformanceScope::PreviewPerformanceScope(

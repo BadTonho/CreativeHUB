@@ -36,6 +36,22 @@ thread. The OpenGL surface retains the shared payload until upload, and only
 the CPU fallback creates a copied image. Non-contiguous rows use a reusable
 staging buffer instead of allocating a new buffer for every upload.
 
+Playback uses a precise timer and a steady-clock target frame. The audio clock
+has priority when audio output is available; video-only playback derives its
+target from elapsed time and the source frame rate. If the worker falls behind,
+it advances sequential decoding to the newest target but publishes at most one
+frame per tick. Intermediate visual frames may therefore be skipped without
+changing the source FPS, timeline positions, or project data. Composition
+playback renders only the newest target frame in this situation.
+
+The worker/UI handoff uses a one-slot latest-frame mailbox. A new immutable
+shared payload replaces an older pending payload before the UI drain callback
+runs, so Qt's event queue does not accumulate one callback per decoded frame.
+The mailbox records `pacing_coalesced_frames`; the OpenGL surface keeps its
+separate `overwritten_frames` metric for replacements that happen after the UI
+submission. Generation checks still discard stale payloads after a seek or
+clip change.
+
 ## Composition pipeline and bounded caches
 
 The playback session keeps a bounded least-recently-used cache of up to eight
@@ -95,6 +111,14 @@ rasterization samples. The summary also includes the aggregate
 entries are written.
 When disabled, the timer stops and the hot path does not collect detailed
 timings.
+
+The same summaries include playback pacing data: `playback_ticks`,
+`pacing_skipped_frames`, `pacing_coalesced_frames`, and average/maximum
+`pacing_lag`. The existing emitted, received, submitted, and GPU-presented
+counts provide the effective per-second playback rate. A skipped frame was
+not published because the worker caught up to a newer target; a coalesced
+frame was replaced in the worker/UI mailbox. These counters are diagnostic
+only and do not alter the Timeline or project state.
 
 Decode timing also exposes packet read/send, codec frame receive, RGBA pixel
 conversion, and decoded-frame cache-copy submetrics. The total `decode_*`

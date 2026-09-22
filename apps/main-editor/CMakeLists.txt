@@ -46,6 +46,8 @@ add_executable(creative-suite-main-editor
     src/rendering/text_renderer.h
     src/playback/playback_worker.cpp
     src/playback/playback_worker.h
+    src/playback/playback_frame_mailbox.cpp
+    src/playback/playback_frame_mailbox.h
     src/playback/audio_output.cpp
     src/playback/audio_output.h
     src/logging/logger.cpp

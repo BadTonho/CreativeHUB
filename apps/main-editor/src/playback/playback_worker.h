@@ -15,6 +15,7 @@
 #include <QtGlobal>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -150,6 +151,10 @@ private:
     [[nodiscard]] bool isSourceFrameInRange(std::int64_t source_frame) const noexcept;
     [[nodiscard]] bool isSeekCurrent(quint64 sequence) const noexcept;
     [[nodiscard]] int frameIntervalMilliseconds() const noexcept;
+    void startPlaybackClock() noexcept;
+    void resetPlaybackClock() noexcept;
+    [[nodiscard]] std::int64_t wallClockTargetFrame(
+        std::chrono::steady_clock::time_point now) const noexcept;
 
     QTimer* timer_ = nullptr;
     std::unique_ptr<media::VideoPlaybackSession> session_;
@@ -174,6 +179,12 @@ private:
     std::int64_t audio_clock_origin_frame_ = 0;
     quint64 generation_ = 0;
     bool playing_ = false;
+    using Clock = std::chrono::steady_clock;
+    Clock::time_point playback_clock_started_at_{};
+    Clock::time_point last_playback_tick_at_{};
+    std::int64_t playback_clock_origin_frame_ = 0;
+    bool playback_clock_valid_ = false;
+    bool last_playback_tick_valid_ = false;
     std::atomic<qint64> pending_seek_frame_{std::numeric_limits<qint64>::min()};
     std::atomic<quint64> pending_seek_generation_{0};
     std::atomic<quint64> pending_seek_sequence_{0};

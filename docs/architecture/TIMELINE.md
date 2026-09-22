@@ -98,6 +98,23 @@ paused at the end of the last clip.
 Audio is never mixed between overlapping tracks: only the visible top-priority
 clip contributes.
 
+During active playback, a precise worker timer follows a steady-clock target.
+Audio output remains the authoritative clock when available; otherwise the
+worker derives the target from elapsed time and the media frame rate. A late
+tick advances sequential decoding to the newest target but publishes only
+that frame. Composition playback similarly renders only the newest target, so
+intermediate visual frames can be skipped instead of creating a burst of UI
+events. This keeps the Preview responsive while preserving playback speed,
+source FPS, clip boundaries, seek behavior, and the final frame.
+
+Frames use a one-slot latest-frame mailbox between the playback thread and the
+UI thread. The mailbox shares immutable `VideoFrame` payloads and replaces a
+pending frame without copying pixels. This is separate from the OpenGL
+surface's pending-frame replacement. Playback metrics report both
+`pacing_coalesced_frames` (worker/UI handoff pressure) and
+`overwritten_frames` (Preview surface pressure), together with skipped frames,
+playback ticks, and pacing lag in the one-second diagnostic summaries.
+
 For composed playback, decoding and layer blending are separate worker stages.
 The worker reuses a bounded decoded-frame cache, advances sequential decoder
 requests without an unnecessary seek, and falls back to a full seek for

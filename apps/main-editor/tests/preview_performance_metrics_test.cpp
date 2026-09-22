@@ -48,7 +48,18 @@ int main() {
                 "Disabled metrics recorded decode substage timing data.");
         require(disabled.text_rasterization.count == 0,
                 "Disabled metrics recorded text rasterization timing data.");
+        require(disabled.playback_ticks == 0 &&
+                    disabled.pacing_skipped_frames == 0 &&
+                    disabled.pacing_coalesced_frames == 0 &&
+                    disabled.pacing_lag.count == 0,
+                "Disabled metrics recorded playback pacing data.");
         metrics.recordTextCompositionFastPathHit();
+        metrics.recordPlaybackTick();
+        metrics.recordPacingSkippedFrames(3);
+        metrics.recordPacingCoalescedFrame();
+        metrics.recordTiming(
+            rendering::PreviewTiming::PacingLag,
+            std::chrono::milliseconds(5));
         require(metrics.takeSnapshotAndReset().text_composition_fast_path_hits == 0,
                 "Disabled metrics recorded text composition fast-path data.");
 
@@ -65,6 +76,9 @@ int main() {
         metrics.recordSubmittedFrame(1920, 1080);
         metrics.recordGpuPresentedFrame();
         metrics.recordOverwrittenFrame();
+        metrics.recordPlaybackTick();
+        metrics.recordPacingSkippedFrames(2);
+        metrics.recordPacingCoalescedFrame();
         metrics.recordTiming(
             rendering::PreviewTiming::Decode,
             std::chrono::milliseconds(2));
@@ -95,6 +109,12 @@ int main() {
         metrics.recordTiming(
             rendering::PreviewTiming::TextRasterization,
             std::chrono::milliseconds(7));
+        metrics.recordTiming(
+            rendering::PreviewTiming::PacingLag,
+            std::chrono::milliseconds(2));
+        metrics.recordTiming(
+            rendering::PreviewTiming::PacingLag,
+            std::chrono::milliseconds(6));
 
         const auto snapshot = metrics.takeSnapshotAndReset();
         require(snapshot.decoded_frames == 1,
@@ -121,6 +141,12 @@ int main() {
                 "GPU presented frame count is incorrect.");
         require(snapshot.overwritten_frames == 1,
                 "Overwritten frame count is incorrect.");
+        require(snapshot.playback_ticks == 1,
+                "Playback tick count is incorrect.");
+        require(snapshot.pacing_skipped_frames == 2,
+                "Skipped pacing frame count is incorrect.");
+        require(snapshot.pacing_coalesced_frames == 1,
+                "Coalesced pacing frame count is incorrect.");
         require(snapshot.last_frame_width == 1920 &&
                     snapshot.last_frame_height == 1080,
                 "Last frame dimensions are incorrect.");
@@ -166,6 +192,12 @@ int main() {
                 "Text rasterization timing average is incorrect.");
         require(snapshot.text_rasterization.maximumMilliseconds() == 7.0,
                 "Text rasterization timing maximum conversion is incorrect.");
+        require(snapshot.pacing_lag.count == 2 &&
+                    snapshot.pacing_lag.total_nanoseconds == 8'000'000 &&
+                    snapshot.pacing_lag.maximum_nanoseconds == 6'000'000 &&
+                    snapshot.pacing_lag.averageMilliseconds() == 4.0 &&
+                    snapshot.pacing_lag.maximumMilliseconds() == 6.0,
+                "Pacing lag timing aggregation is incorrect.");
 
         const auto reset = metrics.takeSnapshotAndReset();
         require(reset.decoded_frames == 0 && reset.decode.count == 0 &&
@@ -174,6 +206,10 @@ int main() {
                     reset.pixel_conversion.count == 0 &&
                     reset.frame_cache_copy.count == 0 &&
                     reset.text_rasterization.count == 0 &&
+                    reset.playback_ticks == 0 &&
+                    reset.pacing_skipped_frames == 0 &&
+                    reset.pacing_coalesced_frames == 0 &&
+                    reset.pacing_lag.count == 0 &&
                     reset.text_composition_fast_path_hits == 0,
                 "Taking a snapshot did not reset the metrics.");
         return 0;

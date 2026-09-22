@@ -101,6 +101,14 @@ void appendPerformanceContext(
     context.emplace_back(
         "overwritten_frames", std::to_string(snapshot.overwritten_frames));
     context.emplace_back(
+        "playback_ticks", std::to_string(snapshot.playback_ticks));
+    context.emplace_back(
+        "pacing_skipped_frames",
+        std::to_string(snapshot.pacing_skipped_frames));
+    context.emplace_back(
+        "pacing_coalesced_frames",
+        std::to_string(snapshot.pacing_coalesced_frames));
+    context.emplace_back(
         "last_frame_width", std::to_string(snapshot.last_frame_width));
     context.emplace_back(
         "last_frame_height", std::to_string(snapshot.last_frame_height));
@@ -121,6 +129,7 @@ void appendPerformanceContext(
     appendTimingContext(context, "cpu_surface", snapshot.cpu_surface);
     appendTimingContext(context, "gpu_upload", snapshot.gpu_upload);
     appendTimingContext(context, "gpu_paint", snapshot.gpu_paint);
+    appendTimingContext(context, "pacing_lag", snapshot.pacing_lag);
 }
 
 } // namespace
@@ -154,8 +163,8 @@ void MainWindow::flushPreviewPerformanceMetrics() {
     if (!metrics.isEnabled()) return;
 
     const auto snapshot = metrics.takeSnapshotAndReset();
-    if (snapshot.emitted_frames == 0 && snapshot.received_frames == 0 &&
-        snapshot.submitted_frames == 0) {
+    if (snapshot.playback_ticks == 0 && snapshot.emitted_frames == 0 &&
+        snapshot.received_frames == 0 && snapshot.submitted_frames == 0) {
         return;
     }
 
@@ -189,9 +198,9 @@ void MainWindow::initializePlayback() {
         &playback::PlaybackWorker::frameReady,
         this,
         [this](playback::VideoFramePtr frame, qint64 frame_index, quint64 generation) {
-            handlePlaybackFrame(std::move(frame), frame_index, generation);
+            queuePlaybackFrame(std::move(frame), frame_index, generation);
         },
-        Qt::QueuedConnection);
+        Qt::DirectConnection);
     connect(
         playback_worker_,
         &playback::PlaybackWorker::mediaReady,
@@ -250,7 +259,44 @@ void MainWindow::shutdownPlayback() {
         playback_thread_.quit();
         playback_thread_.wait();
     }
+    playback_frame_mailbox_.clearPending();
     playback_worker_ = nullptr;
+}
+
+void MainWindow::queuePlaybackFrame(
+    playback::VideoFramePtr frame,
+    qint64 frame_index,
+    quint64 generation) {
+    if (frame == nullptr) return;
+
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    if (playback_frame_mailbox_.publish(
+            playback::PlaybackFramePacket{
+                std::move(frame), frame_index, generation})) {
+        metrics.recordPacingCoalescedFrame();
+    }
+
+    if (!playback_frame_mailbox_.acquireDispatch()) return;
+    QMetaObject::invokeMethod(
+        this,
+        [this]() { drainPlaybackFrameMailbox(); },
+        Qt::QueuedConnection);
+}
+
+void MainWindow::drainPlaybackFrameMailbox() {
+    const auto packet = playback_frame_mailbox_.take();
+    if (packet.has_value()) {
+        handlePlaybackFrame(
+            packet->frame,
+            packet->frame_index,
+            packet->generation);
+    }
+
+    if (!playback_frame_mailbox_.finishDispatch()) return;
+    QMetaObject::invokeMethod(
+        this,
+        [this]() { drainPlaybackFrameMailbox(); },
+        Qt::QueuedConnection);
 }
 
 void MainWindow::sendCompositionToWorker() {
