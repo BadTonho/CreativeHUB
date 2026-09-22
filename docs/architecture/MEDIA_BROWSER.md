@@ -32,8 +32,11 @@ default of 100%, a range of 50% to 150%, and a step of 10%. It applies to both
 list and block modes while preserving their respective proportions. Block mode
 uses the cached first frame already held by the media item and does not decode a
 new frame when the view or icon scale changes. Items use compact names and video
-summaries; the large technical-details panel is intentionally not part of the
-Browser layout.
+summaries; the visible labels in the Media panel are limited to the first seven
+characters and use `...` when the original name is longer. The technical
+summary is not shown below the label; the information icon still exposes the
+complete metadata. Inline editing uses the full original name, and the large
+technical-details panel is intentionally not part of the Browser layout.
 
 `Bins` and `Media` are independent `QDockWidget` panels. They can be moved,
 resized, floated, closed, re-docked, tabified, or split side by side through
@@ -53,7 +56,9 @@ state uses version 7; older states fall back
 to the default Media Pool layout.
 
 The media view also includes the immediate child bins of the active location as
-folder items alongside the media entries. Folder items use the standard Qt
+folder items alongside the media entries. Visible folder labels follow the same
+seven-character compact form, while the bin tree keeps full names for
+navigation. Folder items use the standard Qt
 folder icon, do not participate in the media-to-Timeline drag operation, and
 can be renamed inline. The bin tree remains available for direct navigation
 and filtering; the existing parent-bin filter still includes its descendants.

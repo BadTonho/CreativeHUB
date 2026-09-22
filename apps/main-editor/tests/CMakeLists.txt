@@ -554,6 +554,8 @@ set_tests_properties(creative-suite-main-editor-effects-panel PROPERTIES
 
 add_executable(creative-suite-main-editor-media-browser-list-widget-tests
     media_browser_list_widget_test.cpp
+    ../src/main_window/main_window_support.cpp
+    ../src/main_window/main_window_support.h
     ../src/ui/media_browser_list_widget.cpp
     ../src/ui/media_browser_list_widget.h
     ../src/ui/media_drag_mime.h

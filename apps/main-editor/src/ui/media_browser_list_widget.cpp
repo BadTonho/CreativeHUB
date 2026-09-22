@@ -4,6 +4,7 @@
 
 #include <QHelpEvent>
 #include <QIcon>
+#include <QLineEdit>
 #include <QMimeData>
 #include <QPainter>
 #include <QSettings>
@@ -60,6 +61,20 @@ public:
         }
         QToolTip::hideText();
         return false;
+    }
+
+    void setEditorData(
+        QWidget* editor,
+        const QModelIndex& index) const override {
+        QStyledItemDelegate::setEditorData(editor, index);
+        auto* line_edit = qobject_cast<QLineEdit*>(editor);
+        if (line_edit == nullptr) return;
+
+        const auto full_name = index.data(
+            media_browser_ui::kMediaFullDisplayNameRole).toString();
+        if (full_name.isEmpty()) return;
+        line_edit->setText(full_name);
+        line_edit->selectAll();
     }
 
 private:

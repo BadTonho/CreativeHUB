@@ -14,6 +14,13 @@ QString fromUtf8(const std::string& value) {
     return QString::fromUtf8(value.data(), static_cast<int>(value.size()));
 }
 
+QString compactMediaBrowserName(std::string_view display_name) {
+    constexpr int kMaximumVisibleCharacters = 7;
+    const auto name = fromUtf8(std::string(display_name));
+    if (name.size() <= kMaximumVisibleCharacters) return name;
+    return name.left(kMaximumVisibleCharacters) + QStringLiteral("...");
+}
+
 std::string pathToUtf8(const std::filesystem::path& path) {
     const auto value = path.u8string();
     return std::string(reinterpret_cast<const char*>(value.data()), value.size());
@@ -92,16 +99,12 @@ QString compactMediaItemListText(
     const media::VideoMetadata& metadata,
     std::string_view display_name,
     bool offline) {
-    const auto name = fromUtf8(
-        display_name.empty() ? metadata.display_name : std::string(display_name));
-    if (offline) return QString("%1 [Offline]\nUnavailable").arg(name);
-
-    return QString("%1\n%2x%3 | %4 | %5")
-        .arg(name)
-        .arg(metadata.width)
-        .arg(metadata.height)
-        .arg(formatOptionalDouble(metadata.frame_rate, " FPS"))
-        .arg(formatOptionalDouble(metadata.duration_seconds, " s"));
+    const auto full_name = display_name.empty()
+        ? std::string_view(metadata.display_name)
+        : display_name;
+    const auto name = compactMediaBrowserName(full_name);
+    if (offline) return QString("%1 [Offline]").arg(name);
+    return name;
 }
 
 QWidget* createPlaceholder(const QString& title, const QString& description) {

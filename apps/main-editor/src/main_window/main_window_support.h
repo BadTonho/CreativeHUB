@@ -19,6 +19,7 @@ namespace main_window_detail {
 [[nodiscard]] QString formatOptionalDouble(
     const std::optional<double>& value,
     const QString& suffix);
+[[nodiscard]] QString compactMediaBrowserName(std::string_view display_name);
 [[nodiscard]] std::filesystem::path normalizedPath(
     const std::filesystem::path& path);
 [[nodiscard]] QString mediaListText(const media::VideoMetadata& metadata);

@@ -1,11 +1,14 @@
 #include "ui/media_browser_list_widget.h"
+#include "main_window/main_window_support.h"
 
 #include <QApplication>
 #include <QCoreApplication>
 #include <QIcon>
 #include <QListWidgetItem>
+#include <QLineEdit>
 #include <QPixmap>
 #include <QSettings>
+#include <QStyleOptionViewItem>
 #include <QStyle>
 
 #include <cstdio>
@@ -29,6 +32,29 @@ int main(int argc, char* argv[]) {
     settings.clear();
 
     try {
+        media::VideoMetadata metadata;
+        metadata.display_name = "OriginalMediaName.mp4";
+        metadata.width = 1920;
+        metadata.height = 1080;
+        metadata.frame_rate = 24.0;
+        metadata.duration_seconds = 56.75;
+        require(
+            main_window_detail::compactMediaBrowserName("Short") == "Short",
+            "Short Media Browser names must remain unchanged.");
+        require(
+            main_window_detail::compactMediaBrowserName("OriginalMediaName") ==
+                "Origina...",
+            "Long Media Browser names were not compacted to seven characters.");
+        require(
+            main_window_detail::compactMediaItemListText(
+                metadata, "OriginalMediaName.mp4", false) == "Origina...",
+            "Media metadata must not be shown in the compact item label.");
+        require(
+            main_window_detail::compactMediaItemListText(
+                metadata, "OriginalMediaName.mp4", true) ==
+                "Origina... [Offline]",
+            "Offline status must remain visible in the compact item label.");
+
         MediaBrowserListWidget widget;
         require(
             widget.displayMode() == MediaBrowserListWidget::DisplayMode::List,
@@ -55,6 +81,9 @@ int main(int argc, char* argv[]) {
         item->setData(
             media_browser_ui::kMediaInfoRole,
             QStringLiteral("Name: Sample clip\nFormat: MP4"));
+        item->setData(
+            media_browser_ui::kMediaFullDisplayNameRole,
+            QStringLiteral("Sample clip with a longer original name"));
         item->setFlags(item->flags() | Qt::ItemIsEditable);
         QPixmap thumbnail(16, 16);
         thumbnail.fill(Qt::blue);
@@ -84,6 +113,23 @@ int main(int argc, char* argv[]) {
         require(item->flags() & Qt::ItemIsEditable,
                 "Media items must be editable.");
 
+        QStyleOptionViewItem editor_options;
+        auto* editor = widget.itemDelegate()->createEditor(
+            &widget,
+            editor_options,
+            widget.indexFromItem(item));
+        require(editor != nullptr,
+                "Media items must provide an inline editor.");
+        widget.itemDelegate()->setEditorData(
+            editor,
+            widget.indexFromItem(item));
+        const auto* line_edit = qobject_cast<QLineEdit*>(editor);
+        require(line_edit != nullptr &&
+                    line_edit->text() ==
+                        "Sample clip with a longer original name",
+                "Inline editing must use the full original Media name.");
+        delete editor;
+
         widget.setIconScalePercent(150);
         require(widget.iconScalePercent() == 150,
                 "Media Browser did not apply the maximum icon scale.");
@@ -111,6 +157,9 @@ int main(int argc, char* argv[]) {
 
         auto* bin_item = new QListWidgetItem("Footage", &widget);
         bin_item->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
+        bin_item->setData(
+            media_browser_ui::kMediaFullDisplayNameRole,
+            QStringLiteral("Footage"));
         bin_item->setData(
             media_browser_ui::kMediaItemTypeRole,
             media_browser_ui::kMediaItemTypeBin);

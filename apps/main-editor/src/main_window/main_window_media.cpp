@@ -374,8 +374,11 @@ void MainWindow::populateMediaBrowser(
             if (relative.empty() || relative.find('/') != std::string::npos) continue;
 
             auto* bin_item = new QListWidgetItem(
-                QString::fromStdString(relative), media_list_);
+                compactMediaBrowserName(relative), media_list_);
             bin_item->setIcon(style()->standardIcon(QStyle::SP_DirIcon));
+            bin_item->setData(
+                media_browser_ui::kMediaFullDisplayNameRole,
+                QString::fromStdString(relative));
             bin_item->setData(
                 media_browser_ui::kMediaItemTypeRole,
                 media_browser_ui::kMediaItemTypeBin);
@@ -402,6 +405,11 @@ void MainWindow::populateMediaBrowser(
                     item.metadata, item.display_name, item.offline),
                 media_list_);
             if (!item.offline) list_item->setIcon(mediaThumbnailIcon(item.first_frame));
+            list_item->setData(
+                media_browser_ui::kMediaFullDisplayNameRole,
+                fromUtf8(item.display_name.empty()
+                    ? item.metadata.display_name
+                    : item.display_name));
             list_item->setData(Qt::UserRole, fromUtf8(pathToUtf8(item.metadata.source_path)));
             list_item->setData(
                 media_browser_ui::kMediaItemTypeRole,

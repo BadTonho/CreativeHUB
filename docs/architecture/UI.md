@@ -24,10 +24,12 @@ icon scale, defaulting to 100% and allowing values from 50% to 150% in 10%
 steps. The scale applies to both list and block modes. Block mode uses each
 online item's cached first frame as a thumbnail; changing modes or icon scale
 does not decode frames or mark the project dirty.
-Items show a compact name and summary instead of a large technical-details
-panel. An information icon in each item's upper-right corner displays the
-complete technical metadata on hover, including offline status, bin, and path
-when applicable. Context menus provide New Bin, Move to Bin, Remove from
+Items show only the first seven characters of the visible name, followed by
+`...` when needed; the technical summary is not shown as a second line. An
+information icon in each item's upper-right corner displays the complete
+technical metadata on hover, including offline status, bin, and path when
+applicable. Inline editing opens the full original name. Visible folder items
+use the same compact label while the Bins tree keeps full names. Context menus provide New Bin, Move to Bin, Remove from
 Browser, and Restore Media. Removing media never deletes the file or its
 Timeline clips, and the existing selection and internal drag-and-drop MIME
 flow remain unchanged. The Media Browser does not display separate New Bin or

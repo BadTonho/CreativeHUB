@@ -37,7 +37,7 @@ updated intentionally.
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON, round-trip, timeline zoom persistence, version 1-5 migration, invalid input, offline media, transactional open |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
-| Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode and icon-scale persistence, bounded 50%-150% icon resizing, compact item data, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
+| Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode and icon-scale persistence, bounded 50%-150% icon resizing, seven-character media and folder labels, full-name inline editing, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
 | Effects UI | Implemented Toolbox categories, current effect catalog, category filtering, stable effect IDs, and visual-only behavior |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
@@ -83,8 +83,9 @@ in the running Main Editor after UI or integration changes:
   clips are deleted or the track model is refreshed;
 - Media Browser list/block toggles, restoration of the last global mode and icon
   scale, slider adjustment from 50% to 150% in 10% steps, default 100% sizing,
-  cached thumbnails, compact item descriptions, hover over the information
-  icon for the complete technical tooltip, selection, clicking bins without
+  cached thumbnails, seven-character labels with ellipses, no technical second
+  line, full-name inline editing, hover over the information icon for the
+  complete technical tooltip, selection, clicking bins without
   losing the selected path or expanded branches, bins, context actions,
   folder items shown alongside media, folder icons, inline renaming with
   double-click and F2, automatic New Bin naming without dialogs through the
