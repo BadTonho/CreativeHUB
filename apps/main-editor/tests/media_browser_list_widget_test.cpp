@@ -35,6 +35,11 @@ int main(int argc, char* argv[]) {
             "Media Browser must default to list mode.");
         require(widget.viewMode() == QListView::ListMode,
                 "List mode was not applied to the QListWidget.");
+        require(widget.iconScalePercent() ==
+                    MediaBrowserListWidget::kDefaultIconScalePercent,
+                "Media Browser must default to 100 percent icon scale.");
+        require(widget.iconSize() == QSize(48, 32),
+                "Default list icon size changed unexpectedly.");
         require(
             widget.editTriggers().testFlag(QAbstractItemView::DoubleClicked),
             "Media items must support double-click editing.");
@@ -61,6 +66,10 @@ int main(int argc, char* argv[]) {
             "Media Browser did not switch to grid mode.");
         require(widget.viewMode() == QListView::IconMode,
                 "Grid mode was not applied to the QListWidget.");
+        require(widget.iconSize() == QSize(128, 72),
+                "Default grid icon size changed unexpectedly.");
+        require(widget.gridSize() == QSize(168, 126),
+                "Default grid cell size changed unexpectedly.");
         require(!item->icon().isNull(),
                 "The Media Browser item did not retain its thumbnail.");
         require(settings.value("media_browser/view_mode").toString() == "grid",
@@ -74,6 +83,31 @@ int main(int argc, char* argv[]) {
                 "Media information data was not preserved.");
         require(item->flags() & Qt::ItemIsEditable,
                 "Media items must be editable.");
+
+        widget.setIconScalePercent(150);
+        require(widget.iconScalePercent() == 150,
+                "Media Browser did not apply the maximum icon scale.");
+        require(widget.iconSize() == QSize(192, 108),
+                "Maximum grid icon size is incorrect.");
+        require(widget.gridSize() == QSize(232, 162),
+                "Maximum grid cell size is incorrect.");
+        require(settings.value("media_browser/icon_scale_percent").toInt() ==
+                    150,
+                "Icon scale was not persisted.");
+
+        widget.setDisplayMode(MediaBrowserListWidget::DisplayMode::List);
+        require(widget.iconSize() == QSize(72, 48),
+                "Maximum list icon size is incorrect.");
+        widget.setIconScalePercent(0);
+        require(widget.iconScalePercent() ==
+                    MediaBrowserListWidget::kMinimumIconScalePercent,
+                "Icon scale was not clamped to its minimum.");
+        require(widget.iconSize() == QSize(24, 16),
+                "Minimum list icon size is incorrect.");
+        widget.setIconScalePercent(999);
+        require(widget.iconScalePercent() ==
+                    MediaBrowserListWidget::kMaximumIconScalePercent,
+                "Icon scale was not clamped to its maximum.");
 
         auto* bin_item = new QListWidgetItem("Footage", &widget);
         bin_item->setIcon(QApplication::style()->standardIcon(QStyle::SP_DirIcon));
@@ -98,15 +132,19 @@ int main(int argc, char* argv[]) {
         require(bin_item->flags() & Qt::ItemIsEditable,
                 "Bin items must be editable.");
 
-        widget.setDisplayMode(MediaBrowserListWidget::DisplayMode::List);
-        require(widget.viewMode() == QListView::ListMode,
-                "Media Browser did not return to list mode.");
-
         MediaBrowserListWidget restored_widget;
         require(
             restored_widget.displayMode() ==
                 MediaBrowserListWidget::DisplayMode::List,
-            "List mode was not persisted after switching back.");
+            "List mode was not preserved after switching back.");
+        require(restored_widget.iconScalePercent() == 150,
+                "Icon scale was not restored from the global preference.");
+        require(restored_widget.iconSize() == QSize(72, 48),
+                "Restored list icon size is incorrect.");
+
+        widget.setDisplayMode(MediaBrowserListWidget::DisplayMode::List);
+        require(widget.viewMode() == QListView::ListMode,
+                "Media Browser did not return to list mode.");
 
         settings.clear();
         return 0;

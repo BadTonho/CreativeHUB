@@ -18,6 +18,10 @@ inline constexpr int kMediaItemTypeBin = 1;
 
 class MediaBrowserListWidget final : public QListWidget {
 public:
+    static constexpr int kMinimumIconScalePercent = 50;
+    static constexpr int kMaximumIconScalePercent = 150;
+    static constexpr int kDefaultIconScalePercent = 100;
+
     enum class DisplayMode {
         List,
         Grid,
@@ -27,6 +31,8 @@ public:
 
     [[nodiscard]] DisplayMode displayMode() const noexcept;
     void setDisplayMode(DisplayMode mode);
+    [[nodiscard]] int iconScalePercent() const noexcept;
+    void setIconScalePercent(int percent);
 
 protected:
     [[nodiscard]] QMimeData* mimeData(
@@ -36,4 +42,5 @@ private:
     void applyDisplayMode();
 
     DisplayMode display_mode_ = DisplayMode::List;
+    int icon_scale_percent_ = kDefaultIconScalePercent;
 };

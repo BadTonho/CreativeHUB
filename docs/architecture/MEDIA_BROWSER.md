@@ -26,11 +26,14 @@ and `Media` contains a view that can switch between compact list mode and
 fixed-size block mode. Bin creation remains available through the existing
 context menus. The selected view
 is a global user preference stored in `QSettings` at
-`media_browser/view_mode`; the first-run default is list mode. Block mode uses
-the cached first frame already held by the media item and does not decode a new
-frame when the view changes. Items use compact names and video summaries; the
-large technical-details panel is intentionally not part of the Browser
-layout.
+`media_browser/view_mode`; the first-run default is list mode. The icon scale
+is a global preference stored at `media_browser/icon_scale_percent`, with a
+default of 100%, a range of 50% to 150%, and a step of 10%. It applies to both
+list and block modes while preserving their respective proportions. Block mode
+uses the cached first frame already held by the media item and does not decode a
+new frame when the view or icon scale changes. Items use compact names and video
+summaries; the large technical-details panel is intentionally not part of the
+Browser layout.
 
 `Bins` and `Media` are independent `QDockWidget` panels. They can be moved,
 resized, floated, closed, re-docked, tabified, or split side by side through

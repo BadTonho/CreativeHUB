@@ -61,6 +61,9 @@ using namespace main_window_detail;
 
 namespace {
 
+constexpr int kMediaThumbnailMaximumWidth = 192;
+constexpr int kMediaThumbnailMaximumHeight = 108;
+
 QIcon mediaThumbnailIcon(const media::VideoFrame& frame) {
     if (frame.width <= 0 || frame.height <= 0 || frame.stride < frame.width * 4 ||
         frame.rgba_pixels.size() <
@@ -75,8 +78,8 @@ QIcon mediaThumbnailIcon(const media::VideoFrame& frame) {
         frame.stride,
         QImage::Format_RGBA8888);
     const auto thumbnail = QPixmap::fromImage(image.copy()).scaled(
-        128,
-        72,
+        kMediaThumbnailMaximumWidth,
+        kMediaThumbnailMaximumHeight,
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation);
     return QIcon(thumbnail);
@@ -145,6 +148,20 @@ QWidget* MainWindow::createMediaPanel() {
     auto* title_row = new QHBoxLayout;
     title_row->addStretch();
 
+    auto* icon_size_label = new QLabel("Icon size", container);
+    icon_size_label->setToolTip("Adjust the Media Browser icon size.");
+    title_row->addWidget(icon_size_label);
+
+    auto* icon_size_slider = new QSlider(Qt::Horizontal, container);
+    icon_size_slider->setRange(
+        MediaBrowserListWidget::kMinimumIconScalePercent,
+        MediaBrowserListWidget::kMaximumIconScalePercent);
+    icon_size_slider->setSingleStep(10);
+    icon_size_slider->setPageStep(20);
+    icon_size_slider->setFixedWidth(96);
+    icon_size_slider->setAccessibleName("Media Browser icon size");
+    title_row->addWidget(icon_size_slider);
+
     auto* view_group = new QButtonGroup(container);
     view_group->setExclusive(true);
     auto* list_view_button = new QToolButton(container);
@@ -167,6 +184,20 @@ QWidget* MainWindow::createMediaPanel() {
     media_list_ = new MediaBrowserListWidget(container);
     media_list_->setMinimumHeight(140);
     media_list_->setSelectionMode(QAbstractItemView::SingleSelection);
+    icon_size_slider->setValue(media_list_->iconScalePercent());
+    const auto updateIconSizeTooltip = [icon_size_slider](int value) {
+        const auto tooltip = QString("Icon size: %1%").arg(value);
+        icon_size_slider->setToolTip(tooltip);
+        icon_size_slider->setAccessibleDescription(tooltip);
+    };
+    updateIconSizeTooltip(icon_size_slider->value());
+    connect(icon_size_slider, &QSlider::valueChanged, this,
+            [this, updateIconSizeTooltip](int value) {
+                updateIconSizeTooltip(value);
+                if (media_list_ != nullptr) {
+                    media_list_->setIconScalePercent(value);
+                }
+            });
     list_view_button->setChecked(
         media_list_->displayMode() == MediaBrowserListWidget::DisplayMode::List);
     grid_view_button->setChecked(

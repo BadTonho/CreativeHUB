@@ -19,8 +19,11 @@ The Media Browser belongs to the logical `Media Pool` group. `Bins` and
 tree, while `Media` contains the filtered view with compact list and
 fixed-size block modes. The global `QSettings` preference
 `media_browser/view_mode` restores the last mode, defaulting to list mode on
-first use. Block mode uses each online item's cached first frame as a
-thumbnail; changing modes does not decode frames or mark the project dirty.
+first use. `media_browser/icon_scale_percent` restores the global Media Browser
+icon scale, defaulting to 100% and allowing values from 50% to 150% in 10%
+steps. The scale applies to both list and block modes. Block mode uses each
+online item's cached first frame as a thumbnail; changing modes or icon scale
+does not decode frames or mark the project dirty.
 Items show a compact name and summary instead of a large technical-details
 panel. An information icon in each item's upper-right corner displays the
 complete technical metadata on hover, including offline status, bin, and path

@@ -12,6 +12,8 @@
 #include <QToolTip>
 #include <QVariant>
 
+#include <algorithm>
+
 namespace {
 
 class MediaBrowserItemDelegate final : public QStyledItemDelegate {
@@ -95,6 +97,12 @@ MediaBrowserListWidget::MediaBrowserListWidget(QWidget* parent)
     const auto saved_mode = settings.value(
         "media_browser/view_mode", "list").toString();
     display_mode_ = saved_mode == "grid" ? DisplayMode::Grid : DisplayMode::List;
+    icon_scale_percent_ = std::clamp(
+        settings.value(
+            "media_browser/icon_scale_percent",
+            kDefaultIconScalePercent).toInt(),
+        kMinimumIconScalePercent,
+        kMaximumIconScalePercent);
     applyDisplayMode();
 }
 
@@ -118,11 +126,40 @@ void MediaBrowserListWidget::setDisplayMode(DisplayMode mode) {
     settings.sync();
 }
 
+int MediaBrowserListWidget::iconScalePercent() const noexcept {
+    return icon_scale_percent_;
+}
+
+void MediaBrowserListWidget::setIconScalePercent(int percent) {
+    const auto normalized = std::clamp(
+        percent,
+        kMinimumIconScalePercent,
+        kMaximumIconScalePercent);
+    if (icon_scale_percent_ == normalized) {
+        applyDisplayMode();
+        return;
+    }
+
+    icon_scale_percent_ = normalized;
+    applyDisplayMode();
+
+    QSettings settings;
+    settings.setValue("media_browser/icon_scale_percent", icon_scale_percent_);
+    settings.sync();
+}
+
 void MediaBrowserListWidget::applyDisplayMode() {
+    const auto scaledSize = [this](const QSize& base_size) {
+        return QSize(
+            std::max(1, (base_size.width() * icon_scale_percent_ + 50) / 100),
+            std::max(1, (base_size.height() * icon_scale_percent_ + 50) / 100));
+    };
+
     if (display_mode_ == DisplayMode::Grid) {
         QListWidget::setViewMode(QListView::IconMode);
-        setIconSize(QSize(128, 72));
-        setGridSize(QSize(168, 126));
+        const auto icon_size = scaledSize(QSize(128, 72));
+        setIconSize(icon_size);
+        setGridSize(QSize(icon_size.width() + 40, icon_size.height() + 54));
         setSpacing(4);
         setResizeMode(QListView::Adjust);
         setMovement(QListView::Static);
@@ -132,7 +169,7 @@ void MediaBrowserListWidget::applyDisplayMode() {
     }
 
     QListWidget::setViewMode(QListView::ListMode);
-    setIconSize(QSize(48, 32));
+    setIconSize(scaledSize(QSize(48, 32)));
     setGridSize(QSize());
     setSpacing(2);
     setResizeMode(QListView::Adjust);
