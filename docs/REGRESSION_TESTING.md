@@ -96,7 +96,9 @@ in the running Main Editor after UI or integration changes:
   context menu, protection of
   All Media/Unsorted, and preventing folder items from producing media drag data,
   native drag previews showing the cached media thumbnail or folder icon with
-  the compact name, and rejecting folder previews at the Timeline,
+  the compact name, pressing and moving a media item with the left mouse button
+  starts the native drag preview in both list and block modes, and rejecting
+  folder previews at the Timeline,
   the `Media Pool` text button below the menu bar next to the `Effects` group
   button, switching between the Media Pool and Effects groups, the `Media Pool`
   submenu with independent `Bins` and `Media` actions, moving, resizing,

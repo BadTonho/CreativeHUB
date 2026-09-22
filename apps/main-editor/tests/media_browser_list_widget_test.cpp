@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
         item->setData(
             media_browser_ui::kMediaFullDisplayNameRole,
             QStringLiteral("Sample clip with a longer original name"));
-        item->setFlags(item->flags() | Qt::ItemIsEditable);
+        item->setFlags(item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
         QPixmap thumbnail(16, 16);
         thumbnail.fill(Qt::blue);
         item->setIcon(QIcon(thumbnail));
@@ -136,6 +136,8 @@ int main(int argc, char* argv[]) {
                 "Media information data was not preserved.");
         require(item->flags() & Qt::ItemIsEditable,
                 "Media items must be editable.");
+        require(item->flags() & Qt::ItemIsDragEnabled,
+                "Media items must remain draggable.");
 
         QStyleOptionViewItem editor_options;
         auto* editor = widget.itemDelegate()->createEditor(

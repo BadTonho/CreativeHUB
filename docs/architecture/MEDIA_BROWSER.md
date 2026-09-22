@@ -95,7 +95,8 @@ dragged to the Timeline through the internal
 items participate in this drag-and-drop flow; operating-system file drops and
 full manual relinking are future work.
 
-When an item starts dragging, the Browser supplies a native Qt drag preview
+After a left-button press moves past the platform drag threshold, the Browser
+starts the native drag explicitly and supplies a native Qt drag preview
 using the cached thumbnail (or the standard folder icon) and the compact visible
 name. The preview is limited to a 128x72 image area, follows the cursor, and
 does not decode media or change project state. Folder previews are visual only

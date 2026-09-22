@@ -9,6 +9,7 @@
 #include <QIcon>
 #include <QLineEdit>
 #include <QMimeData>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPixmap>
 #include <QSettings>
@@ -265,6 +266,41 @@ void MediaBrowserListWidget::applyDisplayMode() {
     setMovement(QListView::Static);
     setWordWrap(true);
     setUniformItemSizes(false);
+}
+
+void MediaBrowserListWidget::mousePressEvent(QMouseEvent* event) {
+    drag_press_item_ = nullptr;
+    if (event != nullptr && event->button() == Qt::LeftButton) {
+        const auto item = itemAt(event->position().toPoint());
+        if (item != nullptr && item->flags().testFlag(Qt::ItemIsDragEnabled)) {
+            drag_press_item_ = item;
+            drag_press_position_ = event->position().toPoint();
+        }
+    }
+    QListWidget::mousePressEvent(event);
+}
+
+void MediaBrowserListWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (event != nullptr &&
+        drag_press_item_ != nullptr &&
+        state() != QAbstractItemView::EditingState &&
+        (event->buttons() & Qt::LeftButton) != Qt::NoButton &&
+        (event->position().toPoint() - drag_press_position_).manhattanLength() >=
+            QApplication::startDragDistance()) {
+        auto* item = drag_press_item_;
+        drag_press_item_ = nullptr;
+        if (item->listWidget() == this && item->isSelected()) {
+            startDrag(Qt::CopyAction);
+            event->accept();
+            return;
+        }
+    }
+    QListWidget::mouseMoveEvent(event);
+}
+
+void MediaBrowserListWidget::mouseReleaseEvent(QMouseEvent* event) {
+    drag_press_item_ = nullptr;
+    QListWidget::mouseReleaseEvent(event);
 }
 
 void MediaBrowserListWidget::startDrag(Qt::DropActions supportedActions) {

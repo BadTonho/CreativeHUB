@@ -1,9 +1,11 @@
 #pragma once
 
 #include <QListWidget>
+#include <QPoint>
 
 class QMimeData;
 class QIcon;
+class QMouseEvent;
 class QPixmap;
 
 namespace media_browser_ui {
@@ -48,6 +50,9 @@ public:
     void setIconScalePercent(int percent);
 
 protected:
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
     void startDrag(Qt::DropActions supportedActions) override;
 
     [[nodiscard]] QMimeData* mimeData(
@@ -58,4 +63,6 @@ private:
 
     DisplayMode display_mode_ = DisplayMode::List;
     int icon_scale_percent_ = kDefaultIconScalePercent;
+    QPoint drag_press_position_;
+    QListWidgetItem* drag_press_item_ = nullptr;
 };
