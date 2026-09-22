@@ -515,6 +515,35 @@ int main(int argc, char* argv[]) {
                 "Frame-level guides must not be drawn across timeline clips.");
         frame_grid_widget.close();
 
+        timeline::TimelineWidget clip_height_widget;
+        clip_height_widget.resize(500, 220);
+        clip_height_widget.setTimelineViewportWidth(500);
+        clip_height_widget.setTracks({timeline::TimelineTrack{
+            1, "Video 1", 1.0, false,
+            {makeClip("clip-height.mkv", 0, 1800, "clip-height")}}});
+        clip_height_widget.setZoomFactor(60.0);
+        clip_height_widget.setMinimumWidth(500);
+        clip_height_widget.resize(500, 220);
+        clip_height_widget.show();
+        application.processEvents();
+        QImage clip_height_image(500, 220, QImage::Format_ARGB32);
+        clip_height_image.fill(Qt::transparent);
+        clip_height_widget.render(&clip_height_image);
+        const auto clip_probe_x = 220;
+        const auto clip_track_background = QColor("#202631");
+        const auto top_clip_pixel = clip_height_image.pixelColor(clip_probe_x, 51);
+        const auto middle_clip_pixel = clip_height_image.pixelColor(clip_probe_x, 100);
+        const auto bottom_clip_pixel = clip_height_image.pixelColor(clip_probe_x, 205);
+        require(top_clip_pixel != clip_track_background &&
+                    bottom_clip_pixel != clip_track_background,
+                "Timeline clips must fill the track row without vertical margins: top=" +
+                    top_clip_pixel.name().toStdString() + " middle=" +
+                    middle_clip_pixel.name().toStdString() + " bottom=" +
+                    bottom_clip_pixel.name().toStdString() + " size=" +
+                    std::to_string(clip_height_widget.width()) + "x" +
+                    std::to_string(clip_height_widget.height()));
+        clip_height_widget.close();
+
         timeline::TimelineWidget playhead_widget;
         playhead_widget.resize(400, 300);
         playhead_widget.setTimelineViewportWidth(400);

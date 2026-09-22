@@ -80,6 +80,7 @@ in the running Main Editor after UI or integration changes:
   controls from 25% through 51,200%, progressively denser adaptive frame guides
   in the upper ruler, one guide per frame at frame-level density, no per-frame
   text over clips, and no vertical grid lines crossing clip content,
+  clips filling the track row vertically without top or bottom margins,
   Ctrl + wheel playhead anchoring, button playhead anchoring, timecode labels in
   `HH:MM:SS.mmm`, click-and-drag
   playhead scrubbing on the upper time ruler, live playhead movement after a

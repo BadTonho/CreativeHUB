@@ -157,6 +157,8 @@ gaps, and allows overlap only across different tracks. It displays a shared
 track-specific colors, and explicit drop/playhead markers. The dock
 provides Add Video Track, Rename Track, Track Up, Track Down, and Remove Track.
 Only empty tracks can be removed.
+Clips fill the height of their track row without an additional top or bottom
+margin; the track row height itself remains unchanged.
 Playback state is shown in a compact fixed footer below the timeline content;
 it does not expand with the dock. The current frame and transient Main Window
 messages, including `Loading timeline clip...`, share one line in that footer;

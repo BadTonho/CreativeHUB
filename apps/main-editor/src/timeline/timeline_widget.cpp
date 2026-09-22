@@ -397,7 +397,10 @@ double TimelineWidget::rowHeight() const noexcept {
 }
 
 QRectF TimelineWidget::trackContentRect(std::size_t index) const noexcept {
-    return trackRect(index).adjusted(track_header_width, 22, -6, -6);
+    // Clips use the complete vertical extent of the track row. The header
+    // remains reserved horizontally, while vertical insets would make a clip
+    // appear shorter than its Timeline track for no functional reason.
+    return trackRect(index).adjusted(track_header_width, 0, -6, 0);
 }
 
 QRectF TimelineWidget::clipRect(const ClipLocation& location) const noexcept {

@@ -21,6 +21,8 @@ TimelineWidget presents the sequence with a shared `HH:MM:SS.mmm` timecode ruler
 separate track headers, per-track clip counts, and track-specific clip colors.
 The active track and clip use a highlighted border; drop targets and the
 playhead are shown directly over the timeline content.
+Clip rectangles fill the vertical extent of their track row; the track header
+remains reserved on the left, while no top or bottom inset is applied to clips.
 The visual timeline uses a minimum one-hour range, independent of the
 actual content duration. Shorter projects therefore keep a stable horizontal
 scale and show empty space after the last clip. The one-hour range fills the
