@@ -3,6 +3,8 @@
 #include <QListWidget>
 
 class QMimeData;
+class QIcon;
+class QPixmap;
 
 namespace media_browser_ui {
 
@@ -14,6 +16,16 @@ inline constexpr int kMediaFullDisplayNameRole = Qt::UserRole + 5;
 
 inline constexpr int kMediaItemTypeMedia = 0;
 inline constexpr int kMediaItemTypeBin = 1;
+
+inline constexpr int kDragPreviewImageWidth = 128;
+inline constexpr int kDragPreviewImageHeight = 72;
+
+[[nodiscard]] QPixmap createDragPreview(
+    const QIcon& icon,
+    const QString& label);
+
+[[nodiscard]] QMimeData* createMediaBrowserDragMimeData(
+    const QList<QListWidgetItem*>& items);
 
 } // namespace media_browser_ui
 
@@ -36,6 +48,8 @@ public:
     void setIconScalePercent(int percent);
 
 protected:
+    void startDrag(Qt::DropActions supportedActions) override;
+
     [[nodiscard]] QMimeData* mimeData(
         const QList<QListWidgetItem*>& items) const override;
 

@@ -1,4 +1,5 @@
 #include "ui/media_browser_list_widget.h"
+#include "ui/media_drag_mime.h"
 #include "main_window/main_window_support.h"
 
 #include <QApplication>
@@ -6,6 +7,7 @@
 #include <QIcon>
 #include <QListWidgetItem>
 #include <QLineEdit>
+#include <QMimeData>
 #include <QPixmap>
 #include <QSettings>
 #include <QStyleOptionViewItem>
@@ -101,6 +103,28 @@ int main(int argc, char* argv[]) {
                 "Default grid cell size changed unexpectedly.");
         require(!item->icon().isNull(),
                 "The Media Browser item did not retain its thumbnail.");
+        const auto media_preview = media_browser_ui::createDragPreview(
+            item->icon(),
+            item->text());
+        require(!media_preview.isNull(),
+                "Media drag preview must produce a pixmap.");
+        require(
+            media_preview.width() ==
+                media_browser_ui::kDragPreviewImageWidth + 16,
+            "Media drag preview width changed unexpectedly.");
+        require(
+            media_preview.height() > media_browser_ui::kDragPreviewImageHeight,
+            "Media drag preview must reserve space for its label.");
+        auto* media_mime = media_browser_ui::createMediaBrowserDragMimeData(
+            QList<QListWidgetItem*>{item});
+        require(
+            media_mime->hasFormat(ui::kMediaPathMimeType),
+            "Media drag data must contain the source path MIME.");
+        require(
+            QString::fromUtf8(media_mime->data(ui::kMediaPathMimeType)) ==
+                "sample.mp4",
+            "Media drag data changed the source path.");
+        delete media_mime;
         require(settings.value("media_browser/view_mode").toString() == "grid",
                 "Grid mode was not persisted.");
         require(item->data(Qt::UserRole).toString() == "sample.mp4",
@@ -166,18 +190,28 @@ int main(int argc, char* argv[]) {
         bin_item->setData(
             media_browser_ui::kMediaBinPathRole,
             QStringLiteral("Projects/Footage"));
-        bin_item->setFlags(
-            (bin_item->flags() | Qt::ItemIsEditable) & ~Qt::ItemIsDragEnabled);
+        bin_item->setFlags(bin_item->flags() | Qt::ItemIsEditable);
         require(!bin_item->icon().isNull(),
                 "The Media Browser bin did not receive a folder icon.");
+        const auto folder_preview = media_browser_ui::createDragPreview(
+            bin_item->icon(),
+            bin_item->text());
+        require(!folder_preview.isNull(),
+                "Folder drag preview must produce a pixmap.");
         require(bin_item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
                     media_browser_ui::kMediaItemTypeBin,
                 "The Media Browser bin type was not preserved.");
         require(bin_item->data(media_browser_ui::kMediaBinPathRole).toString() ==
                     "Projects/Footage",
                 "The Media Browser bin path was not preserved.");
-        require(!(bin_item->flags() & Qt::ItemIsDragEnabled),
-                "Bins must not use the media-to-Timeline drag operation.");
+        require(bin_item->flags() & Qt::ItemIsDragEnabled,
+                "Bins must be draggable to show their folder preview.");
+        auto* bin_mime = media_browser_ui::createMediaBrowserDragMimeData(
+            QList<QListWidgetItem*>{bin_item});
+        require(
+            !bin_mime->hasFormat(ui::kMediaPathMimeType),
+            "Folder drag data must not contain the media path MIME.");
+        delete bin_mime;
         require(bin_item->flags() & Qt::ItemIsEditable,
                 "Bin items must be editable.");
 

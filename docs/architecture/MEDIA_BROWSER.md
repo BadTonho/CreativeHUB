@@ -58,10 +58,11 @@ to the default Media Pool layout.
 The media view also includes the immediate child bins of the active location as
 folder items alongside the media entries. Visible folder labels follow the same
 seven-character compact form, while the bin tree keeps full names for
-navigation. Folder items use the standard Qt
-folder icon, do not participate in the media-to-Timeline drag operation, and
-can be renamed inline. The bin tree remains available for direct navigation
-and filtering; the existing parent-bin filter still includes its descendants.
+navigation. Folder items use the standard Qt folder icon, can be dragged to
+show a visual folder preview, but do not produce the media MIME accepted by the
+Timeline. They can be renamed inline. The bin tree remains available for
+direct navigation and filtering; the existing parent-bin filter still includes
+its descendants.
 The tree draws visible branch connectors in the indentation area so nested bins
 can be followed quickly without changing their navigation behavior.
 
@@ -93,6 +94,12 @@ dragged to the Timeline through the internal
 `application/x-creative-suite-media-path` MIME type. Only already imported
 items participate in this drag-and-drop flow; operating-system file drops and
 full manual relinking are future work.
+
+When an item starts dragging, the Browser supplies a native Qt drag preview
+using the cached thumbnail (or the standard folder icon) and the compact visible
+name. The preview is limited to a 128x72 image area, follows the cursor, and
+does not decode media or change project state. Folder previews are visual only
+for Timeline drops because folders intentionally carry no media path MIME.
 
 Media organization changes mark the project dirty but do not create entries in
 the Timeline Undo/Redo history. Selection, bin filtering, and tree expansion

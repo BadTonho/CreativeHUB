@@ -74,7 +74,8 @@ then restored globally without affecting project state.
 
 The media view includes immediate child bins as folder items alongside media.
 They use the standard Qt folder icon, are excluded from the media-to-Timeline
-drag MIME, and support inline renaming. `New Bin` creates an automatically
+drag MIME, show a visual folder preview when dragged, and support inline
+renaming. `New Bin` creates an automatically
 named child in the current bin and starts editing it without a dialog. Media
 and editable bins can be renamed with double-click or `F2`; `All Media` and
 `Unsorted` remain protected. The bin tree remains available for navigation and
@@ -88,6 +89,12 @@ a bin onto another bin reparents the complete subtree. `All Media`, empty tree
 space, self/descendant destinations, collisions, and moving `Unsorted` are
 rejected. Bin creation from the context menu uses the clicked or selected bin
 as the parent, while the existing `Move to Bin` action remains available.
+
+Dragging an imported media item from the Media view displays a native preview
+with the cached thumbnail and compact visible name beside the cursor. The
+preview image area is capped at 128x72 and is created only when the drag starts.
+Folder items display the same style using the standard folder icon, but carry no
+media MIME and are therefore rejected by the Timeline.
 
 File actions provide New Project, Open Project, Save Project, and Save Project
 As. Save prompts are transactional and New, Open, and close use Save, Discard,

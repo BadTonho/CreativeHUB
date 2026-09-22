@@ -2,11 +2,15 @@
 
 #include "media_drag_mime.h"
 
+#include <QApplication>
+#include <QDrag>
+#include <QFontMetrics>
 #include <QHelpEvent>
 #include <QIcon>
 #include <QLineEdit>
 #include <QMimeData>
 #include <QPainter>
+#include <QPixmap>
 #include <QSettings>
 #include <QStyle>
 #include <QStyledItemDelegate>
@@ -95,6 +99,76 @@ private:
 };
 
 } // namespace
+
+namespace media_browser_ui {
+
+QPixmap createDragPreview(const QIcon& icon, const QString& label) {
+    constexpr int padding = 8;
+    constexpr int corner_radius = 8;
+    const QSize image_size(kDragPreviewImageWidth, kDragPreviewImageHeight);
+    const QFontMetrics font_metrics(QApplication::font());
+    const int text_height = std::max(1, font_metrics.height());
+    const QSize preview_size(
+        image_size.width() + padding * 2,
+        image_size.height() + padding * 2 + text_height);
+
+    QPixmap preview(preview_size);
+    preview.fill(Qt::transparent);
+
+    QPainter painter(&preview);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(QColor(255, 255, 255, 70)));
+    painter.setBrush(QColor(28, 28, 32, 235));
+    painter.drawRoundedRect(
+        preview.rect().adjusted(0, 0, -1, -1),
+        corner_radius,
+        corner_radius);
+
+    const QPixmap source = icon.pixmap(image_size);
+    if (!source.isNull()) {
+        const QPixmap scaled = source.scaled(
+            image_size,
+            Qt::KeepAspectRatio,
+            Qt::SmoothTransformation);
+        const QRect image_rect(
+            padding + (image_size.width() - scaled.width()) / 2,
+            padding + (image_size.height() - scaled.height()) / 2,
+            scaled.width(),
+            scaled.height());
+        painter.drawPixmap(image_rect, scaled);
+    }
+
+    const QRect text_rect(
+        padding,
+        padding + image_size.height(),
+        image_size.width(),
+        text_height);
+    painter.setPen(Qt::white);
+    painter.drawText(
+        text_rect,
+        Qt::AlignCenter,
+        font_metrics.elidedText(label, Qt::ElideRight, text_rect.width()));
+    return preview;
+}
+
+QMimeData* createMediaBrowserDragMimeData(
+    const QList<QListWidgetItem*>& items) {
+    auto* mime_data = new QMimeData;
+    if (items.isEmpty()) return mime_data;
+
+    const auto* item = items.front();
+    if (item->data(kMediaItemTypeRole).toInt() == kMediaItemTypeBin) {
+        return mime_data;
+    }
+
+    const QString source_path = item->data(Qt::UserRole).toString();
+    if (!source_path.isEmpty()) {
+        mime_data->setData(ui::kMediaPathMimeType, source_path.toUtf8());
+    }
+    return mime_data;
+}
+
+} // namespace media_browser_ui
 
 MediaBrowserListWidget::MediaBrowserListWidget(QWidget* parent)
     : QListWidget(parent) {
@@ -193,20 +267,32 @@ void MediaBrowserListWidget::applyDisplayMode() {
     setUniformItemSizes(false);
 }
 
-QMimeData* MediaBrowserListWidget::mimeData(
-    const QList<QListWidgetItem*>& items) const {
-    auto* mime_data = new QMimeData;
-    if (items.isEmpty()) return mime_data;
+void MediaBrowserListWidget::startDrag(Qt::DropActions supportedActions) {
+    const auto items = selectedItems();
+    if (items.isEmpty()) return;
+
+    auto* drag = new QDrag(this);
+    drag->setMimeData(media_browser_ui::createMediaBrowserDragMimeData(items));
 
     const auto* item = items.front();
-    if (item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
-        media_browser_ui::kMediaItemTypeBin) {
-        return mime_data;
+    const auto preview = media_browser_ui::createDragPreview(
+        item->icon(),
+        item->text());
+    if (!preview.isNull()) {
+        drag->setPixmap(preview);
+        drag->setHotSpot(QPoint(preview.width() / 2, preview.height() / 2));
     }
 
-    const QString source_path = item->data(Qt::UserRole).toString();
-    if (!source_path.isEmpty()) {
-        mime_data->setData(ui::kMediaPathMimeType, source_path.toUtf8());
-    }
-    return mime_data;
+    const auto actions = supportedActions == Qt::IgnoreAction
+        ? Qt::CopyAction
+        : supportedActions;
+    const auto default_action = defaultDropAction() == Qt::IgnoreAction
+        ? Qt::CopyAction
+        : defaultDropAction();
+    drag->exec(actions, default_action);
+}
+
+QMimeData* MediaBrowserListWidget::mimeData(
+    const QList<QListWidgetItem*>& items) const {
+    return media_browser_ui::createMediaBrowserDragMimeData(items);
 }

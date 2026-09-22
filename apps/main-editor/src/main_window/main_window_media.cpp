@@ -385,7 +385,6 @@ void MainWindow::populateMediaBrowser(
             bin_item->setData(
                 media_browser_ui::kMediaBinPathRole,
                 QString::fromStdString(bin));
-            bin_item->setFlags(bin_item->flags() & ~Qt::ItemIsDragEnabled);
             if (bin != "Unsorted") {
                 bin_item->setFlags(bin_item->flags() | Qt::ItemIsEditable);
             } else {

@@ -91,6 +91,8 @@ in the running Main Editor after UI or integration changes:
   double-click and F2, automatic New Bin naming without dialogs through the
   context menu, protection of
   All Media/Unsorted, and preventing folder items from producing media drag data,
+  native drag previews showing the cached media thumbnail or folder icon with
+  the compact name, and rejecting folder previews at the Timeline,
   the `Media Pool` text button below the menu bar next to the `Effects` group
   button, switching between the Media Pool and Effects groups, the `Media Pool`
   submenu with independent `Bins` and `Media` actions, moving, resizing,
