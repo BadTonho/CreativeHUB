@@ -18,6 +18,7 @@ class QDragEnterEvent;
 class QDragLeaveEvent;
 class QDragMoveEvent;
 class QDropEvent;
+class QMimeData;
 class QMouseEvent;
 class QPaintEvent;
 class QContextMenuEvent;
@@ -126,6 +127,15 @@ private:
     void showTransitionMenu(const QPoint& position, const QPoint& global_position);
     void emitSelected(const ClipLocation& location);
     void emitLegacySelection(const ClipLocation& location);
+    [[nodiscard]] bool isSupportedDrop(
+        const QMimeData* mime_data) const noexcept;
+    void clearDropHover();
+    [[nodiscard]] bool updateDropHover(
+        const QMimeData* mime_data,
+        const QPointF& position);
+    [[nodiscard]] bool processDrop(
+        const QMimeData* mime_data,
+        const QPointF& position);
 
     std::vector<TimelineTrack> tracks_;
     int timeline_viewport_width_ = 0;

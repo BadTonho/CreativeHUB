@@ -274,11 +274,58 @@ void TimelineWidget::setTimelineViewportWidth(int width) {
 }
 
 bool TimelineWidget::eventFilter(QObject* watched, QEvent* event) {
-    Q_UNUSED(watched);
     if (event != nullptr && event->type() == QEvent::Resize) {
         const auto* resize_event = static_cast<const QResizeEvent*>(event);
         setTimelineViewportWidth(resize_event->size().width());
     }
+
+    auto* watched_widget = qobject_cast<QWidget*>(watched);
+    if (watched_widget != nullptr && watched != this && event != nullptr) {
+        switch (event->type()) {
+        case QEvent::DragEnter: {
+            auto* drag_event = static_cast<QDragEnterEvent*>(event);
+            if (isSupportedDrop(drag_event->mimeData())) {
+                drag_event->acceptProposedAction();
+            } else {
+                drag_event->ignore();
+            }
+            return true;
+        }
+        case QEvent::DragMove: {
+            auto* drag_event = static_cast<QDragMoveEvent*>(event);
+            const auto position = mapFrom(
+                watched_widget,
+                drag_event->position().toPoint());
+            if (updateDropHover(drag_event->mimeData(), position)) {
+                drag_event->acceptProposedAction();
+            } else {
+                drag_event->ignore();
+            }
+            return true;
+        }
+        case QEvent::DragLeave: {
+            auto* drag_event = static_cast<QDragLeaveEvent*>(event);
+            clearDropHover();
+            drag_event->accept();
+            return true;
+        }
+        case QEvent::Drop: {
+            auto* drop_event = static_cast<QDropEvent*>(event);
+            const auto position = mapFrom(
+                watched_widget,
+                drop_event->position().toPoint());
+            if (processDrop(drop_event->mimeData(), position)) {
+                drop_event->acceptProposedAction();
+            } else {
+                drop_event->ignore();
+            }
+            return true;
+        }
+        default:
+            break;
+        }
+    }
+
     return QWidget::eventFilter(watched, event);
 }
 
@@ -822,8 +869,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
 }
 
 void TimelineWidget::dragEnterEvent(QDragEnterEvent* event) {
-    if (event->mimeData()->hasFormat(ui::kMediaPathMimeType) ||
-        event->mimeData()->hasFormat(ui::kEffectIdMimeType)) {
+    if (isSupportedDrop(event->mimeData())) {
         event->acceptProposedAction();
     } else {
         event->ignore();
@@ -831,20 +877,47 @@ void TimelineWidget::dragEnterEvent(QDragEnterEvent* event) {
 }
 
 void TimelineWidget::dragLeaveEvent(QDragLeaveEvent* event) {
-    drag_hovering_ = false;
-    drop_hover_track_.reset();
-    drop_hover_frame_.reset();
-    update();
+    clearDropHover();
     event->accept();
 }
 
 void TimelineWidget::dragMoveEvent(QDragMoveEvent* event) {
-    const auto track = trackAt(event->position().y());
-    const auto frame = globalFrameAt(event->position().x());
-    const bool supported_drop =
-        event->mimeData()->hasFormat(ui::kMediaPathMimeType) ||
-        event->mimeData()->hasFormat(ui::kEffectIdMimeType);
-    const bool accepted = supported_drop && track.has_value() && frame.has_value();
+    if (updateDropHover(event->mimeData(), event->position())) {
+        event->acceptProposedAction();
+    } else {
+        event->ignore();
+    }
+}
+
+void TimelineWidget::dropEvent(QDropEvent* event) {
+    if (processDrop(event->mimeData(), event->position())) {
+        event->acceptProposedAction();
+        update();
+    } else {
+        event->ignore();
+    }
+}
+
+bool TimelineWidget::isSupportedDrop(const QMimeData* mime_data) const noexcept {
+    return mime_data != nullptr &&
+        (mime_data->hasFormat(ui::kMediaPathMimeType) ||
+         mime_data->hasFormat(ui::kEffectIdMimeType));
+}
+
+void TimelineWidget::clearDropHover() {
+    drag_hovering_ = false;
+    drop_hover_track_.reset();
+    drop_hover_frame_.reset();
+    update();
+}
+
+bool TimelineWidget::updateDropHover(
+    const QMimeData* mime_data,
+    const QPointF& position) {
+    const auto track = trackAt(position.y());
+    const auto frame = globalFrameAt(position.x());
+    const bool accepted = isSupportedDrop(mime_data) &&
+        track.has_value() && frame.has_value();
     drag_hovering_ = accepted;
     if (accepted) {
         drop_hover_track_ = track;
@@ -854,43 +927,37 @@ void TimelineWidget::dragMoveEvent(QDragMoveEvent* event) {
         drop_hover_frame_.reset();
     }
     update();
-    if (accepted) event->acceptProposedAction();
-    else event->ignore();
+    return accepted;
 }
 
-void TimelineWidget::dropEvent(QDropEvent* event) {
-    const auto track = trackAt(event->position().y());
-    const auto frame = globalFrameAt(event->position().x());
-    const bool is_media_drop = event->mimeData()->hasFormat(ui::kMediaPathMimeType);
-    const bool is_effect_drop = event->mimeData()->hasFormat(ui::kEffectIdMimeType);
+bool TimelineWidget::processDrop(
+    const QMimeData* mime_data,
+    const QPointF& position) {
+    const auto track = trackAt(position.y());
+    const auto frame = globalFrameAt(position.x());
+    const bool is_media_drop = mime_data != nullptr &&
+        mime_data->hasFormat(ui::kMediaPathMimeType);
+    const bool is_effect_drop = mime_data != nullptr &&
+        mime_data->hasFormat(ui::kEffectIdMimeType);
     if ((!is_media_drop && !is_effect_drop) ||
         !track.has_value() || !frame.has_value()) {
-        event->ignore();
-        return;
+        return false;
     }
-    drag_hovering_ = false;
-    drop_hover_track_.reset();
-    drop_hover_frame_.reset();
+
+    clearDropHover();
     if (is_media_drop) {
         const auto path = QString::fromUtf8(
-            event->mimeData()->data(ui::kMediaPathMimeType));
-        if (path.isEmpty()) {
-            event->ignore();
-            return;
-        }
+            mime_data->data(ui::kMediaPathMimeType));
+        if (path.isEmpty()) return false;
         emit mediaDropRequestedAt(path, static_cast<qint64>(*track), *frame);
     } else {
         const auto effect_id = QString::fromUtf8(
-            event->mimeData()->data(ui::kEffectIdMimeType));
-        if (effect_id.isEmpty()) {
-            event->ignore();
-            return;
-        }
+            mime_data->data(ui::kEffectIdMimeType));
+        if (effect_id.isEmpty()) return false;
         emit effectDropRequestedAt(
             effect_id, static_cast<qint64>(*track), *frame);
     }
-    event->acceptProposedAction();
-    update();
+    return true;
 }
 
 void TimelineWidget::showTransitionMenu(

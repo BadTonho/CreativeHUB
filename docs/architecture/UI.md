@@ -96,6 +96,12 @@ preview image area is capped at 128x72 and is created only when the drag starts.
 Folder items display the same style using the standard folder icon, but carry no
 media MIME and are therefore rejected by the Timeline.
 
+The Timeline is hosted inside a scrollable viewport. Media and effect drops are
+handled through that viewport and their coordinates are converted back to the
+Timeline content before the target track and frame are resolved. Only the
+content area of a track accepts a drop; the track header, ruler, and empty
+viewport space remain invalid targets.
+
 File actions provide New Project, Open Project, Save Project, and Save Project
 As. Save prompts are transactional and New, Open, and close use Save, Discard,
 and Cancel when the project is dirty.

@@ -100,6 +100,10 @@ using the cached thumbnail (or the standard folder icon) and the compact visible
 name. The preview is limited to a 128x72 image area, follows the cursor, and
 does not decode media or change project state. Folder previews are visual only
 for Timeline drops because folders intentionally carry no media path MIME.
+The Timeline's scrollable viewport forwards valid media and effect drag events
+to the Timeline content and converts the pointer position before calculating
+the destination frame. The track header, ruler, and empty viewport space do not
+accept drops.
 
 Media organization changes mark the project dirty but do not create entries in
 the Timeline Undo/Redo history. Selection, bin filtering, and tree expansion

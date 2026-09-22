@@ -447,11 +447,14 @@ QWidget* MainWindow::createTimeline() {
     timeline_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     timeline_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     timeline_scroll_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    timeline_scroll_->setAcceptDrops(true);
+    timeline_scroll_->viewport()->setAcceptDrops(true);
     timeline_scroll_->setFrameShape(QFrame::NoFrame);
     timeline_scroll_->setStyleSheet(
         "QScrollArea { background: transparent; border: none; }"
         "QScrollArea > QWidget > QWidget { background: transparent; }");
     timeline_scroll_->setWidget(timeline_widget_);
+    timeline_widget_->setAcceptDrops(false);
     timeline_scroll_->viewport()->installEventFilter(timeline_widget_);
     timeline_widget_->setTimelineViewportWidth(timeline_scroll_->viewport()->width());
     layout->addWidget(timeline_scroll_, 1);

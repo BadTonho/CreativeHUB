@@ -9,6 +9,8 @@
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPointingDevice>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QWheelEvent>
 
 #include <cstdint>
@@ -160,6 +162,146 @@ int main(int argc, char* argv[]) {
         require(effect_drop_received && effect_drop_track == 0 &&
                     effect_drop_frame > 0,
                 "Text effect drop did not preserve the target track and frame.");
+
+        bool media_drop_received = false;
+        QString media_drop_path;
+        qint64 media_drop_track = -1;
+        qint64 media_drop_frame = -1;
+        QObject::connect(
+            &widget,
+            &timeline::TimelineWidget::mediaDropRequestedAt,
+            [&media_drop_received, &media_drop_path, &media_drop_track,
+             &media_drop_frame](
+                const QString& path,
+                qint64 track,
+                qint64 frame) {
+                media_drop_received = true;
+                media_drop_path = path;
+                media_drop_track = track;
+                media_drop_frame = frame;
+            });
+        QMimeData media_mime;
+        media_mime.setData(
+            ui::kMediaPathMimeType,
+            QByteArrayLiteral("sample.mp4"));
+        require(
+            media_mime.hasFormat(ui::kMediaPathMimeType),
+            "Media test MIME was not initialized.");
+        QDragEnterEvent media_enter(
+            effect_drop_position.toPoint(),
+            Qt::CopyAction,
+            &media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&widget, &media_enter);
+        QDragMoveEvent media_move(
+            effect_drop_position.toPoint(),
+            Qt::CopyAction,
+            &media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&widget, &media_move);
+        QDropEvent media_drop(
+            effect_drop_position,
+            Qt::CopyAction,
+            &media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&widget, &media_drop);
+        require(
+            media_drop.isAccepted(),
+            "Direct media drop was not accepted by TimelineWidget.");
+        require(
+            media_drop_received,
+            "Direct media drop did not emit the media signal.");
+        require(
+            media_drop_path == "sample.mp4" && media_drop_track == 0 &&
+                media_drop_frame > 0,
+            "Media drop did not preserve the source path and target position.");
+
+        QDropEvent header_media_drop(
+            QPointF(50.0, effect_drop_position.y()),
+            Qt::CopyAction,
+            &media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&widget, &header_media_drop);
+        require(
+            !header_media_drop.isAccepted(),
+            "Timeline accepted a media drop on the track header.");
+
+        QScrollArea scroll_area;
+        scroll_area.resize(360, 220);
+        scroll_area.setWidgetResizable(true);
+        auto* viewport_timeline = new timeline::TimelineWidget;
+        viewport_timeline->setTracks({lower_track});
+        viewport_timeline->setZoomFactor(2.0);
+        viewport_timeline->setAcceptDrops(false);
+        scroll_area.setWidget(viewport_timeline);
+        scroll_area.setAcceptDrops(true);
+        scroll_area.viewport()->setAcceptDrops(true);
+        scroll_area.viewport()->installEventFilter(viewport_timeline);
+        scroll_area.show();
+        application.processEvents();
+        viewport_timeline->setTimelineViewportWidth(
+            scroll_area.viewport()->width());
+        scroll_area.horizontalScrollBar()->setValue(100);
+        application.processEvents();
+
+        bool viewport_media_drop_received = false;
+        qint64 viewport_media_drop_track = -1;
+        qint64 viewport_media_drop_frame = -1;
+        QObject::connect(
+            viewport_timeline,
+            &timeline::TimelineWidget::mediaDropRequestedAt,
+            [&viewport_media_drop_received, &viewport_media_drop_track,
+             &viewport_media_drop_frame](
+                const QString&,
+                qint64 track,
+                qint64 frame) {
+                viewport_media_drop_received = true;
+                viewport_media_drop_track = track;
+                viewport_media_drop_frame = frame;
+            });
+
+        const QPoint viewport_drop_position(220, 80);
+        QDragEnterEvent viewport_enter(
+            viewport_drop_position,
+            Qt::CopyAction,
+            &media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(
+            scroll_area.viewport(),
+            &viewport_enter);
+        QDragMoveEvent viewport_move(
+            viewport_drop_position,
+            Qt::CopyAction,
+            &media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(
+            scroll_area.viewport(),
+            &viewport_move);
+        QDropEvent viewport_drop(
+            QPointF(viewport_drop_position),
+            Qt::CopyAction,
+            &media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(
+            scroll_area.viewport(),
+            &viewport_drop);
+        require(
+            viewport_media_drop_received && viewport_media_drop_track == 0 &&
+                viewport_media_drop_frame > 0,
+            "Media drop received by the QScrollArea viewport was not forwarded.");
+        require(
+            viewport_timeline->mapFrom(
+                scroll_area.viewport(),
+                viewport_drop_position).x() > viewport_drop_position.x(),
+            "The viewport test did not exercise horizontal coordinate conversion.");
+        scroll_area.close();
 
         QMimeData invalid_mime;
         invalid_mime.setData(

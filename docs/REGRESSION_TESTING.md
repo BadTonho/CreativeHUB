@@ -103,8 +103,11 @@ in the running Main Editor after UI or integration changes:
   offline media, right-click New Bin in the media area and bin tree, creation
   of child bins, dragging media to bins, dragging bins into bins, preservation
   of empty sub-bins, rejection of All Media/blank/self/descendant/collision
-  drops, project dirty state, persistence after save/reopen, and drag-and-drop
-  to the Timeline; confirm that invalid inline names restore the previous
+  drops, project dirty state, persistence after save/reopen, drag-and-drop
+  through the scrollable Timeline viewport in both list and block modes,
+  horizontal-scroll coordinate conversion, rejection of the track header and
+  ruler, and creation of exactly one clip; confirm that invalid inline names
+  restore the previous
   label and report a concise status message, and confirm that no Add to
   Timeline or New Bin buttons, redundant status row, or excessive top/bottom
   spacing is shown while media drag-and-drop remains available; confirm that
