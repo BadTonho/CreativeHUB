@@ -1,8 +1,11 @@
 #include "playback/playback_worker.h"
 #include "playback/playback_frame_mailbox.h"
+#include "logging/logger.h"
 #include "rendering/preview_performance_metrics.h"
 
 #include <QGuiApplication>
+#include <QEventLoop>
+#include <QThread>
 #include <QTimer>
 
 #include <array>
@@ -28,6 +31,44 @@ QString toQString(const std::filesystem::path& path) {
     return QString::fromUtf8(
         reinterpret_cast<const char*>(value.data()),
         static_cast<int>(value.size()));
+}
+
+void validateWorkerDiagnostics(QCoreApplication&) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
+
+    const auto ui_thread_id = logging::current_thread_id();
+    QThread playback_thread;
+    auto* worker = new playback::PlaybackWorker;
+    worker->moveToThread(&playback_thread);
+
+    QObject::connect(
+        &playback_thread,
+        &QThread::finished,
+        worker,
+        &QObject::deleteLater);
+    QObject::connect(
+        &playback_thread,
+        &QThread::started,
+        worker,
+        &playback::PlaybackWorker::initializeDiagnostics,
+        Qt::QueuedConnection);
+
+    playback_thread.start();
+    QEventLoop wait_loop;
+    QTimer::singleShot(500, &wait_loop, &QEventLoop::quit);
+    wait_loop.exec();
+
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    playback_thread.quit();
+    playback_thread.wait();
+    metrics.setEnabled(false);
+
+    require(snapshot.playback_worker_thread_id != 0,
+            "Playback worker thread identifier was not captured.");
+    require(snapshot.playback_worker_thread_id != ui_thread_id,
+            "Playback worker thread identifier matches the UI thread.");
 }
 
 void validateMissingMedia(QCoreApplication& application) {
@@ -773,6 +814,7 @@ int main(int argc, char* argv[]) {
     QGuiApplication application(argc, argv);
 
     try {
+        validateWorkerDiagnostics(application);
         validateMissingMedia(application);
         validateSeekWithoutMedia(application);
         validatePlaybackFrameMailbox();

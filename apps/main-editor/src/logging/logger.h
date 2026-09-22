@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <mutex>
 #include <string>
@@ -20,6 +21,8 @@ enum class Level {
 
 using Context = std::vector<std::pair<std::string, std::string>>;
 
+[[nodiscard]] std::uint64_t current_thread_id() noexcept;
+
 struct Options {
     std::size_t max_file_size_bytes = 5U * 1024U * 1024U;
     std::size_t max_file_count = 3U;
@@ -32,7 +35,7 @@ struct Options {
 
 class Logger final {
 public:
-    Logger() = default;
+    Logger();
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
 
@@ -56,6 +59,7 @@ private:
     mutable std::mutex mutex_;
     std::filesystem::path directory_;
     Options options_;
+    std::string process_instance_id_;
     bool initialized_ = false;
 };
 

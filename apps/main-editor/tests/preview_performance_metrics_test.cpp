@@ -83,6 +83,7 @@ int main() {
         metrics.recordPlaybackTick();
         metrics.recordPacingSkippedFrames(2);
         metrics.recordPacingCoalescedFrame();
+        metrics.setPlaybackWorkerThreadId(12345);
         metrics.recordTiming(
             rendering::PreviewTiming::Decode,
             std::chrono::milliseconds(2));
@@ -153,6 +154,8 @@ int main() {
                 "Skipped pacing frame count is incorrect.");
         require(snapshot.pacing_coalesced_frames == 1,
                 "Coalesced pacing frame count is incorrect.");
+        require(snapshot.playback_worker_thread_id == 12345,
+                "Playback worker thread identifier is incorrect.");
         require(snapshot.last_frame_width == 1920 &&
                     snapshot.last_frame_height == 1080,
                 "Last frame dimensions are incorrect.");
@@ -217,6 +220,7 @@ int main() {
                     reset.playback_ticks == 0 &&
                     reset.pacing_skipped_frames == 0 &&
                     reset.pacing_coalesced_frames == 0 &&
+                    reset.playback_worker_thread_id == 12345 &&
                     reset.pacing_lag.count == 0 &&
                     reset.text_composition_fast_path_hits == 0,
                 "Taking a snapshot did not reset the metrics.");

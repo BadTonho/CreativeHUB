@@ -158,6 +158,14 @@ in the running Main Editor after UI or integration changes:
   confirm that a simple run stays close to the source FPS, that intentional
   catch-up reports skipped frames instead of emitting a burst, and that the
   one-slot mailbox prevents unnecessary UI queue growth;
+- with Preview metrics enabled, confirm every log entry contains numeric
+  `process_id` and `thread_id` values plus a stable `process_instance_id`;
+  confirm `playback/worker_ready` identifies `thread_role="playback_worker"`,
+  `preview/performance_metrics` identifies `thread_role="ui_logger"`, and
+  its `playback_worker_thread_id`, `playback_generation`, active track and
+  clip indices, and playback frame index correlate with the active playback
+  session; verify missing track or clip selections are recorded as `-1` and
+  no media paths are added to performance samples;
 - the Timeline footer RAM indicator: confirm it is aligned to the right, uses
   the `RAM: <megabytes> MB` format, refreshes approximately once per
   second, reports only the Main Editor process, and does not affect playback,

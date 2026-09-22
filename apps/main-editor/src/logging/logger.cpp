@@ -1,17 +1,91 @@
 #include "logger.h"
 
+#include <atomic>
 #include <chrono>
 #include <ctime>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <thread>
 #include <system_error>
 
 #include <cstdlib>
 
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <pthread.h>
+#include <unistd.h>
+#elif defined(__linux__)
+#include <sys/syscall.h>
+#include <unistd.h>
+#elif defined(__unix__)
+#include <pthread.h>
+#include <unistd.h>
+#endif
+
 namespace logging {
 namespace {
+
+std::uint64_t hashedThreadId() noexcept {
+    try {
+        return static_cast<std::uint64_t>(
+            std::hash<std::thread::id>{}(std::this_thread::get_id()));
+    } catch (...) {
+        return 0;
+    }
+}
+
+std::uint64_t currentProcessId() noexcept {
+#if defined(_WIN32)
+    return static_cast<std::uint64_t>(::GetCurrentProcessId());
+#elif defined(__unix__) || defined(__APPLE__)
+    return static_cast<std::uint64_t>(::getpid());
+#else
+    return 0;
+#endif
+}
+
+std::uint64_t currentThreadId() noexcept {
+#if defined(_WIN32)
+    return static_cast<std::uint64_t>(::GetCurrentThreadId());
+#elif defined(__APPLE__)
+    std::uint64_t thread_id = 0;
+    if (pthread_threadid_np(nullptr, &thread_id) == 0) return thread_id;
+    return hashedThreadId();
+#elif defined(__linux__) && defined(SYS_gettid)
+    return static_cast<std::uint64_t>(::syscall(SYS_gettid));
+#else
+    return hashedThreadId();
+#endif
+}
+
+std::string generateProcessInstanceId() {
+    static std::atomic<std::uint64_t> sequence{0};
+    const auto now = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    const auto serial = sequence.fetch_add(1, std::memory_order_relaxed);
+
+    std::ostringstream result;
+    result << std::hex << static_cast<std::uint64_t>(now) << '-'
+           << currentProcessId() << '-' << serial;
+    return result.str();
+}
+
+const std::string& processInstanceId() {
+    static const std::string id = generateProcessInstanceId();
+    return id;
+}
+
+bool isReservedContextKey(std::string_view key) noexcept {
+    return key == "process_id" || key == "thread_id" ||
+        key == "process_instance_id";
+}
 
 int levelRank(Level level) noexcept {
     switch (level) {
@@ -157,6 +231,13 @@ void writeFallback(std::string_view line) noexcept {
 
 } // namespace
 
+std::uint64_t current_thread_id() noexcept {
+    return currentThreadId();
+}
+
+Logger::Logger()
+    : process_instance_id_(processInstanceId()) {}
+
 std::string_view level_name(Level level) noexcept {
     switch (level) {
     case Level::Debug: return "Debug";
@@ -208,7 +289,26 @@ void Logger::log(Level level,
                  std::string_view message,
                  const Context& context) noexcept {
     try {
-        const auto line = formatLine(level, subsystem, operation, message, context);
+        Context enriched_context;
+        enriched_context.reserve(context.size() + 3);
+        enriched_context.emplace_back(
+            "process_id", std::to_string(currentProcessId()));
+        enriched_context.emplace_back(
+            "thread_id", std::to_string(currentThreadId()));
+        enriched_context.emplace_back(
+            "process_instance_id", process_instance_id_);
+        for (const auto& entry : context) {
+            if (!isReservedContextKey(entry.first)) {
+                enriched_context.push_back(entry);
+            }
+        }
+
+        const auto line = formatLine(
+            level,
+            subsystem,
+            operation,
+            message,
+            enriched_context);
         std::lock_guard lock(mutex_);
         if (levelRank(level) < levelRank(options_.minimum_level)) return;
         if (!initialized_) {

@@ -64,6 +64,7 @@ public:
     void requestSeek(qint64 frame_index, quint64 generation);
 
 public slots:
+    void initializeDiagnostics();
     void setMedia(
         QString source_path,
         double frame_rate,
@@ -180,6 +181,7 @@ private:
     std::int64_t audio_clock_origin_frame_ = 0;
     quint64 generation_ = 0;
     bool playing_ = false;
+    bool diagnostics_logged_ = false;
     using Clock = std::chrono::steady_clock;
     Clock::time_point playback_clock_started_at_{};
     Clock::time_point last_playback_tick_at_{};

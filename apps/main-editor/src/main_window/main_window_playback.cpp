@@ -173,6 +173,26 @@ void MainWindow::flushPreviewPerformanceMetrics() {
 
     logging::Context context;
     appendPerformanceContext(context, snapshot);
+    context.emplace_back("thread_role", "ui_logger");
+    context.emplace_back(
+        "playback_generation",
+        std::to_string(static_cast<unsigned long long>(playback_generation_)));
+    context.emplace_back(
+        "active_track_index",
+        active_timeline_track_index_.has_value()
+            ? std::to_string(*active_timeline_track_index_)
+            : "-1");
+    context.emplace_back(
+        "active_clip_index",
+        active_timeline_clip_index_.has_value()
+            ? std::to_string(*active_timeline_clip_index_)
+            : "-1");
+    context.emplace_back(
+        "playback_frame_index",
+        std::to_string(static_cast<long long>(playback_frame_index_)));
+    context.emplace_back(
+        "playback_worker_thread_id",
+        std::to_string(snapshot.playback_worker_thread_id));
     logging::Logger::instance().log(
         logging::Level::Info,
         "preview",
@@ -190,6 +210,13 @@ void MainWindow::initializePlayback() {
 
     playback_worker_ = new playback::PlaybackWorker;
     playback_worker_->moveToThread(&playback_thread_);
+
+    connect(
+        &playback_thread_,
+        &QThread::started,
+        playback_worker_,
+        &playback::PlaybackWorker::initializeDiagnostics,
+        Qt::QueuedConnection);
 
     connect(
         &playback_thread_,

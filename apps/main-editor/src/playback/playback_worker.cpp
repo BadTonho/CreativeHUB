@@ -56,6 +56,21 @@ PlaybackWorker::~PlaybackWorker() {
     clearCompositionCache();
 }
 
+void PlaybackWorker::initializeDiagnostics() {
+    if (diagnostics_logged_) return;
+    diagnostics_logged_ = true;
+
+    const auto thread_id = logging::current_thread_id();
+    rendering::PreviewPerformanceMetrics::instance()
+        .setPlaybackWorkerThreadId(thread_id);
+    logging::Logger::instance().log(
+        logging::Level::Info,
+        "playback",
+        "worker_ready",
+        "Playback worker initialized.",
+        {{"thread_role", "playback_worker"}});
+}
+
 void PlaybackWorker::clearCompositionCache() noexcept {
     cached_composition_generation_ = 0;
     cached_composition_global_frame_ = -1;

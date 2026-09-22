@@ -50,6 +50,7 @@ struct PreviewPerformanceSnapshot {
     std::uint64_t playback_ticks = 0;
     std::uint64_t pacing_skipped_frames = 0;
     std::uint64_t pacing_coalesced_frames = 0;
+    std::uint64_t playback_worker_thread_id = 0;
     std::uint64_t last_frame_width = 0;
     std::uint64_t last_frame_height = 0;
 
@@ -97,6 +98,7 @@ public:
     void recordPlaybackTick() noexcept;
     void recordPacingSkippedFrames(std::uint64_t count) noexcept;
     void recordPacingCoalescedFrame() noexcept;
+    void setPlaybackWorkerThreadId(std::uint64_t thread_id) noexcept;
 
     [[nodiscard]] PreviewPerformanceSnapshot takeSnapshotAndReset() noexcept;
 
@@ -127,6 +129,7 @@ private:
     std::atomic<std::uint64_t> playback_ticks_{0};
     std::atomic<std::uint64_t> pacing_skipped_frames_{0};
     std::atomic<std::uint64_t> pacing_coalesced_frames_{0};
+    std::atomic<std::uint64_t> playback_worker_thread_id_{0};
     std::atomic<std::uint64_t> last_frame_width_{0};
     std::atomic<std::uint64_t> last_frame_height_{0};
     TimingStorage decode_;

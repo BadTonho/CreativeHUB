@@ -162,6 +162,13 @@ void PreviewPerformanceMetrics::recordPacingCoalescedFrame() noexcept {
     }
 }
 
+void PreviewPerformanceMetrics::setPlaybackWorkerThreadId(
+    std::uint64_t thread_id) noexcept {
+    if (thread_id != 0) {
+        playback_worker_thread_id_.store(thread_id, std::memory_order_relaxed);
+    }
+}
+
 PreviewTimingSnapshot PreviewPerformanceMetrics::takeTimingSnapshot(
     TimingStorage& storage) noexcept {
     return PreviewTimingSnapshot{
@@ -188,6 +195,7 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
         playback_ticks_.exchange(0, std::memory_order_relaxed),
         pacing_skipped_frames_.exchange(0, std::memory_order_relaxed),
         pacing_coalesced_frames_.exchange(0, std::memory_order_relaxed),
+        playback_worker_thread_id_.load(std::memory_order_relaxed),
         last_frame_width_.exchange(0, std::memory_order_relaxed),
         last_frame_height_.exchange(0, std::memory_order_relaxed),
         takeTimingSnapshot(decode_),

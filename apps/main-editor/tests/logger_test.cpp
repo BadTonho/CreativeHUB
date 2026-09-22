@@ -7,6 +7,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 namespace {
 
@@ -19,6 +20,16 @@ std::string readFile(const std::filesystem::path& path) {
     std::ostringstream content;
     content << input.rdbuf();
     return content.str();
+}
+
+std::string contextValue(const std::string& line, const std::string& key) {
+    const auto prefix = key + "=\"";
+    const auto start = line.find(prefix);
+    if (start == std::string::npos) return {};
+    const auto value_start = start + prefix.size();
+    const auto end = line.find('"', value_start);
+    if (end == std::string::npos) return {};
+    return line.substr(value_start, end - value_start);
 }
 
 std::filesystem::path uniqueTestDirectory() {
@@ -46,7 +57,11 @@ int main() {
             "media",
             "probe",
             "A \"quoted\" message\nwith a new line and a \\ slash.",
-            {{"path", "C:\\media\\clip.mkv"}, {"error_code", "-22"}});
+            {{"path", "C:\\media\\clip.mkv"},
+             {"error_code", "-22"},
+             {"process_id", "spoofed"},
+             {"thread_id", "spoofed"},
+             {"process_instance_id", "spoofed"}});
 
         const auto initial_content = readFile(logger.log_path());
         require(initial_content.find("level=Error") != std::string::npos,
@@ -60,6 +75,41 @@ int main() {
                 "Log message escaping is incorrect.");
         require(initial_content.find("error_code=\"-22\"") != std::string::npos,
                 "Log context was not written.");
+        require(initial_content.find("process_id=\"") != std::string::npos,
+                "Process identifier was not written.");
+        require(initial_content.find("thread_id=\"") != std::string::npos,
+                "Thread identifier was not written.");
+        require(initial_content.find("process_instance_id=\"") != std::string::npos,
+                "Process instance identifier was not written.");
+        require(initial_content.find("process_id=\"spoofed\"") == std::string::npos,
+                "Reserved process identifier was overridden by caller context.");
+        require(initial_content.find("thread_id=\"spoofed\"") == std::string::npos,
+                "Reserved thread identifier was overridden by caller context.");
+        require(initial_content.find("process_instance_id=\"spoofed\"") == std::string::npos,
+                "Reserved process instance identifier was overridden by caller context.");
+
+        const auto main_thread_id = contextValue(initial_content, "thread_id");
+        const auto process_instance_id = contextValue(
+            initial_content,
+            "process_instance_id");
+        require(!main_thread_id.empty() && !process_instance_id.empty(),
+                "Runtime identifiers were empty.");
+
+        std::thread worker([&logger]() {
+            logger.log(
+                logging::Level::Info,
+                "test",
+                "thread_identity",
+                "Thread identity sample.");
+        });
+        worker.join();
+
+        const auto worker_content = readFile(logger.log_path());
+        const auto worker_thread_id = contextValue(worker_content, "thread_id");
+        require(!worker_thread_id.empty() && worker_thread_id != main_thread_id,
+                "Worker log did not expose a distinct thread identifier.");
+        require(contextValue(worker_content, "process_instance_id") == process_instance_id,
+                "Process instance identifier changed between threads.");
 
         for (int index = 0; index < 40; ++index) {
             logger.log(

@@ -116,6 +116,17 @@ entries are written.
 When disabled, the timer stops and the hot path does not collect detailed
 timings.
 
+Every logger entry also includes the numeric `process_id`, the native
+`thread_id` that emitted the entry, and a `process_instance_id` that remains
+stable for the application lifetime. The playback thread writes one
+`playback/worker_ready` entry with `thread_role="playback_worker"`. Preview
+performance samples are emitted by the UI timer and therefore identify their
+emitting thread with `thread_role="ui_logger"`; they additionally include the
+`playback_worker_thread_id`, `playback_generation`, active track and clip
+indices, and the current playback frame. Missing track or clip selections use
+`-1`. These fields make worker stalls distinguishable from UI and GPU work
+without writing a per-frame diagnostic entry.
+
 The same summaries include playback pacing data: `playback_ticks`,
 `pacing_skipped_frames`, `pacing_coalesced_frames`, and average/maximum
 `pacing_lag`. The existing emitted, received, submitted, and GPU-presented
