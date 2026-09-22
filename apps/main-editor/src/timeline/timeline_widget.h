@@ -47,6 +47,8 @@ public:
     [[nodiscard]] bool razorMode() const noexcept;
     void setMoveRequiresAlt(bool enabled);
     [[nodiscard]] bool moveRequiresAlt() const noexcept;
+    void setSnapEnabled(bool enabled);
+    [[nodiscard]] bool snapEnabled() const noexcept;
     void setTimelineViewportWidth(int width);
     [[nodiscard]] double zoomFactor() const noexcept;
     void setZoomFactor(double factor);
@@ -91,6 +93,7 @@ signals:
     void zoomRequested(double factor);
     void zoomChanged(double factor);
     void trackRowHeightChanged(double height);
+    void snapEnabledChanged(bool enabled);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -107,6 +110,10 @@ protected:
 
 private:
     enum class TrimEdge { Left, Right };
+    struct SnapPlacement {
+        std::int64_t start_frame = 0;
+        std::optional<std::int64_t> guide_frame;
+    };
 
     [[nodiscard]] QRectF trackRect(std::size_t index) const noexcept;
     [[nodiscard]] QRectF rulerRect() const noexcept;
@@ -147,6 +154,11 @@ private:
         std::size_t track_index,
         std::int64_t start_frame,
         std::int64_t duration_frames) const noexcept;
+    [[nodiscard]] SnapPlacement snapPlacement(
+        std::size_t track_index,
+        std::int64_t raw_start_frame,
+        std::int64_t duration_frames,
+        std::optional<ClipLocation> excluded = std::nullopt) const noexcept;
     void clearDragPreview();
     void clearDropHover();
     [[nodiscard]] bool updateDropHover(
@@ -160,6 +172,7 @@ private:
     int timeline_viewport_width_ = 0;
     double zoom_factor_ = 1.0;
     double track_row_height_ = kDefaultTrackRowHeight;
+    bool snap_enabled_ = true;
     std::optional<ClipLocation> active_clip_;
     std::int64_t playhead_frame_ = 0;
     std::optional<std::int64_t> drag_frame_;
@@ -197,6 +210,7 @@ private:
     bool drag_hovering_ = false;
     std::optional<std::size_t> drop_hover_track_;
     std::optional<std::int64_t> drop_hover_frame_;
+    std::optional<std::int64_t> snap_guide_frame_;
     struct SelectedTransition {
         std::size_t track_index = 0;
         std::size_t from_clip_index = 0;

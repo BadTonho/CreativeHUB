@@ -109,6 +109,23 @@ QIcon timelineToolIcon(bool blade) {
     return QIcon(pixmap);
 }
 
+QIcon timelineSnapIcon() {
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(QColor("#f2f2f2"), 1.8, Qt::SolidLine,
+                        Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawLine(QPointF(5.0, 3.0), QPointF(5.0, 9.0));
+    painter.drawLine(QPointF(15.0, 3.0), QPointF(15.0, 9.0));
+    painter.drawArc(QRectF(5.0, 4.0, 10.0, 12.0), 180 * 16, 180 * 16);
+    painter.drawLine(QPointF(3.0, 3.0), QPointF(7.0, 3.0));
+    painter.drawLine(QPointF(13.0, 3.0), QPointF(17.0, 3.0));
+    return QIcon(pixmap);
+}
+
 } // namespace
 
 void MainWindow::addVideoTrack() {
@@ -354,14 +371,19 @@ QWidget* MainWindow::createTimeline() {
     clear_timeline_button_ = new QPushButton("Clear Timeline", container);
     selection_button_ = new QPushButton(container);
     razor_button_ = new QPushButton(container);
+    snap_button_ = new QPushButton(container);
     selection_button_->setIcon(timelineToolIcon(false));
     razor_button_->setIcon(timelineToolIcon(true));
+    snap_button_->setIcon(timelineSnapIcon());
     selection_button_->setIconSize(QSize(16, 16));
     razor_button_->setIconSize(QSize(16, 16));
+    snap_button_->setIconSize(QSize(16, 16));
     selection_button_->setFixedSize(32, 28);
     razor_button_->setFixedSize(32, 28);
+    snap_button_->setFixedSize(32, 28);
     selection_button_->setCheckable(true);
     razor_button_->setCheckable(true);
+    snap_button_->setCheckable(true);
     selection_button_->setAutoExclusive(true);
     razor_button_->setAutoExclusive(true);
     selection_button_->setChecked(true);
@@ -371,6 +393,7 @@ QWidget* MainWindow::createTimeline() {
     controls->addWidget(clear_timeline_button_);
     controls->addWidget(selection_button_);
     controls->addWidget(razor_button_);
+    controls->addWidget(snap_button_);
     controls->addSpacing(10);
     auto* tracks_label = new QLabel("Tracks", container);
     tracks_label->setStyleSheet("color: #9aa4b2; font-weight: 600;");
@@ -434,6 +457,9 @@ QWidget* MainWindow::createTimeline() {
     selection_button_->setAccessibleName("Selection Tool");
     razor_button_->setToolTip("Split a clip where you click");
     razor_button_->setAccessibleName("Blade Tool");
+    snap_button_->setToolTip(
+        "Toggle magnetic snapping for clips and media drops");
+    snap_button_->setAccessibleName("Magnetic Snap");
     add_track_button->setToolTip("Create a new empty video track");
     rename_track_button->setToolTip("Rename the active track");
     move_track_up_button->setToolTip("Move the active track toward the top");
@@ -457,6 +483,7 @@ QWidget* MainWindow::createTimeline() {
     timeline_widget_->setAcceptDrops(false);
     timeline_scroll_->viewport()->installEventFilter(timeline_widget_);
     timeline_widget_->setTimelineViewportWidth(timeline_scroll_->viewport()->width());
+    snap_button_->setChecked(timeline_widget_->snapEnabled());
     layout->addWidget(timeline_scroll_, 1);
 
     // Keep the playback status as a compact footer while giving the timeline
@@ -527,6 +554,23 @@ QWidget* MainWindow::createTimeline() {
         }
         if (timeline_widget_ != nullptr) timeline_widget_->setRazorMode(enabled);
     });
+    connect(snap_button_, &QPushButton::toggled, this, [this](bool enabled) {
+        if (timeline_widget_ != nullptr &&
+            timeline_widget_->snapEnabled() != enabled) {
+            timeline_widget_->setSnapEnabled(enabled);
+        }
+    });
+    connect(
+        timeline_widget_,
+        &timeline::TimelineWidget::snapEnabledChanged,
+        this,
+        [this](bool enabled) {
+            if (snap_button_ == nullptr || snap_button_->isChecked() == enabled) {
+                return;
+            }
+            const QSignalBlocker blocker(snap_button_);
+            snap_button_->setChecked(enabled);
+        });
     connect(add_track_button, &QPushButton::clicked,
             this, &MainWindow::addVideoTrack);
     connect(rename_track_button, &QPushButton::clicked,

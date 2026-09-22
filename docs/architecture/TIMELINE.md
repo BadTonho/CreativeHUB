@@ -50,6 +50,17 @@ The selected height is a per-project view setting; Ctrl + mouse wheel remains
 reserved for horizontal zoom and an unmodified wheel remains available to the
 scroll area.
 
+Magnetic snapping is enabled by default for clip movement and Media Browser
+media drops. The toolbar magnet button toggles it for the current editor
+session and does not mark the project dirty. When enabled, the Timeline uses
+an approximately eight-pixel visual tolerance and attracts either edge of the
+dragged clip to the start or end of a clip on the destination track. Frame zero
+and the end of the visible Timeline range are also valid boundaries; the
+playhead and clips on other tracks are not snap targets. A subtle vertical
+guide marks the exact contact frame. Snapping is applied only to the preview
+and the final requested position; the existing overlap validation still
+decides whether the operation is accepted.
+
 The internal add-to-timeline operation appends media to the active track. A
 drop from the imported Media Browser provides a target track and absolute
 timeline frame. The same source

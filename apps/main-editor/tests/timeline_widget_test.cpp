@@ -105,6 +105,8 @@ int main(int argc, char* argv[]) {
         timeline::TimelineWidget widget;
         require(widget.trackRowHeight() == 70.0,
                 "A new Timeline widget did not start with the 70-pixel default row height.");
+        require(widget.snapEnabled(),
+                "A new Timeline widget did not enable magnetic snapping by default.");
         widget.resize(1000, 500);
         widget.show();
         application.processEvents();
@@ -1007,46 +1009,322 @@ int main(int argc, char* argv[]) {
                 media_preview_sample_x, media_preview_sample_y) == media_before,
             "The media drop ghost was not cleared after cancellation.");
 
-        QMimeData preview_media_without_metadata;
-        preview_media_without_metadata.setData(
-            ui::kMediaPathMimeType,
-            QByteArrayLiteral("metadata-free.mp4"));
-        const auto fallback_preview_position = QPointF(
-            media_preview_widget.contentXForFrame(42000),
-            media_preview_sample_y);
-        QDragEnterEvent fallback_media_enter(
-            fallback_preview_position.toPoint(),
-            Qt::CopyAction,
-            &preview_media_without_metadata,
-            Qt::LeftButton,
-            Qt::NoModifier);
-        QApplication::sendEvent(
-            &media_preview_widget,
-            &fallback_media_enter);
-        QDragMoveEvent fallback_media_move(
-            fallback_preview_position.toPoint(),
-            Qt::CopyAction,
-            &preview_media_without_metadata,
-            Qt::LeftButton,
-            Qt::NoModifier);
-        QApplication::sendEvent(
-            &media_preview_widget,
-            &fallback_media_move);
-        QImage fallback_media_preview(900, 180, QImage::Format_ARGB32);
-        fallback_media_preview.fill(Qt::transparent);
-        media_preview_widget.render(&fallback_media_preview);
-        require(
-            fallback_media_preview.pixelColor(
-                static_cast<int>(std::lround(
-                    media_preview_widget.contentXForFrame(42000))),
-                media_preview_sample_y) != media_before,
-            "A media drag without metadata did not show its one-frame fallback ghost.");
-        QDragLeaveEvent fallback_media_leave;
-        QApplication::sendEvent(
-            &media_preview_widget,
-            &fallback_media_leave);
         media_preview_widget.close();
         drag_preview_widget.close();
+
+        // Magnetic snapping aligns either edge of a dragged clip to another
+        // clip edge while the model remains untouched until release.
+        timeline::TimelineWidget snap_widget;
+        snap_widget.resize(900, 260);
+        snap_widget.setTimelineViewportWidth(900);
+        const auto snap_source_clip = makeClip(
+            "snap-source.mkv", 0, 12000, "Snap source");
+        const auto snap_target_clip = makeClip(
+            "snap-target.mkv", 30000, 12000, "Snap target");
+        const auto snap_same_track = timeline::TimelineTrack{
+            1,
+            "Video 1",
+            1.0,
+            false,
+            {snap_source_clip, snap_target_clip}};
+        snap_widget.setTracks({snap_same_track});
+        snap_widget.show();
+        application.processEvents();
+        require(snap_widget.snapEnabled(),
+                "Magnetic snapping was not enabled on the Timeline widget.");
+        int snap_state_changes = 0;
+        bool last_snap_state = true;
+        QObject::connect(
+            &snap_widget,
+            &timeline::TimelineWidget::snapEnabledChanged,
+            [&snap_state_changes, &last_snap_state](bool enabled) {
+                ++snap_state_changes;
+                last_snap_state = enabled;
+            });
+        snap_widget.setSnapEnabled(false);
+        require(!snap_widget.snapEnabled() && snap_state_changes == 1 &&
+                    !last_snap_state,
+                "Magnetic snapping could not be disabled through its API.");
+        snap_widget.setSnapEnabled(true);
+        require(snap_widget.snapEnabled() && snap_state_changes == 2 &&
+                    last_snap_state,
+                "Magnetic snapping could not be re-enabled through its API.");
+
+        int snap_move_count = 0;
+        qint64 snap_target_track = -1;
+        qint64 snap_target_frame = -1;
+        QObject::connect(
+            &snap_widget,
+            &timeline::TimelineWidget::clipMoveRequestedAt,
+            [&snap_move_count, &snap_target_track, &snap_target_frame](
+                qint64, qint64, qint64 track, qint64 frame) {
+                ++snap_move_count;
+                snap_target_track = track;
+                snap_target_frame = frame;
+            });
+        const auto snap_source_y = 48.0 + 35.0;
+        const auto snap_press = QPointF(
+            snap_widget.contentXForFrame(6000), snap_source_y);
+        const auto snap_near_target = QPointF(
+            snap_widget.contentXForFrame(19000), snap_source_y);
+        QImage snap_before(900, 260, QImage::Format_ARGB32);
+        snap_before.fill(Qt::transparent);
+        snap_widget.render(&snap_before);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseButtonPress,
+            snap_press,
+            Qt::LeftButton);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseMove,
+            snap_near_target,
+            Qt::LeftButton);
+        require(snap_move_count == 0,
+                "Magnetic snapping emitted a move before release.");
+        QImage snap_active(900, 260, QImage::Format_ARGB32);
+        snap_active.fill(Qt::transparent);
+        snap_widget.render(&snap_active);
+        const auto snap_guide_x = static_cast<int>(std::lround(
+            snap_widget.contentXForFrame(30000)));
+        require(
+            snap_active.pixelColor(snap_guide_x, 52) !=
+                snap_before.pixelColor(snap_guide_x, 52),
+            "Magnetic snapping did not paint its aligned guide line.");
+        sendMouse(
+            snap_widget,
+            QEvent::MouseButtonRelease,
+            snap_near_target,
+            Qt::NoButton);
+        require(snap_move_count == 1 && snap_target_track == 0 &&
+                    snap_target_frame == 18000,
+                "A clip edge did not snap to the adjacent clip boundary.");
+
+        // A pointer farther than the visual tolerance keeps its raw frame.
+        snap_widget.setTracks({snap_same_track});
+        const auto snap_outside_tolerance = QPointF(
+            snap_widget.contentXForFrame(21000), snap_source_y);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseButtonPress,
+            snap_press,
+            Qt::LeftButton);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseMove,
+            snap_outside_tolerance,
+            Qt::LeftButton);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseButtonRelease,
+            snap_outside_tolerance,
+            Qt::NoButton);
+        require(snap_move_count == 2 && snap_target_frame == 21000,
+                "A clip outside the snap tolerance was moved to an adjusted frame.");
+
+        snap_widget.setSnapEnabled(false);
+        snap_widget.setTracks({snap_same_track});
+        sendMouse(
+            snap_widget,
+            QEvent::MouseButtonPress,
+            snap_press,
+            Qt::LeftButton);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseMove,
+            snap_near_target,
+            Qt::LeftButton);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseButtonRelease,
+            snap_near_target,
+            Qt::NoButton);
+        require(snap_move_count == 3 && snap_target_frame == 19000,
+                "Disabling magnetic snapping did not preserve the raw frame.");
+        snap_widget.setSnapEnabled(true);
+
+        // The same edge calculation works when moving to another track and
+        // when the source clip is brought to either Timeline boundary.
+        const auto snap_destination_track = timeline::TimelineTrack{
+            2,
+            "Video 2",
+            1.0,
+            false,
+            {snap_target_clip}};
+        snap_widget.setTracks({
+            timeline::TimelineTrack{1, "Video 1", 1.0, false, {snap_source_clip}},
+            snap_destination_track});
+        const auto snap_second_track_y = 48.0 + 70.0 + 10.0 + 35.0;
+        const auto snap_cross_track = QPointF(
+            snap_widget.contentXForFrame(19000), snap_second_track_y);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseButtonPress,
+            snap_press,
+            Qt::LeftButton);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseMove,
+            snap_cross_track,
+            Qt::LeftButton);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseButtonRelease,
+            snap_cross_track,
+            Qt::NoButton);
+        require(snap_move_count == 4 && snap_target_track == 1 &&
+                    snap_target_frame == 18000,
+                "Moving a clip between tracks did not preserve magnetic snapping.");
+
+        snap_widget.setTracks({snap_same_track});
+        const auto snap_start_boundary = QPointF(
+            snap_widget.contentXForFrame(600), snap_source_y);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseButtonPress,
+            snap_press,
+            Qt::LeftButton);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseMove,
+            snap_start_boundary,
+            Qt::LeftButton);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseButtonRelease,
+            snap_start_boundary,
+            Qt::NoButton);
+        require(snap_move_count == 5 && snap_target_frame == 0,
+                "A clip did not snap to the start of the Timeline.");
+
+        const auto snap_end_boundary = QPointF(
+            snap_widget.contentXForFrame(96800), snap_source_y);
+        snap_widget.setTracks({snap_same_track});
+        sendMouse(
+            snap_widget,
+            QEvent::MouseButtonPress,
+            snap_press,
+            Qt::LeftButton);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseMove,
+            snap_end_boundary,
+            Qt::LeftButton);
+        sendMouse(
+            snap_widget,
+            QEvent::MouseButtonRelease,
+            snap_end_boundary,
+            Qt::NoButton);
+        require(snap_move_count == 6 && snap_target_frame == 96000,
+                "A clip did not snap to the end of the Timeline.");
+        snap_widget.close();
+
+        // Media drops use the same target calculation and preserve their
+        // existing path MIME while using the known duration for the ghost.
+        timeline::TimelineWidget media_snap_widget;
+        media_snap_widget.resize(900, 180);
+        media_snap_widget.setTimelineViewportWidth(900);
+        media_snap_widget.setTracks({snap_same_track});
+        media_snap_widget.show();
+        application.processEvents();
+        int media_snap_drop_count = 0;
+        qint64 media_snap_frame = -1;
+        QObject::connect(
+            &media_snap_widget,
+            &timeline::TimelineWidget::mediaDropRequestedAt,
+            [&media_snap_drop_count, &media_snap_frame](
+                const QString&, qint64, qint64 frame) {
+                ++media_snap_drop_count;
+                media_snap_frame = frame;
+            });
+        QMimeData snap_media_mime;
+        snap_media_mime.setData(
+            ui::kMediaPathMimeType,
+            QByteArrayLiteral("snap-media.mp4"));
+        snap_media_mime.setData(
+            ui::kMediaFrameCountMimeType,
+            QByteArrayLiteral("12000"));
+        const auto media_snap_position = QPointF(
+            media_snap_widget.contentXForFrame(19000), snap_source_y);
+        QDragEnterEvent snap_media_enter(
+            media_snap_position.toPoint(),
+            Qt::CopyAction,
+            &snap_media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&media_snap_widget, &snap_media_enter);
+        QDragMoveEvent snap_media_move(
+            media_snap_position.toPoint(),
+            Qt::CopyAction,
+            &snap_media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&media_snap_widget, &snap_media_move);
+        QDropEvent snap_media_drop(
+            media_snap_position,
+            Qt::CopyAction,
+            &snap_media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&media_snap_widget, &snap_media_drop);
+        require(media_snap_drop_count == 1 && media_snap_frame == 18000,
+                "A media drop did not snap to the adjacent clip boundary.");
+
+        // With no metadata, a one-frame fallback makes the dragged end align
+        // to a target one frame ahead instead of moving the start to it.
+        timeline::TimelineWidget fallback_snap_widget;
+        fallback_snap_widget.resize(900, 180);
+        fallback_snap_widget.setTimelineViewportWidth(900);
+        fallback_snap_widget.setTracks({timeline::TimelineTrack{
+            1,
+            "Video 1",
+            1.0,
+            false,
+            {makeClip("fallback-target.mkv", 101, 120, "Fallback target")}}});
+        fallback_snap_widget.show();
+        application.processEvents();
+        int fallback_drop_count = 0;
+        qint64 fallback_drop_frame = -1;
+        QObject::connect(
+            &fallback_snap_widget,
+            &timeline::TimelineWidget::mediaDropRequestedAt,
+            [&fallback_drop_count, &fallback_drop_frame](
+                const QString&, qint64, qint64 frame) {
+                ++fallback_drop_count;
+                fallback_drop_frame = frame;
+            });
+        QMimeData fallback_snap_mime;
+        fallback_snap_mime.setData(
+            ui::kMediaPathMimeType,
+            QByteArrayLiteral("snap-fallback.mp4"));
+        const auto fallback_snap_position = QPointF(
+            fallback_snap_widget.contentXForFrame(100), snap_source_y);
+        QDragEnterEvent fallback_snap_enter(
+            fallback_snap_position.toPoint(),
+            Qt::CopyAction,
+            &fallback_snap_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&fallback_snap_widget, &fallback_snap_enter);
+        QDragMoveEvent fallback_snap_move(
+            fallback_snap_position.toPoint(),
+            Qt::CopyAction,
+            &fallback_snap_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&fallback_snap_widget, &fallback_snap_move);
+        QDropEvent fallback_snap_drop(
+            fallback_snap_position,
+            Qt::CopyAction,
+            &fallback_snap_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&fallback_snap_widget, &fallback_snap_drop);
+        require(fallback_drop_count == 1 && fallback_drop_frame == 100,
+                "A metadata-free media drop did not use the one-frame fallback duration.");
+        fallback_snap_widget.close();
+
+        media_snap_widget.close();
 
         widget.close();
         return 0;

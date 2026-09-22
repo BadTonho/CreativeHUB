@@ -181,6 +181,13 @@ over the Timeline changes every row uniformly using smooth wheel deltas. When
 the rows require more space than the viewport, the existing vertical scroll
 bar exposes the remaining tracks. The selected row height is persisted per
 project; Ctrl + scroll continues to control horizontal timeline zoom.
+The Timeline toolbar also includes the checked-by-default `Magnetic Snap`
+button. It attracts either edge of a moving clip or a new Media Browser drop
+to clip boundaries on the destination track, frame zero, or the end of the
+visible Timeline range when the nearest point is within approximately eight
+visual pixels. A light guide shows the contact frame. The button state lasts
+for the editor session, is not project data, and snapping does not apply to
+effect drops.
 The same footer shows the Main Editor process working-set memory at the right
 in the form `RAM: <megabytes> MB`, refreshed every second. Windows reads
 the value through `GetProcessMemoryInfo`; platforms without an implementation,

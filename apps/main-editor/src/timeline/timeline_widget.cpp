@@ -35,6 +35,7 @@ constexpr double track_header_width = 142.0;
 constexpr double edge_width = 8.0;
 constexpr double standard_timeline_duration_seconds = 60.0 * 60.0;
 constexpr double ruler_minor_target_spacing_pixels = 8.0;
+constexpr double snap_tolerance_pixels = 8.0;
 
 std::int64_t rulerMinorStep(double pixels_per_frame) noexcept {
     if (!std::isfinite(pixels_per_frame) || pixels_per_frame <= 0.0 ||
@@ -240,6 +241,48 @@ void TimelineWidget::setMoveRequiresAlt(bool enabled) {
 
 bool TimelineWidget::moveRequiresAlt() const noexcept {
     return move_requires_alt_;
+}
+
+void TimelineWidget::setSnapEnabled(bool enabled) {
+    if (snap_enabled_ == enabled) return;
+    snap_enabled_ = enabled;
+    snap_guide_frame_.reset();
+
+    if (moving_active_ && move_target_track_.has_value()) {
+        const auto raw_frame = globalFrameAt(drag_preview_position_.x());
+        if (raw_frame.has_value()) {
+            const auto& clip = tracks_[moving_clip_.track_index]
+                .clips[moving_clip_.clip_index];
+            const auto snapped = snapPlacement(
+                *move_target_track_,
+                *raw_frame,
+                clip.timeline_duration_frames,
+                moving_clip_);
+            move_target_frame_ = snapped.start_frame;
+            snap_guide_frame_ = snapped.guide_frame;
+        }
+    } else if (drag_hovering_ && drag_preview_kind_ == DragPreviewKind::MediaDrop &&
+               drop_hover_track_.has_value()) {
+        const auto raw_frame = globalFrameAt(drag_preview_position_.x());
+        if (raw_frame.has_value()) {
+            const auto snapped = snapPlacement(
+                *drop_hover_track_,
+                *raw_frame,
+                drag_preview_duration_frames_);
+            drop_hover_frame_ = snapped.start_frame;
+            snap_guide_frame_ = snapped.guide_frame;
+            drag_preview_valid_ = !placementOverlaps(
+                *drop_hover_track_,
+                *drop_hover_frame_,
+                drag_preview_duration_frames_);
+        }
+    }
+    update();
+    emit snapEnabledChanged(snap_enabled_);
+}
+
+bool TimelineWidget::snapEnabled() const noexcept {
+    return snap_enabled_;
 }
 
 double TimelineWidget::zoomFactor() const noexcept {
@@ -542,6 +585,93 @@ QRectF TimelineWidget::previewRect(
         content.top(),
         std::max(2.0, right - left),
         content.height());
+}
+
+TimelineWidget::SnapPlacement TimelineWidget::snapPlacement(
+    std::size_t track_index,
+    std::int64_t raw_start_frame,
+    std::int64_t duration_frames,
+    std::optional<ClipLocation> excluded) const noexcept {
+    SnapPlacement result{
+        std::max<std::int64_t>(0, raw_start_frame),
+        std::nullopt};
+    if (!snap_enabled_ || track_index >= tracks_.size() || duration_frames <= 0) {
+        return result;
+    }
+
+    const auto max_frame = std::numeric_limits<std::int64_t>::max();
+    const auto raw_end_frame = result.start_frame > max_frame - duration_frames
+        ? max_frame
+        : result.start_frame + duration_frames;
+    struct Candidate {
+        std::int64_t start_frame = 0;
+        std::int64_t guide_frame = 0;
+        double distance_pixels = 0.0;
+    };
+    std::optional<Candidate> best;
+
+    const auto consider = [&](std::int64_t dragged_edge_frame,
+                              std::int64_t candidate_start_frame,
+                              std::int64_t guide_frame) {
+        if (candidate_start_frame < 0 || guide_frame < 0) return;
+        const auto distance_pixels = std::abs(
+            contentXForFrame(dragged_edge_frame) -
+            contentXForFrame(guide_frame));
+        if (distance_pixels > snap_tolerance_pixels) return;
+        const Candidate candidate{
+            candidate_start_frame,
+            guide_frame,
+            distance_pixels};
+        if (!best.has_value() ||
+            candidate.distance_pixels < best->distance_pixels - 0.000001 ||
+            (std::abs(candidate.distance_pixels - best->distance_pixels) <= 0.000001 &&
+             (candidate.start_frame < best->start_frame ||
+              (candidate.start_frame == best->start_frame &&
+               candidate.guide_frame < best->guide_frame)))) {
+            best = candidate;
+        }
+    };
+
+    // Timeline boundaries are useful when placing the first or last clip.
+    consider(result.start_frame, 0, 0);
+    const auto timeline_end = displayDuration();
+    if (timeline_end > 0 && duration_frames <= timeline_end) {
+        consider(raw_end_frame, timeline_end - duration_frames, timeline_end);
+    }
+
+    const auto clip_end = [max_frame](const TimelineClip& clip) {
+        if (clip.timeline_duration_frames <= 0 || clip.timeline_start_frame < 0 ||
+            clip.timeline_start_frame > max_frame - clip.timeline_duration_frames) {
+            return std::optional<std::int64_t>{};
+        }
+        return std::optional<std::int64_t>(
+            clip.timeline_start_frame + clip.timeline_duration_frames);
+    };
+    for (std::size_t clip_index = 0;
+         clip_index < tracks_[track_index].clips.size();
+         ++clip_index) {
+        if (excluded.has_value() &&
+            excluded->track_index == track_index &&
+            excluded->clip_index == clip_index) {
+            continue;
+        }
+        const auto& clip = tracks_[track_index].clips[clip_index];
+        const auto end = clip_end(clip);
+        if (!end.has_value()) continue;
+        // Align the dragged start to this edge, or align the dragged end to it.
+        consider(result.start_frame, *end, *end);
+        if (clip.timeline_start_frame >= duration_frames) {
+            consider(raw_end_frame,
+                     clip.timeline_start_frame - duration_frames,
+                     clip.timeline_start_frame);
+        }
+    }
+
+    if (best.has_value()) {
+        result.start_frame = best->start_frame;
+        result.guide_frame = best->guide_frame;
+    }
+    return result;
 }
 
 double TimelineWidget::frameRate() const noexcept {
@@ -1109,6 +1239,30 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
         painter.drawEllipse(QPointF(x, content.top() - 5), 3, 3);
     }
 
+    std::optional<std::size_t> snap_track;
+    if (moving_active_ && move_target_track_.has_value()) {
+        snap_track = move_target_track_;
+    } else if (drag_hovering_ &&
+               drag_preview_kind_ == DragPreviewKind::MediaDrop &&
+               drop_hover_track_.has_value()) {
+        snap_track = drop_hover_track_;
+    }
+    if (snap_track.has_value() && snap_guide_frame_.has_value()) {
+        const auto content = trackContentRect(*snap_track);
+        const auto x = std::clamp(
+            contentXForFrame(*snap_guide_frame_),
+            content.left(),
+            content.right());
+        painter.save();
+        painter.setPen(QPen(QColor("#c7efff"), 1.5, Qt::DashLine));
+        painter.drawLine(
+            QPointF(x, trackRect(*snap_track).top() - 5),
+            QPointF(x, trackRect(*snap_track).bottom() + 5));
+        painter.setBrush(QColor("#c7efff"));
+        painter.drawEllipse(QPointF(x, trackRect(*snap_track).top() - 6), 2.5, 2.5);
+        painter.restore();
+    }
+
     const bool active_clip_valid = active_clip_.has_value() &&
         active_clip_->track_index < tracks_.size() &&
         active_clip_->clip_index < tracks_[active_clip_->track_index].clips.size();
@@ -1183,6 +1337,7 @@ void TimelineWidget::clearDragPreview() {
     drag_preview_duration_frames_ = 1;
     drag_preview_label_.clear();
     drag_preview_valid_ = false;
+    snap_guide_frame_.reset();
 }
 
 void TimelineWidget::clearDropHover() {
@@ -1203,6 +1358,7 @@ bool TimelineWidget::updateDropHover(
         track.has_value() && frame.has_value();
     drag_hovering_ = supported;
     drag_preview_position_ = position;
+    snap_guide_frame_.reset();
     if (accepted) {
         drop_hover_track_ = track;
         drop_hover_frame_ = frame;
@@ -1214,11 +1370,20 @@ bool TimelineWidget::updateDropHover(
         drag_preview_kind_ = DragPreviewKind::MediaDrop;
         drag_preview_duration_frames_ = mediaDropDuration(mime_data);
         drag_preview_label_ = mediaDropLabel(mime_data);
-        drag_preview_valid_ = accepted &&
-            !placementOverlaps(
+        if (accepted) {
+            const auto snapped = snapPlacement(
                 *track,
                 *frame,
                 drag_preview_duration_frames_);
+            *drop_hover_frame_ = snapped.start_frame;
+            snap_guide_frame_ = snapped.guide_frame;
+            drag_preview_valid_ = !placementOverlaps(
+                *track,
+                *drop_hover_frame_,
+                drag_preview_duration_frames_);
+        } else {
+            drag_preview_valid_ = false;
+        }
     } else {
         clearDragPreview();
     }
@@ -1240,12 +1405,22 @@ bool TimelineWidget::processDrop(
         return false;
     }
 
+    auto target_frame = *frame;
+    if (is_media_drop) {
+        target_frame = snapPlacement(
+            *track,
+            *frame,
+            mediaDropDuration(mime_data)).start_frame;
+    }
     clearDropHover();
     if (is_media_drop) {
         const auto path = QString::fromUtf8(
             mime_data->data(ui::kMediaPathMimeType));
         if (path.isEmpty()) return false;
-        emit mediaDropRequestedAt(path, static_cast<qint64>(*track), *frame);
+        emit mediaDropRequestedAt(
+            path,
+            static_cast<qint64>(*track),
+            target_frame);
     } else {
         const auto effect_id = QString::fromUtf8(
             mime_data->data(ui::kEffectIdMimeType));
@@ -1436,6 +1611,7 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         moving_clip_ = *location;
         move_press_position_ = event->position();
         drag_preview_position_ = event->position();
+        snap_guide_frame_.reset();
         move_target_track_ = location->track_index;
         move_target_frame_ = tracks_[location->track_index].clips[location->clip_index].timeline_start_frame;
         grabMouse();
@@ -1487,9 +1663,23 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
     }
     if (moving_active_) {
         drag_preview_position_ = event->position();
+        snap_guide_frame_.reset();
         move_target_track_ = trackAt(event->position().y());
         if (move_target_track_.has_value()) {
-            move_target_frame_ = globalFrameAt(event->position().x()).value_or(0);
+            const auto raw_frame = globalFrameAt(event->position().x());
+            if (raw_frame.has_value()) {
+                const auto& clip = tracks_[moving_clip_.track_index]
+                    .clips[moving_clip_.clip_index];
+                const auto snapped = snapPlacement(
+                    *move_target_track_,
+                    *raw_frame,
+                    clip.timeline_duration_frames,
+                    moving_clip_);
+                move_target_frame_ = snapped.start_frame;
+                snap_guide_frame_ = snapped.guide_frame;
+            } else {
+                move_target_frame_ = 0;
+            }
         }
         update();
         event->accept();

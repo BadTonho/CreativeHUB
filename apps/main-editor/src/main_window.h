@@ -306,6 +306,7 @@ private:
     QPushButton* clear_timeline_button_ = nullptr;
     QPushButton* selection_button_ = nullptr;
     QPushButton* razor_button_ = nullptr;
+    QPushButton* snap_button_ = nullptr;
     QSlider* clip_volume_slider_ = nullptr;
     QSlider* track_volume_slider_ = nullptr;
     QCheckBox* clip_mute_check_ = nullptr;
