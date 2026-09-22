@@ -129,6 +129,26 @@ qint64 AudioOutput::processedUsecs() const noexcept {
 #endif
 }
 
+std::optional<qint64> AudioOutput::bufferedUsecs() const noexcept {
+#if defined(CREATIVE_SUITE_HAS_QT_MULTIMEDIA)
+    if (sink_ == nullptr || sample_rate_ <= 0 || channel_count_ <= 0) {
+        return std::nullopt;
+    }
+    const auto buffer_size = sink_->bufferSize();
+    const auto free_bytes = sink_->bytesFree();
+    const auto bytes_per_second = static_cast<qint64>(sample_rate_) *
+        static_cast<qint64>(channel_count_) * bytesPerSample();
+    if (buffer_size <= 0 || free_bytes < 0 || free_bytes > buffer_size ||
+        bytes_per_second <= 0) {
+        return std::nullopt;
+    }
+    const auto buffered_bytes = buffer_size - free_bytes;
+    return buffered_bytes * 1'000'000 / bytes_per_second;
+#else
+    return std::nullopt;
+#endif
+}
+
 qint64 AudioOutput::write(const QByteArray& data) noexcept {
 #if defined(CREATIVE_SUITE_HAS_QT_MULTIMEDIA)
     if (device_ == nullptr || data.isEmpty()) return 0;

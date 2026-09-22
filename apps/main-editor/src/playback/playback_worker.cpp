@@ -63,6 +63,18 @@ void recordPacingCatchup(
     }
 }
 
+void recordPacingCatchup(
+    rendering::PreviewPerformanceMetrics& metrics,
+    const detail::AudioPacingDecision& decision) noexcept {
+    const auto total = decision.deadline_catchup_frames +
+        decision.audio_catchup_frames;
+    metrics.recordPacingSkippedFrames(total);
+    metrics.recordPacingDeadlineCatchupFrames(
+        decision.deadline_catchup_frames);
+    metrics.recordPacingAudioCatchupFrames(
+        decision.audio_catchup_frames);
+}
+
 } // namespace
 
 PlaybackWorker::PlaybackWorker(QObject* parent)
@@ -161,6 +173,7 @@ void PlaybackWorker::setMedia(
     audio_failure_reported_ = false;
     audio_clock_origin_usecs_ = 0;
     audio_clock_origin_frame_ = 0;
+    audio_pacing_policy_.reset();
     pending_audio_bytes_.clear();
     disableAudioOutput();
     audio_session_.reset();
@@ -262,6 +275,7 @@ void PlaybackWorker::play() {
             if (audio_enabled_) {
                 try {
                     fillAudioOutput();
+                    updateAudioBufferMetric();
                 } catch (const media::MediaError& error) {
                     reportAudioFailure(error, "decode");
                 } catch (const std::exception& error) {
@@ -289,6 +303,7 @@ void PlaybackWorker::pause() {
     if (timer_ != nullptr) timer_->stop();
     if (audio_output_ != nullptr) audio_output_->pause();
     resetPlaybackClock();
+    audio_pacing_policy_.reset();
     rendering::PreviewPerformanceMetrics::instance().setPlaybackActive(false);
     if (!playing_) return;
 
@@ -728,6 +743,7 @@ void PlaybackWorker::decodeTick() {
         if (audio_enabled_) {
             try {
                 fillAudioOutput();
+                updateAudioBufferMetric();
             } catch (const media::MediaError& error) {
                 reportAudioFailure(error, "decode");
             } catch (const std::exception& error) {
@@ -740,8 +756,11 @@ void PlaybackWorker::decodeTick() {
             return;
         }
 
-        std::int64_t target_frame = deadline_target_frame;
-        bool audio_clock_ahead = false;
+        const auto scheduler_target_frame = segment_frame_count_ > 0
+            ? std::min(deadline_target_frame, segment_frame_count_ - 1)
+            : deadline_target_frame;
+        detail::AudioPacingDecision pacing_decision;
+        pacing_decision.target_frame = scheduler_target_frame;
         if (audio_enabled_ && audio_output_ != nullptr) {
             const auto elapsed_usecs = std::max<qint64>(
                 0,
@@ -750,15 +769,27 @@ void PlaybackWorker::decodeTick() {
                 static_cast<std::int64_t>(
                     std::floor(static_cast<double>(elapsed_usecs) *
                         frame_rate_ / 1000000.0));
-            audio_clock_ahead = audio_target_frame > deadline_target_frame;
-            target_frame = audio_target_frame;
+            const auto bounded_audio_target = segment_frame_count_ > 0
+                ? std::min(audio_target_frame, segment_frame_count_ - 1)
+                : audio_target_frame;
+            const auto drift_frames = bounded_audio_target -
+                scheduler_target_frame;
+            metrics.recordAudioClockDrift(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::duration<double>(
+                        static_cast<double>(drift_frames) / frame_rate_)));
+            pacing_decision = audio_pacing_policy_.selectTarget(
+                current_frame_index_,
+                scheduler_target_frame,
+                bounded_audio_target);
+        } else {
+            pacing_decision = audio_pacing_policy_.selectTarget(
+                current_frame_index_,
+                scheduler_target_frame,
+                scheduler_target_frame);
+            metrics.setAudioBufferedUsecs(std::nullopt);
         }
-        if (segment_frame_count_ > 0) {
-            target_frame = std::min(target_frame, segment_frame_count_ - 1);
-        }
-        const auto scheduler_target_frame = segment_frame_count_ > 0
-            ? std::min(deadline_target_frame, segment_frame_count_ - 1)
-            : deadline_target_frame;
+        const auto target_frame = pacing_decision.target_frame;
         playback_scheduler_.advanceAfterTarget(scheduler_target_frame);
         if (target_frame <= current_frame_index_) {
             scheduleNextPlaybackTick();
@@ -766,11 +797,7 @@ void PlaybackWorker::decodeTick() {
         }
 
         if (composition_enabled_) {
-            recordPacingCatchup(
-                metrics,
-                static_cast<std::uint64_t>(
-                    target_frame - current_frame_index_ - 1),
-                audio_clock_ahead);
+            recordPacingCatchup(metrics, pacing_decision);
             current_frame_index_ = target_frame;
             emitComposedFrame();
             scheduleNextPlaybackTick();
@@ -806,11 +833,7 @@ void PlaybackWorker::decodeTick() {
                 finishPlayback();
             } else {
                 metrics.recordDecodedFrame();
-                recordPacingCatchup(
-                    metrics,
-                    static_cast<std::uint64_t>(
-                        target_frame - current_frame_index_ - 1),
-                    audio_clock_ahead);
+                recordPacingCatchup(metrics, pacing_decision);
                 emitFrame(std::move(frame));
             }
         }
@@ -840,6 +863,7 @@ bool PlaybackWorker::ensureSessionAtCurrentFrame() {
 
 void PlaybackWorker::configureAudio() {
     audio_enabled_ = false;
+    audio_pacing_policy_.reset();
     rendering::PreviewPerformanceMetrics::instance().setAudioEnabled(false);
     audio_output_ = std::make_unique<AudioOutput>();
 
@@ -952,8 +976,25 @@ void PlaybackWorker::fillAudioOutput() {
     }
 }
 
+void PlaybackWorker::updateAudioBufferMetric() noexcept {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    if (!audio_enabled_ || audio_output_ == nullptr) {
+        metrics.setAudioBufferedUsecs(std::nullopt);
+        return;
+    }
+
+    const auto buffered_usecs = audio_output_->bufferedUsecs();
+    if (buffered_usecs.has_value() && *buffered_usecs >= 0) {
+        metrics.setAudioBufferedUsecs(
+            static_cast<std::uint64_t>(*buffered_usecs));
+    } else {
+        metrics.setAudioBufferedUsecs(std::nullopt);
+    }
+}
+
 void PlaybackWorker::disableAudioOutput() noexcept {
     audio_enabled_ = false;
+    audio_pacing_policy_.reset();
     rendering::PreviewPerformanceMetrics::instance().setAudioEnabled(false);
     audio_position_valid_ = false;
     pending_audio_bytes_.clear();

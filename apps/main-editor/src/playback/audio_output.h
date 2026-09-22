@@ -4,6 +4,7 @@
 #include <QString>
 
 #include <cstdint>
+#include <optional>
 
 class QAudioSink;
 class QIODevice;
@@ -31,6 +32,7 @@ public:
     void stop() noexcept;
     [[nodiscard]] qint64 bytesFree() const noexcept;
     [[nodiscard]] qint64 processedUsecs() const noexcept;
+    [[nodiscard]] std::optional<qint64> bufferedUsecs() const noexcept;
     [[nodiscard]] qint64 write(const QByteArray& data) noexcept;
 
 private:

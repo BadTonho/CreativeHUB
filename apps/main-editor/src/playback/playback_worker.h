@@ -6,6 +6,7 @@
 #include "../rendering/frame_compositor.h"
 #include "../timeline/timeline_model.h"
 #include "audio_output.h"
+#include "playback_audio_pacing.h"
 #include "playback_deadline_scheduler.h"
 
 #include <QMetaType>
@@ -147,6 +148,7 @@ private:
         qint64 error_code = -1);
     void configureAudio();
     void fillAudioOutput();
+    void updateAudioBufferMetric() noexcept;
     void disableAudioOutput() noexcept;
     [[nodiscard]] std::optional<std::int64_t> sourceFrameForLocal(
         std::int64_t local_frame) const noexcept;
@@ -183,6 +185,7 @@ private:
     bool diagnostics_logged_ = false;
     using Clock = std::chrono::steady_clock;
     detail::PlaybackDeadlineScheduler playback_scheduler_;
+    detail::AudioPacingPolicy audio_pacing_policy_;
     std::atomic<qint64> pending_seek_frame_{std::numeric_limits<qint64>::min()};
     std::atomic<quint64> pending_seek_generation_{0};
     std::atomic<quint64> pending_seek_sequence_{0};

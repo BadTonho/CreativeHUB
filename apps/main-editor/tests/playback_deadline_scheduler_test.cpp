@@ -1,3 +1,4 @@
+#include "playback/playback_audio_pacing.h"
 #include "playback/playback_deadline_scheduler.h"
 
 #include <chrono>
@@ -9,6 +10,7 @@
 namespace {
 
 using Scheduler = playback::detail::PlaybackDeadlineScheduler;
+using AudioPacingPolicy = playback::detail::AudioPacingPolicy;
 using Clock = Scheduler::Clock;
 
 void require(bool condition, const char* message) {
@@ -132,6 +134,57 @@ void validateResetAndRestart() {
         "Restart did not create a fresh deadline.");
 }
 
+void validateAudioPacingToleranceAndPersistence() {
+    AudioPacingPolicy policy;
+
+    const auto within_tolerance = policy.selectTarget(10, 11, 12);
+    require(
+        within_tolerance.target_frame == 11 &&
+            within_tolerance.audio_catchup_frames == 0 &&
+            within_tolerance.deadline_catchup_frames == 0,
+        "A one-frame audio drift was not tolerated.");
+
+    const auto first_ahead_tick = policy.selectTarget(10, 11, 13);
+    const auto second_ahead_tick = policy.selectTarget(10, 11, 13);
+    require(
+        first_ahead_tick.target_frame == 11 &&
+            second_ahead_tick.target_frame == 11,
+        "Transient audio drift triggered visual catch-up.");
+
+    const auto persistent_ahead = policy.selectTarget(10, 11, 13);
+    require(
+        persistent_ahead.target_frame == 12 &&
+            persistent_ahead.audio_catchup_frames == 1 &&
+            persistent_ahead.deadline_catchup_frames == 0 &&
+            persistent_ahead.audio_correction_applied,
+        "Persistent audio drift was not limited to one extra frame.");
+
+    const auto continued_ahead = policy.selectTarget(11, 12, 20);
+    require(
+        continued_ahead.target_frame == 13 &&
+            continued_ahead.audio_catchup_frames == 1,
+        "Large audio drift was not bounded per tick.");
+
+    const auto deadline_catchup = policy.selectTarget(10, 14, 14);
+    require(
+        deadline_catchup.target_frame == 14 &&
+            deadline_catchup.deadline_catchup_frames == 3 &&
+            deadline_catchup.audio_catchup_frames == 0,
+        "Deadline catch-up was classified as audio catch-up.");
+
+    const auto normalized = policy.selectTarget(12, 13, 14);
+    require(
+        normalized.target_frame == 13 &&
+            normalized.audio_catchup_frames == 0,
+        "Audio drift persistence was not reset after normalization.");
+
+    policy.reset();
+    const auto after_reset = policy.selectTarget(10, 11, 13);
+    require(
+        after_reset.target_frame == 11,
+        "Reset did not clear audio drift persistence.");
+}
+
 } // namespace
 
 int main() {
@@ -140,6 +193,7 @@ int main() {
         validateEarlyAndLateCallbacks();
         validateAudioTargetDoesNotChangeCadence();
         validateResetAndRestart();
+        validateAudioPacingToleranceAndPersistence();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;

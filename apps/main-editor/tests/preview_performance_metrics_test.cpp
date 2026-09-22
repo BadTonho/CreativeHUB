@@ -49,6 +49,10 @@ int main() {
                     disabled.activation_events == 0 &&
                     disabled.playback_start_events == 0 &&
                     disabled.seek_requests == 0 &&
+                    disabled.audio_clock_drift_samples == 0 &&
+                    disabled.audio_clock_drift_total_nanoseconds == 0 &&
+                    disabled.audio_clock_drift_max_abs_nanoseconds == 0 &&
+                    !disabled.audio_buffered_usecs.has_value() &&
                     disabled.pacing_audio_catchup_frames == 0 &&
                     disabled.pacing_deadline_catchup_frames == 0,
                 "Disabled metrics recorded decoded-frame data.");
@@ -119,6 +123,9 @@ int main() {
         metrics.recordPacingSkippedFrames(2);
         metrics.recordPacingAudioCatchupFrames(1);
         metrics.recordPacingDeadlineCatchupFrames(1);
+        metrics.recordAudioClockDrift(std::chrono::milliseconds(-20));
+        metrics.recordAudioClockDrift(std::chrono::milliseconds(40));
+        metrics.setAudioBufferedUsecs(125'000);
         metrics.recordPacingCoalescedFrame();
         metrics.setPlaybackWorkerThreadId(12345);
         metrics.setTargetFrameRate(23.976);
@@ -224,6 +231,12 @@ int main() {
         require(snapshot.pacing_audio_catchup_frames == 1 &&
                     snapshot.pacing_deadline_catchup_frames == 1,
                 "Pacing catch-up cause counts are incorrect.");
+        require(snapshot.audio_clock_drift_samples == 2 &&
+                    snapshot.audio_clock_drift_total_nanoseconds == 20'000'000 &&
+                    snapshot.audio_clock_drift_max_abs_nanoseconds == 40'000'000 &&
+                    snapshot.audio_buffered_usecs.has_value() &&
+                    *snapshot.audio_buffered_usecs == 125'000,
+                "Audio clock diagnostics are incorrect.");
         require(snapshot.pacing_coalesced_frames == 1,
                 "Coalesced pacing frame count is incorrect.");
         require(snapshot.playback_worker_thread_id == 12345,
@@ -338,6 +351,11 @@ int main() {
                     reset.pacing_audio_catchup_frames == 0 &&
                     reset.pacing_deadline_catchup_frames == 0 &&
                     reset.pacing_coalesced_frames == 0 &&
+                    reset.audio_clock_drift_samples == 0 &&
+                    reset.audio_clock_drift_total_nanoseconds == 0 &&
+                    reset.audio_clock_drift_max_abs_nanoseconds == 0 &&
+                    reset.audio_buffered_usecs.has_value() &&
+                    *reset.audio_buffered_usecs == 125'000 &&
                     reset.playback_worker_thread_id == 12345 &&
                     reset.pacing_lag.count == 0 &&
                     reset.text_composition_fast_path_hits == 0 &&
@@ -352,6 +370,10 @@ int main() {
                     reset.seek_to_presentation.count == 0,
                 "Taking a snapshot did not reset the metrics.");
         metrics.setEnabled(false);
+        const auto disabled_after_audio = metrics.takeSnapshotAndReset();
+        require(
+            !disabled_after_audio.audio_buffered_usecs.has_value(),
+            "Disabled metrics retained an audio buffer value.");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

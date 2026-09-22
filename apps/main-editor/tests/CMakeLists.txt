@@ -181,6 +181,7 @@ add_executable(creative-suite-main-editor-playback-worker-tests
     ../src/playback/audio_output.h
     ../src/playback/playback_worker.cpp
     ../src/playback/playback_worker.h
+    ../src/playback/playback_audio_pacing.h
     ../src/playback/playback_deadline_scheduler.h
     ../src/playback/playback_frame_mailbox.cpp
     ../src/playback/playback_frame_mailbox.h
@@ -301,6 +302,7 @@ endif()
 
 add_executable(creative-suite-main-editor-playback-deadline-tests
     playback_deadline_scheduler_test.cpp
+    ../src/playback/playback_audio_pacing.h
     ../src/playback/playback_deadline_scheduler.h
 )
 

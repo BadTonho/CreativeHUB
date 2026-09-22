@@ -23,6 +23,14 @@ Nanoseconds toNanoseconds(std::chrono::nanoseconds elapsed) noexcept {
     return count <= 0 ? 0U : static_cast<Nanoseconds>(count);
 }
 
+std::uint64_t absoluteNanoseconds(std::int64_t value) noexcept {
+    if (value >= 0) return static_cast<std::uint64_t>(value);
+    if (value == std::numeric_limits<std::int64_t>::min()) {
+        return std::numeric_limits<std::uint64_t>::max();
+    }
+    return static_cast<std::uint64_t>(-value);
+}
+
 void updateMaximum(
     std::atomic<Nanoseconds>& target,
     Nanoseconds value) noexcept {
@@ -152,6 +160,9 @@ void PreviewPerformanceMetrics::setEnabled(bool enabled) noexcept {
         activation_started_nanoseconds_.store(0, std::memory_order_relaxed);
         playback_started_nanoseconds_.store(0, std::memory_order_relaxed);
         seek_started_nanoseconds_.store(0, std::memory_order_relaxed);
+        audio_buffered_usecs_.store(
+            kUnavailableAudioBufferUsecs,
+            std::memory_order_relaxed);
     }
     enabled_.store(enabled, std::memory_order_release);
 }
@@ -363,6 +374,29 @@ void PreviewPerformanceMetrics::recordPacingCoalescedFrame() noexcept {
     }
 }
 
+void PreviewPerformanceMetrics::recordAudioClockDrift(
+    std::chrono::nanoseconds drift) noexcept {
+    if (!isEnabled()) return;
+
+    const auto value = drift.count();
+    audio_clock_drift_samples_.fetch_add(1, std::memory_order_relaxed);
+    audio_clock_drift_total_nanoseconds_.fetch_add(
+        value,
+        std::memory_order_relaxed);
+    updateMaximum(
+        audio_clock_drift_max_abs_nanoseconds_,
+        absoluteNanoseconds(value));
+}
+
+void PreviewPerformanceMetrics::setAudioBufferedUsecs(
+    std::optional<std::uint64_t> buffered_usecs) noexcept {
+    audio_buffered_usecs_.store(
+        buffered_usecs.has_value()
+            ? *buffered_usecs
+            : kUnavailableAudioBufferUsecs,
+        std::memory_order_relaxed);
+}
+
 void PreviewPerformanceMetrics::setPlaybackWorkerThreadId(
     std::uint64_t thread_id) noexcept {
     if (thread_id != 0) {
@@ -393,6 +427,7 @@ void PreviewPerformanceMetrics::setCompositionWorkload(
 
 void PreviewPerformanceMetrics::setAudioEnabled(bool enabled) noexcept {
     audio_enabled_.store(enabled, std::memory_order_relaxed);
+    if (!enabled) setAudioBufferedUsecs(std::nullopt);
 }
 
 void PreviewPerformanceMetrics::setPlaybackActive(bool active) noexcept {
@@ -497,6 +532,22 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
     snapshot.pacing_audio_catchup_frames = pacing_audio_catchup_frames_.exchange(0, std::memory_order_relaxed);
     snapshot.pacing_deadline_catchup_frames = pacing_deadline_catchup_frames_.exchange(0, std::memory_order_relaxed);
     snapshot.pacing_coalesced_frames = pacing_coalesced_frames_.exchange(0, std::memory_order_relaxed);
+    snapshot.audio_clock_drift_samples = audio_clock_drift_samples_.exchange(
+        0,
+        std::memory_order_relaxed);
+    snapshot.audio_clock_drift_total_nanoseconds =
+        audio_clock_drift_total_nanoseconds_.exchange(
+            0,
+            std::memory_order_relaxed);
+    snapshot.audio_clock_drift_max_abs_nanoseconds =
+        audio_clock_drift_max_abs_nanoseconds_.exchange(
+            0,
+            std::memory_order_relaxed);
+    const auto audio_buffered_usecs = audio_buffered_usecs_.load(
+        std::memory_order_relaxed);
+    if (audio_buffered_usecs != kUnavailableAudioBufferUsecs) {
+        snapshot.audio_buffered_usecs = audio_buffered_usecs;
+    }
     snapshot.playback_worker_thread_id = playback_worker_thread_id_.load(std::memory_order_relaxed);
     snapshot.last_frame_width = last_frame_width_.exchange(0, std::memory_order_relaxed);
     snapshot.last_frame_height = last_frame_height_.exchange(0, std::memory_order_relaxed);

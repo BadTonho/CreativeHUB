@@ -142,7 +142,7 @@ in the running Main Editor after UI or integration changes:
   Settings) and compare a simple 1080p playback run
   with the metrics disabled: confirm the one-second summaries include decode,
   composition, decoded-frame cache hits, text-raster cache hits, and final
-  composition-cache hits, `metrics_schema_version="3"`, p95/p99 timings,
+  composition-cache hits, `metrics_schema_version="4"`, p95/p99 timings,
   delivery FPS, window-local `first_frame_ms`, lifecycle timings for media
   open, audio setup, composition setup, activation, playback start, and seek,
   cache bytes, and process-resource fields;
@@ -158,14 +158,19 @@ in the running Main Editor after UI or integration changes:
 - with Preview metrics enabled during playback, compare `playback_ticks`,
   `pacing_skipped_frames`, `pacing_coalesced_frames`, `pacing_lag_avg_ms`,
   `pacing_lag_max_ms`, `pacing_lag_p95_ms`, `pacing_lag_p99_ms`,
-  `pacing_audio_catchup_frames`, and `pacing_deadline_catchup_frames`,
+  `pacing_audio_catchup_frames`, `pacing_deadline_catchup_frames`,
+  `audio_clock_drift_samples`, `audio_clock_drift_avg_ms`,
+  `audio_clock_drift_max_abs_ms`, and `audio_buffered_ms`,
   `emitted_frames`, `received_frames`, `submitted_frames`,
   `cpu_presented_frames`, `gpu_presented_frames`, `presented_fps`,
   `presentation_ratio_percent`, and `overwritten_frames`; confirm that a
   simple run stays close to the source FPS, that intentional catch-up reports
   skipped frames instead of emitting a burst, stale frames are counted after a
   seek/generation change, and the one-slot mailbox prevents unnecessary UI
-  queue growth;
+  queue growth; for audio playback, confirm that a one-frame drift does not
+  immediately skip video frames, that audio catch-up starts only after three
+  consecutive ticks above the tolerance, and that no more than one additional
+  audio catch-up frame is selected per tick;
 - with Preview metrics enabled, activate a media item and perform seeks in a
   composition with text and video layers; confirm `activation_events`,
   `playback_start_events`, `seek_requests`, and `seek_operations` distinguish

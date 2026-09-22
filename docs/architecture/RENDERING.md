@@ -104,7 +104,7 @@ When enabled, the application aggregates data for one-second intervals and
 writes at most one summary per interval through the existing logger using the
 `preview/performance_metrics` operation. `metrics_schema_version` identifies
 the current field set while existing fields retain their previous meaning. The
-current schema version is `3`.
+current schema version is `4`.
 The summary includes decoded, decoded-frame cache hits, text-raster cache hits,
 seeked, composed, final-composition cache hits, emitted, received, submitted,
 CPU-presented, GPU-presented, overwritten, stale, skipped, and coalesced frame
@@ -169,12 +169,24 @@ seek or generation change. These counters are diagnostic only and do not
 alter the Timeline or project state.
 
 `pacing_audio_catchup_frames` counts intermediate frames skipped because the
-audio clock selected a target ahead of the video deadline. The
+audio clock selected a target ahead of the video deadline. Small audio-clock
+drifts are tolerated for one frame and must persist for three consecutive
+worker ticks before audio catch-up is enabled. Once enabled, audio catch-up
+adds at most one frame beyond the current video deadline per tick. The
 `pacing_deadline_catchup_frames` field counts skips caused by the absolute
 video deadline or a late worker callback. Both are subsets of
 `pacing_skipped_frames`; `decode_discarded_frames` may describe the same
 catch-up interval at the decoder level and must not be added as another set of
 presented-frame losses.
+
+Schema version `4` also records `audio_clock_drift_samples`, the signed
+`audio_clock_drift_avg_ms` (positive means that the audio target is ahead of
+the video deadline), `audio_clock_drift_max_abs_ms`, and the latest
+`audio_buffered_ms` estimate. The buffer field is `N/A` when the audio backend
+does not expose a valid buffer measurement. Drift is measured against the
+absolute video deadline, not against the previous callback, so a small
+transient clock fluctuation can be distinguished from a sustained pacing
+problem.
 
 Playback cadence uses an internal monotonic, absolute-deadline scheduler. The
 worker starts a `steady_clock` origin for each playback run and computes the

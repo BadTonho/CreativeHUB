@@ -97,7 +97,7 @@ void appendOptionalUint64Context(
 void appendPerformanceContext(
     logging::Context& context,
     const PreviewPerformanceSnapshot& snapshot) {
-    context.emplace_back("metrics_schema_version", "3");
+    context.emplace_back("metrics_schema_version", "4");
     context.emplace_back(
         "decoded_frames", std::to_string(snapshot.decoded_frames));
     context.emplace_back(
@@ -168,6 +168,9 @@ void appendPerformanceContext(
     context.emplace_back(
         "pacing_coalesced_frames",
         std::to_string(snapshot.pacing_coalesced_frames));
+    context.emplace_back(
+        "audio_clock_drift_samples",
+        std::to_string(snapshot.audio_clock_drift_samples));
     context.emplace_back(
         "last_frame_width", std::to_string(snapshot.last_frame_width));
     context.emplace_back(
@@ -251,6 +254,30 @@ void appendPerformanceContext(
         snapshot.first_frame_nanoseconds > 0
             ? std::optional<double>(static_cast<double>(snapshot.first_frame_nanoseconds) /
                 1'000'000.0)
+            : std::nullopt);
+    appendOptionalDoubleContext(
+        context,
+        "audio_clock_drift_avg_ms",
+        snapshot.audio_clock_drift_samples > 0
+            ? std::optional<double>(
+                static_cast<double>(snapshot.audio_clock_drift_total_nanoseconds) /
+                static_cast<double>(snapshot.audio_clock_drift_samples) /
+                1'000'000.0)
+            : std::nullopt);
+    appendOptionalDoubleContext(
+        context,
+        "audio_clock_drift_max_abs_ms",
+        snapshot.audio_clock_drift_samples > 0
+            ? std::optional<double>(
+                static_cast<double>(snapshot.audio_clock_drift_max_abs_nanoseconds) /
+                1'000'000.0)
+            : std::nullopt);
+    appendOptionalDoubleContext(
+        context,
+        "audio_buffered_ms",
+        snapshot.audio_buffered_usecs.has_value()
+            ? std::optional<double>(
+                static_cast<double>(*snapshot.audio_buffered_usecs) / 1000.0)
             : std::nullopt);
     appendTimingContext(context, "decode", snapshot.decode);
     appendTimingContext(context, "decode_packet", snapshot.decode_packet);
@@ -339,7 +366,8 @@ void MainWindow::flushPreviewPerformanceMetrics() {
         snapshot.composition_setup.count == 0 &&
         snapshot.activation_to_presentation.count == 0 &&
         snapshot.playback_start_to_presentation.count == 0 &&
-        snapshot.seek_to_presentation.count == 0) {
+        snapshot.seek_to_presentation.count == 0 &&
+        snapshot.audio_clock_drift_samples == 0) {
         return;
     }
 

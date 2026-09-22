@@ -104,6 +104,7 @@ void testDisabledAudioOutputFallback() {
     QString error;
     assert(!output.initialize(&error, nullptr));
     assert(output.disabledByEnvironment());
+    assert(!output.bufferedUsecs().has_value());
     qunsetenv("CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT");
 }
 
