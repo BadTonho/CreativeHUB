@@ -711,7 +711,7 @@ void MainWindow::handlePlaybackFrame(
             frame_index,
             false,
             pending.preserve_timeline_playhead);
-        preview_widget_->setFrame(*frame);
+        preview_widget_->setFrame(frame);
         if (timeline_widget_ != nullptr) {
             timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());
         }
@@ -725,7 +725,7 @@ void MainWindow::handlePlaybackFrame(
 
     preserved_timeline_playhead_frame_.reset();
     playback_frame_index_ = frame_index;
-    preview_widget_->setFrame(*frame);
+    preview_widget_->setFrame(frame);
     if (timeline_widget_ != nullptr && selectedMediaMatchesTimeline()) {
         timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());
     }

@@ -27,7 +27,7 @@ class QTimer;
 
 namespace playback {
 
-using VideoFramePtr = std::shared_ptr<const media::VideoFrame>;
+using VideoFramePtr = media::VideoFramePtr;
 
 struct CompositionLayerSpec {
     QString source_path;

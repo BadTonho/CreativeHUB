@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
 PreviewWidget::PreviewWidget(QWidget* parent)
     : QWidget(parent) {
@@ -44,14 +45,19 @@ PreviewWidget::PreviewWidget(QWidget* parent)
 }
 
 void PreviewWidget::setFrame(const media::VideoFrame& frame) {
-    if (frame.width <= 0 || frame.height <= 0 || frame.stride < frame.width * 4) {
+    setFrame(std::make_shared<const media::VideoFrame>(frame));
+}
+
+void PreviewWidget::setFrame(media::VideoFramePtr frame) {
+    if (frame == nullptr || frame->width <= 0 || frame->height <= 0 ||
+        frame->stride < frame->width * 4) {
         clearFrame("Preview frame is unavailable.");
         return;
     }
 
-    const auto expected_size = static_cast<std::size_t>(frame.stride) *
-        static_cast<std::size_t>(frame.height);
-    if (frame.rgba_pixels.size() < expected_size) {
+    const auto expected_size = static_cast<std::size_t>(frame->stride) *
+        static_cast<std::size_t>(frame->height);
+    if (frame->rgba_pixels.size() < expected_size) {
         clearFrame("Preview frame is unavailable.");
         return;
     }
@@ -60,20 +66,22 @@ void PreviewWidget::setFrame(const media::VideoFrame& frame) {
     rendering::PreviewPerformanceScope timing(
         metrics,
         rendering::PreviewTiming::PreviewSubmit);
-    metrics.recordSubmittedFrame(frame.width, frame.height);
+    metrics.recordSubmittedFrame(frame->width, frame->height);
+    current_frame_ = std::move(frame);
 
-    const QImage image(
-        frame.rgba_pixels.data(),
-        frame.width,
-        frame.height,
-        frame.stride,
-        QImage::Format_RGBA8888);
-    frame_image_ = image.copy();
+    if (gpu_surface_ != nullptr && gpu_enabled_) {
+        frame_image_ = {};
+        gpu_surface_->setFrame(current_frame_);
+        return;
+    }
+
+    frame_image_ = {};
+    ensureCpuImage();
     updateCpuPixmap();
-    if (gpu_surface_ != nullptr && gpu_enabled_) gpu_surface_->setFrame(frame);
 }
 
 void PreviewWidget::clearFrame(const QString& message) {
+    current_frame_.reset();
     frame_image_ = {};
     empty_message_ = message;
     if (cpu_surface_ != nullptr) {
@@ -85,10 +93,11 @@ void PreviewWidget::clearFrame(const QString& message) {
 
 void PreviewWidget::setGrayscaleEnabled(bool enabled) {
     grayscale_enabled_ = enabled;
-    updateCpuPixmap();
     if (gpu_surface_ != nullptr && gpu_enabled_) {
         gpu_surface_->setGrayscaleEnabled(enabled);
+        return;
     }
+    updateCpuPixmap();
 }
 
 bool PreviewWidget::isGrayscaleEnabled() const noexcept {
@@ -97,7 +106,7 @@ bool PreviewWidget::isGrayscaleEnabled() const noexcept {
 
 void PreviewWidget::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
-    updateCpuPixmap();
+    if (!gpu_enabled_) updateCpuPixmap();
 }
 
 void PreviewWidget::handleGpuFailure(const QString& reason, qint64 error_code) {
@@ -105,12 +114,28 @@ void PreviewWidget::handleGpuFailure(const QString& reason, qint64 error_code) {
     if (stack_ != nullptr && cpu_surface_ != nullptr) {
         stack_->setCurrentWidget(cpu_surface_);
     }
+    frame_image_ = {};
+    ensureCpuImage();
     updateCpuPixmap();
     emit gpuFallbackRequested(reason, error_code);
 }
 
+void PreviewWidget::ensureCpuImage() {
+    if (!frame_image_.isNull() || current_frame_ == nullptr) return;
+
+    const auto& frame = *current_frame_;
+    const QImage image(
+        frame.rgba_pixels.data(),
+        frame.width,
+        frame.height,
+        frame.stride,
+        QImage::Format_RGBA8888);
+    frame_image_ = image.copy();
+}
+
 void PreviewWidget::updateCpuPixmap() {
     if (cpu_surface_ == nullptr) return;
+    ensureCpuImage();
     if (frame_image_.isNull()) {
         cpu_surface_->setPixmap({});
         cpu_surface_->setText(empty_message_);

@@ -7,6 +7,7 @@
 #include <QtGlobal>
 
 #include <memory>
+#include <vector>
 
 class QOpenGLFunctions_3_2_Core;
 class QOpenGLShaderProgram;
@@ -21,7 +22,7 @@ public:
     explicit OpenGLPreviewSurface(QWidget* parent = nullptr);
     ~OpenGLPreviewSurface() override;
 
-    void setFrame(const media::VideoFrame& frame);
+    void setFrame(media::VideoFramePtr frame);
     void clearFrame();
     void setGrayscaleEnabled(bool enabled);
 
@@ -49,7 +50,8 @@ private:
     int texture_height_ = 0;
     int video_width_ = 0;
     int video_height_ = 0;
-    media::VideoFrame pending_frame_;
+    media::VideoFramePtr pending_frame_;
+    std::vector<std::uint8_t> packed_pixels_;
     bool pending_frame_valid_ = false;
     bool frame_available_ = false;
     bool grayscale_enabled_ = false;

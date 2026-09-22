@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace media {
@@ -11,5 +12,7 @@ struct VideoFrame {
     int stride = 0;
     std::vector<std::uint8_t> rgba_pixels;
 };
+
+using VideoFramePtr = std::shared_ptr<const VideoFrame>;
 
 } // namespace media

@@ -173,7 +173,12 @@ in the running Main Editor after UI or integration changes:
   playback limits, frame rate, clip data, and Undo/Redo remain unchanged; at
   the highest levels, adjacent frames are visibly separated and the horizontal
   scrollbar remains usable for short and long projects;
-- GPU preview, CPU fallback, grayscale, aspect-ratio preservation, and logs.
+- GPU preview, CPU fallback, grayscale, aspect-ratio preservation, and logs;
+- GPU playback frame handoff: with metrics enabled, confirm normal GPU playback
+  does not repeatedly update the hidden CPU surface, Preview submission does
+  not retain stale frames after clear, and the shared frame handoff preserves
+  the same visual output; repeat with `CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1`
+  to confirm the lazy CPU fallback, grayscale, and invalid-frame behavior.
 
 Record a manual result in the task or commit description when a milestone
 changes one of these behaviors.

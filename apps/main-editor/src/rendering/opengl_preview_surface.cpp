@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace rendering {
@@ -78,11 +79,11 @@ OpenGLPreviewSurface::~OpenGLPreviewSurface() {
     releaseResources();
 }
 
-void OpenGLPreviewSurface::setFrame(const media::VideoFrame& frame) {
+void OpenGLPreviewSurface::setFrame(media::VideoFramePtr frame) {
     if (gpu_failed_) return;
 
-    if (!hasValidFrame(frame)) {
-        pending_frame_ = {};
+    if (frame == nullptr || !hasValidFrame(*frame)) {
+        pending_frame_.reset();
         pending_frame_valid_ = false;
         frame_available_ = false;
         update();
@@ -91,13 +92,13 @@ void OpenGLPreviewSurface::setFrame(const media::VideoFrame& frame) {
 
     auto& metrics = PreviewPerformanceMetrics::instance();
     if (pending_frame_valid_) metrics.recordOverwrittenFrame();
-    pending_frame_ = frame;
+    pending_frame_ = std::move(frame);
     pending_frame_valid_ = true;
     update();
 }
 
 void OpenGLPreviewSurface::clearFrame() {
-    pending_frame_ = {};
+    pending_frame_.reset();
     pending_frame_valid_ = false;
     frame_available_ = false;
     update();
@@ -203,13 +204,14 @@ void OpenGLPreviewSurface::showEvent(QShowEvent* event) {
 }
 
 bool OpenGLPreviewSurface::uploadPendingFrame() {
-    if (!pending_frame_valid_ || functions_ == nullptr || texture_ == 0) {
+    if (!pending_frame_valid_ || pending_frame_ == nullptr ||
+        functions_ == nullptr || texture_ == 0) {
         return true;
     }
 
-    const auto& frame = pending_frame_;
+    const auto& frame = *pending_frame_;
     if (!hasValidFrame(frame)) {
-        pending_frame_ = {};
+        pending_frame_.reset();
         pending_frame_valid_ = false;
         frame_available_ = false;
         return true;
@@ -218,19 +220,18 @@ bool OpenGLPreviewSurface::uploadPendingFrame() {
     auto& metrics = PreviewPerformanceMetrics::instance();
     PreviewPerformanceScope timing(metrics, PreviewTiming::GpuUpload);
 
-    std::vector<std::uint8_t> packed_pixels;
     const std::uint8_t* pixels = frame.rgba_pixels.data();
     const auto packed_stride = static_cast<std::size_t>(frame.width) * 4U;
     if (static_cast<std::size_t>(frame.stride) != packed_stride) {
-        packed_pixels.resize(packed_stride * static_cast<std::size_t>(frame.height));
+        packed_pixels_.resize(packed_stride * static_cast<std::size_t>(frame.height));
         for (int row = 0; row < frame.height; ++row) {
             const auto* source = frame.rgba_pixels.data() +
                 static_cast<std::size_t>(row) * static_cast<std::size_t>(frame.stride);
-            auto* destination = packed_pixels.data() +
+            auto* destination = packed_pixels_.data() +
                 static_cast<std::size_t>(row) * packed_stride;
             std::copy(source, source + packed_stride, destination);
         }
-        pixels = packed_pixels.data();
+        pixels = packed_pixels_.data();
     }
 
     functions_->glBindTexture(GL_TEXTURE_2D, texture_);
@@ -277,7 +278,7 @@ bool OpenGLPreviewSurface::uploadPendingFrame() {
         return false;
     }
 
-    pending_frame_ = {};
+    pending_frame_.reset();
     pending_frame_valid_ = false;
     frame_available_ = true;
     return true;

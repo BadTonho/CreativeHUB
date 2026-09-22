@@ -107,6 +107,12 @@ rasterized RGBA layer and its immutable per-row alpha coverage. These are
 playback caches only: they are invalidated when media or composition state
 changes and never alter clip data, timing, frame rate, or project history.
 
+Playback frames cross the worker/UI boundary as immutable shared payloads. The
+GPU Preview retains that payload until its upload instead of copying the RGBA
+vector, while the CPU fallback creates its `QImage` lazily. This keeps frame
+handoff and Preview submission separate from Timeline editing and does not
+change frame selection, playback timing, or project state.
+
 Unrotated cached text layers use the alpha coverage to skip transparent spans
 during CPU composition. The existing general compositor remains the fallback
 for rotated or unsupported layers, so the optimization does not change the

@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <memory>
 #include <cstdlib>
 #include <stdexcept>
 
@@ -42,16 +43,25 @@ int main(int argc, char* argv[]) {
         widget.show();
 
         const auto frame = makeFrame();
+        auto shared_frame = std::make_shared<const media::VideoFrame>(frame);
+        std::weak_ptr<const media::VideoFrame> weak_frame = shared_frame;
         auto& metrics = rendering::PreviewPerformanceMetrics::instance();
         metrics.setEnabled(true);
         metrics.reset();
-        widget.setFrame(frame);
+        widget.setFrame(shared_frame);
+        shared_frame.reset();
+        require(!weak_frame.expired(),
+                "Preview did not retain the submitted frame while displayed.");
         const auto preview_snapshot = metrics.takeSnapshotAndReset();
         require(preview_snapshot.submitted_frames == 1,
                 "Preview metrics did not record the submitted frame.");
         require(preview_snapshot.preview_submit.count == 1,
                 "Preview metrics did not time frame submission.");
         metrics.setEnabled(false);
+        widget.clearFrame("Frame released.");
+        require(weak_frame.expired(),
+                "Preview retained a frame after it was cleared.");
+        widget.setFrame(frame);
         widget.setGrayscaleEnabled(true);
         require(widget.isGrayscaleEnabled(), "Grayscale state was not enabled.");
         widget.resize(320, 240);

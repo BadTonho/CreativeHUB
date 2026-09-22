@@ -22,16 +22,19 @@ variable `CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1` selects the CPU path without
 logging an error.
 
 Playback timing and decoding are separated from the UI thread. The application
-layer owns a Qt `QThread` and a worker-owned `QTimer`; the worker emits owning
-shared frame payloads to the UI. The UI may copy a frame into a `QImage` for
-presentation, but it does not own FFmpeg decoder resources or decode frames
+layer owns a Qt `QThread` and a worker-owned `QTimer`; the worker emits
+immutable shared frame payloads to the UI. While the GPU surface is active,
+the payload crosses the UI boundary without copying its RGBA buffer. The CPU
+fallback materializes a `QImage` only when it is selected or needed after a
+GPU failure; the UI does not own FFmpeg decoder resources or decode frames
 itself during playback.
 
 Media decoding, timeline state, frame ownership, and GPU resource management
 remain separate from the UI widget. Decoding stays on the playback worker;
 OpenGL resource creation, texture uploads, and drawing stay on the UI/OpenGL
-thread. The UI copies incoming frame data only into its temporary CPU fallback
-and transfers the owning frame payload to the OpenGL surface for upload.
+thread. The OpenGL surface retains the shared payload until upload, and only
+the CPU fallback creates a copied image. Non-contiguous rows use a reusable
+staging buffer instead of allocating a new buffer for every upload.
 
 ## Composition pipeline and bounded caches
 
