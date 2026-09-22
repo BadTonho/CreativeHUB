@@ -212,12 +212,13 @@ in the running Main Editor after UI or integration changes:
 - absolute-deadline pacing: run a continuous 24 fps and 25 fps playback for at
   least 30 seconds, with Preview performance metrics enabled. Confirm that
   normal playback does not show a periodic frame-loss pattern, that the
-  effective frame rate stays close to the source rate, and that
-  `pacing_lag` increases only during real worker delays. Introduce a temporary
-  decode or composition delay and confirm that catch-up skips due intermediate
-  frames, then remove the delay and confirm playback resumes without
-  accumulating timer drift or changing Timeline, project, GPU, or Undo/Redo
-  state.
+  effective frame rate stays close to the source rate with and without audio,
+  and that `pacing_lag` increases only during real worker delays. With audio
+  enabled, confirm the worker does not collapse to a lower cadence when the
+  audio-selected target is ahead. Introduce a temporary decode or composition
+  delay and confirm that catch-up skips due intermediate frames, then remove
+  the delay and confirm playback resumes without accumulating timer drift or
+  changing Timeline, project, GPU, or Undo/Redo state.
 
 Record a manual result in the task or commit description when a milestone
 changes one of these behaviors.

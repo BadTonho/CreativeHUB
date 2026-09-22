@@ -694,11 +694,9 @@ void PlaybackWorker::decodeTick() {
         if (segment_frame_count_ > 0) {
             target_frame = std::min(target_frame, segment_frame_count_ - 1);
         }
-        const auto scheduler_target_frame =
-            segment_frame_count_ > 0 &&
-                target_frame >= segment_frame_count_ - 1
-            ? target_frame
-            : std::max(deadline_target_frame, target_frame);
+        const auto scheduler_target_frame = segment_frame_count_ > 0
+            ? std::min(deadline_target_frame, segment_frame_count_ - 1)
+            : deadline_target_frame;
         playback_scheduler_.advanceAfterTarget(
             std::max(scheduler_target_frame, current_frame_index_));
         if (target_frame <= current_frame_index_) {

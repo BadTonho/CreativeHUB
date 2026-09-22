@@ -75,6 +75,35 @@ void validateEarlyAndLateCallbacks() {
         "A delayed callback left an overdue deadline queued.");
 }
 
+void validateAudioTargetDoesNotChangeCadence() {
+    const auto origin = Clock::time_point{};
+    Scheduler scheduler;
+    scheduler.start(origin, 0, 24.0);
+
+    const auto callback_time = origin + std::chrono::milliseconds(42);
+    const auto deadline_target = scheduler.targetFrame(callback_time);
+    const auto audio_target = std::int64_t{4};
+    require(
+        deadline_target == 1 && audio_target > deadline_target,
+        "The audio cadence test did not create an ahead-of-deadline target.");
+
+    // The audio-selected frame must not move the scheduler past the next
+    // absolute video deadline.
+    scheduler.advanceAfterTarget(deadline_target);
+    const auto expected = std::chrono::duration<double>(2.0 / 24.0);
+    const auto actual = scheduler.nextDeadline() - origin;
+    require(
+        std::chrono::duration<double>(actual) >= expected,
+        "An audio target advanced the scheduler to an early deadline.");
+    require(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            actual - std::chrono::duration_cast<Clock::duration>(expected)).count() < 2,
+        "An audio target advanced the scheduler by multiple frames.");
+    require(
+        scheduler.delayUntil(callback_time).count() == 42,
+        "An audio target changed the next video timer delay.");
+}
+
 void validateResetAndRestart() {
     const auto origin = Clock::time_point{};
     Scheduler scheduler;
@@ -106,6 +135,7 @@ int main() {
     try {
         validateFractionalDeadlines();
         validateEarlyAndLateCallbacks();
+        validateAudioTargetDoesNotChangeCadence();
         validateResetAndRestart();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

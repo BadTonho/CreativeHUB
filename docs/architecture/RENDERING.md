@@ -146,6 +146,10 @@ while a late callback advances directly to the next deadline after catch-up.
 `pacing_lag` is the time by which the callback arrived after its scheduled
 absolute deadline. It therefore measures actual worker lateness, not the
 difference between two callbacks and a rounded frame interval.
+When audio is active, its clock may select a newer frame target for
+synchronization, but it never advances the video deadlines; the worker keeps
+waking at the absolute video cadence and catches up only when that cadence is
+actually late.
 
 Decode timing also exposes packet read/send, codec frame receive, RGBA pixel
 conversion, and decoded-frame cache-copy submetrics. The total `decode_*`
