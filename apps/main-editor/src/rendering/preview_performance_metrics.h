@@ -23,6 +23,11 @@ enum class PreviewTiming {
     GpuUpload,
     GpuPaint,
     PacingLag,
+    MediaOpen,
+    AudioSetup,
+    CompositionSetup,
+    ActivationToPresentation,
+    PlaybackStartToPresentation,
     SeekToPresentation,
 };
 
@@ -48,6 +53,9 @@ struct PreviewPerformanceSnapshot {
     std::uint64_t decoded_cache_bytes = 0;
     std::uint64_t text_cache_hits = 0;
     std::uint64_t text_composition_fast_path_hits = 0;
+    std::uint64_t activation_events = 0;
+    std::uint64_t playback_start_events = 0;
+    std::uint64_t seek_requests = 0;
     std::uint64_t seek_operations = 0;
     std::uint64_t composed_frames = 0;
     std::uint64_t composition_cache_hits = 0;
@@ -63,6 +71,8 @@ struct PreviewPerformanceSnapshot {
     std::uint64_t gpu_failures = 0;
     std::uint64_t playback_ticks = 0;
     std::uint64_t pacing_skipped_frames = 0;
+    std::uint64_t pacing_audio_catchup_frames = 0;
+    std::uint64_t pacing_deadline_catchup_frames = 0;
     std::uint64_t pacing_coalesced_frames = 0;
     std::uint64_t playback_worker_thread_id = 0;
     std::uint64_t last_frame_width = 0;
@@ -92,6 +102,11 @@ struct PreviewPerformanceSnapshot {
     PreviewTimingSnapshot gpu_upload;
     PreviewTimingSnapshot gpu_paint;
     PreviewTimingSnapshot pacing_lag;
+    PreviewTimingSnapshot media_open;
+    PreviewTimingSnapshot audio_setup;
+    PreviewTimingSnapshot composition_setup;
+    PreviewTimingSnapshot activation_to_presentation;
+    PreviewTimingSnapshot playback_start_to_presentation;
     PreviewTimingSnapshot seek_to_presentation;
 };
 
@@ -115,6 +130,8 @@ public:
         std::uint64_t bytes) noexcept;
     void recordTextCacheHit() noexcept;
     void recordTextCompositionFastPathHit() noexcept;
+    void recordActivationStarted() noexcept;
+    void recordSeekRequest() noexcept;
     void recordSeekOperation() noexcept;
     void recordComposedFrame() noexcept;
     void recordCompositionCacheHit() noexcept;
@@ -130,6 +147,8 @@ public:
     void recordGpuFailure() noexcept;
     void recordPlaybackTick() noexcept;
     void recordPacingSkippedFrames(std::uint64_t count) noexcept;
+    void recordPacingAudioCatchupFrames(std::uint64_t count) noexcept;
+    void recordPacingDeadlineCatchupFrames(std::uint64_t count) noexcept;
     void recordPacingCoalescedFrame() noexcept;
     void setPlaybackWorkerThreadId(std::uint64_t thread_id) noexcept;
     void setTargetFrameRate(double frame_rate) noexcept;
@@ -162,6 +181,8 @@ private:
     std::atomic<std::uint64_t> active_started_nanoseconds_{0};
     std::atomic<std::uint64_t> playback_active_nanoseconds_{0};
     std::atomic<std::uint64_t> first_frame_nanoseconds_{0};
+    std::atomic<std::uint64_t> activation_started_nanoseconds_{0};
+    std::atomic<std::uint64_t> playback_started_nanoseconds_{0};
     std::atomic<std::uint64_t> seek_started_nanoseconds_{0};
     std::atomic<std::uint64_t> seek_to_presentation_nanoseconds_{0};
     std::atomic<std::uint64_t> decoded_frames_{0};
@@ -172,6 +193,9 @@ private:
     std::atomic<std::uint64_t> decoded_cache_bytes_{0};
     std::atomic<std::uint64_t> text_cache_hits_{0};
     std::atomic<std::uint64_t> text_composition_fast_path_hits_{0};
+    std::atomic<std::uint64_t> activation_events_{0};
+    std::atomic<std::uint64_t> playback_start_events_{0};
+    std::atomic<std::uint64_t> seek_requests_{0};
     std::atomic<std::uint64_t> seek_operations_{0};
     std::atomic<std::uint64_t> composed_frames_{0};
     std::atomic<std::uint64_t> composition_cache_hits_{0};
@@ -187,6 +211,8 @@ private:
     std::atomic<std::uint64_t> gpu_failures_{0};
     std::atomic<std::uint64_t> playback_ticks_{0};
     std::atomic<std::uint64_t> pacing_skipped_frames_{0};
+    std::atomic<std::uint64_t> pacing_audio_catchup_frames_{0};
+    std::atomic<std::uint64_t> pacing_deadline_catchup_frames_{0};
     std::atomic<std::uint64_t> pacing_coalesced_frames_{0};
     std::atomic<std::uint64_t> playback_worker_thread_id_{0};
     std::atomic<std::uint64_t> last_frame_width_{0};
@@ -212,6 +238,11 @@ private:
     TimingStorage gpu_upload_;
     TimingStorage gpu_paint_;
     TimingStorage pacing_lag_;
+    TimingStorage media_open_;
+    TimingStorage audio_setup_;
+    TimingStorage composition_setup_;
+    TimingStorage activation_to_presentation_;
+    TimingStorage playback_start_to_presentation_;
     TimingStorage seek_to_presentation_;
 };
 

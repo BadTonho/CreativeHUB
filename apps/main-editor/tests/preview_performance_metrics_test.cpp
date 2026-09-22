@@ -45,7 +45,12 @@ int main() {
                     disabled.decode_failures == 0 &&
                     disabled.seek_failures == 0 &&
                     disabled.composition_failures == 0 &&
-                    disabled.gpu_failures == 0,
+                    disabled.gpu_failures == 0 &&
+                    disabled.activation_events == 0 &&
+                    disabled.playback_start_events == 0 &&
+                    disabled.seek_requests == 0 &&
+                    disabled.pacing_audio_catchup_frames == 0 &&
+                    disabled.pacing_deadline_catchup_frames == 0,
                 "Disabled metrics recorded decoded-frame data.");
         require(disabled.decode.count == 0,
                 "Disabled metrics recorded timing data.");
@@ -59,14 +64,25 @@ int main() {
                 "Disabled metrics recorded decode substage timing data.");
         require(disabled.text_rasterization.count == 0,
                 "Disabled metrics recorded text rasterization timing data.");
+        require(disabled.media_open.count == 0 &&
+                    disabled.audio_setup.count == 0 &&
+                    disabled.composition_setup.count == 0 &&
+                    disabled.activation_to_presentation.count == 0 &&
+                    disabled.playback_start_to_presentation.count == 0 &&
+                    disabled.seek_to_presentation.count == 0,
+                "Disabled metrics recorded lifecycle timing data.");
         require(disabled.playback_ticks == 0 &&
                     disabled.pacing_skipped_frames == 0 &&
+                    disabled.pacing_audio_catchup_frames == 0 &&
+                    disabled.pacing_deadline_catchup_frames == 0 &&
                     disabled.pacing_coalesced_frames == 0 &&
                     disabled.pacing_lag.count == 0,
                 "Disabled metrics recorded playback pacing data.");
         metrics.recordTextCompositionFastPathHit();
         metrics.recordPlaybackTick();
         metrics.recordPacingSkippedFrames(3);
+        metrics.recordPacingAudioCatchupFrames(2);
+        metrics.recordPacingDeadlineCatchupFrames(1);
         metrics.recordPacingCoalescedFrame();
         metrics.recordTiming(
             rendering::PreviewTiming::PacingLag,
@@ -75,6 +91,10 @@ int main() {
                 "Disabled metrics recorded text composition fast-path data.");
 
         metrics.setEnabled(true);
+        metrics.recordActivationStarted();
+        metrics.recordSeekRequest();
+        metrics.recordSeekOperation();
+        metrics.setPlaybackActive(true);
         metrics.recordDecodedFrame();
         metrics.recordDecodeDiscardedFrame();
         metrics.recordDecodeDiscardedFrame();
@@ -83,7 +103,6 @@ int main() {
         metrics.recordDecodedCacheState(3, 4096);
         metrics.recordTextCacheHit();
         metrics.recordTextCompositionFastPathHit();
-        metrics.recordSeekOperation();
         metrics.recordComposedFrame();
         metrics.recordCompositionCacheHit();
         metrics.recordEmittedFrame();
@@ -98,12 +117,13 @@ int main() {
         metrics.recordGpuFailure();
         metrics.recordPlaybackTick();
         metrics.recordPacingSkippedFrames(2);
+        metrics.recordPacingAudioCatchupFrames(1);
+        metrics.recordPacingDeadlineCatchupFrames(1);
         metrics.recordPacingCoalescedFrame();
         metrics.setPlaybackWorkerThreadId(12345);
         metrics.setTargetFrameRate(23.976);
         metrics.setCompositionWorkload(4, 1, 2, true);
         metrics.setAudioEnabled(true);
-        metrics.setPlaybackActive(true);
         metrics.recordTiming(
             rendering::PreviewTiming::Decode,
             std::chrono::milliseconds(2));
@@ -140,8 +160,21 @@ int main() {
         metrics.recordTiming(
             rendering::PreviewTiming::PacingLag,
             std::chrono::milliseconds(6));
+        metrics.recordTiming(
+            rendering::PreviewTiming::MediaOpen,
+            std::chrono::milliseconds(2));
+        metrics.recordTiming(
+            rendering::PreviewTiming::MediaOpen,
+            std::chrono::milliseconds(4));
+        metrics.recordTiming(
+            rendering::PreviewTiming::AudioSetup,
+            std::chrono::milliseconds(3));
+        metrics.recordTiming(
+            rendering::PreviewTiming::CompositionSetup,
+            std::chrono::milliseconds(5));
 
         const auto snapshot = metrics.takeSnapshotAndReset();
+        metrics.setPlaybackActive(false);
         require(snapshot.decoded_frames == 1,
                 "Decoded frame count is incorrect.");
         require(snapshot.decode_discarded_frames == 2,
@@ -157,6 +190,10 @@ int main() {
                 "Text cache hit count is incorrect.");
         require(snapshot.text_composition_fast_path_hits == 1,
                 "Text composition fast-path hit count is incorrect.");
+        require(snapshot.activation_events == 1 &&
+                    snapshot.playback_start_events == 1 &&
+                    snapshot.seek_requests == 1,
+                "Lifecycle event counts are incorrect.");
         require(snapshot.seek_operations == 1,
                 "Seek operation count is incorrect.");
         require(snapshot.composed_frames == 1,
@@ -184,6 +221,9 @@ int main() {
                 "Playback tick count is incorrect.");
         require(snapshot.pacing_skipped_frames == 2,
                 "Skipped pacing frame count is incorrect.");
+        require(snapshot.pacing_audio_catchup_frames == 1 &&
+                    snapshot.pacing_deadline_catchup_frames == 1,
+                "Pacing catch-up cause counts are incorrect.");
         require(snapshot.pacing_coalesced_frames == 1,
                 "Coalesced pacing frame count is incorrect.");
         require(snapshot.playback_worker_thread_id == 12345,
@@ -202,6 +242,16 @@ int main() {
                 "First-frame latency is outside the metrics window.");
         require(snapshot.seek_to_presentation.count == 1,
                 "Seek-to-presentation latency was not recorded.");
+        require(snapshot.activation_to_presentation.count == 1 &&
+                    snapshot.playback_start_to_presentation.count == 1,
+                "Lifecycle-to-presentation latency was not recorded.");
+        require(snapshot.media_open.count == 2 &&
+                    snapshot.audio_setup.count == 1 &&
+                    snapshot.composition_setup.count == 1,
+                "Playback setup timing was not recorded.");
+        require(snapshot.media_open.percentile95_nanoseconds == 4'194'303 &&
+                    snapshot.media_open.percentile99_nanoseconds == 4'194'303,
+                "Media-open percentiles are incorrect.");
         require(snapshot.decode.count == 2,
                 "Decode timing count is incorrect.");
         require(snapshot.decode.total_nanoseconds == 6'000'000,
@@ -254,9 +304,29 @@ int main() {
                     snapshot.pacing_lag.maximumMilliseconds() == 6.0,
                 "Pacing lag timing aggregation is incorrect.");
 
+        metrics.recordTiming(
+            rendering::PreviewTiming::MediaOpen,
+            std::chrono::nanoseconds::max());
+        const auto overflow = metrics.takeSnapshotAndReset();
+        require(overflow.media_open.count == 1 &&
+                    overflow.media_open.maximum_nanoseconds ==
+                        static_cast<std::uint64_t>(
+                            std::chrono::nanoseconds::max().count()) &&
+                    overflow.media_open.percentile95_nanoseconds ==
+                        static_cast<std::uint64_t>(
+                            std::chrono::nanoseconds::max().count()) &&
+                    overflow.media_open.percentile99_nanoseconds ==
+                        static_cast<std::uint64_t>(
+                            std::chrono::nanoseconds::max().count()),
+                "Timing histogram overflow handling is incorrect.");
+
         const auto reset = metrics.takeSnapshotAndReset();
         require(reset.decoded_frames == 0 &&
                     reset.decode_discarded_frames == 0 &&
+                    reset.activation_events == 0 &&
+                    reset.playback_start_events == 0 &&
+                    reset.seek_requests == 0 &&
+                    reset.seek_operations == 0 &&
                     reset.decode.count == 0 &&
                     reset.decode_packet.count == 0 &&
                     reset.decode_receive.count == 0 &&
@@ -265,6 +335,8 @@ int main() {
                     reset.text_rasterization.count == 0 &&
                     reset.playback_ticks == 0 &&
                     reset.pacing_skipped_frames == 0 &&
+                    reset.pacing_audio_catchup_frames == 0 &&
+                    reset.pacing_deadline_catchup_frames == 0 &&
                     reset.pacing_coalesced_frames == 0 &&
                     reset.playback_worker_thread_id == 12345 &&
                     reset.pacing_lag.count == 0 &&
@@ -272,8 +344,14 @@ int main() {
                     reset.stale_frames_discarded == 0 &&
                     reset.cpu_presented_frames == 0 &&
                     reset.decode_failures == 0 &&
+                    reset.media_open.count == 0 &&
+                    reset.audio_setup.count == 0 &&
+                    reset.composition_setup.count == 0 &&
+                    reset.activation_to_presentation.count == 0 &&
+                    reset.playback_start_to_presentation.count == 0 &&
                     reset.seek_to_presentation.count == 0,
                 "Taking a snapshot did not reset the metrics.");
+        metrics.setEnabled(false);
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

@@ -102,7 +102,8 @@ the project, `.csp` data, Timeline history, or Undo/Redo state.
 When enabled, the application aggregates data for one-second intervals and
 writes at most one summary per interval through the existing logger using the
 `preview/performance_metrics` operation. `metrics_schema_version` identifies
-the current field set while existing fields retain their previous meaning.
+the current field set while existing fields retain their previous meaning. The
+current schema version is `3`.
 The summary includes decoded, decoded-frame cache hits, text-raster cache hits,
 seeked, composed, final-composition cache hits, emitted, received, submitted,
 CPU-presented, GPU-presented, overwritten, stale, skipped, and coalesced frame
@@ -117,10 +118,23 @@ approximations for the p95 and p99 milliseconds. The timings cover decoding,
 decode packet/receive stages, pixel conversion, cache copies, text
 rasterization, seeking, composition, payload creation, the UI callback,
 Preview submission, CPU presentation, GPU upload, GPU painting, pacing lag,
-and seek-to-presentation latency. Derived delivery fields include the actual
-window duration, active playback duration, target FPS, expected frames,
-emitted/received/presented FPS, frame budget, presentation ratio, and first
-frame latency.
+seek-to-presentation latency, media-session opening, audio setup, composition
+setup, activation-to-presentation, and playback-start-to-presentation. The
+existing `first_frame_ms` field is retained for compatibility and means the
+time from the beginning of the current aggregation window to its first
+presentation; it is not a playback-start or seek latency. Use
+`activation_to_presentation_*` and `playback_start_to_presentation_*` for
+those lifecycle latencies. Derived delivery fields include the actual window
+duration, active playback duration, target FPS, expected frames,
+emitted/received/presented FPS, frame budget, and presentation ratio.
+
+`activation_events`, `playback_start_events`, `seek_requests`, and
+`seek_operations` count the corresponding lifecycle stages. Activation timing
+starts when a playback media session is requested, media-opening and audio
+setup timings isolate the worker setup cost, and composition-setup timing
+covers rebuilding the worker's layer sessions. Seek timing starts when the
+worker begins processing the current seek request, including the composition
+path, and ends at the first accepted presentation for that seek.
 
 The same summary records decode, seek, composition, and GPU failure counters,
 the source and preview dimensions, source FPS/codec/container when available,
@@ -144,13 +158,22 @@ indices, and the current playback frame. Missing track or clip selections use
 without writing a per-frame diagnostic entry.
 
 The same summaries include playback pacing data: `playback_ticks`,
-`pacing_skipped_frames`, `pacing_coalesced_frames`, and average/maximum/p95/p99
-`pacing_lag`. The emitted, received, CPU-presented, and GPU-presented counts
+`pacing_skipped_frames`, `pacing_audio_catchup_frames`,
+`pacing_deadline_catchup_frames`, `pacing_coalesced_frames`, and
+average/maximum/p95/p99 `pacing_lag`. The emitted, received, CPU-presented, and GPU-presented counts
 provide the effective per-second playback rate. A skipped frame was not
 published because the worker caught up to a newer target; a coalesced frame
 was replaced in the worker/UI mailbox; a stale frame was rejected after a
 seek or generation change. These counters are diagnostic only and do not
 alter the Timeline or project state.
+
+`pacing_audio_catchup_frames` counts intermediate frames skipped because the
+audio clock selected a target ahead of the video deadline. The
+`pacing_deadline_catchup_frames` field counts skips caused by the absolute
+video deadline or a late worker callback. Both are subsets of
+`pacing_skipped_frames`; `decode_discarded_frames` may describe the same
+catch-up interval at the decoder level and must not be added as another set of
+presented-frame losses.
 
 Playback cadence uses an internal monotonic, absolute-deadline scheduler. The
 worker starts a `steady_clock` origin for each playback run and computes the

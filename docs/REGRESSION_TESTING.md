@@ -141,8 +141,10 @@ in the running Main Editor after UI or integration changes:
 - enable Preview performance metrics and compare a simple 1080p playback run
   with the metrics disabled: confirm the one-second summaries include decode,
   composition, decoded-frame cache hits, text-raster cache hits, and final
-  composition-cache hits, `metrics_schema_version="2"`, p95/p99 timings,
-  delivery FPS, first-frame latency, cache bytes, and process-resource fields;
+  composition-cache hits, `metrics_schema_version="3"`, p95/p99 timings,
+  delivery FPS, window-local `first_frame_ms`, lifecycle timings for media
+  open, audio setup, composition setup, activation, playback start, and seek,
+  cache bytes, and process-resource fields;
   verify that a sequential run does not seek for every frame, that composition
   remains on the CPU, and that the optimized path does not change the Preview
   output, frame rate, project dirty state, or Undo/Redo;
@@ -155,6 +157,7 @@ in the running Main Editor after UI or integration changes:
 - with Preview metrics enabled during playback, compare `playback_ticks`,
   `pacing_skipped_frames`, `pacing_coalesced_frames`, `pacing_lag_avg_ms`,
   `pacing_lag_max_ms`, `pacing_lag_p95_ms`, `pacing_lag_p99_ms`,
+  `pacing_audio_catchup_frames`, and `pacing_deadline_catchup_frames`,
   `emitted_frames`, `received_frames`, `submitted_frames`,
   `cpu_presented_frames`, `gpu_presented_frames`, `presented_fps`,
   `presentation_ratio_percent`, and `overwritten_frames`; confirm that a
@@ -162,6 +165,12 @@ in the running Main Editor after UI or integration changes:
   skipped frames instead of emitting a burst, stale frames are counted after a
   seek/generation change, and the one-slot mailbox prevents unnecessary UI
   queue growth;
+- with Preview metrics enabled, activate a media item and perform seeks in a
+  composition with text and video layers; confirm `activation_events`,
+  `playback_start_events`, `seek_requests`, and `seek_operations` distinguish
+  requested and executed lifecycle work, `seek_to_presentation_*` is populated
+  for composition seeks, and `first_frame_ms` is not interpreted as the
+  playback-start latency;
 - with Preview metrics enabled, exercise decode, seek, composition, and GPU
   failures; confirm their counters increase in the next aggregate sample while
   the detailed technical error remains in its normal error log entry;

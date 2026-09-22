@@ -76,6 +76,8 @@ Nanoseconds histogramPercentile(
 void recordPresentation(
     PreviewPerformanceMetrics& metrics,
     std::atomic<std::uint64_t>& first_frame,
+    std::atomic<std::uint64_t>& activation_started,
+    std::atomic<std::uint64_t>& playback_started,
     std::atomic<std::uint64_t>& seek_started,
     std::atomic<std::uint64_t>& enabled_started) noexcept {
     const auto now = nowNanoseconds();
@@ -87,6 +89,24 @@ void recordPresentation(
             now >= enabled_at ? now - enabled_at : 0U,
             std::memory_order_relaxed,
             std::memory_order_relaxed);
+    }
+
+    const auto activation_at = activation_started.exchange(
+        0,
+        std::memory_order_relaxed);
+    if (activation_at != 0 && now >= activation_at) {
+        metrics.recordTiming(
+            PreviewTiming::ActivationToPresentation,
+            std::chrono::nanoseconds(now - activation_at));
+    }
+
+    const auto playback_at = playback_started.exchange(
+        0,
+        std::memory_order_relaxed);
+    if (playback_at != 0 && now >= playback_at) {
+        metrics.recordTiming(
+            PreviewTiming::PlaybackStartToPresentation,
+            std::chrono::nanoseconds(now - playback_at));
     }
 
     const auto seek_at = seek_started.exchange(0, std::memory_order_relaxed);
@@ -129,6 +149,9 @@ void PreviewPerformanceMetrics::setEnabled(bool enabled) noexcept {
             std::memory_order_relaxed);
     } else {
         enabled_started_nanoseconds_.store(0, std::memory_order_relaxed);
+        activation_started_nanoseconds_.store(0, std::memory_order_relaxed);
+        playback_started_nanoseconds_.store(0, std::memory_order_relaxed);
+        seek_started_nanoseconds_.store(0, std::memory_order_relaxed);
     }
     enabled_.store(enabled, std::memory_order_release);
 }
@@ -163,6 +186,15 @@ void PreviewPerformanceMetrics::recordTiming(
     case PreviewTiming::GpuUpload: storage = &gpu_upload_; break;
     case PreviewTiming::GpuPaint: storage = &gpu_paint_; break;
     case PreviewTiming::PacingLag: storage = &pacing_lag_; break;
+    case PreviewTiming::MediaOpen: storage = &media_open_; break;
+    case PreviewTiming::AudioSetup: storage = &audio_setup_; break;
+    case PreviewTiming::CompositionSetup: storage = &composition_setup_; break;
+    case PreviewTiming::ActivationToPresentation:
+        storage = &activation_to_presentation_;
+        break;
+    case PreviewTiming::PlaybackStartToPresentation:
+        storage = &playback_start_to_presentation_;
+        break;
     case PreviewTiming::SeekToPresentation:
         storage = &seek_to_presentation_;
         break;
@@ -215,6 +247,16 @@ void PreviewPerformanceMetrics::recordTextCompositionFastPathHit() noexcept {
     }
 }
 
+void PreviewPerformanceMetrics::recordActivationStarted() noexcept {
+    if (!isEnabled()) return;
+    activation_events_.fetch_add(1, std::memory_order_relaxed);
+    activation_started_nanoseconds_.store(nowNanoseconds(), std::memory_order_relaxed);
+}
+
+void PreviewPerformanceMetrics::recordSeekRequest() noexcept {
+    if (isEnabled()) seek_requests_.fetch_add(1, std::memory_order_relaxed);
+}
+
 void PreviewPerformanceMetrics::recordSeekOperation() noexcept {
     if (!isEnabled()) return;
     seek_operations_.fetch_add(1, std::memory_order_relaxed);
@@ -252,6 +294,8 @@ void PreviewPerformanceMetrics::recordCpuPresentedFrame() noexcept {
     recordPresentation(
         *this,
         first_frame_nanoseconds_,
+        activation_started_nanoseconds_,
+        playback_started_nanoseconds_,
         seek_started_nanoseconds_,
         enabled_started_nanoseconds_);
 }
@@ -262,6 +306,8 @@ void PreviewPerformanceMetrics::recordGpuPresentedFrame() noexcept {
     recordPresentation(
         *this,
         first_frame_nanoseconds_,
+        activation_started_nanoseconds_,
+        playback_started_nanoseconds_,
         seek_started_nanoseconds_,
         enabled_started_nanoseconds_);
 }
@@ -288,6 +334,20 @@ void PreviewPerformanceMetrics::recordGpuFailure() noexcept {
 
 void PreviewPerformanceMetrics::recordPlaybackTick() noexcept {
     if (isEnabled()) playback_ticks_.fetch_add(1, std::memory_order_relaxed);
+}
+
+void PreviewPerformanceMetrics::recordPacingAudioCatchupFrames(
+    std::uint64_t count) noexcept {
+    if (isEnabled() && count > 0) {
+        pacing_audio_catchup_frames_.fetch_add(count, std::memory_order_relaxed);
+    }
+}
+
+void PreviewPerformanceMetrics::recordPacingDeadlineCatchupFrames(
+    std::uint64_t count) noexcept {
+    if (isEnabled() && count > 0) {
+        pacing_deadline_catchup_frames_.fetch_add(count, std::memory_order_relaxed);
+    }
 }
 
 void PreviewPerformanceMetrics::recordPacingSkippedFrames(
@@ -339,11 +399,14 @@ void PreviewPerformanceMetrics::setPlaybackActive(bool active) noexcept {
     const auto now = nowNanoseconds();
     if (active) {
         auto expected = Nanoseconds{0};
-        active_started_nanoseconds_.compare_exchange_strong(
-            expected,
-            now,
-            std::memory_order_relaxed,
-            std::memory_order_relaxed);
+        if (active_started_nanoseconds_.compare_exchange_strong(
+                expected,
+                now,
+                std::memory_order_relaxed,
+                std::memory_order_relaxed)) {
+            playback_start_events_.fetch_add(1, std::memory_order_relaxed);
+            playback_started_nanoseconds_.store(now, std::memory_order_relaxed);
+        }
         return;
     }
 
@@ -355,6 +418,7 @@ void PreviewPerformanceMetrics::setPlaybackActive(bool active) noexcept {
             now - started,
             std::memory_order_relaxed);
     }
+    playback_started_nanoseconds_.store(0, std::memory_order_relaxed);
 }
 
 PreviewTimingSnapshot PreviewPerformanceMetrics::takeTimingSnapshot(
@@ -412,6 +476,9 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
     snapshot.decoded_cache_bytes = decoded_cache_bytes_.load(std::memory_order_relaxed);
     snapshot.text_cache_hits = text_cache_hits_.exchange(0, std::memory_order_relaxed);
     snapshot.text_composition_fast_path_hits = text_composition_fast_path_hits_.exchange(0, std::memory_order_relaxed);
+    snapshot.activation_events = activation_events_.exchange(0, std::memory_order_relaxed);
+    snapshot.playback_start_events = playback_start_events_.exchange(0, std::memory_order_relaxed);
+    snapshot.seek_requests = seek_requests_.exchange(0, std::memory_order_relaxed);
     snapshot.seek_operations = seek_operations_.exchange(0, std::memory_order_relaxed);
     snapshot.composed_frames = composed_frames_.exchange(0, std::memory_order_relaxed);
     snapshot.composition_cache_hits = composition_cache_hits_.exchange(0, std::memory_order_relaxed);
@@ -427,6 +494,8 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
     snapshot.gpu_failures = gpu_failures_.exchange(0, std::memory_order_relaxed);
     snapshot.playback_ticks = playback_ticks_.exchange(0, std::memory_order_relaxed);
     snapshot.pacing_skipped_frames = pacing_skipped_frames_.exchange(0, std::memory_order_relaxed);
+    snapshot.pacing_audio_catchup_frames = pacing_audio_catchup_frames_.exchange(0, std::memory_order_relaxed);
+    snapshot.pacing_deadline_catchup_frames = pacing_deadline_catchup_frames_.exchange(0, std::memory_order_relaxed);
     snapshot.pacing_coalesced_frames = pacing_coalesced_frames_.exchange(0, std::memory_order_relaxed);
     snapshot.playback_worker_thread_id = playback_worker_thread_id_.load(std::memory_order_relaxed);
     snapshot.last_frame_width = last_frame_width_.exchange(0, std::memory_order_relaxed);
@@ -452,6 +521,11 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
     snapshot.gpu_upload = takeTimingSnapshot(gpu_upload_);
     snapshot.gpu_paint = takeTimingSnapshot(gpu_paint_);
     snapshot.pacing_lag = takeTimingSnapshot(pacing_lag_);
+    snapshot.media_open = takeTimingSnapshot(media_open_);
+    snapshot.audio_setup = takeTimingSnapshot(audio_setup_);
+    snapshot.composition_setup = takeTimingSnapshot(composition_setup_);
+    snapshot.activation_to_presentation = takeTimingSnapshot(activation_to_presentation_);
+    snapshot.playback_start_to_presentation = takeTimingSnapshot(playback_start_to_presentation_);
     snapshot.seek_to_presentation = takeTimingSnapshot(seek_to_presentation_);
     return snapshot;
 }

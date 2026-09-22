@@ -42,6 +42,27 @@ void consumeDecodeCacheHits(media::VideoPlaybackSession& session) noexcept {
     metrics.recordDecodedCacheState(cache.entries, cache.bytes);
 }
 
+std::unique_ptr<media::VideoPlaybackSession> openVideoPlaybackSession(
+    const std::filesystem::path& source_path) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    rendering::PreviewPerformanceScope timing(
+        metrics,
+        rendering::PreviewTiming::MediaOpen);
+    return media::VideoPlaybackSession::open(source_path);
+}
+
+void recordPacingCatchup(
+    rendering::PreviewPerformanceMetrics& metrics,
+    std::uint64_t count,
+    bool audio_clock_ahead) noexcept {
+    metrics.recordPacingSkippedFrames(count);
+    if (audio_clock_ahead) {
+        metrics.recordPacingAudioCatchupFrames(count);
+    } else {
+        metrics.recordPacingDeadlineCatchupFrames(count);
+    }
+}
+
 } // namespace
 
 PlaybackWorker::PlaybackWorker(QObject* parent)
@@ -80,6 +101,7 @@ void PlaybackWorker::clearCompositionCache() noexcept {
 }
 
 void PlaybackWorker::requestSeek(qint64 frame_index, quint64 generation) {
+    rendering::PreviewPerformanceMetrics::instance().recordSeekRequest();
     pending_seek_frame_.store(frame_index, std::memory_order_relaxed);
     pending_seek_generation_.store(generation, std::memory_order_relaxed);
     pending_seek_sequence_.fetch_add(1, std::memory_order_release);
@@ -104,6 +126,8 @@ void PlaybackWorker::setMedia(
     qint64 track_index,
     qint64 clip_index,
     quint64 generation) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.recordActivationStarted();
     pending_seek_frame_.store(no_pending_seek, std::memory_order_relaxed);
     pending_seek_generation_.store(generation, std::memory_order_relaxed);
     pending_seek_sequence_.fetch_add(1, std::memory_order_release);
@@ -152,8 +176,13 @@ void PlaybackWorker::setMedia(
         if (source_start_frame_ < 0 || segment_frame_count_ < 0) {
             throw media::MediaError("The playback segment range is invalid.");
         }
-        session_ = media::VideoPlaybackSession::open(source_path_);
-        configureAudio();
+        session_ = openVideoPlaybackSession(source_path_);
+        {
+            rendering::PreviewPerformanceScope timing(
+                metrics,
+                rendering::PreviewTiming::AudioSetup);
+            configureAudio();
+        }
         emit mediaReady(generation_);
     } catch (const media::MediaError& error) {
         reportFailure(error, "set_media");
@@ -179,7 +208,7 @@ void PlaybackWorker::play() {
 
     try {
         if (!composition_enabled_) {
-            if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
+            if (!session_) session_ = openVideoPlaybackSession(source_path_);
             if (session_->at_end()) {
                 session_->reset();
                 current_frame_index_ = 0;
@@ -306,6 +335,11 @@ void PlaybackWorker::setComposition(
     if (generation < generation_) return;
     generation_ = generation;
 
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    rendering::PreviewPerformanceScope setup_timing(
+        metrics,
+        rendering::PreviewTiming::CompositionSetup);
+
     clearCompositionCache();
 
     composition_specs_ = std::move(layers);
@@ -318,7 +352,6 @@ void PlaybackWorker::setComposition(
         [](const CompositionLayerSpec& spec) {
             return spec.kind == timeline::ClipKind::Text;
         }));
-    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     metrics.setCompositionWorkload(
         static_cast<std::uint64_t>(composition_specs_.size()),
         text_layer_count,
@@ -350,7 +383,7 @@ void PlaybackWorker::setComposition(
             composition_session.spec = spec;
             if (spec.kind == timeline::ClipKind::Video) {
                 if (spec.source_path.isEmpty()) continue;
-                composition_session.session = media::VideoPlaybackSession::open(
+                composition_session.session = openVideoPlaybackSession(
                     QFileInfo(spec.source_path).filesystemFilePath());
             }
             if (spec.track_index == track_index_ && spec.clip_index == clip_index_) {
@@ -487,7 +520,7 @@ void PlaybackWorker::stepForward() {
     }
 
     try {
-        if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
+        if (!session_) session_ = openVideoPlaybackSession(source_path_);
         if (segment_frame_count_ > 0 &&
             current_frame_index_ >= segment_frame_count_ - 1) {
             finishPlayback();
@@ -533,13 +566,14 @@ void PlaybackWorker::stepBackward() {
     }
 
     try {
-        if (!session_) session_ = media::VideoPlaybackSession::open(source_path_);
+        if (!session_) session_ = openVideoPlaybackSession(source_path_);
         const auto target_frame = std::max<std::int64_t>(0, current_frame_index_ - 1);
         const auto source_frame = sourceFrameForLocal(target_frame);
         if (!source_frame.has_value()) {
             throw media::MediaError("The requested previous frame is outside the playback segment.");
         }
         auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+        metrics.recordSeekOperation();
         std::optional<media::VideoFramePtr> frame;
         {
             rendering::PreviewPerformanceScope timing(
@@ -548,7 +582,6 @@ void PlaybackWorker::stepBackward() {
             frame = session_->decode_frame_at(*source_frame);
         }
         consumeDecodeCacheHits(*session_);
-        metrics.recordSeekOperation();
         if (frame.has_value()) metrics.recordDecodedFrame();
         emitFrame(std::move(frame));
         audio_position_valid_ = false;
@@ -576,6 +609,7 @@ void PlaybackWorker::processPendingSeek() {
             }
             return;
         }
+        rendering::PreviewPerformanceMetrics::instance().recordSeekOperation();
         generation_ = generation;
         pause();
 
@@ -598,7 +632,7 @@ void PlaybackWorker::processPendingSeek() {
                 emitComposedFrame();
             } else if (!source_path_.empty()) {
                 if (!session_) {
-                    session_ = media::VideoPlaybackSession::open(source_path_);
+                    session_ = openVideoPlaybackSession(source_path_);
                 }
 
                 const auto source_frame = sourceFrameForLocal(frame_index);
@@ -616,7 +650,6 @@ void PlaybackWorker::processPendingSeek() {
                         seek_is_current);
                 }
                 consumeDecodeCacheHits(*session_);
-                metrics.recordSeekOperation();
                 if (!isSeekCurrent(sequence)) continue;
                 if (!frame.has_value()) {
                     throw media::MediaError("The requested frame is outside the media range.");
@@ -678,8 +711,11 @@ void PlaybackWorker::decodeTick() {
                 scheduleNextPlaybackTick();
                 return;
             }
-            metrics.recordPacingSkippedFrames(static_cast<std::uint64_t>(
-                target_frame - current_frame_index_ - 1));
+            recordPacingCatchup(
+                metrics,
+                static_cast<std::uint64_t>(
+                    target_frame - current_frame_index_ - 1),
+                false);
             current_frame_index_ = target_frame;
             emitComposedFrame();
             scheduleNextPlaybackTick();
@@ -705,13 +741,17 @@ void PlaybackWorker::decodeTick() {
         }
 
         std::int64_t target_frame = deadline_target_frame;
+        bool audio_clock_ahead = false;
         if (audio_enabled_ && audio_output_ != nullptr) {
             const auto elapsed_usecs = std::max<qint64>(
                 0,
                 audio_output_->processedUsecs() - audio_clock_origin_usecs_);
-            target_frame = audio_clock_origin_frame_ + static_cast<std::int64_t>(
-                std::floor(static_cast<double>(elapsed_usecs) *
-                    frame_rate_ / 1000000.0));
+            const auto audio_target_frame = audio_clock_origin_frame_ +
+                static_cast<std::int64_t>(
+                    std::floor(static_cast<double>(elapsed_usecs) *
+                        frame_rate_ / 1000000.0));
+            audio_clock_ahead = audio_target_frame > deadline_target_frame;
+            target_frame = audio_target_frame;
         }
         if (segment_frame_count_ > 0) {
             target_frame = std::min(target_frame, segment_frame_count_ - 1);
@@ -726,8 +766,11 @@ void PlaybackWorker::decodeTick() {
         }
 
         if (composition_enabled_) {
-            metrics.recordPacingSkippedFrames(static_cast<std::uint64_t>(
-                target_frame - current_frame_index_ - 1));
+            recordPacingCatchup(
+                metrics,
+                static_cast<std::uint64_t>(
+                    target_frame - current_frame_index_ - 1),
+                audio_clock_ahead);
             current_frame_index_ = target_frame;
             emitComposedFrame();
             scheduleNextPlaybackTick();
@@ -763,8 +806,11 @@ void PlaybackWorker::decodeTick() {
                 finishPlayback();
             } else {
                 metrics.recordDecodedFrame();
-                metrics.recordPacingSkippedFrames(static_cast<std::uint64_t>(
-                    target_frame - current_frame_index_ - 1));
+                recordPacingCatchup(
+                    metrics,
+                    static_cast<std::uint64_t>(
+                        target_frame - current_frame_index_ - 1),
+                    audio_clock_ahead);
                 emitFrame(std::move(frame));
             }
         }

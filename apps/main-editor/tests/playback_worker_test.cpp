@@ -193,6 +193,12 @@ void validateReference(QCoreApplication& application, const std::filesystem::pat
     const auto snapshot = metrics.takeSnapshotAndReset();
     require(snapshot.payload.count == 0,
             "Source playback created a copied payload instead of sharing the decoded frame.");
+    require(snapshot.activation_events == 1 &&
+                snapshot.media_open.count == 1 &&
+                snapshot.audio_setup.count == 1,
+            "Media activation did not measure opening and audio setup.");
+    require(snapshot.playback_start_events == 1,
+            "Media playback did not record its start transition.");
 
     worker.setMedia(toQString(path), 30.0, 0, 0, 1.0, false, 1.0, false, 0, 0, 8);
     require(ready_count == 2, "Reactivating media did not emit mediaReady again.");
@@ -423,6 +429,10 @@ void validateCompositionTransitions(
 void validateCompositionPlayback(
     QCoreApplication& application,
     const std::filesystem::path& path) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
+
     playback::PlaybackWorker worker;
     bool playback_finished = false;
     bool playback_error = false;
@@ -432,12 +442,16 @@ void validateCompositionPlayback(
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&frame_count, &empty_frame](playback::VideoFramePtr frame, qint64, quint64) {
+        [&frame_count, &empty_frame, &metrics](
+            playback::VideoFramePtr frame,
+            qint64,
+            quint64) {
             if (frame == nullptr) {
                 empty_frame = true;
                 return;
             }
             ++frame_count;
+            metrics.recordCpuPresentedFrame();
         });
     QObject::connect(
         &worker,
@@ -480,6 +494,8 @@ void validateCompositionPlayback(
     timeout.start(2000);
     application.exec();
 
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    metrics.setEnabled(false);
     require(!playback_error,
             "Composition playback without a selected media source emitted an error.");
     require(!empty_frame,
@@ -488,6 +504,74 @@ void validateCompositionPlayback(
             "Composition playback without a selected media source did not finish.");
     require(frame_count >= 1,
             "Composition playback without a selected media source emitted no frames.");
+    require(snapshot.media_open.count == 1 &&
+                snapshot.composition_setup.count == 1,
+            "Composition activation did not measure media opening and setup.");
+    require(snapshot.playback_start_events == 1 &&
+                snapshot.playback_start_to_presentation.count == 1,
+            "Composition playback start-to-presentation timing was not recorded.");
+}
+
+void validateCompositionSeekMetrics(
+    QCoreApplication& application,
+    const std::filesystem::path& path) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
+
+    playback::PlaybackWorker worker;
+    bool received_frame = false;
+    bool playback_error = false;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&received_frame, &metrics](playback::VideoFramePtr frame, qint64, quint64) {
+            require(frame != nullptr, "Composition seek emitted an empty frame.");
+            received_frame = true;
+            metrics.recordCpuPresentedFrame();
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&application, &playback_error](const QString&, qint64, quint64) {
+            playback_error = true;
+            application.quit();
+        });
+
+    playback::CompositionLayerSpec layer;
+    layer.source_path = toQString(path);
+    layer.frame_rate = 30.0;
+    layer.timeline_start_frame = 0;
+    layer.source_start_frame = 0;
+    layer.segment_frame_count = 3;
+    layer.track_index = 0;
+    layer.clip_index = 0;
+
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{layer},
+        {},
+        210);
+    worker.requestSeek(1, 211);
+
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(
+        &timeout,
+        &QTimer::timeout,
+        &application,
+        &QCoreApplication::quit);
+    timeout.start(2000);
+    application.exec();
+
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    metrics.setEnabled(false);
+    require(!playback_error && received_frame,
+            "Composition seek did not produce a valid frame.");
+    require(snapshot.seek_requests == 1 && snapshot.seek_operations == 1,
+            "Composition seek request and operation counts are incorrect.");
+    require(snapshot.seek_to_presentation.count == 1,
+            "Composition seek-to-presentation timing was not recorded.");
 }
 
 void validateDirectDecodeCatchup(
@@ -901,6 +985,7 @@ int main(int argc, char* argv[]) {
             validateSegmentRange(application, std::filesystem::path(argv[1]));
             validateCompositionTransitions(std::filesystem::path(argv[1]));
             validateCompositionPlayback(application, std::filesystem::path(argv[1]));
+            validateCompositionSeekMetrics(application, std::filesystem::path(argv[1]));
             validateCompositionDecodeCatchup(application, std::filesystem::path(argv[1]));
             validateDirectDecodeCatchup(application, std::filesystem::path(argv[1]));
         }

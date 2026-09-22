@@ -97,7 +97,7 @@ void appendOptionalUint64Context(
 void appendPerformanceContext(
     logging::Context& context,
     const PreviewPerformanceSnapshot& snapshot) {
-    context.emplace_back("metrics_schema_version", "2");
+    context.emplace_back("metrics_schema_version", "3");
     context.emplace_back(
         "decoded_frames", std::to_string(snapshot.decoded_frames));
     context.emplace_back(
@@ -119,6 +119,13 @@ void appendPerformanceContext(
     context.emplace_back(
         "text_composition_fast_path_hits",
         std::to_string(snapshot.text_composition_fast_path_hits));
+    context.emplace_back(
+        "activation_events", std::to_string(snapshot.activation_events));
+    context.emplace_back(
+        "playback_start_events",
+        std::to_string(snapshot.playback_start_events));
+    context.emplace_back(
+        "seek_requests", std::to_string(snapshot.seek_requests));
     context.emplace_back(
         "seek_operations", std::to_string(snapshot.seek_operations));
     context.emplace_back(
@@ -152,6 +159,12 @@ void appendPerformanceContext(
     context.emplace_back(
         "pacing_skipped_frames",
         std::to_string(snapshot.pacing_skipped_frames));
+    context.emplace_back(
+        "pacing_audio_catchup_frames",
+        std::to_string(snapshot.pacing_audio_catchup_frames));
+    context.emplace_back(
+        "pacing_deadline_catchup_frames",
+        std::to_string(snapshot.pacing_deadline_catchup_frames));
     context.emplace_back(
         "pacing_coalesced_frames",
         std::to_string(snapshot.pacing_coalesced_frames));
@@ -257,6 +270,20 @@ void appendPerformanceContext(
     appendTimingContext(context, "gpu_upload", snapshot.gpu_upload);
     appendTimingContext(context, "gpu_paint", snapshot.gpu_paint);
     appendTimingContext(context, "pacing_lag", snapshot.pacing_lag);
+    appendTimingContext(context, "media_open", snapshot.media_open);
+    appendTimingContext(context, "audio_setup", snapshot.audio_setup);
+    appendTimingContext(
+        context,
+        "composition_setup",
+        snapshot.composition_setup);
+    appendTimingContext(
+        context,
+        "activation_to_presentation",
+        snapshot.activation_to_presentation);
+    appendTimingContext(
+        context,
+        "playback_start_to_presentation",
+        snapshot.playback_start_to_presentation);
     appendTimingContext(
         context,
         "seek_to_presentation",
@@ -299,11 +326,20 @@ void MainWindow::flushPreviewPerformanceMetrics() {
     if (snapshot.playback_ticks == 0 && snapshot.emitted_frames == 0 &&
         snapshot.received_frames == 0 && snapshot.submitted_frames == 0 &&
         snapshot.playback_active_nanoseconds == 0 &&
+        snapshot.activation_events == 0 &&
+        snapshot.playback_start_events == 0 &&
+        snapshot.seek_requests == 0 &&
         snapshot.seek_operations == 0 &&
         snapshot.decode_failures == 0 &&
         snapshot.seek_failures == 0 &&
         snapshot.composition_failures == 0 &&
-        snapshot.gpu_failures == 0) {
+        snapshot.gpu_failures == 0 &&
+        snapshot.media_open.count == 0 &&
+        snapshot.audio_setup.count == 0 &&
+        snapshot.composition_setup.count == 0 &&
+        snapshot.activation_to_presentation.count == 0 &&
+        snapshot.playback_start_to_presentation.count == 0 &&
+        snapshot.seek_to_presentation.count == 0) {
         return;
     }
 
