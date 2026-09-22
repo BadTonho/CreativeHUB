@@ -808,6 +808,80 @@ void validateCompositionPacing(QCoreApplication& application) {
     }
 }
 
+void validateNormalCompositionPacing(QCoreApplication& application) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
+
+    playback::PlaybackWorker worker;
+    std::vector<qint64> frame_indices;
+    bool playback_finished = false;
+    bool playback_error = false;
+
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&frame_indices](playback::VideoFramePtr frame, qint64 frame_index, quint64) {
+            require(frame != nullptr, "Normal composition emitted an empty frame.");
+            frame_indices.push_back(frame_index);
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackFinished,
+        [&application, &playback_finished](quint64, bool during_playback) {
+            playback_finished = during_playback;
+            application.quit();
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&application, &playback_error](const QString&, qint64, quint64) {
+            playback_error = true;
+            application.quit();
+        });
+
+    playback::CompositionLayerSpec layer;
+    layer.kind = timeline::ClipKind::Text;
+    layer.frame_rate = 24.0;
+    layer.timeline_start_frame = 0;
+    layer.segment_frame_count = 48;
+    layer.track_index = 0;
+    layer.clip_index = 0;
+    layer.text.content = "Normal pacing";
+
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{layer},
+        {},
+        402);
+    worker.play();
+
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(
+        &timeout,
+        &QTimer::timeout,
+        &application,
+        &QCoreApplication::quit);
+    timeout.start(5000);
+    application.exec();
+
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    metrics.setEnabled(false);
+    require(!playback_error && playback_finished,
+            "Normal 24 fps composition playback did not finish cleanly.");
+    require(frame_indices.size() >= 42,
+            "Normal 24 fps composition playback lost too many frames.");
+    require(snapshot.pacing_skipped_frames <= 4,
+            "Normal 24 fps composition playback accumulated systematic skips.");
+    require(snapshot.playback_ticks >= frame_indices.size(),
+            "Normal playback tick metrics did not cover emitted frames.");
+    for (std::size_t index = 1; index < frame_indices.size(); ++index) {
+        require(frame_indices[index] > frame_indices[index - 1],
+                "Normal pacing emitted non-monotonic frame indices.");
+    }
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -819,6 +893,7 @@ int main(int argc, char* argv[]) {
         validateSeekWithoutMedia(application);
         validatePlaybackFrameMailbox();
         validateCompositionPacing(application);
+        validateNormalCompositionPacing(application);
         validateCompositionCaching();
         if (argc == 2) {
             validateReference(application, std::filesystem::path(argv[1]));

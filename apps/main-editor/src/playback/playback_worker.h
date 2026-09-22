@@ -6,6 +6,7 @@
 #include "../rendering/frame_compositor.h"
 #include "../timeline/timeline_model.h"
 #include "audio_output.h"
+#include "playback_deadline_scheduler.h"
 
 #include <QMetaType>
 #include <QByteArray>
@@ -152,11 +153,9 @@ private:
     [[nodiscard]] bool isLocalFrameInRange(std::int64_t local_frame) const noexcept;
     [[nodiscard]] bool isSourceFrameInRange(std::int64_t source_frame) const noexcept;
     [[nodiscard]] bool isSeekCurrent(quint64 sequence) const noexcept;
-    [[nodiscard]] int frameIntervalMilliseconds() const noexcept;
+    void scheduleNextPlaybackTick();
     void startPlaybackClock() noexcept;
     void resetPlaybackClock() noexcept;
-    [[nodiscard]] std::int64_t wallClockTargetFrame(
-        std::chrono::steady_clock::time_point now) const noexcept;
 
     QTimer* timer_ = nullptr;
     std::unique_ptr<media::VideoPlaybackSession> session_;
@@ -183,11 +182,7 @@ private:
     bool playing_ = false;
     bool diagnostics_logged_ = false;
     using Clock = std::chrono::steady_clock;
-    Clock::time_point playback_clock_started_at_{};
-    Clock::time_point last_playback_tick_at_{};
-    std::int64_t playback_clock_origin_frame_ = 0;
-    bool playback_clock_valid_ = false;
-    bool last_playback_tick_valid_ = false;
+    detail::PlaybackDeadlineScheduler playback_scheduler_;
     std::atomic<qint64> pending_seek_frame_{std::numeric_limits<qint64>::min()};
     std::atomic<quint64> pending_seek_generation_{0};
     std::atomic<quint64> pending_seek_sequence_{0};

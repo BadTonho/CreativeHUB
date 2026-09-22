@@ -25,7 +25,7 @@ updated intentionally.
 | Structured logging | File creation, required fields, escaping, rotation, retention limit |
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions |
 | Playback session | Sequential frames, forward catch-up without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
-| Playback worker | Media activation, generation handling, seek coalescing, precise clock pacing, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
+| Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
 | Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom through 51,200%, frame-level guides, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
@@ -209,6 +209,15 @@ in the running Main Editor after UI or integration changes:
   is not confused with mailbox coalescing. Verify seek,
   Previous Frame, Next Frame, Blade Tool, selection, playback completion, and
   project dirty state remain unchanged.
+- absolute-deadline pacing: run a continuous 24 fps and 25 fps playback for at
+  least 30 seconds, with Preview performance metrics enabled. Confirm that
+  normal playback does not show a periodic frame-loss pattern, that the
+  effective frame rate stays close to the source rate, and that
+  `pacing_lag` increases only during real worker delays. Introduce a temporary
+  decode or composition delay and confirm that catch-up skips due intermediate
+  frames, then remove the delay and confirm playback resumes without
+  accumulating timer drift or changing Timeline, project, GPU, or Undo/Redo
+  state.
 
 Record a manual result in the task or commit description when a milestone
 changes one of these behaviors.

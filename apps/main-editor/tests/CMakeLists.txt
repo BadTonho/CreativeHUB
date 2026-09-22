@@ -181,6 +181,7 @@ add_executable(creative-suite-main-editor-playback-worker-tests
     ../src/playback/audio_output.h
     ../src/playback/playback_worker.cpp
     ../src/playback/playback_worker.h
+    ../src/playback/playback_deadline_scheduler.h
     ../src/playback/playback_frame_mailbox.cpp
     ../src/playback/playback_frame_mailbox.h
     ../src/rendering/frame_compositor.cpp
@@ -297,6 +298,28 @@ if(EXISTS "${REFERENCE_VIDEO}")
         ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;QT_QPA_PLATFORM=offscreen"
     )
 endif()
+
+add_executable(creative-suite-main-editor-playback-deadline-tests
+    playback_deadline_scheduler_test.cpp
+    ../src/playback/playback_deadline_scheduler.h
+)
+
+target_include_directories(creative-suite-main-editor-playback-deadline-tests PRIVATE
+    ../src
+)
+
+target_compile_features(creative-suite-main-editor-playback-deadline-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-playback-deadline-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-playback-deadline-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-playback-deadline
+    COMMAND creative-suite-main-editor-playback-deadline-tests
+)
 
 add_executable(creative-suite-main-editor-timeline-tests
     timeline_model_test.cpp

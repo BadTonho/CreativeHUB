@@ -135,6 +135,18 @@ not published because the worker caught up to a newer target; a coalesced
 frame was replaced in the worker/UI mailbox. These counters are diagnostic
 only and do not alter the Timeline or project state.
 
+Playback cadence uses an internal monotonic, absolute-deadline scheduler. The
+worker starts a `steady_clock` origin for each playback run and computes the
+due frame as `floor(elapsed_seconds * frame_rate)`, preserving fractional
+rates such as 23.976 fps. Each deadline is derived from the original clock
+origin and frame offset rather than from the previous rounded millisecond
+interval, so timer rounding cannot accumulate drift. The Qt timer is a
+single-shot precise timer; an early callback is rearmed for the same deadline,
+while a late callback advances directly to the next deadline after catch-up.
+`pacing_lag` is the time by which the callback arrived after its scheduled
+absolute deadline. It therefore measures actual worker lateness, not the
+difference between two callbacks and a rounded frame interval.
+
 Decode timing also exposes packet read/send, codec frame receive, RGBA pixel
 conversion, and decoded-frame cache-copy submetrics. The total `decode_*`
 values remain the compatibility metric; the submetrics may have different
