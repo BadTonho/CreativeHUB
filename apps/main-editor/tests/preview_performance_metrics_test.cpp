@@ -22,6 +22,18 @@ int main() {
             rendering::PreviewTiming::Decode,
             std::chrono::milliseconds(5));
         metrics.recordTiming(
+            rendering::PreviewTiming::DecodePacket,
+            std::chrono::milliseconds(5));
+        metrics.recordTiming(
+            rendering::PreviewTiming::DecodeReceive,
+            std::chrono::milliseconds(5));
+        metrics.recordTiming(
+            rendering::PreviewTiming::PixelConversion,
+            std::chrono::milliseconds(5));
+        metrics.recordTiming(
+            rendering::PreviewTiming::FrameCacheCopy,
+            std::chrono::milliseconds(5));
+        metrics.recordTiming(
             rendering::PreviewTiming::TextRasterization,
             std::chrono::milliseconds(6));
         const auto disabled = metrics.takeSnapshotAndReset();
@@ -29,6 +41,11 @@ int main() {
                 "Disabled metrics recorded a frame.");
         require(disabled.decode.count == 0,
                 "Disabled metrics recorded timing data.");
+        require(disabled.decode_packet.count == 0 &&
+                    disabled.decode_receive.count == 0 &&
+                    disabled.pixel_conversion.count == 0 &&
+                    disabled.frame_cache_copy.count == 0,
+                "Disabled metrics recorded decode substage timing data.");
         require(disabled.text_rasterization.count == 0,
                 "Disabled metrics recorded text rasterization timing data.");
         metrics.recordTextCompositionFastPathHit();
@@ -54,6 +71,24 @@ int main() {
         metrics.recordTiming(
             rendering::PreviewTiming::Decode,
             std::chrono::milliseconds(4));
+        metrics.recordTiming(
+            rendering::PreviewTiming::DecodePacket,
+            std::chrono::milliseconds(1));
+        metrics.recordTiming(
+            rendering::PreviewTiming::DecodePacket,
+            std::chrono::milliseconds(3));
+        metrics.recordTiming(
+            rendering::PreviewTiming::DecodeReceive,
+            std::chrono::milliseconds(4));
+        metrics.recordTiming(
+            rendering::PreviewTiming::PixelConversion,
+            std::chrono::milliseconds(5));
+        metrics.recordTiming(
+            rendering::PreviewTiming::PixelConversion,
+            std::chrono::milliseconds(7));
+        metrics.recordTiming(
+            rendering::PreviewTiming::FrameCacheCopy,
+            std::chrono::milliseconds(2));
         metrics.recordTiming(
             rendering::PreviewTiming::TextRasterization,
             std::chrono::milliseconds(3));
@@ -99,6 +134,28 @@ int main() {
                 "Decode timing average is incorrect.");
         require(snapshot.decode.maximumMilliseconds() == 4.0,
                 "Decode timing maximum conversion is incorrect.");
+        require(snapshot.decode_packet.count == 2 &&
+                    snapshot.decode_packet.total_nanoseconds == 4'000'000 &&
+                    snapshot.decode_packet.maximum_nanoseconds == 3'000'000 &&
+                    snapshot.decode_packet.averageMilliseconds() == 2.0 &&
+                    snapshot.decode_packet.maximumMilliseconds() == 3.0,
+                "Decode packet timing aggregation is incorrect.");
+        require(snapshot.decode_receive.count == 1 &&
+                    snapshot.decode_receive.total_nanoseconds == 4'000'000 &&
+                    snapshot.decode_receive.maximum_nanoseconds == 4'000'000 &&
+                    snapshot.decode_receive.averageMilliseconds() == 4.0,
+                "Decode receive timing aggregation is incorrect.");
+        require(snapshot.pixel_conversion.count == 2 &&
+                    snapshot.pixel_conversion.total_nanoseconds == 12'000'000 &&
+                    snapshot.pixel_conversion.maximum_nanoseconds == 7'000'000 &&
+                    snapshot.pixel_conversion.averageMilliseconds() == 6.0 &&
+                    snapshot.pixel_conversion.maximumMilliseconds() == 7.0,
+                "Pixel conversion timing aggregation is incorrect.");
+        require(snapshot.frame_cache_copy.count == 1 &&
+                    snapshot.frame_cache_copy.total_nanoseconds == 2'000'000 &&
+                    snapshot.frame_cache_copy.maximum_nanoseconds == 2'000'000 &&
+                    snapshot.frame_cache_copy.averageMilliseconds() == 2.0,
+                "Frame cache copy timing aggregation is incorrect.");
         require(snapshot.text_rasterization.count == 2,
                 "Text rasterization timing count is incorrect.");
         require(snapshot.text_rasterization.total_nanoseconds == 10'000'000,
@@ -112,6 +169,10 @@ int main() {
 
         const auto reset = metrics.takeSnapshotAndReset();
         require(reset.decoded_frames == 0 && reset.decode.count == 0 &&
+                    reset.decode_packet.count == 0 &&
+                    reset.decode_receive.count == 0 &&
+                    reset.pixel_conversion.count == 0 &&
+                    reset.frame_cache_copy.count == 0 &&
                     reset.text_rasterization.count == 0 &&
                     reset.text_composition_fast_path_hits == 0,
                 "Taking a snapshot did not reset the metrics.");

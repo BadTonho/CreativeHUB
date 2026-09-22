@@ -105,6 +105,10 @@ void appendPerformanceContext(
     context.emplace_back(
         "last_frame_height", std::to_string(snapshot.last_frame_height));
     appendTimingContext(context, "decode", snapshot.decode);
+    appendTimingContext(context, "decode_packet", snapshot.decode_packet);
+    appendTimingContext(context, "decode_receive", snapshot.decode_receive);
+    appendTimingContext(context, "pixel_conversion", snapshot.pixel_conversion);
+    appendTimingContext(context, "frame_cache_copy", snapshot.frame_cache_copy);
     appendTimingContext(
         context,
         "text_rasterization",

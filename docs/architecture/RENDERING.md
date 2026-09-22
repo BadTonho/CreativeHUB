@@ -93,6 +93,13 @@ entries are written.
 When disabled, the timer stops and the hot path does not collect detailed
 timings.
 
+Decode timing also exposes packet read/send, codec frame receive, RGBA pixel
+conversion, and decoded-frame cache-copy submetrics. The total `decode_*`
+values remain the compatibility metric; the submetrics may have different
+counts because one decoded frame can require multiple packet or codec calls.
+The playback session reuses its FFmpeg `SwsContext` for compatible frames and
+lets FFmpeg replace it when the source format or dimensions change.
+
 SDL3 and the archived SDL3 prototype are intentionally not reused by the Main
 Editor: the application already depends on Qt Widgets, and adding a second
 window/input/GPU stack would increase deployment and boundary complexity before

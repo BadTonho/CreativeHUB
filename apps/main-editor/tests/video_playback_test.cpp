@@ -39,6 +39,7 @@ void validateReference(const std::filesystem::path& path) {
     const auto first = session->decode_next_frame();
     require(first.has_value(), "The first frame was not decoded.");
     require(first->width == 640 && first->height == 360, "Unexpected first frame dimensions.");
+    const auto first_pixels = first->rgba_pixels;
     require(session->current_frame_index() == 0, "First frame index is incorrect.");
 
     const auto second = session->decode_next_frame();
@@ -50,6 +51,8 @@ void validateReference(const std::filesystem::path& path) {
     require(session->current_frame_index() == 0, "Previous frame index is incorrect.");
     require(first_seek->width == 640 && first_seek->height == 360,
             "The first seek frame dimensions are incorrect.");
+    require(first_seek->rgba_pixels == first_pixels,
+            "Seeking back to the first frame changed the converted RGBA pixels.");
     require(session->take_cache_hit_count() >= 1,
             "A previously decoded frame was not reused from the cache.");
 

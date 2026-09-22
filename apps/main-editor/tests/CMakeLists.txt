@@ -33,6 +33,8 @@ add_executable(creative-suite-main-editor-video-decoder-tests
     ../src/media/video_probe.h
     ../src/media/video_playback.cpp
     ../src/media/video_playback.h
+    ../src/rendering/preview_performance_metrics.cpp
+    ../src/rendering/preview_performance_metrics.h
 )
 
 target_include_directories(creative-suite-main-editor-video-decoder-tests PRIVATE
@@ -125,6 +127,8 @@ add_executable(creative-suite-main-editor-video-playback-tests
     ../src/media/video_metadata.h
     ../src/media/video_playback.cpp
     ../src/media/video_playback.h
+    ../src/rendering/preview_performance_metrics.cpp
+    ../src/rendering/preview_performance_metrics.h
 )
 
 target_include_directories(creative-suite-main-editor-video-playback-tests PRIVATE

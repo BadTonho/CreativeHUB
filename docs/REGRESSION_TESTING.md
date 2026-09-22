@@ -145,6 +145,11 @@ in the running Main Editor after UI or integration changes:
   frame, that composition remains on the CPU, and that the optimized path
   does not change the Preview output, frame rate, project dirty state, or
   Undo/Redo;
+- with Preview metrics enabled, compare `decode_avg_ms` with
+  `decode_packet_avg_ms`, `decode_receive_avg_ms`, `pixel_conversion_avg_ms`,
+  and `frame_cache_copy_avg_ms`; confirm that sequential playback reuses the
+  pixel converter, keeps the same frame counts, and does not add overwritten
+  frames or visual differences;
 - the Timeline footer RAM indicator: confirm it is aligned to the right, uses
   the `RAM: <megabytes> MB` format, refreshes approximately once per
   second, reports only the Main Editor process, and does not affect playback,

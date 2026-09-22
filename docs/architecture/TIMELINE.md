@@ -107,6 +107,11 @@ rasterized RGBA layer and its immutable per-row alpha coverage. These are
 playback caches only: they are invalidated when media or composition state
 changes and never alter clip data, timing, frame rate, or project history.
 
+Preview diagnostics separate total decode time into packet read/send, codec
+receive, RGBA conversion, and cache-copy timings. Sequential playback reuses
+the decoder's cached FFmpeg `SwsContext`; a format or dimension change rebuilds
+that conversion context without changing the resulting `VideoFrame`.
+
 Playback frames cross the worker/UI boundary as immutable shared payloads. The
 GPU Preview retains that payload until its upload instead of copying the RGBA
 vector, while the CPU fallback creates its `QImage` lazily. This keeps frame

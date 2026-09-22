@@ -1,6 +1,7 @@
 #include "video_playback.h"
 
 #include "../logging/logger.h"
+#include "../rendering/preview_performance_metrics.h"
 #include "video_metadata.h"
 
 extern "C" {
@@ -92,7 +93,10 @@ void validateInputFile(const std::filesystem::path& source_path) {
     }
 }
 
-VideoFrame copyRgbaFrame(const AVFrame& frame) {
+VideoFrame copyRgbaFrame(
+    const AVFrame& frame,
+    SwsContextPtr& scaler,
+    rendering::PreviewPerformanceMetrics& metrics) {
     if (frame.width <= 0 || frame.height <= 0) {
         throw MediaError("Decoded video frame has invalid dimensions.");
     }
@@ -116,7 +120,11 @@ VideoFrame copyRgbaFrame(const AVFrame& frame) {
     result.stride = static_cast<int>(stride);
     result.rgba_pixels.resize(stride * height);
 
-    SwsContextPtr scaler(sws_getContext(
+    rendering::PreviewPerformanceScope conversion_timing(
+        metrics,
+        rendering::PreviewTiming::PixelConversion);
+    auto* cached_scaler = sws_getCachedContext(
+        scaler.release(),
         frame.width,
         frame.height,
         static_cast<AVPixelFormat>(frame.format),
@@ -126,8 +134,11 @@ VideoFrame copyRgbaFrame(const AVFrame& frame) {
         SWS_BILINEAR,
         nullptr,
         nullptr,
-        nullptr));
-    if (!scaler) throw MediaError("Could not create the video color conversion context.");
+        nullptr);
+    if (cached_scaler == nullptr) {
+        throw MediaError("Could not create the video color conversion context.");
+    }
+    scaler.reset(cached_scaler);
 
     std::uint8_t* destination_data[4] = {result.rgba_pixels.data(), nullptr, nullptr, nullptr};
     int destination_linesize[4] = {result.stride, 0, 0, 0};
@@ -256,6 +267,7 @@ struct VideoPlaybackSession::Impl {
     std::int64_t current_frame_index = -1;
     std::int64_t last_decoded_timestamp = AV_NOPTS_VALUE;
     std::deque<CachedFrame> frame_cache;
+    SwsContextPtr scaler;
     std::size_t cached_bytes = 0;
     std::uint64_t cache_hit_count = 0;
 };
@@ -420,9 +432,13 @@ std::unique_ptr<VideoPlaybackSession::Impl> VideoPlaybackSession::openImpl(
 std::optional<VideoFrame> VideoPlaybackSession::decodeNextFrame(Impl& impl) {
     if (impl.end_reached) return std::nullopt;
 
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     while (true) {
         if (!impl.flush_sent) {
             while (true) {
+                rendering::PreviewPerformanceScope packet_timing(
+                    metrics,
+                    rendering::PreviewTiming::DecodePacket);
                 const int read_result = av_read_frame(impl.format.get(), impl.packet.get());
                 if (read_result == AVERROR_EOF) {
                     const int flush_result = avcodec_send_packet(impl.decoder.get(), nullptr);
@@ -450,12 +466,18 @@ std::optional<VideoFrame> VideoPlaybackSession::decodeNextFrame(Impl& impl) {
             }
         }
 
+        rendering::PreviewPerformanceScope receive_timing(
+            metrics,
+            rendering::PreviewTiming::DecodeReceive);
         const int receive_result = avcodec_receive_frame(impl.decoder.get(), impl.frame.get());
         if (receive_result == 0) {
             ++impl.current_frame_index;
             impl.last_decoded_timestamp = impl.frame->best_effort_timestamp;
-            auto decoded_frame = copyRgbaFrame(*impl.frame);
+            auto decoded_frame = copyRgbaFrame(*impl.frame, impl.scaler, metrics);
             if (impl.cache_decoded_frames) {
+                rendering::PreviewPerformanceScope cache_copy_timing(
+                    metrics,
+                    rendering::PreviewTiming::FrameCacheCopy);
                 VideoPlaybackSession::cacheFrame(
                     impl,
                     impl.current_frame_index,
@@ -570,6 +592,9 @@ std::optional<VideoFrame> VideoPlaybackSession::decode_frame_at(
             }
 
             impl_->current_frame_index = *decoded_index;
+            rendering::PreviewPerformanceScope cache_copy_timing(
+                rendering::PreviewPerformanceMetrics::instance(),
+                rendering::PreviewTiming::FrameCacheCopy);
             cacheFrame(*impl_, *decoded_index, *frame);
             if (*decoded_index == frame_index) {
                 impl_->cache_decoded_frames = true;
