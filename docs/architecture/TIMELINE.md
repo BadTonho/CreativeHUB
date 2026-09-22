@@ -30,8 +30,10 @@ content duration remains authoritative for playback and project behavior.
 The horizontal view can be zoomed from 25% through 51,200% using discrete
 levels. The levels after 800% provide frame-level inspection; when the scale
 reaches at least one pixel per frame, a subtle guide is drawn for each visible
-frame without adding text labels. Ctrl + mouse wheel and the visible minus and
-plus controls zoom around the playhead, keeping that timeline instant in place.
+frame inside the upper time ruler without adding text labels over the clips.
+Major time divisions also remain in that ruler. Ctrl + mouse wheel and the
+visible minus and plus controls zoom around the playhead, keeping that timeline
+instant in place.
 Zoom changes only the timeline's horizontal presentation and are saved in the
 project; they do not change clip frames, playback, preview, or Undo/Redo.
 The timeline surface grows only as much as its track rows require; additional

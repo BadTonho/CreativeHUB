@@ -461,15 +461,24 @@ int main(int argc, char* argv[]) {
         QImage frame_grid_image(400, 300, QImage::Format_ARGB32);
         frame_grid_image.fill(Qt::transparent);
         frame_grid_widget.render(&frame_grid_image);
-        const auto row_background = frame_grid_image.pixelColor(210, 100);
+        const auto ruler_background = frame_grid_image.pixelColor(210, 13);
         int frame_grid_pixels = 0;
         for (int x = 154; x < 195; ++x) {
-            if (frame_grid_image.pixelColor(x, 100) != row_background) {
+            if (frame_grid_image.pixelColor(x, 13) != ruler_background) {
                 ++frame_grid_pixels;
             }
         }
         require(frame_grid_pixels >= 4,
-                "Frame-level zoom did not render individual frame guides.");
+                "Frame-level zoom did not render individual frame guides in the ruler.");
+        const auto track_background = frame_grid_image.pixelColor(180, 100);
+        int track_grid_pixels = 0;
+        for (int x = 165; x < 185; ++x) {
+            if (frame_grid_image.pixelColor(x, 100) != track_background) {
+                ++track_grid_pixels;
+            }
+        }
+        require(track_grid_pixels == 0,
+                "Frame-level guides must not be drawn across timeline clips.");
         frame_grid_widget.close();
         widget.setZoomFactor(1.0);
         widget.resize(1000, 500);

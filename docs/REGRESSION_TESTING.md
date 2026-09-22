@@ -27,7 +27,7 @@ updated intentionally.
 | Playback session | Sequential frames, forward catch-up without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
 | Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, composition playback without a selected Media Browser source, errors, and no-op seeks without a selected source |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
-| Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom through 51,200%, frame-level guides, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
+| Timeline interaction | Selection without playhead jumps, optional move-to-start selection preference, seek-on-release, configurable clip movement, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, timecode ruler, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
 | System memory details | Offscreen non-modal dialog, System Memory and Main Editor sections, click-to-open behavior, Working Set, Private Usage, GB/MB formatting, and per-metric `N/A` handling |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
@@ -77,7 +77,9 @@ in the running Main Editor after UI or integration changes:
   remain available; confirm no Add Text button is shown;
 - Timeline track height, maximum row height, vertical scrolling, stable
   one-hour horizontal scale, horizontal scrolling for longer content, zoom
-  controls from 25% through 51,200%, frame-level guides with no per-frame text,
+  controls from 25% through 51,200%, frame-level guides shown only in the upper
+  ruler with no per-frame text over clips, and no vertical grid lines crossing
+  clip content,
   Ctrl + wheel playhead anchoring, button playhead anchoring, timecode labels in
   `HH:MM:SS.mmm`, click-and-drag
   playhead scrubbing on the upper time ruler, empty gaps without overlays,

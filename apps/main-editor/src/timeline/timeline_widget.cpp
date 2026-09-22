@@ -623,8 +623,9 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     const auto fps = frameRate();
     painter.setFont(QFont(painter.font().family(), 8));
     for (std::int64_t frame = 0; frame <= ruler_end; frame += tick_step) {
-        const auto fraction = static_cast<double>(frame) / ruler_end;
-        const auto x = ruler.left() + ruler.width() * fraction;
+        const auto x = contentXForFrame(frame);
+        painter.setPen(QColor("#252d38"));
+        painter.drawLine(QPointF(x, ruler.top()), QPointF(x, ruler.bottom()));
         painter.setPen(QColor("#566171"));
         painter.drawLine(QPointF(x, ruler.bottom() - 5), ruler.bottomRight() +
             QPointF(x - ruler.right(), 0));
@@ -634,19 +635,6 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             Qt::AlignLeft | Qt::AlignVCenter,
             TimelineWidget::formatTimecode(frame, fps));
         if (frame > ruler_end - tick_step) break;
-    }
-
-    const auto grid_content = trackContentRect(0);
-    if (total > 0 && grid_content.width() > 0.0) {
-        for (std::int64_t frame = 0; frame <= total; frame += tick_step) {
-            const auto x = grid_content.left() + grid_content.width() *
-                static_cast<double>(frame) / total;
-            painter.setPen(QColor("#252d38"));
-            painter.drawLine(
-                QPointF(x, grid_content.top()),
-                QPointF(x, trackRect(tracks_.size() - 1).bottom() - 6));
-            if (frame > total - tick_step) break;
-        }
     }
 
     for (std::size_t track_index = 0; track_index < tracks_.size(); ++track_index) {
@@ -787,40 +775,41 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     }
 
     // At frame-level zoom, draw only the frame boundaries that intersect the
-    // current paint region. This keeps long timelines responsive while making
-    // adjacent frames visibly distinct in the timeline content.
+    // current paint region. Keep these guides inside the time ruler so clip
+    // content remains visually clear at high zoom levels.
     const auto frame_grid_content = trackContentRect(0);
-    const auto frame_grid_visual_duration = displayDuration();
     const auto actual_duration = totalDuration();
     const auto frame_width = pixelsPerFrame();
-    if (actual_duration > 0 && frame_grid_visual_duration > 0 && frame_width >= 1.0 &&
+    if (actual_duration > 0 && frame_width >= 1.0 &&
         frame_grid_content.width() > 0.0) {
         const auto dirty = event != nullptr
             ? QRectF(event->rect())
             : QRectF(rect());
-        const auto first_x = std::max(frame_grid_content.left(), dirty.left());
-        const auto last_x = std::min(frame_grid_content.right(), dirty.right());
-        const auto first_frame = std::max<std::int64_t>(
-            0,
-            static_cast<std::int64_t>(std::floor(
-                (first_x - frame_grid_content.left()) / frame_width)) - 1);
-        const auto last_frame = std::min<std::int64_t>(
-            actual_duration,
-            static_cast<std::int64_t>(std::ceil(
-                (last_x - frame_grid_content.left()) / frame_width)) + 1);
-        const auto grid_bottom = trackRect(tracks_.size() - 1).bottom() - 6.0;
+        const auto first_x = std::max({
+            frame_grid_content.left(), ruler.left(), dirty.left()});
+        const auto last_x = std::min({
+            frame_grid_content.right(), ruler.right(), dirty.right()});
+        if (last_x >= first_x) {
+            const auto first_frame = std::max<std::int64_t>(
+                0,
+                static_cast<std::int64_t>(std::floor(
+                    (first_x - frame_grid_content.left()) / frame_width)) - 1);
+            const auto last_frame = std::min<std::int64_t>(
+                actual_duration,
+                static_cast<std::int64_t>(std::ceil(
+                    (last_x - frame_grid_content.left()) / frame_width)) + 1);
 
-        painter.save();
-        painter.setPen(QPen(QColor(92, 105, 122, 105), 1.0));
-        for (auto frame = first_frame; frame <= last_frame; ++frame) {
-            const auto x = frame_grid_content.left() +
-                frame_width * static_cast<double>(frame);
-            painter.drawLine(
-                QPointF(x, frame_grid_content.top()),
-                QPointF(x, grid_bottom));
-            if (frame == last_frame) break;
+            painter.save();
+            painter.setPen(QPen(QColor(92, 105, 122, 105), 1.0));
+            for (auto frame = first_frame; frame <= last_frame; ++frame) {
+                const auto x = contentXForFrame(frame);
+                painter.drawLine(
+                    QPointF(x, ruler.top()),
+                    QPointF(x, ruler.bottom()));
+                if (frame == last_frame) break;
+            }
+            painter.restore();
         }
-        painter.restore();
     }
 
     if (drag_hovering_) {
