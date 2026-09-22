@@ -138,11 +138,17 @@ an interval from 10 to 300 seconds (30 by default), and a retention limit from
 5 to 20 snapshots (5 by default). These global settings apply immediately.
 Autosave writes atomic recovery snapshots beside a saved project, or under
 the application data recovery directory for an unsaved project; it never
-overwrites the main `.csp` file or clears the dirty state. A recovery dialog
-lists snapshots by date and provides Restore, Ignore, and Delete actions.
+overwrites the main `.csp` file or clears the dirty state. The `Autosave` tab
+lists valid snapshots for the current project and unsaved projects by project,
+type, date, and snapshot name. It provides Refresh, Restore Selected, Delete
+Selected, and Open Folder actions. Restore asks for confirmation when the
+current project is dirty, loads the snapshot as dirty working data, and clears
+the restored project's recovery set after a successful load. Invalid snapshots
+are omitted.
 The existing timeline choices remain in the Edit menu. Opening or closing the
-dialog, or changing a shortcut, does not change project data, project dirty
-state, undo/redo history, or the `.csp` format. `SettingsDialog` and
+dialog, refreshing the Autosave tab, or changing a shortcut, does not change
+project data, project dirty state, undo/redo history, or the `.csp` format.
+`SettingsDialog` and
 `ShortcutManager` are independent Qt components under
 `apps/main-editor/src/settings/`; `MainWindow` owns the manager, registers its
 actions, and only creates and opens the dialog.

@@ -134,6 +134,7 @@ void MainWindow::createWorkspace() {
 }
 void MainWindow::showSettingsDialog() {
     settings::SettingsDialog dialog(this, *shortcut_manager_);
+    dialog.setAutosaveSnapshots(autosaveSnapshotsForSettings());
     connect(
         &dialog,
         &settings::SettingsDialog::previewPerformanceMetricsEnabledChanged,
@@ -146,6 +147,36 @@ void MainWindow::showSettingsDialog() {
         [this](bool enabled, int interval_seconds, int) {
             configureProjectAutosave(enabled, interval_seconds);
         });
+    connect(
+        &dialog,
+        &settings::SettingsDialog::autosaveRefreshRequested,
+        &dialog,
+        [this, &dialog]() {
+            dialog.setAutosaveSnapshots(autosaveSnapshotsForSettings());
+        });
+    connect(
+        &dialog,
+        &settings::SettingsDialog::autosaveRestoreRequested,
+        &dialog,
+        [this, &dialog](const QString& snapshot_path,
+                        const QString& project_path) {
+            if (restoreAutosaveSnapshot(snapshot_path, project_path)) {
+                dialog.accept();
+            }
+        });
+    connect(
+        &dialog,
+        &settings::SettingsDialog::autosaveDeleteRequested,
+        &dialog,
+        [this, &dialog](const QString& snapshot_path) {
+            deleteAutosaveSnapshot(snapshot_path);
+            dialog.setAutosaveSnapshots(autosaveSnapshotsForSettings());
+        });
+    connect(
+        &dialog,
+        &settings::SettingsDialog::autosaveOpenFolderRequested,
+        this,
+        &MainWindow::openAutosaveFolder);
     dialog.exec();
 }
 void MainWindow::createMenus() {

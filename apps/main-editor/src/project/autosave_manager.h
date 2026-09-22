@@ -40,6 +40,8 @@ public:
 
     [[nodiscard]] std::vector<AutosaveSnapshot> snapshotsForProject(
         const std::filesystem::path& project_path) const;
+    [[nodiscard]] std::vector<AutosaveSnapshot> validSnapshotsForProject(
+        const std::filesystem::path& project_path) const;
     [[nodiscard]] std::vector<AutosaveSnapshot> recoverableSnapshotsForProject(
         const std::filesystem::path& project_path) const;
     [[nodiscard]] std::vector<AutosaveSnapshot> unsavedSnapshots() const;

@@ -106,5 +106,13 @@ it asks whether to restore, ignore, or delete the snapshot. Restoring loads
 the snapshot as dirty working data while leaving the original `.csp` untouched.
 Invalid or incomplete snapshots are ignored and technical failures are logged.
 
+The Settings `Autosave` tab provides a second management path for the current
+project and unsaved-project snapshots. It lists valid snapshots by project,
+type, date, and filename, and supports refresh, restoration, individual
+deletion, and opening the containing folder. Restoration asks for confirmation
+when the current document is dirty. After a successful restoration, the
+recovered project's or session's snapshot set is removed so the same recovery
+is not offered repeatedly. The main `.csp` file remains untouched.
+
 Media paths in snapshots use the same serialization rules as normal projects;
 no new media or personal data is added by autosave.

@@ -57,6 +57,7 @@ class TimelineWidget;
 
 namespace settings {
 class ShortcutManager;
+struct AutosaveSnapshotItem;
 }
 
 class MainWindow final : public QMainWindow {
@@ -95,6 +96,13 @@ private:
     void flushPreviewPerformanceMetrics();
     void configureProjectAutosave(bool enabled, int interval_seconds);
     void autosaveProject();
+    [[nodiscard]] std::vector<settings::AutosaveSnapshotItem>
+    autosaveSnapshotsForSettings() const;
+    [[nodiscard]] bool restoreAutosaveSnapshot(
+        const QString& snapshot_path,
+        const QString& project_path);
+    void deleteAutosaveSnapshot(const QString& snapshot_path);
+    void openAutosaveFolder(const QString& folder_path);
     void offerUnsavedProjectRecovery();
     [[nodiscard]] std::optional<std::filesystem::path> chooseRecoverySnapshot(
         const std::vector<project::AutosaveSnapshot>& snapshots,

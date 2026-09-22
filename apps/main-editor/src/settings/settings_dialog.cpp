@@ -3,8 +3,10 @@
 #include "settings/shortcut_manager.h"
 #include "settings/user_preferences.h"
 
+#include <QAbstractItemView>
 #include <QCheckBox>
 #include <QDialogButtonBox>
+#include <QHeaderView>
 #include <QHash>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -14,10 +16,19 @@
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QTableWidget>
+#include <QTableWidgetItem>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
 namespace settings {
+namespace {
+
+constexpr int kSnapshotPathRole = Qt::UserRole;
+constexpr int kProjectPathRole = Qt::UserRole + 1;
+constexpr int kFolderPathRole = Qt::UserRole + 2;
+
+} // namespace
 
 SettingsDialog::SettingsDialog(
     QWidget* parent,
@@ -30,6 +41,7 @@ SettingsDialog::SettingsDialog(
     auto* layout = new QVBoxLayout(this);
     auto* tabs = new QTabWidget(this);
     tabs->addTab(createGeneralPage(), "General");
+    tabs->addTab(createAutosavePage(), "Autosave");
     tabs->addTab(createTimelinePage(), "Timeline");
     tabs->addTab(createShortcutsPage(), "Shortcuts");
 
@@ -126,6 +138,141 @@ QWidget* SettingsDialog::createGeneralPage() {
             this, emit_autosave_settings);
     connect(retention_spin, qOverload<int>(&QSpinBox::valueChanged),
             this, emit_autosave_settings);
+    return page;
+}
+
+void SettingsDialog::setAutosaveSnapshots(
+    const std::vector<AutosaveSnapshotItem>& snapshots) {
+    if (autosave_table_ == nullptr) return;
+
+    autosave_table_->setRowCount(0);
+    for (const auto& snapshot : snapshots) {
+        const auto row = autosave_table_->rowCount();
+        autosave_table_->insertRow(row);
+
+        auto* project_item = new QTableWidgetItem(snapshot.project_name);
+        project_item->setData(kSnapshotPathRole, snapshot.snapshot_path);
+        project_item->setData(kProjectPathRole, snapshot.project_path);
+        project_item->setData(kFolderPathRole, snapshot.folder_path);
+        autosave_table_->setItem(row, 0, project_item);
+        autosave_table_->setItem(row, 1, new QTableWidgetItem(snapshot.type));
+        autosave_table_->setItem(row, 2, new QTableWidgetItem(snapshot.modified));
+        autosave_table_->setItem(row, 3, new QTableWidgetItem(snapshot.snapshot_name));
+    }
+
+    const bool has_snapshots = autosave_table_->rowCount() > 0;
+    autosave_empty_label_->setVisible(!has_snapshots);
+    if (has_snapshots) {
+        autosave_table_->selectRow(0);
+    } else {
+        autosave_table_->clearSelection();
+    }
+    updateAutosaveActions();
+}
+
+void SettingsDialog::updateAutosaveActions() {
+    const bool has_selection = autosave_table_ != nullptr &&
+        autosave_table_->currentRow() >= 0 &&
+        autosave_table_->item(autosave_table_->currentRow(), 0) != nullptr;
+    if (autosave_restore_button_ != nullptr) {
+        autosave_restore_button_->setEnabled(has_selection);
+    }
+    if (autosave_delete_button_ != nullptr) {
+        autosave_delete_button_->setEnabled(has_selection);
+    }
+    if (autosave_open_folder_button_ != nullptr) {
+        autosave_open_folder_button_->setEnabled(has_selection);
+    }
+}
+
+QWidget* SettingsDialog::createAutosavePage() {
+    auto* page = new QWidget(this);
+    auto* layout = new QVBoxLayout(page);
+
+    auto* description = new QLabel(
+        "Manage recovery snapshots for the current project and unsaved projects. "
+        "Restoring never overwrites the main .csp file.",
+        page);
+    description->setWordWrap(true);
+    layout->addWidget(description);
+
+    autosave_table_ = new QTableWidget(page);
+    autosave_table_->setObjectName("autosaveSnapshotsTable");
+    autosave_table_->setColumnCount(4);
+    autosave_table_->setHorizontalHeaderLabels(
+        {"Project", "Type", "Modified", "Snapshot"});
+    autosave_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    autosave_table_->setSelectionMode(QAbstractItemView::SingleSelection);
+    autosave_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    autosave_table_->setAlternatingRowColors(true);
+    autosave_table_->setSortingEnabled(false);
+    autosave_table_->verticalHeader()->setVisible(false);
+    autosave_table_->horizontalHeader()->setStretchLastSection(true);
+    autosave_table_->horizontalHeader()->setSectionResizeMode(
+        0, QHeaderView::Stretch);
+    autosave_table_->horizontalHeader()->setSectionResizeMode(
+        1, QHeaderView::ResizeToContents);
+    autosave_table_->horizontalHeader()->setSectionResizeMode(
+        2, QHeaderView::ResizeToContents);
+    layout->addWidget(autosave_table_, 1);
+
+    autosave_empty_label_ = new QLabel(
+        "No valid autosave snapshots found.", page);
+    autosave_empty_label_->setObjectName("autosaveEmptyLabel");
+    autosave_empty_label_->setAlignment(Qt::AlignCenter);
+    layout->addWidget(autosave_empty_label_);
+
+    auto* buttons = new QHBoxLayout();
+    auto* refresh = new QPushButton("Refresh", page);
+    refresh->setObjectName("autosaveRefreshButton");
+    refresh->setToolTip("Reload the available recovery snapshots");
+    autosave_restore_button_ = new QPushButton("Restore Selected", page);
+    autosave_restore_button_->setObjectName("autosaveRestoreButton");
+    autosave_restore_button_->setToolTip(
+        "Load the selected snapshot as the current dirty project");
+    autosave_delete_button_ = new QPushButton("Delete Selected", page);
+    autosave_delete_button_->setObjectName("autosaveDeleteButton");
+    autosave_delete_button_->setToolTip("Delete the selected recovery snapshot");
+    autosave_open_folder_button_ = new QPushButton("Open Folder", page);
+    autosave_open_folder_button_->setObjectName("autosaveOpenFolderButton");
+    autosave_open_folder_button_->setToolTip(
+        "Open the folder containing the selected recovery snapshot");
+
+    buttons->addWidget(refresh);
+    buttons->addStretch();
+    buttons->addWidget(autosave_restore_button_);
+    buttons->addWidget(autosave_delete_button_);
+    buttons->addWidget(autosave_open_folder_button_);
+    layout->addLayout(buttons);
+
+    connect(refresh, &QPushButton::clicked, this, [this]() {
+        emit autosaveRefreshRequested();
+    });
+    connect(autosave_table_, &QTableWidget::itemSelectionChanged,
+            this, &SettingsDialog::updateAutosaveActions);
+    connect(autosave_restore_button_, &QPushButton::clicked, this, [this]() {
+        const auto row = autosave_table_->currentRow();
+        auto* item = row >= 0 ? autosave_table_->item(row, 0) : nullptr;
+        if (item == nullptr) return;
+        emit autosaveRestoreRequested(
+            item->data(kSnapshotPathRole).toString(),
+            item->data(kProjectPathRole).toString());
+    });
+    connect(autosave_delete_button_, &QPushButton::clicked, this, [this]() {
+        const auto row = autosave_table_->currentRow();
+        auto* item = row >= 0 ? autosave_table_->item(row, 0) : nullptr;
+        if (item == nullptr) return;
+        emit autosaveDeleteRequested(item->data(kSnapshotPathRole).toString());
+    });
+    connect(autosave_open_folder_button_, &QPushButton::clicked, this, [this]() {
+        const auto row = autosave_table_->currentRow();
+        auto* item = row >= 0 ? autosave_table_->item(row, 0) : nullptr;
+        if (item == nullptr) return;
+        emit autosaveOpenFolderRequested(item->data(kFolderPathRole).toString());
+    });
+
+    autosave_empty_label_->setVisible(true);
+    updateAutosaveActions();
     return page;
 }
 

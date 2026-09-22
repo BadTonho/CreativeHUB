@@ -194,6 +194,11 @@ std::vector<AutosaveSnapshot> AutosaveManager::snapshotsForProject(
         savedProjectDirectory(project_path), normalizedPath(project_path));
 }
 
+std::vector<AutosaveSnapshot> AutosaveManager::validSnapshotsForProject(
+    const std::filesystem::path& project_path) const {
+    return validSnapshots(snapshotsForProject(project_path));
+}
+
 std::vector<AutosaveSnapshot> AutosaveManager::validSnapshots(
     std::vector<AutosaveSnapshot> snapshots) const {
     snapshots.erase(

@@ -32,7 +32,7 @@ updated intentionally.
 | System memory details | Offscreen non-modal dialog, System Memory and Main Editor sections, click-to-open behavior, Working Set, Private Usage, GB/MB formatting, and per-metric `N/A` handling |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
-| Settings dialog | Modal shell, General, Timeline, and Shortcuts tabs, Close action, independent component construction, and editable shortcut preferences |
+| Settings dialog | Modal shell, General, Autosave, Timeline, and Shortcuts tabs, empty and populated autosave snapshot table, refresh/restore/delete/open-folder requests, Close action, independent component construction, and editable shortcut preferences |
 | Preview performance metrics | Deterministic counter/timing aggregation, bounded p95/p99 timing histograms, decoded/stale-frame counters, playback delivery-rate derivation, failure counters, cache state, workload context, process-resource sampling, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON, round-trip, timeline zoom and row-height persistence, version 1-6 migration, invalid input, offline media, transactional open |
@@ -53,7 +53,7 @@ in the running Main Editor after UI or integration changes:
   path points to the intended updated binary rather than an older installed
   copy;
 - Settings action: confirm the menu-bar action immediately left of `Help`
-  opens a modal dialog with `General`, `Timeline`, and `Shortcuts` tabs, closes
+  opens a modal dialog with `General`, `Autosave`, `Timeline`, and `Shortcuts` tabs, closes
   without changing project dirty state, and leaves the existing Edit menu
   preferences available;
 - Settings > General: confirm preview performance metrics are disabled by
@@ -266,6 +266,14 @@ in the running Main Editor after UI or integration changes:
   repeat with an unsaved project and confirm snapshots use the application
   data recovery directory; verify Settings changes for enablement, 10–300
   second interval, and 5–20 snapshot retention;
+- Settings > Autosave: confirm the current project's and unsaved-project
+  snapshots appear with project/type/date/name information, the newest entry
+  is selected, Refresh reloads the list, Delete Selected asks for confirmation,
+  and Open Folder opens the containing recovery directory;
+- Settings > Autosave recovery: with a dirty project, confirm Restore Selected
+  asks for confirmation, leaves the main `.csp` untouched, loads the selected
+  snapshot as dirty working data, closes Settings only after success, and
+  clears the restored project's or session's snapshot set;
 - recovery: leave a newer snapshot, restart the editor, and confirm the
   dialog lists snapshots by date; Restore opens dirty working data without
   replacing the original `.csp`, Ignore leaves the snapshots available, and

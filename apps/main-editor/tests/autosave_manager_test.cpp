@@ -75,6 +75,8 @@ int main(int argc, char* argv[]) {
         std::ofstream invalid_file(invalid_path, std::ios::binary);
         invalid_file << "not a project";
         invalid_file.close();
+        require(manager.validSnapshotsForProject(project_path).size() == 5,
+                "The Settings snapshot list included an invalid snapshot.");
         require(manager.recoverableSnapshotsForProject(project_path).size() == 5,
                 "An invalid snapshot was offered for recovery.");
         std::ofstream damaged_project(project_path, std::ios::binary | std::ios::trunc);
@@ -82,6 +84,9 @@ int main(int argc, char* argv[]) {
         damaged_project.close();
         require(manager.recoverableSnapshotsForProject(project_path).size() == 5,
                 "A damaged main project hid valid recovery snapshots.");
+        manager.removeSnapshotsForProject(project_path);
+        require(manager.validSnapshotsForProject(project_path).empty(),
+                "Saved-project snapshot cleanup did not remove the recovery set.");
 
         project::AutosaveManager unsaved_manager(root / "recovery", "session-b");
         for (int index = 0; index < 6; ++index) {
@@ -92,6 +97,9 @@ int main(int argc, char* argv[]) {
                 "Unsaved-project autosave retention did not prune old snapshots.");
         require(unsaved.front().project_path.empty(),
                 "An unsaved snapshot unexpectedly contains a project path.");
+        unsaved_manager.removeSnapshot(unsaved.front().path);
+        require(unsaved_manager.unsavedSnapshots().size() == 4,
+                "Individual autosave snapshot deletion did not work.");
         unsaved_manager.removeCurrentUnsavedSnapshots();
         require(unsaved_manager.unsavedSnapshots().empty(),
                 "Unsaved-project autosave cleanup did not remove the session.");

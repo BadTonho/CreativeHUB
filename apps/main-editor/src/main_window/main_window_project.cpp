@@ -4,6 +4,7 @@
 #include "logging/logger.h"
 #include "preview_widget.h"
 #include "project/project_file.h"
+#include "settings/settings_dialog.h"
 #include "settings/user_preferences.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser_list_widget.h"
@@ -53,6 +54,20 @@
 
 
 using namespace main_window_detail;
+
+namespace {
+
+QString autosaveSnapshotDateText(
+    const project::AutosaveSnapshot& snapshot) {
+    const auto modified = QFileInfo(
+        main_window_detail::fromUtf8(
+            main_window_detail::pathToUtf8(snapshot.path))).lastModified();
+    return modified.isValid()
+        ? modified.toLocalTime().toString(Qt::TextDate)
+        : QStringLiteral("Unknown time");
+}
+
+} // namespace
 
 project::ProjectDocument MainWindow::currentProjectDocument() const {
     project::ProjectDocument document;
@@ -158,6 +173,134 @@ void MainWindow::autosaveProject() {
                     ? pathToUtf8(*project_path_)
                     : ""} });
     }
+}
+
+std::vector<settings::AutosaveSnapshotItem>
+MainWindow::autosaveSnapshotsForSettings() const {
+    std::vector<project::AutosaveSnapshot> snapshots;
+    if (project_path_.has_value()) {
+        snapshots = autosave_manager_.validSnapshotsForProject(*project_path_);
+    }
+    auto unsaved_snapshots = autosave_manager_.unsavedSnapshots();
+    snapshots.insert(
+        snapshots.end(),
+        std::make_move_iterator(unsaved_snapshots.begin()),
+        std::make_move_iterator(unsaved_snapshots.end()));
+    std::sort(
+        snapshots.begin(), snapshots.end(),
+        [](const project::AutosaveSnapshot& left,
+           const project::AutosaveSnapshot& right) {
+            if (left.modified_time != right.modified_time) {
+                return left.modified_time > right.modified_time;
+            }
+            return left.path.string() > right.path.string();
+        });
+
+    std::vector<settings::AutosaveSnapshotItem> rows;
+    rows.reserve(snapshots.size());
+    for (const auto& snapshot : snapshots) {
+        const bool saved_project = !snapshot.project_path.empty();
+        settings::AutosaveSnapshotItem row;
+        row.project_name = saved_project
+            ? fromUtf8(pathToUtf8(snapshot.project_path.filename()))
+            : QStringLiteral("Unsaved project");
+        row.type = saved_project
+            ? QStringLiteral("Saved project")
+            : QStringLiteral("Unsaved project");
+        row.modified = autosaveSnapshotDateText(snapshot);
+        row.snapshot_name = fromUtf8(pathToUtf8(snapshot.path.filename()));
+        row.snapshot_path = fromUtf8(pathToUtf8(snapshot.path));
+        row.project_path = saved_project
+            ? fromUtf8(pathToUtf8(snapshot.project_path))
+            : QString();
+        row.folder_path = fromUtf8(pathToUtf8(snapshot.path.parent_path()));
+        rows.push_back(std::move(row));
+    }
+    return rows;
+}
+
+bool MainWindow::restoreAutosaveSnapshot(
+    const QString& snapshot_path,
+    const QString& project_path) {
+    if (snapshot_path.isEmpty() || !confirmProjectChange()) return false;
+
+    const auto snapshot = QFileInfo(snapshot_path).filesystemFilePath();
+    if (!project_path.isEmpty()) {
+        const auto active_project = QFileInfo(project_path).filesystemFilePath();
+        if (!openProjectPath(snapshot, active_project)) return false;
+        try {
+            autosave_manager_.removeSnapshotsForProject(active_project);
+        } catch (const project::ProjectError& error) {
+            logging::Logger::instance().log(
+                logging::Level::Warning,
+                "project",
+                "autosave_cleanup",
+                error.what(),
+                {{"project_path", pathToUtf8(active_project)},
+                 {"cause", error.what()}});
+        }
+        return true;
+    }
+
+    project::ProjectDocument blank_document;
+    blank_document.bins = {"Unsorted"};
+    if (!openProjectPath(snapshot, std::nullopt, std::move(blank_document))) {
+        return false;
+    }
+    try {
+        autosave_manager_.removeUnsavedSnapshotsForSession(snapshot);
+    } catch (const project::ProjectError& error) {
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "project",
+            "autosave_cleanup",
+            error.what(),
+            {{"snapshot_path", pathToUtf8(snapshot)},
+             {"cause", error.what()}});
+    }
+    return true;
+}
+
+void MainWindow::deleteAutosaveSnapshot(const QString& snapshot_path) {
+    if (snapshot_path.isEmpty()) return;
+    const auto result = QMessageBox::question(
+        this,
+        "Delete Autosave Snapshot",
+        "Delete the selected recovery snapshot?",
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    if (result != QMessageBox::Yes) return;
+
+    const auto path = QFileInfo(snapshot_path).filesystemFilePath();
+    try {
+        autosave_manager_.removeSnapshot(path);
+        statusBar()->showMessage("Autosave snapshot deleted.");
+    } catch (const project::ProjectError& error) {
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "project",
+            "autosave_remove",
+            error.what(),
+            {{"snapshot_path", pathToUtf8(path)},
+             {"cause", error.what()}});
+        statusBar()->showMessage("Could not delete autosave snapshot.");
+    }
+}
+
+void MainWindow::openAutosaveFolder(const QString& folder_path) {
+    if (folder_path.isEmpty()) return;
+    const auto path = QFileInfo(folder_path).filesystemFilePath();
+    if (QDesktopServices::openUrl(QUrl::fromLocalFile(
+            main_window_detail::fromUtf8(pathToUtf8(path))))) {
+        return;
+    }
+    logging::Logger::instance().log(
+        logging::Level::Warning,
+        "project",
+        "autosave_open_folder",
+        "The recovery folder could not be opened.",
+        {{"folder_path", pathToUtf8(path)}});
+    statusBar()->showMessage("Could not open autosave folder.");
 }
 
 void MainWindow::updateProjectDirtyState() {
