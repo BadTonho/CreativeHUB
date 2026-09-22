@@ -256,7 +256,7 @@ void validateDocument(const ProjectDocument& document,
         document.timeline_row_height < timeline::kMinimumTrackRowHeight ||
         document.timeline_row_height > timeline::kMaximumTrackRowHeight) {
         throwJson(ProjectErrorCode::InvalidValue, project_path,
-                  "Project JSON contains an invalid timeline row height; expected a value from 72.0 to 180.0.");
+                  "Project JSON contains an invalid timeline row height; expected a value from 30.0 to 180.0.");
     }
     std::vector<std::filesystem::path> media_paths;
     for (const auto& media : document.media) {
@@ -524,7 +524,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
             row_height_value.toDouble() < timeline::kMinimumTrackRowHeight ||
             row_height_value.toDouble() > timeline::kMaximumTrackRowHeight) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
-                      "Project JSON contains an invalid timeline row height; expected a value from 72.0 to 180.0.");
+                      "Project JSON contains an invalid timeline row height; expected a value from 30.0 to 180.0.");
         }
         document.timeline_row_height = row_height_value.toDouble();
     }

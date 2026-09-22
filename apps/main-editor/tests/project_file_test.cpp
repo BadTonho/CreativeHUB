@@ -303,7 +303,7 @@ int main(int argc, char** argv) {
         }
 
         for (const auto invalid_row_height : {
-                 71.99, 180.01, std::numeric_limits<double>::quiet_NaN()}) {
+                 29.99, 180.01, std::numeric_limits<double>::quiet_NaN()}) {
             const auto row_height_json = std::isnan(invalid_row_height)
                 ? std::string("null")
                 : std::to_string(invalid_row_height);

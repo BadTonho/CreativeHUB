@@ -339,7 +339,9 @@ int main(int argc, char* argv[]) {
         require(!invalid_drop.isAccepted(),
                 "Timeline accepted an unsupported effect drop.");
 
-        require(widget.minimumHeight() >= 48 + 2 * 72 + 10 + 12,
+        require(widget.minimumHeight() >=
+                    48 + 2 * static_cast<int>(timeline::kDefaultTrackRowHeight) +
+                        10 + 12,
                 "The Timeline minimum height does not fit all track rows.");
         require(widget.minimumWidth() == 1000,
                 "A short timeline did not keep the standard viewport width.");
@@ -471,7 +473,7 @@ int main(int argc, char* argv[]) {
         widget.setTrackRowHeight(1.0);
         require(widget.trackRowHeight() == timeline::kMinimumTrackRowHeight,
                 "Timeline row height did not clamp the lower bound.");
-        require(widget.minimumHeight() >= 48 + 2 * 72 + 10 + 12,
+        require(widget.minimumHeight() >= 48 + 2 * 30 + 10 + 12,
                 "Timeline minimum height did not include every track row.");
         require(widget.minimumWidth() == width_before_row_resize &&
                     widget.frameAtContentX(600.0) == frame_before_row_resize,

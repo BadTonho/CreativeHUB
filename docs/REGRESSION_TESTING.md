@@ -243,7 +243,7 @@ in the running Main Editor after UI or integration changes:
   the highest levels, adjacent frames are visibly separated and the horizontal
   scrollbar remains usable for short and long projects;
 - hold Shift and scroll over the Timeline content and ruler at low, medium, and
-  maximum row heights; confirm all rows change uniformly, the 72–180 pixel
+  maximum row heights; confirm all rows change uniformly, the 30–180 pixel
   limits are respected, and the vertical scrollbar appears when needed;
 - confirm that Ctrl + scroll still changes only horizontal zoom and normal
   scrolling still moves the scroll area;

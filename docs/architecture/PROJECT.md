@@ -34,7 +34,7 @@ versions; version 5 and newer files always write the array.
 
 The `timeline` object also stores the per-project horizontal timeline view as
 `zoom`, a finite value from `0.25` through `512.0`, and the uniform track
-`row_height`, a finite value from `72.0` through `180.0` pixels. The defaults
+`row_height`, a finite value from `30.0` through `180.0` pixels. The defaults
 are `1.0` zoom and `180.0` pixels, where one hour is the reference range.
 Values above `8.0` enable high-density and frame-level inspection. These view
 settings are persisted with the project but are not part of Timeline Undo/Redo
