@@ -34,6 +34,37 @@ constexpr double row_gap = 10.0;
 constexpr double track_header_width = 142.0;
 constexpr double edge_width = 8.0;
 constexpr double standard_timeline_duration_seconds = 60.0 * 60.0;
+constexpr double ruler_minor_target_spacing_pixels = 8.0;
+
+std::int64_t rulerMinorStep(double pixels_per_frame) noexcept {
+    if (!std::isfinite(pixels_per_frame) || pixels_per_frame <= 0.0 ||
+        pixels_per_frame >= 1.0) {
+        return 1;
+    }
+
+    const auto raw_step = std::max<long double>(
+        1.0L,
+        std::ceil(static_cast<long double>(ruler_minor_target_spacing_pixels) /
+                  static_cast<long double>(pixels_per_frame)));
+    const auto max_step = std::numeric_limits<std::int64_t>::max();
+    std::int64_t magnitude = 1;
+    while (magnitude <= max_step / 10 &&
+           static_cast<long double>(magnitude) * 10.0L < raw_step) {
+        magnitude *= 10;
+    }
+
+    for (const auto multiplier : {1, 2, 5}) {
+        if (magnitude <= max_step / multiplier) {
+            const auto candidate = magnitude * multiplier;
+            if (static_cast<long double>(candidate) >= raw_step) {
+                return candidate;
+            }
+        }
+    }
+    if (magnitude <= max_step / 10) return magnitude * 10;
+    return max_step;
+}
+
 QString text(const std::string& value) {
     return QString::fromUtf8(value.data(), static_cast<int>(value.size()));
 }
@@ -620,6 +651,46 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     const auto tick_step = std::max<std::int64_t>(
         1,
         (ruler_end + tick_count - 1) / tick_count);
+    const auto ruler_content = trackContentRect(0);
+    const auto minor_frame_width = pixelsPerFrame();
+    const auto minor_step = rulerMinorStep(minor_frame_width);
+    if (minor_frame_width > 0.0 && minor_frame_width < 1.0 &&
+        ruler_content.width() > 0.0) {
+        const auto dirty = event != nullptr
+            ? QRectF(event->rect())
+            : QRectF(rect());
+        const auto first_x = std::max({
+            ruler_content.left(), ruler.left(), dirty.left()});
+        const auto last_x = std::min({
+            ruler_content.right(), ruler.right(), dirty.right()});
+        if (last_x >= first_x) {
+            const auto first_visible_frame = std::max<std::int64_t>(
+                0,
+                static_cast<std::int64_t>(std::floor(
+                    (first_x - ruler_content.left()) / minor_frame_width)) - 1);
+            const auto last_visible_frame = std::min<std::int64_t>(
+                ruler_end,
+                static_cast<std::int64_t>(std::ceil(
+                    (last_x - ruler_content.left()) / minor_frame_width)) + 1);
+            const auto first_frame = first_visible_frame -
+                first_visible_frame % minor_step;
+
+            painter.save();
+            painter.setPen(QPen(QColor(82, 94, 110, 100), 1.0));
+            for (auto frame = first_frame;
+                 frame <= last_visible_frame;
+                 frame += minor_step) {
+                if (frame % tick_step != 0) {
+                    const auto x = contentXForFrame(frame);
+                    painter.drawLine(
+                        QPointF(x, ruler.top()),
+                        QPointF(x, ruler.bottom()));
+                }
+                if (frame > last_visible_frame - minor_step) break;
+            }
+            painter.restore();
+        }
+    }
     const auto fps = frameRate();
     painter.setFont(QFont(painter.font().family(), 8));
     for (std::int64_t frame = 0; frame <= ruler_end; frame += tick_step) {
@@ -778,9 +849,8 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     // current paint region. Keep these guides inside the time ruler so clip
     // content remains visually clear at high zoom levels.
     const auto frame_grid_content = trackContentRect(0);
-    const auto actual_duration = totalDuration();
     const auto frame_width = pixelsPerFrame();
-    if (actual_duration > 0 && frame_width >= 1.0 &&
+    if (ruler_end > 0 && frame_width >= 1.0 &&
         frame_grid_content.width() > 0.0) {
         const auto dirty = event != nullptr
             ? QRectF(event->rect())
@@ -795,7 +865,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                 static_cast<std::int64_t>(std::floor(
                     (first_x - frame_grid_content.left()) / frame_width)) - 1);
             const auto last_frame = std::min<std::int64_t>(
-                actual_duration,
+                ruler_end,
                 static_cast<std::int64_t>(std::ceil(
                     (last_x - frame_grid_content.left()) / frame_width)) + 1);
 

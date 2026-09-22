@@ -81,6 +81,15 @@ void sendWheel(
     QApplication::sendEvent(&widget, &event);
 }
 
+int countRulerGuides(const QImage& image, int first_x, int last_x, int y) {
+    const auto background = QColor("#171a20");
+    int guide_count = 0;
+    for (int x = first_x; x <= last_x; ++x) {
+        if (image.pixelColor(x, y) != background) ++guide_count;
+    }
+    return guide_count;
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -458,6 +467,27 @@ int main(int argc, char* argv[]) {
         frame_grid_widget.resize(400, 300);
         frame_grid_widget.show();
         application.processEvents();
+
+        const auto render_ruler = [&](double zoom) {
+            frame_grid_widget.setZoomFactor(zoom);
+            frame_grid_widget.setMinimumWidth(400);
+            frame_grid_widget.resize(400, 300);
+            application.processEvents();
+            QImage image(400, 300, QImage::Format_ARGB32);
+            image.fill(Qt::transparent);
+            frame_grid_widget.render(&image);
+            return countRulerGuides(image, 154, 394, 13);
+        };
+        const auto guides_at_25_percent = render_ruler(0.25);
+        const auto guides_at_100_percent = render_ruler(1.0);
+        const auto guides_at_400_percent = render_ruler(4.0);
+        const auto guides_at_frame_level = render_ruler(512.0);
+        require(guides_at_25_percent > 0 &&
+                    guides_at_100_percent >= guides_at_25_percent - 2 &&
+                    guides_at_400_percent >= guides_at_100_percent - 2 &&
+                    guides_at_frame_level > guides_at_400_percent,
+                "Timeline ruler guides did not become denser with zoom.");
+
         QImage frame_grid_image(400, 300, QImage::Format_ARGB32);
         frame_grid_image.fill(Qt::transparent);
         frame_grid_widget.render(&frame_grid_image);

@@ -28,12 +28,15 @@ available viewport; content longer than one hour expands the timeline
 surface proportionally and is accessed with horizontal scrolling. The actual
 content duration remains authoritative for playback and project behavior.
 The horizontal view can be zoomed from 25% through 51,200% using discrete
-levels. The levels after 800% provide frame-level inspection; when the scale
-reaches at least one pixel per frame, a subtle guide is drawn for each visible
-frame inside the upper time ruler without adding text labels over the clips.
-Major time divisions also remain in that ruler. Ctrl + mouse wheel and the
-visible minus and plus controls zoom around the playhead, keeping that timeline
-instant in place.
+levels. The upper time ruler combines the existing major time divisions with
+adaptive minor divisions aligned to frame boundaries. Minor divisions use
+`1, 2, 5 x 10^n` frame intervals and target approximately eight pixels between
+guides as the scale changes, so the ruler becomes more precise without adding
+text to every division. When the scale reaches at least one pixel per frame, a
+subtle guide is drawn for each visible frame. All of these guides remain inside
+the upper ruler and never cross clip content. Ctrl + mouse wheel and the visible
+minus and plus controls zoom around the playhead, keeping that timeline instant
+in place.
 Zoom changes only the timeline's horizontal presentation and are saved in the
 project; they do not change clip frames, playback, preview, or Undo/Redo.
 The timeline surface grows only as much as its track rows require; additional
