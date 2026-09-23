@@ -1,5 +1,6 @@
 #include "playback/playback_worker.h"
 #include "playback/playback_frame_mailbox.h"
+#include "playback/playback_transition_plan.h"
 #include "logging/logger.h"
 #include "rendering/preview_performance_metrics.h"
 
@@ -8,6 +9,7 @@
 #include <QThread>
 #include <QTimer>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -19,6 +21,7 @@
 #include <utility>
 #include <vector>
 #include <optional>
+#include <span>
 
 namespace {
 
@@ -317,6 +320,150 @@ void validateSegmentRange(
     invalid_timeout.start(1000);
     application.exec();
     require(received_error, "An out-of-range segment seek was accepted.");
+}
+
+void validateTransitionPlan() {
+    using playback::detail::CompositionFrameRequest;
+    using playback::detail::CompositionSessionRef;
+
+    std::array<playback::CompositionLayerSpec, 3> layers;
+    layers[0].track_index = 0;
+    layers[0].clip_index = 0;
+    layers[0].timeline_start_frame = 0;
+    layers[0].segment_frame_count = 60;
+    layers[1].track_index = 0;
+    layers[1].clip_index = 1;
+    layers[1].timeline_start_frame = 60;
+    layers[1].segment_frame_count = 60;
+    layers[2].track_index = 1;
+    layers[2].clip_index = 0;
+    layers[2].timeline_start_frame = 0;
+    layers[2].segment_frame_count = 120;
+    const std::array<CompositionSessionRef, 3> sessions{{
+        {&layers[0], 0}, {&layers[1], 1}, {&layers[2], 2}}};
+
+    const auto request_for = [](const std::vector<CompositionFrameRequest>& requests,
+                                std::size_t index) -> const CompositionFrameRequest* {
+        const auto found = std::find_if(
+            requests.begin(), requests.end(),
+            [index](const CompositionFrameRequest& request) {
+                return request.session_index == index;
+            });
+        return found == requests.end() ? nullptr : &*found;
+    };
+    const auto at = [&](std::int64_t frame,
+                        playback::CompositionTransitionSpec transition,
+                        bool include_other = true) {
+        std::vector<CompositionFrameRequest> requests;
+        for (std::size_t index = 0; index < layers.size(); ++index) {
+            if (index == 2 && !include_other) continue;
+            const auto& layer = layers[index];
+            if (frame >= layer.timeline_start_frame &&
+                frame < layer.timeline_start_frame + layer.segment_frame_count) {
+                requests.push_back({index, frame - layer.timeline_start_frame, 1.0, true});
+            }
+        }
+        playback::detail::applyTransitionRequests(
+            requests, sessions, std::span(&transition, 1), frame);
+        return requests;
+    };
+    const auto close = [](double actual, double expected) {
+        return std::abs(actual - expected) < 1e-12;
+    };
+
+    const playback::CompositionTransitionSpec dissolve{
+        0, 0, 1, 60, 10, timeline::TransitionKind::CrossDissolve};
+    const auto before_dissolve = at(59, dissolve);
+    require(before_dissolve.size() == 2 &&
+                request_for(before_dissolve, 0)->local_frame == 59 &&
+                request_for(before_dissolve, 1) == nullptr,
+            "Cross dissolve changed requests before its boundary.");
+    for (const auto [frame, expected_blend] :
+         {std::pair{60, 0.1}, std::pair{64, 0.5}, std::pair{69, 1.0}}) {
+        const auto requests = at(frame, dissolve);
+        const auto* from = request_for(requests, 0);
+        const auto* to = request_for(requests, 1);
+        const auto* other = request_for(requests, 2);
+        require(requests.size() == 3 && from != nullptr && to != nullptr &&
+                    other != nullptr && from->local_frame == 59 &&
+                    !from->allow_forward_decode && close(from->opacity_multiplier, 1.0) &&
+                    to->local_frame == frame - 60 &&
+                    close(to->opacity_multiplier, expected_blend) &&
+                    other->local_frame == frame &&
+                    close(other->opacity_multiplier, 1.0),
+                "Cross dissolve changed its held frame, blend, or unrelated layer.");
+    }
+    const auto after_dissolve = at(70, dissolve);
+    require(after_dissolve.size() == 2 && request_for(after_dissolve, 0) == nullptr &&
+                request_for(after_dissolve, 1)->local_frame == 10,
+            "Cross dissolve remained active beyond its last frame.");
+    auto one_frame_dissolve = dissolve;
+    one_frame_dissolve.duration_frames = 1;
+    const auto single_dissolve = at(60, one_frame_dissolve);
+    require(single_dissolve.size() == 3 &&
+                close(request_for(single_dissolve, 1)->opacity_multiplier, 1.0),
+            "A one-frame Cross Dissolve did not fully show the incoming clip.");
+
+    const playback::CompositionTransitionSpec fade{
+        0, 0, 1, 60, 10, timeline::TransitionKind::FadeToBlack};
+    const auto fade_start = at(50, fade);
+    require(fade_start.size() == 2 &&
+                close(request_for(fade_start, 0)->opacity_multiplier, 0.9),
+            "Fade to Black changed the first outgoing opacity.");
+    const auto fade_end = at(59, fade, false);
+    require(fade_end.empty(),
+            "Fade to Black left an outgoing layer at the last pre-cut frame.");
+    const auto black = at(60, fade, false);
+    require(black.empty(),
+            "Fade to Black did not leave the junction frame black.");
+    const auto fade_in = at(61, fade);
+    require(fade_in.size() == 2 &&
+                request_for(fade_in, 1)->local_frame == 1 &&
+                close(request_for(fade_in, 1)->opacity_multiplier, 1.0 / 9.0) &&
+                request_for(fade_in, 2) != nullptr,
+            "Fade to Black changed its incoming frame or another track.");
+    const auto fade_last = at(69, fade);
+    require(fade_last.size() == 2 &&
+                close(request_for(fade_last, 1)->opacity_multiplier, 1.0),
+            "Fade to Black did not fully show the incoming clip at its end.");
+    const auto fade_after = at(70, fade);
+    require(fade_after.size() == 2 &&
+                close(request_for(fade_after, 1)->opacity_multiplier, 1.0),
+            "Fade to Black remained active after its duration.");
+    auto one_frame_fade = fade;
+    one_frame_fade.duration_frames = 1;
+    require(at(59, one_frame_fade, false).empty() &&
+                at(60, one_frame_fade, false).empty(),
+            "A one-frame Fade to Black did not suppress both junction sides.");
+
+    auto invalid = dissolve;
+    invalid.duration_frames = 0;
+    require(at(60, invalid).size() == 2,
+            "A zero-duration transition changed visible requests.");
+    invalid.duration_frames = -1;
+    require(at(60, invalid).size() == 2,
+            "A negative-duration transition changed visible requests.");
+    invalid = dissolve;
+    invalid.to_clip_index = 99;
+    require(at(60, invalid).size() == 2,
+            "A transition with a missing endpoint changed visible requests.");
+    invalid = dissolve;
+    invalid.track_index = 99;
+    require(at(60, invalid).size() == 2,
+            "A transition on another track changed visible requests.");
+
+    const std::array<CompositionSessionRef, 4> reordered{{
+        {&layers[1], 3}, {&layers[0], 0},
+        {&layers[1], 1}, {&layers[2], 2}}};
+    std::vector<CompositionFrameRequest> duplicate_requests{
+        {1, 0, 1.0, true}, {2, 60, 1.0, true}};
+    playback::detail::applyTransitionRequests(
+        duplicate_requests, reordered, std::span(&dissolve, 1), 60);
+    require(duplicate_requests.size() == 3 &&
+                request_for(duplicate_requests, 0) != nullptr &&
+                request_for(duplicate_requests, 1) != nullptr &&
+                request_for(duplicate_requests, 3) == nullptr,
+            "Transition endpoints no longer use the first worker session.");
 }
 
 void validateCompositionTransitions(
@@ -1008,6 +1155,7 @@ int main(int argc, char* argv[]) {
     QGuiApplication application(argc, argv);
 
     try {
+        validateTransitionPlan();
         validateWorkerDiagnostics(application);
         validateMissingMedia(application);
         validateSeekWithoutMedia(application);

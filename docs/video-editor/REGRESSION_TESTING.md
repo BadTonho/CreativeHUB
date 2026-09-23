@@ -30,6 +30,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions, PNG/JPEG/BMP/WebP/TIFF still-image probing, RGBA transparency, 150-frame defaults, and animated-GIF rejection |
 | Playback session | Sequential frames, forward catch-up without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
 | Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
+| Playback transition plan | Cross Dissolve held outgoing frame and incoming blend at its first, middle, and final frames; Fade to Black on both sides of the cut; one-frame durations; inactive and invalid transitions; unaffected layers on other tracks |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, rolling and individual edge trims, one-sided media overlap and top-clip priority, video source limits, still-image/text extension, delete, metadata, history |
 | Timeline edge-trim command | Rolling and individual trim outcomes for video, image, and text, edited-clip identity after reordering, local playback frame and preserved global playhead, no-change and invalid requests, and Undo/Redo snapshot compatibility |
 | Timeline edge-trim gesture | Pending transition selection versus valid shared-cut drag, rolling and individual previews, final release boundary, retained preview after an invalid pointer boundary, no-op and invalid requests, legacy trim range, signal order and single commit, and cancellation on track replacement or clearing |
@@ -200,7 +201,8 @@ in the running Main Editor after UI or integration changes:
   rejects overlap, and participates in Undo/Redo and project dirty state; drag
   Cross Dissolve and Fade to Black onto contiguous clip junctions on multiple
   tracks, confirm the target junction is highlighted, the transition appears
-  only on release, playback reflects it, and Undo/Redo and project dirty state
+  only on release, playback and frame seeking before, during, and after the
+  transition reflect it, and Undo/Redo and project dirty state
   update; confirm drops away from a valid junction are rejected; confirm
   Grayscale and Gain remain non-draggable and do not change the Preview,
   Timeline, project dirty state, or Undo/Redo; close and reopen the editor to

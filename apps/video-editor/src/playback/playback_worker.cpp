@@ -1,4 +1,5 @@
 #include "playback_worker.h"
+#include "playback_transition_plan.h"
 
 #include "../logging/logger.h"
 #include "../rendering/preview_performance_metrics.h"
@@ -1134,147 +1135,67 @@ PlaybackWorker::decodeCompositionLayers(
     std::vector<DecodedCompositionLayer> layers;
     layers.reserve(composition_sessions_.size());
 
-    struct RenderRequest {
-        CompositionSession* composition = nullptr;
-        std::int64_t local_frame = 0;
-        double opacity_multiplier = 1.0;
-        bool allow_forward_decode = true;
-    };
-
-    std::vector<CompositionSession*> ordered_sessions;
+    std::vector<detail::CompositionSessionRef> ordered_sessions;
     ordered_sessions.reserve(composition_sessions_.size());
-    for (auto& composition : composition_sessions_) {
-        ordered_sessions.push_back(&composition);
+    for (std::size_t index = 0; index < composition_sessions_.size(); ++index) {
+        ordered_sessions.push_back(detail::CompositionSessionRef{
+            &composition_sessions_[index].spec, index});
     }
     std::sort(
         ordered_sessions.begin(),
         ordered_sessions.end(),
-        [](const CompositionSession* left, const CompositionSession* right) {
-            if (left->spec.track_index != right->spec.track_index) {
-                return left->spec.track_index > right->spec.track_index;
+        [](const detail::CompositionSessionRef& left,
+           const detail::CompositionSessionRef& right) {
+            if (left.spec->track_index != right.spec->track_index) {
+                return left.spec->track_index > right.spec->track_index;
             }
-            if (left->spec.kind != right->spec.kind) {
-                return timeline::isMediaClipKind(left->spec.kind);
+            if (left.spec->kind != right.spec->kind) {
+                return timeline::isMediaClipKind(left.spec->kind);
             }
-            return left->spec.clip_index < right->spec.clip_index;
+            return left.spec->clip_index < right.spec->clip_index;
         });
 
-    std::vector<RenderRequest> requests;
+    std::vector<detail::CompositionFrameRequest> requests;
     requests.reserve(ordered_sessions.size() + composition_transitions_.size());
-    for (auto* composition : ordered_sessions) {
-        const auto& spec = composition->spec;
+    for (const auto& session : ordered_sessions) {
+        const auto& spec = *session.spec;
         if (global_frame < spec.timeline_start_frame ||
             global_frame >= spec.timeline_start_frame + spec.segment_frame_count) {
             continue;
         }
-        requests.push_back(RenderRequest{
-            composition,
+        requests.push_back(detail::CompositionFrameRequest{
+            session.session_index,
             global_frame - spec.timeline_start_frame,
             1.0});
     }
 
-    const auto find_session = [this](qint64 track_index,
-                                     qint64 clip_index) -> CompositionSession* {
-        for (auto& composition : composition_sessions_) {
-            if (composition.spec.track_index == track_index &&
-                composition.spec.clip_index == clip_index) {
-                return &composition;
-            }
-        }
-        return nullptr;
-    };
-    const auto remove_requests_for = [&requests](CompositionSession* composition) {
-        requests.erase(
-            std::remove_if(
-                requests.begin(),
-                requests.end(),
-                [composition](const RenderRequest& request) {
-                    return request.composition == composition;
-                }),
-            requests.end());
-    };
-    const auto append_transition_request = [&requests](
-        CompositionSession* composition,
-        std::int64_t local_frame,
-        double opacity_multiplier,
-        bool allow_forward_decode = true) {
-        if (composition != nullptr && opacity_multiplier > 0.0) {
-            requests.push_back(RenderRequest{
-                composition,
-                local_frame,
-                std::clamp(opacity_multiplier, 0.0, 1.0),
-                allow_forward_decode});
-        }
-    };
-
-    for (const auto& transition : composition_transitions_) {
-        if (transition.duration_frames <= 0) continue;
-        auto* from = find_session(
-            transition.track_index, transition.from_clip_index);
-        auto* to = find_session(
-            transition.track_index, transition.to_clip_index);
-        if (from == nullptr || to == nullptr) continue;
-        const auto boundary = transition.boundary_frame;
-        const auto duration = transition.duration_frames;
-        if (transition.kind == timeline::TransitionKind::CrossDissolve) {
-            if (global_frame < boundary || global_frame >= boundary + duration) {
-                continue;
-            }
-            const auto offset = global_frame - boundary;
-            const auto from_local = std::max<std::int64_t>(
-                0, from->spec.segment_frame_count - 1);
-            const auto to_local = offset;
-            const double blend = duration == 1
-                ? 1.0
-                : static_cast<double>(offset + 1) / static_cast<double>(duration);
-            remove_requests_for(from);
-            remove_requests_for(to);
-            // FrameCompositor starts from an opaque black canvas. Keep the
-            // outgoing layer opaque and use the incoming layer's alpha as the
-            // blend factor; fading both layers would compound alpha against
-            // the opaque background and darken the result.
-            append_transition_request(
-                from, from_local, 1.0, false);
-            append_transition_request(
-                to, to_local, blend);
-        } else if (transition.kind == timeline::TransitionKind::FadeToBlack) {
-            if (global_frame >= boundary - duration && global_frame < boundary) {
-                const auto offset = global_frame - (boundary - duration);
-                const double fade = static_cast<double>(offset + 1) /
-                    static_cast<double>(duration);
-                remove_requests_for(from);
-                append_transition_request(
-                    from,
-                    global_frame - from->spec.timeline_start_frame,
-                    1.0 - fade);
-            } else if (global_frame >= boundary && global_frame < boundary + duration) {
-                const auto offset = global_frame - boundary;
-                const double fade = duration == 1
-                    ? 0.0
-                    : static_cast<double>(offset) /
-                        static_cast<double>(duration - 1);
-                remove_requests_for(to);
-                append_transition_request(
-                    to, offset, fade);
-            }
-        }
-    }
+    detail::applyTransitionRequests(
+        requests,
+        ordered_sessions,
+        std::span<const CompositionTransitionSpec>(
+            composition_transitions_.constData(),
+            static_cast<std::size_t>(composition_transitions_.size())),
+        global_frame);
 
     std::sort(
         requests.begin(),
         requests.end(),
-        [](const RenderRequest& left, const RenderRequest& right) {
-            if (left.composition->spec.track_index != right.composition->spec.track_index) {
-                return left.composition->spec.track_index > right.composition->spec.track_index;
+        [this](const detail::CompositionFrameRequest& left,
+               const detail::CompositionFrameRequest& right) {
+            const auto& left_spec = composition_sessions_[left.session_index].spec;
+            const auto& right_spec = composition_sessions_[right.session_index].spec;
+            if (left_spec.track_index != right_spec.track_index) {
+                return left_spec.track_index > right_spec.track_index;
             }
-            if (left.composition->spec.kind != right.composition->spec.kind) {
-                return timeline::isMediaClipKind(left.composition->spec.kind);
+            if (left_spec.kind != right_spec.kind) {
+                return timeline::isMediaClipKind(left_spec.kind);
             }
-            return left.composition->spec.clip_index < right.composition->spec.clip_index;
+            return left_spec.clip_index < right_spec.clip_index;
         });
 
     for (const auto& request : requests) {
-        const auto& spec = request.composition->spec;
+        auto& composition = composition_sessions_[request.session_index];
+        const auto& spec = composition.spec;
         if (request.local_frame < 0 ||
             request.local_frame >= spec.segment_frame_count ||
             spec.source_start_frame >
@@ -1286,8 +1207,8 @@ PlaybackWorker::decodeCompositionLayers(
         auto& metrics = rendering::PreviewPerformanceMetrics::instance();
         if (should_cancel && should_cancel()) return std::nullopt;
         if (spec.kind == timeline::ClipKind::Text) {
-            if (request.composition->cached_text_frame != nullptr) {
-                frame = request.composition->cached_text_frame;
+            if (composition.cached_text_frame != nullptr) {
+                frame = composition.cached_text_frame;
                 metrics.recordTextCacheHit();
             } else {
                 std::optional<media::VideoFrame> rendered;
@@ -1300,33 +1221,33 @@ PlaybackWorker::decodeCompositionLayers(
                 if (!rendered.has_value()) {
                     throw media::MediaError("The text layer could not be rasterized.");
                 }
-                request.composition->cached_text_frame =
+                composition.cached_text_frame =
                     std::make_shared<const media::VideoFrame>(std::move(*rendered));
-                request.composition->cached_text_alpha_coverage =
+                composition.cached_text_alpha_coverage =
                     rendering::FrameCompositor::buildAlphaCoverage(
-                        *request.composition->cached_text_frame);
-                frame = request.composition->cached_text_frame;
+                        *composition.cached_text_frame);
+                frame = composition.cached_text_frame;
             }
         } else if (spec.kind == timeline::ClipKind::Image) {
-            frame = request.composition->static_frame;
-        } else if (request.composition->session != nullptr) {
+            frame = composition.static_frame;
+        } else if (composition.session != nullptr) {
             std::optional<media::VideoFramePtr> decoded;
             const auto current_source_frame =
-                request.composition->session->current_frame_index();
+                composition.session->current_frame_index();
             if (playing_ && request.allow_forward_decode && current_source_frame >= 0 &&
                 source_frame > current_source_frame) {
-                decoded = request.composition->session->decode_forward_to(
+                decoded = composition.session->decode_forward_to(
                     source_frame,
                     should_cancel);
             }
-            if (!decoded.has_value() && !request.composition->session->at_end() &&
+            if (!decoded.has_value() && !composition.session->at_end() &&
                 !(should_cancel && should_cancel())) {
-                decoded = request.composition->session->decode_frame_at(
+                decoded = composition.session->decode_frame_at(
                     source_frame,
                     should_cancel);
             }
             if (should_cancel && should_cancel()) return std::nullopt;
-            consumeDecodeCacheHits(*request.composition->session);
+            consumeDecodeCacheHits(*composition.session);
             if (decoded.has_value()) {
                 metrics.recordDecodedFrame();
                 frame = *decoded;
@@ -1342,7 +1263,7 @@ PlaybackWorker::decodeCompositionLayers(
             std::move(frame),
             transform,
             spec.kind == timeline::ClipKind::Text
-                ? request.composition->cached_text_alpha_coverage
+                ? composition.cached_text_alpha_coverage
                 : rendering::AlphaCoveragePtr{}});
     }
     return layers;

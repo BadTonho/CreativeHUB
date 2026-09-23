@@ -50,6 +50,12 @@ Some timing and communication policies are already isolated in
 `playback_frame_mailbox.*`. Follow this focused approach instead of moving the
 entire worker at once.
 
+**Progress (2026-09-23):** The first focused composition step moves Cross
+Dissolve and Fade to Black frame-request decisions into
+`playback_transition_plan`. The worker still owns session ordering, decoding,
+caching, composition, diagnostics, and signal delivery. Other playback
+responsibilities should be extracted only alongside a concrete change.
+
 ### 4. Main Window state and workflow coupling — structural item
 
 `src/main_window.h` is approximately 434 lines and holds UI controls and state

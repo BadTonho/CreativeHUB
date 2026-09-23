@@ -265,6 +265,13 @@ outgoing fade before the junction, a black junction frame, and a linear
 incoming fade afterward. Transition duration is expressed in timeline frames
 and does not change clip positions or durations.
 
+The internal `playback_transition_plan` adjusts lightweight requests for the
+visible composition sessions at each global frame. It selects the local source
+frame, opacity, and whether sequential decoding is allowed for transition
+endpoints. `PlaybackWorker` retains session ordering, media decoding, caches,
+composition, metrics, and error reporting; frame buffers are not copied into
+the plan.
+
 Transition failures preserve the last valid preview and use the existing
 `playback/compose` diagnostic path with track, clip, global/local frame, path,
 and available decoder error information. Audio remains on the normal cut
