@@ -56,22 +56,40 @@ int main(int argc, char* argv[]) {
             "Text", Qt::MatchExactly);
         require(text_items.size() == 1,
                 "Text effect must be available for dragging.");
-        require(effects_list.dragEnabled() &&
-                    text_items.front()->flags().testFlag(Qt::ItemIsDragEnabled),
-                "Text effect drag support is not enabled.");
+        require(effects_list.dragEnabled(),
+                "Effects drag support is not enabled.");
         for (int index = 0; index < effects_list.count(); ++index) {
-            if (effects_list.item(index) != text_items.front()) {
-                require(!effects_list.item(index)->flags().testFlag(
-                            Qt::ItemIsDragEnabled),
-                        "Non-Text effects must not be draggable.");
-            }
+            const auto effect_id = effects_list.item(index)
+                ->data(Qt::UserRole).toString();
+            const bool expected_draggable =
+                effect_id == QStringLiteral("text.text") ||
+                effect_id == QStringLiteral("transitions.cross_dissolve") ||
+                effect_id == QStringLiteral("transitions.fade_to_black");
+            require(
+                effects_list.item(index)->flags().testFlag(Qt::ItemIsDragEnabled) ==
+                    expected_draggable,
+                "Only Text and timeline transitions must be draggable.");
         }
-        auto* text_mime = effects_list.mimeData(text_items);
-        require(text_mime != nullptr &&
-                    text_mime->hasFormat(ui::kEffectIdMimeType) &&
-                    text_mime->data(ui::kEffectIdMimeType) == "text.text",
-                "Text effect drag data is invalid.");
-        delete text_mime;
+        const auto verifyDragMime = [&effects_list](
+            const QString& name,
+            const QByteArray& expected_id) {
+            const auto items = effects_list.findItems(name, Qt::MatchExactly);
+            require(items.size() == 1,
+                    "A draggable effect is missing from the Effects list.");
+            auto* mime = effects_list.mimeData(items);
+            require(mime != nullptr &&
+                        mime->hasFormat(ui::kEffectIdMimeType) &&
+                        mime->data(ui::kEffectIdMimeType) == expected_id,
+                    "A draggable effect has invalid MIME data.");
+            delete mime;
+        };
+        verifyDragMime("Text", QByteArrayLiteral("text.text"));
+        verifyDragMime(
+            "Cross Dissolve",
+            QByteArrayLiteral("transitions.cross_dissolve"));
+        verifyDragMime(
+            "Fade to Black",
+            QByteArrayLiteral("transitions.fade_to_black"));
 
         bool changed = false;
         QString changed_category;

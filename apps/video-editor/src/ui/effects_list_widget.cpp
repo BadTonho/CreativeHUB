@@ -9,6 +9,16 @@
 
 #include <algorithm>
 
+namespace {
+
+bool isDraggableEffect(const QString& effect_id) {
+    return effect_id == QStringLiteral("text.text") ||
+        effect_id == QStringLiteral("transitions.cross_dissolve") ||
+        effect_id == QStringLiteral("transitions.fade_to_black");
+}
+
+}  // namespace
+
 EffectsListWidget::EffectsListWidget(QWidget* parent)
     : QListWidget(parent) {
     setObjectName(QStringLiteral("effectsList"));
@@ -25,7 +35,7 @@ EffectsListWidget::EffectsListWidget(QWidget* parent)
         auto* item = new QListWidgetItem(effect.name, this);
         item->setData(Qt::UserRole, effect.id);
         item->setData(Qt::UserRole + 1, effect.category_id);
-        if (effect.id != QStringLiteral("text.text")) {
+        if (!isDraggableEffect(effect.id)) {
             item->setFlags(item->flags() & ~Qt::ItemIsDragEnabled);
         }
     }
@@ -63,16 +73,16 @@ int EffectsListWidget::visibleEffectCount() const {
 
 QMimeData* EffectsListWidget::mimeData(
     const QList<QListWidgetItem*>& items) const {
-    if (items.size() != 1 || items.front() == nullptr ||
-        items.front()->data(Qt::UserRole).toString() !=
-            QStringLiteral("text.text")) {
+    if (items.size() != 1 || items.front() == nullptr) {
         return nullptr;
     }
+    const auto effect_id = items.front()->data(Qt::UserRole).toString();
+    if (!isDraggableEffect(effect_id)) return nullptr;
 
     auto* mime_data = new QMimeData;
     mime_data->setData(
         ui::kEffectIdMimeType,
-        items.front()->data(Qt::UserRole).toString().toUtf8());
+        effect_id.toUtf8());
     return mime_data;
 }
 

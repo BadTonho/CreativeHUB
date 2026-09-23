@@ -1448,7 +1448,7 @@ bool TimelineWidget::updateDropHover(
     const auto track = trackAt(position.y());
     const auto frame = globalFrameAt(position.x());
     const bool supported = isSupportedDrop(mime_data);
-    const bool accepted = supported &&
+    bool accepted = supported &&
         track.has_value() && frame.has_value();
     drag_hovering_ = supported;
     drag_preview_position_ = position;
@@ -1478,6 +1478,26 @@ bool TimelineWidget::updateDropHover(
         } else {
             drag_preview_valid_ = false;
         }
+    } else if (supported && mime_data->hasFormat(ui::kEffectIdMimeType)) {
+        const auto effect_id = QString::fromUtf8(
+            mime_data->data(ui::kEffectIdMimeType));
+        const bool is_transition_effect =
+            effect_id == QStringLiteral("transitions.cross_dissolve") ||
+            effect_id == QStringLiteral("transitions.fade_to_black");
+        if (is_transition_effect) {
+            const auto indexes = transitionClipIndexesAt(
+                position.x(), position.y());
+            if (!indexes.has_value() || !track.has_value()) {
+                accepted = false;
+                drop_hover_track_.reset();
+                drop_hover_frame_.reset();
+            } else {
+                const auto& clips = tracks_[*track].clips;
+                drop_hover_track_ = track;
+                drop_hover_frame_ = clips[indexes->second].timeline_start_frame;
+            }
+        }
+        clearDragPreview();
     } else {
         clearDragPreview();
     }
@@ -1505,6 +1525,26 @@ bool TimelineWidget::processDrop(
             *track,
             *frame,
             mediaDropDuration(mime_data)).start_frame;
+    }
+    if (is_effect_drop) {
+        const auto effect_id = QString::fromUtf8(
+            mime_data->data(ui::kEffectIdMimeType));
+        const bool is_cross_dissolve = effect_id ==
+            QStringLiteral("transitions.cross_dissolve");
+        const bool is_fade_to_black = effect_id ==
+            QStringLiteral("transitions.fade_to_black");
+        if (is_cross_dissolve || is_fade_to_black) {
+            const auto indexes = transitionClipIndexesAt(
+                position.x(), position.y());
+            if (!indexes.has_value()) return false;
+            clearDropHover();
+            emit transitionAddRequestedAt(
+                static_cast<qint64>(*track),
+                static_cast<qint64>(indexes->first),
+                static_cast<qint64>(indexes->second),
+                is_cross_dissolve ? 0 : 1);
+            return true;
+        }
     }
     clearDropHover();
     if (is_media_drop) {

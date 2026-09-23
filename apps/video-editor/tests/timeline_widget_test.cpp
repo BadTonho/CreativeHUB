@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QDragEnterEvent>
+#include <QDragLeaveEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QImage>
@@ -186,6 +187,86 @@ int main(int argc, char* argv[]) {
         require(effect_drop_received && effect_drop_track == 0 &&
                     effect_drop_frame > 0,
                 "Text effect drop did not preserve the target track and frame.");
+
+        qint64 transition_drop_count = 0;
+        qint64 transition_drop_kind = -1;
+        const auto sendTransitionDrop = [
+            &application,
+            &transition_drop_count,
+            &transition_drop_kind](
+            const QByteArray& effect_id,
+            bool target_cut) {
+            timeline::TimelineWidget transition_widget;
+            transition_widget.resize(1000, 200);
+            timeline::TimelineTrack adjacent_clips_track{
+                3,
+                "Video 3",
+                1.0,
+                false,
+                {makeClip("first.mkv", 0, 12000, "first.mkv"),
+                 makeClip("second.mkv", 12000, 12000, "second.mkv")}};
+            adjacent_clips_track.clips[0].clip_id = 1;
+            adjacent_clips_track.clips[1].clip_id = 2;
+            transition_widget.setTracks({adjacent_clips_track});
+            transition_widget.setTimelineViewportWidth(1000);
+            transition_widget.show();
+            application.processEvents();
+
+            QObject::connect(
+                &transition_widget,
+                &timeline::TimelineWidget::transitionAddRequestedAt,
+                [&transition_drop_count, &transition_drop_kind](
+                    qint64 track,
+                    qint64 from,
+                    qint64 to,
+                    qint64 kind) {
+                    if (track == 0 && from == 0 && to == 1) {
+                        ++transition_drop_count;
+                        transition_drop_kind = kind;
+                    }
+                });
+
+            const auto x = target_cut
+                ? transition_widget.contentXForFrame(12000) + 3.0
+                : transition_widget.contentXForFrame(400);
+            const bool should_be_accepted = target_cut;
+            QMimeData transition_mime;
+            transition_mime.setData(ui::kEffectIdMimeType, effect_id);
+            const QPointF position(x, 60.0);
+            QDragEnterEvent enter(
+                position.toPoint(), Qt::CopyAction, &transition_mime,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&transition_widget, &enter);
+            QDragMoveEvent move(
+                position.toPoint(), Qt::CopyAction, &transition_mime,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&transition_widget, &move);
+            require(
+                move.isAccepted() == should_be_accepted,
+                "Transition drag hover validity was wrong for " +
+                    effect_id.toStdString() + " at x=" + std::to_string(x));
+            QDropEvent drop(
+                position, Qt::CopyAction, &transition_mime,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&transition_widget, &drop);
+            require(drop.isAccepted() == should_be_accepted,
+                    "Transition drop did not match cut validity.");
+            QDragLeaveEvent leave;
+            QApplication::sendEvent(&transition_widget, &leave);
+        };
+        sendTransitionDrop(
+            QByteArrayLiteral("transitions.cross_dissolve"),
+            true);
+        require(transition_drop_count == 1 && transition_drop_kind == 0,
+                "Cross Dissolve drop did not target the adjacent clip cut.");
+        sendTransitionDrop(
+            QByteArrayLiteral("transitions.fade_to_black"),
+            true);
+        require(transition_drop_count == 2 && transition_drop_kind == 1,
+                "Fade to Black drop did not target the adjacent clip cut.");
+        sendTransitionDrop(
+            QByteArrayLiteral("transitions.fade_to_black"),
+            false);
 
         bool media_drop_received = false;
         QString media_drop_path;

@@ -57,10 +57,12 @@ the categories `All`, `Video`, `Audio`, `Transitions`, and `Text`. Selecting a
 category filters the five currently implemented entries — `Grayscale`, `Gain`,
 `Cross Dissolve`, `Fade to Black`, and `Text` — in the Effects dock. The Text
 entry is the Timeline text-clip tool: it can be dragged to a track and frame
-in the Timeline to create a five-second text clip. The other entries remain a
-UI prototype only and cannot be applied from this dock to the Preview,
-Timeline, or project. The toolbar `Effects` action activates all
-three docks and hides the Media Pool pair, while `View > Effects` controls
+in the Timeline to create a five-second text clip. `Cross Dissolve` and `Fade
+to Black` can be dragged onto a contiguous clip junction in the same track;
+the Timeline highlights the junction and adds the transition on release. The
+`Grayscale` and `Gain` entries remain UI prototypes and cannot be applied from
+this dock to the Preview, Timeline, or project. The toolbar `Effects` action
+activates all three docks and hides the Media Pool pair, while `View > Effects` controls
 `Toolbox`, `Favorites`, and `Effects` individually. The workspace layout is
 stored globally in `workspace/dock_layout_state` with layout version 7 and
 does not affect project state. The default layout shows Media Pool and keeps

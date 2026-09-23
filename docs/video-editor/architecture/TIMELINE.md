@@ -304,8 +304,11 @@ crossfade in this milestone.
 The Timeline displays transition regions around valid junctions. A junction
 can be selected or opened with its context menu to add Cross Dissolve, add
 Fade to Black, or remove the transition. The Inspector confirms the type and
-duration edits. Moving, splitting, trimming, or deleting an endpoint removes
-only transitions whose adjacency or endpoint validity is no longer true.
+duration edits. Cross Dissolve and Fade to Black can also be dragged from the
+Effects dock onto a contiguous junction. The Timeline highlights the target
+cut within its hit area (at least eight pixels) and commits the transition on
+release. Moving, splitting, trimming, or deleting an endpoint removes only
+transitions whose adjacency or endpoint validity is no longer true.
 Transitions are included in bounded Undo/Redo snapshots and are persisted in
 `.csp` version 8. Projects from earlier versions load with no transitions,
 100% timeline zoom, and the default 70-pixel track-row height.

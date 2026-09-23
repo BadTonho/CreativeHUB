@@ -48,7 +48,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode and icon-scale persistence, bounded 50%-150% icon resizing, seven-character media and folder labels, full-name inline editing, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
-| Effects UI | Implemented Toolbox categories, current effect catalog, category filtering, stable effect IDs, and visual-only behavior |
+| Effects UI | Implemented Toolbox categories, current effect catalog, category filtering, stable effect IDs, Text and transition drag MIME, and visual-only Grayscale/Gain behavior |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
 
 ## Manual UI validation
@@ -144,9 +144,9 @@ in the running Main Editor after UI or integration changes:
   confirm the checked-by-default Magnetic Snap button, place clip edges side
   by side within and beyond the eight-pixel tolerance, move between tracks,
   verify the guide line and Timeline-boundary snapping, then disable the tool
-  and confirm the raw cursor frame is preserved; confirm effect drops retain
-  their existing marker behavior and the snap toggle does not dirty the
-  project;
+  and confirm the raw cursor frame is preserved; confirm Text drops keep their
+  cursor marker and transition drops highlight a contiguous cut within the
+  current hit area; confirm the snap toggle does not dirty the project;
 - Media Browser list/block toggles, restoration of the last global mode and icon
   scale, slider adjustment from 50% to 150% in 10% steps, default 100% sizing,
   cached thumbnails, seven-character labels with ellipses, no technical second
@@ -193,14 +193,17 @@ in the running Main Editor after UI or integration changes:
   confirm the toolbar actions synchronize their checked state; select every
   Toolbox category and confirm the Effects list shows only the implemented
   entries (`Grayscale`, `Gain`, `Cross Dissolve`, `Fade to Black`, and `Text`),
-  including the draggable Text tool; drag Text to multiple tracks and frames,
-  confirm it creates a five-second text clip at the drop position, rejects
-  overlap, and participates in Undo/Redo and project dirty state; confirm the
-  other effects remain non-draggable and do not change the Preview, Timeline,
-  project dirty state, or Undo/Redo; close and reopen the editor to confirm
-  layout version 7 restores
-  the saved arrangement, and use `View > Restore Default Layout` to restore
-  the Media Pool default;
+  including draggable Text and transition tools; drag Text to multiple tracks
+  and frames, confirm it creates a five-second text clip at the drop position,
+  rejects overlap, and participates in Undo/Redo and project dirty state; drag
+  Cross Dissolve and Fade to Black onto contiguous clip junctions on multiple
+  tracks, confirm the target junction is highlighted, the transition appears
+  only on release, playback reflects it, and Undo/Redo and project dirty state
+  update; confirm drops away from a valid junction are rejected; confirm
+  Grayscale and Gain remain non-draggable and do not change the Preview,
+  Timeline, project dirty state, or Undo/Redo; close and reopen the editor to
+  confirm layout version 7 restores the saved arrangement, and use
+  `View > Restore Default Layout` to restore the Media Pool default;
 - first launch: confirm the Main Editor opens maximized with Media Pool on the
   left, Inspector on the right, Preview in the center, and Timeline across the
   bottom; resize or rearrange the docks, close the editor, and confirm the
