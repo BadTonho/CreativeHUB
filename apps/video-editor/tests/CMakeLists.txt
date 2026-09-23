@@ -755,10 +755,14 @@ set_tests_properties(creative-suite-main-editor-settings-dialog PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Test)
+
 add_executable(creative-suite-main-editor-shortcut-manager-tests
     shortcut_manager_test.cpp
     ../src/settings/shortcut_manager.cpp
     ../src/settings/shortcut_manager.h
+    ../src/ui/function_palette.cpp
+    ../src/ui/function_palette.h
 )
 
 target_include_directories(creative-suite-main-editor-shortcut-manager-tests PRIVATE
@@ -767,6 +771,7 @@ target_include_directories(creative-suite-main-editor-shortcut-manager-tests PRI
 
 target_link_libraries(creative-suite-main-editor-shortcut-manager-tests PRIVATE
     Qt6::Widgets
+    Qt6::Test
 )
 
 target_compile_features(creative-suite-main-editor-shortcut-manager-tests PRIVATE cxx_std_20)

@@ -52,6 +52,7 @@ class EffectsListWidget;
 class EffectsFavoritesWidget;
 class QWidget;
 namespace ui {
+class FunctionPalette;
 class WorkspacePageView;
 }
 
@@ -327,6 +328,7 @@ private:
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
+    ui::FunctionPalette* function_palette_ = nullptr;
     ui::WorkspacePageView* workspace_page_view_ = nullptr;
     QWidget* workspace_buttons_container_ = nullptr;
     QPushButton* edit_workspace_button_ = nullptr;

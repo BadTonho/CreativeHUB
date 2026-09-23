@@ -7,6 +7,7 @@
 #include "settings/settings_dialog.h"
 #include "settings/shortcut_manager.h"
 #include "timeline/timeline_widget.h"
+#include "ui/function_palette.h"
 #include "ui/media_browser_list_widget.h"
 #include "ui/workspace_page_view.h"
 
@@ -136,6 +137,8 @@ void MainWindow::createWorkspace() {
         "timelineDock",
         workspace_page_view_->lowerWorkspacePanel());
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
+
+    function_palette_ = new ui::FunctionPalette(this, *shortcut_manager_);
 
     restoreWorkspaceLayout();
     setWorkspacePage(WorkspacePage::Edit);

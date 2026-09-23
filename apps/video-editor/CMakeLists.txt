@@ -101,6 +101,8 @@ add_executable(creative-suite-main-editor
     src/ui/effects_toolbox_widget.h
     src/ui/effects_list_widget.cpp
     src/ui/effects_list_widget.h
+    src/ui/function_palette.cpp
+    src/ui/function_palette.h
     src/ui/system_memory_details_dialog.cpp
     src/ui/system_memory_details_dialog.h
     src/ui/system_memory_indicator.cpp

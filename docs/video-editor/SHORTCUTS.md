@@ -6,6 +6,7 @@ It must change in the same commit as any shortcut change.
 | Shortcut | Action | Context |
 | --- | --- | --- |
 | Space | Play or pause the selected timeline media | Main Editor |
+| Shift + Space | Open or close the empty Functions window | Main Editor |
 | Left Arrow | Previous frame, crossing a clip boundary when applicable | Main Editor |
 | Right Arrow | Next frame, crossing a clip boundary when applicable | Main Editor |
 | Ctrl + Left | Nudge the active clip one frame left when valid | Main Editor |
