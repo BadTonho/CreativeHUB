@@ -157,7 +157,7 @@ dialog, refreshing the Autosave tab, or changing a shortcut, does not change
 project data, project dirty state, undo/redo history, or the `.csp` format.
 `SettingsDialog` and
 `ShortcutManager` are independent Qt components under
-`apps/main-editor/src/settings/`; `MainWindow` owns the manager, registers its
+`apps/video-editor/src/settings/`; `MainWindow` owns the manager, registers its
 actions, and only creates and opens the dialog.
 
 The `Help > System` action opens a modal diagnostic dialog showing the Main
@@ -361,7 +361,7 @@ transition data, selection, and playhead while remaining paused. Invalid
 junctions and gaps are intentional no-op outcomes and are not logged.
 
 The `MainWindow` coordinator is implemented in responsibility-focused
-translation units under `apps/main-editor/src/main_window/`. Workspace,
+translation units under `apps/video-editor/src/main_window/`. Workspace,
 project, Media Browser, Timeline, playback, and Inspector construction and
 coordination remain part of the same window class; this organization does not
 introduce additional controllers or change ownership.

@@ -31,7 +31,7 @@ under `docs/architecture/` so each document can remain focused and current.
 
 ## Current product direction
 
-The first real application is the Main Editor under `apps/main-editor/`.
+The first real application is the Main Editor under `apps/video-editor/`.
 Motion Studio and the future Image Editor remain separate product areas. The
 archived technical prototypes under `prototypes/` are references and are not
 application dependencies.

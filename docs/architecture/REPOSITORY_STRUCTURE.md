@@ -10,14 +10,14 @@ monorepo structure.
 
 ```text
 apps/
-  main-editor/       # User-facing audiovisual editor
+  video-editor/      # User-facing audiovisual editor
 libs/                # Shared libraries added only when multiple apps need them
 platform/            # Platform adapters when a shared abstraction requires them
 prototypes/          # Isolated technical experiments and references
 docs/                # Project and architecture documentation
 ```
 
-The first real application is located at `apps/main-editor/`. The archived
+The first real application is located at `apps/video-editor/`. The archived
 technical prototypes remain under `prototypes/` and are not application
 dependencies.
 
@@ -35,7 +35,7 @@ while the product boundaries are still being validated.
 
 The Main Editor keeps `src/main_window.h` as the public declaration of the
 application window and organizes its implementation by responsibility under
-`apps/main-editor/src/main_window/`:
+`apps/video-editor/src/main_window/`:
 
 ```text
 main_window/

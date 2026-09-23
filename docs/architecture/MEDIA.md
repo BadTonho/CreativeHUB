@@ -3,7 +3,7 @@
 Status: **provisional**.
 
 The first media module is application-local under
-`apps/main-editor/src/media/`. It uses FFmpeg's `libavformat`, `libavcodec`,
+`apps/video-editor/src/media/`. It uses FFmpeg's `libavformat`, `libavcodec`,
 `libavutil`, `libswscale`, and `libswresample` APIs to inspect and decode local
 video, while `QImageReader` handles supported raster still images.
 

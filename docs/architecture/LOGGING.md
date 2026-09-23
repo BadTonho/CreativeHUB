@@ -3,7 +3,7 @@
 Status: **provisional**.
 
 The Main Editor owns the first application-local logger under
-`apps/main-editor/src/logging/`. It uses only the C++ standard library and does
+`apps/video-editor/src/logging/`. It uses only the C++ standard library and does
 not expose Qt types.
 
 ## Policy

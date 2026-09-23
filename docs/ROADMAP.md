@@ -53,7 +53,7 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 
 - [x] Define the initial repository structure and boundaries between applications,
   shared libraries, and platform adapters.
-- [x] Create `apps/main-editor/` as the first real application.
+- [x] Create `apps/video-editor/` as the first real application.
 - [ ] Define shared-core responsibilities and create only the modules required
   by the Main Editor.
 - [x] Choose Qt 6 Widgets as the provisional UI, window, and input approach.

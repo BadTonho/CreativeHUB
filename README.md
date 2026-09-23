@@ -58,7 +58,7 @@ The suite combines the best paradigms of industry-standard tools into a unified,
 
 ## 3. Current Implementation Status
 
-Development is currently centered on the **Main Editor** MVP under [`apps/main-editor`](apps/main-editor), built with **C++20**, **Qt 6 Widgets**, and **FFmpeg**:
+Development is currently centered on the **Main Editor** MVP under [`apps/video-editor`](apps/video-editor), built with **C++20**, **Qt 6 Widgets**, and **FFmpeg**:
 
 - [x] **Workspace & Shell**: Dockable panels (Media Browser, Timeline, Preview Player, Inspector) with flexible desktop layouts.
 - [x] **Multi-Track Timeline**:
@@ -116,13 +116,13 @@ Development is currently centered on the **Main Editor** MVP under [`apps/main-e
 4. **Run the Main Editor:**
    ```bash
    # On Windows:
-   .\build\apps\main-editor\Release\creative-suite-main-editor.exe
+   .\build\apps\video-editor\Release\creative-suite-main-editor.exe
 
    # On Linux:
-   ./build/apps/main-editor/creative-suite-main-editor
+   ./build/apps/video-editor/creative-suite-main-editor
 
    # On macOS:
-   open build/apps/main-editor/creative-suite-main-editor.app
+   open build/apps/video-editor/creative-suite-main-editor.app
    ```
 
 ---

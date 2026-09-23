@@ -7,7 +7,7 @@ application-local validation backend, not the final product renderer. The
 preview requests an OpenGL 3.2 Core context through `QOpenGLWidget`, uploads
 the media layer's owned RGBA8 pixels to a linear-filtered texture, and draws a
 letterboxed textured rectangle. The vertex and fragment shaders are embedded
-in `apps/main-editor/src/rendering/`.
+in `apps/video-editor/src/rendering/`.
 
 The fragment shader includes the optional `View > Grayscale Preview` effect.
 It is disabled by default and is not persisted in `.csp` projects. The CPU
