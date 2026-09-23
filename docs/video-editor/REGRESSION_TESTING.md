@@ -90,6 +90,16 @@ in the running Main Editor after UI or integration changes:
   remain available; confirm no Add Text button is shown; confirm the far right
   of the top workspace toolbar shows the active `Edit` button followed by the
   blank Fusion button with no text or icon;
+- Timeline construction (F1): confirm the control row, scrolling viewport,
+  fixed track headers, and footer retain their layout. Check the saved monitor
+  volume at startup, zoom slider and buttons, checked initial Snap state,
+  Selection/Blade switching, and each add/rename/move/remove track action.
+  Switch Edit/Fusion and back; check footer status updates and playback buttons
+  and shortcuts. Each action should respond once, with the same preview and
+  playhead behavior; Timeline selection, project dirty state, and Undo/Redo
+  history should change only when the corresponding edit requires it. The
+  existing widget, workspace selector, and Timeline end-button tests cover
+  those components, but do not instantiate the application `MainWindow`;
 - Workspace pages: confirm startup selects Edit; click the blank Fusion button
   and confirm the existing Preview is labeled `Viewer`, the bottom dock title
   changes to `Node Editor`, the Timeline is hidden, and the Inspector shows the

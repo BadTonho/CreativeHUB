@@ -391,6 +391,13 @@ translation units under `apps/video-editor/src/main_window/`. Workspace,
 project, Media Browser, Timeline, playback, and Inspector construction and
 coordination remain part of the same window class; this organization does not
 introduce additional controllers or change ownership.
+Within `main_window_timeline.cpp`, `createTimeline` assembles the controls,
+scrolling viewport with fixed track headers, and footer through private
+construction helpers, then connects the remaining control and Timeline widget
+signals. Workspace selectors, vertical scrolling, and footer status signals
+are connected when their respective components are created. The control
+references needed for later connections are temporary and are not stored as
+additional `MainWindow` state.
 
 The internal `frame_step_navigation` module decides whether a Previous/Next
 Frame command stays within the active clip, activates a clip at the boundary,

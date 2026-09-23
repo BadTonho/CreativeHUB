@@ -115,12 +115,19 @@ module only when it establishes a useful state or test boundary. Use the stable
 `F1`-`F9` identifiers to request one target, for example: “Do F2.” They are
 separate from refactoring items 1-8 above.
 
-- **F1. Timeline controls:** `MainWindow::createTimeline` builds the playback and
-  editing toolbar, zoom controls, scrolling viewport and fixed track headers,
-  footer, and all their signal connections in one function. Candidate helpers
-  are `createTimelineControls`, `createTimelineViewport`,
-  `createTimelineFooter`, and `connectTimelineSignals`. Keep widget ownership,
-  initialization order, shortcut behavior, and signal connections intact.
+- **F1. Timeline controls:** `MainWindow::createTimeline` now assembles the
+  playback and editing toolbar, zoom controls, scrolling viewport with fixed
+  track headers, and footer through `createTimelineControls`,
+  `createTimelineViewport`, `createTimelineFooter`, and
+  `connectTimelineSignals`. Keep widget ownership, initialization order,
+  shortcut behavior, and signal connections intact in future changes.
+  **Implementation complete (2026-09-23):** These four private helpers build
+  and connect the same UI within `main_window_timeline.cpp`.
+  `createTimeline` assembles them and initializes monitor volume and Snap
+  before their change handlers are connected. The temporary control
+  references do not extend `MainWindow`
+  state. Application-level visual and connection checks remain manual because
+  the automated tests do not instantiate `MainWindow`.
 - **F2. Timeline painting:** `TimelineWidget::paintEvent` draws ruler ticks and
   frame guides, tracks and clips, keyframes, transition regions, move/drop
   ghosts and snap guides, then the playhead. Candidate helpers are

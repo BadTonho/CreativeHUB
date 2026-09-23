@@ -45,6 +45,7 @@ class MediaBrowserBinTreeWidget;
 class MediaBrowserListWidget;
 class QListWidgetItem;
 class QTreeWidgetItem;
+class QVBoxLayout;
 class PreviewWidget;
 class SystemMemoryIndicator;
 class EffectsToolboxWidget;
@@ -76,6 +77,7 @@ protected:
 
 private:
     struct ImportedMedia;
+    struct TimelineControls;
 
     enum class WorkspacePage {
         Edit,
@@ -102,6 +104,10 @@ private:
     QWidget* createEffectsFavorites();
     QWidget* createInspector();
     QWidget* createTimeline();
+    TimelineControls createTimelineControls(QWidget* container, QVBoxLayout* layout);
+    void createTimelineViewport(QWidget* container, QVBoxLayout* layout);
+    void createTimelineFooter(QWidget* container, QVBoxLayout* layout);
+    void connectTimelineSignals(const TimelineControls& controls);
     void initializePlayback();
     void shutdownPlayback();
     void configurePreviewPerformanceMetrics(bool enabled);

@@ -344,12 +344,21 @@ void MainWindow::addTextClipAt(qint64 requested_track_index, qint64 requested_fr
     }
 }
 
-QWidget* MainWindow::createTimeline() {
-    auto* container = new QWidget;
-    auto* layout = new QVBoxLayout(container);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(8);
+struct MainWindow::TimelineControls {
+    QPushButton* add_track_button;
+    QPushButton* rename_track_button;
+    QPushButton* move_track_up_button;
+    QPushButton* move_track_down_button;
+    QPushButton* remove_track_button;
+    QPushButton* zoom_out_button;
+    QSlider* zoom_slider;
+    QLabel* zoom_indicator;
+    QPushButton* zoom_in_button;
+};
 
+MainWindow::TimelineControls MainWindow::createTimelineControls(
+    QWidget* container,
+    QVBoxLayout* layout) {
     auto* controls = new QHBoxLayout;
     controls->setSpacing(6);
 
@@ -486,9 +495,6 @@ QWidget* MainWindow::createTimeline() {
         [this]() { setWorkspacePage(WorkspacePage::Fusion); });
     layout->addLayout(controls);
 
-    monitor_volume_slider_->setValue(settings::monitorVolumePercent());
-    applyMonitorVolumePercent(monitor_volume_slider_->value());
-
     previous_frame_button_->setToolTip("Step one frame backward");
     play_pause_button_->setToolTip("Play or pause the active clip");
     next_frame_button_->setToolTip("Step one frame forward");
@@ -511,6 +517,19 @@ QWidget* MainWindow::createTimeline() {
     move_track_down_button->setToolTip("Move the active track toward the bottom");
     remove_track_button->setToolTip("Remove the active track when it is empty");
 
+    return {
+        add_track_button,
+        rename_track_button,
+        move_track_up_button,
+        move_track_down_button,
+        remove_track_button,
+        zoom_out_button,
+        zoom_slider,
+        zoom_indicator,
+        zoom_in_button};
+}
+
+void MainWindow::createTimelineViewport(QWidget* container, QVBoxLayout* layout) {
     timeline_widget_ = new timeline::TimelineWidget(container);
     timeline_scroll_ = new QScrollArea(container);
     timeline_scroll_->setWidgetResizable(true);
@@ -538,9 +557,10 @@ QWidget* MainWindow::createTimeline() {
         &QScrollBar::valueChanged,
         timeline_header_overlay_,
         &timeline::TimelineTrackHeaderOverlay::setVerticalScrollOffset);
-    snap_button_->setChecked(timeline_widget_->snapEnabled());
     layout->addWidget(timeline_scroll_, 1);
+}
 
+void MainWindow::createTimelineFooter(QWidget* container, QVBoxLayout* layout) {
     // Keep the playback status as a compact footer while giving the timeline
     // the expandable space in the dock.
     auto* playback_footer = new QWidget(container);
@@ -579,6 +599,18 @@ QWidget* MainWindow::createTimeline() {
     timeline_message_label_->setText(statusBar()->currentMessage());
     timeline_message_label_->setVisible(!statusBar()->currentMessage().isEmpty());
     statusBar()->setVisible(false);
+}
+
+void MainWindow::connectTimelineSignals(const TimelineControls& controls) {
+    auto* add_track_button = controls.add_track_button;
+    auto* rename_track_button = controls.rename_track_button;
+    auto* move_track_up_button = controls.move_track_up_button;
+    auto* move_track_down_button = controls.move_track_down_button;
+    auto* remove_track_button = controls.remove_track_button;
+    auto* zoom_out_button = controls.zoom_out_button;
+    auto* zoom_slider = controls.zoom_slider;
+    auto* zoom_indicator = controls.zoom_indicator;
+    auto* zoom_in_button = controls.zoom_in_button;
 
     connect(previous_frame_button_, &QPushButton::clicked, this, [this]() {
         sendPlaybackCommand("stepBackward");
@@ -744,6 +776,21 @@ QWidget* MainWindow::createTimeline() {
         &timeline::TimelineWidget::effectDropRequestedAt,
         this,
         &MainWindow::handleEffectDropAt);
+}
+
+QWidget* MainWindow::createTimeline() {
+    auto* container = new QWidget;
+    auto* layout = new QVBoxLayout(container);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(8);
+
+    const auto controls = createTimelineControls(container, layout);
+    monitor_volume_slider_->setValue(settings::monitorVolumePercent());
+    applyMonitorVolumePercent(monitor_volume_slider_->value());
+    createTimelineViewport(container, layout);
+    snap_button_->setChecked(timeline_widget_->snapEnabled());
+    createTimelineFooter(container, layout);
+    connectTimelineSignals(controls);
 
     updateTimelineState();
     updatePlaybackControls();
