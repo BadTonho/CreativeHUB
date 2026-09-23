@@ -150,8 +150,11 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 
 ## 6. Motion Studio
 
-- [ ] Define the Motion Studio scope and boundaries with the Main Editor.
-- [ ] Create `apps/motion-studio/` after the shared foundation is stable.
+- [x] Reserve the `apps/motion-editor/` and `docs/motion-editor/` placeholders.
+- [ ] Define the Motion Studio scope and boundaries with the Main Editor; see
+  the [Motion Studio roadmap](../motion-editor/ROADMAP.md).
+- [ ] Build the application in `apps/motion-editor/` after the shared
+  foundation is stable.
 - [ ] Add advanced keyframes and property curves.
 - [ ] Add nested compositions.
 - [ ] Add animated masks.
@@ -163,8 +166,9 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 
 ## 7. Image Editor
 
+- [x] Reserve the `apps/photo-editor/` and `docs/photo-editor/` placeholders.
 - [ ] Revisit the image editor after the Main Editor and Motion Studio
-  foundations are stable.
+  foundations are stable; see the [Image Editor roadmap](../photo-editor/ROADMAP.md).
 - [ ] Define whether it will be a separate application or an integrated
   module.
 - [ ] Plan layers, masks, selections, text, color adjustments, filters, and

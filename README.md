@@ -174,6 +174,8 @@ Key reference documents:
 - [Architecture Overview](docs/video-editor/ARCHITECTURE.md)
 - [Subsystem Architecture Boundaries](docs/video-editor/architecture/)
 - [Project Roadmap](docs/video-editor/ROADMAP.md)
+- [Motion Studio Roadmap](docs/motion-editor/ROADMAP.md)
+- [Image Editor Roadmap](docs/photo-editor/ROADMAP.md)
 - [Technical Prototype Comparison](docs/video-editor/TECHNICAL_PROTOTYPE_COMPARISON.md)
 
 ---

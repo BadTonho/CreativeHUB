@@ -25,8 +25,8 @@ docs/
 The first real application is located at `apps/video-editor/`. The archived
 technical prototypes remain under `prototypes/` and are not application
 dependencies. The motion and photo editor application directories are empty
-placeholders and are not wired into CMake yet; their documentation folders are
-reserved for future work.
+placeholders and are not wired into CMake yet. Their documentation folders
+contain provisional roadmaps only.
 
 ## Module boundaries
 
