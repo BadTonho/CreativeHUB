@@ -47,8 +47,11 @@ under `src/main_window/` separate implementation into translation units, but
 they still operate on the same `MainWindow` state. The repository structure
 document describes `MainWindow` as the application coordinator, not as
 independent controllers. If a change repeatedly needs state from unrelated
-workflows, consider extracting a controller with explicit inputs and outputs.
-Do this as a behavior-preserving step before adding the feature that needs it.
+workflows, identify the shared state and the boundary involved. Consider
+extracting a controller with explicit inputs and outputs only when that boundary
+would make the concrete change safer or easier to test. Keep any extraction
+behavior-preserving and covered by regression tests; it is not a prerequisite
+for every feature.
 
 ### 5. Project persistence — only when changing the project format
 
