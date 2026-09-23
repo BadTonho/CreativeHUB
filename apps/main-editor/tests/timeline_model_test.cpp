@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -233,6 +234,31 @@ int main() {
                 "A trim beyond the current segment was accepted.");
         require(trim_model.trimClip(99, 0, 1) == timeline::TrimClipResult::InvalidIndex,
                 "An invalid trim index was accepted.");
+
+        timeline::TimelineModel malformed_range_model;
+        auto malformed_snapshot = malformed_range_model.snapshot();
+        timeline::TimelineClip malformed_clip;
+        malformed_clip.source_start_frame =
+            std::numeric_limits<std::int64_t>::max() - 1;
+        malformed_clip.timeline_duration_frames = 3;
+        malformed_snapshot.tracks.front().clips.push_back(malformed_clip);
+        malformed_range_model.restore(std::move(malformed_snapshot));
+        require(malformed_range_model.trimClip(
+                    0,
+                    std::numeric_limits<std::int64_t>::max() - 1,
+                    1) == timeline::TrimClipResult::InvalidRange,
+                "Trimming a clip with an overflowing existing source range was not rejected.");
+
+        timeline::TimelineModel overflowing_move_model;
+        require(overflowing_move_model.addClip(first_metadata) ==
+                    timeline::AddClipResult::Added,
+                "The overflow move test source was not added.");
+        require(overflowing_move_model.moveClip(
+                    timeline::ClipLocation{0, 0},
+                    timeline::ClipLocation{0, 0},
+                    std::numeric_limits<std::int64_t>::max() - 30) ==
+                    timeline::MoveClipResult::InvalidPosition,
+                "Moving a clip to an overflowing timeline position was accepted.");
 
         timeline::TimelineModel remove_model;
         require(remove_model.addClip(first_metadata) == timeline::AddClipResult::Added,

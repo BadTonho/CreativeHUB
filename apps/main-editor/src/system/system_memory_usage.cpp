@@ -25,7 +25,7 @@ namespace {
 
 std::optional<std::uint64_t> parseProcBytesLine(
     const std::string& line,
-    const char* expected_name) noexcept {
+    const char* expected_name) {
     std::istringstream stream(line);
     std::string name;
     std::uint64_t value = 0;
@@ -114,40 +114,45 @@ MemorySnapshot queryMemorySnapshot() noexcept {
     }
     mach_port_deallocate(mach_task_self(), host);
 #elif defined(__linux__)
-    std::ifstream memory_info("/proc/meminfo");
-    std::string line;
-    while (std::getline(memory_info, line)) {
-        if (const auto bytes = parseProcBytesLine(line, "MemTotal:");
-            bytes.has_value()) {
-            snapshot.system_total_bytes = *bytes;
+    try {
+        std::ifstream memory_info("/proc/meminfo");
+        std::string line;
+        while (std::getline(memory_info, line)) {
+            if (const auto bytes = parseProcBytesLine(line, "MemTotal:");
+                bytes.has_value()) {
+                snapshot.system_total_bytes = *bytes;
+            }
+            if (const auto bytes = parseProcBytesLine(line, "MemAvailable:");
+                bytes.has_value()) {
+                snapshot.system_available_bytes = *bytes;
+            }
         }
-        if (const auto bytes = parseProcBytesLine(line, "MemAvailable:");
-            bytes.has_value()) {
-            snapshot.system_available_bytes = *bytes;
-        }
-    }
 
-    std::ifstream process_status("/proc/self/status");
-    while (std::getline(process_status, line)) {
-        if (const auto bytes = parseProcBytesLine(line, "VmRSS:");
-            bytes.has_value()) {
-            snapshot.process_working_set_bytes = *bytes;
+        std::ifstream process_status("/proc/self/status");
+        while (std::getline(process_status, line)) {
+            if (const auto bytes = parseProcBytesLine(line, "VmRSS:");
+                bytes.has_value()) {
+                snapshot.process_working_set_bytes = *bytes;
+            }
         }
-    }
 
-    std::ifstream private_memory("/proc/self/smaps_rollup");
-    std::uint64_t private_bytes = 0;
-    while (std::getline(private_memory, line)) {
-        if (const auto bytes = parseProcBytesLine(line, "Private_Clean:");
-            bytes.has_value()) {
-            private_bytes += *bytes;
+        std::ifstream private_memory("/proc/self/smaps_rollup");
+        std::uint64_t private_bytes = 0;
+        while (std::getline(private_memory, line)) {
+            if (const auto bytes = parseProcBytesLine(line, "Private_Clean:");
+                bytes.has_value()) {
+                private_bytes += *bytes;
+            }
+            if (const auto bytes = parseProcBytesLine(line, "Private_Dirty:");
+                bytes.has_value()) {
+                private_bytes += *bytes;
+            }
         }
-        if (const auto bytes = parseProcBytesLine(line, "Private_Dirty:");
-            bytes.has_value()) {
-            private_bytes += *bytes;
-        }
+        if (private_bytes > 0) snapshot.process_private_usage_bytes = private_bytes;
+    } catch (...) {
+        // Memory metrics are best-effort. Preserve any values already read and
+        // let the UI render unavailable fields instead of terminating on OOM.
     }
-    if (private_bytes > 0) snapshot.process_private_usage_bytes = private_bytes;
 #endif
 
     return snapshot;

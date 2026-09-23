@@ -276,8 +276,12 @@ MoveClipResult TimelineModel::moveClip(
         return MoveClipResult::InvalidIndex;
     }
     if (target_track == nullptr) return MoveClipResult::InvalidTrack;
-    if (timeline_start_frame < 0) return MoveClipResult::InvalidPosition;
     const auto clip = source_track->clips[from.clip_index];
+    if (timeline_start_frame < 0 || clip.timeline_duration_frames <= 0 ||
+        timeline_start_frame > std::numeric_limits<std::int64_t>::max() -
+            clip.timeline_duration_frames) {
+        return MoveClipResult::InvalidPosition;
+    }
     if (from.track_index == to.track_index && from.clip_index == to.clip_index &&
         clip.timeline_start_frame == timeline_start_frame) {
         return MoveClipResult::NoChange;
@@ -367,7 +371,10 @@ TrimClipResult TimelineModel::trimClip(
         return TrimClipResult::InvalidIndex;
     }
     auto& clip = track->clips[clip_index];
-    if (new_source_start_frame < clip.source_start_frame ||
+    if (clip.source_start_frame < 0 || clip.timeline_duration_frames <= 0 ||
+        clip.source_start_frame > std::numeric_limits<std::int64_t>::max() -
+            clip.timeline_duration_frames ||
+        new_source_start_frame < clip.source_start_frame ||
         new_source_start_frame < 0 || new_duration_frames <= 0 ||
         new_source_start_frame > std::numeric_limits<std::int64_t>::max() -
             new_duration_frames) {

@@ -182,9 +182,13 @@ std::int64_t requiredInteger(const QJsonObject& object,
     }
 
     const double number = value.toDouble();
+    // 2^63 is representable as a double, but INT64_MAX rounds up to that same
+    // value when converted to double. Use an exclusive upper bound so 2^63
+    // cannot reach the out-of-range floating-point-to-integer conversion.
+    constexpr double int64_upper_exclusive = 0x1p63;
     if (!std::isfinite(number) || std::floor(number) != number ||
-        number < static_cast<double>(std::numeric_limits<std::int64_t>::min()) ||
-        number > static_cast<double>(std::numeric_limits<std::int64_t>::max())) {
+        number < -int64_upper_exclusive ||
+        number >= int64_upper_exclusive) {
         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid integer value.");
     }
     return static_cast<std::int64_t>(number);
@@ -313,6 +317,11 @@ void validateDocument(const ProjectDocument& document,
             std::numeric_limits<std::int64_t>::max() -
                 clip.timeline_start_frame) {
             throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains an overflowing timeline range.");
+        }
+        if (clip.duration_frames >
+            std::numeric_limits<std::int64_t>::max() -
+                clip.source_start_frame) {
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains an overflowing media source range.");
         }
         if (!validAudioGain(clip.audio_gain)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip audio gain.");

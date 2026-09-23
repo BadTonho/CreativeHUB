@@ -867,6 +867,8 @@ add_test(
 
 add_executable(creative-suite-main-editor-autosave-tests
     autosave_manager_test.cpp
+    ../src/logging/logger.cpp
+    ../src/logging/logger.h
     ../src/project/autosave_manager.cpp
     ../src/project/autosave_manager.h
     ../src/project/project_file.cpp

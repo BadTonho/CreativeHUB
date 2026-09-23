@@ -2,6 +2,8 @@
 
 #include "project_file.h"
 
+#include "../logging/logger.h"
+
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
@@ -47,6 +49,44 @@ bool isRegularFile(const std::filesystem::path& path) {
     return std::filesystem::is_regular_file(path, error) && !error;
 }
 
+std::string pathToUtf8(const std::filesystem::path& path) {
+    const auto value = path.u8string();
+    return std::string(reinterpret_cast<const char*>(value.data()), value.size());
+}
+
+void logInvalidSnapshot(
+    const std::filesystem::path& snapshot_path,
+    const std::exception& error,
+    std::optional<int> error_code = std::nullopt) noexcept {
+    try {
+        logging::Context context{{"snapshot_path", pathToUtf8(snapshot_path)}};
+        if (error_code.has_value()) {
+            context.emplace_back("error_code", std::to_string(*error_code));
+        }
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "project",
+            "autosave_validate",
+            error.what(),
+            context);
+    } catch (...) {
+        // Invalid snapshots remain ignorable if diagnostic allocation fails.
+    }
+}
+
+void logInvalidSnapshot(const std::filesystem::path& snapshot_path) noexcept {
+    try {
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "project",
+            "autosave_validate",
+            "An autosave snapshot could not be validated due to an unknown error.",
+            {{"snapshot_path", pathToUtf8(snapshot_path)}});
+    } catch (...) {
+        // Invalid snapshots remain ignorable if diagnostic allocation fails.
+    }
+}
+
 } // namespace
 
 AutosaveManager::AutosaveManager(
@@ -73,7 +113,9 @@ const std::string& AutosaveManager::sessionId() const noexcept {
 std::filesystem::path AutosaveManager::savedProjectDirectory(
     const std::filesystem::path& project_path) {
     if (project_path.empty()) return {};
-    return std::filesystem::path(project_path.string() + ".autosave");
+    auto directory = project_path;
+    directory += std::filesystem::path(".autosave");
+    return directory;
 }
 
 std::filesystem::path AutosaveManager::currentUnsavedDirectory() const {
@@ -183,7 +225,7 @@ std::vector<AutosaveSnapshot> AutosaveManager::snapshotsInDirectory(
             if (left.modified_time != right.modified_time) {
                 return left.modified_time > right.modified_time;
             }
-            return left.path.string() > right.path.string();
+            return left.path > right.path;
         });
     return snapshots;
 }
@@ -209,7 +251,17 @@ std::vector<AutosaveSnapshot> AutosaveManager::validSnapshots(
                 try {
                     static_cast<void>(project::load(snapshot.path));
                     return false;
+                } catch (const ProjectError& error) {
+                    logInvalidSnapshot(
+                        snapshot.path,
+                        error,
+                        static_cast<int>(error.code()));
+                    return true;
+                } catch (const std::exception& error) {
+                    logInvalidSnapshot(snapshot.path, error);
+                    return true;
                 } catch (...) {
+                    logInvalidSnapshot(snapshot.path);
                     return true;
                 }
             }),

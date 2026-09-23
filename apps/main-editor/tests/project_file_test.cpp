@@ -163,6 +163,17 @@ int main(int argc, char** argv) {
 
         writeText(
             project_path,
+            R"({"format":"creative-suite.main-editor","version":9223372036854775808,"media":[],"timeline":{}})");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("An integer outside the signed 64-bit range was accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::InvalidValue,
+                    "An out-of-range JSON integer returned the wrong error category.");
+        }
+
+        writeText(
+            project_path,
             R"({"format":"creative-suite.main-editor","version":99,"media":[],"timeline":{"clips":[]}})");
         try {
             static_cast<void>(project::load(project_path));
@@ -192,6 +203,19 @@ int main(int argc, char** argv) {
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::InvalidTimeline,
                     "Negative source frame returned the wrong error category.");
+        }
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":8,"canvas":{"width":1920,"height":1080},"media":[],"bins":["Unsorted"],"timeline":{"zoom":1,"row_height":70,"tracks":[{"name":"Video 1","clips":[{"kind":"video","source":"media/first video.mkv","timeline_start_frame":0,"source_start_frame":9223372036854774784,"duration_frames":2048}],"transitions":[]}]}})");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("A media source range that overflows was accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::InvalidTimeline,
+                    "An overflowing media range returned error code " +
+                        std::to_string(static_cast<int>(error.code())) + ": " +
+                        error.what());
         }
 
         writeText(

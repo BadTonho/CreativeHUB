@@ -196,9 +196,10 @@ bool ensureDirectory(const std::filesystem::path& directory) {
 
 std::filesystem::path indexedPath(const std::filesystem::path& directory,
                                   std::size_t index) {
-    const auto current = directory / "main-editor.log";
+    auto current = directory / "main-editor.log";
     if (index == 0) return current;
-    return std::filesystem::path(current.string() + "." + std::to_string(index));
+    current += std::filesystem::path("." + std::to_string(index));
+    return current;
 }
 
 std::string formatLine(Level level,

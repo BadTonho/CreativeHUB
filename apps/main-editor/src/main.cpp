@@ -6,9 +6,15 @@
 
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <string>
 
 namespace {
+
+std::string pathToUtf8(const std::filesystem::path& path) {
+    const auto value = path.u8string();
+    return std::string(reinterpret_cast<const char*>(value.data()), value.size());
+}
 
 [[noreturn]] void handleTerminate() noexcept {
     auto& logger = logging::Logger::instance();
@@ -46,7 +52,7 @@ int main(int argc, char* argv[]) {
         "application",
         "startup",
         "Main Editor started.",
-        {{"version", "Beta 0.1.0"}, {"log_path", logger.log_path().string()}});
+        {{"version", "Beta 0.1.0"}, {"log_path", pathToUtf8(logger.log_path())}});
 
     try {
         QApplication application(argc, argv);

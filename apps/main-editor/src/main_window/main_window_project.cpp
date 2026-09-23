@@ -194,7 +194,7 @@ MainWindow::autosaveSnapshotsForSettings() const {
             if (left.modified_time != right.modified_time) {
                 return left.modified_time > right.modified_time;
             }
-            return left.path.string() > right.path.string();
+            return left.path > right.path;
         });
 
     std::vector<settings::AutosaveSnapshotItem> rows;

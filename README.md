@@ -77,7 +77,7 @@ Development is currently centered on the **Main Editor** MVP under [`apps/main-e
   - Built-in transitions: Cross Dissolve and Fade to Black with Inspector duration controls.
   - Text & caption overlays: customizable text clips with font, size, color, alignment, and transform animations.
 - [x] **Project Persistence & Safety**:
-  - Versioned `.csp` project file format with automatic schema migration (v1 through v6).
+  - Versioned `.csp` project file format with automatic migration from versions 1 through 7 to version 8.
   - Multi-level Undo / Redo history for editing actions.
   - Local structured diagnostic logging for troubleshooting.
 
@@ -116,10 +116,13 @@ Development is currently centered on the **Main Editor** MVP under [`apps/main-e
 4. **Run the Main Editor:**
    ```bash
    # On Windows:
-   .\build\apps\main-editor\Release\main-editor.exe
+   .\build\apps\main-editor\Release\creative-suite-main-editor.exe
 
-   # On Linux / macOS:
-   ./build/apps/main-editor/main-editor
+   # On Linux:
+   ./build/apps/main-editor/creative-suite-main-editor
+
+   # On macOS:
+   open build/apps/main-editor/creative-suite-main-editor.app
    ```
 
 ---

@@ -1,5 +1,6 @@
 #include "project/autosave_manager.h"
 #include "project/project_file.h"
+#include "logging/logger.h"
 
 #include <QCoreApplication>
 
@@ -41,6 +42,11 @@ int main(int argc, char* argv[]) {
     try {
         const auto project_path = root / "sample.csp";
         std::filesystem::create_directories(root);
+        logging::Options log_options;
+        log_options.minimum_level = logging::Level::Debug;
+        auto& logger = logging::Logger::instance();
+        require(logger.initialize(root / "logs", log_options),
+                "The autosave test logger could not be initialized.");
         const auto original = document();
         project::save(project_path, original);
         const auto original_contents = readFile(project_path);
@@ -77,6 +83,11 @@ int main(int argc, char* argv[]) {
         invalid_file.close();
         require(manager.validSnapshotsForProject(project_path).size() == 5,
                 "The Settings snapshot list included an invalid snapshot.");
+        const auto validation_log = readFile(logger.log_path());
+        require(validation_log.find("operation=\"autosave_validate\"") !=
+                    std::string::npos &&
+                    validation_log.find("snapshot-invalid.csp") != std::string::npos,
+                "An invalid recovery snapshot was omitted without an actionable log entry.");
         require(manager.recoverableSnapshotsForProject(project_path).size() == 5,
                 "An invalid snapshot was offered for recovery.");
         std::ofstream damaged_project(project_path, std::ios::binary | std::ios::trunc);
@@ -87,6 +98,15 @@ int main(int argc, char* argv[]) {
         manager.removeSnapshotsForProject(project_path);
         require(manager.validSnapshotsForProject(project_path).empty(),
                 "Saved-project snapshot cleanup did not remove the recovery set.");
+
+        const auto unicode_directory = root /
+            std::filesystem::path(u8"Project-\U0001F3AC");
+        std::filesystem::create_directories(unicode_directory);
+        const auto unicode_project_path = unicode_directory / "sample.csp";
+        project::save(unicode_project_path, original);
+        manager.saveSnapshot(original, unicode_project_path, 5);
+        require(manager.validSnapshotsForProject(unicode_project_path).size() == 1,
+                "A saved project under a Unicode path did not receive an autosave snapshot.");
 
         project::AutosaveManager unsaved_manager(root / "recovery", "session-b");
         for (int index = 0; index < 6; ++index) {

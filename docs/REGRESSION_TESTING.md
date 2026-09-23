@@ -18,6 +18,10 @@ The CTest suite is the required automated gate. A failed test blocks the
 change until the cause is understood and fixed or the expected behavior is
 updated intentionally.
 
+The GitHub Actions workflow runs the same build and CTest gate on Windows,
+macOS, and Linux. Local results only validate the operating system on which
+they were run; cross-platform support is validated when all matrix jobs pass.
+
 ## Automated coverage
 
 | Area | Test coverage |
@@ -36,6 +40,8 @@ updated intentionally.
 | Preview performance metrics | Deterministic counter/timing aggregation, bounded p95/p99 timing histograms, decoded/stale-frame counters, playback delivery-rate derivation, failure counters, cache state, workload context, process-resource sampling, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON v8, video/image/text kind round-trip, timeline zoom and row-height persistence, version 1-7 migration with legacy media defaulting to video, invalid input, offline media, transactional open |
+| Project validation | Out-of-range JSON integers, overflowing timeline ranges, and overflowing media-source ranges are rejected before reaching editing code |
+| Autosave and recovery | Retention, Unicode project paths, recovery filtering, and actionable log entries for malformed snapshots |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode and icon-scale persistence, bounded 50%-150% icon resizing, seven-character media and folder labels, full-name inline editing, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |

@@ -34,8 +34,9 @@ std::string contextValue(const std::string& line, const std::string& key) {
 
 std::filesystem::path uniqueTestDirectory() {
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-    return std::filesystem::temp_directory_path() /
-        ("creative-suite-logger-test-" + std::to_string(stamp));
+    auto directory = std::filesystem::path(u8"creative-suite-logger-test-\U0001F3AC");
+    directory += std::filesystem::path("-" + std::to_string(stamp));
+    return std::filesystem::temp_directory_path() / directory;
 }
 
 } // namespace
@@ -121,11 +122,17 @@ int main() {
         }
 
         require(std::filesystem::exists(logger.log_path()), "Current log file is missing.");
-        require(std::filesystem::exists(logger.log_path().string() + ".1"),
+        auto first_rotated_log = logger.log_path();
+        first_rotated_log += ".1";
+        auto second_rotated_log = logger.log_path();
+        second_rotated_log += ".2";
+        auto third_rotated_log = logger.log_path();
+        third_rotated_log += ".3";
+        require(std::filesystem::exists(first_rotated_log),
                 "First rotated log file is missing.");
-        require(std::filesystem::exists(logger.log_path().string() + ".2"),
+        require(std::filesystem::exists(second_rotated_log),
                 "Second rotated log file is missing.");
-        require(!std::filesystem::exists(logger.log_path().string() + ".3"),
+        require(!std::filesystem::exists(third_rotated_log),
                 "Log rotation exceeded the configured file count.");
     } catch (const std::exception& error) {
         std::error_code cleanup_error;
