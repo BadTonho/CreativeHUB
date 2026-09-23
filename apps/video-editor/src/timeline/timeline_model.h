@@ -78,6 +78,14 @@ struct TimelineTransition {
     friend bool operator==(const TimelineTransition&, const TimelineTransition&) = default;
 };
 
+struct TransitionSelection {
+    TrackId track_id = 0;
+    ClipId from_clip_id = 0;
+    ClipId to_clip_id = 0;
+
+    friend bool operator==(const TransitionSelection&, const TransitionSelection&) = default;
+};
+
 struct TimelineTrack {
     TrackId track_id = 0;
     std::string name;

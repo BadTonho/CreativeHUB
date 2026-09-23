@@ -143,6 +143,23 @@ public:
                         !window.active_timeline_clip_id_.has_value() &&
                         !window.playback_is_playing_,
                     "A stale activation for a removed clip was not discarded safely.");
+
+            window.setActiveTimelineSelection(timeline::ClipLocation{1, 0});
+            window.handleTimelineClipMoveAt(1, 0, 0, 0);
+            require(window.active_timeline_track_id_ == 1 &&
+                        window.active_timeline_clip_id_ == 2 &&
+                        window.active_timeline_track_index_cache_ == 0 &&
+                        window.active_timeline_clip_index_cache_ == 0,
+                    "A service-backed move did not update the MainWindow selection projection.");
+            require(window.project_dirty_,
+                    "A service-backed move did not update the project dirty state.");
+
+            window.undoTimelineEdit();
+            require(window.active_timeline_track_id_ == 2 &&
+                        window.active_timeline_clip_id_ == 2 &&
+                        window.active_timeline_track_index_cache_ == 1 &&
+                        window.timeline_model_.locateClip(2) == timeline::ClipLocation{1, 0},
+                    "Undo did not restore the service-backed move and selection.");
         }
 
         std::error_code cleanup_error;

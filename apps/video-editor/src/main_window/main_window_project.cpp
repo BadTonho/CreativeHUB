@@ -443,7 +443,7 @@ void MainWindow::clearProjectState() {
     }
 
     timeline_model_.clear();
-    timeline_history_.clear();
+    timeline_command_service_.clearHistory();
     clearActiveTimelineSelection();
     preserved_timeline_playhead_frame_.reset();
     playback_frame_index_ = 0;
@@ -891,7 +891,7 @@ void MainWindow::applyLoadedProject(
     }
 
     timeline_model_.restore(std::move(timeline_snapshot));
-    timeline_history_.clear();
+    timeline_command_service_.clearHistory();
     media_items_ = std::move(media_items);
     bin_paths_ = loaded_document.bins.empty()
         ? std::vector<std::string>{"Unsorted"}

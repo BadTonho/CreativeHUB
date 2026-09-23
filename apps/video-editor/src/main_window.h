@@ -5,6 +5,8 @@
 #include "media/media_library.h"
 #include "media/video_metadata.h"
 #include "media/video_probe.h"
+#include "application/editor_session.h"
+#include "application/timeline_command_service.h"
 #include "playback/playback_worker.h"
 #include "playback/playback_frame_mailbox.h"
 #include "project/autosave_manager.h"
@@ -80,7 +82,8 @@ protected:
 private:
     friend class MainWindowIntegrationTest;
 
-    struct ImportedMedia;
+    using ImportedMedia = application::ImportedMedia;
+    using ActiveTransition = timeline::TransitionSelection;
     struct TimelineControls;
 
     enum class WorkspacePage {
@@ -241,9 +244,18 @@ private:
     void removeSelectedTransition();
     void undoTimelineEdit();
     void redoTimelineEdit();
-    [[nodiscard]] timeline::EditState captureTimelineEditState() const;
-    void restoreTimelineEditState(timeline::EditState state, const char* operation);
+    void synchronizeTimelineSessionSelection();
+    [[nodiscard]] timeline::EditState captureTimelineEditState();
     void recordTimelineEdit(timeline::EditState state);
+    void applyTimelineEditResult(
+        const application::TimelineEditResult& result,
+        bool stop_playback = true);
+    template <typename Command>
+    [[nodiscard]] application::TimelineEditResult executeTimelineCommand(
+        const Command& command) {
+        synchronizeTimelineSessionSelection();
+        return timeline_command_service_.execute(command);
+    }
     void updateHistoryActions();
     void updateTimelineState();
     void applyTimelineZoom(double factor);
@@ -314,14 +326,6 @@ private:
         std::int64_t frame_index,
         bool show_cached_frame,
         bool preserve_timeline_playhead = false);
-
-    struct ImportedMedia {
-        media::VideoMetadata metadata;
-        media::VideoFrame first_frame;
-        std::string display_name;
-        std::string bin_path = "Unsorted";
-        bool offline = false;
-    };
 
     struct PendingClipActivation {
         std::int64_t target_frame = 0;
@@ -410,32 +414,32 @@ private:
     timeline::TimelineWidget* timeline_widget_ = nullptr;
     timeline::TimelineTrackHeaderOverlay* timeline_header_overlay_ = nullptr;
     QScrollArea* timeline_scroll_ = nullptr;
-    std::vector<ImportedMedia> media_items_;
-    std::vector<std::string> bin_paths_{"Unsorted"};
-    timeline::TimelineModel timeline_model_;
-    timeline::TimelineHistory timeline_history_;
+    application::EditorSession editor_session_;
+    application::TimelineCommandService timeline_command_service_{editor_session_};
+    std::vector<ImportedMedia>& media_items_ = editor_session_.mediaItemsForUi();
+    std::vector<std::string>& bin_paths_ = editor_session_.binPathsForUi();
+    timeline::TimelineModel& timeline_model_ = editor_session_.legacyTimelineForUi();
     // Stable identities are the source of truth for selection. The index
     // fields below remain as short-lived presentation/worker coordinates.
-    std::optional<timeline::TrackId> active_timeline_track_id_;
-    std::optional<timeline::ClipId> active_timeline_clip_id_;
+    std::optional<timeline::TrackId>& active_timeline_track_id_ =
+        editor_session_.selectionForUi().active_track_id;
+    std::optional<timeline::ClipId>& active_timeline_clip_id_ =
+        editor_session_.selectionForUi().active_clip_id;
     std::optional<std::size_t> active_timeline_track_index_cache_;
     std::optional<std::size_t> active_timeline_clip_index_cache_;
-    std::optional<std::int64_t> preserved_timeline_playhead_frame_;
-    struct ActiveTransition {
-        timeline::TrackId track_id = 0;
-        timeline::ClipId from_clip_id = 0;
-        timeline::ClipId to_clip_id = 0;
-
-        friend bool operator==(const ActiveTransition&, const ActiveTransition&) = default;
-    };
-    std::optional<ActiveTransition> active_transition_;
+    std::optional<std::int64_t>& preserved_timeline_playhead_frame_ =
+        editor_session_.preservedPlayheadFrameForUi();
+    std::optional<ActiveTransition>& active_transition_ =
+        editor_session_.selectionForUi().active_transition;
     std::optional<PendingClipActivation> pending_clip_activation_;
-    std::optional<std::filesystem::path> project_path_;
-    std::optional<project::ProjectDocument> saved_project_document_;
+    std::optional<std::filesystem::path>& project_path_ =
+        editor_session_.projectPathForUi();
+    std::optional<project::ProjectDocument>& saved_project_document_ =
+        editor_session_.savedProjectDocumentForUi();
     std::optional<project::ProjectDocument> last_autosaved_document_;
     std::optional<timeline::EditState> pending_audio_edit_;
     std::optional<timeline::EditState> pending_transform_edit_;
-    bool project_dirty_ = false;
+    bool& project_dirty_ = editor_session_.projectDirtyForUi();
     WorkspacePage workspace_page_ = WorkspacePage::Edit;
     bool initial_window_layout_pending_ = false;
     media::VideoProbe video_probe_;
@@ -444,7 +448,7 @@ private:
     QThread playback_thread_;
     playback::PlaybackWorker* playback_worker_ = nullptr;
     playback::PlaybackFrameMailbox playback_frame_mailbox_;
-    std::int64_t playback_frame_index_ = 0;
+    std::int64_t& playback_frame_index_ = editor_session_.playheadFrameForUi();
     quint64 playback_generation_ = 0;
     bool playback_is_playing_ = false;
     std::array<std::uint8_t, 4> text_color_{255, 255, 255, 255};

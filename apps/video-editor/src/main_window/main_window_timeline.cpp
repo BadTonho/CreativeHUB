@@ -286,36 +286,21 @@ void MainWindow::addTextClipAt(qint64 requested_track_index, qint64 requested_fr
     const auto start_frame = std::max<std::int64_t>(0, requested_frame);
 
     try {
-        const auto before = captureTimelineEditState();
-        const auto result = timeline_model_.addTextClip(
-            track_index, start_frame, duration_frames, frame_rate);
-        if (result == timeline::AddClipResult::Overlap) {
+        const auto result = executeTimelineCommand(application::AddTextClipCommand{
+            timeline_model_.tracks()[track_index].track_id,
+            start_frame,
+            duration_frames,
+            frame_rate});
+        if (!result.changed() && result.reason == application::EditReason::Overlap) {
             statusBar()->showMessage("A text clip already occupies that range.");
             return;
         }
-        if (result != timeline::AddClipResult::Added) {
+        if (!result.changed()) {
             statusBar()->showMessage("The text clip could not be added.");
             return;
         }
 
-        pending_clip_activation_.reset();
-        ++playback_generation_;
-        playback_is_playing_ = false;
-        recordTimelineEdit(before);
-        const auto& clips = timeline_model_.tracks()[track_index].clips;
-        const auto inserted = std::find_if(
-            clips.begin(), clips.end(),
-            [start_frame, duration_frames](const timeline::TimelineClip& clip) {
-                return clip.kind == timeline::ClipKind::Text &&
-                    clip.timeline_start_frame == start_frame &&
-                    clip.timeline_duration_frames == duration_frames;
-            });
-        if (inserted != clips.end()) {
-            setActiveTimelineSelection(timeline::ClipLocation{
-                track_index,
-                static_cast<std::size_t>(std::distance(clips.begin(), inserted))});
-            playback_frame_index_ = 0;
-        }
+        applyTimelineEditResult(result, false);
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -1052,31 +1037,30 @@ std::int64_t MainWindow::timelinePlayheadFrame() const noexcept {
     return clip.timeline_start_frame + local_frame;
 }
 
-timeline::EditState MainWindow::captureTimelineEditState() const {
-    timeline::EditState state;
-    state.timeline = timeline_model_.snapshot();
-    state.active_track_id = active_timeline_track_id_;
-    state.active_clip_id = active_timeline_clip_id_;
-    if (!state.active_clip_id.has_value() && active_timeline_track_index_cache_.has_value() &&
+void MainWindow::synchronizeTimelineSessionSelection() {
+    if (!active_timeline_clip_id_.has_value() && active_timeline_track_index_cache_.has_value() &&
         active_timeline_clip_index_cache_.has_value() &&
         *active_timeline_track_index_cache_ < timeline_model_.trackCount() &&
         *active_timeline_clip_index_cache_ < timeline_model_.clipCount(*active_timeline_track_index_cache_)) {
         const auto& track = timeline_model_.tracks()[*active_timeline_track_index_cache_];
-        state.active_track_id = track.track_id;
-        state.active_clip_id = track.clips[*active_timeline_clip_index_cache_].clip_id;
+        active_timeline_track_id_ = track.track_id;
+        active_timeline_clip_id_ = track.clips[*active_timeline_clip_index_cache_].clip_id;
     }
+    editor_session_.selectionForUi().selected_source_path.reset();
     if (hasSelectedMedia()) {
-        state.selected_source_path = normalizedPath(
-        media_items_[*selectedMediaIndex()]
-                .metadata.source_path);
+        editor_session_.selectionForUi().selected_source_path = normalizedPath(
+            media_items_[*selectedMediaIndex()].metadata.source_path);
     }
-    state.playhead_frame = playback_frame_index_;
-    return state;
+}
+
+timeline::EditState MainWindow::captureTimelineEditState() {
+    synchronizeTimelineSessionSelection();
+    return editor_session_.captureEditState();
 }
 
 void MainWindow::recordTimelineEdit(timeline::EditState state) {
     try {
-        timeline_history_.recordBeforeEdit(std::move(state));
+        timeline_command_service_.recordLegacyEdit(std::move(state));
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
             logging::Level::Error,
@@ -1089,8 +1073,53 @@ void MainWindow::recordTimelineEdit(timeline::EditState state) {
 }
 
 void MainWindow::updateHistoryActions() {
-    if (undo_action_ != nullptr) undo_action_->setEnabled(timeline_history_.canUndo());
-    if (redo_action_ != nullptr) redo_action_->setEnabled(timeline_history_.canRedo());
+    if (undo_action_ != nullptr) undo_action_->setEnabled(timeline_command_service_.canUndo());
+    if (redo_action_ != nullptr) redo_action_->setEnabled(timeline_command_service_.canRedo());
+}
+
+void MainWindow::applyTimelineEditResult(
+    const application::TimelineEditResult& result,
+    bool stop_playback) {
+    if (!result.changed()) return;
+    active_timeline_track_id_ = result.selection.active_track_id;
+    active_timeline_clip_id_ = result.selection.active_clip_id;
+    active_transition_ = result.selection.active_transition;
+    playback_frame_index_ = std::max<std::int64_t>(0, result.playhead_frame);
+    preserved_timeline_playhead_frame_ = result.preserved_playhead_frame;
+    synchronizeActiveTimelineSelection();
+    if (result.selection.selected_source_path.has_value() && media_list_ != nullptr) {
+        const auto selected_path = normalizedPath(*result.selection.selected_source_path);
+        const auto selected_media = std::find_if(
+            media_items_.begin(), media_items_.end(),
+            [&selected_path](const ImportedMedia& item) {
+                return normalizedPath(item.metadata.source_path) == selected_path;
+            });
+        if (selected_media != media_items_.end()) {
+            const auto media_index = static_cast<qint64>(
+                std::distance(media_items_.begin(), selected_media));
+            const QSignalBlocker blocker(media_list_);
+            for (int row = 0; row < media_list_->count(); ++row) {
+                auto* item = media_list_->item(row);
+                if (item != nullptr &&
+                    item->data(media_browser_ui::kMediaIndexRole).toLongLong() == media_index) {
+                    media_list_->setCurrentItem(item);
+                    break;
+                }
+            }
+        }
+    }
+    if (result.invalidate_playback) {
+        pending_clip_activation_.reset();
+        ++playback_generation_;
+        playback_is_playing_ = false;
+        if (playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_, stop_playback ? "stop" : "pause",
+                Qt::QueuedConnection);
+        }
+    }
+    updateHistoryActions();
+    updateProjectDirtyState();
 }
 
 void MainWindow::beginAudioEdit() {
@@ -1250,42 +1279,32 @@ void MainWindow::addSelectedMediaToTimeline() {
         return;
     }
     try {
-        const auto before_edit = captureTimelineEditState();
         const auto track_index = active_timeline_track_index_cache_.value_or(0);
         if (track_index >= timeline_model_.trackCount()) {
             statusBar()->showMessage("The selected track is unavailable.");
             return;
         }
-        std::int64_t track_end = 0;
-        for (const auto& clip : timeline_model_.tracks()[track_index].clips) {
-            track_end = std::max(
-                track_end,
-                clip.timeline_start_frame + clip.timeline_duration_frames);
-        }
-        switch (timeline_model_.addClip(track_index, selected.metadata, track_end)) {
-        case timeline::AddClipResult::Added:
-            recordTimelineEdit(before_edit);
-            setActiveTimelineSelection(timeline::ClipLocation{
-                track_index,
-                timeline_model_.tracks()[track_index].clips.size() - 1});
-            playback_frame_index_ = 0;
-            updateMediaDetails(static_cast<int>(*selected_index));
+        const auto result = executeTimelineCommand(application::AddMediaClipCommand{
+            selected.metadata.source_path,
+            timeline_model_.tracks()[track_index].track_id,
+            std::nullopt});
+        if (result.changed()) {
+            applyTimelineEditResult(result);
             updateTimelineState();
             updatePlaybackControls();
             updatePlaybackStatus();
-            if (track_index == 0) {
+            updateMediaDetails(static_cast<int>(*selected_index));
+            if (track_index == 0 && active_timeline_clip_index_cache_.has_value()) {
                 activateTimelineClipAt(
-                    track_index,
-                    *active_timeline_clip_index_cache_,
-                    0,
-                    false);
+                    track_index, *active_timeline_clip_index_cache_, 0, false);
             } else {
                 preview_widget_->setFrame(selected.first_frame);
                 sendCompositionToWorker();
             }
             statusBar()->showMessage("Media added to the timeline.");
-            break;
-        case timeline::AddClipResult::InvalidTimingMetadata: {
+            return;
+        }
+        if (result.reason == application::EditReason::InvalidTimingMetadata) {
             const auto path = pathToUtf8(selected.metadata.source_path);
             logging::Logger::instance().log(
                 logging::Level::Error,
@@ -1298,9 +1317,13 @@ void MainWindow::addSelectedMediaToTimeline() {
                 "Could not add media",
                 "This media does not contain enough timing metadata for the timeline.");
             statusBar()->showMessage("Could not add media to the timeline.");
-            break;
+            return;
         }
+        if (result.reason == application::EditReason::OfflineMedia) {
+            statusBar()->showMessage("Offline media cannot be added to the timeline.");
+            return;
         }
+        statusBar()->showMessage("Could not add media to the timeline.");
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
             logging::Level::Error,
@@ -1379,18 +1402,19 @@ void MainWindow::handleMediaDropAt(
     }
 
     try {
-        const auto before = captureTimelineEditState();
-        const auto result = timeline_model_.addClip(
-            static_cast<std::size_t>(track_index),
-            media->metadata,
-            timeline_frame);
-        if (result == timeline::AddClipResult::Overlap ||
-            result == timeline::AddClipResult::InvalidPosition ||
-            result == timeline::AddClipResult::InvalidTrack) {
+        const auto target_track = static_cast<std::size_t>(track_index);
+        const auto result = executeTimelineCommand(application::AddMediaClipCommand{
+            media->metadata.source_path,
+            timeline_model_.tracks()[target_track].track_id,
+            timeline_frame});
+        if (!result.changed() &&
+            (result.reason == application::EditReason::Overlap ||
+             result.reason == application::EditReason::InvalidPosition ||
+             result.reason == application::EditReason::InvalidTarget)) {
             statusBar()->showMessage("The media cannot be placed at that position.");
             return;
         }
-        if (result == timeline::AddClipResult::InvalidTimingMetadata) {
+        if (result.reason == application::EditReason::InvalidTimingMetadata) {
             logging::Logger::instance().log(
                 logging::Level::Error,
                 "timeline",
@@ -1405,28 +1429,14 @@ void MainWindow::handleMediaDropAt(
                 "This media does not contain enough timing metadata for the timeline.");
             return;
         }
+        if (!result.changed()) return;
 
-        recordTimelineEdit(before);
-        const auto target_track = static_cast<std::size_t>(track_index);
+        applyTimelineEditResult(result);
         {
             const QSignalBlocker blocker(media_list_);
             media_list_->setCurrentRow(static_cast<int>(media_index));
         }
         updateMediaDetails(static_cast<int>(media_index));
-        const auto inserted = std::find_if(
-            timeline_model_.tracks()[target_track].clips.begin(),
-            timeline_model_.tracks()[target_track].clips.end(),
-            [&path, timeline_frame](const timeline::TimelineClip& clip) {
-                return clip.source_path == path &&
-                    clip.timeline_start_frame == timeline_frame;
-            });
-        if (inserted == timeline_model_.tracks()[target_track].clips.end()) {
-            throw std::runtime_error("The dropped timeline clip could not be located.");
-        }
-        setActiveTimelineSelection(timeline::ClipLocation{
-            target_track,
-            static_cast<std::size_t>(std::distance(
-                timeline_model_.tracks()[target_track].clips.begin(), inserted))});
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -1646,33 +1656,23 @@ void MainWindow::handleTimelineTransitionAddRequestedAt(
     }
 
     try {
-        const auto before = captureTimelineEditState();
-        pending_clip_activation_.reset();
-        ++playback_generation_;
-        playback_is_playing_ = false;
-        if (playback_worker_ != nullptr) {
-            QMetaObject::invokeMethod(
-                playback_worker_, "pause", Qt::QueuedConnection);
-        }
-
-        const auto result = timeline_model_.addTransition(
-            track,
-            from,
-            to,
-            kind == 0
-                ? timeline::TransitionKind::CrossDissolve
-                : timeline::TransitionKind::FadeToBlack,
-            15);
-        if (result != timeline::TransitionMutationResult::Added) {
+        const auto& timeline_track = timeline_model_.tracks()[track];
+        const auto result = executeTimelineCommand(application::AddTransitionCommand{
+            timeline_track.track_id,
+            timeline_track.clips[from].clip_id,
+            timeline_track.clips[to].clip_id,
+            kind == 0 ? timeline::TransitionKind::CrossDissolve
+                      : timeline::TransitionKind::FadeToBlack,
+            15});
+        if (!result.changed()) {
+            if (result.status == application::EditStatus::NoChange) {
+                statusBar()->showMessage("A transition is already present here.");
+                return;
+            }
             statusBar()->showMessage("The transition cannot be added here.");
             return;
         }
-
-        active_transition_ = ActiveTransition{
-            timeline_model_.tracks()[track].track_id,
-            timeline_model_.tracks()[track].clips[from].clip_id,
-            timeline_model_.tracks()[track].clips[to].clip_id};
-        recordTimelineEdit(before);
+        applyTimelineEditResult(result, false);
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -1719,23 +1719,16 @@ void MainWindow::handleTimelineTransitionRemoveRequestedAt(
     }
 
     try {
-        const auto before = captureTimelineEditState();
-        pending_clip_activation_.reset();
-        ++playback_generation_;
-        playback_is_playing_ = false;
-        if (playback_worker_ != nullptr) {
-            QMetaObject::invokeMethod(
-                playback_worker_, "pause", Qt::QueuedConnection);
-        }
-
-        if (timeline_model_.removeTransition(track, from, to) !=
-            timeline::TransitionMutationResult::Removed) {
+        const auto& timeline_track = timeline_model_.tracks()[track];
+        const auto result = executeTimelineCommand(application::RemoveTransitionCommand{
+            timeline_track.track_id,
+            timeline_track.clips[from].clip_id,
+            timeline_track.clips[to].clip_id});
+        if (!result.changed()) {
             statusBar()->showMessage("No transition is present at this junction.");
             return;
         }
-
-        active_transition_.reset();
-        recordTimelineEdit(before);
+        applyTimelineEditResult(result, false);
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -1788,31 +1781,22 @@ void MainWindow::applyTransitionSettings() {
     }
 
     try {
-        const auto before = captureTimelineEditState();
-        pending_clip_activation_.reset();
-        ++playback_generation_;
-        playback_is_playing_ = false;
-        if (playback_worker_ != nullptr) {
-            QMetaObject::invokeMethod(
-                playback_worker_, "pause", Qt::QueuedConnection);
-        }
-
         const auto kind = transition_type_combo_->currentData().toInt() == 1
             ? timeline::TransitionKind::FadeToBlack
             : timeline::TransitionKind::CrossDissolve;
-        const auto result = timeline_model_.updateTransition(
-            *track_index,
-            from_location->clip_index,
-            to_location->clip_index,
+        const auto result = executeTimelineCommand(application::UpdateTransitionCommand{
+            selection.track_id,
+            selection.from_clip_id,
+            selection.to_clip_id,
             kind,
-            transition_duration_spin_->value());
-        if (result != timeline::TransitionMutationResult::Updated) {
+            transition_duration_spin_->value()});
+        if (!result.changed()) {
             statusBar()->showMessage("The transition settings were not changed.");
             updateInspector();
             return;
         }
 
-        recordTimelineEdit(before);
+        applyTimelineEditResult(result, false);
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -1880,26 +1864,17 @@ void MainWindow::handleTimelineClipMoveAt(
     const auto clip_id = timeline_model_.tracks()[location.track_index]
         .clips[location.clip_index].clip_id;
     try {
-        const auto before = captureTimelineEditState();
-        pending_clip_activation_.reset();
-        ++playback_generation_;
-        playback_is_playing_ = false;
-        if (playback_worker_ != nullptr) {
-            QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
-        }
-        const auto result = timeline_model_.moveClip(
-            location,
-            timeline::ClipLocation{static_cast<std::size_t>(to_track), 0},
-            timeline_start_frame);
-        if (result != timeline::MoveClipResult::Moved) {
+        const auto target_track = static_cast<std::size_t>(to_track);
+        const auto result = executeTimelineCommand(application::MoveClipCommand{
+            clip_id,
+            timeline_model_.tracks()[target_track].track_id,
+            timeline_start_frame});
+        if (!result.changed()) {
+            if (result.status == application::EditStatus::NoChange) return;
             statusBar()->showMessage("The clip cannot be moved to that position.");
             return;
         }
-        recordTimelineEdit(before);
-        const auto new_location = timeline_model_.locateClip(clip_id);
-        if (new_location.has_value()) {
-            setActiveTimelineSelection(*new_location);
-        }
+        applyTimelineEditResult(result);
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -1923,15 +1898,6 @@ void MainWindow::handleTimelineClipSplitAt(
     qint64 track_index,
     qint64 clip_index,
     qint64 local_frame) {
-    if (track_index == 0 &&
-        clip_index >= 0 &&
-        clip_index < static_cast<qint64>(timeline_model_.clipCount(0)) &&
-        timeline::isMediaClipKind(
-            timeline_model_.tracks()[0].clips[static_cast<std::size_t>(clip_index)].kind)) {
-        active_timeline_track_id_ = timeline_model_.tracks().front().track_id;
-        handleTimelineClipSplit(clip_index, local_frame);
-        return;
-    }
     if (track_index < 0 || clip_index < 0 || local_frame < 0 ||
         track_index >= static_cast<qint64>(timeline_model_.trackCount()) ||
         clip_index >= static_cast<qint64>(
@@ -1940,27 +1906,25 @@ void MainWindow::handleTimelineClipSplitAt(
     }
     const auto track = static_cast<std::size_t>(track_index);
     const auto clip = static_cast<std::size_t>(clip_index);
+    const auto source_clip = timeline_model_.tracks()[track].clips[clip];
     try {
-        const auto before = captureTimelineEditState();
-        pending_clip_activation_.reset();
-        ++playback_generation_;
-        playback_is_playing_ = false;
-        if (playback_worker_ != nullptr) {
-            QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
-        }
-        if (timeline_model_.splitClip(track, clip, local_frame) !=
-            timeline::SplitClipResult::Split) {
+        const auto result = executeTimelineCommand(application::SplitClipCommand{
+            source_clip.clip_id, local_frame});
+        if (!result.changed()) {
             statusBar()->showMessage("A clip cannot be split at its boundary.");
             return;
         }
-        recordTimelineEdit(before);
-        setActiveTimelineSelection(timeline::ClipLocation{track, clip + 1});
-        playback_frame_index_ = 0;
+        applyTimelineEditResult(result);
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
         sendCompositionToWorker();
-        const auto& right_clip = timeline_model_.tracks()[track].clips[clip + 1];
+        if (!active_timeline_track_index_cache_.has_value() ||
+            !active_timeline_clip_index_cache_.has_value()) {
+            return;
+        }
+        const auto& right_clip = timeline_model_.tracks()[*active_timeline_track_index_cache_]
+            .clips[*active_timeline_clip_index_cache_];
         const auto media_item = std::find_if(
             media_items_.begin(),
             media_items_.end(),
@@ -1969,7 +1933,24 @@ void MainWindow::handleTimelineClipSplitAt(
                        normalizedPath(right_clip.source_path);
             });
         if (media_item != media_items_.end() && !media_item->offline) {
-            activateTimelineClipAt(track, clip + 1, 0, false);
+            const auto media_index = static_cast<int>(
+                std::distance(media_items_.begin(), media_item));
+            {
+                const QSignalBlocker blocker(media_list_);
+                media_list_->setCurrentRow(media_index);
+            }
+            updateMediaDetails(media_index);
+            activateTimelineClipAt(
+                *active_timeline_track_index_cache_,
+                *active_timeline_clip_index_cache_, 0, false);
+        } else if (source_clip.kind == timeline::ClipKind::Text && playback_worker_ != nullptr) {
+            QMetaObject::invokeMethod(
+                playback_worker_,
+                "renderCompositionFrame",
+                Qt::QueuedConnection,
+                Q_ARG(qint64, static_cast<qint64>(timelinePlayheadFrame())),
+                Q_ARG(qint64, static_cast<qint64>(playback_frame_index_)),
+                Q_ARG(quint64, playback_generation_));
         }
         statusBar()->showMessage("Clip split at the playhead.");
     } catch (const std::exception& error) {
@@ -2008,32 +1989,27 @@ void MainWindow::handleTimelineClipTrimAt(
         return;
     }
 
+    const auto clip_id = timeline_model_.tracks()[track].clips[clip_index_value].clip_id;
     const auto edge = static_cast<timeline::ClipEdge>(edge_value);
     const auto mode = static_cast<timeline::ClipEdgeEditMode>(mode_value);
-    const auto playhead_before = timelinePlayheadFrame();
-    const auto playback_frame_before = playback_frame_index_;
     try {
-        const auto before = captureTimelineEditState();
-        const auto outcome = timeline::applyClipEdgeTrim(
-            timeline_model_,
-            timeline::ClipLocation{track, clip_index_value},
+        const auto result = executeTimelineCommand(application::TrimClipEdgeCommand{
+            clip_id,
             edge,
             boundary_frame,
             mode,
-            playhead_before,
-            playback_frame_before);
-        if (outcome.result == timeline::TrimClipResult::NoChange) return;
-        if (outcome.result != timeline::TrimClipResult::Trimmed) {
+            timelinePlayheadFrame(),
+            playback_frame_index_});
+        if (result.status == application::EditStatus::NoChange) return;
+        if (!result.changed()) {
             statusBar()->showMessage("The clip edge cannot move any farther.");
             return;
         }
-        recordTimelineEdit(before);
-        if (!outcome.selection.has_value()) return;
-        const auto edited_location = outcome.selection->location;
-        setActiveTimelineSelection(edited_location);
-        playback_frame_index_ = outcome.selection->playback_frame;
-        preserved_timeline_playhead_frame_ =
-            outcome.selection->preserved_playhead_frame;
+        applyTimelineEditResult(result);
+        if (!active_timeline_track_index_cache_.has_value() ||
+            !active_timeline_clip_index_cache_.has_value()) return;
+        const auto edited_location = timeline::ClipLocation{
+            *active_timeline_track_index_cache_, *active_timeline_clip_index_cache_};
         const auto& edited_clip = timeline_model_.tracks()[edited_location.track_index]
             .clips[edited_location.clip_index];
         updateTimelineState();
@@ -2211,125 +2187,18 @@ void MainWindow::clearTimeline() {
     }
 }
 
-void MainWindow::restoreTimelineEditState(
-    timeline::EditState state,
-    const char* operation) {
-    try {
-        pending_clip_activation_.reset();
-        ++playback_generation_;
-        playback_is_playing_ = false;
-        if (playback_worker_ != nullptr) {
-            QMetaObject::invokeMethod(
-                playback_worker_,
-                "stop",
-                Qt::QueuedConnection);
-        }
-
-        timeline_model_.restore(std::move(state.timeline));
-        clearActiveTimelineSelection();
-        active_timeline_track_id_ = state.active_track_id;
-        active_timeline_clip_id_ = state.active_clip_id;
-        synchronizeActiveTimelineSelection();
-
-        playback_frame_index_ = std::max<std::int64_t>(0, state.playhead_frame);
-        if (active_timeline_track_index_cache_.has_value() &&
-            active_timeline_clip_index_cache_.has_value()) {
-            const auto& active_clip = timeline_model_.tracks()
-                [*active_timeline_track_index_cache_].clips[*active_timeline_clip_index_cache_];
-            playback_frame_index_ = std::clamp<std::int64_t>(
-                playback_frame_index_,
-                0,
-                std::max<std::int64_t>(0, active_clip.timeline_duration_frames - 1));
-        } else {
-            playback_frame_index_ = 0;
-        }
-
-        std::optional<std::size_t> selected_media_index;
-        if (state.selected_source_path.has_value()) {
-            const auto selected_path = normalizedPath(*state.selected_source_path);
-            const auto selected_media = std::find_if(
-                media_items_.begin(),
-                media_items_.end(),
-                [&selected_path](const ImportedMedia& item) {
-                    return normalizedPath(item.metadata.source_path) == selected_path;
-                });
-            if (selected_media != media_items_.end()) {
-                selected_media_index = static_cast<std::size_t>(
-                    std::distance(media_items_.begin(), selected_media));
-            } else {
-                logging::Logger::instance().log(
-                    logging::Level::Error,
-                    "timeline",
-                    operation,
-                    "The selected media for the restored timeline state is unavailable.",
-                    {{"path", pathToUtf8(selected_path)},
-                     {"generation", std::to_string(playback_generation_)}});
-            }
-        }
-
-        if (selected_media_index.has_value()) {
-            const auto& item = media_items_[*selected_media_index];
-            populateMediaBrowser(item.metadata.source_path);
-            if (!item.offline) preview_widget_->setFrame(item.first_frame);
-        } else {
-            preview_widget_->clearFrame(
-                "Preview area\n\nImport media to display its first frame.");
-        }
-
-        updateTimelineState();
-        updatePlaybackControls();
-        updatePlaybackStatus();
-
-        if (active_timeline_track_index_cache_.has_value() &&
-            active_timeline_clip_index_cache_.has_value() &&
-            selected_media_index.has_value() &&
-            *active_timeline_track_index_cache_ < timeline_model_.trackCount() &&
-            *active_timeline_clip_index_cache_ < timeline_model_.clipCount(
-                *active_timeline_track_index_cache_) &&
-            timeline_model_.tracks()[*active_timeline_track_index_cache_]
-                .clips[*active_timeline_clip_index_cache_].source_path ==
-                normalizedPath(media_items_[*selected_media_index]
-                                   .metadata.source_path)) {
-            if (!media_items_[*selected_media_index].offline) activateTimelineClipAt(
-                *active_timeline_track_index_cache_,
-                *active_timeline_clip_index_cache_,
-                playback_frame_index_,
-                false);
-        }
-
-        statusBar()->showMessage(
-            std::string_view(operation) == "undo"
-                ? "Timeline edit undone."
-                : "Timeline edit redone.");
-    } catch (const std::exception& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error,
-            "timeline",
-            operation,
-            error.what(),
-            {{"clip_index", active_timeline_clip_index_cache_.has_value()
-                    ? std::to_string(*active_timeline_clip_index_cache_)
-                    : "none"},
-             {"generation", std::to_string(playback_generation_)}});
-        playback_is_playing_ = false;
-        updateTimelineState();
-        updatePlaybackControls();
-        updatePlaybackStatus();
-        statusBar()->showMessage("Could not restore the timeline edit.");
-        QMessageBox::warning(
-            this,
-            "Timeline history error",
-            "The timeline edit could not be restored.");
-    }
-}
-
 void MainWindow::undoTimelineEdit() {
-    if (!timeline_history_.canUndo()) return;
-
+    if (!timeline_command_service_.canUndo()) return;
     try {
-        const auto state = timeline_history_.undo(captureTimelineEditState());
-        if (!state.has_value()) return;
-        restoreTimelineEditState(std::move(*state), "undo");
+        synchronizeTimelineSessionSelection();
+        const auto result = timeline_command_service_.undo();
+        if (!result.changed()) return;
+        applyTimelineEditResult(result);
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        sendCompositionToWorker();
+        statusBar()->showMessage("Timeline edit undone.");
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
             logging::Level::Error,
@@ -2343,12 +2212,17 @@ void MainWindow::undoTimelineEdit() {
 }
 
 void MainWindow::redoTimelineEdit() {
-    if (!timeline_history_.canRedo()) return;
-
+    if (!timeline_command_service_.canRedo()) return;
     try {
-        const auto state = timeline_history_.redo(captureTimelineEditState());
-        if (!state.has_value()) return;
-        restoreTimelineEditState(std::move(*state), "redo");
+        synchronizeTimelineSessionSelection();
+        const auto result = timeline_command_service_.redo();
+        if (!result.changed()) return;
+        applyTimelineEditResult(result);
+        updateTimelineState();
+        updatePlaybackControls();
+        updatePlaybackStatus();
+        sendCompositionToWorker();
+        statusBar()->showMessage("Timeline edit redone.");
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
             logging::Level::Error,
@@ -2371,28 +2245,13 @@ void MainWindow::handleTimelineClipMove(qint64 from_index, qint64 to_index) {
 
     const auto from = static_cast<std::size_t>(from_index);
     const auto to = static_cast<std::size_t>(to_index);
-    const auto source_path = timeline_model_.tracks()[0].clips[from].source_path;
-    timeline::EditState before_edit;
+    const auto clip_id = timeline_model_.tracks()[0].clips[from].clip_id;
 
     try {
-        before_edit = captureTimelineEditState();
-        pending_clip_activation_.reset();
-        ++playback_generation_;
-        playback_is_playing_ = false;
-        if (playback_worker_ != nullptr) {
-            QMetaObject::invokeMethod(
-                playback_worker_,
-                "stop",
-                Qt::QueuedConnection);
-        }
-
-        const auto result = timeline_model_.moveClip(from, to);
-        if (result == timeline::MoveClipResult::NoChange ||
-            result == timeline::MoveClipResult::InvalidIndex) {
-            return;
-        }
-
-        recordTimelineEdit(before_edit);
+        const auto result = executeTimelineCommand(
+            application::ReorderClipCommand{clip_id, to});
+        if (!result.changed()) return;
+        applyTimelineEditResult(result);
 
         updateTimelineState();
         updatePlaybackControls();
@@ -2406,8 +2265,7 @@ void MainWindow::handleTimelineClipMove(qint64 from_index, qint64 to_index) {
             "move_clip",
             error.what(),
             {{"from_index", std::to_string(from_index)},
-             {"to_index", std::to_string(to_index)},
-             {"path", pathToUtf8(source_path)}});
+             {"to_index", std::to_string(to_index)}});
         statusBar()->showMessage("Could not move the timeline clip.");
         QMessageBox::warning(
             this,
@@ -2431,16 +2289,14 @@ void MainWindow::moveActiveTimelineClip(int direction) {
     if (direction < 0 && active_clip.timeline_start_frame == 0) return;
     const auto new_start = active_clip.timeline_start_frame + direction;
     try {
-        const auto before = captureTimelineEditState();
-        const auto result = timeline_model_.moveClip(
-            timeline::ClipLocation{track, clip},
-            timeline::ClipLocation{track, clip},
-            new_start);
-        if (result != timeline::MoveClipResult::Moved) {
+        const auto result = executeTimelineCommand(application::MoveClipCommand{
+            active_clip.clip_id, active_clip.track_id, new_start});
+        if (!result.changed()) {
+            if (result.status == application::EditStatus::NoChange) return;
             statusBar()->showMessage("The clip cannot move to that frame.");
             return;
         }
-        recordTimelineEdit(before);
+        applyTimelineEditResult(result);
         sendCompositionToWorker();
         updateTimelineState();
         updateProjectDirtyState();
@@ -2472,34 +2328,13 @@ void MainWindow::deleteActiveTimelineClip() {
     const auto clip_index = *active_timeline_clip_index_cache_;
     const auto clip = timeline_model_.tracks()[track_index].clips[clip_index];
     if (timeline::isMediaClipKind(clip.kind) && !canPlaybackSelectedMedia()) return;
-    timeline::EditState before_edit;
 
     try {
-        before_edit = captureTimelineEditState();
-        pending_clip_activation_.reset();
-        ++playback_generation_;
-        playback_is_playing_ = false;
-        if (playback_worker_ != nullptr) {
-            QMetaObject::invokeMethod(
-                playback_worker_,
-                "stop",
-                Qt::QueuedConnection);
-        }
-
-        if (timeline_model_.removeClip(track_index, clip_index) !=
-            timeline::RemoveClipResult::Removed) {
-            updateTimelineState();
-            updatePlaybackControls();
-            updatePlaybackStatus();
-            return;
-        }
-
-        recordTimelineEdit(before_edit);
-
-        playback_frame_index_ = 0;
+        const auto result = executeTimelineCommand(
+            application::DeleteClipCommand{clip.clip_id});
+        if (!result.changed()) return;
+        applyTimelineEditResult(result);
         if (!timeline_model_.hasClip()) {
-            active_timeline_track_index_cache_.reset();
-            active_timeline_clip_index_cache_.reset();
             sendCompositionToWorker();
             updateTimelineState();
             updatePlaybackControls();
@@ -2507,42 +2342,18 @@ void MainWindow::deleteActiveTimelineClip() {
             statusBar()->showMessage("Timeline clip deleted.");
             return;
         }
-
-        std::size_t next_track = track_index;
-        std::size_t next_index = 0;
-        if (track_index < timeline_model_.trackCount() &&
-            !timeline_model_.tracks()[track_index].clips.empty()) {
-            next_index = std::min(
-                clip_index,
-                timeline_model_.tracks()[track_index].clips.size() - 1);
-        } else {
-            for (std::size_t candidate = 0;
-                 candidate < timeline_model_.trackCount(); ++candidate) {
-                if (!timeline_model_.tracks()[candidate].clips.empty()) {
-                    next_track = candidate;
-                    break;
-                }
-            }
-        }
-        if (timeline_model_.trackCount() == 0 ||
-            timeline_model_.tracks()[next_track].clips.empty()) {
-            clearActiveTimelineSelection();
-            updateTimelineState();
-            updatePlaybackControls();
-            updatePlaybackStatus();
-            statusBar()->showMessage("Timeline clip deleted.");
-            return;
-        }
-        setActiveTimelineSelection(timeline::ClipLocation{next_track, next_index});
         sendCompositionToWorker();
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
-        if (timeline::isMediaClipKind(
-                timeline_model_.tracks()[next_track].clips[next_index].kind)) {
-            activateTimelineClipAt(next_track, next_index, 0, false);
+        if (active_timeline_track_index_cache_.has_value() &&
+            active_timeline_clip_index_cache_.has_value() &&
+            timeline::isMediaClipKind(timeline_model_.tracks()[
+                *active_timeline_track_index_cache_].clips[
+                *active_timeline_clip_index_cache_].kind)) {
+            activateTimelineClipAt(*active_timeline_track_index_cache_,
+                                   *active_timeline_clip_index_cache_, 0, false);
         } else {
-            setActiveTimelineSelection(timeline::ClipLocation{next_track, next_index});
             sendCompositionToWorker();
             updateTimelineState();
             updatePlaybackControls();
@@ -2638,24 +2449,14 @@ void MainWindow::handleTimelineClipTrim(
         local_start_frame;
     const auto new_duration_frames = local_end_frame - local_start_frame;
     if (clip.kind == timeline::ClipKind::Text) {
-        const bool was_active = active_timeline_clip_id_.has_value() &&
-            *active_timeline_clip_id_ == clip.clip_id;
-        const auto old_playhead_frame = playback_frame_index_;
         try {
-            const auto before_edit = captureTimelineEditState();
-            const auto result = timeline_model_.trimClip(
-                index, new_source_start_frame, new_duration_frames);
-            if (result != timeline::TrimClipResult::Trimmed) {
+            const auto result = executeTimelineCommand(application::TrimClipRangeCommand{
+                clip.clip_id, new_source_start_frame, new_duration_frames});
+            if (!result.changed()) {
                 statusBar()->showMessage("The text clip cannot be trimmed to that range.");
                 return;
             }
-            recordTimelineEdit(before_edit);
-            setActiveTimelineSelection(timeline::ClipLocation{0, index});
-            playback_frame_index_ = was_active
-                ? std::clamp<std::int64_t>(
-                    old_playhead_frame - local_start_frame,
-                    0, new_duration_frames - 1)
-                : 0;
+            applyTimelineEditResult(result, false);
             updateTimelineState();
             updatePlaybackControls();
             updatePlaybackStatus();
@@ -2701,18 +2502,10 @@ void MainWindow::handleTimelineClipTrim(
         return;
     }
 
-    const bool was_active = active_timeline_clip_id_.has_value() &&
-        *active_timeline_clip_id_ == clip.clip_id;
-    const auto old_playhead_frame = playback_frame_index_;
-    timeline::EditState before_edit;
-
     try {
-        before_edit = captureTimelineEditState();
-        const auto result = timeline_model_.trimClip(
-            index,
-            new_source_start_frame,
-            new_duration_frames);
-        if (result != timeline::TrimClipResult::Trimmed) {
+        const auto result = executeTimelineCommand(application::TrimClipRangeCommand{
+            clip.clip_id, new_source_start_frame, new_duration_frames});
+        if (!result.changed()) {
             updateTimelineState();
             updatePlaybackControls();
             updatePlaybackStatus();
@@ -2720,23 +2513,15 @@ void MainWindow::handleTimelineClipTrim(
             return;
         }
 
-        recordTimelineEdit(before_edit);
+        applyTimelineEditResult(result);
         sendCompositionToWorker();
-
-        setActiveTimelineSelection(timeline::ClipLocation{0, index});
-        playback_frame_index_ = 0;
-        if (was_active) {
-            const auto adjusted_frame = old_playhead_frame - local_start_frame;
-            playback_frame_index_ = std::clamp<std::int64_t>(
-                adjusted_frame,
-                0,
-                new_duration_frames - 1);
-        }
 
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
-        activateTimelineClip(index, playback_frame_index_, false);
+        if (active_timeline_clip_index_cache_.has_value()) {
+            activateTimelineClip(*active_timeline_clip_index_cache_, playback_frame_index_, false);
+        }
         statusBar()->showMessage("Timeline clip trimmed.");
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
@@ -2770,7 +2555,7 @@ void MainWindow::handleTimelineClipSplit(qint64 clip_index, qint64 local_frame) 
     }
 
     const auto source_index = static_cast<std::size_t>(clip_index);
-    const auto& source_clip = timeline_model_.tracks()[0].clips[source_index];
+    const auto source_clip = timeline_model_.tracks()[0].clips[source_index];
     if (local_frame <= 0 ||
         local_frame >= source_clip.timeline_duration_frames ||
         source_clip.source_start_frame < 0 ||
@@ -2782,22 +2567,13 @@ void MainWindow::handleTimelineClipSplit(qint64 clip_index, qint64 local_frame) 
 
     if (source_clip.kind == timeline::ClipKind::Text) {
         try {
-            const auto before = captureTimelineEditState();
-            pending_clip_activation_.reset();
-            ++playback_generation_;
-            playback_is_playing_ = false;
-            if (playback_worker_ != nullptr) {
-                QMetaObject::invokeMethod(
-                    playback_worker_, "pause", Qt::QueuedConnection);
-            }
-            if (timeline_model_.splitClip(0, source_index, local_frame) !=
-                timeline::SplitClipResult::Split) {
+            const auto result = executeTimelineCommand(application::SplitClipCommand{
+                source_clip.clip_id, local_frame});
+            if (!result.changed()) {
                 statusBar()->showMessage("A clip cannot be split at its boundary.");
                 return;
             }
-            recordTimelineEdit(before);
-            setActiveTimelineSelection(timeline::ClipLocation{0, source_index + 1});
-            playback_frame_index_ = 0;
+            applyTimelineEditResult(result, false);
             updateTimelineState();
             updatePlaybackControls();
             updatePlaybackStatus();
@@ -2840,37 +2616,21 @@ void MainWindow::handleTimelineClipSplit(qint64 clip_index, qint64 local_frame) 
     }
 
     const auto source_frame = source_clip.source_start_frame + local_frame;
-    timeline::EditState before_edit;
     try {
-        before_edit = captureTimelineEditState();
-        pending_clip_activation_.reset();
-        ++playback_generation_;
-        playback_is_playing_ = false;
-        if (playback_worker_ != nullptr) {
-            QMetaObject::invokeMethod(
-                playback_worker_,
-                "stop",
-                Qt::QueuedConnection);
-        }
-
-        const auto result = timeline_model_.splitClip(
-            source_index,
-            local_frame);
-        if (result != timeline::SplitClipResult::Split) {
+        const auto result = executeTimelineCommand(application::SplitClipCommand{
+            source_clip.clip_id, local_frame});
+        if (!result.changed()) {
             updatePlaybackControls();
             updatePlaybackStatus();
             statusBar()->showMessage("The clip could not be split at that frame.");
             return;
         }
-
-        recordTimelineEdit(before_edit);
+        applyTimelineEditResult(result);
 
         const auto right_clip_index = source_index + 1;
         const auto& right_clip = timeline_model_.tracks()[0].clips[right_clip_index];
         const auto media_index = static_cast<std::size_t>(
             std::distance(media_items_.begin(), media_item));
-        setActiveTimelineSelection(timeline::ClipLocation{0, right_clip_index});
-        playback_frame_index_ = 0;
         {
             const QSignalBlocker blocker(media_list_);
             media_list_->setCurrentRow(static_cast<int>(media_index));

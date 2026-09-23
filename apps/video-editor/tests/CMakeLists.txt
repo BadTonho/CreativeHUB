@@ -358,6 +358,39 @@ add_test(
     COMMAND creative-suite-main-editor-timeline-tests
 )
 
+add_executable(creative-suite-main-editor-timeline-command-service-tests
+    timeline_command_service_test.cpp
+    ../src/application/editor_session.cpp
+    ../src/application/editor_session.h
+    ../src/application/timeline_command_service.cpp
+    ../src/application/timeline_command_service.h
+    ../src/timeline/timeline_clip_edge_command.cpp
+    ../src/timeline/timeline_clip_edge_command.h
+    ../src/timeline/timeline_history.cpp
+    ../src/timeline/timeline_history.h
+    ../src/timeline/timeline_model.cpp
+    ../src/timeline/timeline_model.h
+    ../src/timeline/timeline_transform.cpp
+    ../src/timeline/timeline_transform.h
+)
+
+target_include_directories(creative-suite-main-editor-timeline-command-service-tests PRIVATE
+    ../src
+)
+
+target_compile_features(creative-suite-main-editor-timeline-command-service-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-timeline-command-service-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-timeline-command-service-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-timeline-command-service
+    COMMAND creative-suite-main-editor-timeline-command-service-tests
+)
+
 add_executable(creative-suite-main-editor-frame-step-navigation-tests
     frame_step_navigation_test.cpp
     ../src/main_window/frame_step_navigation.cpp

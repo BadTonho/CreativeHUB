@@ -16,6 +16,10 @@ endif()
 set(MAIN_EDITOR_CORE_SOURCES
     src/main_window.cpp
     src/main_window.h
+    src/application/editor_session.cpp
+    src/application/editor_session.h
+    src/application/timeline_command_service.cpp
+    src/application/timeline_command_service.h
     src/main_window/main_window_support.cpp
     src/main_window/main_window_support.h
     src/main_window/frame_step_navigation.cpp

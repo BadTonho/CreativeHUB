@@ -15,7 +15,11 @@ struct EditState {
     std::optional<TrackId> active_track_id;
     std::optional<ClipId> active_clip_id;
     std::optional<std::filesystem::path> selected_source_path;
+    std::optional<TransitionSelection> active_transition;
     std::int64_t playhead_frame = 0;
+    std::optional<std::int64_t> preserved_playhead_frame;
+
+    friend bool operator==(const EditState&, const EditState&) = default;
 };
 
 class TimelineHistory final {
