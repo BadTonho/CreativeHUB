@@ -17,8 +17,11 @@ and transform rules as videos, and never create an audio playback session.
 Video 1 is created by default. Each newly created track is inserted above the
 existing tracks, so it becomes the top visual priority. Tracks are drawn
 vertically, with the top row composited above the rows below it. Tracks can be
-renamed, reordered, and removed when empty. Each track permits gaps and rejects
-overlap within that track; clips on different tracks may overlap.
+renamed, reordered, and removed when empty. Each track permits gaps. Add and
+move operations reject overlapping media clips; an individual edge trim may
+overlap one adjacent media clip while leaving it fixed. In that region, the
+media clip with the later timeline start is composed above the earlier clip.
+Text-over-text overlap remains rejected; clips on different tracks may overlap.
 TimelineModel can locate the clip visible at a frame and the top-priority clip
 when tracks overlap.
 
@@ -122,32 +125,38 @@ and keeps the current timeline frame.
 
 Movement, splitting, and trimming do not decode while the pointer moves.
 Trimming updates a paint-only preview during the drag and commits one edit on
-release. In normal edit mode, the horizontal resize cursor appears while
-hovering within 8 pixels of either clip edge and returns to the default cursor
-when the pointer leaves that area or the Timeline. Edge hit testing follows the
-clip's rendered geometry so the visible right edge remains draggable at frame
-boundaries. Dragging the left edge changes the clip's timeline start and source
-start while keeping its right edge fixed; dragging the right edge changes its
-right edge. Either edge can extend as well as shorten a clip. Video source
-limits use the recorded frame count or duration multiplied by frame rate when
-the count is unavailable. Still images hold their cached frame when extended,
-and text clips can extend without a media-source limit. Timeline starts remain
-at or after frame zero, and clips remain at least one frame long.
-
-When clips share a boundary on one track, dragging either side rolls that
+release. In normal edit mode, the horizontal resize cursor appears over clip
+edges and returns to the default cursor when the pointer leaves an edge or the
+Timeline. At a shared boundary, an 8-pixel strip centered on the cut rolls the
 boundary: one clip grows as the other shrinks, both keep at least one frame,
-and the rest of the track stays in place. Source limits can stop the boundary
-from moving farther. At an outer edge with a timeline gap, only the dragged
-clip changes; extension stops before it would violate the track's existing
-overlap rules. Existing keyframes within the retained range are remapped to the
-new local origin, and the transform at an extended edge is held across the
+and the rest of the track stays in place. The 8-pixel side handles immediately
+outside that strip trim only the clip on that side. A media clip may extend
+over its adjacent media neighbor without moving it; the clip with the later
+timeline start is drawn above the earlier one. Shortening one side may leave a
+gap. During an individual trim preview, a guide marks the edited edge even
+where the covering clip hides the underlying edge. A simple click on the cut
+still selects its transition.
+
+At an outer edge or an edge separated by a timeline gap, only the dragged clip
+changes; extension stops before it overlaps another media clip. Edge hit
+testing follows the clip's rendered geometry so the visible right edge remains
+draggable at frame boundaries. Dragging the left edge changes the clip's
+timeline start and source start while keeping its right edge fixed; dragging
+the right edge changes its right edge. Either edge can extend as well as
+shorten a clip. Video source limits use the recorded frame count or duration
+multiplied by frame rate when the count is unavailable. Still images hold their
+cached frame when extended, and text clips can extend without a media-source
+limit. Timeline starts remain at or after frame zero, and clips remain at least
+one frame long. Existing keyframes within the retained range are remapped to
+the new local origin, and the transform at an extended edge is held across the
 added range. A valid transition remains attached to its clip pair while the
-boundary moves; it is removed if the resulting clip lengths no longer support
-it. Seeking decodes only after release. Delete removes the active clip without
-moving remaining clips. Ctrl + Left and Ctrl + Right nudge the active clip by
-one frame when the new position is valid. When a model update replaces the
-tracks during an active pointer gesture, the Timeline releases its mouse grab
-before resetting the gesture so the rest of the editor remains clickable.
+boundary rolls; it is removed if the resulting adjacency or clip lengths no
+longer support it. Seeking decodes only after release. Delete removes the
+active clip without moving remaining clips. Ctrl + Left and Ctrl + Right nudge
+the active clip by one frame when the new position is valid. When a model update
+replaces the tracks during an active pointer gesture, the Timeline releases its
+mouse grab before resetting the gesture so the rest of the editor remains
+clickable.
 
 While a clip is being moved, the original occurrence remains visible with a
 dimmed treatment and a semitransparent ghost follows the calculated target
@@ -178,7 +187,10 @@ playback clock when output is available; videos without audio and output
 failures use the existing video timer. Playback pauses in gaps and remains
 paused at the end of the last clip.
 Audio is never mixed between overlapping tracks: only the visible top-priority
-clip contributes.
+clip contributes. Within one track, the later-starting media clip supplies
+audio during a permitted overlap, and playback switches back to an underlying
+media clip if it remains visible after the overlapping clip ends. No audio
+crossfade is added.
 
 During active playback, a precise worker timer follows a steady-clock target.
 Audio output remains the authoritative clock when available; otherwise the
@@ -293,8 +305,10 @@ drop frame, with a five-second default duration and the selected media frame
 rate (or 30 FPS when no video is selected). If no track is active, the top
 track is used.
 
-Within one track, text is composited above video. Video-over-video and
-text-over-text overlap is rejected, while text-over-video overlap is allowed.
+Within one track, text is composited above video. Add and move operations
+reject media overlap; an individual edge trim may overlap adjacent media, with
+the later-starting clip above the earlier clip. Text-over-text overlap remains
+rejected, while text-over-video overlap is allowed.
 The existing absolute positions, gaps, selection, split, trim, move, delete,
 and Timeline Undo/Redo rules apply to both kinds of clip.
 
@@ -315,7 +329,8 @@ moves or resizes either endpoint. The endpoint clips must be on the same
 track, have no gap between them, and have a positive duration. The default
 duration is 15 timeline frames and the maximum is the shorter endpoint
 duration. Video-to-video, video-to-text, and text-to-video junctions are
-supported; same-kind overlap rules remain unchanged.
+supported; text-over-text overlap remains rejected. An individual media edge
+trim may create a media overlap without adding a transition.
 
 `Cross Dissolve` starts at the junction. The outgoing clip holds its last
 frame while the incoming clip advances from local frame zero, with a linear

@@ -30,11 +30,11 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions, PNG/JPEG/BMP/WebP/TIFF still-image probing, RGBA transparency, 150-frame defaults, and animated-GIF rejection |
 | Playback session | Sequential frames, forward catch-up without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
 | Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
-| Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, edge trim and extension, shared-boundary rolls, video source limits, still-image/text extension, delete, metadata, history |
+| Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, rolling and individual edge trims, one-sided media overlap and top-clip priority, video source limits, still-image/text extension, delete, metadata, history |
 | Timeline workspace selectors | Edit and blank Fusion button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
 | Workspace page switching | Edit startup state, Edit → Fusion → Edit, exclusive selectors, replacement of the Timeline with the Node Editor in the same lower dock, Inspector visibility, and reuse of the existing Preview as Viewer |
 | Functions window shortcut | Offscreen Shift+Space registration, WindowShortcut context, empty non-modal floating window, opening and toggling while focused, inside/outside click behavior, close and destruction through Escape/title bar/deactivation, fresh recreation without duplicates, and regular Space playback shortcut preservation |
-| Timeline interaction | Selection without playhead jumps, row-local clip hit testing, gap deselection for Timeline and Media Browser items, no-op drags from empty rows, optional move-to-start selection preference, seek-on-release, configurable clip movement, checked-by-default Magnetic Snap with eight-pixel tolerance, clip-edge and Timeline-boundary snapping, aligned snap guides, enable/disable behavior, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, one-frame fallback metadata, cancellation cleanup, no pre-release model signal, Blade Tool, edge-hover resize cursor and reset behavior, live left/right edge extension previews and trim-on-release, shared-boundary dragging while preserving junction selection on click, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, frozen track-header overlay during horizontal scrolling, vertical header alignment during vertical scrolling, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
+| Timeline interaction | Selection without playhead jumps, row-local clip hit testing, gap deselection for Timeline and Media Browser items, no-op drags from empty rows, optional move-to-start selection preference, seek-on-release, configurable clip movement, checked-by-default Magnetic Snap with eight-pixel tolerance, clip-edge and Timeline-boundary snapping, aligned snap guides, enable/disable behavior, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, one-frame fallback metadata, cancellation cleanup, no pre-release model signal, Blade Tool, edge-hover resize cursor and reset behavior, live left/right edge extension previews and trim-on-release, distinct rolling-center and one-sided shared-cut handles while preserving junction selection on click, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, frozen track-header overlay during horizontal scrolling, vertical header alignment during vertical scrolling, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
 | System memory details | Offscreen non-modal dialog, System Memory and Main Editor sections, click-to-open behavior, Working Set, Private Usage, GB/MB formatting, and per-metric `N/A` handling |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
@@ -42,7 +42,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Settings dialog | Modal shell, General, Autosave, Timeline, and Shortcuts tabs, empty and populated autosave snapshot table, refresh/restore/delete/open-folder requests, Close action, independent component construction, and editable shortcut preferences |
 | Preview performance metrics | Deterministic counter/timing aggregation, bounded p95/p99 timing histograms, decoded/stale-frame counters, playback delivery-rate derivation, failure counters, cache state, workload context, process-resource sampling, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
-| Project persistence | Versioned JSON v8, video/image/text kind round-trip, timeline zoom and row-height persistence, version 1-7 migration with legacy media defaulting to video, invalid input, offline media, transactional open |
+| Project persistence | Versioned JSON v8, video/image/text kind round-trip, media overlap round-trip with text-over-text rejection, timeline zoom and row-height persistence, version 1-7 migration with legacy media defaulting to video, invalid input, offline media, transactional open |
 | Project validation | Out-of-range JSON integers, overflowing timeline ranges, and overflowing media-source ranges are rejected before reaching editing code |
 | Autosave and recovery | Retention, Unicode project paths, recovery filtering, and actionable log entries for malformed snapshots |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
@@ -217,14 +217,19 @@ in the running Main Editor after UI or integration changes:
   `Loading timeline clip...`, and other transient status messages appear beside
   the frame in one compact footer line without a separate global status row;
 - hover over both edges of a clip and confirm the horizontal resize cursor
-  appears within the edge hit area, returns to the default cursor inside the
-  clip and outside its edge, and disappears when the pointer leaves the
-  Timeline; then split a video with the Blade Tool, drag either side of the
-  shared cut, and confirm the preview moves live, dragging an edge outward
-  grows that clip, dragging it back shrinks it while the neighbor grows,
-  neither clip drops below one frame, and one Undo/Redo restores and reapplies
-  the complete boundary edit; also extend an outer edge into a gap and confirm
-  video source limits, still-image frame holding, and text duration extension;
+  appears in the edge hit area, returns to the default cursor inside the clip,
+  and disappears outside its edge or when the pointer leaves the Timeline;
+  split a video, drag the 8-pixel strip centered on the shared cut, and confirm
+  the preview moves both sides while preserving the cut; then drag each
+  8-pixel side handle and confirm only that clip changes, the neighbor stays
+  fixed, and extending into it creates an overlap whose edited edge remains
+  marked in the preview while the later-starting clip stays visible above;
+  play through the overlap and confirm audio switches to the
+  visible clip, then switches back if the underlying clip continues; verify
+  one-frame minimums, source limits, transition selection on a simple click,
+  and Undo/Redo for both gesture modes; save and reopen the overlapping
+  project; also extend an outer edge into a gap and confirm video source limits,
+  still-image frame holding, and text duration extension;
 - use the default-enabled Preview performance metrics (or enable them in
   Settings) and compare a simple 1080p playback run
   with the metrics disabled: confirm the one-second summaries include decode,

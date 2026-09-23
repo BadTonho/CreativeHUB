@@ -521,6 +521,7 @@ int main(int argc, char* argv[]) {
         qint64 split_frame = -1;
         qint64 trim_edge = -1;
         qint64 trim_boundary = -1;
+        qint64 trim_mode = -1;
         int transition_track = -1;
         int transition_from = -1;
         int transition_to = -1;
@@ -563,9 +564,11 @@ int main(int argc, char* argv[]) {
         QObject::connect(
             &widget,
             &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
-            [&trim_edge, &trim_boundary](qint64, qint64, qint64 edge, qint64 boundary) {
+            [&trim_edge, &trim_boundary, &trim_mode](
+                qint64, qint64, qint64 edge, qint64 boundary, qint64 mode) {
                 trim_edge = edge;
                 trim_boundary = boundary;
+                trim_mode = mode;
             });
         QObject::connect(
             &widget,
@@ -946,7 +949,9 @@ int main(int argc, char* argv[]) {
         sendMouse(widget, QEvent::MouseButtonRelease, QPointF(200, 120),
                   Qt::NoButton);
         require(trim_edge == static_cast<qint64>(timeline::ClipEdge::Left) &&
-                    trim_boundary > 0 && trim_boundary < test_clip_duration,
+                    trim_boundary > 0 && trim_boundary < test_clip_duration &&
+                    trim_mode == static_cast<qint64>(
+                        timeline::ClipEdgeEditMode::Individual),
                 "The left edge did not request an absolute trim boundary.");
 
         // A contiguous junction is selectable through the same hit area used
@@ -998,12 +1003,15 @@ int main(int argc, char* argv[]) {
         const auto color_before_trim = trim_before.pixelColor(preview_sample);
         int edge_edit_count = 0;
         qint64 edge_edit_boundary = -1;
+        qint64 edge_edit_mode = -1;
         QObject::connect(
             &trim_preview_widget,
             &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
-            [&edge_edit_count, &edge_edit_boundary](qint64, qint64, qint64, qint64 boundary) {
+            [&edge_edit_count, &edge_edit_boundary, &edge_edit_mode](
+                qint64, qint64, qint64, qint64 boundary, qint64 mode) {
                 ++edge_edit_count;
                 edge_edit_boundary = boundary;
+                edge_edit_mode = mode;
             });
         const auto seam_x = trim_preview_widget.contentXForFrame(100);
         const auto moved_seam_x = trim_preview_widget.contentXForFrame(110);
@@ -1020,9 +1028,116 @@ int main(int argc, char* argv[]) {
                 "The shared clip boundary did not update in the live preview.");
         sendMouse(trim_preview_widget, QEvent::MouseButtonRelease,
                   QPointF(moved_seam_x, 110), Qt::NoButton);
-        require(edge_edit_count == 1 && edge_edit_boundary == 110,
+        require(edge_edit_count == 1 && edge_edit_boundary == 110 &&
+                    edge_edit_mode == static_cast<qint64>(
+                        timeline::ClipEdgeEditMode::Rolling),
                 "Dragging a shared edge did not commit the requested boundary once.");
         trim_preview_widget.close();
+
+        timeline::TimelineWidget single_clip_edge_widget;
+        single_clip_edge_widget.resize(1000, 180);
+        single_clip_edge_widget.setTimelineViewportWidth(1000);
+        auto first_overlapping_video = makeClip(
+            "first-overlap.mkv", 0, 100, "first-overlap.mkv");
+        auto second_overlapping_video = makeClip(
+            "second-overlap.mkv", 100, 100, "second-overlap.mkv");
+        first_overlapping_video.frame_count = 300;
+        first_overlapping_video.duration_seconds = 10.0;
+        second_overlapping_video.source_start_frame = 100;
+        second_overlapping_video.frame_count = 300;
+        second_overlapping_video.duration_seconds = 10.0;
+        single_clip_edge_widget.setTracks({timeline::TimelineTrack{
+            1, "Video 1", 1.0, false,
+            {first_overlapping_video, second_overlapping_video}}});
+        single_clip_edge_widget.setZoomFactor(512.0);
+        single_clip_edge_widget.setMinimumWidth(1000);
+        single_clip_edge_widget.resize(1000, 180);
+        single_clip_edge_widget.show();
+        application.processEvents();
+        int single_clip_edit_count = 0;
+        qint64 single_clip_edit_edge = -1;
+        qint64 single_clip_edit_mode = -1;
+        qint64 single_clip_edit_boundary = -1;
+        QObject::connect(
+            &single_clip_edge_widget,
+            &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
+            [&single_clip_edit_count, &single_clip_edit_edge, &single_clip_edit_mode,
+             &single_clip_edit_boundary](
+                qint64, qint64, qint64 edge, qint64 boundary, qint64 mode) {
+                ++single_clip_edit_count;
+                single_clip_edit_edge = edge;
+                single_clip_edit_boundary = boundary;
+                single_clip_edit_mode = mode;
+            });
+        const auto single_seam_x =
+            single_clip_edge_widget.contentXForFrame(100);
+        const auto single_clip_sample = QPoint(
+            static_cast<int>(std::lround(
+                single_clip_edge_widget.contentXForFrame(95))),
+            110);
+        const auto samplePixel = [&single_clip_edge_widget, single_clip_sample]() {
+            QImage image(1000, 180, QImage::Format_ARGB32);
+            image.fill(Qt::transparent);
+            single_clip_edge_widget.render(&image);
+            return image.pixelColor(single_clip_sample);
+        };
+        const auto preview_edge_sample = QPoint(
+            static_cast<int>(std::lround(
+                single_clip_edge_widget.contentXForFrame(110))),
+            110);
+        const auto previewEdgePixel = [&single_clip_edge_widget,
+                                       preview_edge_sample]() {
+            QImage image(1000, 180, QImage::Format_ARGB32);
+            image.fill(Qt::transparent);
+            single_clip_edge_widget.render(&image);
+            return image.pixelColor(preview_edge_sample);
+        };
+        const auto individual_before = samplePixel();
+        const auto edge_guide_before = previewEdgePixel();
+        const QPointF individual_grab(single_seam_x - 8.0, 110.0);
+        sendMouse(single_clip_edge_widget, QEvent::MouseMove,
+                  individual_grab, Qt::NoButton);
+        require(single_clip_edge_widget.cursor().shape() == Qt::SizeHorCursor,
+                "The individual side of a shared cut did not show the resize cursor.");
+        sendMouse(single_clip_edge_widget, QEvent::MouseButtonPress,
+                  individual_grab, Qt::LeftButton);
+        sendMouse(single_clip_edge_widget, QEvent::MouseMove,
+                  QPointF(single_clip_edge_widget.contentXForFrame(110), 110),
+                  Qt::LeftButton);
+        require(single_clip_edit_count == 0 && samplePixel() != individual_before &&
+                    previewEdgePixel() != edge_guide_before,
+                "An individual edge drag did not preview without committing.");
+        sendMouse(single_clip_edge_widget, QEvent::MouseButtonRelease,
+                  QPointF(single_clip_edge_widget.contentXForFrame(110), 110),
+                  Qt::NoButton);
+        require(single_clip_edit_count == 1 &&
+                    single_clip_edit_edge == static_cast<qint64>(
+                        timeline::ClipEdge::Right) &&
+                    single_clip_edit_mode == static_cast<qint64>(
+                        timeline::ClipEdgeEditMode::Individual) &&
+                    single_clip_edit_boundary == 110,
+                "A side handle did not commit one individual edge edit on release.");
+        const QPointF right_individual_grab(single_seam_x + 8.0, 110.0);
+        sendMouse(single_clip_edge_widget, QEvent::MouseMove,
+                  right_individual_grab, Qt::NoButton);
+        require(single_clip_edge_widget.cursor().shape() == Qt::SizeHorCursor,
+                "The opposite side of a shared cut did not show the resize cursor.");
+        sendMouse(single_clip_edge_widget, QEvent::MouseButtonPress,
+                  right_individual_grab, Qt::LeftButton);
+        sendMouse(single_clip_edge_widget, QEvent::MouseMove,
+                  QPointF(single_clip_edge_widget.contentXForFrame(90), 110),
+                  Qt::LeftButton);
+        sendMouse(single_clip_edge_widget, QEvent::MouseButtonRelease,
+                  QPointF(single_clip_edge_widget.contentXForFrame(90), 110),
+                  Qt::NoButton);
+        require(single_clip_edit_count == 2 &&
+                    single_clip_edit_edge == static_cast<qint64>(
+                        timeline::ClipEdge::Left) &&
+                    single_clip_edit_mode == static_cast<qint64>(
+                        timeline::ClipEdgeEditMode::Individual) &&
+                    single_clip_edit_boundary == 90,
+                "The opposite side handle did not commit one individual edge edit.");
+        single_clip_edge_widget.close();
 
         timeline::TimelineWidget edge_drag_widget;
         edge_drag_widget.resize(1000, 180);
@@ -1045,7 +1160,7 @@ int main(int argc, char* argv[]) {
             &edge_drag_widget,
             &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
             [&edge_drag_commit_count, &last_drag_edge, &last_drag_boundary](
-                qint64, qint64, qint64 edge, qint64 boundary) {
+                qint64, qint64, qint64 edge, qint64 boundary, qint64) {
                 ++edge_drag_commit_count;
                 last_drag_edge = edge;
                 last_drag_boundary = boundary;

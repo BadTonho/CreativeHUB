@@ -273,6 +273,146 @@ int main() {
                     edge_trim_model.clips()[1].timeline_start_frame == 1,
                 "A shared cut moved before the minimum one-frame segment boundary.");
 
+        timeline::TimelineModel individual_right_model;
+        require(individual_right_model.addClip(makeMetadata(
+                    first_source, "individual-right.mkv", 120)) ==
+                    timeline::AddClipResult::Added &&
+                    individual_right_model.splitClip(0, 0, 40) ==
+                        timeline::SplitClipResult::Split,
+                "The individual right-edge setup failed.");
+        const auto individual_right_preview = timeline::previewClipEdgeEdit(
+            individual_right_model.tracks(),
+            timeline::ClipLocation{0, 0},
+            timeline::ClipEdge::Right,
+            60,
+            timeline::ClipEdgeEditMode::Individual);
+        require(individual_right_preview.has_value() &&
+                    !individual_right_preview->neighbor_location.has_value() &&
+                    individual_right_preview->clip.timeline_duration_frames == 60 &&
+                    individual_right_model.trimClipEdge(
+                        0,
+                        0,
+                        timeline::ClipEdge::Right,
+                        60,
+                        timeline::ClipEdgeEditMode::Individual) ==
+                        timeline::TrimClipResult::Trimmed,
+                "An individual right-edge preview or commit changed the wrong clips.");
+        require(individual_right_model.clips()[0].timeline_duration_frames == 60 &&
+                    individual_right_model.clips()[1].timeline_start_frame == 40 &&
+                    individual_right_model.clips()[1].source_start_frame == 40 &&
+                    individual_right_model.clips()[1].timeline_duration_frames == 80 &&
+                    individual_right_model.topClipAt(50) ==
+                        timeline::ClipLocation{0, 1},
+                "Extending one clip did not preserve the neighbor or show the later clip above it.");
+        require(individual_right_model.trimClipEdge(
+                    0,
+                    0,
+                    timeline::ClipEdge::Right,
+                    30,
+                    timeline::ClipEdgeEditMode::Individual) ==
+                    timeline::TrimClipResult::Trimmed &&
+                    individual_right_model.clips()[0].timeline_duration_frames == 30 &&
+                    individual_right_model.clips()[1].timeline_start_frame == 40 &&
+                    !individual_right_model.clipAt(0, 35).has_value(),
+                "Shortening one clip did not leave a gap before the unchanged neighbor.");
+        require(individual_right_model.trimClipEdge(
+                    0,
+                    0,
+                    timeline::ClipEdge::Right,
+                    1,
+                    timeline::ClipEdgeEditMode::Individual) ==
+                    timeline::TrimClipResult::Trimmed &&
+                    individual_right_model.clips()[0].timeline_duration_frames == 1 &&
+                    individual_right_model.clips()[1].timeline_start_frame == 40 &&
+                    individual_right_model.clips()[1].timeline_duration_frames == 80,
+                "An individual edge trim did not preserve the one-frame minimum.");
+
+        timeline::TimelineModel individual_left_model;
+        require(individual_left_model.addClip(makeMetadata(
+                    first_source, "individual-left.mkv", 120)) ==
+                    timeline::AddClipResult::Added &&
+                    individual_left_model.splitClip(0, 0, 40) ==
+                        timeline::SplitClipResult::Split &&
+                    individual_left_model.trimClipEdge(
+                        0,
+                        1,
+                        timeline::ClipEdge::Left,
+                        30,
+                        timeline::ClipEdgeEditMode::Individual) ==
+                        timeline::TrimClipResult::Trimmed,
+                "An individual left edge could not extend over its neighbor.");
+        require(individual_left_model.clips()[0].timeline_start_frame == 0 &&
+                    individual_left_model.clips()[0].timeline_duration_frames == 40 &&
+                    individual_left_model.clips()[1].timeline_start_frame == 30 &&
+                    individual_left_model.clips()[1].source_start_frame == 30 &&
+                    individual_left_model.clips()[1].timeline_duration_frames == 90 &&
+                    individual_left_model.topClipAt(35) ==
+                        timeline::ClipLocation{0, 1},
+                "Extending one clip's left edge changed its neighbor or visibility order.");
+
+        timeline::TimelineModel individual_left_shrink_model;
+        require(individual_left_shrink_model.addClip(makeMetadata(
+                    first_source, "individual-left-shrink.mkv", 120)) ==
+                    timeline::AddClipResult::Added &&
+                    individual_left_shrink_model.splitClip(0, 0, 40) ==
+                        timeline::SplitClipResult::Split &&
+                    individual_left_shrink_model.trimClipEdge(
+                        0,
+                        1,
+                        timeline::ClipEdge::Left,
+                        50,
+                        timeline::ClipEdgeEditMode::Individual) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    individual_left_shrink_model.clips()[0].timeline_start_frame == 0 &&
+                    individual_left_shrink_model.clips()[0].timeline_duration_frames == 40 &&
+                    individual_left_shrink_model.clips()[1].timeline_start_frame == 50 &&
+                    individual_left_shrink_model.clips()[1].timeline_duration_frames == 70 &&
+                    !individual_left_shrink_model.clipAt(0, 45).has_value(),
+                "Shortening one clip's left edge did not preserve the neighbor and leave a gap.");
+
+        timeline::TimelineModel resumed_underlap_model;
+        auto long_overlap_metadata = makeMetadata(
+            first_source, "long-underlap.mkv", 200);
+        auto short_overlap_metadata = makeMetadata(
+            first_source, "short-overlap.mkv", 20);
+        require(resumed_underlap_model.addClip(long_overlap_metadata) ==
+                    timeline::AddClipResult::Added &&
+                    resumed_underlap_model.trimClip(0, 0, 100) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    resumed_underlap_model.addClip(
+                        0, short_overlap_metadata, 100) ==
+                        timeline::AddClipResult::Added &&
+                    resumed_underlap_model.trimClipEdge(
+                        0,
+                        0,
+                        timeline::ClipEdge::Right,
+                        140,
+                        timeline::ClipEdgeEditMode::Individual) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    resumed_underlap_model.topClipAt(110) ==
+                        timeline::ClipLocation{0, 1} &&
+                    resumed_underlap_model.topClipAt(125) ==
+                        timeline::ClipLocation{0, 0},
+                "Visibility did not return to the underlying clip after the overlap ended.");
+
+        timeline::TimelineModel individual_source_bound_model;
+        require(individual_source_bound_model.addClip(makeMetadata(
+                    first_source, "individual-source-bound.mkv", 60)) ==
+                    timeline::AddClipResult::Added &&
+                    individual_source_bound_model.splitClip(0, 0, 40) ==
+                        timeline::SplitClipResult::Split &&
+                    individual_source_bound_model.trimClipEdge(
+                        0,
+                        0,
+                        timeline::ClipEdge::Right,
+                        500,
+                        timeline::ClipEdgeEditMode::Individual) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    individual_source_bound_model.clips()[0].timeline_duration_frames == 60 &&
+                    individual_source_bound_model.clips()[1].timeline_start_frame == 40 &&
+                    individual_source_bound_model.clips()[1].timeline_duration_frames == 20,
+                "An individual edge exceeded the video source limit or changed its neighbor.");
+
         timeline::TimelineModel mixed_edge_model;
         require(mixed_edge_model.addClip(makeMetadata(
                     first_source, "mixed-edge.mkv", 200)) ==
@@ -440,6 +580,44 @@ int main() {
         edge_history_model.restore(redone_edge->timeline);
         require(edge_history_model.clips()[0].timeline_duration_frames == 90,
                 "Redo did not restore the extended clip duration.");
+
+        timeline::TimelineModel individual_history_model;
+        require(individual_history_model.addClip(makeMetadata(
+                    first_source, "individual-history.mkv", 120)) ==
+                    timeline::AddClipResult::Added &&
+                    individual_history_model.splitClip(0, 0, 40) ==
+                        timeline::SplitClipResult::Split,
+                "The individual edge history setup failed.");
+        timeline::EditState before_individual_edit;
+        before_individual_edit.timeline = individual_history_model.snapshot();
+        timeline::TimelineHistory individual_history;
+        individual_history.recordBeforeEdit(before_individual_edit);
+        require(individual_history_model.trimClipEdge(
+                    0,
+                    0,
+                    timeline::ClipEdge::Right,
+                    60,
+                    timeline::ClipEdgeEditMode::Individual) ==
+                    timeline::TrimClipResult::Trimmed,
+                "The individual edge history edit failed.");
+        timeline::EditState after_individual_edit;
+        after_individual_edit.timeline = individual_history_model.snapshot();
+        const auto undone_individual = individual_history.undo(after_individual_edit);
+        require(undone_individual.has_value(),
+                "Undo after an individual edge edit was unavailable.");
+        individual_history_model.restore(undone_individual->timeline);
+        require(individual_history_model.clips()[0].timeline_duration_frames == 40 &&
+                    individual_history_model.clips()[1].timeline_start_frame == 40 &&
+                    individual_history_model.clips()[1].timeline_duration_frames == 80,
+                "Undo did not restore both clips after an individual edge edit.");
+        const auto redone_individual = individual_history.redo(*undone_individual);
+        require(redone_individual.has_value(),
+                "Redo after an individual edge edit was unavailable.");
+        individual_history_model.restore(redone_individual->timeline);
+        require(individual_history_model.clips()[0].timeline_duration_frames == 60 &&
+                    individual_history_model.clips()[1].timeline_start_frame == 40 &&
+                    individual_history_model.clips()[1].timeline_duration_frames == 80,
+                "Redo did not restore the individual overlap without changing the neighbor.");
 
         timeline::TimelineModel malformed_range_model;
         auto malformed_snapshot = malformed_range_model.snapshot();

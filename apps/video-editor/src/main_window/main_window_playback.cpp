@@ -1101,6 +1101,29 @@ void MainWindow::handlePlaybackFrame(
     preserved_timeline_playhead_frame_.reset();
     playback_frame_index_ = frame_index;
     preview_widget_->setFrame(frame);
+    if (playback_is_playing_ && active_timeline_track_index_.has_value() &&
+        active_timeline_clip_index_.has_value()) {
+        const auto timeline_frame = timelinePlayheadFrame();
+        const auto visible_clip = timeline_model_.topClipAt(timeline_frame);
+        if (visible_clip.has_value() &&
+            (visible_clip->track_index != *active_timeline_track_index_ ||
+             visible_clip->clip_index != *active_timeline_clip_index_)) {
+            const auto& clip = timeline_model_.tracks()[visible_clip->track_index]
+                .clips[visible_clip->clip_index];
+            if (timeline::isMediaClipKind(clip.kind)) {
+                const auto local_frame = timeline_frame - clip.timeline_start_frame;
+                if (local_frame >= 0 && local_frame < clip.timeline_duration_frames) {
+                    activateTimelineClipAt(
+                        visible_clip->track_index,
+                        visible_clip->clip_index,
+                        local_frame,
+                        true,
+                        true);
+                    return;
+                }
+            }
+        }
+    }
     // Playback follows the active timeline clip even when the Media Browser
     // selection is a bin or a different media item. Gating this update on the
     // browser selection leaves the playhead frozen while frame_index advances.

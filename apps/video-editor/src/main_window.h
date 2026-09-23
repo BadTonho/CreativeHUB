@@ -212,7 +212,8 @@ private:
         qint64 track_index,
         qint64 clip_index,
         qint64 edge,
-        qint64 boundary_frame);
+        qint64 boundary_frame,
+        qint64 mode);
     void handleTimelineTransitionSelectedAt(
         qint64 track_index,
         qint64 from_clip_index,

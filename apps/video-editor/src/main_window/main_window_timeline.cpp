@@ -1843,7 +1843,8 @@ void MainWindow::handleTimelineClipTrimAt(
     qint64 track_index,
     qint64 clip_index,
     qint64 edge_value,
-    qint64 boundary_frame) {
+    qint64 boundary_frame,
+    qint64 mode_value) {
     if (track_index < 0 || clip_index < 0 ||
         track_index >= static_cast<qint64>(timeline_model_.trackCount()) ||
         clip_index >= static_cast<qint64>(
@@ -1856,15 +1857,20 @@ void MainWindow::handleTimelineClipTrimAt(
         edge_value != static_cast<qint64>(timeline::ClipEdge::Right)) {
         return;
     }
+    if (mode_value != static_cast<qint64>(timeline::ClipEdgeEditMode::Rolling) &&
+        mode_value != static_cast<qint64>(timeline::ClipEdgeEditMode::Individual)) {
+        return;
+    }
 
     const auto edge = static_cast<timeline::ClipEdge>(edge_value);
+    const auto mode = static_cast<timeline::ClipEdgeEditMode>(mode_value);
     const auto clip_id = timeline_model_.tracks()[track].clips[clip_index_value].clip_id;
     const auto playhead_before = timelinePlayheadFrame();
     const auto playback_frame_before = playback_frame_index_;
     try {
         const auto before = captureTimelineEditState();
         const auto result = timeline_model_.trimClipEdge(
-            track, clip_index_value, edge, boundary_frame);
+            track, clip_index_value, edge, boundary_frame, mode);
         if (result == timeline::TrimClipResult::NoChange) return;
         if (result != timeline::TrimClipResult::Trimmed) {
             statusBar()->showMessage("The clip edge cannot move any farther.");
@@ -1933,7 +1939,8 @@ void MainWindow::handleTimelineClipTrimAt(
             {{"track_index", std::to_string(track_index)},
              {"clip_index", std::to_string(clip_index)},
              {"edge", std::to_string(edge_value)},
-             {"boundary_frame", std::to_string(boundary_frame)}});
+             {"boundary_frame", std::to_string(boundary_frame)},
+             {"mode", std::to_string(mode_value)}});
         statusBar()->showMessage("Could not adjust the timeline clip edge.");
     }
 }

@@ -244,8 +244,13 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
     const std::vector<TimelineTrack>& tracks,
     ClipLocation location,
     ClipEdge edge,
-    std::int64_t requested_boundary_frame) {
-    if (edge != ClipEdge::Left && edge != ClipEdge::Right) return std::nullopt;
+    std::int64_t requested_boundary_frame,
+    ClipEdgeEditMode mode) {
+    if ((edge != ClipEdge::Left && edge != ClipEdge::Right) ||
+        (mode != ClipEdgeEditMode::Rolling &&
+         mode != ClipEdgeEditMode::Individual)) {
+        return std::nullopt;
+    }
     if (location.track_index >= tracks.size()) return std::nullopt;
     const auto& track = tracks[location.track_index];
     if (location.clip_index >= track.clips.size()) return std::nullopt;
@@ -257,20 +262,23 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
         return std::nullopt;
     }
 
-    std::optional<std::size_t> neighbor_index;
+    std::optional<std::size_t> shared_neighbor_index;
     if (edge == ClipEdge::Left && location.clip_index > 0) {
         const auto previous_index = location.clip_index - 1;
         const auto previous_end = clipTimelineEnd(track.clips[previous_index]);
         if (previous_end.has_value() && *previous_end == original.timeline_start_frame) {
-            neighbor_index = previous_index;
+            shared_neighbor_index = previous_index;
         }
     } else if (edge == ClipEdge::Right &&
                location.clip_index + 1 < track.clips.size()) {
         const auto& next = track.clips[location.clip_index + 1];
         if (next.timeline_start_frame == *original_end) {
-            neighbor_index = location.clip_index + 1;
+            shared_neighbor_index = location.clip_index + 1;
         }
     }
+    const auto neighbor_index = mode == ClipEdgeEditMode::Rolling
+        ? shared_neighbor_index
+        : std::nullopt;
 
     std::int64_t minimum_boundary = edge == ClipEdge::Left
         ? 0
@@ -296,6 +304,11 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
         for (std::size_t index = 0; index < track.clips.size(); ++index) {
             if (index == location.clip_index) continue;
             const auto& other = track.clips[index];
+            const bool overlaps_adjacent_media =
+                mode == ClipEdgeEditMode::Individual &&
+                shared_neighbor_index == index &&
+                isMediaClipKind(original.kind) && isMediaClipKind(other.kind);
+            if (overlaps_adjacent_media) continue;
             const auto other_end = clipTimelineEnd(other);
             if (other_end.has_value() && *other_end <= original.timeline_start_frame &&
                 sameOverlapClass(other, original)) {
@@ -306,6 +319,11 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
         for (std::size_t index = 0; index < track.clips.size(); ++index) {
             if (index == location.clip_index) continue;
             const auto& other = track.clips[index];
+            const bool overlaps_adjacent_media =
+                mode == ClipEdgeEditMode::Individual &&
+                shared_neighbor_index == index &&
+                isMediaClipKind(original.kind) && isMediaClipKind(other.kind);
+            if (overlaps_adjacent_media) continue;
             if (other.timeline_start_frame >= *original_end &&
                 sameOverlapClass(other, original)) {
                 maximum_boundary = std::min(
@@ -507,7 +525,7 @@ AddClipResult TimelineModel::addClip(
         metadata.kind == media::MediaKind::Image ? ClipKind::Image : ClipKind::Video,
         {}};
     track->clips.push_back(std::move(clip));
-    std::sort(track->clips.begin(), track->clips.end(),
+    std::stable_sort(track->clips.begin(), track->clips.end(),
               [](const auto& left, const auto& right) {
                   return left.timeline_start_frame < right.timeline_start_frame;
               });
@@ -544,7 +562,7 @@ AddClipResult TimelineModel::addTextClip(
     clip.track_id = track->track_id;
     clip.kind = ClipKind::Text;
     track->clips.push_back(std::move(clip));
-    std::sort(track->clips.begin(), track->clips.end(),
+    std::stable_sort(track->clips.begin(), track->clips.end(),
               [](const auto& left, const auto& right) {
                   return left.timeline_start_frame < right.timeline_start_frame;
               });
@@ -584,7 +602,7 @@ MoveClipResult TimelineModel::moveClip(
     moved.timeline_start_frame = timeline_start_frame;
     moved.track_id = target_track->track_id;
     target_track->clips.push_back(std::move(moved));
-    std::sort(target_track->clips.begin(), target_track->clips.end(),
+    std::stable_sort(target_track->clips.begin(), target_track->clips.end(),
               [](const auto& left, const auto& right) {
                   return left.timeline_start_frame < right.timeline_start_frame;
               });
@@ -699,13 +717,14 @@ TrimClipResult TimelineModel::trimClipEdge(
     std::size_t track_index,
     std::size_t clip_index,
     ClipEdge edge,
-    std::int64_t boundary_frame) {
+    std::int64_t boundary_frame,
+    ClipEdgeEditMode mode) {
     auto* track = trackAt(track_index);
     if (track == nullptr || clip_index >= track->clips.size()) {
         return TrimClipResult::InvalidIndex;
     }
     const auto preview = previewClipEdgeEdit(
-        tracks_, ClipLocation{track_index, clip_index}, edge, boundary_frame);
+        tracks_, ClipLocation{track_index, clip_index}, edge, boundary_frame, mode);
     if (!preview.has_value()) return TrimClipResult::InvalidRange;
 
     const bool clip_changed = preview->clip != track->clips[clip_index];
@@ -719,7 +738,7 @@ TrimClipResult TimelineModel::trimClipEdge(
     if (preview->neighbor_location.has_value() && preview->neighbor_clip.has_value()) {
         track->clips[preview->neighbor_location->clip_index] = *preview->neighbor_clip;
     }
-    std::sort(track->clips.begin(), track->clips.end(),
+    std::stable_sort(track->clips.begin(), track->clips.end(),
               [](const auto& left, const auto& right) {
                   return left.timeline_start_frame < right.timeline_start_frame;
               });

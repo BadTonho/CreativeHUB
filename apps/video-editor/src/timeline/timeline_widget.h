@@ -85,7 +85,8 @@ signals:
         qint64 track_index,
         qint64 clip_index,
         qint64 edge,
-        qint64 boundary_frame);
+        qint64 boundary_frame,
+        qint64 mode);
     void mediaDropRequestedAt(const QString& source_path, qint64 track_index, qint64 timeline_frame);
     void effectDropRequestedAt(const QString& effect_id, qint64 track_index, qint64 timeline_frame);
     void transitionSelectedAt(qint64 track_index, qint64 from_clip_index, qint64 to_clip_index);
@@ -152,6 +153,8 @@ private:
         double x) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> localFrameAt(const ClipLocation&, double x) const noexcept;
     [[nodiscard]] std::optional<ClipEdge> trimEdgeAt(const ClipLocation&, double x) const noexcept;
+    [[nodiscard]] ClipEdgeEditMode trimEditModeAt(
+        const ClipLocation&, ClipEdge, double x) const noexcept;
     void updateTrimHoverCursor(const QPointF& position);
     [[nodiscard]] std::optional<std::int64_t> trimBoundaryAt(double x) const noexcept;
     void updateTrimPreview(double x);
@@ -213,6 +216,7 @@ private:
     std::optional<std::pair<std::size_t, std::size_t>> trim_transition_pair_;
     ClipLocation trimming_clip_{};
     ClipEdge trim_edge_ = ClipEdge::Left;
+    ClipEdgeEditMode trim_mode_ = ClipEdgeEditMode::Rolling;
     std::int64_t trim_original_boundary_frame_ = 0;
     std::int64_t trim_scale_duration_ = 0;
     QPointF trim_last_position_{};

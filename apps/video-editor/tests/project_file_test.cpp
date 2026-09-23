@@ -265,13 +265,47 @@ int main(int argc, char** argv) {
         writeText(
             project_path,
             R"({"format":"creative-suite.main-editor","version":2,"media":[],"bins":["Unsorted"],"timeline":{"tracks":[{"name":"Video 1","clips":[{"source":"a.mkv","timeline_start_frame":0,"source_start_frame":0,"duration_frames":10},{"source":"b.mkv","timeline_start_frame":5,"source_start_frame":0,"duration_frames":10}]}]}})");
+        const auto overlapping_legacy = project::load(project_path);
+        require(overlapping_legacy.timeline_tracks.front().clips.size() == 2 &&
+                    overlapping_legacy.timeline_tracks.front().clips[0]
+                            .timeline_start_frame == 0 &&
+                    overlapping_legacy.timeline_tracks.front().clips[1]
+                            .timeline_start_frame == 5,
+                "A legacy project with an individual media overlap did not load.");
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":4,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"tracks":[{"name":"Video 1","clips":[{"kind":"text","timeline_start_frame":0,"source_start_frame":0,"duration_frames":10,"text":{"content":"First","font_family":"Sans Serif","font_size_pixels":48,"color":{"r":255,"g":255,"b":255,"a":255},"alignment":"center"}},{"kind":"text","timeline_start_frame":5,"source_start_frame":0,"duration_frames":10,"text":{"content":"Second","font_family":"Sans Serif","font_size_pixels":48,"color":{"r":255,"g":255,"b":255,"a":255},"alignment":"center"}}]}]}})");
         try {
             static_cast<void>(project::load(project_path));
-            throw std::runtime_error("Overlapping clips on one track were accepted.");
+            throw std::runtime_error("Overlapping text clips on one track were accepted.");
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::InvalidTimeline,
-                    "Track overlap returned the wrong error category.");
+                    "Overlapping text clips returned the wrong error category.");
         }
+
+        auto overlapping_document = original;
+        project::ProjectClip first_overlapping_clip;
+        first_overlapping_clip.source_path = first_source;
+        first_overlapping_clip.timeline_start_frame = 0;
+        first_overlapping_clip.source_start_frame = 0;
+        first_overlapping_clip.duration_frames = 60;
+        project::ProjectClip second_overlapping_clip;
+        second_overlapping_clip.source_path = first_source;
+        second_overlapping_clip.timeline_start_frame = 40;
+        second_overlapping_clip.source_start_frame = 40;
+        second_overlapping_clip.duration_frames = 60;
+        overlapping_document.timeline_tracks = {project::ProjectTrack{
+            "Video 1", 1.0, false,
+            {first_overlapping_clip, second_overlapping_clip}, {}}};
+        overlapping_document.timeline_clips =
+            overlapping_document.timeline_tracks.front().clips;
+        const auto overlapping_project_path = directory / "overlapping.csp";
+        project::save(overlapping_project_path, overlapping_document);
+        const auto loaded_overlapping_document =
+            project::load(overlapping_project_path);
+        require(loaded_overlapping_document == overlapping_document,
+                "A media overlap did not round-trip through the project format.");
 
         writeText(
             project_path,

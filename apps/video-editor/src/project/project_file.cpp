@@ -364,7 +364,8 @@ void validateDocument(const ProjectDocument& document,
                 const auto& second = track.clips[right];
                 const auto second_end =
                     second.timeline_start_frame + second.duration_frames;
-                if (first.kind == second.kind &&
+                if (first.kind == timeline::ClipKind::Text &&
+                    second.kind == timeline::ClipKind::Text &&
                     second.timeline_start_frame < first_end &&
                     first.timeline_start_frame <
                         second_end) {

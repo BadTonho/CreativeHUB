@@ -97,6 +97,9 @@ struct ClipLocation {
 };
 
 enum class ClipEdge { Left, Right };
+// Rolling edits resize both clips at a shared cut; individual edits preserve
+// the neighbor and may overlap an adjacent media clip.
+enum class ClipEdgeEditMode { Rolling, Individual };
 
 struct ClipEdgeEditPreview {
     ClipLocation clip_location;
@@ -110,7 +113,8 @@ struct ClipEdgeEditPreview {
     const std::vector<TimelineTrack>& tracks,
     ClipLocation location,
     ClipEdge edge,
-    std::int64_t boundary_frame);
+    std::int64_t boundary_frame,
+    ClipEdgeEditMode mode = ClipEdgeEditMode::Rolling);
 
 enum class AddTrackResult { Added, InvalidName };
 
@@ -198,7 +202,8 @@ public:
         std::size_t track_index,
         std::size_t clip_index,
         ClipEdge edge,
-        std::int64_t boundary_frame);
+        std::int64_t boundary_frame,
+        ClipEdgeEditMode mode = ClipEdgeEditMode::Rolling);
 
     // Compatibility helpers for the original single-track API.
     AddClipResult addClip(const media::VideoMetadata& metadata);
