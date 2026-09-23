@@ -33,7 +33,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
 | Timeline workspace selectors | Edit and blank Fusion button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
 | Workspace page switching | Edit startup state, Edit → Fusion → Edit, exclusive selectors, replacement of the Timeline with the Node Editor in the same lower dock, Inspector visibility, and reuse of the existing Preview as Viewer |
-| Functions window shortcut | Offscreen Shift+Space registration, WindowShortcut context, empty non-modal floating window, opening and toggling while focused, Escape and close behavior, reuse without duplicates, and regular Space playback shortcut preservation |
+| Functions window shortcut | Offscreen Shift+Space registration, WindowShortcut context, empty non-modal floating window, opening and toggling while focused, inside/outside click behavior, close and destruction through Escape/title bar/deactivation, fresh recreation without duplicates, and regular Space playback shortcut preservation |
 | Timeline interaction | Selection without playhead jumps, row-local clip hit testing, gap deselection for Timeline and Media Browser items, no-op drags from empty rows, optional move-to-start selection preference, seek-on-release, configurable clip movement, checked-by-default Magnetic Snap with eight-pixel tolerance, clip-edge and Timeline-boundary snapping, aligned snap guides, enable/disable behavior, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, one-frame fallback metadata, cancellation cleanup, no pre-release model signal, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, frozen track-header overlay during horizontal scrolling, vertical header alignment during vertical scrolling, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
 | System memory details | Offscreen non-modal dialog, System Memory and Main Editor sections, click-to-open behavior, Working Set, Private Usage, GB/MB formatting, and per-metric `N/A` handling |
@@ -98,11 +98,14 @@ in the running Main Editor after UI or integration changes:
 - Functions window: press Shift + Space with focus in the Timeline, Media
   Browser, and Preview, in both Edit and Fusion, and confirm the empty
   floating `Functions` window opens centered over the editor and receives
-  focus. Press Shift + Space again while the window is focused to hide it;
-  verify Escape and the title-bar close button also hide it, then reopen it and
-  confirm the same window is reused. Confirm the window contains no controls or
-  function entries, Space alone still controls playback, and opening or closing
-  the window does not change project dirty state, Timeline selection, playhead,
+  focus. Click inside the window and confirm it stays open. Click any Main
+  Editor panel outside it and confirm the window closes while the panel still
+  receives the click; also switch to another application and confirm the
+  window closes. Press Shift + Space again to confirm a fresh empty window
+  opens. Verify Escape, the title-bar close button, and Shift + Space while the
+  window is focused all close it. Confirm it contains no controls or function
+  entries, Space alone still controls playback, and opening or closing the
+  window does not change project dirty state, Timeline selection, playhead,
   playback, or Undo/Redo. Change the shortcut in `Settings > Shortcuts`, verify
   the new assignment applies, then reset it to Shift + Space;
 - Timeline selection and empty-row behavior: select a clip, click an empty

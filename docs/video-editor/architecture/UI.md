@@ -161,11 +161,13 @@ project data, project dirty state, undo/redo history, or the `.csp` format.
 actions, and only creates and opens the dialog.
 
 `Shift + Space` opens and closes the non-modal floating `Functions` window.
-The window is an empty 420x320 shell centered over the Main Editor; Escape and
-the title-bar close button hide it, and reopening reuses the same window. The
-shortcut uses `WindowShortcut` context and remains available while the floating
-window is focused. It is registered in `ShortcutManager` and can be customized
-in `Settings > Shortcuts`. The window has no list, search, drag-and-drop, or
+The window is an empty 420x320 shell centered over the Main Editor. A click
+outside it, loss of window activation, Escape, the title-bar close button, or
+Shift + Space closes and destroys it; the next shortcut press creates a fresh
+window. Outside clicks continue to the clicked control. The shortcut uses
+`WindowShortcut` context and remains available while the floating window is
+focused. It is registered in `ShortcutManager` and can be customized in
+`Settings > Shortcuts`. The window has no list, search, drag-and-drop, or
 function operations and does not change project or Timeline state.
 
 The `Help > System` action opens a modal diagnostic dialog showing the Main

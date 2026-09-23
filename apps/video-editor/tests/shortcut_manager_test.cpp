@@ -5,8 +5,11 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDialog>
+#include <QEvent>
 #include <QKeySequence>
 #include <QMainWindow>
+#include <QPointer>
+#include <QPushButton>
 #include <QSettings>
 #include <QTest>
 #include <QWidget>
@@ -28,6 +31,11 @@ void sendKey(
     QApplication::processEvents();
 }
 
+void processDeferredDeletes() {
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QApplication::processEvents();
+}
+
 void verifyFunctionPalette(QSettings& settings) {
     settings.clear();
 
@@ -35,6 +43,14 @@ void verifyFunctionPalette(QSettings& settings) {
     main_window.resize(640, 480);
     auto* editor = new QWidget;
     editor->setFocusPolicy(Qt::StrongFocus);
+    auto* outside_button = new QPushButton(QStringLiteral("Outside"), editor);
+    outside_button->setGeometry(10, 10, 80, 30);
+    int outside_button_clicks = 0;
+    QObject::connect(
+        outside_button,
+        &QPushButton::clicked,
+        &main_window,
+        [&outside_button_clicks]() { ++outside_button_clicks; });
     main_window.setCentralWidget(editor);
 
     int playback_triggers = 0;
@@ -104,7 +120,6 @@ void verifyFunctionPalette(QSettings& settings) {
     editor->setFocus();
     QApplication::processEvents();
 
-    auto* const original_dialog = palette.dialog();
     sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
     require(palette.dialog()->isVisible(),
             "Shift+Space must open the Functions window from a child widget.");
@@ -115,34 +130,84 @@ void verifyFunctionPalette(QSettings& settings) {
             "Functions window must open centered over the Main Editor.");
     require(playback_triggers == 0,
             "Shift+Space must not trigger the regular Space action.");
+    QPointer<QDialog> first_dialog = palette.dialog();
+
+    QTest::mouseClick(
+        palette.dialog(),
+        Qt::LeftButton,
+        Qt::NoModifier,
+        palette.dialog()->rect().center());
+    QApplication::processEvents();
+    require(palette.dialog()->isVisible(),
+            "Clicking inside Functions must keep the window open.");
+
+    const QPoint outside_click = outside_button->mapToGlobal(
+        outside_button->rect().center());
+    require(!palette.dialog()->frameGeometry().contains(outside_click),
+            "Test click must land outside the Functions window.");
+    QTest::mouseClick(
+        outside_button,
+        Qt::LeftButton,
+        Qt::NoModifier,
+        outside_button->rect().center());
+    processDeferredDeletes();
+    require(first_dialog.isNull() && palette.dialog() == nullptr,
+            "Clicking outside Functions must close and destroy the window.");
+    require(outside_button_clicks == 1,
+            "The outside click must still reach the clicked Main Editor control.");
+
+    sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
+    require(palette.dialog() != nullptr && palette.dialog()->isVisible(),
+            "Shift+Space must create a new Functions window after closing.");
+    QPointer<QDialog> second_dialog = palette.dialog();
 
     sendKey(palette.dialog(), Qt::Key_Space, Qt::ShiftModifier);
-    require(!palette.dialog()->isVisible(),
-            "Shift+Space must hide the Functions window when it is focused.");
+    processDeferredDeletes();
+    require(second_dialog.isNull() && palette.dialog() == nullptr,
+            "Shift+Space must close the Functions window when it is focused.");
 
     sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
-    require(palette.dialog()->isVisible(),
-            "Shift+Space must reopen the same Functions window.");
-    sendKey(palette.dialog(), Qt::Key_Escape);
-    require(!palette.dialog()->isVisible(),
-            "Escape must hide the Functions window.");
+    QPointer<QDialog> third_dialog = palette.dialog();
+    require(third_dialog != nullptr && third_dialog->isVisible(),
+            "Shift+Space must create a Functions window after toggling closed.");
+    sendKey(third_dialog, Qt::Key_Escape);
+    processDeferredDeletes();
+    require(third_dialog.isNull() && palette.dialog() == nullptr,
+            "Escape must close and destroy the Functions window.");
 
     sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
-    require(palette.dialog() == original_dialog &&
-                palette.dialog()->isVisible(),
-            "Reopening Functions must reuse the existing window.");
+    QPointer<QDialog> fourth_dialog = palette.dialog();
+    require(fourth_dialog != nullptr && fourth_dialog->isVisible(),
+            "Shift+Space must open Functions after Escape closes it.");
     palette.dialog()->close();
-    QApplication::processEvents();
-    require(!palette.dialog()->isVisible(),
-            "Closing the Functions window must hide it.");
-    sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
-    require(palette.dialog() == original_dialog &&
-                palette.dialog()->isVisible(),
-            "Closing and reopening must not create duplicate windows.");
+    processDeferredDeletes();
+    require(fourth_dialog.isNull() && palette.dialog() == nullptr,
+            "The title-bar close action must destroy the Functions window.");
 
-    palette.dialog()->hide();
+    sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
+    QPointer<QDialog> fifth_dialog = palette.dialog();
+    require(fifth_dialog != nullptr && fifth_dialog->isVisible(),
+            "Functions must reopen after the title-bar close action.");
+    require(main_window.findChildren<QDialog*>(
+                QStringLiteral("functionsWindow")).size() == 1,
+            "Only one Functions window may exist after reopening.");
+
+    sendKey(fifth_dialog, Qt::Key_Space, Qt::ShiftModifier);
+    processDeferredDeletes();
+    require(fifth_dialog.isNull() && palette.dialog() == nullptr,
+            "Shift+Space must close the final Functions window.");
+
+    sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
+    QPointer<QDialog> deactivated_dialog = palette.dialog();
+    QEvent deactivation(QEvent::WindowDeactivate);
+    QCoreApplication::sendEvent(deactivated_dialog, &deactivation);
+    QTest::qWait(1);
+    processDeferredDeletes();
+    require(deactivated_dialog.isNull() && palette.dialog() == nullptr,
+            "Losing window activation must close and destroy Functions.");
+
     main_window.activateWindow();
-    main_window.setFocus();
+    editor->setFocus();
     QApplication::processEvents();
     sendKey(&main_window, Qt::Key_Space);
     require(playback_triggers == 1,
