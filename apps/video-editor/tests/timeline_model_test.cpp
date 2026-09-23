@@ -1,4 +1,5 @@
 #include "media/video_metadata.h"
+#include "timeline/timeline_clip_edge_command.h"
 #include "timeline/timeline_history.h"
 #include "timeline/timeline_model.h"
 
@@ -35,6 +36,132 @@ media::VideoMetadata makeMetadata(
     return metadata;
 }
 
+void validateClipEdgeTrimCommand(
+    const std::filesystem::path& first_source,
+    const std::filesystem::path& second_source) {
+    timeline::TimelineModel rolling;
+    require(rolling.addClip(makeMetadata(first_source, "rolling.mkv")) ==
+                timeline::AddClipResult::Added &&
+                rolling.splitClip(0, 0, 40) == timeline::SplitClipResult::Split,
+            "The rolling edge-command setup failed.");
+    const auto first_id = rolling.clips()[0].clip_id;
+    const auto second_id = rolling.clips()[1].clip_id;
+    timeline::TimelineHistory history;
+    timeline::EditState before;
+    before.timeline = rolling.snapshot();
+
+    const auto inside = timeline::applyClipEdgeTrim(
+        rolling, {0, 0}, timeline::ClipEdge::Right, 50,
+        timeline::ClipEdgeEditMode::Rolling, 45, 7);
+    require(inside.result == timeline::TrimClipResult::Trimmed &&
+                inside.selection.has_value() &&
+                inside.selection->location == timeline::ClipLocation{0, 0} &&
+                inside.selection->playback_frame == 45 &&
+                !inside.selection->preserved_playhead_frame.has_value() &&
+                rolling.clips()[0].clip_id == first_id &&
+                rolling.clips()[1].timeline_start_frame == 50,
+            "Rolling trim did not preserve the selected clip and inside playhead.");
+    history.recordBeforeEdit(before);
+    require(history.undoCount() == 1 && history.redoCount() == 0,
+            "A successful edge trim did not produce one history entry.");
+
+    const auto changed = rolling.snapshot();
+    const auto no_change = timeline::applyClipEdgeTrim(
+        rolling, {0, 0}, timeline::ClipEdge::Right, 50,
+        timeline::ClipEdgeEditMode::Rolling, 45, 45);
+    const auto invalid_index = timeline::applyClipEdgeTrim(
+        rolling, {9, 0}, timeline::ClipEdge::Right, 50,
+        timeline::ClipEdgeEditMode::Rolling, 45, 45);
+    const auto invalid_mode = timeline::applyClipEdgeTrim(
+        rolling, {0, 0}, timeline::ClipEdge::Right, 55,
+        static_cast<timeline::ClipEdgeEditMode>(9), 45, 45);
+    require(no_change.result == timeline::TrimClipResult::NoChange &&
+                !no_change.selection.has_value() &&
+                invalid_index.result == timeline::TrimClipResult::InvalidIndex &&
+                !invalid_index.selection.has_value() &&
+                invalid_mode.result == timeline::TrimClipResult::InvalidRange &&
+                !invalid_mode.selection.has_value() &&
+                rolling.snapshot() == changed && history.undoCount() == 1,
+            "A no-op or invalid edge command changed the model or history.");
+
+    timeline::EditState after;
+    after.timeline = rolling.snapshot();
+    const auto undone = history.undo(after);
+    require(undone.has_value() && history.undoCount() == 0 &&
+                history.redoCount() == 1,
+            "Undo did not consume exactly one edge-trim history entry.");
+    rolling.restore(undone->timeline);
+    require(rolling.clips()[0].timeline_duration_frames == 40 &&
+                rolling.clips()[1].timeline_start_frame == 40,
+            "Undo did not restore the original shared cut.");
+    const auto redone = history.redo(*undone);
+    require(redone.has_value() && history.undoCount() == 1 &&
+                history.redoCount() == 0,
+            "Redo did not restore exactly one edge-trim history entry.");
+    rolling.restore(redone->timeline);
+    require(rolling.snapshot() == changed,
+            "Redo did not restore the command's rolling trim.");
+
+    const auto outside = timeline::applyClipEdgeTrim(
+        rolling, {0, 1}, timeline::ClipEdge::Left, 30,
+        timeline::ClipEdgeEditMode::Rolling, 10, 999);
+    require(outside.result == timeline::TrimClipResult::Trimmed &&
+                outside.selection.has_value() &&
+                outside.selection->location == timeline::ClipLocation{0, 1} &&
+                outside.selection->playback_frame == 89 &&
+                outside.selection->preserved_playhead_frame == 10 &&
+                rolling.clips()[1].clip_id == second_id,
+            "Rolling trim did not clamp the local frame and preserve an outside playhead.");
+
+    timeline::TimelineModel individual;
+    require(individual.addClip(0, makeMetadata(first_source, "first.mkv"), 30) ==
+                timeline::AddClipResult::Added &&
+                individual.trimClip(0, 0, 0, 20) == timeline::TrimClipResult::Trimmed &&
+                individual.addClip(0, makeMetadata(second_source, "second.mkv"), 50) ==
+                    timeline::AddClipResult::Added &&
+                individual.trimClip(0, 1, 30, 40) == timeline::TrimClipResult::Trimmed,
+            "The individual edge-command setup failed.");
+    const auto reordered_id = individual.clips()[1].clip_id;
+    const auto individual_outcome = timeline::applyClipEdgeTrim(
+        individual, {0, 1}, timeline::ClipEdge::Left, 20,
+        timeline::ClipEdgeEditMode::Individual, 25, 0);
+    require(individual_outcome.result == timeline::TrimClipResult::Trimmed &&
+                individual_outcome.selection.has_value() &&
+                individual_outcome.selection->location ==
+                    timeline::ClipLocation{0, 0} &&
+                individual_outcome.selection->playback_frame == 5 &&
+                !individual_outcome.selection->preserved_playhead_frame.has_value() &&
+                individual.clips()[0].clip_id == reordered_id &&
+                individual.clips()[1].timeline_start_frame == 30,
+            "Individual trim lost clip identity after reordering the track.");
+
+    timeline::TimelineModel text;
+    require(text.addTextClip(0, 10, 10) == timeline::AddClipResult::Added,
+            "The text edge-command setup failed.");
+    const auto text_outcome = timeline::applyClipEdgeTrim(
+        text, {0, 0}, timeline::ClipEdge::Right, 25,
+        timeline::ClipEdgeEditMode::Individual, 5, 50);
+    require(text_outcome.result == timeline::TrimClipResult::Trimmed &&
+                text_outcome.selection.has_value() &&
+                text_outcome.selection->playback_frame == 14 &&
+                text_outcome.selection->preserved_playhead_frame == 5,
+            "Text trim did not preserve an outside playhead and clamp its local frame.");
+
+    timeline::TimelineModel image;
+    auto image_metadata = makeMetadata(second_source, "still.png", 1);
+    image_metadata.kind = media::MediaKind::Image;
+    require(image.addClip(0, image_metadata, 0) == timeline::AddClipResult::Added,
+            "The image edge-command setup failed.");
+    const auto image_outcome = timeline::applyClipEdgeTrim(
+        image, {0, 0}, timeline::ClipEdge::Right, 300,
+        timeline::ClipEdgeEditMode::Individual, 180, 0);
+    require(image_outcome.result == timeline::TrimClipResult::Trimmed &&
+                image_outcome.selection.has_value() &&
+                image_outcome.selection->playback_frame == 180 &&
+                !image_outcome.selection->preserved_playhead_frame.has_value(),
+            "Image trim did not keep the playhead inside the extended clip.");
+}
+
 } // namespace
 
 int main() {
@@ -46,6 +173,8 @@ int main() {
         const auto second_source = directory / "media" / "second.mkv";
         std::ofstream(first_source, std::ios::binary).close();
         std::ofstream(second_source, std::ios::binary).close();
+
+        validateClipEdgeTrimCommand(first_source, second_source);
 
         const auto non_canonical_first =
             directory / "media" / ".." / "media" / "first.mkv";

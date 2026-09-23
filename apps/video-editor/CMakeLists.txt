@@ -78,6 +78,8 @@ add_executable(creative-suite-main-editor
     src/project/project_file.h
     src/timeline/timeline_model.cpp
     src/timeline/timeline_model.h
+    src/timeline/timeline_clip_edge_command.cpp
+    src/timeline/timeline_clip_edge_command.h
     src/timeline/timeline_layout.h
     src/timeline/timeline_zoom.h
     src/timeline/timeline_transform.cpp

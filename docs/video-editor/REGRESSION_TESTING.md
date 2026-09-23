@@ -31,6 +31,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Playback session | Sequential frames, forward catch-up without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
 | Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, rolling and individual edge trims, one-sided media overlap and top-clip priority, video source limits, still-image/text extension, delete, metadata, history |
+| Timeline edge-trim command | Rolling and individual trim outcomes for video, image, and text, edited-clip identity after reordering, local playback frame and preserved global playhead, no-change and invalid requests, and Undo/Redo snapshot compatibility |
 | Timeline workspace selectors | Edit and blank Fusion button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
 | Workspace page switching | Edit startup state, Edit → Fusion → Edit, exclusive selectors, replacement of the Timeline with the Node Editor in the same lower dock, Inspector visibility, and reuse of the existing Preview as Viewer |
 | Functions window shortcut | Offscreen Shift+Space registration, WindowShortcut context, empty non-modal floating window, opening and toggling while focused, inside/outside click behavior, close and destruction through Escape/title bar/deactivation, fresh recreation without duplicates, and regular Space playback shortcut preservation |
@@ -229,7 +230,9 @@ in the running Main Editor after UI or integration changes:
   one-frame minimums, source limits, transition selection on a simple click,
   and Undo/Redo for both gesture modes; save and reopen the overlapping
   project; also extend an outer edge into a gap and confirm video source limits,
-  still-image frame holding, and text duration extension;
+  still-image frame holding, and text duration extension; repeat with the
+  playhead inside and outside the edited clip, confirming the selected clip,
+  playhead, Preview frame, and one Undo/Redo entry after each valid release;
 - use the default-enabled Preview performance metrics (or enable them in
   Settings) and compare a simple 1080p playback run
   with the metrics disabled: confirm the one-second summaries include decode,

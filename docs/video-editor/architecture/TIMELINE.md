@@ -137,6 +137,13 @@ gap. During an individual trim preview, a guide marks the edited edge even
 where the covering clip hides the underlying edge. A simple click on the cut
 still selects its transition.
 
+On release, a Qt-independent edge-trim command applies the model edit, finds
+the edited clip by its stable identifier after any track reordering, and
+calculates the selected clip and local playback frame. It preserves the global
+playhead when that frame falls outside the edited clip. `MainWindow` retains
+Undo/Redo recording, UI refresh, status and error logging, and playback-worker
+coordination.
+
 At an outer edge or an edge separated by a timeline gap, only the dragged clip
 changes; extension stops before it overlaps another media clip. Edge hit
 testing follows the clip's rendered geometry so the visible right edge remains

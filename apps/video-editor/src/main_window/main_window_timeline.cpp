@@ -5,6 +5,7 @@
 #include "preview_widget.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
+#include "timeline/timeline_clip_edge_command.h"
 #include "timeline/timeline_track_header_overlay.h"
 #include "timeline/timeline_zoom.h"
 #include "timeline/timeline_widget.h"
@@ -1864,49 +1865,41 @@ void MainWindow::handleTimelineClipTrimAt(
 
     const auto edge = static_cast<timeline::ClipEdge>(edge_value);
     const auto mode = static_cast<timeline::ClipEdgeEditMode>(mode_value);
-    const auto clip_id = timeline_model_.tracks()[track].clips[clip_index_value].clip_id;
     const auto playhead_before = timelinePlayheadFrame();
     const auto playback_frame_before = playback_frame_index_;
     try {
         const auto before = captureTimelineEditState();
-        const auto result = timeline_model_.trimClipEdge(
-            track, clip_index_value, edge, boundary_frame, mode);
-        if (result == timeline::TrimClipResult::NoChange) return;
-        if (result != timeline::TrimClipResult::Trimmed) {
+        const auto outcome = timeline::applyClipEdgeTrim(
+            timeline_model_,
+            timeline::ClipLocation{track, clip_index_value},
+            edge,
+            boundary_frame,
+            mode,
+            playhead_before,
+            playback_frame_before);
+        if (outcome.result == timeline::TrimClipResult::NoChange) return;
+        if (outcome.result != timeline::TrimClipResult::Trimmed) {
             statusBar()->showMessage("The clip edge cannot move any farther.");
             return;
         }
         recordTimelineEdit(before);
-        const auto edited_location = timeline_model_.locateClip(clip_id);
-        if (!edited_location.has_value()) return;
-        active_timeline_track_index_ = edited_location->track_index;
-        active_timeline_clip_index_ = edited_location->clip_index;
-        const auto& edited_clip = timeline_model_.tracks()[edited_location->track_index]
-            .clips[edited_location->clip_index];
-        const auto edited_end = edited_clip.timeline_start_frame +
-            edited_clip.timeline_duration_frames;
-        const bool playhead_remains_inside =
-            playhead_before >= edited_clip.timeline_start_frame &&
-            playhead_before < edited_end;
-        if (playhead_remains_inside) {
-            playback_frame_index_ =
-                playhead_before - edited_clip.timeline_start_frame;
-            preserved_timeline_playhead_frame_.reset();
-        } else {
-            playback_frame_index_ = std::clamp<std::int64_t>(
-                playback_frame_before,
-                0,
-                edited_clip.timeline_duration_frames - 1);
-            preserved_timeline_playhead_frame_ = playhead_before;
-        }
+        if (!outcome.selection.has_value()) return;
+        const auto edited_location = outcome.selection->location;
+        active_timeline_track_index_ = edited_location.track_index;
+        active_timeline_clip_index_ = edited_location.clip_index;
+        playback_frame_index_ = outcome.selection->playback_frame;
+        preserved_timeline_playhead_frame_ =
+            outcome.selection->preserved_playhead_frame;
+        const auto& edited_clip = timeline_model_.tracks()[edited_location.track_index]
+            .clips[edited_location.clip_index];
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
         if (edited_clip.kind == timeline::ClipKind::Text ||
             edited_clip.kind == timeline::ClipKind::Image) {
             activateTimelineClipAt(
-                edited_location->track_index,
-                edited_location->clip_index,
+                edited_location.track_index,
+                edited_location.clip_index,
                 playback_frame_index_,
                 false,
                 true);
@@ -1920,8 +1913,8 @@ void MainWindow::handleTimelineClipTrimAt(
                 });
             if (media_item != media_items_.end() && !media_item->offline) {
                 activateTimelineClipAt(
-                    edited_location->track_index,
-                    edited_location->clip_index,
+                    edited_location.track_index,
+                    edited_location.clip_index,
                     playback_frame_index_,
                     false,
                     true);
