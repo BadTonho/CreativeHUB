@@ -256,6 +256,13 @@ Selecting a timeline clip does not move the playhead by default. The Edit >
 Move Playhead to Selected Clip Start preference restores the optional behavior
 and is stored as a user preference.
 
+Timeline clip hit testing is limited to the track row under the pointer. An
+empty content gap therefore cannot select or move a clip from another track.
+Clicking a gap clears the active Timeline clip and the current Media Browser
+item, while dragging from a gap performs no edit and does not create a ghost.
+Existing movement between tracks remains available when the gesture starts on
+an actual clip.
+
 The upper time ruler is also a playhead scrub area. Clicking or dragging it
 updates the visible playhead without selecting a clip, then requests the seek
 when the pointer is released. Scrubbing remains bounded by the real project

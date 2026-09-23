@@ -1291,6 +1291,11 @@ void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_in
         }
         active_timeline_track_index_.reset();
         active_timeline_clip_index_.reset();
+        if (media_list_ != nullptr) {
+            const QSignalBlocker blocker(media_list_);
+            media_list_->clearSelection();
+            media_list_->setCurrentRow(-1);
+        }
         playback_frame_index_ = 0;
         if (move_playhead || previous_playhead == 0) {
             preserved_timeline_playhead_frame_.reset();

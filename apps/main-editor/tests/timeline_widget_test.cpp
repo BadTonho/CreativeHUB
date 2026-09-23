@@ -758,7 +758,41 @@ int main(int argc, char* argv[]) {
         require(seek_frames.size() == 1,
                 "A normal move drag was incorrectly treated as seeking.");
 
+        // Clip hit testing is local to the row under the pointer. A clip on a
+        // different row must not be selected or moved through an empty row.
+        const auto empty_lower_track = timeline::TimelineTrack{
+            1, "Video 1", 1.0, false, {}};
+        widget.setTracks({top_track, empty_lower_track});
+        widget.setActiveClip(timeline::ClipLocation{0, 0});
+        selected_track = 0;
+        selected_clip = 0;
+        move_from_track = -1;
+        move_to_track = -1;
+        sendMouse(widget, QEvent::MouseButtonPress, QPointF(500, 320),
+                  Qt::LeftButton);
+        sendMouse(widget, QEvent::MouseMove, QPointF(700, 320),
+                  Qt::LeftButton);
+        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(700, 320),
+                  Qt::NoButton);
+        require(selected_track == -1 && selected_clip == -1 &&
+                    move_from_track == -1 && move_to_track == -1,
+                "Dragging an empty row selected or moved a clip from another row.");
+
+        // An actual clip in the clicked row remains selectable even when the
+        // same frame is occupied by a clip on another row.
+        widget.setTracks({top_track, lower_track});
+        widget.setActiveClip(std::nullopt);
+        selected_track = -1;
+        selected_clip = -1;
+        sendMouse(widget, QEvent::MouseButtonPress, QPointF(500, 320),
+                  Qt::LeftButton);
+        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(500, 320),
+                  Qt::NoButton);
+        require(selected_track == 1 && selected_clip == 0,
+                "The Timeline did not select the clip in the clicked row.");
+
         // Alt becomes the seek override when movement no longer requires it.
+        widget.setActiveClip(timeline::ClipLocation{0, 0});
         sendMouse(widget, QEvent::MouseButtonPress, QPointF(400, 120),
                   Qt::LeftButton, Qt::AltModifier);
         sendMouse(widget, QEvent::MouseMove, QPointF(700, 120),

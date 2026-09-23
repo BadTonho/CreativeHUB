@@ -872,30 +872,29 @@ std::optional<std::size_t> TimelineWidget::trackAt(double y) const noexcept {
 }
 
 std::optional<ClipLocation> TimelineWidget::clipAt(double x, double y) const noexcept {
-    if (!trackAt(y).has_value()) return std::nullopt;
+    const auto track_index = trackAt(y);
+    if (!track_index.has_value()) return std::nullopt;
     const auto global_frame = globalFrameAt(x);
     if (!global_frame.has_value()) return std::nullopt;
-    // Track zero is the visual top layer. A click in an overlap selects the
-    // first visible clip in that priority order, regardless of the row under
-    // the pointer.
-    for (std::size_t track_index = 0; track_index < tracks_.size(); ++track_index) {
-        std::optional<ClipLocation> video_match;
-        for (std::size_t clip_index = 0;
-             clip_index < tracks_[track_index].clips.size();
-             ++clip_index) {
-            const auto& clip = tracks_[track_index].clips[clip_index];
-            if (*global_frame >= clip.timeline_start_frame &&
-                *global_frame < clip.timeline_start_frame +
-                    clip.timeline_duration_frames) {
-                if (clip.kind == ClipKind::Text) {
-                    return ClipLocation{track_index, clip_index};
-                }
-                video_match = ClipLocation{track_index, clip_index};
+    // Hit testing is local to the row under the pointer. Looking through all
+    // tracks would make a click in an empty row select or move a clip from a
+    // different row at the same timeline frame.
+    std::optional<ClipLocation> media_match;
+    const auto& track = tracks_[*track_index];
+    for (std::size_t clip_index = 0;
+         clip_index < track.clips.size();
+         ++clip_index) {
+        const auto& clip = track.clips[clip_index];
+        if (*global_frame >= clip.timeline_start_frame &&
+            *global_frame < clip.timeline_start_frame +
+                clip.timeline_duration_frames) {
+            if (clip.kind == ClipKind::Text) {
+                return ClipLocation{*track_index, clip_index};
             }
+            media_match = ClipLocation{*track_index, clip_index};
         }
-        if (video_match.has_value()) return video_match;
     }
-    return std::nullopt;
+    return media_match;
 }
 
 std::optional<std::int64_t> TimelineWidget::globalFrameAt(double x) const noexcept {

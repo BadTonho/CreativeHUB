@@ -75,9 +75,12 @@ decides whether the operation is accepted.
 The internal add-to-timeline operation appends media to the active track. A
 drop from the imported Media Browser provides a target track and absolute
 timeline frame. The same source
-may appear repeatedly as independent occurrences. Direct selection in the
-Timeline changes the active clip and Media Browser selection. A gap pauses
-playback and clears the preview without creating an error log entry.
+may appear repeatedly as independent occurrences. Clip hit testing is local to
+the track row under the pointer, so a clip on another row cannot be selected
+or moved through an empty row. Direct selection in the Timeline changes the
+active clip and Media Browser selection. Clicking a content gap clears both
+selections, pauses playback, and clears the preview without creating an error
+log entry; dragging from a gap is a no-op.
 
 ## Editing gestures
 
