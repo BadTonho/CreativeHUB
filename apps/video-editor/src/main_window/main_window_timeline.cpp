@@ -10,6 +10,7 @@
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser_list_widget.h"
 #include "ui/system_memory_indicator.h"
+#include "ui/timeline_end_buttons.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -468,6 +469,7 @@ QWidget* MainWindow::createTimeline() {
     controls->addWidget(zoom_control);
     controls->addWidget(zoom_in_button);
     controls->addStretch();
+    controls->addWidget(ui::createTimelineEndButtons(container));
     layout->addLayout(controls);
 
     monitor_volume_slider_->setValue(settings::monitorVolumePercent());

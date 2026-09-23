@@ -249,6 +249,11 @@ labeling every frame or drawing guides across clip content. The guides are
 limited to the current paint region so long timelines remain responsive.
 Zoom affects only horizontal timeline presentation and is persisted per project
 without creating a clip-edit history entry.
+At the far right of the Timeline toolbar, after the zoom controls and flexible
+space, two active placeholder buttons are shown in order: `Edit`, then a blank
+button with no visible text or icon. Neither button has an action, shortcut,
+tooltip, or effect on project, playback, history, or Timeline state. The blank
+button exposes an accessible name to assistive technology.
 
 Gesture priority is configurable: by default, normal drag moves clips and
 Alt + drag seeks; when the Edit > Require Alt to Move Clips option is enabled,

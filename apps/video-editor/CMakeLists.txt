@@ -105,6 +105,8 @@ add_executable(creative-suite-main-editor
     src/ui/system_memory_details_dialog.h
     src/ui/system_memory_indicator.cpp
     src/ui/system_memory_indicator.h
+    src/ui/timeline_end_buttons.cpp
+    src/ui/timeline_end_buttons.h
 )
 
 target_link_libraries(creative-suite-main-editor PRIVATE
