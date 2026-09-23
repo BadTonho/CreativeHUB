@@ -201,6 +201,11 @@ over the Timeline changes every row uniformly using smooth wheel deltas. When
 the rows require more space than the viewport, the existing vertical scroll
 bar exposes the remaining tracks. The selected row height is persisted per
 project; Ctrl + scroll continues to control horizontal timeline zoom.
+The same toolbar includes `Volume` and a `Monitor Volume` slider from 0% to
+200%, initialized at 100%. This is a global monitoring control for audio heard
+during editor playback; it is persisted in `QSettings`, applies live without
+restarting playback, and does not affect clip/track gains, project dirty state,
+autosaves, or exports.
 The Timeline toolbar also includes the checked-by-default `Magnetic Snap`
 button. It attracts either edge of a moving clip or a new Media Browser drop
 to clip boundaries on the destination track, frame zero, or the end of the

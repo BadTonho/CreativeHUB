@@ -66,4 +66,25 @@ void setProjectAutosaveRetention(int count) {
             kMaximumProjectAutosaveRetention));
 }
 
+int monitorVolumePercent() {
+    const auto stored = QSettings().value(kMonitorVolumePercentKey);
+    bool ok = false;
+    const auto value = stored.toInt(&ok);
+    if (!ok) return kDefaultMonitorVolumePercent;
+    return std::clamp(
+        value,
+        kMinimumMonitorVolumePercent,
+        kMaximumMonitorVolumePercent);
+}
+
+void setMonitorVolumePercent(int percent) {
+    QSettings settings;
+    settings.setValue(
+        kMonitorVolumePercentKey,
+        std::clamp(
+            percent,
+            kMinimumMonitorVolumePercent,
+            kMaximumMonitorVolumePercent));
+}
+
 } // namespace settings

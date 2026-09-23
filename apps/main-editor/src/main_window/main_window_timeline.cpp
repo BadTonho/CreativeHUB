@@ -4,6 +4,7 @@
 #include "logging/logger.h"
 #include "preview_widget.h"
 #include "project/project_file.h"
+#include "settings/user_preferences.h"
 #include "timeline/timeline_track_header_overlay.h"
 #include "timeline/timeline_zoom.h"
 #include "timeline/timeline_widget.h"
@@ -391,6 +392,28 @@ QWidget* MainWindow::createTimeline() {
     controls->addWidget(previous_frame_button_);
     controls->addWidget(play_pause_button_);
     controls->addWidget(next_frame_button_);
+    controls->addSpacing(6);
+    auto* monitor_volume_label = new QLabel("Volume", container);
+    monitor_volume_label->setStyleSheet("color: #9aa4b2; font-weight: 600;");
+    monitor_volume_slider_ = new QSlider(Qt::Horizontal, container);
+    monitor_volume_indicator_ = new QLabel(container);
+    monitor_volume_slider_->setObjectName("monitorVolumeSlider");
+    monitor_volume_indicator_->setObjectName("monitorVolumeIndicator");
+    monitor_volume_slider_->setRange(
+        settings::kMinimumMonitorVolumePercent,
+        settings::kMaximumMonitorVolumePercent);
+    monitor_volume_slider_->setSingleStep(5);
+    monitor_volume_slider_->setPageStep(10);
+    monitor_volume_slider_->setFixedWidth(96);
+    monitor_volume_slider_->setToolTip(
+        "Editor monitoring volume (0% to 200%)");
+    monitor_volume_slider_->setAccessibleName("Monitor Volume");
+    monitor_volume_indicator_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    monitor_volume_indicator_->setMinimumWidth(42);
+    monitor_volume_indicator_->setStyleSheet("color: #9aa4b2;");
+    controls->addWidget(monitor_volume_label);
+    controls->addWidget(monitor_volume_slider_);
+    controls->addWidget(monitor_volume_indicator_);
     controls->addWidget(clear_timeline_button_);
     controls->addWidget(selection_button_);
     controls->addWidget(razor_button_);
@@ -447,12 +470,17 @@ QWidget* MainWindow::createTimeline() {
     controls->addStretch();
     layout->addLayout(controls);
 
+    monitor_volume_slider_->setValue(settings::monitorVolumePercent());
+    applyMonitorVolumePercent(monitor_volume_slider_->value());
+
     previous_frame_button_->setToolTip("Step one frame backward");
     play_pause_button_->setToolTip("Play or pause the active clip");
     next_frame_button_->setToolTip("Step one frame forward");
     previous_frame_button_->setAccessibleName("Previous Frame");
     play_pause_button_->setAccessibleName("Play or Pause");
     next_frame_button_->setAccessibleName("Next Frame");
+    monitor_volume_label->setToolTip(
+        "Volume heard during editor playback; does not modify the project.");
     clear_timeline_button_->setToolTip("Remove all clips from every track");
     selection_button_->setToolTip("Select and move timeline clips");
     selection_button_->setAccessibleName("Selection Tool");
@@ -545,6 +573,11 @@ QWidget* MainWindow::createTimeline() {
     connect(next_frame_button_, &QPushButton::clicked, this, [this]() {
         sendPlaybackCommand("stepForward");
     });
+    connect(
+        monitor_volume_slider_,
+        &QSlider::valueChanged,
+        this,
+        &MainWindow::applyMonitorVolumePercent);
     connect(clear_timeline_button_, &QPushButton::clicked, this, [this]() {
         clearTimeline();
     });
@@ -724,6 +757,30 @@ void MainWindow::applyTimelineZoom(double factor) {
             new_anchor_content_x - anchor_viewport_x));
         bar->setValue(target);
     });
+}
+
+void MainWindow::applyMonitorVolumePercent(int percent) {
+    const auto normalized = std::clamp(
+        percent,
+        settings::kMinimumMonitorVolumePercent,
+        settings::kMaximumMonitorVolumePercent);
+    settings::setMonitorVolumePercent(normalized);
+    if (monitor_volume_slider_ != nullptr &&
+        monitor_volume_slider_->value() != normalized) {
+        const QSignalBlocker blocker(monitor_volume_slider_);
+        monitor_volume_slider_->setValue(normalized);
+    }
+    if (monitor_volume_indicator_ != nullptr) {
+        monitor_volume_indicator_->setText(
+            QString::number(normalized) + "%");
+    }
+    if (playback_worker_ != nullptr) {
+        QMetaObject::invokeMethod(
+            playback_worker_,
+            "setMonitorVolume",
+            Qt::QueuedConnection,
+            Q_ARG(double, static_cast<double>(normalized) / 100.0));
+    }
 }
 
 bool MainWindow::hasSelectedMedia() const noexcept {

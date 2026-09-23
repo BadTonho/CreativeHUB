@@ -343,6 +343,13 @@ void PlaybackWorker::setAudioParameters(
     if (was_playing) play();
 }
 
+void PlaybackWorker::setMonitorVolume(double gain) {
+    monitor_volume_gain_ = AudioOutput::normalizeVolume(gain);
+    if (audio_output_ != nullptr) {
+        audio_output_->setVolume(monitor_volume_gain_);
+    }
+}
+
 void PlaybackWorker::setComposition(
     QVector<CompositionLayerSpec> layers,
     QVector<CompositionTransitionSpec> transitions,
@@ -878,6 +885,7 @@ void PlaybackWorker::configureAudio() {
     audio_pacing_policy_.reset();
     rendering::PreviewPerformanceMetrics::instance().setAudioEnabled(false);
     audio_output_ = std::make_unique<AudioOutput>();
+    audio_output_->setVolume(monitor_volume_gain_);
 
     // Probe the media before touching the system audio device. A video-only
     // source is an expected case and must remain silent in the diagnostics.
@@ -938,7 +946,8 @@ void PlaybackWorker::fillAudioOutput() {
     const auto effective_gain =
         (track_audio_muted_ || clip_audio_muted_)
             ? 0.0
-            : track_audio_gain_ * clip_audio_gain_;
+            : track_audio_gain_ * clip_audio_gain_ *
+                AudioOutput::sampleBoost(monitor_volume_gain_);
     const auto output = audio_session_->output_spec();
     const auto target_bytes = static_cast<std::size_t>(
         output.sample_rate * output.channel_count * 2 / 5);

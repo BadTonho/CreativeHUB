@@ -9,6 +9,9 @@
 
 #include <QIODevice>
 
+#include <algorithm>
+#include <cmath>
+
 namespace playback {
 
 AudioOutput::~AudioOutput() {
@@ -54,6 +57,7 @@ bool AudioOutput::initialize(QString* error_message, qint64* error_code) {
     channel_count_ = format.channelCount();
     sink_ = new QAudioSink(device, format);
     sink_->setBufferSize(sample_rate_ * channel_count_ * bytesPerSample() / 5);
+    setVolume(volume_gain_);
     available_ = true;
     return true;
 #else
@@ -79,6 +83,29 @@ bool AudioOutput::start(QString* error_message, qint64* error_code) {
     return true;
 #else
     return false;
+#endif
+}
+
+double AudioOutput::normalizeVolume(double gain) noexcept {
+    return std::isfinite(gain) && gain >= 0.0 && gain <= 2.0
+        ? gain
+        : 1.0;
+}
+
+double AudioOutput::outputVolume(double gain) noexcept {
+    return std::min(normalizeVolume(gain), 1.0);
+}
+
+double AudioOutput::sampleBoost(double gain) noexcept {
+    return std::max(normalizeVolume(gain), 1.0);
+}
+
+void AudioOutput::setVolume(double gain) noexcept {
+    volume_gain_ = normalizeVolume(gain);
+#if defined(CREATIVE_SUITE_HAS_QT_MULTIMEDIA)
+    if (sink_ != nullptr) {
+        sink_->setVolume(static_cast<qreal>(outputVolume(volume_gain_)));
+    }
 #endif
 }
 

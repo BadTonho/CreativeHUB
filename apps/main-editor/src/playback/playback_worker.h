@@ -88,6 +88,7 @@ public slots:
         bool track_audio_muted,
         double clip_audio_gain,
         bool clip_audio_muted);
+    void setMonitorVolume(double gain);
     void setComposition(
         QVector<CompositionLayerSpec> layers,
         QVector<CompositionTransitionSpec> transitions,
@@ -174,6 +175,7 @@ private:
     bool track_audio_muted_ = false;
     double clip_audio_gain_ = 1.0;
     bool clip_audio_muted_ = false;
+    double monitor_volume_gain_ = 1.0;
     qint64 track_index_ = -1;
     qint64 clip_index_ = -1;
     bool audio_enabled_ = false;

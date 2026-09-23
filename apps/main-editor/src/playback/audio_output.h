@@ -28,6 +28,7 @@ public:
 
     [[nodiscard]] bool start(QString* error_message, qint64* error_code);
     [[nodiscard]] bool resume(QString* error_message, qint64* error_code);
+    void setVolume(double gain) noexcept;
     void pause() noexcept;
     void stop() noexcept;
     [[nodiscard]] qint64 bytesFree() const noexcept;
@@ -35,11 +36,16 @@ public:
     [[nodiscard]] std::optional<qint64> bufferedUsecs() const noexcept;
     [[nodiscard]] qint64 write(const QByteArray& data) noexcept;
 
+    [[nodiscard]] static double normalizeVolume(double gain) noexcept;
+    [[nodiscard]] static double outputVolume(double gain) noexcept;
+    [[nodiscard]] static double sampleBoost(double gain) noexcept;
+
 private:
     QAudioSink* sink_ = nullptr;
     QIODevice* device_ = nullptr;
     int sample_rate_ = 48000;
     int channel_count_ = 2;
+    double volume_gain_ = 1.0;
     bool available_ = false;
     bool disabled_by_environment_ = false;
 };

@@ -31,6 +31,28 @@ int main(int argc, char* argv[]) {
         settings.clear();
         settings.sync();
 
+        require(settings::monitorVolumePercent() ==
+                    settings::kDefaultMonitorVolumePercent,
+                "Monitor volume default is incorrect.");
+        settings.setValue(settings::kMonitorVolumePercentKey, "invalid");
+        require(settings::monitorVolumePercent() ==
+                    settings::kDefaultMonitorVolumePercent,
+                "Invalid monitor volume preference was not normalized.");
+        settings.remove(settings::kMonitorVolumePercentKey);
+        settings::setMonitorVolumePercent(150);
+        require(settings::monitorVolumePercent() == 150 &&
+                    settings.value(settings::kMonitorVolumePercentKey).toInt() == 150,
+                "Monitor volume preference was not persisted.");
+        settings::setMonitorVolumePercent(999);
+        require(settings::monitorVolumePercent() ==
+                    settings::kMaximumMonitorVolumePercent,
+                "Monitor volume upper bound was not applied.");
+        settings::setMonitorVolumePercent(-10);
+        require(settings::monitorVolumePercent() ==
+                    settings::kMinimumMonitorVolumePercent,
+                "Monitor volume lower bound was not applied.");
+        settings.clear();
+
         settings::ShortcutManager shortcut_manager;
         settings::SettingsDialog dialog(nullptr, shortcut_manager);
         require(dialog.windowTitle() == "Settings",

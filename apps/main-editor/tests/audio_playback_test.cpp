@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -108,6 +109,22 @@ void testDisabledAudioOutputFallback() {
     qunsetenv("CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT");
 }
 
+void testMonitorVolumeNormalization() {
+    assert(playback::AudioOutput::normalizeVolume(0.0) == 0.0);
+    assert(playback::AudioOutput::normalizeVolume(1.0) == 1.0);
+    assert(playback::AudioOutput::normalizeVolume(2.0) == 2.0);
+    assert(playback::AudioOutput::normalizeVolume(-0.1) == 1.0);
+    assert(playback::AudioOutput::normalizeVolume(2.1) == 1.0);
+    assert(playback::AudioOutput::normalizeVolume(std::numeric_limits<double>::quiet_NaN()) == 1.0);
+    assert(playback::AudioOutput::normalizeVolume(
+               std::numeric_limits<double>::infinity()) == 1.0);
+
+    assert(playback::AudioOutput::outputVolume(0.0) == 0.0);
+    assert(playback::AudioOutput::outputVolume(1.5) == 1.0);
+    assert(playback::AudioOutput::sampleBoost(0.5) == 1.0);
+    assert(playback::AudioOutput::sampleBoost(1.5) == 1.5);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -116,6 +133,7 @@ int main(int argc, char** argv) {
     try {
         testAudioDecodeAndSeek(wav_path);
         testDisabledAudioOutputFallback();
+        testMonitorVolumeNormalization();
         if (argc > 1) {
             testMissingAudioDoesNotBecomeAnError(argv[1]);
         }

@@ -560,6 +560,9 @@ void MainWindow::initializePlayback() {
         Qt::QueuedConnection);
 
     playback_thread_.start();
+    if (monitor_volume_slider_ != nullptr) {
+        applyMonitorVolumePercent(monitor_volume_slider_->value());
+    }
 }
 void MainWindow::shutdownPlayback() {
     if (playback_worker_ == nullptr) return;

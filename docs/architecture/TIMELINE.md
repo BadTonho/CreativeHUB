@@ -61,6 +61,12 @@ The selected height is a per-project view setting; Ctrl + mouse wheel remains
 reserved for horizontal zoom and an unmodified wheel remains available to the
 scroll area.
 
+The Timeline toolbar also provides a global monitoring-volume slider from 0% to
+200%, with 100% as the neutral default. It affects only audio heard during
+editor playback, is persisted through `QSettings`, and is never stored in the
+project, autosave snapshots, or exports. Changes apply without restarting or
+repositioning playback; clip and track audio gains remain project settings.
+
 Magnetic snapping is enabled by default for clip movement and Media Browser
 media drops. The toolbar magnet button toggles it for the current editor
 session and does not mark the project dirty. When enabled, the Timeline uses
