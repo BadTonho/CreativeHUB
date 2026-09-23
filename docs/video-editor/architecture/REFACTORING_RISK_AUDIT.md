@@ -111,56 +111,61 @@ This map identifies places where one function performs several distinguishable
 steps. It is an aid for adding, moving, or removing behavior in a future change,
 not a request to extract all of these functions now. Start with private helpers
 in the same translation unit when they only organize code; introduce a new
-module only when it establishes a useful state or test boundary.
+module only when it establishes a useful state or test boundary. Use the stable
+`F1`-`F9` identifiers to request one target, for example: “Do F2.” They are
+separate from refactoring items 1-8 above.
 
-- **Timeline controls:** `MainWindow::createTimeline` builds the playback and
+- **F1. Timeline controls:** `MainWindow::createTimeline` builds the playback and
   editing toolbar, zoom controls, scrolling viewport and fixed track headers,
   footer, and all their signal connections in one function. Candidate helpers
   are `createTimelineControls`, `createTimelineViewport`,
   `createTimelineFooter`, and `connectTimelineSignals`. Keep widget ownership,
   initialization order, shortcut behavior, and signal connections intact.
-- **Timeline painting:** `TimelineWidget::paintEvent` draws ruler ticks and
+- **F2. Timeline painting:** `TimelineWidget::paintEvent` draws ruler ticks and
   frame guides, tracks and clips, keyframes, transition regions, move/drop
   ghosts and snap guides, then the playhead. Candidate helpers are
   `paintRuler`, `paintTracksAndClips`, `paintTransitions`,
   `paintDragFeedback`, and `paintPlayhead`, sharing one `QPainter` and the
   current dirty region. Preserve the present drawing order and visible-range
   clipping, especially at high zoom.
-- **Timeline gestures:** `mousePressEvent`, `mouseMoveEvent`, and
+- **F3. Timeline gestures:** `mousePressEvent`, `mouseMoveEvent`, and
   `mouseReleaseEvent` each dispatch among ruler seek, clip move, trim, Blade,
   and clip seek. If another gesture changes, extract matching handlers for its
   press, move, and release phases while keeping event priority, mouse capture,
   state cleanup, and legacy signal order in the widget. The trim decision is
   already isolated in `TimelineTrimGesture` and need not be duplicated.
-- **Media Browser refresh:** `MainWindow::populateMediaBrowser` captures the
+- **F4. Media Browser refresh:** `MainWindow::populateMediaBrowser` captures the
   selected media/bin and expanded tree paths, collects bin paths, rebuilds the
   tree and list, then restores selection and dependent controls. Candidate
   helpers are `captureBrowserState`, `collectBinPaths`, `populateBinTree`,
   and `populateMediaList`. Preserve signal blocking, offline entries, nested
   bin filtering, and selection restoration.
-- **Menus and shortcuts:** `MainWindow::createMenus` creates menu groups,
+- **F5. Menus and shortcuts:** `MainWindow::createMenus` creates menu groups,
   registers configurable shortcut IDs, connects actions, and creates playback
   shortcuts. Candidate helpers can group File, Edit, View, and playback
   actions; preserve the shortcut IDs, contexts, action ownership, and final
   shortcut loading and action-state update.
-- **Project opening:** `MainWindow::openProjectPath` loads a document, probes
+- **F6. Project opening:** `MainWindow::openProjectPath` loads a document, probes
   or marks media offline, normalizes bins, converts project tracks and clips to
   a Timeline snapshot, and finally applies the loaded project. Candidate
   helpers are `prepareProjectMedia`, `normalizeProjectBins`, and
   `buildTimelineSnapshot`. Keep all preparation before `applyLoadedProject`
   so a failure leaves the active project intact; retain media/clip context in
   the existing error logs.
-- **Persistence and playback:** `project::load` and `project::save` have clear
+- **F7. Project persistence:** `project::load` and `project::save` have clear
   media, track, clip, and transition parsing/writing phases, but should be
   divided only with a project-format change and version 1-8 compatibility
-  tests. `PlaybackWorker::decodeTick` has separate target selection, audio
-  pacing, composition, and direct decoding phases; split only alongside a
-  playback change, preserving cancellation, deadlines, metrics, and errors.
+  tests.
+- **F8. Playback tick:** `PlaybackWorker::decodeTick` has separate target
+  selection, audio pacing, composition, and direct decoding phases; split only
+  alongside a playback change, preserving cancellation, deadlines, metrics,
+  and errors.
 
-The large `timeline_widget_test.cpp` and `timeline_model_test.cpp` place most
-scenarios inside `main`. Named scenario functions within those files would
-make test cases easier to add or move before any file split. In contrast,
-`playback_worker_test.cpp` already groups its scenarios into named functions.
+- **F9. Test scenario organization:** The large `timeline_widget_test.cpp` and
+  `timeline_model_test.cpp` place most scenarios inside `main`. Named scenario
+  functions within those files would make test cases easier to add or move
+  before any file split. In contrast, `playback_worker_test.cpp` already groups
+  its scenarios into named functions.
 The existing tests exercise the widget, model, project format, and worker, but
 do not instantiate the application `MainWindow`; a future extraction of its UI
 construction or project-open workflow also needs a documented manual check or
