@@ -34,7 +34,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Timeline workspace selectors | Edit and blank Fusion button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
 | Workspace page switching | Edit startup state, Edit → Fusion → Edit, exclusive selectors, replacement of the Timeline with the Node Editor in the same lower dock, Inspector visibility, and reuse of the existing Preview as Viewer |
 | Functions window shortcut | Offscreen Shift+Space registration, WindowShortcut context, empty non-modal floating window, opening and toggling while focused, inside/outside click behavior, close and destruction through Escape/title bar/deactivation, fresh recreation without duplicates, and regular Space playback shortcut preservation |
-| Timeline interaction | Selection without playhead jumps, row-local clip hit testing, gap deselection for Timeline and Media Browser items, no-op drags from empty rows, optional move-to-start selection preference, seek-on-release, configurable clip movement, checked-by-default Magnetic Snap with eight-pixel tolerance, clip-edge and Timeline-boundary snapping, aligned snap guides, enable/disable behavior, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, one-frame fallback metadata, cancellation cleanup, no pre-release model signal, Blade Tool, live edge-trim preview and trim-on-release, shared-boundary dragging while preserving junction selection on click, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, frozen track-header overlay during horizontal scrolling, vertical header alignment during vertical scrolling, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
+| Timeline interaction | Selection without playhead jumps, row-local clip hit testing, gap deselection for Timeline and Media Browser items, no-op drags from empty rows, optional move-to-start selection preference, seek-on-release, configurable clip movement, checked-by-default Magnetic Snap with eight-pixel tolerance, clip-edge and Timeline-boundary snapping, aligned snap guides, enable/disable behavior, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, one-frame fallback metadata, cancellation cleanup, no pre-release model signal, Blade Tool, edge-hover resize cursor and reset behavior, live left/right edge extension previews and trim-on-release, shared-boundary dragging while preserving junction selection on click, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, frozen track-header overlay during horizontal scrolling, vertical header alignment during vertical scrolling, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
 | System memory details | Offscreen non-modal dialog, System Memory and Main Editor sections, click-to-open behavior, Working Set, Private Usage, GB/MB formatting, and per-metric `N/A` handling |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
@@ -216,12 +216,15 @@ in the running Main Editor after UI or integration changes:
   boundary without an out-of-range-frame error, and that `Project opened.`,
   `Loading timeline clip...`, and other transient status messages appear beside
   the frame in one compact footer line without a separate global status row;
-- split a video with the Blade Tool, drag either side of the shared cut, and
-  confirm the preview moves live, dragging an edge outward grows that clip,
-  dragging it back shrinks it while the neighbor grows, neither clip drops
-  below one frame, and one Undo/Redo restores and reapplies the complete
-  boundary edit; also extend an outer edge into a gap and confirm video source
-  limits, still-image frame holding, and text duration extension;
+- hover over both edges of a clip and confirm the horizontal resize cursor
+  appears within the edge hit area, returns to the default cursor inside the
+  clip and outside its edge, and disappears when the pointer leaves the
+  Timeline; then split a video with the Blade Tool, drag either side of the
+  shared cut, and confirm the preview moves live, dragging an edge outward
+  grows that clip, dragging it back shrinks it while the neighbor grows,
+  neither clip drops below one frame, and one Undo/Redo restores and reapplies
+  the complete boundary edit; also extend an outer edge into a gap and confirm
+  video source limits, still-image frame holding, and text duration extension;
 - use the default-enabled Preview performance metrics (or enable them in
   Settings) and compare a simple 1080p playback run
   with the metrics disabled: confirm the one-second summaries include decode,

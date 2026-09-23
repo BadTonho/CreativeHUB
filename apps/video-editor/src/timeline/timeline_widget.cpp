@@ -232,6 +232,7 @@ std::int64_t TimelineWidget::playheadFrame() const noexcept {
 void TimelineWidget::setRazorMode(bool enabled) {
     razor_mode_ = enabled;
     razor_clicking_ = false;
+    unsetCursor();
     update();
 }
 
@@ -900,24 +901,36 @@ std::optional<std::size_t> TimelineWidget::trackAt(double y) const noexcept {
 std::optional<ClipLocation> TimelineWidget::clipAt(double x, double y) const noexcept {
     const auto track_index = trackAt(y);
     if (!track_index.has_value()) return std::nullopt;
-    const auto global_frame = globalFrameAt(x);
-    if (!global_frame.has_value()) return std::nullopt;
+    const auto total = displayDuration();
+    const auto content = trackContentRect(*track_index);
+    if (total <= 0 || content.width() <= 0.0) return std::nullopt;
     // Hit testing is local to the row under the pointer. Looking through all
     // tracks would make a click in an empty row select or move a clip from a
     // different row at the same timeline frame.
+    // Use the rendered geometry so a clip's visible right edge stays
+    // interactive even when mapping that pixel to a frame rounds to its
+    // exclusive end frame.
+    const QPointF position(x, y);
     std::optional<ClipLocation> media_match;
     const auto& track = tracks_[*track_index];
     for (std::size_t clip_index = 0;
          clip_index < track.clips.size();
          ++clip_index) {
-        const auto& clip = track.clips[clip_index];
-        if (*global_frame >= clip.timeline_start_frame &&
-            *global_frame < clip.timeline_start_frame +
-                clip.timeline_duration_frames) {
+        const ClipLocation location{*track_index, clip_index};
+        const auto& clip = displayedClip(location);
+        const double begin = static_cast<double>(clip.timeline_start_frame) / total;
+        const double end = static_cast<double>(
+            clip.timeline_start_frame + clip.timeline_duration_frames) / total;
+        const QRectF rect(
+            content.left() + content.width() * begin,
+            content.top(),
+            std::max(2.0, content.width() * (end - begin)),
+            content.height());
+        if (rect.contains(position)) {
             if (clip.kind == ClipKind::Text) {
-                return ClipLocation{*track_index, clip_index};
+                return location;
             }
-            media_match = ClipLocation{*track_index, clip_index};
+            media_match = location;
         }
     }
     return media_match;
@@ -965,9 +978,30 @@ std::optional<ClipEdge> TimelineWidget::trimEdgeAt(
     if (rect.width() <= 0.0 || !rect.contains(QPointF(x, rect.center().y()))) {
         return std::nullopt;
     }
-    if (x - rect.left() <= edge_width) return ClipEdge::Left;
-    if (rect.right() - x <= edge_width) return ClipEdge::Right;
+    const auto left_distance = x - rect.left();
+    const auto right_distance = rect.right() - x;
+    const bool near_left = left_distance <= edge_width;
+    const bool near_right = right_distance <= edge_width;
+    if (near_left && near_right) {
+        return left_distance <= right_distance ? ClipEdge::Left : ClipEdge::Right;
+    }
+    if (near_left) return ClipEdge::Left;
+    if (near_right) return ClipEdge::Right;
     return std::nullopt;
+}
+
+void TimelineWidget::updateTrimHoverCursor(const QPointF& position) {
+    if (!trimming_ && !razor_mode_) {
+        const auto location = clipAt(position.x(), position.y());
+        if (location.has_value() &&
+            trimEdgeAt(*location, position.x()).has_value()) {
+            if (cursor().shape() != Qt::SizeHorCursor) {
+                setCursor(Qt::SizeHorCursor);
+            }
+            return;
+        }
+    }
+    if (testAttribute(Qt::WA_SetCursor)) unsetCursor();
 }
 
 std::optional<std::int64_t> TimelineWidget::trimBoundaryAt(double x) const noexcept {
@@ -1694,6 +1728,11 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
     event->accept();
 }
 
+void TimelineWidget::leaveEvent(QEvent* event) {
+    if (!trimming_) unsetCursor();
+    QWidget::leaveEvent(event);
+}
+
 void TimelineWidget::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::RightButton) {
         const auto indexes = transitionClipIndexesAt(
@@ -1966,6 +2005,7 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
         update();
         event->accept();
     } else {
+        updateTrimHoverCursor(event->position());
         event->ignore();
     }
 }
@@ -2006,6 +2046,7 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
                     static_cast<qint64>(from.clip_index));
             }
         }
+        updateTrimHoverCursor(event->position());
         update();
         event->accept();
         return;
@@ -2029,6 +2070,7 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
                     static_cast<qint64>(pair->first),
                     static_cast<qint64>(pair->second));
             }
+            updateTrimHoverCursor(event->position());
             update();
             event->accept();
             return;
@@ -2073,6 +2115,7 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
                 }
             }
         }
+        updateTrimHoverCursor(event->position());
         update();
         event->accept();
         return;
@@ -2110,6 +2153,7 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
                 .clips[seek_clip_.clip_index];
             emit seekRequested(clip.timeline_start_frame + *frame);
         }
+        updateTrimHoverCursor(event->position());
         update();
         event->accept();
         return;
@@ -2118,6 +2162,7 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
         seek_pending_ = false;
         drag_frame_.reset();
         releaseMouse();
+        updateTrimHoverCursor(event->position());
         update();
         event->accept();
         return;

@@ -115,6 +115,7 @@ protected:
     void dragMoveEvent(QDragMoveEvent* event) override;
     void dropEvent(QDropEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void leaveEvent(QEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
@@ -151,6 +152,7 @@ private:
         double x) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> localFrameAt(const ClipLocation&, double x) const noexcept;
     [[nodiscard]] std::optional<ClipEdge> trimEdgeAt(const ClipLocation&, double x) const noexcept;
+    void updateTrimHoverCursor(const QPointF& position);
     [[nodiscard]] std::optional<std::int64_t> trimBoundaryAt(double x) const noexcept;
     void updateTrimPreview(double x);
     [[nodiscard]] std::optional<std::pair<std::size_t, std::size_t>>

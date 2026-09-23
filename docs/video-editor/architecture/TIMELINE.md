@@ -122,7 +122,11 @@ and keeps the current timeline frame.
 
 Movement, splitting, and trimming do not decode while the pointer moves.
 Trimming updates a paint-only preview during the drag and commits one edit on
-release. Dragging the left edge changes the clip's timeline start and source
+release. In normal edit mode, the horizontal resize cursor appears while
+hovering within 8 pixels of either clip edge and returns to the default cursor
+when the pointer leaves that area or the Timeline. Edge hit testing follows the
+clip's rendered geometry so the visible right edge remains draggable at frame
+boundaries. Dragging the left edge changes the clip's timeline start and source
 start while keeping its right edge fixed; dragging the right edge changes its
 right edge. Either edge can extend as well as shorten a clip. Video source
 limits use the recorded frame count or duration multiplied by frame rate when

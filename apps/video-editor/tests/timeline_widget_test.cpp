@@ -7,6 +7,7 @@
 #include <QDragLeaveEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QEvent>
 #include <QImage>
 #include <QMimeData>
 #include <QMouseEvent>
@@ -907,6 +908,29 @@ int main(int argc, char* argv[]) {
 
         // Edge dragging requests a trim only when the pointer is released.
         widget.setRazorMode(false);
+        const auto left_edge_x = widget.contentXForFrame(0) + 2.0;
+        const auto right_edge_x = widget.contentXForFrame(test_clip_duration);
+        sendMouse(widget, QEvent::MouseMove, QPointF(left_edge_x, 120), Qt::NoButton);
+        require(widget.cursor().shape() == Qt::SizeHorCursor,
+                "Hovering the left clip edge did not show the resize cursor.");
+        require(trim_edge == -1 && trim_boundary == -1,
+                "Hovering a clip edge changed the timeline.");
+        sendMouse(widget, QEvent::MouseMove, QPointF(300, 120), Qt::NoButton);
+        require(widget.cursor().shape() == Qt::ArrowCursor,
+                "The resize cursor remained inside the clip away from its edges.");
+        sendMouse(widget, QEvent::MouseMove, QPointF(right_edge_x, 120), Qt::NoButton);
+        require(widget.cursor().shape() == Qt::SizeHorCursor,
+                "Hovering the exact right clip edge did not show the resize cursor.");
+        sendMouse(widget, QEvent::MouseMove,
+                  QPointF(right_edge_x + 20.0, 120), Qt::NoButton);
+        require(widget.cursor().shape() == Qt::ArrowCursor,
+                "The resize cursor remained outside the clip edge.");
+        sendMouse(widget, QEvent::MouseMove, QPointF(left_edge_x, 120), Qt::NoButton);
+        QEvent leave_timeline(QEvent::Leave);
+        QApplication::sendEvent(&widget, &leave_timeline);
+        require(widget.cursor().shape() == Qt::ArrowCursor,
+                "Leaving the Timeline did not restore the default cursor.");
+
         sendMouse(widget, QEvent::MouseButtonPress, QPointF(156, 120),
                   Qt::LeftButton);
         sendMouse(widget, QEvent::MouseButtonRelease, QPointF(156, 120),
@@ -999,6 +1023,90 @@ int main(int argc, char* argv[]) {
         require(edge_edit_count == 1 && edge_edit_boundary == 110,
                 "Dragging a shared edge did not commit the requested boundary once.");
         trim_preview_widget.close();
+
+        timeline::TimelineWidget edge_drag_widget;
+        edge_drag_widget.resize(1000, 180);
+        edge_drag_widget.setTimelineViewportWidth(1000);
+        auto edge_drag_video = makeClip("edge-drag.mkv", 50, 50, "edge-drag.mkv");
+        edge_drag_video.source_start_frame = 50;
+        edge_drag_video.frame_count = 200;
+        edge_drag_video.duration_seconds = 200.0 / 30.0;
+        edge_drag_widget.setTracks({timeline::TimelineTrack{
+            1, "Video 1", 1.0, false, {edge_drag_video}}});
+        edge_drag_widget.setZoomFactor(512.0);
+        edge_drag_widget.setMinimumWidth(1000);
+        edge_drag_widget.resize(1000, 180);
+        edge_drag_widget.show();
+        application.processEvents();
+        int edge_drag_commit_count = 0;
+        qint64 last_drag_edge = -1;
+        qint64 last_drag_boundary = -1;
+        QObject::connect(
+            &edge_drag_widget,
+            &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
+            [&edge_drag_commit_count, &last_drag_edge, &last_drag_boundary](
+                qint64, qint64, qint64 edge, qint64 boundary) {
+                ++edge_drag_commit_count;
+                last_drag_edge = edge;
+                last_drag_boundary = boundary;
+            });
+        const auto pixelAtFrame = [&edge_drag_widget](std::int64_t frame) {
+            QImage image(1000, 180, QImage::Format_ARGB32);
+            image.fill(Qt::transparent);
+            edge_drag_widget.render(&image);
+            return image.pixelColor(
+                QPoint(static_cast<int>(std::lround(
+                            edge_drag_widget.contentXForFrame(frame))),
+                       110));
+        };
+        const auto left_extension_before = pixelAtFrame(45);
+        const auto left_edge_drag_x = edge_drag_widget.contentXForFrame(50);
+        sendMouse(edge_drag_widget, QEvent::MouseMove,
+                  QPointF(left_edge_drag_x, 110), Qt::NoButton);
+        require(edge_drag_widget.cursor().shape() == Qt::SizeHorCursor,
+                "The split clip's left edge did not expose the resize cursor.");
+        sendMouse(edge_drag_widget, QEvent::MouseButtonPress,
+                  QPointF(left_edge_drag_x, 110), Qt::LeftButton);
+        sendMouse(edge_drag_widget, QEvent::MouseMove,
+                  QPointF(edge_drag_widget.contentXForFrame(40), 110),
+                  Qt::LeftButton);
+        require(edge_drag_commit_count == 0,
+                "The left edge extension committed before release.");
+        const auto left_extension_during = pixelAtFrame(45);
+        require(left_extension_during != left_extension_before,
+                "Extending the left edge did not update the live preview (before " +
+                    left_extension_before.name().toStdString() + ", during " +
+                    left_extension_during.name().toStdString() + ").");
+        sendMouse(edge_drag_widget, QEvent::MouseButtonRelease,
+                  QPointF(edge_drag_widget.contentXForFrame(40), 110),
+                  Qt::NoButton);
+        require(edge_drag_commit_count == 1 &&
+                    last_drag_edge == static_cast<qint64>(timeline::ClipEdge::Left) &&
+                    last_drag_boundary == 40,
+                "The left edge extension was not committed once on release.");
+
+        const auto right_extension_before = pixelAtFrame(105);
+        const auto right_edge_drag_x = edge_drag_widget.contentXForFrame(100);
+        sendMouse(edge_drag_widget, QEvent::MouseMove,
+                  QPointF(right_edge_drag_x, 110), Qt::NoButton);
+        require(edge_drag_widget.cursor().shape() == Qt::SizeHorCursor,
+                "The split clip's exact right edge did not expose the resize cursor.");
+        sendMouse(edge_drag_widget, QEvent::MouseButtonPress,
+                  QPointF(right_edge_drag_x, 110), Qt::LeftButton);
+        sendMouse(edge_drag_widget, QEvent::MouseMove,
+                  QPointF(edge_drag_widget.contentXForFrame(110), 110),
+                  Qt::LeftButton);
+        require(edge_drag_commit_count == 1 &&
+                    pixelAtFrame(105) != right_extension_before,
+                "Extending the right edge did not preview until release.");
+        sendMouse(edge_drag_widget, QEvent::MouseButtonRelease,
+                  QPointF(edge_drag_widget.contentXForFrame(110), 110),
+                  Qt::NoButton);
+        require(edge_drag_commit_count == 2 &&
+                    last_drag_edge == static_cast<qint64>(timeline::ClipEdge::Right) &&
+                    last_drag_boundary == 110,
+                "The right edge extension was not committed once on release.");
+        edge_drag_widget.close();
 
         // The viewport is the scale reference for the standard one-hour
         // range, while longer content expands the scrollable surface.
