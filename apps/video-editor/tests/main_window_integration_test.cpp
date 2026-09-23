@@ -42,12 +42,6 @@ project::ProjectDocument makeMultiTrackProject(
             {second_source, 0, 0, 1},
         }},
     };
-    for (const auto& track : document.timeline_tracks) {
-        document.timeline_clips.insert(
-            document.timeline_clips.end(),
-            track.clips.begin(),
-            track.clips.end());
-    }
     return document;
 }
 
@@ -105,12 +99,8 @@ public:
                     "The current MainWindow document has different media entries.");
             require(current.timeline_tracks == loaded.timeline_tracks,
                     "The current MainWindow document has different timeline tracks.");
-            require(current.timeline_clips == loaded.timeline_clips,
-                    "The current MainWindow document has a different compatibility clip view.");
             require(current.bins == loaded.bins,
                     "The current MainWindow document has different media bins.");
-            require(current.timeline_clips.size() == 2,
-                    "The compatibility clip view did not include every track.");
 
             require(window.saveProjectTo(round_trip_path, "save_as"),
                     "The MainWindow could not save the multi-track project.");

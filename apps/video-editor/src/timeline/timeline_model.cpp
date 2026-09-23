@@ -826,11 +826,6 @@ const std::vector<TimelineTrack>& TimelineModel::tracks() const noexcept {
     return tracks_;
 }
 
-const std::vector<TimelineClip>& TimelineModel::clips() const noexcept {
-    static const std::vector<TimelineClip> empty;
-    return tracks_.empty() ? empty : tracks_.front().clips;
-}
-
 std::optional<std::size_t> TimelineModel::firstClipIndexForSource(
     const std::filesystem::path& source_path) const {
     if (tracks_.empty()) return std::nullopt;
@@ -904,7 +899,6 @@ const TimelineTransition* TimelineModel::transitionBetween(
 TimelineModel::Snapshot TimelineModel::snapshot() const {
     Snapshot result;
     result.tracks = tracks_;
-    if (!tracks_.empty()) result.clips = tracks_.front().clips;
     result.next_track_id = next_track_id_;
     result.next_clip_id = next_clip_id_;
     return result;
@@ -927,10 +921,6 @@ void TimelineModel::ensureIdentifiers() {
 }
 
 void TimelineModel::restore(Snapshot snapshot) {
-    if (snapshot.tracks.empty() && !snapshot.clips.empty()) {
-        snapshot.tracks.push_back(
-            TimelineTrack{1, "Video 1", 1.0, false, std::move(snapshot.clips)});
-    }
     tracks_ = std::move(snapshot.tracks);
     next_track_id_ = snapshot.next_track_id;
     next_clip_id_ = snapshot.next_clip_id;

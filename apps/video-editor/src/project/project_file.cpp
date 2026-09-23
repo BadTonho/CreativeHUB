@@ -410,7 +410,6 @@ void validateDocument(const ProjectDocument& document,
             transition_pairs.push_back(pair);
         }
     }
-    for (const auto& clip : document.timeline_clips) validate_clip(clip);
 }
 
 } // namespace
@@ -582,7 +581,6 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                 std::numeric_limits<std::int64_t>::max() - clip.duration_frames) {
                 timeline_start += clip.duration_frames;
             }
-            document.timeline_clips.push_back(clip);
             track.clips.push_back(std::move(clip));
         }
         document.timeline_tracks.push_back(std::move(track));
@@ -709,8 +707,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                     parse_keyframes("rotation", timeline::TransformProperty::Rotation, clip.keyframes.rotation);
                     parse_keyframes("opacity", timeline::TransformProperty::Opacity, clip.keyframes.opacity);
                 }
-                track.clips.push_back(clip);
-                document.timeline_clips.push_back(std::move(clip));
+                track.clips.push_back(std::move(clip));
             }
             if (version >= transitions_format_version) {
                 const auto transitions_value = track_object.value("transitions");
@@ -774,18 +771,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
         media.append(item);
     }
 
-    std::vector<ProjectTrack> tracks = document.timeline_tracks;
-    if (tracks.empty() && !document.timeline_clips.empty()) {
-        tracks.push_back({"Video 1", 1.0, false, document.timeline_clips});
-        std::int64_t start = 0;
-        for (auto& clip : tracks.front().clips) {
-            clip.timeline_start_frame = start;
-            if (clip.duration_frames > 0 && start <=
-                std::numeric_limits<std::int64_t>::max() - clip.duration_frames) {
-                start += clip.duration_frames;
-            }
-        }
-    }
+    const auto& tracks = document.timeline_tracks;
 
     QJsonArray track_array;
     for (const auto& track_source : tracks) {

@@ -44,8 +44,8 @@ void validateClipEdgeTrimCommand(
                 timeline::AddClipResult::Added &&
                 rolling.splitClip(0, 0, 40) == timeline::SplitClipResult::Split,
             "The rolling edge-command setup failed.");
-    const auto first_id = rolling.clips()[0].clip_id;
-    const auto second_id = rolling.clips()[1].clip_id;
+    const auto first_id = rolling.tracks().front().clips[0].clip_id;
+    const auto second_id = rolling.tracks().front().clips[1].clip_id;
     timeline::TimelineHistory history;
     timeline::EditState before;
     before.timeline = rolling.snapshot();
@@ -58,8 +58,8 @@ void validateClipEdgeTrimCommand(
                 inside.selection->location == timeline::ClipLocation{0, 0} &&
                 inside.selection->playback_frame == 45 &&
                 !inside.selection->preserved_playhead_frame.has_value() &&
-                rolling.clips()[0].clip_id == first_id &&
-                rolling.clips()[1].timeline_start_frame == 50,
+                rolling.tracks().front().clips[0].clip_id == first_id &&
+                rolling.tracks().front().clips[1].timeline_start_frame == 50,
             "Rolling trim did not preserve the selected clip and inside playhead.");
     history.recordBeforeEdit(before);
     require(history.undoCount() == 1 && history.redoCount() == 0,
@@ -91,8 +91,8 @@ void validateClipEdgeTrimCommand(
                 history.redoCount() == 1,
             "Undo did not consume exactly one edge-trim history entry.");
     rolling.restore(undone->timeline);
-    require(rolling.clips()[0].timeline_duration_frames == 40 &&
-                rolling.clips()[1].timeline_start_frame == 40,
+    require(rolling.tracks().front().clips[0].timeline_duration_frames == 40 &&
+                rolling.tracks().front().clips[1].timeline_start_frame == 40,
             "Undo did not restore the original shared cut.");
     const auto redone = history.redo(*undone);
     require(redone.has_value() && history.undoCount() == 1 &&
@@ -110,7 +110,7 @@ void validateClipEdgeTrimCommand(
                 outside.selection->location == timeline::ClipLocation{0, 1} &&
                 outside.selection->playback_frame == 89 &&
                 outside.selection->preserved_playhead_frame == 10 &&
-                rolling.clips()[1].clip_id == second_id,
+                rolling.tracks().front().clips[1].clip_id == second_id,
             "Rolling trim did not clamp the local frame and preserve an outside playhead.");
 
     timeline::TimelineModel individual;
@@ -121,7 +121,7 @@ void validateClipEdgeTrimCommand(
                     timeline::AddClipResult::Added &&
                 individual.trimClip(0, 1, 30, 40) == timeline::TrimClipResult::Trimmed,
             "The individual edge-command setup failed.");
-    const auto reordered_id = individual.clips()[1].clip_id;
+    const auto reordered_id = individual.tracks().front().clips[1].clip_id;
     const auto individual_outcome = timeline::applyClipEdgeTrim(
         individual, {0, 1}, timeline::ClipEdge::Left, 20,
         timeline::ClipEdgeEditMode::Individual, 25, 0);
@@ -131,8 +131,8 @@ void validateClipEdgeTrimCommand(
                     timeline::ClipLocation{0, 0} &&
                 individual_outcome.selection->playback_frame == 5 &&
                 !individual_outcome.selection->preserved_playhead_frame.has_value() &&
-                individual.clips()[0].clip_id == reordered_id &&
-                individual.clips()[1].timeline_start_frame == 30,
+                individual.tracks().front().clips[0].clip_id == reordered_id &&
+                individual.tracks().front().clips[1].timeline_start_frame == 30,
             "Individual trim lost clip identity after reordering the track.");
 
     timeline::TimelineModel text;
@@ -191,7 +191,7 @@ int main() {
                 "The first clip was not added.");
         require(model.clipCount() == 1, "The first clip count was incorrect.");
 
-        const auto& first_clip = model.clips().front();
+        const auto& first_clip = model.tracks().front().clips.front();
         require(first_clip.timeline_start_frame == 0,
                 "The first clip did not start at frame zero.");
         require(first_clip.source_start_frame == 0,
@@ -219,8 +219,8 @@ int main() {
         timeline::TimelineModel image_model;
         require(image_model.addClip(image_metadata) == timeline::AddClipResult::Added,
                 "A still image was not accepted as a timeline clip.");
-        require(image_model.clips().front().kind == timeline::ClipKind::Image &&
-                    image_model.clips().front().timeline_duration_frames == 150,
+        require(image_model.tracks().front().clips.front().kind == timeline::ClipKind::Image &&
+                    image_model.tracks().front().clips.front().timeline_duration_frames == 150,
                 "The still image did not become a 150-frame image clip.");
         require(image_model.addClip(0, first_metadata, 30) ==
                     timeline::AddClipResult::Overlap,
@@ -231,8 +231,8 @@ int main() {
                 "The audio parameter test source was not added.");
         require(audio_model.tracks()[0].audio_gain == 1.0 &&
                     !audio_model.tracks()[0].audio_muted &&
-                    audio_model.clips()[0].audio_gain == 1.0 &&
-                    !audio_model.clips()[0].audio_muted,
+                    audio_model.tracks().front().clips[0].audio_gain == 1.0 &&
+                    !audio_model.tracks().front().clips[0].audio_muted,
                 "Audio parameters did not start with their defaults.");
         require(audio_model.setClipAudio(0, 0, 0.5, true) ==
                     timeline::AudioParameterResult::Changed,
@@ -240,8 +240,8 @@ int main() {
         require(audio_model.setTrackAudio(0, 1.5, false) ==
                     timeline::AudioParameterResult::Changed,
                 "Track audio parameters could not be changed.");
-        require(audio_model.clips()[0].audio_gain == 0.5 &&
-                    audio_model.clips()[0].audio_muted &&
+        require(audio_model.tracks().front().clips[0].audio_gain == 0.5 &&
+                    audio_model.tracks().front().clips[0].audio_muted &&
                     audio_model.tracks()[0].audio_gain == 1.5,
                 "Audio parameter changes were not preserved.");
         require(audio_model.setClipAudio(0, 0, 2.1, false) ==
@@ -253,20 +253,20 @@ int main() {
         const auto second_metadata = makeMetadata(second_source, "second.mkv", 60);
         require(model.addClip(second_metadata) == timeline::AddClipResult::Added,
                 "The second clip was not added.");
-        require(model.clips().size() == 2,
+        require(model.tracks().front().clips.size() == 2,
                 "The timeline did not retain both clips.");
-        require(model.clips()[1].timeline_start_frame == 120,
+        require(model.tracks().front().clips[1].timeline_start_frame == 120,
                 "The second clip was not appended after the first.");
-        require(model.clips()[1].timeline_duration_frames == 60,
+        require(model.tracks().front().clips[1].timeline_duration_frames == 60,
                 "The second clip duration was incorrect.");
         require(model.totalDurationFrames() == 180,
                 "The total timeline duration was incorrect.");
 
         require(model.addClip(first_metadata) == timeline::AddClipResult::Added,
                 "The same source could not be added a second time.");
-        require(model.clips().size() == 3,
+        require(model.tracks().front().clips.size() == 3,
                 "The repeated source did not create an independent clip.");
-        require(model.clips()[2].timeline_start_frame == 180,
+        require(model.tracks().front().clips[2].timeline_start_frame == 180,
                 "The repeated source was not appended at the end.");
         require(model.firstClipIndexForSource(first_source) == 0,
                 "The first source lookup did not return the first occurrence.");
@@ -278,7 +278,7 @@ int main() {
         fallback_metadata.frame_rate = 24.0;
         require(model.addClip(fallback_metadata) == timeline::AddClipResult::Added,
                 "Duration and frame rate fallback metadata was rejected.");
-        require(model.clips().back().timeline_duration_frames == 60,
+        require(model.tracks().front().clips.back().timeline_duration_frames == 60,
                 "Duration and frame rate fallback was calculated incorrectly.");
 
         timeline::TimelineModel split_model;
@@ -291,34 +291,34 @@ int main() {
                 "The first clip was not split at an intermediate frame.");
         require(split_model.clipCount() == 3,
                 "Splitting did not create a second segment.");
-        require(split_model.clips()[0].source_start_frame == 0 &&
-                    split_model.clips()[0].timeline_duration_frames == 30 &&
-                    split_model.clips()[1].source_start_frame == 30 &&
-                    split_model.clips()[1].timeline_duration_frames == 90,
+        require(split_model.tracks().front().clips[0].source_start_frame == 0 &&
+                    split_model.tracks().front().clips[0].timeline_duration_frames == 30 &&
+                    split_model.tracks().front().clips[1].source_start_frame == 30 &&
+                    split_model.tracks().front().clips[1].timeline_duration_frames == 90,
                 "The split source offsets or durations were incorrect.");
-        require(split_model.clips()[0].timeline_start_frame == 0 &&
-                    split_model.clips()[1].timeline_start_frame == 30 &&
-                    split_model.clips()[2].timeline_start_frame == 120,
+        require(split_model.tracks().front().clips[0].timeline_start_frame == 0 &&
+                    split_model.tracks().front().clips[1].timeline_start_frame == 30 &&
+                    split_model.tracks().front().clips[2].timeline_start_frame == 120,
                 "Splitting did not recalculate timeline starts.");
         require(split_model.totalDurationFrames() == split_total_before,
                 "Splitting changed the total timeline duration.");
-        require(split_model.clips()[1].source_path ==
+        require(split_model.tracks().front().clips[1].source_path ==
                     std::filesystem::weakly_canonical(first_source) &&
-                    split_model.clips()[1].display_name == first_metadata.display_name &&
-                    split_model.clips()[1].frame_rate == first_metadata.frame_rate &&
-                    split_model.clips()[1].frame_count == first_metadata.frame_count,
+                    split_model.tracks().front().clips[1].display_name == first_metadata.display_name &&
+                    split_model.tracks().front().clips[1].frame_rate == first_metadata.frame_rate &&
+                    split_model.tracks().front().clips[1].frame_count == first_metadata.frame_count,
                 "Splitting did not preserve source metadata.");
         require(split_model.trimClip(1, 50, 40) == timeline::TrimClipResult::Trimmed,
                 "Trimming a previously split segment failed.");
-        require(split_model.clips()[1].source_start_frame == 50 &&
-                    split_model.clips()[1].timeline_duration_frames == 40 &&
-                    split_model.clips()[1].timeline_start_frame == 30 &&
-                    split_model.clips()[2].timeline_start_frame == 120,
+        require(split_model.tracks().front().clips[1].source_start_frame == 50 &&
+                    split_model.tracks().front().clips[1].timeline_duration_frames == 40 &&
+                    split_model.tracks().front().clips[1].timeline_start_frame == 30 &&
+                    split_model.tracks().front().clips[2].timeline_start_frame == 120,
                 "Trimming a split segment produced incorrect offsets.");
         require(split_model.splitClip(2, 20) == timeline::SplitClipResult::Split,
                 "The second source occurrence was not split.");
-        require(split_model.clips()[2].source_start_frame == 0 &&
-                    split_model.clips()[3].source_start_frame == 20,
+        require(split_model.tracks().front().clips[2].source_start_frame == 0 &&
+                    split_model.tracks().front().clips[3].source_start_frame == 20,
                 "Repeated source occurrences did not keep independent offsets.");
         require(split_model.splitClip(0, 0) == timeline::SplitClipResult::InvalidBoundary,
                 "A split at the first frame was accepted.");
@@ -336,22 +336,22 @@ int main() {
                 "The trim test repeated source was not added.");
         require(trim_model.trimClip(0, 20, 80) == timeline::TrimClipResult::Trimmed,
                 "Trimming the start of a clip failed.");
-        require(trim_model.clips()[0].source_start_frame == 20 &&
-                    trim_model.clips()[0].timeline_duration_frames == 80 &&
-                    trim_model.clips()[0].timeline_start_frame == 0 &&
-                    trim_model.clips()[1].timeline_start_frame == 120 &&
-                    trim_model.clips()[2].timeline_start_frame == 180,
+        require(trim_model.tracks().front().clips[0].source_start_frame == 20 &&
+                    trim_model.tracks().front().clips[0].timeline_duration_frames == 80 &&
+                    trim_model.tracks().front().clips[0].timeline_start_frame == 0 &&
+                    trim_model.tracks().front().clips[1].timeline_start_frame == 120 &&
+                    trim_model.tracks().front().clips[2].timeline_start_frame == 180,
                 "Trimming the start did not preserve absolute placement.");
         require(trim_model.trimClip(1, 0, 30) == timeline::TrimClipResult::Trimmed,
                 "Trimming the end of a clip failed.");
-        require(trim_model.clips()[1].timeline_duration_frames == 30 &&
-                    trim_model.clips()[2].timeline_start_frame == 180,
+        require(trim_model.tracks().front().clips[1].timeline_duration_frames == 30 &&
+                    trim_model.tracks().front().clips[2].timeline_start_frame == 180,
                 "Trimming the end changed following clip placement.");
         require(trim_model.totalDurationFrames() == 300,
                 "Trimming did not update the total timeline duration.");
-        require(trim_model.clips()[0].display_name == first_metadata.display_name &&
-                    trim_model.clips()[0].frame_rate == first_metadata.frame_rate &&
-                    trim_model.clips()[0].frame_count == first_metadata.frame_count,
+        require(trim_model.tracks().front().clips[0].display_name == first_metadata.display_name &&
+                    trim_model.tracks().front().clips[0].frame_rate == first_metadata.frame_rate &&
+                    trim_model.tracks().front().clips[0].frame_count == first_metadata.frame_count,
                 "Trimming did not preserve source metadata.");
         require(trim_model.trimClip(0, 10, 50) == timeline::TrimClipResult::InvalidRange,
                 "A trim before the current source start was accepted.");
@@ -374,32 +374,32 @@ int main() {
                     0, 1, timeline::ClipEdge::Left, 30) ==
                     timeline::TrimClipResult::Trimmed,
                 "A split clip could not extend backward by rolling its cut.");
-        require(edge_trim_model.clips()[0].timeline_duration_frames == 30 &&
-                    edge_trim_model.clips()[1].timeline_start_frame == 30 &&
-                    edge_trim_model.clips()[1].source_start_frame == 30 &&
-                    edge_trim_model.clips()[1].timeline_duration_frames == 90,
+        require(edge_trim_model.tracks().front().clips[0].timeline_duration_frames == 30 &&
+                    edge_trim_model.tracks().front().clips[1].timeline_start_frame == 30 &&
+                    edge_trim_model.tracks().front().clips[1].source_start_frame == 30 &&
+                    edge_trim_model.tracks().front().clips[1].timeline_duration_frames == 90,
                 "Rolling a cut backward did not resize both source ranges.");
         require(edge_trim_model.trimClipEdge(
                     0, 0, timeline::ClipEdge::Right, 50) ==
                     timeline::TrimClipResult::Trimmed,
                 "A split clip could not extend forward by rolling its cut.");
-        require(edge_trim_model.clips()[0].timeline_duration_frames == 50 &&
-                    edge_trim_model.clips()[1].timeline_start_frame == 50 &&
-                    edge_trim_model.clips()[1].source_start_frame == 50 &&
-                    edge_trim_model.clips()[1].timeline_duration_frames == 70,
+        require(edge_trim_model.tracks().front().clips[0].timeline_duration_frames == 50 &&
+                    edge_trim_model.tracks().front().clips[1].timeline_start_frame == 50 &&
+                    edge_trim_model.tracks().front().clips[1].source_start_frame == 50 &&
+                    edge_trim_model.tracks().front().clips[1].timeline_duration_frames == 70,
                 "Rolling a cut forward did not resize both source ranges.");
         require(edge_trim_model.trimClipEdge(
                     0, 0, timeline::ClipEdge::Right, 500) ==
                     timeline::TrimClipResult::Trimmed &&
-                    edge_trim_model.clips()[0].timeline_duration_frames == 119 &&
-                    edge_trim_model.clips()[1].timeline_start_frame == 119 &&
-                    edge_trim_model.clips()[1].timeline_duration_frames == 1,
+                    edge_trim_model.tracks().front().clips[0].timeline_duration_frames == 119 &&
+                    edge_trim_model.tracks().front().clips[1].timeline_start_frame == 119 &&
+                    edge_trim_model.tracks().front().clips[1].timeline_duration_frames == 1,
                 "A shared cut did not stop before reducing its neighbor to zero frames.");
         require(edge_trim_model.trimClipEdge(
                     0, 1, timeline::ClipEdge::Left, -20) ==
                     timeline::TrimClipResult::Trimmed &&
-                    edge_trim_model.clips()[0].timeline_duration_frames == 1 &&
-                    edge_trim_model.clips()[1].timeline_start_frame == 1,
+                    edge_trim_model.tracks().front().clips[0].timeline_duration_frames == 1 &&
+                    edge_trim_model.tracks().front().clips[1].timeline_start_frame == 1,
                 "A shared cut moved before the minimum one-frame segment boundary.");
 
         timeline::TimelineModel individual_right_model;
@@ -426,10 +426,10 @@ int main() {
                         timeline::ClipEdgeEditMode::Individual) ==
                         timeline::TrimClipResult::Trimmed,
                 "An individual right-edge preview or commit changed the wrong clips.");
-        require(individual_right_model.clips()[0].timeline_duration_frames == 60 &&
-                    individual_right_model.clips()[1].timeline_start_frame == 40 &&
-                    individual_right_model.clips()[1].source_start_frame == 40 &&
-                    individual_right_model.clips()[1].timeline_duration_frames == 80 &&
+        require(individual_right_model.tracks().front().clips[0].timeline_duration_frames == 60 &&
+                    individual_right_model.tracks().front().clips[1].timeline_start_frame == 40 &&
+                    individual_right_model.tracks().front().clips[1].source_start_frame == 40 &&
+                    individual_right_model.tracks().front().clips[1].timeline_duration_frames == 80 &&
                     individual_right_model.topClipAt(50) ==
                         timeline::ClipLocation{0, 1},
                 "Extending one clip did not preserve the neighbor or show the later clip above it.");
@@ -440,8 +440,8 @@ int main() {
                     30,
                     timeline::ClipEdgeEditMode::Individual) ==
                     timeline::TrimClipResult::Trimmed &&
-                    individual_right_model.clips()[0].timeline_duration_frames == 30 &&
-                    individual_right_model.clips()[1].timeline_start_frame == 40 &&
+                    individual_right_model.tracks().front().clips[0].timeline_duration_frames == 30 &&
+                    individual_right_model.tracks().front().clips[1].timeline_start_frame == 40 &&
                     !individual_right_model.clipAt(0, 35).has_value(),
                 "Shortening one clip did not leave a gap before the unchanged neighbor.");
         require(individual_right_model.trimClipEdge(
@@ -451,9 +451,9 @@ int main() {
                     1,
                     timeline::ClipEdgeEditMode::Individual) ==
                     timeline::TrimClipResult::Trimmed &&
-                    individual_right_model.clips()[0].timeline_duration_frames == 1 &&
-                    individual_right_model.clips()[1].timeline_start_frame == 40 &&
-                    individual_right_model.clips()[1].timeline_duration_frames == 80,
+                    individual_right_model.tracks().front().clips[0].timeline_duration_frames == 1 &&
+                    individual_right_model.tracks().front().clips[1].timeline_start_frame == 40 &&
+                    individual_right_model.tracks().front().clips[1].timeline_duration_frames == 80,
                 "An individual edge trim did not preserve the one-frame minimum.");
 
         timeline::TimelineModel individual_left_model;
@@ -470,11 +470,11 @@ int main() {
                         timeline::ClipEdgeEditMode::Individual) ==
                         timeline::TrimClipResult::Trimmed,
                 "An individual left edge could not extend over its neighbor.");
-        require(individual_left_model.clips()[0].timeline_start_frame == 0 &&
-                    individual_left_model.clips()[0].timeline_duration_frames == 40 &&
-                    individual_left_model.clips()[1].timeline_start_frame == 30 &&
-                    individual_left_model.clips()[1].source_start_frame == 30 &&
-                    individual_left_model.clips()[1].timeline_duration_frames == 90 &&
+        require(individual_left_model.tracks().front().clips[0].timeline_start_frame == 0 &&
+                    individual_left_model.tracks().front().clips[0].timeline_duration_frames == 40 &&
+                    individual_left_model.tracks().front().clips[1].timeline_start_frame == 30 &&
+                    individual_left_model.tracks().front().clips[1].source_start_frame == 30 &&
+                    individual_left_model.tracks().front().clips[1].timeline_duration_frames == 90 &&
                     individual_left_model.topClipAt(35) ==
                         timeline::ClipLocation{0, 1},
                 "Extending one clip's left edge changed its neighbor or visibility order.");
@@ -492,10 +492,10 @@ int main() {
                         50,
                         timeline::ClipEdgeEditMode::Individual) ==
                         timeline::TrimClipResult::Trimmed &&
-                    individual_left_shrink_model.clips()[0].timeline_start_frame == 0 &&
-                    individual_left_shrink_model.clips()[0].timeline_duration_frames == 40 &&
-                    individual_left_shrink_model.clips()[1].timeline_start_frame == 50 &&
-                    individual_left_shrink_model.clips()[1].timeline_duration_frames == 70 &&
+                    individual_left_shrink_model.tracks().front().clips[0].timeline_start_frame == 0 &&
+                    individual_left_shrink_model.tracks().front().clips[0].timeline_duration_frames == 40 &&
+                    individual_left_shrink_model.tracks().front().clips[1].timeline_start_frame == 50 &&
+                    individual_left_shrink_model.tracks().front().clips[1].timeline_duration_frames == 70 &&
                     !individual_left_shrink_model.clipAt(0, 45).has_value(),
                 "Shortening one clip's left edge did not preserve the neighbor and leave a gap.");
 
@@ -537,9 +537,9 @@ int main() {
                         500,
                         timeline::ClipEdgeEditMode::Individual) ==
                         timeline::TrimClipResult::Trimmed &&
-                    individual_source_bound_model.clips()[0].timeline_duration_frames == 60 &&
-                    individual_source_bound_model.clips()[1].timeline_start_frame == 40 &&
-                    individual_source_bound_model.clips()[1].timeline_duration_frames == 20,
+                    individual_source_bound_model.tracks().front().clips[0].timeline_duration_frames == 60 &&
+                    individual_source_bound_model.tracks().front().clips[1].timeline_start_frame == 40 &&
+                    individual_source_bound_model.tracks().front().clips[1].timeline_duration_frames == 20,
                 "An individual edge exceeded the video source limit or changed its neighbor.");
 
         timeline::TimelineModel mixed_edge_model;
@@ -553,9 +553,9 @@ int main() {
                     mixed_edge_model.trimClipEdge(
                         0, 0, timeline::ClipEdge::Right, 110) ==
                         timeline::TrimClipResult::Trimmed &&
-                    mixed_edge_model.clips()[0].timeline_duration_frames == 110 &&
-                    mixed_edge_model.clips()[1].timeline_start_frame == 110 &&
-                    mixed_edge_model.clips()[1].timeline_duration_frames == 40,
+                    mixed_edge_model.tracks().front().clips[0].timeline_duration_frames == 110 &&
+                    mixed_edge_model.tracks().front().clips[1].timeline_start_frame == 110 &&
+                    mixed_edge_model.tracks().front().clips[1].timeline_duration_frames == 40,
                 "A shared boundary between different clip kinds did not roll.");
 
         timeline::TimelineModel gap_edge_model;
@@ -572,26 +572,26 @@ int main() {
         require(gap_edge_model.trimClipEdge(
                     0, 0, timeline::ClipEdge::Left, 90) ==
                     timeline::TrimClipResult::Trimmed &&
-                    gap_edge_model.clips()[0].timeline_start_frame == 90 &&
-                    gap_edge_model.clips()[0].source_start_frame == 40 &&
-                    gap_edge_model.clips()[0].timeline_duration_frames == 90,
+                    gap_edge_model.tracks().front().clips[0].timeline_start_frame == 90 &&
+                    gap_edge_model.tracks().front().clips[0].source_start_frame == 40 &&
+                    gap_edge_model.tracks().front().clips[0].timeline_duration_frames == 90,
                 "Extending a left edge into a gap did not move the clip start.");
         require(gap_edge_model.trimClipEdge(
                     0, 0, timeline::ClipEdge::Right, 190) ==
                     timeline::TrimClipResult::Trimmed &&
-                    gap_edge_model.clips()[0].timeline_duration_frames == 100,
+                    gap_edge_model.tracks().front().clips[0].timeline_duration_frames == 100,
                 "Extending a right edge into a gap did not increase its duration.");
         require(gap_edge_model.trimClipEdge(
                     0, 0, timeline::ClipEdge::Left, -100) ==
                     timeline::TrimClipResult::Trimmed &&
-                    gap_edge_model.clips()[0].timeline_start_frame == 50 &&
-                    gap_edge_model.clips()[0].source_start_frame == 0,
+                    gap_edge_model.tracks().front().clips[0].timeline_start_frame == 50 &&
+                    gap_edge_model.tracks().front().clips[0].source_start_frame == 0,
                 "A video left edge extended before source frame zero.");
         require(gap_edge_model.trimClipEdge(
                     0, 0, timeline::ClipEdge::Right, 1000) ==
                     timeline::TrimClipResult::Trimmed &&
-                    gap_edge_model.clips()[0].timeline_start_frame == 50 &&
-                    gap_edge_model.clips()[0].timeline_duration_frames == 200,
+                    gap_edge_model.tracks().front().clips[0].timeline_start_frame == 50 &&
+                    gap_edge_model.tracks().front().clips[0].timeline_duration_frames == 200,
                 "A video right edge extended beyond the source frame count.");
 
         timeline::TimelineModel fallback_edge_model;
@@ -606,7 +606,7 @@ int main() {
                     fallback_edge_model.trimClipEdge(
                         0, 0, timeline::ClipEdge::Right, 100) ==
                         timeline::TrimClipResult::Trimmed &&
-                    fallback_edge_model.clips()[0].timeline_duration_frames == 20,
+                    fallback_edge_model.tracks().front().clips[0].timeline_duration_frames == 20,
                 "Video edge extension ignored the duration/FPS source bound fallback.");
 
         timeline::TimelineModel image_edge_model;
@@ -618,7 +618,7 @@ int main() {
                     image_edge_model.trimClipEdge(
                         0, 0, timeline::ClipEdge::Right, 300) ==
                         timeline::TrimClipResult::Trimmed &&
-                    image_edge_model.clips()[0].timeline_duration_frames == 300,
+                    image_edge_model.tracks().front().clips[0].timeline_duration_frames == 300,
                 "A still image could not extend while holding its static frame.");
 
         timeline::TimelineModel text_edge_model;
@@ -626,7 +626,7 @@ int main() {
                     text_edge_model.trimClipEdge(
                         0, 0, timeline::ClipEdge::Right, 500) ==
                         timeline::TrimClipResult::Trimmed &&
-                    text_edge_model.clips()[0].timeline_duration_frames == 500,
+                    text_edge_model.tracks().front().clips[0].timeline_duration_frames == 500,
                 "A text clip could not extend beyond its original duration.");
 
         timeline::TimelineModel zero_bound_edge_model;
@@ -635,8 +635,8 @@ int main() {
                     zero_bound_edge_model.trimClipEdge(
                         0, 0, timeline::ClipEdge::Left, -50) ==
                         timeline::TrimClipResult::Trimmed &&
-                    zero_bound_edge_model.clips()[0].timeline_start_frame == 0 &&
-                    zero_bound_edge_model.clips()[0].timeline_duration_frames == 20,
+                    zero_bound_edge_model.tracks().front().clips[0].timeline_start_frame == 0 &&
+                    zero_bound_edge_model.tracks().front().clips[0].timeline_duration_frames == 20,
                 "A clip edge moved its timeline start before frame zero.");
 
         timeline::TimelineModel keyframe_edge_model;
@@ -652,7 +652,7 @@ int main() {
                         0, 0, timeline::ClipEdge::Left, 5) ==
                         timeline::TrimClipResult::Trimmed,
                 "A keyframed clip could not extend before its original start.");
-        const auto& extended_keyframes = keyframe_edge_model.clips()[0];
+        const auto& extended_keyframes = keyframe_edge_model.tracks().front().clips[0];
         require(extended_keyframes.timeline_start_frame == 5 &&
                     extended_keyframes.timeline_duration_frames == 25 &&
                     timeline::evaluateTransform(
@@ -672,8 +672,8 @@ int main() {
                     0, 0, timeline::ClipEdge::Right, 40) ==
                     timeline::TrimClipResult::Trimmed &&
                     timeline::evaluateTransform(
-                        keyframe_edge_model.clips()[0].transform,
-                        keyframe_edge_model.clips()[0].keyframes,
+                        keyframe_edge_model.tracks().front().clips[0].transform,
+                        keyframe_edge_model.tracks().front().clips[0].keyframes,
                         30).position_x == 0.8,
                 "Extending a right edge did not hold the last evaluated transform.");
         const auto unchanged_edge_snapshot = keyframe_edge_model.snapshot();
@@ -702,12 +702,12 @@ int main() {
         const auto undone_edge = edge_history.undo(after_edge_edit);
         require(undone_edge.has_value(), "Undo after edge extension was unavailable.");
         edge_history_model.restore(undone_edge->timeline);
-        require(edge_history_model.clips()[0].timeline_duration_frames == 60,
+        require(edge_history_model.tracks().front().clips[0].timeline_duration_frames == 60,
                 "Undo did not restore the original edge-trimmed duration.");
         const auto redone_edge = edge_history.redo(*undone_edge);
         require(redone_edge.has_value(), "Redo after edge extension was unavailable.");
         edge_history_model.restore(redone_edge->timeline);
-        require(edge_history_model.clips()[0].timeline_duration_frames == 90,
+        require(edge_history_model.tracks().front().clips[0].timeline_duration_frames == 90,
                 "Redo did not restore the extended clip duration.");
 
         timeline::TimelineModel individual_history_model;
@@ -735,17 +735,17 @@ int main() {
         require(undone_individual.has_value(),
                 "Undo after an individual edge edit was unavailable.");
         individual_history_model.restore(undone_individual->timeline);
-        require(individual_history_model.clips()[0].timeline_duration_frames == 40 &&
-                    individual_history_model.clips()[1].timeline_start_frame == 40 &&
-                    individual_history_model.clips()[1].timeline_duration_frames == 80,
+        require(individual_history_model.tracks().front().clips[0].timeline_duration_frames == 40 &&
+                    individual_history_model.tracks().front().clips[1].timeline_start_frame == 40 &&
+                    individual_history_model.tracks().front().clips[1].timeline_duration_frames == 80,
                 "Undo did not restore both clips after an individual edge edit.");
         const auto redone_individual = individual_history.redo(*undone_individual);
         require(redone_individual.has_value(),
                 "Redo after an individual edge edit was unavailable.");
         individual_history_model.restore(redone_individual->timeline);
-        require(individual_history_model.clips()[0].timeline_duration_frames == 60 &&
-                    individual_history_model.clips()[1].timeline_start_frame == 40 &&
-                    individual_history_model.clips()[1].timeline_duration_frames == 80,
+        require(individual_history_model.tracks().front().clips[0].timeline_duration_frames == 60 &&
+                    individual_history_model.tracks().front().clips[1].timeline_start_frame == 40 &&
+                    individual_history_model.tracks().front().clips[1].timeline_duration_frames == 80,
                 "Redo did not restore the individual overlap without changing the neighbor.");
 
         timeline::TimelineModel malformed_range_model;
@@ -783,9 +783,9 @@ int main() {
         require(remove_model.removeClip(1) == timeline::RemoveClipResult::Removed,
                 "Removing an intermediate clip failed.");
         require(remove_model.clipCount() == 2 &&
-                    remove_model.clips()[0].timeline_start_frame == 0 &&
-                    remove_model.clips()[1].timeline_start_frame == 180 &&
-                    remove_model.clips()[1].source_path ==
+                    remove_model.tracks().front().clips[0].timeline_start_frame == 0 &&
+                    remove_model.tracks().front().clips[1].timeline_start_frame == 180 &&
+                    remove_model.tracks().front().clips[1].source_path ==
                         std::filesystem::weakly_canonical(first_source),
                 "Removing an intermediate clip did not preserve absolute placement.");
         require(remove_model.totalDurationFrames() == 300,
@@ -793,11 +793,11 @@ int main() {
         require(remove_model.removeClip(1) == timeline::RemoveClipResult::Removed,
                 "Removing the last clip failed.");
         require(remove_model.clipCount() == 1 &&
-                    remove_model.clips().front().timeline_start_frame == 0,
+                    remove_model.tracks().front().clips.front().timeline_start_frame == 0,
                 "Removing the last clip left invalid placement.");
         require(remove_model.removeClip(0) == timeline::RemoveClipResult::Removed,
                 "Removing the first clip failed.");
-        require(remove_model.clips().empty(),
+        require(remove_model.tracks().front().clips.empty(),
                 "Removing the first clip did not empty the model.");
         require(remove_model.removeClip(0) == timeline::RemoveClipResult::InvalidIndex,
                 "Removing an invalid clip index was accepted.");
@@ -805,51 +805,51 @@ int main() {
         const auto total_before_moves = model.totalDurationFrames();
         require(model.moveClip(0, 3) == timeline::MoveClipResult::Moved,
                 "Moving the first clip to the end failed.");
-        require(model.clips()[0].source_path ==
+        require(model.tracks().front().clips[0].source_path ==
                     std::filesystem::weakly_canonical(second_source),
                 "The first-to-last move produced the wrong first source.");
-        require(model.clips()[0].timeline_start_frame == 0 &&
-                    model.clips()[1].timeline_start_frame == 60 &&
-                    model.clips()[2].timeline_start_frame == 180 &&
-                    model.clips()[3].timeline_start_frame == 240,
+        require(model.tracks().front().clips[0].timeline_start_frame == 0 &&
+                    model.tracks().front().clips[1].timeline_start_frame == 60 &&
+                    model.tracks().front().clips[2].timeline_start_frame == 180 &&
+                    model.tracks().front().clips[3].timeline_start_frame == 240,
                 "The first-to-last move did not recalculate starts.");
         require(model.totalDurationFrames() == total_before_moves,
                 "Moving a clip changed the total duration.");
-        require(model.clips()[1].display_name == "first.mkv" &&
-                    model.clips()[1].frame_count == first_metadata.frame_count,
+        require(model.tracks().front().clips[1].display_name == "first.mkv" &&
+                    model.tracks().front().clips[1].frame_count == first_metadata.frame_count,
                 "Moving a clip did not preserve its metadata.");
 
         require(model.moveClip(3, 0) == timeline::MoveClipResult::Moved,
                 "Moving the last clip to the beginning failed.");
-        require(model.clips()[0].source_path ==
+        require(model.tracks().front().clips[0].source_path ==
                     std::filesystem::weakly_canonical(first_source),
                 "The last-to-first move produced the wrong first source.");
-        require(model.clips()[0].timeline_start_frame == 0 &&
-                    model.clips()[1].timeline_start_frame == 120 &&
-                    model.clips()[2].timeline_start_frame == 180 &&
-                    model.clips()[3].timeline_start_frame == 300,
+        require(model.tracks().front().clips[0].timeline_start_frame == 0 &&
+                    model.tracks().front().clips[1].timeline_start_frame == 120 &&
+                    model.tracks().front().clips[2].timeline_start_frame == 180 &&
+                    model.tracks().front().clips[3].timeline_start_frame == 300,
                 "The last-to-first move did not recalculate starts.");
 
         require(model.moveClip(1, 2) == timeline::MoveClipResult::Moved,
                 "Moving an intermediate clip failed.");
-        require(model.clips()[0].timeline_start_frame == 0 &&
-                    model.clips()[1].timeline_start_frame == 120 &&
-                    model.clips()[2].timeline_start_frame == 240 &&
-                    model.clips()[3].timeline_start_frame == 300,
+        require(model.tracks().front().clips[0].timeline_start_frame == 0 &&
+                    model.tracks().front().clips[1].timeline_start_frame == 120 &&
+                    model.tracks().front().clips[2].timeline_start_frame == 240 &&
+                    model.tracks().front().clips[3].timeline_start_frame == 300,
                 "The intermediate move did not recalculate starts.");
-        require(model.clips()[0].source_path == model.clips()[1].source_path,
+        require(model.tracks().front().clips[0].source_path == model.tracks().front().clips[1].source_path,
                 "Repeated sources were not preserved as independent occurrences.");
         require(model.firstClipIndexForSource(first_source) == 0,
                 "Source lookup did not preserve the first occurrence after moves.");
 
-        const auto starts_before_invalid_move = model.clips()[1].timeline_start_frame;
+        const auto starts_before_invalid_move = model.tracks().front().clips[1].timeline_start_frame;
         require(model.moveClip(1, 1) == timeline::MoveClipResult::NoChange,
                 "A no-op move was not reported as such.");
         require(model.moveClip(99, 0) == timeline::MoveClipResult::InvalidIndex,
                 "An invalid source index was accepted.");
         require(model.moveClip(0, 99) == timeline::MoveClipResult::InvalidIndex,
                 "An invalid destination index was accepted.");
-        require(model.clips()[1].timeline_start_frame == starts_before_invalid_move,
+        require(model.tracks().front().clips[1].timeline_start_frame == starts_before_invalid_move,
                 "An invalid move changed the timeline.");
 
         media::VideoMetadata invalid_metadata;
@@ -858,13 +858,13 @@ int main() {
         require(model.addClip(invalid_metadata) ==
                     timeline::AddClipResult::InvalidTimingMetadata,
                 "Metadata without timing information was accepted.");
-        require(model.clips().size() == 4,
+        require(model.tracks().front().clips.size() == 4,
                 "Invalid metadata changed the timeline.");
 
         model.clear();
         require(!model.hasClip(), "The timeline was not cleared.");
         require(model.clipCount() == 0, "The cleared timeline still has clips.");
-        require(model.clips().empty(), "The cleared clip collection was not empty.");
+        require(model.tracks().front().clips.empty(), "The cleared clip collection was not empty.");
 
         timeline::TimelineModel multi_track_model;
         require(multi_track_model.addTrack("Video 2") ==
@@ -901,6 +901,14 @@ int main() {
         require(multi_track_model.locateClip(moved_id).has_value() &&
                     multi_track_model.locateClip(moved_id)->track_index == 1,
                 "The moved clip could not be located by its stable id.");
+        const auto multi_track_snapshot = multi_track_model.snapshot();
+        multi_track_model.clear();
+        multi_track_model.restore(multi_track_snapshot);
+        require(multi_track_model.snapshot() == multi_track_snapshot &&
+                    multi_track_model.trackCount() == 2 &&
+                    multi_track_model.clipCount(0) == 1 &&
+                    multi_track_model.clipCount(1) == 2,
+                "A multi-track snapshot did not restore every track and clip.");
         require(multi_track_model.removeTrack(0) ==
                     timeline::TrackMutationResult::NotEmpty,
                 "A non-empty track was removed.");
@@ -1025,9 +1033,9 @@ int main() {
         require(undone_move.has_value() && history.canRedo(),
                 "Undo did not return the previous timeline state.");
         history_model.restore(undone_move->timeline);
-        require(history_model.clips()[0].source_path ==
+        require(history_model.tracks().front().clips[0].source_path ==
                     std::filesystem::weakly_canonical(first_source) &&
-                    history_model.clips()[1].source_path ==
+                    history_model.tracks().front().clips[1].source_path ==
                         std::filesystem::weakly_canonical(second_source) &&
                     undone_move->active_clip_index == 0 &&
                     undone_move->selected_source_path == first_source &&
@@ -1038,9 +1046,9 @@ int main() {
         require(redone_move.has_value() && history.canUndo(),
                 "Redo did not return the newer timeline state.");
         history_model.restore(redone_move->timeline);
-        require(history_model.clips()[0].source_path ==
+        require(history_model.tracks().front().clips[0].source_path ==
                     std::filesystem::weakly_canonical(second_source) &&
-                    history_model.clips()[1].source_path ==
+                    history_model.tracks().front().clips[1].source_path ==
                         std::filesystem::weakly_canonical(first_source) &&
                     redone_move->active_clip_index == 1 &&
                     redone_move->playhead_frame == 5,
@@ -1068,8 +1076,8 @@ int main() {
         const auto undone_trim = history.undo(trim_state);
         require(undone_trim.has_value(), "Undo after trim was unavailable.");
         history_model.restore(undone_trim->timeline);
-        require(history_model.clips()[0].source_start_frame == 0 &&
-                    history_model.clips()[0].timeline_duration_frames == 60,
+        require(history_model.tracks().front().clips[0].source_start_frame == 0 &&
+                    history_model.tracks().front().clips[0].timeline_duration_frames == 60,
                 "Undo after trim did not restore the source range.");
 
         const auto before_remove = make_history_state(0, first_source, 2);
@@ -1094,7 +1102,7 @@ int main() {
         require(undone_clear.has_value(), "Undo after clear was unavailable.");
         history_model.restore(undone_clear->timeline);
         require(history_model.clipCount() == 2 &&
-                    history_model.clips()[0].source_path ==
+                    history_model.tracks().front().clips[0].source_path ==
                         std::filesystem::weakly_canonical(second_source),
                 "Undo after clear did not restore the Timeline.");
 
@@ -1108,20 +1116,20 @@ int main() {
         const auto undone_audio = history.undo(after_audio);
         require(undone_audio.has_value(), "Undo after audio edit was unavailable.");
         history_model.restore(undone_audio->timeline);
-        require(history_model.clips()[0].audio_gain == 1.0 &&
-                    !history_model.clips()[0].audio_muted,
+        require(history_model.tracks().front().clips[0].audio_gain == 1.0 &&
+                    !history_model.tracks().front().clips[0].audio_muted,
                 "Undo after audio edit did not restore clip audio parameters.");
         const auto redone_audio = history.redo(*undone_audio);
         require(redone_audio.has_value(), "Redo after audio edit was unavailable.");
         history_model.restore(redone_audio->timeline);
-        require(history_model.clips()[0].audio_gain == 0.25 &&
-                    history_model.clips()[0].audio_muted,
+        require(history_model.tracks().front().clips[0].audio_gain == 0.25 &&
+                    history_model.tracks().front().clips[0].audio_muted,
                 "Redo after audio edit did not restore clip audio parameters.");
 
         const auto before_transform = make_history_state(0, first_source, 4);
         history.clear();
         history.recordBeforeEdit(before_transform);
-        auto edited_transform = history_model.clips()[0].transform;
+        auto edited_transform = history_model.tracks().front().clips[0].transform;
         edited_transform.position_x = 0.25;
         require(history_model.setClipTransform(0, 0, edited_transform) ==
                     timeline::TransformParameterResult::Changed,
@@ -1131,13 +1139,13 @@ int main() {
         require(undone_transform.has_value(),
                 "Undo after a transform edit was unavailable.");
         history_model.restore(undone_transform->timeline);
-        require(history_model.clips()[0].transform.position_x == 0.5,
+        require(history_model.tracks().front().clips[0].transform.position_x == 0.5,
                 "Undo after a transform edit did not restore the base value.");
         const auto redone_transform = history.redo(*undone_transform);
         require(redone_transform.has_value(),
                 "Redo after a transform edit was unavailable.");
         history_model.restore(redone_transform->timeline);
-        require(history_model.clips()[0].transform.position_x == 0.25,
+        require(history_model.tracks().front().clips[0].transform.position_x == 0.25,
                 "Redo after a transform edit did not restore the edited value.");
 
         const auto before_keyframe = make_history_state(0, first_source, 4);
@@ -1152,7 +1160,7 @@ int main() {
         require(undone_keyframe.has_value(),
                 "Undo after a keyframe edit was unavailable.");
         history_model.restore(undone_keyframe->timeline);
-        require(history_model.clips()[0].keyframes.opacity.empty(),
+        require(history_model.tracks().front().clips[0].keyframes.opacity.empty(),
                 "Undo after a keyframe edit did not restore the curve.");
 
         history.clear();

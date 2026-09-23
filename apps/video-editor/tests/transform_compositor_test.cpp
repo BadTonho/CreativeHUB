@@ -129,17 +129,17 @@ int main() {
                 "The clip keyframe was not stored.");
         require(model.splitClip(0, 0, 10) == timeline::SplitClipResult::Split,
                 "The transform clip was not split.");
-        require(model.clips()[0].transform.position_x == 0.25 &&
-                    model.clips()[1].transform.position_x == 0.75,
+        require(model.tracks().front().clips[0].transform.position_x == 0.25 &&
+                    model.tracks().front().clips[1].transform.position_x == 0.75,
                 "Splitting changed the transform bases incorrectly.");
-        require(model.clips()[1].source_start_frame == 10 &&
-                    model.clips()[1].timeline_duration_frames == 10,
+        require(model.tracks().front().clips[1].source_start_frame == 10 &&
+                    model.tracks().front().clips[1].timeline_duration_frames == 10,
                 "The split source offsets were incorrect.");
 
         require(model.trimClip(0, 1, 12, 6) == timeline::TrimClipResult::Trimmed,
                 "The transform clip was not trimmed.");
-        require(model.clips()[1].source_start_frame == 12 &&
-                    model.clips()[1].timeline_duration_frames == 6,
+        require(model.tracks().front().clips[1].source_start_frame == 12 &&
+                    model.tracks().front().clips[1].timeline_duration_frames == 6,
                 "The trimmed source range was incorrect.");
 
         const auto bottom = solid(255, 0, 0);

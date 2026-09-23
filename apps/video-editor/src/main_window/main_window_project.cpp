@@ -130,13 +130,6 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
         }
         document.timeline_tracks.push_back(std::move(project_track));
     }
-    document.timeline_clips.clear();
-    for (const auto& project_track : document.timeline_tracks) {
-        document.timeline_clips.insert(
-            document.timeline_clips.end(),
-            project_track.clips.begin(),
-            project_track.clips.end());
-    }
     return document;
 }
 
@@ -680,11 +673,7 @@ bool MainWindow::openProjectPath(
             return std::max<std::int64_t>(1, static_cast<std::int64_t>(std::ceil(estimated)));
         };
 
-        std::vector<project::ProjectTrack> project_tracks = document.timeline_tracks;
-        if (project_tracks.empty() && !document.timeline_clips.empty()) {
-            project_tracks.push_back(project::ProjectTrack{
-                "Video 1", 1.0, false, document.timeline_clips});
-        }
+        const auto& project_tracks = document.timeline_tracks;
 
         timeline::TimelineModel::Snapshot snapshot;
         timeline::TrackId next_track_id = 1;
@@ -732,7 +721,6 @@ bool MainWindow::openProjectPath(
                     text_clip.keyframes = project_clip.keyframes;
                     text_clip.kind = timeline::ClipKind::Text;
                     text_clip.text = project_clip.text;
-                    snapshot.clips.push_back(text_clip);
                     snapshot.tracks.back().clips.push_back(std::move(text_clip));
                     continue;
                 }
@@ -765,7 +753,7 @@ bool MainWindow::openProjectPath(
                     project_clip.source_path);
             }
 
-            snapshot.clips.push_back(timeline::TimelineClip{
+            snapshot.tracks.back().clips.push_back(timeline::TimelineClip{
                 project_clip.timeline_start_frame,
                 project_clip.source_start_frame,
                 project_clip.duration_frames,
@@ -784,7 +772,6 @@ bool MainWindow::openProjectPath(
                     ? timeline::ClipKind::Image
                     : timeline::ClipKind::Video,
                 {}});
-            snapshot.tracks.back().clips.push_back(snapshot.clips.back());
             }
 
             for (const auto& transition : project_track.transitions) {

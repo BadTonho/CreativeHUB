@@ -76,8 +76,6 @@ struct ProjectDocument {
     std::vector<ProjectMedia> media;
     std::vector<std::string> bins;
     std::vector<ProjectTrack> timeline_tracks;
-    // Compatibility view for callers still being migrated to timeline_tracks.
-    std::vector<ProjectClip> timeline_clips;
 
     friend bool operator==(const ProjectDocument&, const ProjectDocument&) = default;
 };

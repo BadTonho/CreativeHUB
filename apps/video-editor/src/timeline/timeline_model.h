@@ -164,9 +164,6 @@ class TimelineModel final {
 public:
     struct Snapshot {
         std::vector<TimelineTrack> tracks;
-        // Kept temporarily for source compatibility with the project loader
-        // while callers migrate to the multi-track representation.
-        std::vector<TimelineClip> clips;
         TrackId next_track_id = 1;
         ClipId next_clip_id = 1;
 
@@ -272,7 +269,6 @@ public:
     [[nodiscard]] std::size_t trackCount() const noexcept;
     [[nodiscard]] std::int64_t totalDurationFrames() const noexcept;
     [[nodiscard]] const std::vector<TimelineTrack>& tracks() const noexcept;
-    [[nodiscard]] const std::vector<TimelineClip>& clips() const noexcept;
     [[nodiscard]] std::optional<std::size_t> firstClipIndexForSource(
         const std::filesystem::path& source_path) const;
     [[nodiscard]] std::optional<ClipLocation> clipAt(

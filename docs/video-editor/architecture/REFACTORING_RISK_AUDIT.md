@@ -9,7 +9,7 @@ no estado do repositório analisado em 2026-09-23.
 ## Linha de base
 
 - O build Release foi concluído com sucesso.
-- Os 31/31 testes do CTest passaram.
+- Os 32/32 testes do CTest passaram.
 - A working tree estava limpa antes da criação deste documento.
 - A aplicação utiliza C++20, Qt 6 Widgets e FFmpeg.
 
@@ -636,3 +636,19 @@ Definição final de concluído:
   foi iniciado, mas não criou uma janela interativa disponível para o
   controlador de interface; o processo foi encerrado sem alterar arquivos do
   projeto.
+
+## Registro de execução da Etapa 2
+
+- `ProjectDocument` agora possui somente `timeline_tracks`.
+- `TimelineModel::Snapshot` agora armazena somente `tracks`, e a API de leitura
+  duplicada `TimelineModel::clips()` foi removida.
+- O loader de projetos legados continua convertendo `timeline.clips` em uma
+  `ProjectTrack` canônica durante o carregamento.
+- Salvamento, autosave, igualdade, estado `dirty` e undo/redo usam somente a
+  representação canônica.
+- Build Release: aprovado.
+- Testes automatizados: 32/32 aprovados.
+- Round-trip multi-track e abertura sem falso estado `dirty`: aprovados.
+- Snapshot/restore de múltiplas tracks: aprovado.
+- `git diff --check`: aprovado; o Git apenas reportou a conversão esperada de
+  LF para CRLF na working tree do Windows.

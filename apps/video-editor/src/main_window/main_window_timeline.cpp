@@ -2006,7 +2006,7 @@ void MainWindow::handleTimelineClipSelected(qint64 clip_index) {
         }
     }
 
-    const auto& clip = timeline_model_.clips()[static_cast<std::size_t>(clip_index)];
+    const auto& clip = timeline_model_.tracks()[0].clips[static_cast<std::size_t>(clip_index)];
     const auto media_item = std::find_if(
         media_items_.begin(),
         media_items_.end(),
@@ -2034,7 +2034,7 @@ void MainWindow::handleTimelineClipSelected(qint64 clip_index) {
 
     active_timeline_clip_index_ = static_cast<std::size_t>(clip_index);
     const auto& selected_clip =
-        timeline_model_.clips()[static_cast<std::size_t>(clip_index)];
+        timeline_model_.tracks()[0].clips[static_cast<std::size_t>(clip_index)];
     const auto selected_local_frame = move_playhead
         ? std::int64_t{0}
         : localFrameAtTimelinePlayhead(selected_clip, previous_playhead);
@@ -2279,7 +2279,7 @@ void MainWindow::handleTimelineClipMove(qint64 from_index, qint64 to_index) {
 
     const auto from = static_cast<std::size_t>(from_index);
     const auto to = static_cast<std::size_t>(to_index);
-    const auto source_path = timeline_model_.clips()[from].source_path;
+    const auto source_path = timeline_model_.tracks()[0].clips[from].source_path;
     timeline::EditState before_edit;
 
     try {
@@ -2532,7 +2532,7 @@ void MainWindow::handleTimelineClipTrim(
     }
 
     const auto index = static_cast<std::size_t>(clip_index);
-    const auto clip = timeline_model_.clips()[index];
+    const auto clip = timeline_model_.tracks()[0].clips[index];
     if (local_start_frame < 0 ||
         local_end_frame <= local_start_frame ||
         local_end_frame > clip.timeline_duration_frames) {
@@ -2683,7 +2683,7 @@ void MainWindow::handleTimelineClipSplit(qint64 clip_index, qint64 local_frame) 
     }
 
     const auto source_index = static_cast<std::size_t>(clip_index);
-    const auto& source_clip = timeline_model_.clips()[source_index];
+    const auto& source_clip = timeline_model_.tracks()[0].clips[source_index];
     if (local_frame <= 0 ||
         local_frame >= source_clip.timeline_duration_frames ||
         source_clip.source_start_frame < 0 ||
@@ -2780,7 +2780,7 @@ void MainWindow::handleTimelineClipSplit(qint64 clip_index, qint64 local_frame) 
         recordTimelineEdit(before_edit);
 
         const auto right_clip_index = source_index + 1;
-        const auto& right_clip = timeline_model_.clips()[right_clip_index];
+        const auto& right_clip = timeline_model_.tracks()[0].clips[right_clip_index];
         const auto media_index = static_cast<std::size_t>(
             std::distance(media_items_.begin(), media_item));
         active_timeline_clip_index_ = right_clip_index;
