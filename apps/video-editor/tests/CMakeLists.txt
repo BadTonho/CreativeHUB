@@ -358,6 +358,33 @@ add_test(
     COMMAND creative-suite-main-editor-timeline-tests
 )
 
+add_executable(creative-suite-main-editor-frame-step-navigation-tests
+    frame_step_navigation_test.cpp
+    ../src/main_window/frame_step_navigation.cpp
+    ../src/main_window/frame_step_navigation.h
+    ../src/timeline/timeline_model.cpp
+    ../src/timeline/timeline_model.h
+    ../src/timeline/timeline_transform.cpp
+    ../src/timeline/timeline_transform.h
+)
+
+target_include_directories(creative-suite-main-editor-frame-step-navigation-tests PRIVATE
+    ../src
+)
+
+target_compile_features(creative-suite-main-editor-frame-step-navigation-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-frame-step-navigation-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-frame-step-navigation-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-frame-step-navigation
+    COMMAND creative-suite-main-editor-frame-step-navigation-tests
+)
+
 add_executable(creative-suite-main-editor-timeline-trim-gesture-tests
     timeline_trim_gesture_test.cpp
     ../src/timeline/timeline_model.cpp

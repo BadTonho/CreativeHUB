@@ -31,6 +31,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Playback session | Sequential frames, forward catch-up without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
 | Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
 | Playback transition plan | Cross Dissolve held outgoing frame and incoming blend at its first, middle, and final frames; Fade to Black on both sides of the cut; one-frame durations; inactive and invalid transitions; unaffected layers on other tracks |
+| Frame-step navigation | Worker steps within a clip; forward/backward activation at contiguous junctions, one-frame clips, gaps and Timeline limits, media overlaps and cross-track priority, transitions, and missing or invalid active clip locations |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, rolling and individual edge trims, one-sided media overlap and top-clip priority, video source limits, still-image/text extension, delete, metadata, history |
 | Timeline edge-trim command | Rolling and individual trim outcomes for video, image, and text, edited-clip identity after reordering, local playback frame and preserved global playhead, no-change and invalid requests, and Undo/Redo snapshot compatibility |
 | Timeline edge-trim gesture | Pending transition selection versus valid shared-cut drag, rolling and individual previews, final release boundary, retained preview after an invalid pointer boundary, no-op and invalid requests, legacy trim range, signal order and single commit, and cancellation on track replacement or clearing |
@@ -220,6 +221,11 @@ in the running Main Editor after UI or integration changes:
   boundary without an out-of-range-frame error, and that `Project opened.`,
   `Loading timeline clip...`, and other transient status messages appear beside
   the frame in one compact footer line without a separate global status row;
+- use Previous Frame and Next Frame buttons and their existing keyboard
+  shortcuts within video, image, and text clips and at contiguous junctions
+  in both directions; check the Preview, playhead, active clip, gap and Timeline
+  limit messages, and transitions on different tracks without changing project
+  dirty state or history;
 - hover over both edges of a clip and confirm the horizontal resize cursor
   appears in the edge hit area, returns to the default cursor inside the clip,
   and disappears outside its edge or when the pointer leaves the Timeline;

@@ -1,4 +1,5 @@
 #include "main_window.h"
+#include "frame_step_navigation.h"
 #include "main_window_support.h"
 
 #include "logging/logger.h"
@@ -901,70 +902,41 @@ void MainWindow::sendPlaybackCommand(const char* command) {
 
     if (!canPlaybackTimelineAtPlayhead()) return;
 
-    const auto active_index = active_timeline_clip_index_;
-    const auto active_track = active_timeline_track_index_.value_or(0);
-    if (active_index.has_value() &&
-        active_track < timeline_model_.trackCount() &&
-        *active_index < timeline_model_.clipCount(active_track) &&
-        std::string_view(command) == "stepForward") {
-        const auto& clip = timeline_model_.tracks()[active_track].clips[*active_index];
-        if (playback_frame_index_ >= clip.timeline_duration_frames - 1) {
-            const auto global_frame = clip.timeline_start_frame +
-                clip.timeline_duration_frames;
-            if (const auto next = timeline_model_.topClipAt(global_frame);
-                next.has_value()) {
-                const auto& next_clip = timeline_model_.tracks()[next->track_index]
-                    .clips[next->clip_index];
-                activateTimelineClipAt(
-                    next->track_index,
-                    next->clip_index,
-                    std::max<std::int64_t>(
-                        0,
-                        global_frame - next_clip.timeline_start_frame),
-                    false);
-            } else if (std::any_of(
-                           timeline_model_.tracks().begin(),
-                           timeline_model_.tracks().end(),
-                           [global_frame](const timeline::TimelineTrack& track) {
-                               return std::any_of(
-                                   track.clips.begin(),
-                                   track.clips.end(),
-                                   [global_frame](const timeline::TimelineClip& candidate) {
-                                       return candidate.timeline_start_frame > global_frame;
-                                   });
-                           })) {
-                statusBar()->showMessage("Gap in timeline.");
-            } else {
-                statusBar()->showMessage("Already at the end of the timeline.");
-            }
+    const auto command_name = std::string_view(command);
+    if (command_name == "stepForward" || command_name == "stepBackward") {
+        std::optional<timeline::ClipLocation> active_clip;
+        if (active_timeline_clip_index_.has_value()) {
+            active_clip = timeline::ClipLocation{
+                active_timeline_track_index_.value_or(0),
+                *active_timeline_clip_index_};
+        }
+        const auto decision = decideFrameStep(
+            timeline_model_,
+            active_clip,
+            playback_frame_index_,
+            command_name == "stepForward"
+                ? FrameStepDirection::Forward
+                : FrameStepDirection::Backward);
+        switch (decision.action) {
+        case FrameStepAction::StepWorker:
+            break;
+        case FrameStepAction::ActivateClip:
+            activateTimelineClipAt(
+                decision.destination->track_index,
+                decision.destination->clip_index,
+                decision.local_frame,
+                false);
+            return;
+        case FrameStepAction::Gap:
+            statusBar()->showMessage("Gap in timeline.");
+            return;
+        case FrameStepAction::Beginning:
+            statusBar()->showMessage("Already at the beginning of the timeline.");
+            return;
+        case FrameStepAction::End:
+            statusBar()->showMessage("Already at the end of the timeline.");
             return;
         }
-    }
-
-    if (active_index.has_value() &&
-        active_track < timeline_model_.trackCount() &&
-        *active_index < timeline_model_.clipCount(active_track) &&
-        std::string_view(command) == "stepBackward" &&
-        playback_frame_index_ <= 0) {
-        const auto& clip = timeline_model_.tracks()[active_track].clips[*active_index];
-        const auto global_frame = clip.timeline_start_frame - 1;
-        if (global_frame >= 0) {
-            if (const auto previous = timeline_model_.topClipAt(global_frame);
-                previous.has_value()) {
-                const auto& previous_clip = timeline_model_.tracks()[previous->track_index]
-                    .clips[previous->clip_index];
-            activateTimelineClipAt(
-                previous->track_index,
-                previous->clip_index,
-                global_frame - previous_clip.timeline_start_frame,
-                false);
-            } else {
-                statusBar()->showMessage("Gap in timeline.");
-            }
-        } else {
-            statusBar()->showMessage("Already at the beginning of the timeline.");
-        }
-        return;
     }
 
     QMetaObject::invokeMethod(playback_worker_, command, Qt::QueuedConnection);

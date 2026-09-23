@@ -70,6 +70,12 @@ would make the concrete change safer or easier to test. Keep any extraction
 behavior-preserving and covered by regression tests; it is not a prerequisite
 for every feature.
 
+**Progress (2026-09-23):** The first focused step isolates the frame-step
+boundary decision in a Qt-independent module with explicit Timeline and active
+clip inputs. `MainWindow` still checks playback eligibility, activates media,
+shows messages, and sends worker commands. The broader window state remains
+with the coordinator; further extraction requires a concrete workflow need.
+
 ### 5. Project persistence — only when changing the project format
 
 `src/project/project_file.cpp` is approximately 921 lines and handles a

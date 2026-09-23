@@ -391,3 +391,9 @@ translation units under `apps/video-editor/src/main_window/`. Workspace,
 project, Media Browser, Timeline, playback, and Inspector construction and
 coordination remain part of the same window class; this organization does not
 introduce additional controllers or change ownership.
+
+The internal `frame_step_navigation` module decides whether a Previous/Next
+Frame command stays within the active clip, activates a clip at the boundary,
+or reports a gap or Timeline limit. It reads Timeline metadata only;
+`MainWindow` retains playback eligibility checks, media activation, status
+messages, and worker communication.

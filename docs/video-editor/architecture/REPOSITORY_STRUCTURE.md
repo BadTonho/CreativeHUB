@@ -60,3 +60,7 @@ translation units, not independent controllers or ownership boundaries. Media,
 timeline, playback, project, and rendering modules remain the lower-level
 boundaries that the coordinator connects. This refactoring creates no shared
 library and does not change the application API or runtime behavior.
+
+An internal Qt-independent `frame_step_navigation` helper under `main_window/`
+now returns the boundary decision for Previous/Next Frame. The window still
+owns UI state, media activation, status messages, and worker commands.

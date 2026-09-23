@@ -19,6 +19,8 @@ add_executable(creative-suite-main-editor
     src/main_window.h
     src/main_window/main_window_support.cpp
     src/main_window/main_window_support.h
+    src/main_window/frame_step_navigation.cpp
+    src/main_window/frame_step_navigation.h
     src/main_window/main_window_workspace.cpp
     src/main_window/main_window_effects.cpp
     src/main_window/main_window_project.cpp
