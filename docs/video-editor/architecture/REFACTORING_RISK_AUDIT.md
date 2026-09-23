@@ -2,7 +2,7 @@
 
 **Status:** Advisory review; not an approved refactoring plan.
 **Reviewed:** 2026-09-23
-**Repository revision:** `01f0a54` (`Implement individual edge trimming and shared boundary handling in timeline`)
+**Repository revision:** `877d890`
 
 This review records structural areas that may increase regression risk when
 changing the Main Editor. File length is a signal for investigation, not by
@@ -15,7 +15,7 @@ Use these stable numbers when requesting work, for example: “Do item 2.”
 
 ### 1. Timeline edit orchestration — high priority for Timeline changes
 
-`src/main_window/main_window_timeline.cpp` is approximately 2,806 lines. It
+`src/main_window/main_window_timeline.cpp` is approximately 2,799 lines. It
 contains Timeline UI creation, clip and track commands, selection, transition
 handling, playback coordination, and edit history. These responsibilities can
 make an editing change affect several workflows at once. For Timeline work,
@@ -29,7 +29,7 @@ concrete change needs them.
 
 ### 2. Timeline widget interaction — high priority for gesture changes
 
-`src/timeline/timeline_widget.cpp` is approximately 2,296 lines. It combines
+`src/timeline/timeline_widget.cpp` is approximately 2,220 lines. It combines
 painting, geometry, hit testing, pointer gestures, drag-and-drop, and transition
 interactions. Changes to gestures can interact with selection, preview
 painting, and drop behavior. Consider extracting the affected interaction
@@ -43,7 +43,7 @@ be extracted only when a concrete change calls for it.
 
 ### 3. Playback worker responsibilities — high priority for playback changes
 
-`src/playback/playback_worker.cpp` is approximately 1,485 lines and coordinates
+`src/playback/playback_worker.cpp` is approximately 1,406 lines and coordinates
 media decoding, audio output, playback timing, composition, and error handling.
 Some timing and communication policies are already isolated in
 `playback_audio_pacing.h`, `playback_deadline_scheduler.h`, and
@@ -99,11 +99,72 @@ orchestration; refactor it only for a compositor-specific requirement.
 ### 8. Large test files — optional organization work
 
 Large test files are not runtime coupling. The current largest examples are
-`timeline_widget_test.cpp` (about 1,803 lines),
-`timeline_model_test.cpp` (about 1,094 lines), and
-`playback_worker_test.cpp` (about 1,035 lines). Splitting them by behavior can
+`timeline_widget_test.cpp` (about 2,000 lines),
+`timeline_model_test.cpp` (about 1,223 lines), and
+`playback_worker_test.cpp` (about 1,183 lines). Splitting them by behavior can
 improve navigation, but should preserve test coverage and should not be bundled
 with an unrelated feature change.
+
+## Function-Level Maintainability Map
+
+This map identifies places where one function performs several distinguishable
+steps. It is an aid for adding, moving, or removing behavior in a future change,
+not a request to extract all of these functions now. Start with private helpers
+in the same translation unit when they only organize code; introduce a new
+module only when it establishes a useful state or test boundary.
+
+- **Timeline controls:** `MainWindow::createTimeline` builds the playback and
+  editing toolbar, zoom controls, scrolling viewport and fixed track headers,
+  footer, and all their signal connections in one function. Candidate helpers
+  are `createTimelineControls`, `createTimelineViewport`,
+  `createTimelineFooter`, and `connectTimelineSignals`. Keep widget ownership,
+  initialization order, shortcut behavior, and signal connections intact.
+- **Timeline painting:** `TimelineWidget::paintEvent` draws ruler ticks and
+  frame guides, tracks and clips, keyframes, transition regions, move/drop
+  ghosts and snap guides, then the playhead. Candidate helpers are
+  `paintRuler`, `paintTracksAndClips`, `paintTransitions`,
+  `paintDragFeedback`, and `paintPlayhead`, sharing one `QPainter` and the
+  current dirty region. Preserve the present drawing order and visible-range
+  clipping, especially at high zoom.
+- **Timeline gestures:** `mousePressEvent`, `mouseMoveEvent`, and
+  `mouseReleaseEvent` each dispatch among ruler seek, clip move, trim, Blade,
+  and clip seek. If another gesture changes, extract matching handlers for its
+  press, move, and release phases while keeping event priority, mouse capture,
+  state cleanup, and legacy signal order in the widget. The trim decision is
+  already isolated in `TimelineTrimGesture` and need not be duplicated.
+- **Media Browser refresh:** `MainWindow::populateMediaBrowser` captures the
+  selected media/bin and expanded tree paths, collects bin paths, rebuilds the
+  tree and list, then restores selection and dependent controls. Candidate
+  helpers are `captureBrowserState`, `collectBinPaths`, `populateBinTree`,
+  and `populateMediaList`. Preserve signal blocking, offline entries, nested
+  bin filtering, and selection restoration.
+- **Menus and shortcuts:** `MainWindow::createMenus` creates menu groups,
+  registers configurable shortcut IDs, connects actions, and creates playback
+  shortcuts. Candidate helpers can group File, Edit, View, and playback
+  actions; preserve the shortcut IDs, contexts, action ownership, and final
+  shortcut loading and action-state update.
+- **Project opening:** `MainWindow::openProjectPath` loads a document, probes
+  or marks media offline, normalizes bins, converts project tracks and clips to
+  a Timeline snapshot, and finally applies the loaded project. Candidate
+  helpers are `prepareProjectMedia`, `normalizeProjectBins`, and
+  `buildTimelineSnapshot`. Keep all preparation before `applyLoadedProject`
+  so a failure leaves the active project intact; retain media/clip context in
+  the existing error logs.
+- **Persistence and playback:** `project::load` and `project::save` have clear
+  media, track, clip, and transition parsing/writing phases, but should be
+  divided only with a project-format change and version 1-8 compatibility
+  tests. `PlaybackWorker::decodeTick` has separate target selection, audio
+  pacing, composition, and direct decoding phases; split only alongside a
+  playback change, preserving cancellation, deadlines, metrics, and errors.
+
+The large `timeline_widget_test.cpp` and `timeline_model_test.cpp` place most
+scenarios inside `main`. Named scenario functions within those files would
+make test cases easier to add or move before any file split. In contrast,
+`playback_worker_test.cpp` already groups its scenarios into named functions.
+The existing tests exercise the widget, model, project format, and worker, but
+do not instantiate the application `MainWindow`; a future extraction of its UI
+construction or project-open workflow also needs a documented manual check or
+an application-level test for the affected behavior.
 
 ## Safer Change Sequence
 
@@ -124,6 +185,7 @@ consumer.
 
 ## Review Snapshot
 
-At the reviewed revision, `git status --short` was empty. This audit did not
-change source code or run tests. The line counts and recommendations are a
-snapshot and should be rechecked when a concrete change is selected.
+At the reviewed revision, `git status --short` was empty. This audit changed
+no application or test code and ran no build or tests. The line counts and
+function map are a snapshot and should be rechecked when a concrete change is
+selected.
