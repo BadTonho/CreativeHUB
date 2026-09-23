@@ -14,7 +14,7 @@ TimelineEndButtons createTimelineEndButtons(QWidget* parent) {
 
     auto* edit_button = new QPushButton("Edit", container);
     edit_button->setObjectName("timelineEditButton");
-    edit_button->setFixedHeight(28);
+    edit_button->setFixedSize(68, 28);
     edit_button->setCheckable(true);
     edit_button->setAutoExclusive(true);
     edit_button->setToolTip("Switch to the Edit workspace");

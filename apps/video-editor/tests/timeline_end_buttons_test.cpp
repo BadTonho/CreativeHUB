@@ -39,8 +39,8 @@ int main(int argc, char* argv[]) {
                 "The first timeline end button must be Edit.");
         require(edit_button->text() == "Edit",
                 "The first timeline end button label must be Edit.");
-        require(edit_button->height() == 28,
-                "The Edit button must be 28 pixels tall.");
+        require(edit_button->size() == QSize(68, 28),
+                "The Edit button must be 68 by 28 pixels so its label fits.");
         require(edit_button == buttons.edit,
                 "The first timeline end button must be the Edit selector.");
         require(edit_button->isCheckable() && edit_button->isChecked(),
