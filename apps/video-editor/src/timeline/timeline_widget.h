@@ -81,7 +81,11 @@ signals:
     void clipSelectedAt(qint64 track_index, qint64 clip_index);
     void clipMoveRequestedAt(qint64 from_track, qint64 from_clip, qint64 to_track, qint64 timeline_start_frame);
     void clipSplitRequestedAt(qint64 track_index, qint64 clip_index, qint64 local_frame);
-    void clipTrimRequestedAt(qint64 track_index, qint64 clip_index, qint64 local_start_frame, qint64 local_end_frame);
+    void clipEdgeTrimRequestedAt(
+        qint64 track_index,
+        qint64 clip_index,
+        qint64 edge,
+        qint64 boundary_frame);
     void mediaDropRequestedAt(const QString& source_path, qint64 track_index, qint64 timeline_frame);
     void effectDropRequestedAt(const QString& effect_id, qint64 track_index, qint64 timeline_frame);
     void transitionSelectedAt(qint64 track_index, qint64 from_clip_index, qint64 to_clip_index);
@@ -117,7 +121,6 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
 
 private:
-    enum class TrimEdge { Left, Right };
     struct SnapPlacement {
         std::int64_t start_frame = 0;
         std::optional<std::int64_t> guide_frame;
@@ -128,6 +131,8 @@ private:
     [[nodiscard]] double rowHeight() const noexcept;
     [[nodiscard]] QRectF trackContentRect(std::size_t index) const noexcept;
     [[nodiscard]] QRectF clipRect(const ClipLocation& location) const noexcept;
+    [[nodiscard]] const TimelineClip& displayedClip(
+        const ClipLocation& location) const noexcept;
     void paintTrackHeaderCell(
         QPainter& painter,
         std::size_t track_index,
@@ -145,7 +150,9 @@ private:
     [[nodiscard]] std::optional<std::int64_t> playheadFrameAtRulerX(
         double x) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> localFrameAt(const ClipLocation&, double x) const noexcept;
-    [[nodiscard]] std::optional<TrimEdge> trimEdgeAt(const ClipLocation&, double x) const noexcept;
+    [[nodiscard]] std::optional<ClipEdge> trimEdgeAt(const ClipLocation&, double x) const noexcept;
+    [[nodiscard]] std::optional<std::int64_t> trimBoundaryAt(double x) const noexcept;
+    void updateTrimPreview(double x);
     [[nodiscard]] std::optional<std::pair<std::size_t, std::size_t>>
     transitionClipIndexesAt(double x, double y) const noexcept;
     void showTransitionMenu(const QPoint& position, const QPoint& global_position);
@@ -200,10 +207,14 @@ private:
     std::optional<std::size_t> move_target_track_;
     std::int64_t move_target_frame_ = 0;
     bool trimming_ = false;
+    bool trim_transition_pending_ = false;
+    std::optional<std::pair<std::size_t, std::size_t>> trim_transition_pair_;
     ClipLocation trimming_clip_{};
-    TrimEdge trim_edge_ = TrimEdge::Left;
-    std::int64_t trim_start_frame_ = 0;
-    std::int64_t trim_end_frame_ = 0;
+    ClipEdge trim_edge_ = ClipEdge::Left;
+    std::int64_t trim_original_boundary_frame_ = 0;
+    std::int64_t trim_scale_duration_ = 0;
+    QPointF trim_last_position_{};
+    std::optional<ClipEdgeEditPreview> trim_preview_;
     bool razor_mode_ = false;
     bool razor_clicking_ = false;
     bool razor_gesture_moved_ = false;

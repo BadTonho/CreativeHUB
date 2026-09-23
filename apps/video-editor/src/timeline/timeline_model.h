@@ -96,6 +96,22 @@ struct ClipLocation {
     friend bool operator==(const ClipLocation&, const ClipLocation&) = default;
 };
 
+enum class ClipEdge { Left, Right };
+
+struct ClipEdgeEditPreview {
+    ClipLocation clip_location;
+    TimelineClip clip;
+    std::optional<ClipLocation> neighbor_location;
+    std::optional<TimelineClip> neighbor_clip;
+    std::int64_t boundary_frame = 0;
+};
+
+[[nodiscard]] std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
+    const std::vector<TimelineTrack>& tracks,
+    ClipLocation location,
+    ClipEdge edge,
+    std::int64_t boundary_frame);
+
 enum class AddTrackResult { Added, InvalidName };
 
 enum class TrackMutationResult {
@@ -125,7 +141,7 @@ enum class MoveClipResult {
 
 enum class SplitClipResult { Split, InvalidIndex, InvalidBoundary };
 enum class RemoveClipResult { Removed, InvalidIndex };
-enum class TrimClipResult { Trimmed, InvalidIndex, InvalidRange };
+enum class TrimClipResult { Trimmed, NoChange, InvalidIndex, InvalidRange };
 enum class AudioParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class TransformParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class TextParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
@@ -178,6 +194,11 @@ public:
         std::size_t clip_index,
         std::int64_t new_source_start_frame,
         std::int64_t new_duration_frames);
+    TrimClipResult trimClipEdge(
+        std::size_t track_index,
+        std::size_t clip_index,
+        ClipEdge edge,
+        std::int64_t boundary_frame);
 
     // Compatibility helpers for the original single-track API.
     AddClipResult addClip(const media::VideoMetadata& metadata);

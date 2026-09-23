@@ -518,8 +518,8 @@ int main(int argc, char* argv[]) {
         qint64 move_to_track = -1;
         int split_count = 0;
         qint64 split_frame = -1;
-        qint64 trim_start = -1;
-        qint64 trim_end = -1;
+        qint64 trim_edge = -1;
+        qint64 trim_boundary = -1;
         int transition_track = -1;
         int transition_from = -1;
         int transition_to = -1;
@@ -561,10 +561,10 @@ int main(int argc, char* argv[]) {
             });
         QObject::connect(
             &widget,
-            &timeline::TimelineWidget::clipTrimRequestedAt,
-            [&trim_start, &trim_end](qint64, qint64, qint64 start, qint64 end) {
-                trim_start = start;
-                trim_end = end;
+            &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
+            [&trim_edge, &trim_boundary](qint64, qint64, qint64 edge, qint64 boundary) {
+                trim_edge = edge;
+                trim_boundary = boundary;
             });
         QObject::connect(
             &widget,
@@ -909,14 +909,21 @@ int main(int argc, char* argv[]) {
         widget.setRazorMode(false);
         sendMouse(widget, QEvent::MouseButtonPress, QPointF(156, 120),
                   Qt::LeftButton);
+        sendMouse(widget, QEvent::MouseButtonRelease, QPointF(156, 120),
+                  Qt::NoButton);
+        require(trim_edge == -1 && trim_boundary == -1,
+                "Clicking a clip edge changed its duration without a drag.");
+        sendMouse(widget, QEvent::MouseButtonPress, QPointF(156, 120),
+                  Qt::LeftButton);
         sendMouse(widget, QEvent::MouseMove, QPointF(200, 120),
                   Qt::LeftButton);
-        require(trim_start == -1 && trim_end == -1,
+        require(trim_edge == -1 && trim_boundary == -1,
                 "Trimming was committed before mouse release.");
         sendMouse(widget, QEvent::MouseButtonRelease, QPointF(200, 120),
                   Qt::NoButton);
-        require(trim_start > 0 && trim_end == test_clip_duration,
-                "The left edge did not request a bounded trim.");
+        require(trim_edge == static_cast<qint64>(timeline::ClipEdge::Left) &&
+                    trim_boundary > 0 && trim_boundary < test_clip_duration,
+                "The left edge did not request an absolute trim boundary.");
 
         // A contiguous junction is selectable through the same hit area used
         // by the transition context menu.
@@ -936,6 +943,62 @@ int main(int argc, char* argv[]) {
                   Qt::NoButton);
         require(transition_track == 0 && transition_from == 0 && transition_to == 1,
                 "The contiguous junction was not detected for transition selection.");
+
+        timeline::TimelineWidget trim_preview_widget;
+        trim_preview_widget.resize(1000, 180);
+        trim_preview_widget.setTimelineViewportWidth(1000);
+        auto preview_video = makeClip("preview.mkv", 50, 50, "preview.mkv");
+        preview_video.source_start_frame = 50;
+        preview_video.frame_count = 200;
+        preview_video.duration_seconds = 200.0 / 30.0;
+        timeline::TimelineClip preview_text;
+        preview_text.timeline_start_frame = 100;
+        preview_text.timeline_duration_frames = 50;
+        preview_text.display_name = "Title";
+        preview_text.kind = timeline::ClipKind::Text;
+        preview_text.frame_rate = 30.0;
+        preview_text.frame_count = 50;
+        trim_preview_widget.setTracks({timeline::TimelineTrack{
+            1, "Video 1", 1.0, false, {preview_video, preview_text}}});
+        trim_preview_widget.setZoomFactor(512.0);
+        trim_preview_widget.setMinimumWidth(1000);
+        trim_preview_widget.resize(1000, 180);
+        trim_preview_widget.show();
+        application.processEvents();
+        QImage trim_before(1000, 180, QImage::Format_ARGB32);
+        trim_before.fill(Qt::transparent);
+        trim_preview_widget.render(&trim_before);
+        const auto preview_sample_x = static_cast<int>(std::lround(
+            trim_preview_widget.contentXForFrame(105)));
+        const auto preview_sample = QPoint(preview_sample_x, 110);
+        const auto color_before_trim = trim_before.pixelColor(preview_sample);
+        int edge_edit_count = 0;
+        qint64 edge_edit_boundary = -1;
+        QObject::connect(
+            &trim_preview_widget,
+            &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
+            [&edge_edit_count, &edge_edit_boundary](qint64, qint64, qint64, qint64 boundary) {
+                ++edge_edit_count;
+                edge_edit_boundary = boundary;
+            });
+        const auto seam_x = trim_preview_widget.contentXForFrame(100);
+        const auto moved_seam_x = trim_preview_widget.contentXForFrame(110);
+        sendMouse(trim_preview_widget, QEvent::MouseButtonPress,
+                  QPointF(seam_x, 110), Qt::LeftButton);
+        sendMouse(trim_preview_widget, QEvent::MouseMove,
+                  QPointF(moved_seam_x, 110), Qt::LeftButton);
+        require(edge_edit_count == 0,
+                "Dragging a shared edge committed the edit before release.");
+        QImage trim_during(1000, 180, QImage::Format_ARGB32);
+        trim_during.fill(Qt::transparent);
+        trim_preview_widget.render(&trim_during);
+        require(trim_during.pixelColor(preview_sample) != color_before_trim,
+                "The shared clip boundary did not update in the live preview.");
+        sendMouse(trim_preview_widget, QEvent::MouseButtonRelease,
+                  QPointF(moved_seam_x, 110), Qt::NoButton);
+        require(edge_edit_count == 1 && edge_edit_boundary == 110,
+                "Dragging a shared edge did not commit the requested boundary once.");
+        trim_preview_widget.close();
 
         // The viewport is the scale reference for the standard one-hour
         // range, while longer content expands the scrollable surface.

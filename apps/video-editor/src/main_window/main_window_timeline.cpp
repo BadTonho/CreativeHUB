@@ -720,7 +720,7 @@ QWidget* MainWindow::createTimeline() {
         &MainWindow::handleTimelineTrimStarted);
     connect(
         timeline_widget_,
-        &timeline::TimelineWidget::clipTrimRequestedAt,
+        &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
         this,
         &MainWindow::handleTimelineClipTrimAt);
     connect(
@@ -1842,17 +1842,8 @@ void MainWindow::handleTimelineClipSplitAt(
 void MainWindow::handleTimelineClipTrimAt(
     qint64 track_index,
     qint64 clip_index,
-    qint64 local_start_frame,
-    qint64 local_end_frame) {
-    if (track_index == 0 &&
-        clip_index >= 0 &&
-        clip_index < static_cast<qint64>(timeline_model_.clipCount(0)) &&
-        timeline::isMediaClipKind(
-            timeline_model_.tracks()[0].clips[static_cast<std::size_t>(clip_index)].kind)) {
-        active_timeline_track_index_ = 0;
-        handleTimelineClipTrim(clip_index, local_start_frame, local_end_frame);
-        return;
-    }
+    qint64 edge_value,
+    qint64 boundary_frame) {
     if (track_index < 0 || clip_index < 0 ||
         track_index >= static_cast<qint64>(timeline_model_.trackCount()) ||
         clip_index >= static_cast<qint64>(
@@ -1861,46 +1852,89 @@ void MainWindow::handleTimelineClipTrimAt(
     }
     const auto track = static_cast<std::size_t>(track_index);
     const auto clip_index_value = static_cast<std::size_t>(clip_index);
-    const auto clip = timeline_model_.tracks()[track].clips[clip_index_value];
-    if (local_start_frame < 0 || local_end_frame <= local_start_frame ||
-        local_end_frame > clip.timeline_duration_frames) {
-        statusBar()->showMessage("The clip cannot be trimmed to that range.");
+    if (edge_value != static_cast<qint64>(timeline::ClipEdge::Left) &&
+        edge_value != static_cast<qint64>(timeline::ClipEdge::Right)) {
         return;
     }
+
+    const auto edge = static_cast<timeline::ClipEdge>(edge_value);
+    const auto clip_id = timeline_model_.tracks()[track].clips[clip_index_value].clip_id;
+    const auto playhead_before = timelinePlayheadFrame();
+    const auto playback_frame_before = playback_frame_index_;
     try {
         const auto before = captureTimelineEditState();
-        const auto result = timeline_model_.trimClip(
-            track,
-            clip_index_value,
-            clip.source_start_frame + local_start_frame,
-            local_end_frame - local_start_frame);
+        const auto result = timeline_model_.trimClipEdge(
+            track, clip_index_value, edge, boundary_frame);
+        if (result == timeline::TrimClipResult::NoChange) return;
         if (result != timeline::TrimClipResult::Trimmed) {
-            statusBar()->showMessage("The clip cannot be trimmed to that range.");
+            statusBar()->showMessage("The clip edge cannot move any farther.");
             return;
         }
         recordTimelineEdit(before);
-        active_timeline_track_index_ = track;
-        active_timeline_clip_index_ = clip_index_value;
-        playback_frame_index_ = std::clamp<std::int64_t>(
-            playback_frame_index_ - local_start_frame,
-            0,
-            local_end_frame - local_start_frame - 1);
+        const auto edited_location = timeline_model_.locateClip(clip_id);
+        if (!edited_location.has_value()) return;
+        active_timeline_track_index_ = edited_location->track_index;
+        active_timeline_clip_index_ = edited_location->clip_index;
+        const auto& edited_clip = timeline_model_.tracks()[edited_location->track_index]
+            .clips[edited_location->clip_index];
+        const auto edited_end = edited_clip.timeline_start_frame +
+            edited_clip.timeline_duration_frames;
+        const bool playhead_remains_inside =
+            playhead_before >= edited_clip.timeline_start_frame &&
+            playhead_before < edited_end;
+        if (playhead_remains_inside) {
+            playback_frame_index_ =
+                playhead_before - edited_clip.timeline_start_frame;
+            preserved_timeline_playhead_frame_.reset();
+        } else {
+            playback_frame_index_ = std::clamp<std::int64_t>(
+                playback_frame_before,
+                0,
+                edited_clip.timeline_duration_frames - 1);
+            preserved_timeline_playhead_frame_ = playhead_before;
+        }
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
-        sendCompositionToWorker();
-        statusBar()->showMessage("Timeline clip trimmed.");
+        if (edited_clip.kind == timeline::ClipKind::Text ||
+            edited_clip.kind == timeline::ClipKind::Image) {
+            activateTimelineClipAt(
+                edited_location->track_index,
+                edited_location->clip_index,
+                playback_frame_index_,
+                false,
+                true);
+        } else {
+            const auto media_item = std::find_if(
+                media_items_.begin(),
+                media_items_.end(),
+                [&edited_clip](const ImportedMedia& item) {
+                    return normalizedPath(item.metadata.source_path) ==
+                        normalizedPath(edited_clip.source_path);
+                });
+            if (media_item != media_items_.end() && !media_item->offline) {
+                activateTimelineClipAt(
+                    edited_location->track_index,
+                    edited_location->clip_index,
+                    playback_frame_index_,
+                    false,
+                    true);
+            } else {
+                sendCompositionToWorker();
+            }
+        }
+        statusBar()->showMessage("Timeline clip edge adjusted.");
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
             logging::Level::Error,
             "timeline",
-            "trim_clip",
+            "trim_clip_edge",
             error.what(),
             {{"track_index", std::to_string(track_index)},
              {"clip_index", std::to_string(clip_index)},
-             {"local_start_frame", std::to_string(local_start_frame)},
-             {"local_end_frame", std::to_string(local_end_frame)}});
-        statusBar()->showMessage("Could not trim the timeline clip.");
+             {"edge", std::to_string(edge_value)},
+             {"boundary_frame", std::to_string(boundary_frame)}});
+        statusBar()->showMessage("Could not adjust the timeline clip edge.");
     }
 }
 
@@ -2427,10 +2461,7 @@ void MainWindow::splitActiveClipAtPlayhead() {
 }
 
 void MainWindow::handleTimelineTrimStarted() {
-    if (!timeline_model_.hasClip() || pending_clip_activation_.has_value()) {
-        return;
-    }
-
+    if (!timeline_model_.hasClip()) return;
     pending_clip_activation_.reset();
     ++playback_generation_;
     playback_is_playing_ = false;

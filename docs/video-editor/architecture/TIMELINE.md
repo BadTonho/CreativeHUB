@@ -121,7 +121,25 @@ starts at its first frame; otherwise selection changes only the active clip
 and keeps the current timeline frame.
 
 Movement, splitting, and trimming do not decode while the pointer moves.
-Seeking decodes only after release. Delete removes the active clip without
+Trimming updates a paint-only preview during the drag and commits one edit on
+release. Dragging the left edge changes the clip's timeline start and source
+start while keeping its right edge fixed; dragging the right edge changes its
+right edge. Either edge can extend as well as shorten a clip. Video source
+limits use the recorded frame count or duration multiplied by frame rate when
+the count is unavailable. Still images hold their cached frame when extended,
+and text clips can extend without a media-source limit. Timeline starts remain
+at or after frame zero, and clips remain at least one frame long.
+
+When clips share a boundary on one track, dragging either side rolls that
+boundary: one clip grows as the other shrinks, both keep at least one frame,
+and the rest of the track stays in place. Source limits can stop the boundary
+from moving farther. At an outer edge with a timeline gap, only the dragged
+clip changes; extension stops before it would violate the track's existing
+overlap rules. Existing keyframes within the retained range are remapped to the
+new local origin, and the transform at an extended edge is held across the
+added range. A valid transition remains attached to its clip pair while the
+boundary moves; it is removed if the resulting clip lengths no longer support
+it. Seeking decodes only after release. Delete removes the active clip without
 moving remaining clips. Ctrl + Left and Ctrl + Right nudge the active clip by
 one frame when the new position is valid. When a model update replaces the
 tracks during an active pointer gesture, the Timeline releases its mouse grab
@@ -139,8 +157,9 @@ keep their existing position marker. These previews are paint-only: no clip is
 moved, created, marked dirty, or added to history until the pointer is
 released and the existing drop/move operation is accepted.
 
-Split and trim preserve source offsets and do not compact later clips. All
-operations retain repeated source occurrences independently.
+Split and edge trim preserve source offsets and do not compact later clips
+outside a shared boundary roll. All operations retain repeated source
+occurrences independently.
 
 ## Playback
 

@@ -235,6 +235,212 @@ int main() {
         require(trim_model.trimClip(99, 0, 1) == timeline::TrimClipResult::InvalidIndex,
                 "An invalid trim index was accepted.");
 
+        timeline::TimelineModel edge_trim_model;
+        auto edge_metadata = makeMetadata(first_source, "edge.mkv", 120);
+        require(edge_trim_model.addClip(edge_metadata) == timeline::AddClipResult::Added &&
+                    edge_trim_model.splitClip(0, 0, 40) ==
+                        timeline::SplitClipResult::Split,
+                "The edge trim split setup failed.");
+        require(edge_trim_model.trimClipEdge(
+                    0, 1, timeline::ClipEdge::Left, 30) ==
+                    timeline::TrimClipResult::Trimmed,
+                "A split clip could not extend backward by rolling its cut.");
+        require(edge_trim_model.clips()[0].timeline_duration_frames == 30 &&
+                    edge_trim_model.clips()[1].timeline_start_frame == 30 &&
+                    edge_trim_model.clips()[1].source_start_frame == 30 &&
+                    edge_trim_model.clips()[1].timeline_duration_frames == 90,
+                "Rolling a cut backward did not resize both source ranges.");
+        require(edge_trim_model.trimClipEdge(
+                    0, 0, timeline::ClipEdge::Right, 50) ==
+                    timeline::TrimClipResult::Trimmed,
+                "A split clip could not extend forward by rolling its cut.");
+        require(edge_trim_model.clips()[0].timeline_duration_frames == 50 &&
+                    edge_trim_model.clips()[1].timeline_start_frame == 50 &&
+                    edge_trim_model.clips()[1].source_start_frame == 50 &&
+                    edge_trim_model.clips()[1].timeline_duration_frames == 70,
+                "Rolling a cut forward did not resize both source ranges.");
+        require(edge_trim_model.trimClipEdge(
+                    0, 0, timeline::ClipEdge::Right, 500) ==
+                    timeline::TrimClipResult::Trimmed &&
+                    edge_trim_model.clips()[0].timeline_duration_frames == 119 &&
+                    edge_trim_model.clips()[1].timeline_start_frame == 119 &&
+                    edge_trim_model.clips()[1].timeline_duration_frames == 1,
+                "A shared cut did not stop before reducing its neighbor to zero frames.");
+        require(edge_trim_model.trimClipEdge(
+                    0, 1, timeline::ClipEdge::Left, -20) ==
+                    timeline::TrimClipResult::Trimmed &&
+                    edge_trim_model.clips()[0].timeline_duration_frames == 1 &&
+                    edge_trim_model.clips()[1].timeline_start_frame == 1,
+                "A shared cut moved before the minimum one-frame segment boundary.");
+
+        timeline::TimelineModel mixed_edge_model;
+        require(mixed_edge_model.addClip(makeMetadata(
+                    first_source, "mixed-edge.mkv", 200)) ==
+                    timeline::AddClipResult::Added &&
+                    mixed_edge_model.trimClip(0, 0, 100) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    mixed_edge_model.addTextClip(0, 100, 50) ==
+                        timeline::AddClipResult::Added &&
+                    mixed_edge_model.trimClipEdge(
+                        0, 0, timeline::ClipEdge::Right, 110) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    mixed_edge_model.clips()[0].timeline_duration_frames == 110 &&
+                    mixed_edge_model.clips()[1].timeline_start_frame == 110 &&
+                    mixed_edge_model.clips()[1].timeline_duration_frames == 40,
+                "A shared boundary between different clip kinds did not roll.");
+
+        timeline::TimelineModel gap_edge_model;
+        auto long_metadata = makeMetadata(first_source, "long.mkv", 200);
+        long_metadata.duration_seconds = 200.0 / 30.0;
+        require(gap_edge_model.addClip(long_metadata) == timeline::AddClipResult::Added &&
+                    gap_edge_model.trimClip(0, 50, 80) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    gap_edge_model.moveClip(
+                        timeline::ClipLocation{0, 0},
+                        timeline::ClipLocation{0, 0},
+                        100) == timeline::MoveClipResult::Moved,
+                "The edge trim gap setup failed.");
+        require(gap_edge_model.trimClipEdge(
+                    0, 0, timeline::ClipEdge::Left, 90) ==
+                    timeline::TrimClipResult::Trimmed &&
+                    gap_edge_model.clips()[0].timeline_start_frame == 90 &&
+                    gap_edge_model.clips()[0].source_start_frame == 40 &&
+                    gap_edge_model.clips()[0].timeline_duration_frames == 90,
+                "Extending a left edge into a gap did not move the clip start.");
+        require(gap_edge_model.trimClipEdge(
+                    0, 0, timeline::ClipEdge::Right, 190) ==
+                    timeline::TrimClipResult::Trimmed &&
+                    gap_edge_model.clips()[0].timeline_duration_frames == 100,
+                "Extending a right edge into a gap did not increase its duration.");
+        require(gap_edge_model.trimClipEdge(
+                    0, 0, timeline::ClipEdge::Left, -100) ==
+                    timeline::TrimClipResult::Trimmed &&
+                    gap_edge_model.clips()[0].timeline_start_frame == 50 &&
+                    gap_edge_model.clips()[0].source_start_frame == 0,
+                "A video left edge extended before source frame zero.");
+        require(gap_edge_model.trimClipEdge(
+                    0, 0, timeline::ClipEdge::Right, 1000) ==
+                    timeline::TrimClipResult::Trimmed &&
+                    gap_edge_model.clips()[0].timeline_start_frame == 50 &&
+                    gap_edge_model.clips()[0].timeline_duration_frames == 200,
+                "A video right edge extended beyond the source frame count.");
+
+        timeline::TimelineModel fallback_edge_model;
+        auto fallback_edge_metadata = makeMetadata(first_source, "fallback.mkv", 20);
+        fallback_edge_metadata.frame_count.reset();
+        fallback_edge_metadata.duration_seconds = 2.0;
+        fallback_edge_metadata.frame_rate = 10.0;
+        require(fallback_edge_model.addClip(fallback_edge_metadata) ==
+                    timeline::AddClipResult::Added &&
+                    fallback_edge_model.trimClip(0, 0, 10) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    fallback_edge_model.trimClipEdge(
+                        0, 0, timeline::ClipEdge::Right, 100) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    fallback_edge_model.clips()[0].timeline_duration_frames == 20,
+                "Video edge extension ignored the duration/FPS source bound fallback.");
+
+        timeline::TimelineModel image_edge_model;
+        auto expandable_image = image_metadata;
+        require(image_edge_model.addClip(expandable_image) ==
+                    timeline::AddClipResult::Added &&
+                    image_edge_model.trimClip(0, 0, 5) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    image_edge_model.trimClipEdge(
+                        0, 0, timeline::ClipEdge::Right, 300) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    image_edge_model.clips()[0].timeline_duration_frames == 300,
+                "A still image could not extend while holding its static frame.");
+
+        timeline::TimelineModel text_edge_model;
+        require(text_edge_model.addTextClip(0, 0, 10) == timeline::AddClipResult::Added &&
+                    text_edge_model.trimClipEdge(
+                        0, 0, timeline::ClipEdge::Right, 500) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    text_edge_model.clips()[0].timeline_duration_frames == 500,
+                "A text clip could not extend beyond its original duration.");
+
+        timeline::TimelineModel zero_bound_edge_model;
+        require(zero_bound_edge_model.addTextClip(0, 10, 10) ==
+                    timeline::AddClipResult::Added &&
+                    zero_bound_edge_model.trimClipEdge(
+                        0, 0, timeline::ClipEdge::Left, -50) ==
+                        timeline::TrimClipResult::Trimmed &&
+                    zero_bound_edge_model.clips()[0].timeline_start_frame == 0 &&
+                    zero_bound_edge_model.clips()[0].timeline_duration_frames == 20,
+                "A clip edge moved its timeline start before frame zero.");
+
+        timeline::TimelineModel keyframe_edge_model;
+        require(keyframe_edge_model.addTextClip(0, 10, 20) ==
+                    timeline::AddClipResult::Added &&
+                    keyframe_edge_model.setClipKeyframe(
+                        0, 0, timeline::TransformProperty::PositionX, 5, 0.2) ==
+                        timeline::TransformParameterResult::Changed &&
+                    keyframe_edge_model.setClipKeyframe(
+                        0, 0, timeline::TransformProperty::PositionX, 15, 0.8) ==
+                        timeline::TransformParameterResult::Changed &&
+                    keyframe_edge_model.trimClipEdge(
+                        0, 0, timeline::ClipEdge::Left, 5) ==
+                        timeline::TrimClipResult::Trimmed,
+                "A keyframed clip could not extend before its original start.");
+        const auto& extended_keyframes = keyframe_edge_model.clips()[0];
+        require(extended_keyframes.timeline_start_frame == 5 &&
+                    extended_keyframes.timeline_duration_frames == 25 &&
+                    timeline::evaluateTransform(
+                        extended_keyframes.transform,
+                        extended_keyframes.keyframes,
+                        4).position_x == 0.2 &&
+                    timeline::evaluateTransform(
+                        extended_keyframes.transform,
+                        extended_keyframes.keyframes,
+                        10).position_x == 0.2 &&
+                    timeline::evaluateTransform(
+                        extended_keyframes.transform,
+                        extended_keyframes.keyframes,
+                        20).position_x == 0.8,
+                "Extending a clip did not preserve keyframes and hold its boundary transform.");
+        require(keyframe_edge_model.trimClipEdge(
+                    0, 0, timeline::ClipEdge::Right, 40) ==
+                    timeline::TrimClipResult::Trimmed &&
+                    timeline::evaluateTransform(
+                        keyframe_edge_model.clips()[0].transform,
+                        keyframe_edge_model.clips()[0].keyframes,
+                        30).position_x == 0.8,
+                "Extending a right edge did not hold the last evaluated transform.");
+        const auto unchanged_edge_snapshot = keyframe_edge_model.snapshot();
+        require(keyframe_edge_model.trimClipEdge(
+                    0, 0, timeline::ClipEdge::Right, 40) ==
+                    timeline::TrimClipResult::NoChange &&
+                    keyframe_edge_model.snapshot() == unchanged_edge_snapshot,
+                "A no-movement edge gesture changed clip state or keyframes.");
+
+        timeline::TimelineModel edge_history_model;
+        require(edge_history_model.addClip(first_metadata) ==
+                    timeline::AddClipResult::Added &&
+                    edge_history_model.trimClip(0, 0, 60) ==
+                        timeline::TrimClipResult::Trimmed,
+                "The edge history setup failed.");
+        timeline::EditState before_edge_edit;
+        before_edge_edit.timeline = edge_history_model.snapshot();
+        timeline::TimelineHistory edge_history;
+        edge_history.recordBeforeEdit(before_edge_edit);
+        require(edge_history_model.trimClipEdge(
+                    0, 0, timeline::ClipEdge::Right, 90) ==
+                    timeline::TrimClipResult::Trimmed,
+                "The edge history edit failed.");
+        timeline::EditState after_edge_edit;
+        after_edge_edit.timeline = edge_history_model.snapshot();
+        const auto undone_edge = edge_history.undo(after_edge_edit);
+        require(undone_edge.has_value(), "Undo after edge extension was unavailable.");
+        edge_history_model.restore(undone_edge->timeline);
+        require(edge_history_model.clips()[0].timeline_duration_frames == 60,
+                "Undo did not restore the original edge-trimmed duration.");
+        const auto redone_edge = edge_history.redo(*undone_edge);
+        require(redone_edge.has_value(), "Redo after edge extension was unavailable.");
+        edge_history_model.restore(redone_edge->timeline);
+        require(edge_history_model.clips()[0].timeline_duration_frames == 90,
+                "Redo did not restore the extended clip duration.");
+
         timeline::TimelineModel malformed_range_model;
         auto malformed_snapshot = malformed_range_model.snapshot();
         timeline::TimelineClip malformed_clip;

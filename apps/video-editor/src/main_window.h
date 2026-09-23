@@ -211,8 +211,8 @@ private:
     void handleTimelineClipTrimAt(
         qint64 track_index,
         qint64 clip_index,
-        qint64 local_start_frame,
-        qint64 local_end_frame);
+        qint64 edge,
+        qint64 boundary_frame);
     void handleTimelineTransitionSelectedAt(
         qint64 track_index,
         qint64 from_clip_index,
