@@ -67,6 +67,8 @@ class ShortcutManager;
 struct AutosaveSnapshotItem;
 }
 
+class MainWindowIntegrationTest;
+
 class MainWindow final : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
@@ -76,6 +78,8 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 private:
+    friend class MainWindowIntegrationTest;
+
     struct ImportedMedia;
     struct TimelineControls;
 

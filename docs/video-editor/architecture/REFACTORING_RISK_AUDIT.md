@@ -624,3 +624,15 @@ Definição final de concluído:
   contrato visível, sem rastrear efeitos colaterais não relacionados do
   `MainWindow`.
 - Nenhum comportamento visível ao usuário mudou de forma não intencional.
+
+## Registro de execução da Etapa 1
+
+- Build Release: aprovado.
+- Testes automatizados: 32/32 aprovados, incluindo o novo teste de integração
+  do `MainWindow`.
+- Round-trip multi-track: aprovado.
+- Abertura de projeto multi-track sem falso estado `dirty`: aprovado.
+- Validação visual manual: não concluída neste ambiente. O processo Release
+  foi iniciado, mas não criou uma janela interativa disponível para o
+  controlador de interface; o processo foi encerrado sem alterar arquivos do
+  projeto.

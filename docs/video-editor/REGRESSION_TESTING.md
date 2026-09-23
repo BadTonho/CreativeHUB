@@ -47,6 +47,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Preview performance metrics | Deterministic counter/timing aggregation, bounded p95/p99 timing histograms, decoded/stale-frame counters, playback delivery-rate derivation, failure counters, cache state, workload context, process-resource sampling, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON v8, video/image/text kind round-trip, media overlap round-trip with text-over-text rejection, timeline zoom and row-height persistence, version 1-7 migration with legacy media defaulting to video, invalid input, offline media, transactional open |
+| MainWindow integration | Offscreen multi-track project open, preservation of two tracks and clips, clean dirty state immediately after opening, current-document equality with the loaded project, save/reopen round-trip, and controlled MainWindow construction and shutdown |
 | Project validation | Out-of-range JSON integers, overflowing timeline ranges, and overflowing media-source ranges are rejected before reaching editing code |
 | Autosave and recovery | Retention, Unicode project paths, recovery filtering, and actionable log entries for malformed snapshots |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |

@@ -13,8 +13,7 @@ else()
     message(WARNING "Qt6::Multimedia was not found; audio output will use the diagnostic fallback.")
 endif()
 
-add_executable(creative-suite-main-editor
-    src/main.cpp
+set(MAIN_EDITOR_CORE_SOURCES
     src/main_window.cpp
     src/main_window.h
     src/main_window/main_window_support.cpp
@@ -121,7 +120,19 @@ add_executable(creative-suite-main-editor
     src/ui/workspace_page_view.h
 )
 
+add_library(creative-suite-main-editor-core STATIC
+    ${MAIN_EDITOR_CORE_SOURCES}
+)
+
+add_executable(creative-suite-main-editor
+    src/main.cpp
+)
+
 target_link_libraries(creative-suite-main-editor PRIVATE
+    creative-suite-main-editor-core
+)
+
+target_link_libraries(creative-suite-main-editor-core PUBLIC
     Qt6::Widgets
     Qt6::OpenGL
     Qt6::OpenGLWidgets
@@ -129,28 +140,31 @@ target_link_libraries(creative-suite-main-editor PRIVATE
 )
 
 if(WIN32)
-    target_link_libraries(creative-suite-main-editor PRIVATE Psapi)
+    target_link_libraries(creative-suite-main-editor-core PUBLIC Psapi)
 endif()
 
 if(CREATIVE_SUITE_HAS_QT_MULTIMEDIA)
-    target_link_libraries(creative-suite-main-editor PRIVATE Qt6::Multimedia)
-    target_compile_definitions(creative-suite-main-editor PRIVATE CREATIVE_SUITE_HAS_QT_MULTIMEDIA=1)
+    target_link_libraries(creative-suite-main-editor-core PUBLIC Qt6::Multimedia)
+    target_compile_definitions(creative-suite-main-editor-core PUBLIC CREATIVE_SUITE_HAS_QT_MULTIMEDIA=1)
 endif()
 
-target_include_directories(creative-suite-main-editor PRIVATE
+target_include_directories(creative-suite-main-editor-core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${FFMPEG_INCLUDE_DIRS}
 )
 
-target_link_directories(creative-suite-main-editor PRIVATE
+target_link_directories(creative-suite-main-editor-core PUBLIC
     ${FFMPEG_LIBRARY_DIRS}
 )
 
+target_compile_features(creative-suite-main-editor-core PUBLIC cxx_std_20)
 target_compile_features(creative-suite-main-editor PRIVATE cxx_std_20)
 
 if(MSVC)
+    target_compile_options(creative-suite-main-editor-core PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-main-editor PRIVATE /W4 /permissive-)
 else()
+    target_compile_options(creative-suite-main-editor-core PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-main-editor PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 

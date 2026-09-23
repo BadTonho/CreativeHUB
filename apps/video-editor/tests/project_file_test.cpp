@@ -88,11 +88,29 @@ int main(int argc, char** argv) {
         original.timeline_tracks.front().clips.front().transform.position_x = 0.25;
         original.timeline_tracks.front().clips.front().transform.rotation_degrees = 12.0;
         original.timeline_tracks.front().clips.front().keyframes.position_x = {{0, 0.25}, {30, 0.75}};
-        original.timeline_clips = original.timeline_tracks.front().clips;
+        project::ProjectClip second_track_title;
+        second_track_title.timeline_start_frame = 0;
+        second_track_title.duration_frames = 15;
+        second_track_title.kind = timeline::ClipKind::Text;
+        second_track_title.text.content = "Second track";
+        second_track_title.text.font_size_pixels = 48.0;
+        original.timeline_tracks.push_back(
+            {"Video 2", 1.0, false, {second_track_title}, {}});
+        for (const auto& track : original.timeline_tracks) {
+            original.timeline_clips.insert(
+                original.timeline_clips.end(),
+                track.clips.begin(),
+                track.clips.end());
+        }
         project::save(project_path, original);
 
         const auto loaded = project::load(project_path);
         require(loaded == original, "A project did not round-trip through JSON.");
+        require(loaded.timeline_tracks.size() == 2 &&
+                    loaded.timeline_tracks[1].name == "Video 2" &&
+                    loaded.timeline_tracks[1].clips.size() == 1 &&
+                    loaded.timeline_clips.size() == 5,
+                "A multi-track project did not preserve every track and compatibility clip.");
         require(loaded.timeline_clips[0].source_start_frame == 30,
                 "A source offset was not preserved.");
         require(loaded.timeline_clips[1].source_path == loaded.timeline_clips[0].source_path,

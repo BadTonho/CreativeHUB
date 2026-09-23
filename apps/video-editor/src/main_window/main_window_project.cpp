@@ -130,8 +130,12 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
         }
         document.timeline_tracks.push_back(std::move(project_track));
     }
-    if (!document.timeline_tracks.empty()) {
-        document.timeline_clips = document.timeline_tracks.front().clips;
+    document.timeline_clips.clear();
+    for (const auto& project_track : document.timeline_tracks) {
+        document.timeline_clips.insert(
+            document.timeline_clips.end(),
+            project_track.clips.begin(),
+            project_track.clips.end());
     }
     return document;
 }
