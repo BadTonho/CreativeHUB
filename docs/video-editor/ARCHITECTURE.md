@@ -2,7 +2,7 @@
 
 Status: **provisional**. This file is the architecture index and cross-cutting
 overview for the project. Detailed responsibilities are separated by domain
-under `docs/architecture/` so each document can remain focused and current.
+under `docs/video-editor/architecture/` so each document can remain focused and current.
 
 ## Architecture documents
 

@@ -301,7 +301,7 @@ possible. Missing audio, disabled output, or an unavailable device keeps the
 video fallback running and reports a short status message while the detailed
 cause goes to the local log.
 
-User-facing keyboard shortcuts are maintained in docs/SHORTCUTS.md and must be
+User-facing keyboard shortcuts are maintained in docs/video-editor/SHORTCUTS.md and must be
 updated in the same change as any shortcut change.
 
 ## Transform Inspector

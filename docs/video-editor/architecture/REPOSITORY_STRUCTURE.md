@@ -14,7 +14,7 @@ apps/
 libs/                # Shared libraries added only when multiple apps need them
 platform/            # Platform adapters when a shared abstraction requires them
 prototypes/          # Isolated technical experiments and references
-docs/                # Project and architecture documentation
+docs/video-editor/  # Project and architecture documentation
 ```
 
 The first real application is located at `apps/video-editor/`. The archived

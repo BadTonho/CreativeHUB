@@ -81,7 +81,7 @@ Development is currently centered on the **Main Editor** MVP under [`apps/video-
   - Multi-level Undo / Redo history for editing actions.
   - Local structured diagnostic logging for troubleshooting.
 
-*Refer to [`docs/architecture/SCOPE.md`](docs/architecture/SCOPE.md) and [`docs/ROADMAP.md`](docs/ROADMAP.md) for detailed progress and future milestones.*
+*Refer to [`docs/video-editor/architecture/SCOPE.md`](docs/video-editor/architecture/SCOPE.md) and [`docs/video-editor/ROADMAP.md`](docs/video-editor/ROADMAP.md) for detailed progress and future milestones.*
 
 ---
 
@@ -141,13 +141,13 @@ Or directly via CTest:
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-For testing practices, refer to [`docs/REGRESSION_TESTING.md`](docs/REGRESSION_TESTING.md).
+For testing practices, refer to [`docs/video-editor/REGRESSION_TESTING.md`](docs/video-editor/REGRESSION_TESTING.md).
 
 ---
 
 ## 6. Keyboard Shortcuts
 
-A complete and continuously updated directory of all user-facing shortcuts is maintained in [`docs/SHORTCUTS.md`](docs/SHORTCUTS.md).
+A complete and continuously updated directory of all user-facing shortcuts is maintained in [`docs/video-editor/SHORTCUTS.md`](docs/video-editor/SHORTCUTS.md).
 
 Common shortcuts in the Main Editor:
 | Action | Shortcut |
@@ -171,10 +171,10 @@ Common shortcuts in the Main Editor:
 Before contributing, please read the project guidelines outlined in [`AGENTS.md`](AGENTS.md). All project documentation, commit notes, and code comments must be written in English.
 
 Key reference documents:
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [Subsystem Architecture Boundaries](docs/architecture/)
-- [Project Roadmap](docs/ROADMAP.md)
-- [Technical Prototype Comparison](docs/TECHNICAL_PROTOTYPE_COMPARISON.md)
+- [Architecture Overview](docs/video-editor/ARCHITECTURE.md)
+- [Subsystem Architecture Boundaries](docs/video-editor/architecture/)
+- [Project Roadmap](docs/video-editor/ROADMAP.md)
+- [Technical Prototype Comparison](docs/video-editor/TECHNICAL_PROTOTYPE_COMPARISON.md)
 
 ---
 
