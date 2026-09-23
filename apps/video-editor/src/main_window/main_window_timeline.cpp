@@ -470,6 +470,7 @@ QWidget* MainWindow::createTimeline() {
     controls->addWidget(zoom_in_button);
     controls->addStretch();
     const auto workspace_buttons = ui::createTimelineEndButtons(container);
+    workspace_buttons_container_ = workspace_buttons.container;
     edit_workspace_button_ = workspace_buttons.edit;
     fusion_workspace_button_ = workspace_buttons.fusion;
     connect(
@@ -482,7 +483,6 @@ QWidget* MainWindow::createTimeline() {
         &QPushButton::clicked,
         this,
         [this]() { setWorkspacePage(WorkspacePage::Fusion); });
-    controls->addWidget(workspace_buttons.container);
     layout->addLayout(controls);
 
     monitor_volume_slider_->setValue(settings::monitorVolumePercent());

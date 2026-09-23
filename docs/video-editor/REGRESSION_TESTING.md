@@ -32,7 +32,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, trim, delete, metadata, history |
 | Timeline workspace selectors | Edit and blank Fusion button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
-| Workspace page switching | Edit startup state, Edit → Fusion → Edit, exclusive selectors, Node Editor and Inspector visibility, and reuse of the existing Preview as Viewer |
+| Workspace page switching | Edit startup state, Edit → Fusion → Edit, exclusive selectors, replacement of the Timeline with the Node Editor in the same lower dock, Inspector visibility, and reuse of the existing Preview as Viewer |
 | Timeline interaction | Selection without playhead jumps, row-local clip hit testing, gap deselection for Timeline and Media Browser items, no-op drags from empty rows, optional move-to-start selection preference, seek-on-release, configurable clip movement, checked-by-default Magnetic Snap with eight-pixel tolerance, clip-edge and Timeline-boundary snapping, aligned snap guides, enable/disable behavior, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, one-frame fallback metadata, cancellation cleanup, no pre-release model signal, Blade Tool, trim-on-release, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, frozen track-header overlay during horizontal scrolling, vertical header alignment during vertical scrolling, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
 | System memory details | Offscreen non-modal dialog, System Memory and Main Editor sections, click-to-open behavior, Working Set, Private Usage, GB/MB formatting, and per-metric `N/A` handling |
@@ -83,17 +83,17 @@ in the running Main Editor after UI or integration changes:
   the mouse Selection Tool icon is checked initially, the Blade Tool is an
   icon-only mutually exclusive mode, and both accessible names and tooltips
   remain available; confirm no Add Text button is shown; confirm the far right
-  of the toolbar shows the active `Edit` button followed by the blank Fusion
-  button with no text or icon, and that both remain visible when the Timeline
-  dock is made narrower;
+  of the top workspace toolbar shows the active `Edit` button followed by the
+  blank Fusion button with no text or icon;
 - Workspace pages: confirm startup selects Edit; click the blank Fusion button
-  and confirm the existing Preview is labeled `Viewer`, the Node Editor appears
-  below it, the Inspector shows the Fusion placeholder, and Bins, Media, and
-  Timeline remain available. Return to Edit and confirm its Preview and
-  Inspector return. Resize the central splitter and docks on both pages. Click
-  both selectors and confirm selection, playhead, playback, Timeline contents,
-  Undo/Redo, and project dirty state remain unchanged; the Node Editor and
-  Fusion Inspector must not provide composition operations;
+  and confirm the existing Preview is labeled `Viewer`, the bottom dock title
+  changes to `Node Editor`, the Timeline is hidden, and the Inspector shows the
+  Fusion placeholder while Bins and Media remain available. Return to Edit and
+  confirm the Timeline dock and normal Inspector return. Resize the bottom
+  dock in both modes. Click both selectors and confirm selection, playhead,
+  playback, Timeline contents, Undo/Redo, and project dirty state remain
+  unchanged; the Node Editor and Fusion Inspector must not provide composition
+  operations;
 - Timeline selection and empty-row behavior: select a clip, click an empty
   content area, and confirm both the Timeline clip and Media Browser item are
   deselected; press and drag from that empty area and confirm no clip moves,

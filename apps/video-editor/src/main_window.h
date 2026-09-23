@@ -328,6 +328,7 @@ private:
     QDockWidget* timeline_dock_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
     ui::WorkspacePageView* workspace_page_view_ = nullptr;
+    QWidget* workspace_buttons_container_ = nullptr;
     QPushButton* edit_workspace_button_ = nullptr;
     QPushButton* fusion_workspace_button_ = nullptr;
     MediaBrowserListWidget* media_list_ = nullptr;

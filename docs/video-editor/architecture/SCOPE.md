@@ -33,8 +33,8 @@ The Main Editor currently includes:
   interval and retention;
 - local structured diagnostic logging.
 - Edit and Fusion workspace pages in the same window; Fusion currently reuses
-  the Edit Preview as its Viewer and provides visual-only Node Editor and
-  Inspector placeholders.
+  the Edit Preview as its Viewer and replaces the Timeline dock with a
+  visual-only Node Editor, alongside an Inspector placeholder.
 
 The current application does not include:
 

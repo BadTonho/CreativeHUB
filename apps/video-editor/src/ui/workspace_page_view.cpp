@@ -3,7 +3,6 @@
 #include <QFrame>
 #include <QLabel>
 #include <QStackedWidget>
-#include <QSplitter>
 #include <QVBoxLayout>
 
 namespace ui {
@@ -11,26 +10,18 @@ namespace ui {
 WorkspacePageView::WorkspacePageView(
     QWidget* preview_widget,
     QWidget* edit_inspector,
+    QWidget* timeline_panel,
     QWidget* parent)
     : QWidget(parent),
       preview_widget_(preview_widget),
+      timeline_panel_(timeline_panel),
       edit_inspector_(edit_inspector) {
     setObjectName("workspacePageView");
 
-    auto* root_layout = new QVBoxLayout(this);
-    root_layout->setContentsMargins(0, 0, 0, 0);
-    root_layout->setSpacing(0);
-
-    splitter_ = new QSplitter(Qt::Vertical, this);
-    splitter_->setObjectName("workspacePageSplitter");
-    splitter_->setChildrenCollapsible(false);
-
-    auto* viewer_panel = new QWidget(splitter_);
-    viewer_panel->setObjectName("workspaceViewerPanel");
-    auto* viewer_layout = new QVBoxLayout(viewer_panel);
+    auto* viewer_layout = new QVBoxLayout(this);
     viewer_layout->setContentsMargins(0, 0, 0, 0);
     viewer_layout->setSpacing(0);
-    viewer_title_ = new QLabel("Viewer", viewer_panel);
+    viewer_title_ = new QLabel("Viewer", this);
     viewer_title_->setObjectName("workspaceViewerTitle");
     viewer_title_->setContentsMargins(8, 5, 8, 5);
     viewer_title_->setStyleSheet(
@@ -38,23 +29,20 @@ WorkspacePageView::WorkspacePageView(
     viewer_title_->hide();
     viewer_layout->addWidget(viewer_title_);
     if (preview_widget_ != nullptr) {
-        preview_widget_->setParent(viewer_panel);
         viewer_layout->addWidget(preview_widget_, 1);
     }
-    splitter_->addWidget(viewer_panel);
 
-    node_editor_panel_ = new QWidget(splitter_);
+    lower_workspace_panel_ = new QStackedWidget(this);
+    lower_workspace_panel_->setObjectName("lowerWorkspacePages");
+    if (timeline_panel_ != nullptr) {
+        lower_workspace_panel_->addWidget(timeline_panel_);
+    }
+
+    node_editor_panel_ = new QWidget(this);
     node_editor_panel_->setObjectName("fusionNodeEditor");
     auto* node_layout = new QVBoxLayout(node_editor_panel_);
     node_layout->setContentsMargins(0, 0, 0, 0);
     node_layout->setSpacing(0);
-
-    auto* node_header = new QLabel("Node Editor", node_editor_panel_);
-    node_header->setObjectName("fusionNodeEditorTitle");
-    node_header->setContentsMargins(8, 5, 8, 5);
-    node_header->setStyleSheet(
-        "font-weight: 600; color: #d6dce6; background: #20242b;");
-    node_layout->addWidget(node_header);
 
     auto* node_canvas = new QFrame(node_editor_panel_);
     node_canvas->setObjectName("fusionNodeCanvas");
@@ -68,10 +56,7 @@ WorkspacePageView::WorkspacePageView(
     node_placeholder->setStyleSheet("color: #8b95a4;");
     canvas_layout->addWidget(node_placeholder);
     node_layout->addWidget(node_canvas, 1);
-    splitter_->addWidget(node_editor_panel_);
-    splitter_->setStretchFactor(0, 3);
-    splitter_->setStretchFactor(1, 2);
-    root_layout->addWidget(splitter_);
+    lower_workspace_panel_->addWidget(node_editor_panel_);
 
     inspector_panel_ = new QStackedWidget(this);
     inspector_panel_->setObjectName("workspaceInspectorPages");
@@ -97,19 +82,22 @@ WorkspacePageView::WorkspacePageView(
     fusion_inspector_layout->addStretch(1);
     inspector_panel_->addWidget(fusion_inspector_);
     inspector_panel_->setCurrentWidget(edit_inspector_);
-
-    node_editor_panel_->hide();
 }
 
 void WorkspacePageView::setFusionPageActive(bool active) {
     viewer_title_->setVisible(active);
-    node_editor_panel_->setVisible(active);
+    lower_workspace_panel_->setCurrentWidget(
+        active ? node_editor_panel_ : timeline_panel_);
     inspector_panel_->setCurrentWidget(
         active ? fusion_inspector_ : edit_inspector_);
 }
 
 QWidget* WorkspacePageView::previewWidget() const noexcept {
     return preview_widget_;
+}
+
+QWidget* WorkspacePageView::timelinePanel() const noexcept {
+    return timeline_panel_;
 }
 
 QWidget* WorkspacePageView::nodeEditorPanel() const noexcept {
@@ -126,6 +114,10 @@ QWidget* WorkspacePageView::fusionInspectorPage() const noexcept {
 
 QStackedWidget* WorkspacePageView::inspectorPanel() const noexcept {
     return inspector_panel_;
+}
+
+QStackedWidget* WorkspacePageView::lowerWorkspacePanel() const noexcept {
+    return lower_workspace_panel_;
 }
 
 }  // namespace ui

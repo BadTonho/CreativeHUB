@@ -59,9 +59,6 @@ using namespace main_window_detail;
 
 void MainWindow::createWorkspace() {
     preview_widget_ = new PreviewWidget(this);
-    workspace_page_view_ = new ui::WorkspacePageView(
-        preview_widget_, createInspector(), this);
-    setCentralWidget(workspace_page_view_);
     connect(
         preview_widget_,
         &PreviewWidget::gpuFallbackRequested,
@@ -122,6 +119,12 @@ void MainWindow::createWorkspace() {
     populateMediaBrowser();
     updateTimelineState();
 
+    auto* edit_inspector = createInspector();
+    auto* edit_timeline = createTimeline();
+    workspace_page_view_ = new ui::WorkspacePageView(
+        preview_widget_, edit_inspector, edit_timeline, this);
+    setCentralWidget(workspace_page_view_);
+
     inspector_dock_ = createDock(
         "Inspector",
         "inspectorDock",
@@ -131,7 +134,7 @@ void MainWindow::createWorkspace() {
     timeline_dock_ = createDock(
         "Timeline",
         "timelineDock",
-        createTimeline());
+        workspace_page_view_->lowerWorkspacePanel());
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
 
     restoreWorkspaceLayout();
@@ -142,6 +145,10 @@ void MainWindow::setWorkspacePage(WorkspacePage page) {
     workspace_page_ = page;
     if (workspace_page_view_ != nullptr) {
         workspace_page_view_->setFusionPageActive(page == WorkspacePage::Fusion);
+    }
+    if (timeline_dock_ != nullptr) {
+        timeline_dock_->setWindowTitle(
+            page == WorkspacePage::Fusion ? "Node Editor" : "Timeline");
     }
 
     const QSignalBlocker edit_blocker(edit_workspace_button_);
@@ -401,6 +408,13 @@ void MainWindow::createMenus() {
     effects_action_ = media_pool_toolbar->addAction("Effects");
     effects_action_->setCheckable(true);
     effects_action_->setToolTip("Show the Effects docks");
+    auto* workspace_toolbar_spacer = new QWidget(media_pool_toolbar);
+    workspace_toolbar_spacer->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Preferred);
+    media_pool_toolbar->addWidget(workspace_toolbar_spacer);
+    if (workspace_buttons_container_ != nullptr) {
+        media_pool_toolbar->addWidget(workspace_buttons_container_);
+    }
     connect(media_pool_action_, &QAction::triggered,
             this, [this](bool) { activateMediaPoolGroup(); });
     connect(bins_dock_, &QDockWidget::visibilityChanged, this,
