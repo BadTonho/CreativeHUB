@@ -423,13 +423,13 @@ void MainWindow::flushPreviewPerformanceMetrics() {
     context.emplace_back("source_container_format", "N/A");
     const auto source_audio_index = context.size();
     context.emplace_back("source_has_audio", "N/A");
-    if (active_timeline_track_index_.has_value() &&
-        active_timeline_clip_index_.has_value() &&
-        *active_timeline_track_index_ < timeline_model_.trackCount() &&
-        *active_timeline_clip_index_ < timeline_model_.clipCount(
-            *active_timeline_track_index_)) {
+    if (active_timeline_track_index_cache_.has_value() &&
+        active_timeline_clip_index_cache_.has_value() &&
+        *active_timeline_track_index_cache_ < timeline_model_.trackCount() &&
+        *active_timeline_clip_index_cache_ < timeline_model_.clipCount(
+            *active_timeline_track_index_cache_)) {
         const auto& clip = timeline_model_.tracks()[
-            *active_timeline_track_index_].clips[*active_timeline_clip_index_];
+            *active_timeline_track_index_cache_].clips[*active_timeline_clip_index_cache_];
         if (clip.kind == timeline::ClipKind::Text) {
             context[source_kind_index].second = "text";
         } else {
@@ -463,13 +463,13 @@ void MainWindow::flushPreviewPerformanceMetrics() {
         std::to_string(static_cast<unsigned long long>(playback_generation_)));
     context.emplace_back(
         "active_track_index",
-        active_timeline_track_index_.has_value()
-            ? std::to_string(*active_timeline_track_index_)
+        active_timeline_track_index_cache_.has_value()
+            ? std::to_string(*active_timeline_track_index_cache_)
             : "-1");
     context.emplace_back(
         "active_clip_index",
-        active_timeline_clip_index_.has_value()
-            ? std::to_string(*active_timeline_clip_index_)
+        active_timeline_clip_index_cache_.has_value()
+            ? std::to_string(*active_timeline_clip_index_cache_)
             : "-1");
     context.emplace_back(
         "playback_frame_index",
@@ -618,6 +618,7 @@ void MainWindow::drainPlaybackFrameMailbox() {
 
 void MainWindow::sendCompositionToWorker() {
     if (playback_worker_ == nullptr) return;
+    synchronizeActiveTimelineSelection();
     QVector<playback::CompositionLayerSpec> layers;
     QVector<playback::CompositionTransitionSpec> transitions;
     for (std::size_t track_index = 0;
@@ -684,11 +685,11 @@ void MainWindow::sendCompositionToWorker() {
                 transition.kind});
         }
     }
-    const auto active_track = active_timeline_track_index_.has_value()
-        ? static_cast<qint64>(*active_timeline_track_index_)
+    const auto active_track = active_timeline_track_index_cache_.has_value()
+        ? static_cast<qint64>(*active_timeline_track_index_cache_)
         : static_cast<qint64>(-1);
-    const auto active_clip = active_timeline_clip_index_.has_value()
-        ? static_cast<qint64>(*active_timeline_clip_index_)
+    const auto active_clip = active_timeline_clip_index_cache_.has_value()
+        ? static_cast<qint64>(*active_timeline_clip_index_cache_)
         : static_cast<qint64>(-1);
     QMetaObject::invokeMethod(
         playback_worker_,
@@ -730,8 +731,7 @@ void MainWindow::activateTimelineClipAt(
     }
     if (clip.kind == timeline::ClipKind::Text ||
         clip.kind == timeline::ClipKind::Image) {
-        active_timeline_track_index_ = track_index;
-        active_timeline_clip_index_ = clip_index;
+        setActiveTimelineSelection(timeline::ClipLocation{track_index, clip_index});
         playback_frame_index_ = std::clamp<std::int64_t>(
             target_frame, 0, std::max<std::int64_t>(
                 0, clip.timeline_duration_frames - 1));
@@ -793,19 +793,17 @@ void MainWindow::activateTimelineClipAt(
     // Publish the destination before queuing setMedia/setComposition. The
     // composition command is asynchronous; leaving the previous clip active
     // would make the worker size the new segment using the old clip.
-    active_timeline_track_index_ = track_index;
-    active_timeline_clip_index_ = clip_index;
+    setActiveTimelineSelection(timeline::ClipLocation{track_index, clip_index});
     ++playback_generation_;
     pending_clip_activation_ = PendingClipActivation{
-        clip_index,
-        static_cast<std::size_t>(std::distance(media_items_.begin(), media_item)),
         target_frame,
         clip.source_start_frame,
         clip.timeline_duration_frames,
         resume_playback,
         playback_generation_,
-        track_index,
-        preserve_timeline_playhead};
+        preserve_timeline_playhead,
+        clip.clip_id,
+        normalizedPath(clip.source_path)};
     playback_is_playing_ = false;
     updatePlaybackControls();
     updatePlaybackStatus();
@@ -843,8 +841,7 @@ void MainWindow::commitTimelineClipActivation(
         return;
     }
 
-    active_timeline_track_index_ = track_index;
-    active_timeline_clip_index_ = clip_index;
+    setActiveTimelineSelection(timeline::ClipLocation{track_index, clip_index});
     playback_frame_index_ = frame_index;
     if (!preserve_timeline_playhead) {
         preserved_timeline_playhead_frame_.reset();
@@ -857,6 +854,17 @@ void MainWindow::commitTimelineClipActivation(
     const auto& item = media_items_[media_index];
     if (show_cached_frame) preview_widget_->setFrame(item.first_frame);
     updateTimelineState();
+    updatePlaybackControls();
+    updatePlaybackStatus();
+}
+
+void MainWindow::discardPendingClipActivation(timeline::ClipId clip_id) {
+    if (active_timeline_clip_id_.has_value() &&
+        *active_timeline_clip_id_ == clip_id) {
+        clearActiveTimelineSelection();
+    }
+    pending_clip_activation_.reset();
+    playback_is_playing_ = false;
     updatePlaybackControls();
     updatePlaybackStatus();
 }
@@ -885,10 +893,9 @@ void MainWindow::sendPlaybackCommand(const char* command) {
             timelinePlayheadFrame() - clip.timeline_start_frame,
             0,
             std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
-        const bool active_clip_matches = active_timeline_track_index_.has_value() &&
-            active_timeline_clip_index_.has_value() &&
-            *active_timeline_track_index_ == playhead_clip->track_index &&
-            *active_timeline_clip_index_ == playhead_clip->clip_index;
+        const bool active_clip_matches = active_timeline_clip_id_.has_value() &&
+            *active_timeline_clip_id_ == timeline_model_.tracks()[playhead_clip->track_index]
+                .clips[playhead_clip->clip_index].clip_id;
         if (!active_clip_matches || !canPlaybackSelectedMedia()) {
             activateTimelineClipAt(
                 playhead_clip->track_index,
@@ -905,10 +912,10 @@ void MainWindow::sendPlaybackCommand(const char* command) {
     const auto command_name = std::string_view(command);
     if (command_name == "stepForward" || command_name == "stepBackward") {
         std::optional<timeline::ClipLocation> active_clip;
-        if (active_timeline_clip_index_.has_value()) {
+        if (active_timeline_clip_index_cache_.has_value()) {
             active_clip = timeline::ClipLocation{
-                active_timeline_track_index_.value_or(0),
-                *active_timeline_clip_index_};
+                active_timeline_track_index_cache_.value_or(0),
+                *active_timeline_clip_index_cache_};
         }
         const auto decision = decideFrameStep(
             timeline_model_,
@@ -963,34 +970,35 @@ void MainWindow::updatePlaybackControls() {
 void MainWindow::updatePlaybackStatus() {
     if (playback_status_label_ == nullptr) return;
 
-    if (pending_clip_activation_.has_value() &&
-        pending_clip_activation_->track_index < timeline_model_.trackCount() &&
-        pending_clip_activation_->clip_index < timeline_model_.clipCount(
-            pending_clip_activation_->track_index)) {
-        const auto& clip = timeline_model_.tracks()
-            [pending_clip_activation_->track_index]
-            .clips[pending_clip_activation_->clip_index];
-        const auto frame = std::clamp<std::int64_t>(
-            pending_clip_activation_->target_frame,
-            0,
-            std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
-        playback_status_label_->setText(
-            QString("Paused - Frame %1 / %2")
-                .arg(frame + 1)
-                .arg(clip.timeline_duration_frames));
-        return;
+    if (pending_clip_activation_.has_value()) {
+        const auto pending_location = timeline_model_.locateClip(
+            pending_clip_activation_->clip_id);
+        if (pending_location.has_value()) {
+            const auto& clip = timeline_model_.tracks()[pending_location->track_index]
+                .clips[pending_location->clip_index];
+            const auto frame = std::clamp<std::int64_t>(
+                pending_clip_activation_->target_frame,
+                0,
+                std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
+            playback_status_label_->setText(
+                QString("Paused - Frame %1 / %2")
+                    .arg(frame + 1)
+                    .arg(clip.timeline_duration_frames));
+            return;
+        }
+        discardPendingClipActivation(pending_clip_activation_->clip_id);
     }
 
     const auto selected_index = selectedMediaIndex();
     if (!selected_index.has_value()) {
         if (canPlaybackSelectedMedia() &&
-            active_timeline_track_index_.has_value() &&
-            active_timeline_clip_index_.has_value() &&
-            *active_timeline_track_index_ < timeline_model_.trackCount() &&
-            *active_timeline_clip_index_ < timeline_model_.clipCount(
-                *active_timeline_track_index_)) {
-            const auto& clip = timeline_model_.tracks()[*active_timeline_track_index_]
-                .clips[*active_timeline_clip_index_];
+            active_timeline_track_index_cache_.has_value() &&
+            active_timeline_clip_index_cache_.has_value() &&
+            *active_timeline_track_index_cache_ < timeline_model_.trackCount() &&
+            *active_timeline_clip_index_cache_ < timeline_model_.clipCount(
+                *active_timeline_track_index_cache_)) {
+            const auto& clip = timeline_model_.tracks()[*active_timeline_track_index_cache_]
+                .clips[*active_timeline_clip_index_cache_];
             const QString state = playback_is_playing_ ? "Playing" : "Paused";
             playback_status_label_->setText(
                 QString("%1 - Frame %2 / %3")
@@ -1012,14 +1020,14 @@ void MainWindow::updatePlaybackStatus() {
     QString total = metadata.frame_count.has_value()
         ? QString::number(*metadata.frame_count)
         : "?";
-    if (active_timeline_track_index_.has_value() &&
-        active_timeline_clip_index_.has_value() &&
-        *active_timeline_track_index_ < timeline_model_.trackCount() &&
-        *active_timeline_clip_index_ < timeline_model_.clipCount(
-            *active_timeline_track_index_)) {
+    if (active_timeline_track_index_cache_.has_value() &&
+        active_timeline_clip_index_cache_.has_value() &&
+        *active_timeline_track_index_cache_ < timeline_model_.trackCount() &&
+        *active_timeline_clip_index_cache_ < timeline_model_.clipCount(
+            *active_timeline_track_index_cache_)) {
         total = QString::number(
-            timeline_model_.tracks()[*active_timeline_track_index_]
-                .clips[*active_timeline_clip_index_]
+            timeline_model_.tracks()[*active_timeline_track_index_cache_]
+                .clips[*active_timeline_clip_index_cache_]
                 .timeline_duration_frames);
     }
     const QString state = playback_is_playing_ ? "Playing" : "Paused";
@@ -1050,11 +1058,36 @@ void MainWindow::handlePlaybackFrame(
     if (pending_clip_activation_.has_value() &&
         pending_clip_activation_->generation == generation) {
         const auto pending = *pending_clip_activation_;
+        const auto location = timeline_model_.locateClip(pending.clip_id);
+        if (!location.has_value()) {
+            discardPendingClipActivation(pending.clip_id);
+            return;
+        }
+        const auto& current_clip = timeline_model_.tracks()[location->track_index]
+            .clips[location->clip_index];
+        if (current_clip.clip_id != pending.clip_id ||
+            normalizedPath(current_clip.source_path) !=
+                normalizedPath(pending.media_source_path)) {
+            discardPendingClipActivation(pending.clip_id);
+            return;
+        }
+        const auto media = std::find_if(
+            media_items_.begin(), media_items_.end(),
+            [&pending](const ImportedMedia& item) {
+                return normalizedPath(item.metadata.source_path) ==
+                    normalizedPath(pending.media_source_path);
+            });
+        if (media == media_items_.end() || media->offline) {
+            discardPendingClipActivation(pending.clip_id);
+            return;
+        }
+        const auto media_index = static_cast<std::size_t>(
+            std::distance(media_items_.begin(), media));
         pending_clip_activation_.reset();
         commitTimelineClipActivation(
-            pending.track_index,
-            pending.clip_index,
-            pending.media_index,
+            location->track_index,
+            location->clip_index,
+            media_index,
             frame_index,
             false,
             pending.preserve_timeline_playhead);
@@ -1073,13 +1106,14 @@ void MainWindow::handlePlaybackFrame(
     preserved_timeline_playhead_frame_.reset();
     playback_frame_index_ = frame_index;
     preview_widget_->setFrame(frame);
-    if (playback_is_playing_ && active_timeline_track_index_.has_value() &&
-        active_timeline_clip_index_.has_value()) {
+    if (playback_is_playing_ && active_timeline_track_index_cache_.has_value() &&
+        active_timeline_clip_index_cache_.has_value()) {
         const auto timeline_frame = timelinePlayheadFrame();
         const auto visible_clip = timeline_model_.topClipAt(timeline_frame);
         if (visible_clip.has_value() &&
-            (visible_clip->track_index != *active_timeline_track_index_ ||
-             visible_clip->clip_index != *active_timeline_clip_index_)) {
+            (!active_timeline_clip_id_.has_value() ||
+             timeline_model_.tracks()[visible_clip->track_index]
+                 .clips[visible_clip->clip_index].clip_id != *active_timeline_clip_id_)) {
             const auto& clip = timeline_model_.tracks()[visible_clip->track_index]
                 .clips[visible_clip->clip_index];
             if (timeline::isMediaClipKind(clip.kind)) {
@@ -1114,6 +1148,31 @@ void MainWindow::handlePlaybackMediaReady(quint64 generation) {
     }
 
     const auto pending = *pending_clip_activation_;
+    const auto location = timeline_model_.locateClip(pending.clip_id);
+    if (!location.has_value()) {
+        discardPendingClipActivation(pending.clip_id);
+        return;
+    }
+    const auto& current_clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    if (current_clip.clip_id != pending.clip_id ||
+        normalizedPath(current_clip.source_path) !=
+            normalizedPath(pending.media_source_path)) {
+        discardPendingClipActivation(pending.clip_id);
+        return;
+    }
+    const auto media = std::find_if(
+        media_items_.begin(), media_items_.end(),
+        [&pending](const ImportedMedia& item) {
+            return normalizedPath(item.metadata.source_path) ==
+                normalizedPath(pending.media_source_path);
+        });
+    if (media == media_items_.end() || media->offline) {
+        discardPendingClipActivation(pending.clip_id);
+        return;
+    }
+    const auto media_index = static_cast<std::size_t>(
+        std::distance(media_items_.begin(), media));
     if (pending.target_frame > 0 || pending.source_start_frame > 0) {
         playback_worker_->requestSeek(
             static_cast<qint64>(pending.target_frame),
@@ -1123,9 +1182,9 @@ void MainWindow::handlePlaybackMediaReady(quint64 generation) {
 
     pending_clip_activation_.reset();
     commitTimelineClipActivation(
-        pending.track_index,
-        pending.clip_index,
-        pending.media_index,
+        location->track_index,
+        location->clip_index,
+        media_index,
         0,
         true,
         pending.preserve_timeline_playhead);
@@ -1153,15 +1212,15 @@ void MainWindow::handlePlaybackFinished(
     if (generation != playback_generation_) return;
 
     playback_is_playing_ = false;
-    if (during_playback && active_timeline_track_index_.has_value() &&
-        active_timeline_clip_index_.has_value() &&
-        *active_timeline_track_index_ < timeline_model_.trackCount() &&
-        *active_timeline_clip_index_ < timeline_model_.clipCount(
-            *active_timeline_track_index_)) {
+    if (during_playback && active_timeline_track_index_cache_.has_value() &&
+        active_timeline_clip_index_cache_.has_value() &&
+        *active_timeline_track_index_cache_ < timeline_model_.trackCount() &&
+        *active_timeline_clip_index_cache_ < timeline_model_.clipCount(
+            *active_timeline_track_index_cache_)) {
         const auto& active_track = timeline_model_.tracks()
-            [*active_timeline_track_index_];
+            [*active_timeline_track_index_cache_];
         const auto& current_clip = active_track.clips
-            [*active_timeline_clip_index_];
+            [*active_timeline_clip_index_cache_];
         const auto boundary = current_clip.timeline_start_frame +
             current_clip.timeline_duration_frames;
         if (const auto next = timeline_model_.topClipAt(boundary);
@@ -1215,22 +1274,17 @@ void MainWindow::handlePlaybackError(
     if (pending_clip_activation_.has_value() &&
         pending_clip_activation_->generation == generation) {
         const auto pending = *pending_clip_activation_;
-        if (pending.track_index >= timeline_model_.trackCount() ||
-            pending.clip_index >= timeline_model_.clipCount(pending.track_index)) {
-            pending_clip_activation_.reset();
-            playback_is_playing_ = false;
-            updatePlaybackControls();
-            updatePlaybackStatus();
-            QMessageBox::warning(this, "Playback error", message);
+        const auto pending_location = timeline_model_.locateClip(pending.clip_id);
+        if (!pending_location.has_value()) {
+            discardPendingClipActivation(pending.clip_id);
             return;
         }
-        const auto& clip = timeline_model_.tracks()[pending.track_index]
-            .clips[pending.clip_index];
+        const auto& clip = timeline_model_.tracks()[pending_location->track_index]
+            .clips[pending_location->clip_index];
         logging::Context context{
             {"path", pathToUtf8(clip.source_path)},
-            {"track_index", std::to_string(pending.track_index)},
-            {"clip_index", std::to_string(pending.clip_index)},
-            {"media_index", std::to_string(pending.media_index)},
+            {"track_id", std::to_string(clip.track_id)},
+            {"clip_id", std::to_string(clip.clip_id)},
             {"requested_frame", std::to_string(pending.target_frame)},
             {"source_start_frame", std::to_string(pending.source_start_frame)},
             {"segment_frame_count", std::to_string(pending.segment_frame_count)},
@@ -1298,10 +1352,9 @@ void MainWindow::handleTimelineSeek(qint64 global_frame) {
     const auto& clip = timeline_model_.tracks()[target_clip->track_index]
         .clips[target_clip->clip_index];
     const auto local_frame = target_frame - clip.timeline_start_frame;
-    const bool same_clip = active_timeline_track_index_.has_value() &&
-        active_timeline_clip_index_.has_value() &&
-        *active_timeline_track_index_ == target_clip->track_index &&
-        *active_timeline_clip_index_ == target_clip->clip_index;
+    const bool same_clip = active_timeline_clip_id_.has_value() &&
+        *active_timeline_clip_id_ == timeline_model_.tracks()[target_clip->track_index]
+            .clips[target_clip->clip_index].clip_id;
     // Timeline navigation is independent from the current Media Browser
     // selection. Resolve a different clip (or a text clip) through the
     // timeline instead of asking the video worker to seek blindly. A video

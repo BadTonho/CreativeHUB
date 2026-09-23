@@ -27,6 +27,7 @@ project::ProjectDocument document() {
     project::ProjectDocument result;
     result.bins = {"Unsorted"};
     result.timeline_tracks.push_back({"Video 1"});
+    result.timeline_tracks.back().track_id = 1;
     return result;
 }
 

@@ -60,7 +60,11 @@ int main(int argc, char** argv) {
                 {first_source, 60, 0, 30, 1.25, false},
             }},
         };
+        original.timeline_tracks.front().track_id = 1;
+        original.timeline_tracks.front().clips[0].clip_id = 1;
+        original.timeline_tracks.front().clips[1].clip_id = 2;
         project::ProjectClip title_clip;
+        title_clip.clip_id = 3;
         title_clip.timeline_start_frame = 10;
         title_clip.duration_frames = 20;
         title_clip.kind = timeline::ClipKind::Text;
@@ -70,6 +74,7 @@ int main(int argc, char** argv) {
         title_clip.text.color = {255, 200, 100, 230};
         original.timeline_tracks.front().clips.push_back(title_clip);
         project::ProjectClip image_clip;
+        image_clip.clip_id = 4;
         image_clip.source_path = image_source;
         image_clip.timeline_start_frame = 100;
         image_clip.duration_frames = 150;
@@ -89,6 +94,7 @@ int main(int argc, char** argv) {
         original.timeline_tracks.front().clips.front().transform.rotation_degrees = 12.0;
         original.timeline_tracks.front().clips.front().keyframes.position_x = {{0, 0.25}, {30, 0.75}};
         project::ProjectClip second_track_title;
+        second_track_title.clip_id = 5;
         second_track_title.timeline_start_frame = 0;
         second_track_title.duration_frames = 15;
         second_track_title.kind = timeline::ClipKind::Text;
@@ -96,6 +102,7 @@ int main(int argc, char** argv) {
         second_track_title.text.font_size_pixels = 48.0;
         original.timeline_tracks.push_back(
             {"Video 2", 1.0, false, {second_track_title}, {}});
+        original.timeline_tracks.back().track_id = 2;
         project::save(project_path, original);
 
         const auto loaded = project::load(project_path);
@@ -138,12 +145,15 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"kind\": \"text\"") != std::string::npos &&
                     saved_json.find("\"content\": \"Title\"") != std::string::npos,
                 "Text clip content and kind were not written to the project.");
-        require(saved_json.find("\"version\": 8") != std::string::npos &&
+        require(saved_json.find("\"track_id\": 1") != std::string::npos &&
+                    saved_json.find("\"clip_id\": 1") != std::string::npos,
+                "Stable track and clip identifiers were not written to the project.");
+        require(saved_json.find("\"version\": 9") != std::string::npos &&
                     saved_json.find("\"zoom\": 512") != std::string::npos &&
                     saved_json.find("\"row_height\": 123.5") != std::string::npos &&
                     saved_json.find("\"transitions\"") != std::string::npos &&
                     saved_json.find("cross_dissolve") != std::string::npos,
-                "Timeline zoom, row height, image, and transition data were not written to the version 8 project.");
+                "Timeline zoom, row height, image, and transition data were not written to the version 9 project.");
         require(saved_json.find("\"kind\": \"image\"") != std::string::npos &&
                     loaded.media.back().kind == media::MediaKind::Image &&
                     loaded.timeline_tracks.front().clips.back().kind == timeline::ClipKind::Image,
@@ -262,6 +272,10 @@ int main(int argc, char** argv) {
                     migrated.timeline_tracks.front().clips[0].timeline_start_frame == 0 &&
                     migrated.timeline_tracks.front().clips[1].timeline_start_frame == 10,
                 "A version 1 timeline was not migrated to sequential Video 1 clips.");
+        require(migrated.timeline_tracks.front().track_id == 1 &&
+                    migrated.timeline_tracks.front().clips[0].clip_id == 1 &&
+                    migrated.timeline_tracks.front().clips[1].clip_id == 2,
+                "A version 1 timeline did not receive deterministic stable identifiers.");
         require(migrated.timeline_tracks.front().clips[0].audio_gain == 1.0 &&
                     !migrated.timeline_tracks.front().clips[0].audio_muted,
                 "A legacy timeline clip did not receive default audio parameters.");
@@ -274,6 +288,31 @@ int main(int argc, char** argv) {
                     migrated_v2.timeline_tracks.front().clips.front().transform ==
                         timeline::Transform2D{},
                 "A version 2 project did not receive identity transform defaults.");
+        require(migrated_v2.timeline_tracks.front().track_id == 1 &&
+                    migrated_v2.timeline_tracks.front().clips.front().clip_id == 1,
+                "A version 2 project did not receive stable identifiers.");
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":9,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"zoom":1,"row_height":70,"tracks":[{"track_id":1,"name":"Video 1","clips":[],"transitions":[]},{"track_id":1,"name":"Video 2","clips":[],"transitions":[]}]}})");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("Duplicate track identifiers were accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::InvalidTimeline,
+                    "Duplicate track identifiers returned the wrong error category.");
+        }
+
+        writeText(
+            project_path,
+            R"({"format":"creative-suite.main-editor","version":9,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"zoom":1,"row_height":70,"tracks":[{"track_id":1,"name":"Video 1","clips":[{"clip_id":0,"kind":"text","timeline_start_frame":0,"source_start_frame":0,"duration_frames":10,"text":{"content":"Invalid"}}],"transitions":[]}]}})");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("Zero clip identifiers were accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::InvalidValue,
+                    "Zero clip identifiers returned the wrong error category.");
+        }
 
         writeText(
             project_path,
@@ -311,6 +350,9 @@ int main(int argc, char** argv) {
         overlapping_document.timeline_tracks = {project::ProjectTrack{
             "Video 1", 1.0, false,
             {first_overlapping_clip, second_overlapping_clip}, {}}};
+        overlapping_document.timeline_tracks.front().track_id = 1;
+        overlapping_document.timeline_tracks.front().clips[0].clip_id = 1;
+        overlapping_document.timeline_tracks.front().clips[1].clip_id = 2;
         const auto overlapping_project_path = directory / "overlapping.csp";
         project::save(overlapping_project_path, overlapping_document);
         const auto loaded_overlapping_document =

@@ -90,24 +90,27 @@ project::ProjectDocument MainWindow::currentProjectDocument() const {
 
     for (const auto& track : timeline_model_.tracks()) {
         project::ProjectTrack project_track;
+        project_track.track_id = track.track_id;
         project_track.name = track.name;
         project_track.audio_gain = track.audio_gain;
         project_track.audio_muted = track.audio_muted;
         project_track.clips.reserve(track.clips.size());
         for (const auto& clip : track.clips) {
-            project_track.clips.push_back(project::ProjectClip{
-                timeline::isMediaClipKind(clip.kind)
-                    ? normalizedPath(clip.source_path)
-                    : std::filesystem::path{},
-                clip.timeline_start_frame,
-                clip.source_start_frame,
-                clip.timeline_duration_frames,
-                clip.audio_gain,
-                clip.audio_muted,
-                clip.transform,
-                clip.keyframes,
-                clip.kind,
-                clip.text});
+            project::ProjectClip project_clip;
+            project_clip.clip_id = clip.clip_id;
+            project_clip.source_path = timeline::isMediaClipKind(clip.kind)
+                ? normalizedPath(clip.source_path)
+                : std::filesystem::path{};
+            project_clip.timeline_start_frame = clip.timeline_start_frame;
+            project_clip.source_start_frame = clip.source_start_frame;
+            project_clip.duration_frames = clip.timeline_duration_frames;
+            project_clip.audio_gain = clip.audio_gain;
+            project_clip.audio_muted = clip.audio_muted;
+            project_clip.transform = clip.transform;
+            project_clip.keyframes = clip.keyframes;
+            project_clip.kind = clip.kind;
+            project_clip.text = clip.text;
+            project_track.clips.push_back(std::move(project_clip));
         }
         for (const auto& transition : track.transitions) {
             const auto from = std::find_if(
@@ -441,8 +444,7 @@ void MainWindow::clearProjectState() {
 
     timeline_model_.clear();
     timeline_history_.clear();
-    active_timeline_track_index_.reset();
-    active_timeline_clip_index_.reset();
+    clearActiveTimelineSelection();
     preserved_timeline_playhead_frame_.reset();
     playback_frame_index_ = 0;
     project_path_.reset();
@@ -680,7 +682,8 @@ bool MainWindow::openProjectPath(
         timeline::ClipId next_clip_id = 1;
         for (std::size_t track_index = 0; track_index < project_tracks.size(); ++track_index) {
             const auto& project_track = project_tracks[track_index];
-            const auto track_id = next_track_id++;
+            const auto track_id = project_track.track_id;
+            next_track_id = std::max(next_track_id, track_id + 1);
             snapshot.tracks.push_back(timeline::TimelineTrack{
                 track_id,
                 project_track.name.empty() ? "Video " + std::to_string(track_index + 1)
@@ -715,7 +718,8 @@ bool MainWindow::openProjectPath(
                     text_clip.frame_count = project_clip.duration_frames;
                     text_clip.audio_gain = project_clip.audio_gain;
                     text_clip.audio_muted = project_clip.audio_muted;
-                    text_clip.clip_id = next_clip_id++;
+                    text_clip.clip_id = project_clip.clip_id;
+                    next_clip_id = std::max(next_clip_id, project_clip.clip_id + 1);
                     text_clip.track_id = track_id;
                     text_clip.transform = project_clip.transform;
                     text_clip.keyframes = project_clip.keyframes;
@@ -764,7 +768,7 @@ bool MainWindow::openProjectPath(
                 metadata.frame_count,
                 project_clip.audio_gain,
                 project_clip.audio_muted,
-                next_clip_id++,
+                project_clip.clip_id,
                 track_id,
                 project_clip.transform,
                 project_clip.keyframes,
@@ -772,6 +776,7 @@ bool MainWindow::openProjectPath(
                     ? timeline::ClipKind::Image
                     : timeline::ClipKind::Video,
                 {}});
+            next_clip_id = std::max(next_clip_id, project_clip.clip_id + 1);
             }
 
             for (const auto& transition : project_track.transitions) {
@@ -903,8 +908,7 @@ void MainWindow::applyLoadedProject(
             start = separator == std::string::npos ? item.bin_path.size() : separator + 1;
         }
     }
-    active_timeline_track_index_.reset();
-    active_timeline_clip_index_.reset();
+    clearActiveTimelineSelection();
     preserved_timeline_playhead_frame_.reset();
     playback_frame_index_ = 0;
     project_path_ = project_path.has_value()
@@ -945,8 +949,7 @@ void MainWindow::applyLoadedProject(
             return;
         }
 
-        active_timeline_track_index_ = first_clip_location->track_index;
-        active_timeline_clip_index_ = first_clip_location->clip_index;
+        setActiveTimelineSelection(*first_clip_location);
         const auto& clip = timeline_model_.tracks()[first_clip_location->track_index]
             .clips[first_clip_location->clip_index];
         const auto media = std::find_if(

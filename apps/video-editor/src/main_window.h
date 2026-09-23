@@ -263,6 +263,9 @@ private:
     [[nodiscard]] bool hasSelectedMedia() const noexcept;
     [[nodiscard]] std::optional<timeline::ClipLocation>
     selectedTimelineClipLocation() const noexcept;
+    void synchronizeActiveTimelineSelection() noexcept;
+    void setActiveTimelineSelection(timeline::ClipLocation location) noexcept;
+    void clearActiveTimelineSelection() noexcept;
     [[nodiscard]] std::optional<std::size_t> selectedTimelineClipIndex() const noexcept;
     [[nodiscard]] bool selectedMediaMatchesTimeline() const noexcept;
     [[nodiscard]] bool canPreviewSelectedMedia() const noexcept;
@@ -272,6 +275,7 @@ private:
     [[nodiscard]] bool canPlaybackTimelineAtPlayhead() const noexcept;
     [[nodiscard]] std::int64_t timelinePlayheadFrame() const noexcept;
     void sendPlaybackCommand(const char* command);
+    void discardPendingClipActivation(timeline::ClipId clip_id);
     void updatePlaybackControls();
     void updatePlaybackStatus();
     void handlePlaybackFrame(
@@ -320,15 +324,14 @@ private:
     };
 
     struct PendingClipActivation {
-        std::size_t clip_index = 0;
-        std::size_t media_index = 0;
         std::int64_t target_frame = 0;
         std::int64_t source_start_frame = 0;
         std::int64_t segment_frame_count = 0;
         bool resume_playback = false;
         quint64 generation = 0;
-        std::size_t track_index = 0;
         bool preserve_timeline_playhead = false;
+        timeline::ClipId clip_id = 0;
+        std::filesystem::path media_source_path;
     };
 
     QDockWidget* bins_dock_ = nullptr;
@@ -411,13 +414,17 @@ private:
     std::vector<std::string> bin_paths_{"Unsorted"};
     timeline::TimelineModel timeline_model_;
     timeline::TimelineHistory timeline_history_;
-    std::optional<std::size_t> active_timeline_track_index_;
-    std::optional<std::size_t> active_timeline_clip_index_;
+    // Stable identities are the source of truth for selection. The index
+    // fields below remain as short-lived presentation/worker coordinates.
+    std::optional<timeline::TrackId> active_timeline_track_id_;
+    std::optional<timeline::ClipId> active_timeline_clip_id_;
+    std::optional<std::size_t> active_timeline_track_index_cache_;
+    std::optional<std::size_t> active_timeline_clip_index_cache_;
     std::optional<std::int64_t> preserved_timeline_playhead_frame_;
     struct ActiveTransition {
-        std::size_t track_index = 0;
-        std::size_t from_clip_index = 0;
-        std::size_t to_clip_index = 0;
+        timeline::TrackId track_id = 0;
+        timeline::ClipId from_clip_id = 0;
+        timeline::ClipId to_clip_id = 0;
 
         friend bool operator==(const ActiveTransition&, const ActiveTransition&) = default;
     };

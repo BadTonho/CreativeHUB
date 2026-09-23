@@ -991,7 +991,7 @@ void MainWindow::updateMediaDetails(int row) {
     playback_frame_index_ = 0;
 
     if (row < 0 || media_list_ == nullptr || media_list_->currentItem() == nullptr) {
-        active_timeline_clip_index_.reset();
+        active_timeline_clip_index_cache_.reset();
         preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
         updateTimelineState();
         updatePlaybackControls();
@@ -1009,11 +1009,9 @@ void MainWindow::updateMediaDetails(int row) {
     const auto& item = media_items_[*item_index];
     const auto selected_location = selectedTimelineClipLocation();
     if (selected_location.has_value()) {
-        active_timeline_track_index_ = selected_location->track_index;
-        active_timeline_clip_index_ = selected_location->clip_index;
+        setActiveTimelineSelection(*selected_location);
     } else {
-        active_timeline_track_index_.reset();
-        active_timeline_clip_index_.reset();
+        clearActiveTimelineSelection();
     }
     if (item.offline) {
         preview_widget_->clearFrame("Preview area\n\nThe selected media is offline.");
@@ -1033,13 +1031,13 @@ void MainWindow::updateMediaDetails(int row) {
         const double frame_rate = item.metadata.frame_rate.value_or(30.0);
         std::int64_t source_start_frame = 0;
         std::int64_t segment_frame_count = item.metadata.frame_count.value_or(0);
-        if (active_timeline_track_index_.has_value() &&
-            active_timeline_clip_index_.has_value() &&
-            *active_timeline_track_index_ < timeline_model_.trackCount() &&
-            *active_timeline_clip_index_ < timeline_model_.clipCount(
-                *active_timeline_track_index_)) {
-            const auto& clip = timeline_model_.tracks()[*active_timeline_track_index_]
-                .clips[*active_timeline_clip_index_];
+        if (active_timeline_track_index_cache_.has_value() &&
+            active_timeline_clip_index_cache_.has_value() &&
+            *active_timeline_track_index_cache_ < timeline_model_.trackCount() &&
+            *active_timeline_clip_index_cache_ < timeline_model_.clipCount(
+                *active_timeline_track_index_cache_)) {
+            const auto& clip = timeline_model_.tracks()[*active_timeline_track_index_cache_]
+                .clips[*active_timeline_clip_index_cache_];
             source_start_frame = clip.source_start_frame;
             segment_frame_count = clip.timeline_duration_frames;
         }
@@ -1051,22 +1049,22 @@ void MainWindow::updateMediaDetails(int row) {
             Q_ARG(double, frame_rate),
              Q_ARG(qint64, static_cast<qint64>(source_start_frame)),
              Q_ARG(qint64, static_cast<qint64>(segment_frame_count)),
-             Q_ARG(double, active_timeline_track_index_.has_value()
-                 ? timeline_model_.tracks()[*active_timeline_track_index_].audio_gain : 1.0),
-             Q_ARG(bool, active_timeline_track_index_.has_value()
-                 ? timeline_model_.tracks()[*active_timeline_track_index_].audio_muted : false),
-             Q_ARG(double, active_timeline_track_index_.has_value() &&
-                 active_timeline_clip_index_.has_value()
-                 ? timeline_model_.tracks()[*active_timeline_track_index_]
-                     .clips[*active_timeline_clip_index_].audio_gain : 1.0),
-             Q_ARG(bool, active_timeline_track_index_.has_value() &&
-                 active_timeline_clip_index_.has_value()
-                 ? timeline_model_.tracks()[*active_timeline_track_index_]
-                     .clips[*active_timeline_clip_index_].audio_muted : false),
-             Q_ARG(qint64, active_timeline_track_index_.has_value()
-                 ? static_cast<qint64>(*active_timeline_track_index_) : -1),
-             Q_ARG(qint64, active_timeline_clip_index_.has_value()
-                 ? static_cast<qint64>(*active_timeline_clip_index_) : -1),
+             Q_ARG(double, active_timeline_track_index_cache_.has_value()
+                 ? timeline_model_.tracks()[*active_timeline_track_index_cache_].audio_gain : 1.0),
+             Q_ARG(bool, active_timeline_track_index_cache_.has_value()
+                 ? timeline_model_.tracks()[*active_timeline_track_index_cache_].audio_muted : false),
+             Q_ARG(double, active_timeline_track_index_cache_.has_value() &&
+                 active_timeline_clip_index_cache_.has_value()
+                 ? timeline_model_.tracks()[*active_timeline_track_index_cache_]
+                     .clips[*active_timeline_clip_index_cache_].audio_gain : 1.0),
+             Q_ARG(bool, active_timeline_track_index_cache_.has_value() &&
+                 active_timeline_clip_index_cache_.has_value()
+                 ? timeline_model_.tracks()[*active_timeline_track_index_cache_]
+                     .clips[*active_timeline_clip_index_cache_].audio_muted : false),
+             Q_ARG(qint64, active_timeline_track_index_cache_.has_value()
+                 ? static_cast<qint64>(*active_timeline_track_index_cache_) : -1),
+             Q_ARG(qint64, active_timeline_clip_index_cache_.has_value()
+                 ? static_cast<qint64>(*active_timeline_clip_index_cache_) : -1),
              Q_ARG(quint64, playback_generation_));
         sendCompositionToWorker();
     }

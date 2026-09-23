@@ -205,7 +205,7 @@ uma mudança de migração de formato não precise alterar validação ou escrit
 
 ### 10. A fronteira de integração possui poucos testes
 
-Os 31 testes atuais são importantes, mas a maioria testa módulos individuais.
+Os 32 testes atuais são importantes, mas a maioria testa módulos individuais.
 Não existe uma fronteira completa de regressão do `MainWindow` cobrindo:
 
 - abertura de projeto com múltiplas tracks e estado de alteração;
@@ -652,3 +652,24 @@ Definição final de concluído:
 - Snapshot/restore de múltiplas tracks: aprovado.
 - `git diff --check`: aprovado; o Git apenas reportou a conversão esperada de
   LF para CRLF na working tree do Windows.
+
+## Registro de execução da Etapa 3
+
+- `TrackId` e `ClipId` agora são persistidos no formato de projeto versão 9.
+- Projetos das versões 1 a 8 recebem IDs determinísticos durante a migração;
+  projetos versão 9 com IDs ausentes, zero ou duplicados são rejeitados.
+- O documento atual do `MainWindow` copia os IDs do modelo, preservando-os no
+  round-trip de salvamento e carregamento.
+- A seleção ativa, o histórico de edição e as transições mantêm identidades
+  estáveis; índices permanecem apenas como caches de apresentação ou
+  coordenadas de compatibilidade do worker.
+- `PendingClipActivation` valida a geração, o `ClipId` e o caminho da mídia
+  antes de confirmar uma ativação, evitando que uma resposta obsoleta ative
+  outro clip que ocupou o mesmo índice.
+- Tracks e clips removidos ou inexistentes limpam a seleção com segurança sem
+  gerar logs para ações esperadas.
+- Cobertura adicionada para IDs no round-trip, migração legada, rejeição de
+  IDs inválidos, reorder de tracks, split de clips, snapshot/restore,
+  undo/redo e abertura multi-track do `MainWindow`.
+- Validação automatizada da Etapa 3: build Release aprovado, 32/32 testes
+  aprovados e `git diff --check` aprovado.

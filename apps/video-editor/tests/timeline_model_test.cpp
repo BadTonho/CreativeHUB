@@ -909,6 +909,24 @@ int main() {
                     multi_track_model.clipCount(0) == 1 &&
                     multi_track_model.clipCount(1) == 2,
                 "A multi-track snapshot did not restore every track and clip.");
+        timeline::TimelineModel identity_model;
+        require(identity_model.addTrack("Identity Track") ==
+                    timeline::AddTrackResult::Added &&
+                    identity_model.addClip(0, first_metadata, 0) ==
+                        timeline::AddClipResult::Added,
+                "The stable identity test model could not be created.");
+        const auto moved_track_id = identity_model.tracks()[0].track_id;
+        require(identity_model.moveTrack(0, 1) ==
+                    timeline::TrackMutationResult::Changed &&
+                    identity_model.locateTrack(moved_track_id).has_value() &&
+                    *identity_model.locateTrack(moved_track_id) == 1,
+                "A reordered track could not be located by its stable id.");
+        const auto split_source_id = identity_model.tracks()[1].clips[0].clip_id;
+        require(identity_model.splitClip(1, 0, 20) ==
+                    timeline::SplitClipResult::Split &&
+                    identity_model.tracks()[1].clips[0].clip_id == split_source_id &&
+                    identity_model.tracks()[1].clips[1].clip_id != split_source_id,
+                "Splitting a clip did not preserve and generate stable identifiers correctly.");
         require(multi_track_model.removeTrack(0) ==
                     timeline::TrackMutationResult::NotEmpty,
                 "A non-empty track was removed.");
@@ -1014,7 +1032,12 @@ int main() {
                              std::int64_t frame) {
                 timeline::EditState state;
                 state.timeline = history_model.snapshot();
-                state.active_clip_index = active;
+                if (active.has_value() &&
+                    *active < history_model.tracks().front().clips.size()) {
+                    state.active_track_id = history_model.tracks().front().track_id;
+                    state.active_clip_id = history_model.tracks().front()
+                        .clips[*active].clip_id;
+                }
                 state.selected_source_path = selected_source;
                 state.playhead_frame = frame;
                 return state;
@@ -1037,7 +1060,8 @@ int main() {
                     std::filesystem::weakly_canonical(first_source) &&
                     history_model.tracks().front().clips[1].source_path ==
                         std::filesystem::weakly_canonical(second_source) &&
-                    undone_move->active_clip_index == 0 &&
+                    undone_move->active_clip_id == history_model.tracks().front()
+                        .clips[0].clip_id &&
                     undone_move->selected_source_path == first_source &&
                     undone_move->playhead_frame == 12,
                 "Undo did not restore the Timeline and UI state.");
@@ -1050,7 +1074,8 @@ int main() {
                     std::filesystem::weakly_canonical(second_source) &&
                     history_model.tracks().front().clips[1].source_path ==
                         std::filesystem::weakly_canonical(first_source) &&
-                    redone_move->active_clip_index == 1 &&
+                    redone_move->active_clip_id == history_model.tracks().front()
+                        .clips[1].clip_id &&
                     redone_move->playhead_frame == 5,
                 "Redo did not restore the newer Timeline state.");
 

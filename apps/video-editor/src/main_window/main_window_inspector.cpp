@@ -338,15 +338,31 @@ QWidget* MainWindow::createInspector() {
 void MainWindow::updateInspector() {
     bool transition_enabled = false;
     const timeline::TimelineTransition* selected_transition = nullptr;
+    std::optional<std::size_t> transition_track_index;
+    std::optional<std::size_t> transition_from_clip_index;
+    std::optional<std::size_t> transition_to_clip_index;
     if (active_transition_.has_value()) {
         const auto& selection = *active_transition_;
-        if (selection.track_index < timeline_model_.trackCount() &&
-            selection.from_clip_index < timeline_model_.clipCount(selection.track_index) &&
-            selection.to_clip_index < timeline_model_.clipCount(selection.track_index)) {
+        if (selection.track_id != 0) {
+            const auto track_index = timeline_model_.locateTrack(selection.track_id);
+            const auto from_location = timeline_model_.locateClip(selection.from_clip_id);
+            const auto to_location = timeline_model_.locateClip(selection.to_clip_id);
+            if (track_index.has_value() && from_location.has_value() &&
+                to_location.has_value() &&
+                from_location->track_index == *track_index &&
+                to_location->track_index == *track_index) {
+                transition_track_index = *track_index;
+                transition_from_clip_index = from_location->clip_index;
+                transition_to_clip_index = to_location->clip_index;
+            }
+        }
+        if (transition_track_index.has_value() &&
+            transition_from_clip_index.has_value() &&
+            transition_to_clip_index.has_value()) {
             selected_transition = timeline_model_.transitionBetween(
-                selection.track_index,
-                selection.from_clip_index,
-                selection.to_clip_index);
+                *transition_track_index,
+                *transition_from_clip_index,
+                *transition_to_clip_index);
             transition_enabled = selected_transition != nullptr;
         }
     }
@@ -405,9 +421,9 @@ void MainWindow::updateInspector() {
                 button->setToolTip(QStringLiteral("Select a clip to edit keyframes"));
             }
         }
-        const auto& track = timeline_model_.tracks()[active_transition_->track_index];
-        const auto& from = track.clips[active_transition_->from_clip_index];
-        const auto& to = track.clips[active_transition_->to_clip_index];
+        const auto& track = timeline_model_.tracks()[*transition_track_index];
+        const auto& from = track.clips[*transition_from_clip_index];
+        const auto& to = track.clips[*transition_to_clip_index];
         const auto maximum = std::min(
             from.timeline_duration_frames,
             to.timeline_duration_frames);
@@ -518,14 +534,14 @@ void MainWindow::updateInspector() {
 }
 
 void MainWindow::applyTextStyle() {
-    if (!active_timeline_track_index_.has_value() ||
-        !active_timeline_clip_index_.has_value() ||
+    if (!active_timeline_track_index_cache_.has_value() ||
+        !active_timeline_clip_index_cache_.has_value() ||
         text_content_editor_ == nullptr || text_font_combo_ == nullptr ||
         text_font_size_spin_ == nullptr || text_alignment_combo_ == nullptr) {
         return;
     }
-    const auto track_index = *active_timeline_track_index_;
-    const auto clip_index = *active_timeline_clip_index_;
+    const auto track_index = *active_timeline_track_index_cache_;
+    const auto clip_index = *active_timeline_clip_index_cache_;
     if (track_index >= timeline_model_.trackCount() ||
         clip_index >= timeline_model_.clipCount(track_index) ||
         timeline_model_.tracks()[track_index].clips[clip_index].kind !=
@@ -578,12 +594,12 @@ void MainWindow::applyTextStyle() {
 
 void MainWindow::applyTransformProperty(int property_index, double value) {
     if (property_index < 0 || property_index >= 5 ||
-        !active_timeline_track_index_.has_value() ||
-        !active_timeline_clip_index_.has_value()) {
+        !active_timeline_track_index_cache_.has_value() ||
+        !active_timeline_clip_index_cache_.has_value()) {
         return;
     }
-    const auto track_index = *active_timeline_track_index_;
-    const auto clip_index = *active_timeline_clip_index_;
+    const auto track_index = *active_timeline_track_index_cache_;
+    const auto clip_index = *active_timeline_clip_index_cache_;
     if (track_index >= timeline_model_.trackCount() ||
         clip_index >= timeline_model_.clipCount(track_index)) return;
 
@@ -635,10 +651,10 @@ void MainWindow::applyTransformProperty(int property_index, double value) {
 
 void MainWindow::toggleTransformKeyframe(int property_index) {
     if (property_index < 0 || property_index >= 5 ||
-        !active_timeline_track_index_.has_value() ||
-        !active_timeline_clip_index_.has_value()) return;
-    const auto track_index = *active_timeline_track_index_;
-    const auto clip_index = *active_timeline_clip_index_;
+        !active_timeline_track_index_cache_.has_value() ||
+        !active_timeline_clip_index_cache_.has_value()) return;
+    const auto track_index = *active_timeline_track_index_cache_;
+    const auto clip_index = *active_timeline_clip_index_cache_;
     if (track_index >= timeline_model_.trackCount() ||
         clip_index >= timeline_model_.clipCount(track_index)) return;
     const auto& clip = timeline_model_.tracks()[track_index].clips[clip_index];

@@ -864,6 +864,14 @@ std::optional<ClipLocation> TimelineModel::topClipAt(std::int64_t timeline_frame
     return std::nullopt;
 }
 
+std::optional<std::size_t> TimelineModel::locateTrack(TrackId track_id) const {
+    if (track_id == 0) return std::nullopt;
+    for (std::size_t track_index = 0; track_index < tracks_.size(); ++track_index) {
+        if (tracks_[track_index].track_id == track_id) return track_index;
+    }
+    return std::nullopt;
+}
+
 std::optional<ClipLocation> TimelineModel::locateClip(ClipId clip_id) const {
     for (std::size_t track_index = 0; track_index < tracks_.size(); ++track_index) {
         for (std::size_t clip_index = 0; clip_index < tracks_[track_index].clips.size(); ++clip_index) {

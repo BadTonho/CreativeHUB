@@ -42,6 +42,10 @@ project::ProjectDocument makeMultiTrackProject(
             {second_source, 0, 0, 1},
         }},
     };
+    document.timeline_tracks[0].track_id = 1;
+    document.timeline_tracks[0].clips[0].clip_id = 1;
+    document.timeline_tracks[1].track_id = 2;
+    document.timeline_tracks[1].clips[0].clip_id = 2;
     return document;
 }
 
@@ -84,6 +88,16 @@ public:
             require(window.timeline_model_.clipCount(0) == 1 &&
                         window.timeline_model_.clipCount(1) == 1,
                     "Opening the project did not preserve clips on both tracks.");
+            require(window.timeline_model_.tracks()[0].track_id == 1 &&
+                        window.timeline_model_.tracks()[1].track_id == 2 &&
+                        window.timeline_model_.tracks()[0].clips[0].clip_id == 1 &&
+                        window.timeline_model_.tracks()[1].clips[0].clip_id == 2,
+                    "Opening the project did not preserve stable track and clip identifiers.");
+            require(window.active_timeline_track_id_.has_value() &&
+                        window.active_timeline_clip_id_.has_value() &&
+                        *window.active_timeline_track_id_ == 1 &&
+                        *window.active_timeline_clip_id_ == 1,
+                    "Opening the project did not select the first clip by stable identity.");
             require(!window.project_dirty_,
                     "Opening a saved multi-track project incorrectly marked it dirty.");
             require(window.windowTitle() == QStringLiteral("Main Editor"),
@@ -111,6 +125,24 @@ public:
                         round_tripped.timeline_tracks[0].clips.size() == 1 &&
                         round_tripped.timeline_tracks[1].clips.size() == 1,
                     "The round-trip project lost a track or clip.");
+
+            window.pending_clip_activation_ = MainWindow::PendingClipActivation{
+                0,
+                0,
+                1,
+                false,
+                window.playback_generation_,
+                false,
+                1,
+                first_source};
+            require(window.timeline_model_.removeClip(0, 0) ==
+                        timeline::RemoveClipResult::Removed,
+                    "The stale activation test could not remove its source clip.");
+            window.handlePlaybackMediaReady(window.playback_generation_);
+            require(!window.pending_clip_activation_.has_value() &&
+                        !window.active_timeline_clip_id_.has_value() &&
+                        !window.playback_is_playing_,
+                    "A stale activation for a removed clip was not discarded safely.");
         }
 
         std::error_code cleanup_error;

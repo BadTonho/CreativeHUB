@@ -14,6 +14,7 @@
 #include <limits>
 #include <string>
 #include <system_error>
+#include <unordered_set>
 #include <utility>
 
 #include "../media/media_library.h"
@@ -194,6 +195,17 @@ std::int64_t requiredInteger(const QJsonObject& object,
     return static_cast<std::int64_t>(number);
 }
 
+std::uint64_t requiredStableId(const QJsonObject& object,
+                               const char* key,
+                               const std::filesystem::path& project_path) {
+    const auto value = requiredInteger(object, key, project_path);
+    if (value <= 0) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid stable identifier.");
+    }
+    return static_cast<std::uint64_t>(value);
+}
+
 QString requiredString(const QJsonObject& object,
                        const char* key,
                        const std::filesystem::path& project_path) {
@@ -348,14 +360,32 @@ void validateDocument(const ProjectDocument& document,
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains invalid clip transform or keyframes.");
         }
     };
+    std::unordered_set<timeline::TrackId> track_ids;
+    std::unordered_set<timeline::ClipId> clip_ids;
     for (const auto& track : document.timeline_tracks) {
+        if (track.track_id == 0 ||
+            track.track_id > static_cast<timeline::TrackId>(
+                std::numeric_limits<std::int64_t>::max()) ||
+            !track_ids.insert(track.track_id).second) {
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                      "Project JSON contains a missing or duplicate track identifier.");
+        }
         if (track.name.empty()) {
             throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains a track without a name.");
         }
         if (!validAudioGain(track.audio_gain)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid track audio gain.");
         }
-        for (const auto& clip : track.clips) validate_clip(clip);
+        for (const auto& clip : track.clips) {
+            if (clip.clip_id == 0 ||
+                clip.clip_id > static_cast<timeline::ClipId>(
+                    std::numeric_limits<std::int64_t>::max()) ||
+                !clip_ids.insert(clip.clip_id).second) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains a missing or duplicate clip identifier.");
+            }
+            validate_clip(clip);
+        }
         for (std::size_t left = 0; left < track.clips.size(); ++left) {
             const auto& first = track.clips[left];
             const auto first_end =
@@ -560,12 +590,16 @@ ProjectDocument load(const std::filesystem::path& project_path) {
         }
         document.timeline_row_height = row_height_value.toDouble();
     }
+    timeline::TrackId migrated_track_id = 1;
+    timeline::ClipId migrated_clip_id = 1;
     if (version == legacy_format_version) {
         const auto clips_value = timeline_object.value("clips");
         if (!clips_value.isArray()) {
             throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the timeline clips array.");
         }
-        ProjectTrack track{"Video 1", 1.0, false, {}};
+        ProjectTrack track;
+        track.track_id = migrated_track_id++;
+        track.name = "Video 1";
         std::int64_t timeline_start = 0;
         for (const auto& clip_value : clips_value.toArray()) {
             if (!clip_value.isObject()) {
@@ -573,6 +607,7 @@ ProjectDocument load(const std::filesystem::path& project_path) {
             }
             const auto clip_object = clip_value.toObject();
             ProjectClip clip;
+            clip.clip_id = migrated_clip_id++;
             clip.source_path = resolvedPath(project_path, requiredString(clip_object, "source", project_path));
             clip.timeline_start_frame = timeline_start;
             clip.source_start_frame = requiredInteger(clip_object, "source_start_frame", project_path);
@@ -595,6 +630,9 @@ ProjectDocument load(const std::filesystem::path& project_path) {
             }
             const auto track_object = track_value.toObject();
             ProjectTrack track;
+            track.track_id = version >= stable_ids_format_version
+                ? requiredStableId(track_object, "track_id", project_path)
+                : migrated_track_id++;
             track.name = requiredString(track_object, "name", project_path).toUtf8().toStdString();
             if (track_object.contains("audio_gain")) {
                 if (!track_object.value("audio_gain").isDouble()) {
@@ -618,6 +656,9 @@ ProjectDocument load(const std::filesystem::path& project_path) {
                 }
                 const auto clip_object = clip_value.toObject();
                 ProjectClip clip;
+                clip.clip_id = version >= stable_ids_format_version
+                    ? requiredStableId(clip_object, "clip_id", project_path)
+                    : migrated_clip_id++;
                 if (version >= clip_kind_format_version && clip_object.contains("kind")) {
                     const auto kind = clip_object.value("kind");
                     if (!kind.isString()) {
@@ -776,12 +817,14 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
     QJsonArray track_array;
     for (const auto& track_source : tracks) {
         QJsonObject track;
+        track.insert("track_id", static_cast<qint64>(track_source.track_id));
         track.insert("name", QString::fromStdString(track_source.name));
         track.insert("audio_gain", track_source.audio_gain);
         track.insert("audio_muted", track_source.audio_muted);
         QJsonArray clips;
         for (const auto& clip : track_source.clips) {
             QJsonObject item;
+            item.insert("clip_id", static_cast<qint64>(clip.clip_id));
             const char* clip_kind = clip.kind == timeline::ClipKind::Text
                 ? "text"
                 : clip.kind == timeline::ClipKind::Image ? "image" : "video";

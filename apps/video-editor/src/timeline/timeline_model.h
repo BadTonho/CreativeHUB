@@ -276,6 +276,7 @@ public:
         std::int64_t timeline_frame) const;
     [[nodiscard]] std::optional<ClipLocation> topClipAt(
         std::int64_t timeline_frame) const;
+    [[nodiscard]] std::optional<std::size_t> locateTrack(TrackId track_id) const;
     [[nodiscard]] std::optional<ClipLocation> locateClip(ClipId clip_id) const;
     [[nodiscard]] const TimelineTransition* transitionBetween(
         std::size_t track_index,

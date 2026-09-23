@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 8;
+inline constexpr int current_format_version = 9;
+inline constexpr int stable_ids_format_version = 9;
 inline constexpr int media_kind_format_version = 8;
 inline constexpr int timeline_zoom_format_version = 6;
 inline constexpr int timeline_row_height_format_version = 7;
@@ -35,6 +36,7 @@ struct ProjectClip {
     timeline::TransformKeyframes keyframes;
     timeline::ClipKind kind = timeline::ClipKind::Video;
     timeline::TextStyle text;
+    timeline::ClipId clip_id = 0;
 
     friend bool operator==(const ProjectClip&, const ProjectClip&) = default;
 };
@@ -54,6 +56,7 @@ struct ProjectTrack {
     bool audio_muted = false;
     std::vector<ProjectClip> clips;
     std::vector<ProjectTransition> transitions;
+    timeline::TrackId track_id = 0;
 
     friend bool operator==(const ProjectTrack&, const ProjectTrack&) = default;
 };
