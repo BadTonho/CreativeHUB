@@ -1358,7 +1358,9 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     const bool active_clip_valid = active_clip_.has_value() &&
         active_clip_->track_index < tracks_.size() &&
         active_clip_->clip_index < tracks_[active_clip_->track_index].clips.size();
-    if (ruler_seeking_ || active_clip_valid) {
+    // The playhead is independent from clip selection. Keep it visible while
+    // the timeline has content, including after a gap click clears selection.
+    if (ruler_seeking_ || active_clip_valid || totalDuration() > 0) {
         const auto content = trackContentRect(0);
         const auto content_duration = std::max<std::int64_t>(1, totalDuration());
         const auto visual_duration = std::max<std::int64_t>(1, displayDuration());

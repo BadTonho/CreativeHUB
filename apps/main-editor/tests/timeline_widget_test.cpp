@@ -688,6 +688,18 @@ int main(int argc, char* argv[]) {
         require(isPlayheadPixel(playhead_image.pixelColor(live_playhead_x, 100)) &&
                     !isPlayheadPixel(playhead_image.pixelColor(stale_ruler_x, 100)),
                 "A stale ruler seek position prevented the live playhead from advancing.");
+
+        // Clearing selection must not hide the playhead while the timeline
+        // still contains clips.
+        playhead_widget.setActiveClip(std::nullopt);
+        playhead_widget.setPlayheadFrame(18);
+        application.processEvents();
+        QImage deselected_playhead_image(400, 300, QImage::Format_ARGB32);
+        deselected_playhead_image.fill(Qt::transparent);
+        playhead_widget.render(&deselected_playhead_image);
+        require(isPlayheadPixel(
+                    deselected_playhead_image.pixelColor(live_playhead_x, 100)),
+                "Clearing the active clip hid the timeline playhead.");
         playhead_widget.close();
         widget.setZoomFactor(1.0);
         widget.setTrackRowHeight(timeline::kMaximumTrackRowHeight);

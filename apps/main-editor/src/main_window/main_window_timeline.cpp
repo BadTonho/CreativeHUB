@@ -1302,7 +1302,10 @@ void MainWindow::handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_in
         } else {
             preserved_timeline_playhead_frame_ = previous_playhead;
         }
-        preview_widget_->clearFrame("Gap in timeline.");
+        // Clearing the selection must not clear the current preview frame.
+        // The playhead remains at the same timeline position, so the last
+        // rendered composition is still the correct visual state until the
+        // user seeks or selects another clip.
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();

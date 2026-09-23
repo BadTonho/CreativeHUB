@@ -79,8 +79,9 @@ may appear repeatedly as independent occurrences. Clip hit testing is local to
 the track row under the pointer, so a clip on another row cannot be selected
 or moved through an empty row. Direct selection in the Timeline changes the
 active clip and Media Browser selection. Clicking a content gap clears both
-selections, pauses playback, and clears the preview without creating an error
-log entry; dragging from a gap is a no-op.
+selections and pauses playback, but preserves the current playhead and last
+rendered preview frame without creating an error log entry; dragging from a
+gap is a no-op.
 
 ## Editing gestures
 
