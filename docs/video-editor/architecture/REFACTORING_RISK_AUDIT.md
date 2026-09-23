@@ -1,128 +1,132 @@
-# Video Editor Refactoring Risk Audit
+# Auditoria de Risco de Refatoração do Editor de Vídeo
 
-Status: **provisional**.
+Status: **provisório**.
 
-This audit describes the current refactoring risks in the Main Editor and
-defines a safer path for separating responsibilities. It is based on the
-repository state reviewed on 2026-09-23.
+Esta auditoria descreve os riscos atuais de refatoração no Main Editor e
+define um caminho mais seguro para separar responsabilidades. Ela foi baseada
+no estado do repositório analisado em 2026-09-23.
 
-## Baseline
+## Linha de base
 
-- Release build completed successfully.
-- 31/31 CTest tests passed.
-- The working tree was clean before this document was added.
-- The application is implemented with C++20, Qt 6 Widgets, and FFmpeg.
+- O build Release foi concluído com sucesso.
+- Os 31/31 testes do CTest passaram.
+- A working tree estava limpa antes da criação deste documento.
+- A aplicação utiliza C++20, Qt 6 Widgets e FFmpeg.
 
-The existing tests provide useful coverage for individual timeline, media,
-playback, rendering, project, and UI modules. They do not currently provide a
-full MainWindow integration boundary covering the complete UI-to-domain-to-
-playback flow.
+Os testes existentes oferecem uma boa cobertura para módulos individuais de
+timeline, mídia, reprodução, renderização, projeto e interface. Porém, ainda
+não existe uma fronteira de integração completa do `MainWindow` cobrindo todo
+o fluxo entre interface, domínio e reprodução.
 
-## Executive assessment
+## Avaliação executiva
 
-The application is already divided into source files, but it is not yet
-divided into independent responsibility and ownership boundaries. `MainWindow`
-remains the coordinator and shared mutable state holder for the UI, timeline,
-media, project persistence, autosave, playback, rendering, history, logging,
-and preferences.
+A aplicação já está dividida em arquivos-fonte, mas ainda não está dividida
+em fronteiras independentes de responsabilidade e propriedade. O
+`MainWindow` continua sendo o coordenador e o proprietário de estado mutável
+da interface, timeline, mídia, persistência do projeto, autosave, reprodução,
+renderização, histórico, logging e preferências.
 
-Moving functions between the existing `main_window_*.cpp` files will improve
-navigation but will not make changes isolated. The next refactoring must first
-separate ownership, commands, state, and contracts.
+Mover funções entre os arquivos `main_window_*.cpp` melhora a navegação, mas
+não torna as mudanças isoladas. A próxima refatoração precisa primeiro separar
+propriedade, comandos, estado e contratos.
 
-## Current dependency shape
+## Estrutura atual de dependências
 
 ```text
 MainWindow
-  |- timeline model and history
-  |- media library and media decoders
-  |- project file and autosave
-  |- playback worker, thread, and frame mailbox
-  |- preview and rendering
-  |- all editor widgets and dialogs
-  `- status messages, error dialogs, and technical logging
+  |- modelo da timeline e histórico
+  |- biblioteca de mídia e decodificadores
+  |- arquivo do projeto e autosave
+  |- worker de reprodução, thread e frame mailbox
+  |- preview e renderização
+  |- todos os widgets e diálogos do editor
+  `- mensagens de status, diálogos de erro e logging técnico
 ```
 
-This structure creates broad change propagation. A timeline edit can directly
-change selection, playback generation, worker commands, preview state, dirty
-state, history, and multiple widgets in one function.
+Essa estrutura cria uma propagação ampla de mudanças. Uma edição na timeline
+pode alterar diretamente seleção, geração de reprodução, comandos do worker,
+estado do preview, estado de alteração, histórico e vários widgets dentro da
+mesma função.
 
-## Main findings
+## Principais descobertas
 
-### 1. `MainWindow` is a God object
+### 1. `MainWindow` é um God Object
 
-`apps/video-editor/src/main_window.h` contains approximately 440 lines and
-declares operations for workspace creation, media management, project
-persistence, timeline editing, inspector editing, playback, autosave, and
-preview diagnostics.
+`apps/video-editor/src/main_window.h` possui aproximadamente 440 linhas e
+declara operações para criação do workspace, gerenciamento de mídia,
+persistência do projeto, edição da timeline, edição do inspector, reprodução,
+autosave e diagnóstico do preview.
 
-The implementation is distributed among:
+A implementação está distribuída entre:
 
-- `main_window_timeline.cpp` — approximately 2,846 lines;
-- `main_window_playback.cpp` — approximately 1,333 lines;
-- `main_window_project.cpp` — approximately 999 lines;
-- `main_window_media.cpp` — approximately 1,093 lines;
-- `main_window_workspace.cpp` — approximately 694 lines;
-- `main_window_inspector.cpp` — approximately 686 lines.
+- `main_window_timeline.cpp` — aproximadamente 2.846 linhas;
+- `main_window_playback.cpp` — aproximadamente 1.333 linhas;
+- `main_window_project.cpp` — aproximadamente 999 linhas;
+- `main_window_media.cpp` — aproximadamente 1.093 linhas;
+- `main_window_workspace.cpp` — aproximadamente 694 linhas;
+- `main_window_inspector.cpp` — aproximadamente 686 linhas.
 
-These are translation-unit boundaries, not ownership boundaries. Every file
-still mutates the same `MainWindow` fields.
+Esses arquivos são apenas divisões por unidade de tradução, não divisões de
+propriedade. Todos continuam alterando os mesmos campos do `MainWindow`.
 
-### 2. Timeline state is duplicated
+### 2. O estado da timeline está duplicado
 
-The timeline currently exposes both a multi-track representation and a legacy
-single-track compatibility representation:
+A timeline expõe uma representação com múltiplas tracks e uma representação
+de compatibilidade legada com uma única track:
 
 ```cpp
 TimelineModel::Snapshot::tracks
 TimelineModel::Snapshot::clips
 ```
 
-The project document has the equivalent duplication:
+O documento do projeto possui a duplicação equivalente:
 
 ```cpp
 ProjectDocument::timeline_tracks
 ProjectDocument::timeline_clips
 ```
 
-The canonical representation should be the multi-track representation. Legacy
-data should be handled only by migration code at the file-format boundary.
+A representação canônica deve ser a de múltiplas tracks. Dados legados devem
+ser tratados somente pelo código de migração na fronteira do formato de
+arquivo.
 
-#### Confirmed dirty-state risk
+#### Risco confirmado no estado de alteração
 
-`MainWindow::currentProjectDocument()` copies only the first track into
-`timeline_clips`, while the project loader appends clips from all tracks to
-`timeline_clips`. As a result, a multi-track project can compare unequal to
-its loaded baseline immediately after opening and appear dirty without a user
-edit.
+`MainWindow::currentProjectDocument()` copia somente a primeira track para
+`timeline_clips`, enquanto o loader do projeto adiciona clips de todas as
+tracks a `timeline_clips`. Como resultado, um projeto com múltiplas tracks
+pode ser considerado diferente da sua linha de base imediatamente após ser
+aberto e aparecer como alterado sem nenhuma edição do usuário.
 
-`project::save()` currently prefers `timeline_tracks` when it is available, so
-the serialized project may still be correct while dirty-state comparison,
-autosave deduplication, and document equality remain inconsistent.
+Atualmente, `project::save()` prioriza `timeline_tracks` quando disponível.
+Por isso, o projeto serializado ainda pode estar correto, enquanto a
+comparação do estado de alteração, a deduplicação do autosave e a igualdade do
+documento permanecem inconsistentes.
 
-### 3. Selection and pending playback use unstable indexes
+### 3. A seleção e a reprodução pendente usam índices instáveis
 
-The UI stores active locations primarily as:
+A interface armazena as localizações ativas principalmente como:
 
 ```cpp
 active_timeline_track_index_
 active_timeline_clip_index_
 ```
 
-Indexes change after sorting, moving, splitting, trimming, loading, and
-undo/redo. The timeline model already provides `TrackId` and `ClipId`, but the
-application state and pending playback activation still rely heavily on
-indexes.
+Os índices mudam depois de ordenar, mover, dividir, cortar, carregar e
+executar undo/redo. O modelo da timeline já fornece `TrackId` e `ClipId`, mas
+o estado da aplicação e a ativação pendente de reprodução ainda dependem muito
+de índices.
 
-The same risk exists in `PendingClipActivation`, which stores a clip index and
-a media vector index while asynchronous worker commands are in flight.
+O mesmo risco existe em `PendingClipActivation`, que armazena um índice de
+clip e um índice do vetor de mídia enquanto comandos assíncronos do worker
+estão em andamento.
 
-The application should store stable IDs and resolve indexes only at the UI or
-model boundary where an operation is executed.
+A aplicação deve armazenar IDs estáveis e resolver os índices somente na
+fronteira da interface ou do modelo onde a operação será executada.
 
-### 4. Event handlers mix too many responsibilities
+### 4. Os event handlers misturam responsabilidades demais
 
-Functions such as:
+Funções como:
 
 - `handleTimelineClipMoveAt()`;
 - `handleTimelineClipSplitAt()`;
@@ -131,87 +135,89 @@ Functions such as:
 - `activateTimelineClipAt()`;
 - `openProjectPath()`;
 
-currently combine:
+atualmente combinam:
 
-- UI input validation;
-- domain mutation;
-- history snapshots;
-- selection changes;
-- playback invalidation;
-- worker commands;
-- widget refresh;
-- status messages;
-- error dialogs;
-- technical logging.
+- validação da entrada da interface;
+- mutação do domínio;
+- snapshots do histórico;
+- mudanças de seleção;
+- invalidação da reprodução;
+- comandos para o worker;
+- atualização de widgets;
+- mensagens de status;
+- diálogos de erro;
+- logging técnico.
 
-This makes individual functions difficult to change or remove safely because
-their side effects are implicit and distributed across unrelated state.
+Isso torna difícil alterar ou remover uma função com segurança, pois seus
+efeitos colaterais são implícitos e estão distribuídos por estados não
+relacionados.
 
-### 5. Heavy media work runs on the UI thread
+### 5. Trabalho pesado de mídia roda na UI thread
 
-`openMedia()` and `openProjectPath()` probe media and decode preview frames
-synchronously. Importing several files or opening a project with large media
-can block the interface.
+`openMedia()` e `openProjectPath()` fazem probing da mídia e decodificam
+frames de preview de forma síncrona. Importar vários arquivos ou abrir um
+projeto com muitas mídias pode bloquear a interface.
 
-Media probing, metadata extraction, first-frame decoding, and project media
-resolution should be owned by an asynchronous service with cancellation and
-generation checks.
+O probing de mídia, a extração de metadados, a decodificação do primeiro
+frame e a resolução das mídias do projeto devem pertencer a um serviço
+assíncrono com cancelamento e verificações de geração.
 
-### 6. `PlaybackWorker` has too many responsibilities
+### 6. `PlaybackWorker` possui responsabilidades demais
 
-`playback_worker.cpp` currently contains FFmpeg video decoding, audio setup,
-audio pacing, composition, transitions, frame caches, worker lifecycle,
-diagnostics, metrics, and Qt signal/slot integration.
+`playback_worker.cpp` atualmente contém decodificação de vídeo com FFmpeg,
+configuração de áudio, sincronização de áudio, composição, transições, caches,
+ciclo de vida do worker, diagnósticos, métricas e integração com sinais e
+slots do Qt.
 
-The worker should become a thin Qt adapter around smaller components:
+O worker deve se tornar um adaptador Qt fino sobre componentes menores:
 
-- video playback session controller;
-- composition playback engine;
-- audio playback controller;
-- playback clock and pacing policy;
-- diagnostics and metrics sink.
+- controlador da sessão de reprodução de vídeo;
+- engine de composição da reprodução;
+- controlador de reprodução de áudio;
+- relógio de reprodução e política de sincronização;
+- destino de diagnósticos e métricas.
 
-### 7. `TimelineWidget` is a large interaction state machine
+### 7. `TimelineWidget` é uma máquina de estados de interação grande
 
-`timeline_widget.cpp` is approximately 2,220 lines and owns painting,
-geometry, hit testing, selection, seeking, moving, trimming, blade gestures,
-snapping, drag-and-drop, transitions, and mouse-capture state.
+`timeline_widget.cpp` possui aproximadamente 2.220 linhas e é responsável
+por pintura, geometria, hit testing, seleção, seek, movimentação, trim,
+blade, snapping, drag-and-drop, transições e captura do mouse.
 
-Existing helpers such as `TimelineTrimGesture` and
-`frame_step_navigation` demonstrate the safer direction. More interaction
-rules should move into Qt-independent helpers or small controllers, leaving
-the widget as a visual and input adapter.
+Helpers existentes como `TimelineTrimGesture` e
+`frame_step_navigation` mostram uma direção mais segura. Mais regras de
+interação devem ser movidas para helpers independentes do Qt ou para pequenos
+controladores, deixando o widget como adaptador visual e de entrada.
 
-### 8. Media data is duplicated and repeatedly searched
+### 8. Os dados de mídia estão duplicados e são pesquisados repetidamente
 
-`MainWindow::ImportedMedia` overlaps with `media::MediaItem`. Media lookup is
-repeated using linear `std::find_if` calls and path normalization.
+`MainWindow::ImportedMedia` se sobrepõe a `media::MediaItem`. A busca de mídia
+é repetida com vários `std::find_if` lineares e normalização de caminhos.
 
-The media domain should have one source of truth and an indexed lookup by
-canonical path or stable media identifier. The UI should receive a projection
-of that state instead of owning a second media collection.
+O domínio de mídia deve ter uma única fonte de verdade e uma busca indexada
+por caminho canônico ou identificador estável de mídia. A interface deve
+receber uma projeção desse estado em vez de manter uma segunda coleção.
 
-### 9. Project parsing and persistence are concentrated
+### 9. O parsing e a persistência do projeto estão concentrados
 
-`project_file.cpp` contains parsing, validation, migration, and serialization
-in one large implementation. These concerns should be separated so that a
-format migration can be changed without touching validation or writing logic.
+`project_file.cpp` contém parsing, validação, migração e serialização em uma
+implementação grande. Essas responsabilidades devem ser separadas para que
+uma mudança de migração de formato não precise alterar validação ou escrita.
 
-### 10. The integration boundary is under-tested
+### 10. A fronteira de integração possui poucos testes
 
-The current 31 passing tests are valuable, but most test individual modules.
-There is no complete MainWindow-level regression boundary covering:
+Os 31 testes atuais são importantes, mas a maioria testa módulos individuais.
+Não existe uma fronteira completa de regressão do `MainWindow` cobrindo:
 
-- multi-track project open and dirty state;
-- selection after move, split, trim, and undo/redo;
-- asynchronous clip activation cancellation;
-- media selection and timeline selection interaction;
-- playback crossing clip boundaries after edits;
-- project loading, autosave, and playback together.
+- abertura de projeto com múltiplas tracks e estado de alteração;
+- seleção depois de mover, dividir, cortar e executar undo/redo;
+- cancelamento de ativação assíncrona de clip;
+- interação entre seleção de mídia e seleção na timeline;
+- reprodução atravessando limites de clips depois de edições;
+- carregamento do projeto, autosave e reprodução em conjunto.
 
-These tests are required before large ownership changes.
+Esses testes são necessários antes de mudanças grandes de propriedade.
 
-## Target architecture
+## Arquitetura desejada
 
 ```text
 MainWindow
@@ -227,367 +233,394 @@ MainWindow
   `- PreviewWidget
 ```
 
-The intended flow is:
+O fluxo pretendido é:
 
 ```text
-UI event
-  -> typed command
-  -> application service or domain mutation
-  -> result and state/event update
-  -> history and playback coordination
-  -> UI projection refresh
+evento da interface
+  -> comando tipado
+  -> serviço da aplicação ou mutação do domínio
+  -> resultado e atualização de estado/evento
+  -> coordenação de histórico e reprodução
+  -> atualização da projeção da interface
 ```
 
-The UI should not directly coordinate model mutation, history, worker
-commands, and error presentation in the same handler.
+A interface não deve coordenar diretamente mutação de modelo, histórico,
+comandos do worker e apresentação de erros dentro do mesmo handler.
 
-## Recommended ownership boundaries
+## Fronteiras de propriedade recomendadas
 
-### Editor session state
+### Estado da sessão do editor
 
-Create an application-level session object that owns the current working
-state:
+Criar um objeto de sessão da aplicação que seja proprietário do estado de
+trabalho atual:
 
-- media library;
-- timeline model;
-- project path;
-- saved baseline;
-- dirty state;
-- selection IDs;
-- playhead state;
-- view settings that belong to the project.
+- biblioteca de mídia;
+- modelo da timeline;
+- caminho do projeto;
+- linha de base salva;
+- estado de alteração;
+- IDs de seleção;
+- estado do playhead;
+- configurações de visualização que pertencem ao projeto.
 
-The session should expose controlled operations instead of public mutable
-fields.
+A sessão deve expor operações controladas em vez de campos mutáveis públicos.
 
-### Timeline command service
+### Serviço de comandos da timeline
 
-Create typed commands for:
+Criar comandos tipados para:
 
-- add, move, delete, split, and trim clip;
-- add, update, and remove transition;
-- transform and keyframe edits;
-- text edits;
-- audio edits;
-- track creation, rename, move, and removal.
+- adicionar, mover, excluir, dividir e cortar clips;
+- adicionar, atualizar e remover transições;
+- alterar transformações e keyframes;
+- editar textos;
+- editar áudio;
+- criar, renomear, mover e remover tracks.
 
-The service should own validation, history recording, stable-ID resolution,
-and mutation results. The result should describe selection and playback
-effects without directly touching widgets.
+O serviço deve ser responsável por validação, registro no histórico, resolução
+de IDs estáveis e resultados das mutações. O resultado deve descrever efeitos
+na seleção e na reprodução sem tocar diretamente nos widgets.
 
-### Media controller and import service
+### Controlador de mídia e serviço de importação
 
-The media controller should own media-library mutations and selection. An
-asynchronous import service should own probing and first-frame decoding.
+O controlador de mídia deve ser responsável pelas mutações e pela seleção da
+biblioteca de mídia. Um serviço assíncrono de importação deve ser responsável
+por probing e decodificação do primeiro frame.
 
-### Project controller and mapper
+### Controlador e mapper do projeto
 
-Separate:
+Separar:
 
-- project loading and saving;
-- format parsing and serialization;
-- version migration;
-- document validation;
-- conversion between project documents and runtime models;
-- dirty-state comparison;
-- autosave and recovery orchestration.
+- carregamento e salvamento do projeto;
+- parsing e serialização do formato;
+- migração de versão;
+- validação do documento;
+- conversão entre documentos do projeto e modelos de runtime;
+- comparação do estado de alteração;
+- coordenação de autosave e recuperação.
 
-### Playback controller
+### Controlador de reprodução
 
-The controller should own:
+O controlador deve ser responsável por:
 
-- worker lifecycle;
-- playback generation;
-- clip activation;
-- composition snapshots;
-- frame mailbox delivery;
-- stale-result rejection;
-- playback state exposed to the UI.
+- ciclo de vida do worker;
+- geração de reprodução;
+- ativação de clips;
+- snapshots de composição;
+- entrega pelo frame mailbox;
+- rejeição de resultados obsoletos;
+- estado de reprodução exposto à interface.
 
-`MainWindow` should send typed playback requests and receive typed playback
-events instead of calling `QMetaObject::invokeMethod()` throughout timeline
-and media handlers.
+O `MainWindow` deve enviar pedidos de reprodução tipados e receber eventos de
+reprodução tipados, em vez de chamar `QMetaObject::invokeMethod()` em vários
+handlers de timeline e mídia.
 
-### Timeline presentation components
+### Componentes de apresentação da timeline
 
-Split `TimelineWidget` into focused components where practical:
+Dividir `TimelineWidget` em componentes focados quando for viável:
 
-- geometry and coordinate conversion;
+- geometria e conversão de coordenadas;
 - hit testing;
-- interaction and gesture state;
-- painting;
-- drop validation and preview.
+- interação e estado dos gestos;
+- pintura;
+- validação e preview de drops.
 
-Keep the widget-specific adapter thin and preserve the existing visual
-behavior through regression tests.
+Manter o adaptador específico do widget fino e preservar o comportamento
+visual existente por meio de testes de regressão.
 
-## Safe refactoring sequence
+## Sequência segura de refatoração
 
-### Phase 0 — protect behavior
+### Fase 0 — proteger o comportamento
 
-Add integration coverage before moving ownership:
+Adicionar cobertura de integração antes de mover responsabilidades:
 
-- multi-track project open and dirty-state behavior;
-- project round-trip with multiple tracks;
-- active selection after move, split, trim, and undo/redo;
-- pending playback activation invalidated by a newer command;
-- playback crossing video, image, and text boundaries;
-- media import cancellation and failure reporting.
+- abertura de projeto com múltiplas tracks e comportamento do estado de
+  alteração;
+- round-trip de projeto com múltiplas tracks;
+- seleção ativa depois de mover, dividir, cortar e executar undo/redo;
+- invalidação de ativação pendente de reprodução por um comando mais recente;
+- reprodução atravessando limites de vídeo, imagem e texto;
+- cancelamento e falha de importação de mídia.
 
-### Phase 1 — remove duplicate state
+### Fase 1 — remover estado duplicado
 
-Make `tracks` and `timeline_tracks` canonical. Keep legacy compatibility only
-inside project migration and remove compatibility accessors after callers are
-migrated.
+Tornar `tracks` e `timeline_tracks` canônicos. Manter a compatibilidade legada
+somente dentro da migração do projeto e remover os accessors de compatibilidade
+depois que todos os callers forem migrados.
 
-### Phase 2 — migrate selection to stable IDs
+### Fase 2 — migrar a seleção para IDs estáveis
 
-Replace active track and clip indexes in application state with `TrackId` and
-`ClipId`. Resolve indexes only when interacting with a vector or widget.
+Substituir os índices de track e clip no estado da aplicação por `TrackId` e
+`ClipId` opcionais. Resolver índices somente ao interagir com um vetor ou
+widget.
 
-### Phase 3 — extract timeline commands
+### Fase 3 — extrair comandos da timeline
 
-Move one end-to-end operation first, preferably clip movement. Establish the
-pattern:
+Mover primeiro uma operação completa de ponta a ponta, preferencialmente a
+movimentação de clip. Estabelecer o padrão:
 
 ```text
-TimelineWidget signal
+sinal do TimelineWidget
   -> MoveClipCommand
   -> TimelineCommandService
   -> EditResult
-  -> MainWindow projection update
+  -> atualização da projeção do MainWindow
 ```
 
-Migrate the remaining editing operations only after the pattern is tested.
+Migrar as demais operações de edição somente depois que esse padrão estiver
+testado.
 
-### Phase 4 — extract project and media controllers
+### Fase 4 — extrair controladores de projeto e mídia
 
-Move project lifecycle and media import out of `MainWindow`. Keep UI dialogs
-as presentation code and return structured errors from services.
+Mover o ciclo de vida do projeto e a importação de mídia para fora do
+`MainWindow`. Manter os diálogos da interface como código de apresentação e
+retornar erros estruturados pelos serviços.
 
-### Phase 5 — extract playback controller
+### Fase 5 — extrair o controlador de reprodução
 
-Centralize worker commands, generations, pending activation, mailbox handling,
-and playback events.
+Centralizar comandos do worker, gerações, ativação pendente, recebimento pelo
+mailbox e eventos de reprodução.
 
-### Phase 6 — reduce and split the timeline widget
+### Fase 6 — reduzir e dividir o widget da timeline
 
-Extract painting, hit testing, and interaction state incrementally. Preserve
-the current signals until all callers are migrated, then remove compatibility
-signals and legacy APIs.
+Extrair pintura, hit testing e estado de interação de forma incremental.
+Preservar os sinais atuais até que todos os callers sejam migrados; depois,
+remover sinais de compatibilidade e APIs legadas.
 
-## Invariants to enforce
+## Invariantes que devem ser aplicadas
 
-1. `TimelineModel::tracks` is the only runtime timeline source of truth.
-2. Every track and clip has a unique stable ID.
-3. Selection is either empty or references an existing stable ID.
-4. Project dirty state compares canonical document representations.
-5. Worker commands carry a generation and stable clip identity.
-6. A stale playback result cannot change current UI state.
-7. UI code does not mutate domain models outside application services.
-8. Every successful mutation produces one history entry where required.
-9. Intentional no-op user actions are not logged as technical errors.
-10. Every unexpected technical failure is logged before user notification.
+1. `TimelineModel::tracks` é a única fonte de verdade da timeline em runtime.
+2. Cada track e clip possui um ID estável e único.
+3. A seleção é vazia ou referencia um ID estável existente.
+4. O estado de alteração compara representações canônicas do documento.
+5. Comandos do worker carregam uma geração e a identidade estável do clip.
+6. Um resultado obsoleto de reprodução não pode alterar o estado atual da
+   interface.
+7. O código da interface não altera modelos do domínio fora dos serviços da
+   aplicação.
+8. Cada mutação bem-sucedida produz uma entrada de histórico quando necessário.
+9. Ações intencionais sem efeito não são registradas como erros técnicos.
+10. Toda falha técnica inesperada é registrada antes da notificação ao usuário.
 
-## Priority classification
+## Classificação de prioridade
 
-### High priority
+### Alta prioridade
 
-- Remove duplicate timeline and project representations.
-- Replace index-based application state with stable IDs.
-- Add MainWindow integration tests.
-- Extract timeline mutation commands.
-- Move media decoding out of the UI thread.
+- remover representações duplicadas de timeline e projeto;
+- substituir o estado da aplicação baseado em índices por IDs estáveis;
+- adicionar testes de integração do `MainWindow`;
+- extrair comandos de mutação da timeline;
+- mover a decodificação de mídia para fora da UI thread.
 
-### Medium priority
+### Média prioridade
 
-- Extract project controller and document mapper.
-- Extract playback controller.
-- Split TimelineWidget interaction and rendering responsibilities.
-- Remove duplicated `ImportedMedia` state and linear media lookup.
+- extrair o controlador do projeto e o mapper de documentos;
+- extrair o controlador de reprodução;
+- dividir as responsabilidades de interação e renderização do
+  `TimelineWidget`;
+- remover o estado duplicado de `ImportedMedia` e as buscas lineares de mídia.
 
-### Lower priority
+### Menor prioridade
 
-- Separate workspace construction from application coordination.
-- Reduce include coupling in `main_window.h`.
-- Replace global metrics access with an injected diagnostics interface.
-- Organize CMake into internal application targets after boundaries stabilize.
+- separar a construção do workspace da coordenação da aplicação;
+- reduzir o acoplamento de includes em `main_window.h`;
+- substituir o acesso global às métricas por uma interface de diagnóstico
+  injetada;
+- organizar o CMake em targets internos depois que as fronteiras estiverem
+  estabilizadas.
 
-## Conclusion
+## Conclusão
 
-The safest strategy is not to move functions into more files immediately. The
-first step is to establish ownership, stable identities, typed commands, and
-integration tests. Once those contracts exist, functions can be created,
-changed, or removed with a much smaller and more visible impact surface.
+A estratégia mais segura não é mover funções imediatamente para mais arquivos.
+O primeiro passo é estabelecer propriedade, identidades estáveis, comandos
+tipados e testes de integração. Depois que esses contratos existirem, será
+possível criar, alterar ou excluir funções com uma superfície de impacto muito
+menor e mais visível.
 
-## Final implementation checklist
+## Etapas finais de implementação
 
-Follow these steps in order. Do not start the next phase until the completion
-criteria for the current phase are met.
+Siga estas etapas na ordem. Não comece a próxima fase até que os critérios de
+conclusão da fase atual sejam atendidos.
 
-### Step 1 — Create a behavior baseline
+### Etapa 1 — criar uma linha de base de comportamento
 
-1. Confirm that the Release build succeeds.
-2. Run the complete test suite and record the result.
-3. Manually validate the current behavior for opening a project, importing
-   media, adding a clip, moving a clip, trimming, splitting, undo/redo,
-   playback, saving, and reopening.
-4. Add regression tests for every behavior that is currently missing,
-   especially multi-track projects and asynchronous playback activation.
+1. Confirmar que o build Release continua funcionando.
+2. Executar toda a suíte de testes e registrar o resultado.
+3. Validar manualmente o comportamento atual para abrir um projeto, importar
+   mídia, adicionar um clip, mover um clip, fazer trim, dividir, executar
+   undo/redo, reproduzir, salvar e reabrir.
+4. Adicionar testes de regressão para todo comportamento importante que ainda
+   não tenha cobertura, principalmente projetos com múltiplas tracks e
+   ativação assíncrona de reprodução.
 
-Completion criteria:
+Critérios de conclusão:
 
-- The test suite passes before the refactoring starts.
-- The important current behaviors are documented by automated tests or by a
-  precise manual validation checklist.
-- No refactoring changes are mixed into this baseline commit.
+- A suíte de testes passa antes do início da refatoração.
+- Os comportamentos importantes estão documentados por testes automatizados
+  ou por uma checklist manual precisa.
+- Nenhuma mudança de refatoração é misturada nesta linha de base.
 
-### Step 2 — Fix the canonical timeline representation
+### Etapa 2 — corrigir a representação canônica da timeline
 
-1. Make `TimelineModel::tracks` the only runtime timeline representation.
-2. Make `ProjectDocument::timeline_tracks` the only serialized timeline
-   representation.
-3. Move support for `timeline_clips` into project migration and compatibility
-   loading only.
-4. Update document creation, loading, saving, equality, dirty-state checks,
-   autosave, and undo/redo snapshots to use the canonical representation.
-5. Add a test that opens a multi-track project and confirms that it is not
-   dirty until the user edits it.
+1. Tornar `TimelineModel::tracks` a única representação da timeline em
+   runtime.
+2. Tornar `ProjectDocument::timeline_tracks` a única representação serializada
+   da timeline.
+3. Mover o suporte a `timeline_clips` somente para a migração e o carregamento
+   de compatibilidade do projeto.
+4. Atualizar criação do documento, carregamento, salvamento, igualdade,
+   verificações de estado de alteração, autosave e snapshots de undo/redo para
+   usar a representação canônica.
+5. Adicionar um teste que abra um projeto com múltiplas tracks e confirme que
+   ele não fica alterado até que o usuário faça uma edição.
 
-Completion criteria:
+Critérios de conclusão:
 
-- There is one runtime timeline source of truth.
-- Multi-track projects round-trip without losing clips.
-- Opening a valid project does not create a false dirty state.
-- All existing tests still pass.
+- Existe uma única fonte de verdade da timeline em runtime.
+- Projetos com múltiplas tracks fazem round-trip sem perder clips.
+- Abrir um projeto válido não cria um falso estado de alteração.
+- Todos os testes existentes continuam passando.
 
-### Step 3 — Replace indexes with stable identities
+### Etapa 3 — substituir índices por identidades estáveis
 
-1. Add or confirm stable `TrackId` and `ClipId` values for every track and
-   clip.
-2. Replace application-level active track and clip indexes with optional
-   stable IDs.
-3. Update selection, inspector editing, timeline commands, undo/redo, and
-   project loading to use IDs.
-4. Resolve an ID to a vector index only at the model or presentation boundary.
-5. Update `PendingClipActivation` so asynchronous requests carry stable clip
-   identity, media identity, and a playback generation.
-6. Define behavior for deleted or missing IDs: reject the operation safely,
-   clear invalid selection, and log only unexpected technical failures.
+1. Adicionar ou confirmar valores estáveis de `TrackId` e `ClipId` para cada
+   track e clip.
+2. Substituir índices de track e clip ativos no estado da aplicação por IDs
+   estáveis opcionais.
+3. Atualizar seleção, edição do inspector, comandos da timeline, undo/redo e
+   carregamento do projeto para usar IDs.
+4. Resolver um ID para um índice somente na fronteira do modelo ou da
+   apresentação.
+5. Atualizar `PendingClipActivation` para transportar identidade estável do
+   clip, identidade da mídia e uma geração de reprodução.
+6. Definir o comportamento para IDs excluídos ou ausentes: rejeitar a
+   operação com segurança, limpar a seleção inválida e registrar somente
+   falhas técnicas inesperadas.
 
-Completion criteria:
+Critérios de conclusão:
 
-- Moving, sorting, splitting, trimming, loading, and undoing do not select a
-  different clip because a vector index changed.
-- A stale asynchronous request cannot activate a newly inserted clip at the
-  same index.
-- Selection remains valid after every tested mutation.
+- Mover, ordenar, dividir, cortar, carregar e desfazer não selecionam outro
+  clip porque um índice de vetor mudou.
+- Uma requisição assíncrona obsoleta não consegue ativar um clip novo que
+  ocupou o mesmo índice.
+- A seleção permanece válida depois de cada mutação testada.
 
-### Step 4 — Add the application service boundary
+### Etapa 4 — criar a fronteira de serviço da aplicação
 
-1. Introduce an `EditorSession` or equivalent object to own current document
-   state, media state, selection, playhead, saved baseline, and dirty state.
-2. Introduce `TimelineCommandService` with typed operations for one edit at a
-   time.
-3. Start with clip movement because it exercises validation, selection,
-   history, playback invalidation, and UI refresh.
-4. Return structured results such as mutation status, affected IDs, new
-   selection, and playback invalidation requirements.
-5. Keep Qt widgets and dialogs out of the service layer.
-6. Convert split, trim, delete, add, and transition operations one by one.
+1. Introduzir um `EditorSession` ou objeto equivalente para possuir o estado
+   atual do documento, mídia, seleção, playhead, linha de base salva e estado
+   de alteração.
+2. Introduzir o `TimelineCommandService` com operações tipadas, uma edição por
+   vez.
+3. Começar pelo movimento de clip, pois ele exercita validação, seleção,
+   histórico, invalidação de reprodução e atualização da interface.
+4. Retornar resultados estruturados, como status da mutação, IDs afetados,
+   nova seleção e necessidade de invalidar a reprodução.
+5. Manter widgets Qt e diálogos fora da camada de serviços.
+6. Converter as operações de dividir, cortar, excluir, adicionar e transição
+   uma por uma.
 
-Completion criteria:
+Critérios de conclusão:
 
-- A timeline edit can be tested without constructing the full `MainWindow`.
-- Each successful edit creates exactly one history entry when required.
-- Intentional no-ops do not create history entries or error logs.
-- `MainWindow` coordinates results instead of directly implementing domain
-  mutation rules.
+- Uma edição da timeline pode ser testada sem construir o `MainWindow` inteiro.
+- Cada edição bem-sucedida cria exatamente uma entrada de histórico quando
+  necessário.
+- Ações intencionais sem efeito não criam entradas de histórico nem logs de
+  erro.
+- O `MainWindow` coordena resultados em vez de implementar diretamente as
+  regras de mutação do domínio.
 
-### Step 5 — Extract project and media responsibilities
+### Etapa 5 — extrair as responsabilidades de projeto e mídia
 
-1. Create a project controller for open, save, close, autosave, recovery, and
-   dirty-state transitions.
-2. Separate project parsing, validation, migration, serialization, and
-   runtime mapping into focused components.
-3. Create a media controller with one media-library source of truth and
-   indexed lookup by stable media ID or canonical path.
-4. Move media probing, metadata extraction, and first-frame decoding to an
-   asynchronous import service.
-5. Add cancellation and generation checks so an old import cannot overwrite a
-   newer selection or project state.
-6. Return structured errors from controllers and keep dialogs in the UI
-   layer. Log unexpected technical errors before displaying them.
+1. Criar um controlador de projeto para abrir, salvar, fechar, executar
+   autosave, recuperar e controlar transições do estado de alteração.
+2. Separar parsing, validação, migração, serialização e mapeamento para os
+   modelos de runtime em componentes focados.
+3. Criar um controlador de mídia com uma única fonte de verdade para a
+   biblioteca e busca indexada por ID estável ou caminho canônico.
+4. Mover probing de mídia, extração de metadados e decodificação do primeiro
+   frame para um serviço de importação assíncrono.
+5. Adicionar cancelamento e verificações de geração para impedir que uma
+   importação antiga sobrescreva uma seleção ou estado de projeto mais novo.
+6. Retornar erros estruturados pelos controladores e manter os diálogos na
+   camada da interface. Registrar falhas técnicas inesperadas antes de
+   apresentá-las ao usuário.
 
-Completion criteria:
+Critérios de conclusão:
 
-- `MainWindow` no longer owns duplicate media records or project lifecycle
-  rules.
-- Opening or importing large media does not perform decoding synchronously on
-  the UI thread.
-- Project round-trip, migration, autosave, failure, and cancellation tests
-  pass.
+- O `MainWindow` não possui mais registros de mídia duplicados nem regras do
+  ciclo de vida do projeto.
+- Abrir ou importar mídias grandes não executa decodificação síncrona na UI
+  thread.
+- Testes de round-trip, migração, autosave, falha e cancelamento do projeto e
+  da mídia passam.
 
-### Step 6 — Extract playback coordination
+### Etapa 6 — extrair a coordenação da reprodução
 
-1. Create a `PlaybackController` that owns worker lifecycle, generations,
-   pending activation, composition snapshots, mailbox delivery, and stale
-   result rejection.
-2. Make `PlaybackWorker` a focused execution adapter rather than the owner of
-   every playback policy.
-3. Separate decoding, composition, audio pacing, caching, lifecycle, and
-   diagnostics behind small interfaces where the existing code supports it.
-4. Replace scattered worker calls and `QMetaObject::invokeMethod()` calls with
-   typed playback requests.
-5. Add tests for play, pause, seek, clip-boundary crossing, edit during
-   playback, rapid activation changes, and worker shutdown.
+1. Criar um `PlaybackController` responsável pelo ciclo de vida do worker,
+   gerações, ativação pendente, snapshots de composição, entrega pelo mailbox
+   e rejeição de resultados obsoletos.
+2. Tornar o `PlaybackWorker` um adaptador de execução focado, em vez de
+   proprietário de todas as políticas de reprodução.
+3. Separar decodificação, composição, sincronização de áudio, cache, ciclo de
+   vida e diagnósticos por interfaces pequenas quando o código existente
+   permitir.
+4. Substituir chamadas espalhadas ao worker e a
+   `QMetaObject::invokeMethod()` por requisições de reprodução tipadas.
+5. Adicionar testes para play, pause, seek, passagem entre clips, edição
+   durante a reprodução, mudanças rápidas de ativação e encerramento do
+   worker.
 
-Completion criteria:
+Critérios de conclusão:
 
-- Only the playback controller coordinates worker commands.
-- A stale frame or completion event cannot change the current preview state.
-- Playback remains responsive while timeline and media operations are edited.
-- Shutdown does not leave a worker, timer, or queued request active.
+- Somente o controlador de reprodução coordena comandos do worker.
+- Um frame ou evento de conclusão obsoleto não altera o preview atual.
+- A reprodução continua responsiva enquanto a timeline e a mídia são editadas.
+- O encerramento não deixa worker, timer ou requisição enfileirada ativos.
 
-### Step 7 — Reduce `MainWindow` and split `TimelineWidget`
+### Etapa 7 — reduzir o `MainWindow` e dividir o `TimelineWidget`
 
-1. Remove migrated fields and methods from `MainWindow` immediately after each
-   controller is adopted.
-2. Keep `MainWindow` responsible for composition of widgets, application
-   wiring, and high-level presentation only.
-3. Extract timeline geometry and coordinate conversion.
-4. Extract hit testing and drop validation.
-5. Extract gesture state for move, trim, blade, snapping, and drag-and-drop.
-6. Extract painting from interaction state.
-7. Preserve existing signals temporarily, then remove compatibility signals
-   after all callers use typed results or events.
+1. Remover campos e métodos migrados do `MainWindow` imediatamente após cada
+   controlador ser adotado.
+2. Manter o `MainWindow` responsável apenas pela composição dos widgets,
+   conexão da aplicação e apresentação de alto nível.
+3. Extrair geometria e conversão de coordenadas da timeline.
+4. Extrair hit testing e validação de drops.
+5. Extrair o estado dos gestos de mover, trim, blade, snapping e
+   drag-and-drop.
+6. Extrair a pintura do estado de interação.
+7. Preservar temporariamente os sinais atuais e removê-los quando todos os
+   callers estiverem usando resultados ou eventos tipados.
 
-Completion criteria:
+Critérios de conclusão:
 
-- `MainWindow` no longer directly mutates timeline, media, project, or
-  playback internals.
-- `TimelineWidget` is primarily a visual and input adapter.
-- Timeline interaction tests and manual visual checks show no regressions.
+- O `MainWindow` não altera diretamente os detalhes internos de timeline,
+  mídia, projeto ou reprodução.
+- O `TimelineWidget` é principalmente um adaptador visual e de entrada.
+- Os testes de interação da timeline e as verificações visuais manuais não
+  mostram regressões.
 
-### Step 8 — Enforce the architecture continuously
+### Etapa 8 — aplicar a arquitetura continuamente
 
-1. Add boundary tests for each controller and for the complete UI-to-service
-   flow.
-2. Add assertions for unique IDs, valid selection, canonical dirty state, and
-   generation-aware playback requests.
-3. Review new code against the ownership rules before merging it.
-4. Keep documentation and `docs/video-editor/SHORTCUTS.md` synchronized when
-   behavior or shortcuts change.
-5. Run the Release build, the full test suite, `git diff --check`, and a
-   repository/security review after each coherent refactoring phase.
+1. Adicionar testes de fronteira para cada controlador e para o fluxo completo
+   entre interface e serviços.
+2. Adicionar assertions para IDs únicos, seleção válida, estado de alteração
+   canônico e requisições de reprodução com geração.
+3. Revisar o código novo de acordo com as regras de propriedade antes de
+   integrá-lo.
+4. Manter a documentação e `docs/video-editor/SHORTCUTS.md` sincronizados
+   quando o comportamento ou os atalhos mudarem.
+5. Executar o build Release, a suíte completa de testes, `git diff --check` e
+   uma revisão de repositório e segurança depois de cada fase coerente de
+   refatoração.
 
-Final definition of done:
+Definição final de concluído:
 
-- The full test suite passes.
-- The Release build succeeds.
-- Multi-track projects, selection, undo/redo, import, playback, save, and
-  recovery have regression coverage.
-- Each major responsibility has one clear owner.
-- New functions can be added, changed, or removed by following a visible
-  contract instead of tracing unrelated `MainWindow` side effects.
-- No user-facing behavior changed unintentionally.
+- A suíte completa de testes passa.
+- O build Release funciona.
+- Projetos com múltiplas tracks, seleção, undo/redo, importação, reprodução,
+  salvamento e recuperação possuem cobertura de regressão.
+- Cada responsabilidade principal possui um único proprietário claro.
+- Novas funções podem ser adicionadas, alteradas ou removidas seguindo um
+  contrato visível, sem rastrear efeitos colaterais não relacionados do
+  `MainWindow`.
+- Nenhum comportamento visível ao usuário mudou de forma não intencional.
