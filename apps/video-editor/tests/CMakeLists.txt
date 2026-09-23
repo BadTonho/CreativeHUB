@@ -356,6 +356,33 @@ add_test(
     COMMAND creative-suite-main-editor-timeline-tests
 )
 
+add_executable(creative-suite-main-editor-timeline-trim-gesture-tests
+    timeline_trim_gesture_test.cpp
+    ../src/timeline/timeline_model.cpp
+    ../src/timeline/timeline_model.h
+    ../src/timeline/timeline_transform.cpp
+    ../src/timeline/timeline_transform.h
+    ../src/timeline/timeline_trim_gesture.cpp
+    ../src/timeline/timeline_trim_gesture.h
+)
+
+target_include_directories(creative-suite-main-editor-timeline-trim-gesture-tests PRIVATE
+    ../src
+)
+
+target_compile_features(creative-suite-main-editor-timeline-trim-gesture-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-timeline-trim-gesture-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-timeline-trim-gesture-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-timeline-trim-gesture
+    COMMAND creative-suite-main-editor-timeline-trim-gesture-tests
+)
+
 add_executable(creative-suite-main-editor-transform-compositor-tests
     transform_compositor_test.cpp
     ../src/media/video_frame.h
@@ -459,6 +486,8 @@ add_executable(creative-suite-main-editor-timeline-widget-tests
     ../src/timeline/timeline_layout.h
     ../src/timeline/timeline_track_header_overlay.cpp
     ../src/timeline/timeline_track_header_overlay.h
+    ../src/timeline/timeline_trim_gesture.cpp
+    ../src/timeline/timeline_trim_gesture.h
     ../src/timeline/timeline_widget.cpp
     ../src/timeline/timeline_widget.h
     ../src/timeline/timeline_transform.cpp

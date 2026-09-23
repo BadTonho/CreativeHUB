@@ -35,6 +35,12 @@ interactions. Changes to gestures can interact with selection, preview
 painting, and drop behavior. Consider extracting the affected interaction
 policy while preserving the widget's signal behavior.
 
+**Progress (2026-09-23):** The edge-trim gesture's transition-click decision,
+preview state, and release decision are now isolated in a Qt-independent
+`TimelineTrimGesture`. The widget still owns coordinates, painting, mouse
+capture, and signal emission. Other gestures remain in the widget and should
+be extracted only when a concrete change calls for it.
+
 ### 3. Playback worker responsibilities — high priority for playback changes
 
 `src/playback/playback_worker.cpp` is approximately 1,485 lines and coordinates

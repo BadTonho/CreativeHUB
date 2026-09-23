@@ -88,6 +88,8 @@ add_executable(creative-suite-main-editor
     src/timeline/timeline_history.h
     src/timeline/timeline_track_header_overlay.cpp
     src/timeline/timeline_track_header_overlay.h
+    src/timeline/timeline_trim_gesture.cpp
+    src/timeline/timeline_trim_gesture.h
     src/timeline/timeline_widget.cpp
     src/timeline/timeline_widget.h
     src/ui/media_browser_list_widget.cpp

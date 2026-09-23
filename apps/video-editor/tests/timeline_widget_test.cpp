@@ -1223,6 +1223,203 @@ int main(int argc, char* argv[]) {
                 "The right edge extension was not committed once on release.");
         edge_drag_widget.close();
 
+        // The shared-cut gesture defers selection until a valid move and
+        // commits at the release position, preserving the signal order.
+        timeline::TimelineWidget gesture_widget;
+        gesture_widget.resize(1000, 180);
+        gesture_widget.setTimelineViewportWidth(1000);
+        auto gesture_first = makeClip("gesture-first.mkv", 0, 100, "First");
+        auto gesture_second = makeClip("gesture-second.mkv", 100, 100, "Second");
+        gesture_first.frame_count = 300;
+        gesture_second.source_start_frame = 100;
+        gesture_second.frame_count = 300;
+        gesture_widget.setTracks({timeline::TimelineTrack{
+            1, "Video 1", 1.0, false, {gesture_first, gesture_second}}});
+        gesture_widget.setZoomFactor(512.0);
+        gesture_widget.setMinimumWidth(1000);
+        gesture_widget.resize(1000, 180);
+        gesture_widget.show();
+        application.processEvents();
+        std::vector<std::string> gesture_signals;
+        qint64 gesture_boundary = -1;
+        QObject::connect(
+            &gesture_widget, &timeline::TimelineWidget::transitionSelectedAt,
+            [&gesture_signals](qint64, qint64 from, qint64 to) {
+                if (from >= 0 && to >= 0) gesture_signals.emplace_back("transition");
+            });
+        QObject::connect(
+            &gesture_widget, &timeline::TimelineWidget::clipSelectedAt,
+            [&gesture_signals](qint64, qint64) {
+                gesture_signals.emplace_back("select");
+            });
+        QObject::connect(
+            &gesture_widget, &timeline::TimelineWidget::trimStarted,
+            [&gesture_signals]() { gesture_signals.emplace_back("start"); });
+        QObject::connect(
+            &gesture_widget, &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
+            [&gesture_signals, &gesture_boundary](
+                qint64, qint64, qint64, qint64 boundary, qint64) {
+                gesture_signals.emplace_back("modern");
+                gesture_boundary = boundary;
+            });
+        QObject::connect(
+            &gesture_widget, &timeline::TimelineWidget::clipTrimRequested,
+            [&gesture_signals](qint64, qint64, qint64) {
+                gesture_signals.emplace_back("legacy");
+            });
+        const auto gesture_seam_x = gesture_widget.contentXForFrame(100);
+        sendMouse(gesture_widget, QEvent::MouseButtonPress,
+                  QPointF(gesture_seam_x, 110), Qt::LeftButton);
+        require(gesture_signals.empty(),
+                "Pressing a shared cut selected a clip or started a trim.");
+        sendMouse(gesture_widget, QEvent::MouseMove,
+                  QPointF(gesture_seam_x, 110), Qt::LeftButton);
+        require(gesture_signals.empty(),
+                "An unchanged shared boundary started a trim.");
+        sendMouse(gesture_widget, QEvent::MouseButtonRelease,
+                  QPointF(gesture_seam_x, 110), Qt::NoButton);
+        require(gesture_signals == std::vector<std::string>{"transition"},
+                "A shared-cut click did not select only the transition.");
+        gesture_signals.clear();
+        sendMouse(gesture_widget, QEvent::MouseButtonPress,
+                  QPointF(gesture_seam_x, 110), Qt::LeftButton);
+        sendMouse(gesture_widget, QEvent::MouseMove,
+                  QPointF(gesture_widget.contentXForFrame(110), 110), Qt::LeftButton);
+        require(gesture_signals ==
+                    (std::vector<std::string>{"select", "start"}),
+                "A valid shared-cut move changed the selection/start signal order.");
+        sendMouse(gesture_widget, QEvent::MouseButtonRelease,
+                  QPointF(gesture_widget.contentXForFrame(112), 110), Qt::NoButton);
+        std::string gesture_result;
+        for (const auto& signal : gesture_signals) gesture_result += signal + ",";
+        require(gesture_signals ==
+                    (std::vector<std::string>{"select", "start", "modern", "legacy"}) &&
+                    gesture_boundary == 112,
+                "A shared-cut release did not request one trim at its final position: " +
+                    gesture_result + " boundary=" + std::to_string(gesture_boundary));
+
+        // MainWindow refreshes the widget's tracks synchronously from the
+        // selection signal. Promotion must survive that refresh.
+        gesture_signals.clear();
+        const auto selection_refresh = QObject::connect(
+            &gesture_widget, &timeline::TimelineWidget::clipSelectedAt,
+            [&gesture_widget, &gesture_first, &gesture_second](qint64, qint64) {
+                gesture_widget.setTracks({timeline::TimelineTrack{
+                    1, "Video 1", 1.0, false,
+                    {gesture_first, gesture_second}}});
+            });
+        const auto refreshed_start_x = gesture_widget.contentXForFrame(100);
+        sendMouse(gesture_widget, QEvent::MouseButtonPress,
+                  QPointF(refreshed_start_x, 110), Qt::LeftButton);
+        sendMouse(gesture_widget, QEvent::MouseMove,
+                  QPointF(gesture_widget.contentXForFrame(110), 110), Qt::LeftButton);
+        sendMouse(gesture_widget, QEvent::MouseButtonRelease,
+                  QPointF(gesture_widget.contentXForFrame(112), 110), Qt::NoButton);
+        QObject::disconnect(selection_refresh);
+        require(gesture_signals ==
+                    (std::vector<std::string>{"select", "start", "modern", "legacy"}),
+                "A synchronous selection refresh cancelled the shared-cut trim.");
+
+        gesture_signals.clear();
+        const auto cancelled_seam_x = gesture_widget.contentXForFrame(100);
+        sendMouse(gesture_widget, QEvent::MouseButtonPress,
+                  QPointF(cancelled_seam_x, 110), Qt::LeftButton);
+        sendMouse(gesture_widget, QEvent::MouseMove,
+                  QPointF(gesture_widget.contentXForFrame(110), 110), Qt::LeftButton);
+        gesture_widget.setTracks({timeline::TimelineTrack{
+            1, "Video 1", 1.0, false, {gesture_first, gesture_second}}});
+        require(gesture_widget.cursor().shape() == Qt::ArrowCursor,
+                "Replacing tracks during a trim left the resize cursor active.");
+        sendMouse(gesture_widget, QEvent::MouseButtonRelease,
+                  QPointF(gesture_widget.contentXForFrame(112), 110), Qt::NoButton);
+        require(gesture_signals ==
+                    (std::vector<std::string>{"select", "start"}),
+                "Replacing tracks during a trim left a pending edit request.");
+        gesture_signals.clear();
+        const auto refreshed_seam_x = gesture_widget.contentXForFrame(100);
+        sendMouse(gesture_widget, QEvent::MouseButtonPress,
+                  QPointF(refreshed_seam_x, 110), Qt::LeftButton);
+        require(gesture_signals.empty(),
+                "Pressing the refreshed shared cut was not pending: old=" +
+                    std::to_string(gesture_seam_x) + " new=" +
+                    std::to_string(refreshed_seam_x));
+        gesture_widget.clearClips();
+        require(gesture_widget.cursor().shape() == Qt::ArrowCursor,
+                "Clearing clips during a trim left the resize cursor active.");
+        sendMouse(gesture_widget, QEvent::MouseButtonRelease,
+                  QPointF(gesture_seam_x, 110), Qt::NoButton);
+        std::string cleared_signals;
+        for (const auto& signal : gesture_signals) cleared_signals += signal + ",";
+        require(gesture_signals.empty(),
+                "Clearing clips during a pending shared cut emitted a trim or selection: " +
+                    cleared_signals);
+        gesture_widget.close();
+
+        timeline::TimelineWidget legacy_trim_widget;
+        legacy_trim_widget.resize(1000, 180);
+        legacy_trim_widget.setTimelineViewportWidth(1000);
+        auto legacy_clip = makeClip("legacy-trim.mkv", 50, 50, "Legacy");
+        legacy_clip.source_start_frame = 50;
+        legacy_clip.frame_count = 300;
+        legacy_trim_widget.setTracks({timeline::TimelineTrack{
+            1, "Video 1", 1.0, false, {legacy_clip}}});
+        legacy_trim_widget.setZoomFactor(512.0);
+        legacy_trim_widget.setMinimumWidth(1000);
+        legacy_trim_widget.resize(1000, 180);
+        legacy_trim_widget.show();
+        application.processEvents();
+        std::vector<std::string> legacy_signals;
+        qint64 legacy_start = -1;
+        qint64 legacy_end = -1;
+        QObject::connect(&legacy_trim_widget,
+                         &timeline::TimelineWidget::clipSelectedAt,
+                         [&legacy_signals](qint64, qint64) {
+                             legacy_signals.emplace_back("select");
+                         });
+        QObject::connect(&legacy_trim_widget,
+                         &timeline::TimelineWidget::trimStarted,
+                         [&legacy_signals]() {
+                             legacy_signals.emplace_back("start");
+                         });
+        QObject::connect(&legacy_trim_widget,
+                         &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
+                         [&legacy_signals](qint64, qint64, qint64, qint64, qint64) {
+                             legacy_signals.emplace_back("modern");
+                         });
+        QObject::connect(&legacy_trim_widget,
+                         &timeline::TimelineWidget::clipTrimRequested,
+                         [&legacy_signals, &legacy_start, &legacy_end](
+                             qint64, qint64 start, qint64 end) {
+                             legacy_signals.emplace_back("legacy");
+                             legacy_start = start;
+                             legacy_end = end;
+                         });
+        const auto legacy_left_x = legacy_trim_widget.contentXForFrame(50);
+        sendMouse(legacy_trim_widget, QEvent::MouseButtonPress,
+                  QPointF(legacy_left_x, 110), Qt::LeftButton);
+        sendMouse(legacy_trim_widget, QEvent::MouseButtonRelease,
+                  QPointF(legacy_left_x, 110), Qt::NoButton);
+        require(legacy_signals ==
+                    (std::vector<std::string>{"select", "start"}),
+                "A no-op edge click requested a trim.");
+        legacy_signals.clear();
+        sendMouse(legacy_trim_widget, QEvent::MouseButtonPress,
+                  QPointF(legacy_left_x, 110), Qt::LeftButton);
+        sendMouse(legacy_trim_widget, QEvent::MouseMove,
+                  QPointF(legacy_trim_widget.contentXForFrame(60), 110),
+                  Qt::LeftButton);
+        require(legacy_signals ==
+                    (std::vector<std::string>{"select", "start"}),
+                "An individual trim committed before release.");
+        sendMouse(legacy_trim_widget, QEvent::MouseButtonRelease,
+                  QPointF(legacy_trim_widget.contentXForFrame(70), 110),
+                  Qt::NoButton);
+        require(legacy_signals ==
+                    (std::vector<std::string>{"select", "start", "modern", "legacy"}) &&
+                    legacy_start == 20 && legacy_end == 50,
+                "An individual trim changed the modern/legacy signal order or range.");
+        legacy_trim_widget.close();
+
         // The viewport is the scale reference for the standard one-hour
         // range, while longer content expands the scrollable surface.
         widget.setTimelineViewportWidth(800);

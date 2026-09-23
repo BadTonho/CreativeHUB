@@ -137,6 +137,14 @@ gap. During an individual trim preview, a guide marks the edited edge even
 where the covering clip hides the underlying edge. A simple click on the cut
 still selects its transition.
 
+The Qt-independent `TimelineTrimGesture` keeps the edge gesture's pending
+transition, active trim, frozen scale, last pointer position, and paint-only
+preview state. It uses the model's `previewClipEdgeEdit` rule to decide when a
+shared-cut drag starts and whether release requests an edit. `TimelineWidget`
+continues to own hit testing, coordinate conversion, painting, mouse capture,
+cursor handling, and signal delivery. Replacing or clearing the tracks cancels
+the pending gesture.
+
 On release, a Qt-independent edge-trim command applies the model edit, finds
 the edited clip by its stable identifier after any track reordering, and
 calculates the selected clip and local playback frame. It preserves the global

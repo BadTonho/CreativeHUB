@@ -40,6 +40,10 @@ constexpr double standard_timeline_duration_seconds = 60.0 * 60.0;
 constexpr double ruler_minor_target_spacing_pixels = 8.0;
 constexpr double snap_tolerance_pixels = 8.0;
 
+TrimPointerPosition trimPointer(const QPointF& position) noexcept {
+    return {position.x(), position.y()};
+}
+
 std::int64_t rulerMinorStep(double pixels_per_frame) noexcept {
     if (!std::isfinite(pixels_per_frame) || pixels_per_frame <= 0.0 ||
         pixels_per_frame >= 1.0) {
@@ -101,6 +105,7 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
     // would leave the grab active and route every subsequent click back to
     // the timeline instead of the rest of the editor.
     if (QWidget::mouseGrabber() == this) releaseMouse();
+    if (trim_gesture_.active()) unsetCursor();
 
     tracks_ = tracks;
     if (tracks_.empty()) tracks_.push_back(TimelineTrack{1, "Video 1", 1.0, false, {}});
@@ -134,11 +139,7 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
     updateHorizontalExtent();
     moving_active_ = false;
     move_pending_ = false;
-    trimming_ = false;
-    trim_transition_pending_ = false;
-    trim_transition_pair_.reset();
-    trim_preview_.reset();
-    trim_scale_duration_ = 0;
+    trim_gesture_.cancel();
     dragging_ = false;
     seek_pending_ = false;
     drag_frame_.reset();
@@ -159,6 +160,8 @@ void TimelineWidget::setClips(const std::vector<TimelineClip>& clips) {
 }
 
 void TimelineWidget::clearClips() {
+    if (trim_gesture_.active() && QWidget::mouseGrabber() == this) releaseMouse();
+    if (trim_gesture_.active()) unsetCursor();
     tracks_.clear();
     tracks_.push_back(TimelineTrack{1, "Video 1", 1.0, false, {}});
     updateVerticalExtent();
@@ -168,11 +171,7 @@ void TimelineWidget::clearClips() {
     drag_frame_.reset();
     moving_active_ = false;
     move_pending_ = false;
-    trimming_ = false;
-    trim_transition_pending_ = false;
-    trim_transition_pair_.reset();
-    trim_preview_.reset();
-    trim_scale_duration_ = 0;
+    trim_gesture_.cancel();
     dragging_ = false;
     seek_pending_ = false;
     ruler_frame_.reset();
@@ -605,11 +604,12 @@ QRectF TimelineWidget::clipRect(const ClipLocation& location) const noexcept {
 
 const TimelineClip& TimelineWidget::displayedClip(
     const ClipLocation& location) const noexcept {
-    if (trim_preview_.has_value()) {
-        if (trim_preview_->clip_location == location) return trim_preview_->clip;
-        if (trim_preview_->neighbor_location == location &&
-            trim_preview_->neighbor_clip.has_value()) {
-            return *trim_preview_->neighbor_clip;
+    const auto& preview = trim_gesture_.preview();
+    if (preview.has_value()) {
+        if (preview->clip_location == location) return preview->clip;
+        if (preview->neighbor_location == location &&
+            preview->neighbor_clip.has_value()) {
+            return *preview->neighbor_clip;
         }
     }
     static const TimelineClip empty_clip;
@@ -832,7 +832,9 @@ std::int64_t TimelineWidget::standardDuration() const noexcept {
 }
 
 std::int64_t TimelineWidget::displayDuration() const noexcept {
-    if (trimming_ && trim_scale_duration_ > 0) return trim_scale_duration_;
+    if (trim_gesture_.active() && trim_gesture_.scaleDuration() > 0) {
+        return trim_gesture_.scaleDuration();
+    }
     const auto standard = standardDuration();
     const auto zoom_duration = std::max<long double>(
         1.0L,
@@ -1060,7 +1062,7 @@ ClipEdgeEditMode TimelineWidget::trimEditModeAt(
 }
 
 void TimelineWidget::updateTrimHoverCursor(const QPointF& position) {
-    if (!trimming_ && !razor_mode_) {
+    if (!trim_gesture_.active() && !razor_mode_) {
         const auto location = clipAt(position.x(), position.y());
         if (location.has_value() &&
             trimEdgeAt(*location, position.x()).has_value()) {
@@ -1075,21 +1077,10 @@ void TimelineWidget::updateTrimHoverCursor(const QPointF& position) {
 
 std::optional<std::int64_t> TimelineWidget::trimBoundaryAt(double x) const noexcept {
     if (tracks_.empty()) return std::nullopt;
-    const auto content = trackContentRect(trimming_clip_.track_index);
+    const auto content = trackContentRect(trim_gesture_.location().track_index);
     if (content.width() <= 0.0) return std::nullopt;
     const auto clamped_x = std::clamp(x, content.left(), content.right());
     return globalFrameAt(clamped_x);
-}
-
-void TimelineWidget::updateTrimPreview(double x) {
-    const auto boundary = trimBoundaryAt(x);
-    if (!boundary.has_value()) return;
-    const auto preview = previewClipEdgeEdit(
-        tracks_, trimming_clip_, trim_edge_, *boundary, trim_mode_);
-    if (preview.has_value()) {
-        trim_preview_ = *preview;
-    }
-    update();
 }
 
 std::optional<std::pair<std::size_t, std::size_t>>
@@ -1241,7 +1232,8 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             const bool active = active_clip_.has_value() &&
                 *active_clip_ == location;
             const bool moving = moving_active_ && moving_clip_ == location;
-            const bool trimming = trimming_ && trimming_clip_ == location;
+            const bool trimming = trim_gesture_.active() &&
+                trim_gesture_.location() == location;
             const auto& clip = displayedClip(location);
             const QColor track_colors[] = {
                 QColor("#3c75ae"), QColor("#357f70"),
@@ -1297,11 +1289,12 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             }
         }
 
-        if (trimming_ && trim_preview_.has_value() &&
-            trim_preview_->clip_location.track_index == track_index &&
-            !trim_preview_->neighbor_clip.has_value()) {
-            const auto rect = clipRect(trim_preview_->clip_location);
-            const auto edge_x = trim_edge_ == ClipEdge::Left
+        const auto& trim_preview = trim_gesture_.preview();
+        if (trim_gesture_.active() && trim_preview.has_value() &&
+            trim_preview->clip_location.track_index == track_index &&
+            !trim_preview->neighbor_clip.has_value()) {
+            const auto rect = clipRect(trim_preview->clip_location);
+            const auto edge_x = trim_gesture_.edge() == ClipEdge::Left
                 ? rect.left()
                 : rect.right();
             painter.setPen(QPen(QColor("#fff0a3"), 2.0, Qt::SolidLine));
@@ -1811,7 +1804,7 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
 }
 
 void TimelineWidget::leaveEvent(QEvent* event) {
-    if (!trimming_) unsetCursor();
+    if (!trim_gesture_.active()) unsetCursor();
     QWidget::leaveEvent(event);
 }
 
@@ -1892,19 +1885,13 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         : ClipEdgeEditMode::Individual;
     if (transition_indexes.has_value() && edge.has_value()) {
         const auto& clip = tracks_[location->track_index].clips[location->clip_index];
-        trim_scale_duration_ = displayDuration();
-        trimming_ = true;
-        trim_transition_pending_ = true;
-        trim_transition_pair_ = *transition_indexes;
-        trimming_clip_ = *location;
-        trim_edge_ = *edge;
-        trim_mode_ = trim_mode;
-        trim_last_position_ = event->position();
-        trim_original_boundary_frame_ = *edge == ClipEdge::Left
+        const auto scale_duration = displayDuration();
+        const auto original_boundary = *edge == ClipEdge::Left
             ? clip.timeline_start_frame
             : clip.timeline_start_frame + clip.timeline_duration_frames;
-        trim_preview_ = previewClipEdgeEdit(
-            tracks_, *location, *edge, trim_original_boundary_frame_, trim_mode_);
+        trim_gesture_.begin(
+            tracks_, *location, *edge, trim_mode, original_boundary,
+            scale_duration, trimPointer(event->position()), *transition_indexes);
         grabMouse();
         setCursor(Qt::SizeHorCursor);
         event->accept();
@@ -1932,17 +1919,9 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
             : clip.timeline_start_frame + clip.timeline_duration_frames;
         emitSelected(*location);
         emit trimStarted();
-        trimming_ = true;
-        trim_transition_pending_ = false;
-        trim_transition_pair_.reset();
-        trimming_clip_ = *location;
-        trim_edge_ = *edge;
-        trim_mode_ = trim_mode;
-        trim_last_position_ = event->position();
-        trim_original_boundary_frame_ = original_boundary;
-        trim_scale_duration_ = scale_duration;
-        trim_preview_ = previewClipEdgeEdit(
-            tracks_, *location, *edge, trim_original_boundary_frame_, trim_mode_);
+        trim_gesture_.begin(
+            tracks_, *location, *edge, trim_mode, original_boundary,
+            scale_duration, trimPointer(event->position()));
         grabMouse();
         setCursor(Qt::SizeHorCursor);
         event->accept();
@@ -2033,40 +2012,21 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (trimming_) {
-        if (trim_transition_pending_) {
-            const auto boundary = trimBoundaryAt(event->position().x());
-            const auto candidate = boundary.has_value()
-                ? previewClipEdgeEdit(
-                    tracks_, trimming_clip_, trim_edge_, *boundary, trim_mode_)
-                : std::nullopt;
-            if (!candidate.has_value() ||
-                candidate->boundary_frame == trim_original_boundary_frame_) {
-                trim_last_position_ = event->position();
-                event->accept();
-                return;
-            }
-
-            const auto location = trimming_clip_;
-            const auto edge = trim_edge_;
-            const auto original_boundary = trim_original_boundary_frame_;
-            const auto scale_duration = trim_scale_duration_;
-            emitSelected(location);
+    if (trim_gesture_.active()) {
+        const auto movement = trim_gesture_.move(
+            tracks_, trimBoundaryAt(event->position().x()),
+            trimPointer(event->position()));
+        if (movement.started) {
+            const auto active_gesture = trim_gesture_;
+            emitSelected(active_gesture.location());
             emit trimStarted();
-            trimming_ = true;
-            trim_transition_pending_ = false;
-            trim_transition_pair_.reset();
-            trimming_clip_ = location;
-            trim_edge_ = edge;
-            trim_original_boundary_frame_ = original_boundary;
-            trim_scale_duration_ = scale_duration;
+            // Selection can synchronously refresh the widget's tracks and
+            // cancel the gesture. The old path resumed this trim afterward.
+            trim_gesture_ = active_gesture;
             grabMouse();
             setCursor(Qt::SizeHorCursor);
         }
-        if (event->position() != trim_last_position_) {
-            updateTrimPreview(event->position().x());
-            trim_last_position_ = event->position();
-        }
+        if (movement.repaint) update();
         event->accept();
         return;
     }
@@ -2138,69 +2098,33 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (trimming_) {
-        if (trim_transition_pending_) {
-            const auto pair = trim_transition_pair_;
-            const auto track = trimming_clip_.track_index;
-            trimming_ = false;
-            trim_transition_pending_ = false;
-            trim_transition_pair_.reset();
-            trim_preview_.reset();
-            trim_scale_duration_ = 0;
-            unsetCursor();
-            releaseMouse();
-            if (pair.has_value()) {
-                selected_transition_ = SelectedTransition{
-                    track, pair->first, pair->second};
-                emit transitionSelectedAt(
-                    static_cast<qint64>(track),
-                    static_cast<qint64>(pair->first),
-                    static_cast<qint64>(pair->second));
-            }
-            updateTrimHoverCursor(event->position());
-            update();
-            event->accept();
-            return;
-        }
-
-        if (event->position() != trim_last_position_) {
-            updateTrimPreview(event->position().x());
-            trim_last_position_ = event->position();
-        }
-        const auto location = trimming_clip_;
-        const auto edge = trim_edge_;
-        const auto preview = trim_preview_;
-        const auto original = tracks_[location.track_index].clips[location.clip_index];
-        const auto preview_changed = preview.has_value() &&
-            (preview->clip != original ||
-             (preview->neighbor_location.has_value() &&
-              preview->neighbor_clip.has_value() &&
-              *preview->neighbor_clip != tracks_[location.track_index].clips[
-                  preview->neighbor_location->clip_index]));
-        trimming_ = false;
-        trim_preview_.reset();
-        trim_scale_duration_ = 0;
+    if (trim_gesture_.active()) {
+        const auto result = trim_gesture_.finish(
+            tracks_, trimBoundaryAt(event->position().x()),
+            trimPointer(event->position()));
         unsetCursor();
         releaseMouse();
-        if (preview_changed) {
+        if (result.kind == TrimGestureFinish::Kind::SelectTransition &&
+            result.transition_pair.has_value()) {
+            const auto& pair = *result.transition_pair;
+            selected_transition_ = SelectedTransition{
+                result.location.track_index, pair.first, pair.second};
+            emit transitionSelectedAt(
+                static_cast<qint64>(result.location.track_index),
+                static_cast<qint64>(pair.first),
+                static_cast<qint64>(pair.second));
+        } else if (result.kind == TrimGestureFinish::Kind::RequestTrim) {
             emit clipEdgeTrimRequestedAt(
-                static_cast<qint64>(location.track_index),
-                static_cast<qint64>(location.clip_index),
-                static_cast<qint64>(edge),
-                preview->boundary_frame,
-                static_cast<qint64>(trim_mode_));
-            if (location.track_index == 0 &&
-                preview->clip.timeline_start_frame >= original.timeline_start_frame) {
-                const auto original_end = original.timeline_start_frame +
-                    original.timeline_duration_frames;
-                const auto preview_end = preview->clip.timeline_start_frame +
-                    preview->clip.timeline_duration_frames;
-                if (preview_end <= original_end) {
-                    emit clipTrimRequested(
-                        static_cast<qint64>(location.clip_index),
-                        preview->clip.timeline_start_frame - original.timeline_start_frame,
-                        preview_end - original.timeline_start_frame);
-                }
+                static_cast<qint64>(result.location.track_index),
+                static_cast<qint64>(result.location.clip_index),
+                static_cast<qint64>(result.edge),
+                result.boundary_frame,
+                static_cast<qint64>(result.mode));
+            if (result.legacy_range.has_value()) {
+                emit clipTrimRequested(
+                    static_cast<qint64>(result.location.clip_index),
+                    result.legacy_range->local_start_frame,
+                    result.legacy_range->local_end_frame);
             }
         }
         updateTrimHoverCursor(event->position());

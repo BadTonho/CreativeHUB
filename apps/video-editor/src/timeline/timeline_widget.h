@@ -2,6 +2,7 @@
 
 #include "timeline_model.h"
 #include "timeline_layout.h"
+#include "timeline_trim_gesture.h"
 #include "timeline_zoom.h"
 
 #include <QString>
@@ -157,7 +158,6 @@ private:
         const ClipLocation&, ClipEdge, double x) const noexcept;
     void updateTrimHoverCursor(const QPointF& position);
     [[nodiscard]] std::optional<std::int64_t> trimBoundaryAt(double x) const noexcept;
-    void updateTrimPreview(double x);
     [[nodiscard]] std::optional<std::pair<std::size_t, std::size_t>>
     transitionClipIndexesAt(double x, double y) const noexcept;
     void showTransitionMenu(const QPoint& position, const QPoint& global_position);
@@ -211,16 +211,7 @@ private:
     QPointF move_press_position_{};
     std::optional<std::size_t> move_target_track_;
     std::int64_t move_target_frame_ = 0;
-    bool trimming_ = false;
-    bool trim_transition_pending_ = false;
-    std::optional<std::pair<std::size_t, std::size_t>> trim_transition_pair_;
-    ClipLocation trimming_clip_{};
-    ClipEdge trim_edge_ = ClipEdge::Left;
-    ClipEdgeEditMode trim_mode_ = ClipEdgeEditMode::Rolling;
-    std::int64_t trim_original_boundary_frame_ = 0;
-    std::int64_t trim_scale_duration_ = 0;
-    QPointF trim_last_position_{};
-    std::optional<ClipEdgeEditPreview> trim_preview_;
+    TimelineTrimGesture trim_gesture_;
     bool razor_mode_ = false;
     bool razor_clicking_ = false;
     bool razor_gesture_moved_ = false;
