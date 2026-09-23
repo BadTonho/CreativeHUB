@@ -673,3 +673,14 @@ Definição final de concluído:
   undo/redo e abertura multi-track do `MainWindow`.
 - Validação automatizada da Etapa 3: build Release aprovado, 32/32 testes
   aprovados e `git diff --check` aprovado.
+
+
+## Stage 5 implementation record
+
+- `EditorSession` now owns the only mutable media library; canonical-path lookup is indexed, and `MediaController` handles library mutations.
+- `ProjectController` owns save, dirty baseline, autosave, recovery snapshots, reset, and prepared-project commit. `ProjectDocumentMapper` bridges runtime state and the persisted document.
+- Project JSON reading and v1-v8 migration, validation, and atomic writing are split into focused codec modules behind the existing `project::load/save` interface. The `.csp` format remains v9. Project opening follows the media kind stored in the document, preserving legacy classification behavior.
+- Media import and project preparation run on the dedicated one-worker pool. Import batches are sequential and cancellable; project open commits only after successful preparation, preserving the active session on cancellation or failure.
+- Service tests cover migration and round-trip, dirty state, recovery, canonical media lookup, duplicates, offline restoration, partial import failure, cancellation, project-open failures, and legacy video-kind GIF media. The MainWindow integration test covers the visible project during loading, applies prepared media and timeline state, protects a newer selection from a late import, and rejects stale project-generation results.
+- Release build: passed. Full CTest suite: 34/34 passed. `git diff --check`: passed.
+- Manual large-media import and project-open validation: documented in [Project and Media Controllers](PROJECT_AND_MEDIA_CONTROLLERS.md), not performed in this environment.

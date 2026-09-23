@@ -39,6 +39,8 @@ QString snapshotDateText(const project::AutosaveSnapshot& snapshot) {
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       shortcut_manager_(std::make_unique<settings::ShortcutManager>()) {
+    media_task_pool_.setMaxThreadCount(1);
+    media_task_pool_.setExpiryTimeout(-1);
     setWindowTitle("Main Editor");
     QSettings settings;
     const auto saved_geometry = settings.value(
@@ -73,7 +75,7 @@ MainWindow::MainWindow(QWidget* parent)
     configurePreviewPerformanceMetrics(
         settings::previewPerformanceMetricsEnabled());
 
-    saved_project_document_ = currentProjectDocument();
+    project_controller_.establishBaseline(currentProjectDocument());
     updateProjectDirtyState();
 
     configureProjectAutosave(
@@ -90,6 +92,13 @@ MainWindow::MainWindow(QWidget* parent)
 
 MainWindow::~MainWindow() {
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
+    if (active_media_import_cancel_) {
+        active_media_import_cancel_->store(true, std::memory_order_relaxed);
+    }
+    if (project_load_cancel_) {
+        project_load_cancel_->store(true, std::memory_order_relaxed);
+    }
+    media_task_pool_.waitForDone();
     configurePreviewPerformanceMetrics(false);
     shutdownPlayback();
 }
@@ -101,7 +110,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     }
 
     try {
-        autosave_manager_.removeCurrentUnsavedSnapshots();
+        project_controller_.removeCurrentUnsavedSnapshots();
     } catch (const project::ProjectError& error) {
         logging::Logger::instance().log(
             logging::Level::Warning,
@@ -183,7 +192,7 @@ std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
         if (row < 0 || row >= static_cast<int>(available_snapshots.size())) return;
         const auto path = available_snapshots[static_cast<std::size_t>(row)].path;
         try {
-            autosave_manager_.removeSnapshot(path);
+            project_controller_.removeSnapshot(path);
             available_snapshots.erase(
                 available_snapshots.begin() + row);
             delete list->takeItem(row);
@@ -205,7 +214,7 @@ std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
 
 void MainWindow::offerUnsavedProjectRecovery() {
     if (!settings::projectAutosaveEnabled()) return;
-    const auto snapshots = autosave_manager_.unsavedSnapshots();
+    const auto snapshots = project_controller_.unsavedSnapshots();
     if (snapshots.empty()) return;
 
     const auto selected = chooseRecoverySnapshot(
@@ -214,16 +223,21 @@ void MainWindow::offerUnsavedProjectRecovery() {
 
     project::ProjectDocument blank_document;
     blank_document.bins = {"Unsorted"};
-    if (openProjectPath(*selected, std::nullopt, std::move(blank_document))) {
-        try {
-            autosave_manager_.removeUnsavedSnapshotsForSession(*selected);
-        } catch (const project::ProjectError& error) {
-            logging::Logger::instance().log(
-                logging::Level::Warning,
-                "project",
-                "autosave_cleanup",
-                error.what(),
-                { {"cause", error.what()} });
-        }
-    }
+    static_cast<void>(openProjectPath(
+        *selected,
+        std::nullopt,
+        std::move(blank_document),
+        [this, snapshot = *selected](bool succeeded) {
+            if (!succeeded) return;
+            try {
+                project_controller_.removeUnsavedSnapshotsForSession(snapshot);
+            } catch (const project::ProjectError& error) {
+                logging::Logger::instance().log(
+                    logging::Level::Warning,
+                    "project",
+                    "autosave_cleanup",
+                    error.what(),
+                    {{"cause", error.what()}});
+            }
+        }));
 }

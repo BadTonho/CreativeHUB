@@ -5,9 +5,14 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace application {
+class MediaController;
+}
 
 namespace media {
 
@@ -34,7 +39,6 @@ enum class MediaMutationResult {
 class MediaLibrary final {
 public:
     [[nodiscard]] const std::vector<MediaItem>& items() const noexcept { return items_; }
-    [[nodiscard]] std::vector<MediaItem>& items() noexcept { return items_; }
     [[nodiscard]] const std::vector<std::string>& bins() const noexcept { return bins_; }
 
     [[nodiscard]] std::size_t size() const noexcept { return items_.size(); }
@@ -69,11 +73,14 @@ public:
     static std::string defaultDisplayName(const std::filesystem::path& path);
 
 private:
+    friend class application::MediaController;
+
     static std::string normalizeBinPath(std::string_view path);
     void ensureBinPath(std::string_view path);
 
     std::vector<MediaItem> items_;
     std::vector<std::string> bins_{std::string(default_bin)};
+    std::map<std::filesystem::path, std::size_t> path_index_;
 };
 
 } // namespace media

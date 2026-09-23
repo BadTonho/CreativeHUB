@@ -293,15 +293,12 @@ TimelineEditResult TimelineCommandService::execute(const DeleteClipCommand& comm
 TimelineEditResult TimelineCommandService::execute(const AddMediaClipCommand& command) {
     const auto track = session_.timeline_.locateTrack(command.track_id);
     if (!track) return result(EditStatus::Rejected, EditReason::InvalidTarget);
-    const auto media = std::find_if(
-        session_.media_items_.begin(), session_.media_items_.end(),
-        [&command](const ImportedMedia& item) {
-            return item.metadata.source_path == command.source_path;
-        });
-    if (media == session_.media_items_.end()) {
+    const auto media_index = session_.media_library_.indexForPath(command.source_path);
+    if (media_index == session_.media_library_.size()) {
         return result(EditStatus::Rejected, EditReason::MediaNotFound);
     }
-    if (media->offline) return result(EditStatus::Rejected, EditReason::OfflineMedia);
+    const auto& media_item = session_.media_library_.items()[media_index];
+    if (media_item.offline) return result(EditStatus::Rejected, EditReason::OfflineMedia);
     std::int64_t start = command.timeline_start_frame.value_or(0);
     if (!command.timeline_start_frame) {
         for (const auto& clip : session_.timeline_.tracks()[*track].clips) {
@@ -313,7 +310,7 @@ TimelineEditResult TimelineCommandService::execute(const AddMediaClipCommand& co
     }
     const auto next_clip_id = session_.timeline_.snapshot().next_clip_id;
     auto before = session_.captureEditState();
-    const auto added = session_.timeline_.addClip(*track, media->metadata, start);
+    const auto added = session_.timeline_.addClip(*track, media_item.metadata, start);
     if (added != timeline::AddClipResult::Added) {
         return result(EditStatus::Rejected, reasonForAdd(added));
     }
@@ -321,7 +318,7 @@ TimelineEditResult TimelineCommandService::execute(const AddMediaClipCommand& co
     const auto location = session_.timeline_.locateClip(next_clip_id);
     if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
     selectClip(*location);
-    session_.selection_.selected_source_path = media->metadata.source_path;
+    session_.selection_.selected_source_path = media_item.metadata.source_path;
     session_.playhead_frame_ = 0;
     session_.preserved_playhead_frame_.reset();
     auto output = result(EditStatus::Applied);

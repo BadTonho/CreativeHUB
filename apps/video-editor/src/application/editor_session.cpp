@@ -14,19 +14,15 @@ timeline::TimelineModel& EditorSession::legacyTimelineForUi() noexcept {
 }
 
 const std::vector<ImportedMedia>& EditorSession::mediaItems() const noexcept {
-    return media_items_;
-}
-
-std::vector<ImportedMedia>& EditorSession::mediaItemsForUi() noexcept {
-    return media_items_;
+    return media_library_.items();
 }
 
 const std::vector<std::string>& EditorSession::binPaths() const noexcept {
-    return bin_paths_;
+    return media_library_.bins();
 }
 
-std::vector<std::string>& EditorSession::binPathsForUi() noexcept {
-    return bin_paths_;
+const media::MediaLibrary& EditorSession::mediaLibrary() const noexcept {
+    return media_library_;
 }
 
 const EditorSelection& EditorSession::selection() const noexcept {
@@ -41,17 +37,8 @@ const std::optional<std::filesystem::path>& EditorSession::projectPath() const n
     return project_path_;
 }
 
-std::optional<std::filesystem::path>& EditorSession::projectPathForUi() noexcept {
-    return project_path_;
-}
-
 const std::optional<project::ProjectDocument>&
 EditorSession::savedProjectDocument() const noexcept {
-    return saved_project_document_;
-}
-
-std::optional<project::ProjectDocument>&
-EditorSession::savedProjectDocumentForUi() noexcept {
     return saved_project_document_;
 }
 
@@ -59,11 +46,7 @@ bool EditorSession::projectDirty() const noexcept {
     return project_dirty_;
 }
 
-void EditorSession::setProjectDirty(bool dirty) noexcept {
-    project_dirty_ = dirty;
-}
-
-bool& EditorSession::projectDirtyForUi() noexcept {
+const bool& EditorSession::projectDirtyState() const noexcept {
     return project_dirty_;
 }
 

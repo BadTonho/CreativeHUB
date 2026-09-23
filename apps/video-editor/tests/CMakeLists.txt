@@ -362,8 +362,12 @@ add_executable(creative-suite-main-editor-timeline-command-service-tests
     timeline_command_service_test.cpp
     ../src/application/editor_session.cpp
     ../src/application/editor_session.h
+    ../src/application/media_controller.cpp
+    ../src/application/media_controller.h
     ../src/application/timeline_command_service.cpp
     ../src/application/timeline_command_service.h
+    ../src/media/media_library.cpp
+    ../src/media/media_library.h
     ../src/timeline/timeline_clip_edge_command.cpp
     ../src/timeline/timeline_clip_edge_command.h
     ../src/timeline/timeline_history.cpp
@@ -924,6 +928,10 @@ add_executable(creative-suite-main-editor-project-tests
     ../src/timeline/timeline_layout.h
     ../src/project/project_file.cpp
     ../src/project/project_file.h
+    ../src/project/project_file_detail.h
+    ../src/project/project_file_reader.cpp
+    ../src/project/project_file_writer.cpp
+    ../src/project/project_document_validator.cpp
     ../src/timeline/timeline_transform.cpp
     ../src/timeline/timeline_transform.h
 )
@@ -1000,6 +1008,10 @@ add_executable(creative-suite-main-editor-autosave-tests
     ../src/project/autosave_manager.h
     ../src/project/project_file.cpp
     ../src/project/project_file.h
+    ../src/project/project_file_detail.h
+    ../src/project/project_file_reader.cpp
+    ../src/project/project_file_writer.cpp
+    ../src/project/project_document_validator.cpp
     ../src/project/project_document.h
     ../src/media/media_library.cpp
     ../src/media/media_library.h
@@ -1354,4 +1366,23 @@ add_test(
 )
 set_tests_properties(creative-suite-main-editor-workspace-page-switch PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
+add_executable(creative-suite-main-editor-application-media-tests
+    application_media_services_test.cpp
+)
+target_link_libraries(creative-suite-main-editor-application-media-tests PRIVATE
+    creative-suite-main-editor-core
+)
+target_compile_features(creative-suite-main-editor-application-media-tests PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-application-media-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-application-media-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+copy_ffmpeg_test_runtime(creative-suite-main-editor-application-media-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-application-media-tests)
+add_test(
+    NAME creative-suite-main-editor-application-media
+    COMMAND creative-suite-main-editor-application-media-tests
 )

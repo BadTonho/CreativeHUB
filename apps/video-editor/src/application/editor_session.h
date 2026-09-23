@@ -1,6 +1,7 @@
 #pragma once
 
 #include "media/video_frame.h"
+#include "media/media_library.h"
 #include "media/video_metadata.h"
 #include "project/project_document.h"
 #include "timeline/timeline_history.h"
@@ -13,13 +14,7 @@
 
 namespace application {
 
-struct ImportedMedia {
-    media::VideoMetadata metadata;
-    media::VideoFrame first_frame;
-    std::string display_name;
-    std::string bin_path = "Unsorted";
-    bool offline = false;
-};
+using ImportedMedia = media::MediaItem;
 
 struct EditorSelection {
     std::optional<timeline::TrackId> active_track_id;
@@ -37,23 +32,18 @@ public:
     [[nodiscard]] timeline::TimelineModel& legacyTimelineForUi() noexcept;
 
     [[nodiscard]] const std::vector<ImportedMedia>& mediaItems() const noexcept;
-    [[nodiscard]] std::vector<ImportedMedia>& mediaItemsForUi() noexcept;
     [[nodiscard]] const std::vector<std::string>& binPaths() const noexcept;
-    [[nodiscard]] std::vector<std::string>& binPathsForUi() noexcept;
+    [[nodiscard]] const media::MediaLibrary& mediaLibrary() const noexcept;
 
     [[nodiscard]] const EditorSelection& selection() const noexcept;
     [[nodiscard]] EditorSelection& selectionForUi() noexcept;
 
     [[nodiscard]] const std::optional<std::filesystem::path>& projectPath() const noexcept;
-    [[nodiscard]] std::optional<std::filesystem::path>& projectPathForUi() noexcept;
     [[nodiscard]] const std::optional<project::ProjectDocument>&
     savedProjectDocument() const noexcept;
-    [[nodiscard]] std::optional<project::ProjectDocument>&
-    savedProjectDocumentForUi() noexcept;
 
     [[nodiscard]] bool projectDirty() const noexcept;
-    void setProjectDirty(bool dirty) noexcept;
-    [[nodiscard]] bool& projectDirtyForUi() noexcept;
+    [[nodiscard]] const bool& projectDirtyState() const noexcept;
 
     [[nodiscard]] std::int64_t playheadFrame() const noexcept;
     void setPlayheadFrame(std::int64_t frame) noexcept;
@@ -65,11 +55,12 @@ public:
 
 private:
     friend class TimelineCommandService;
+    friend class MediaController;
+    friend class ProjectController;
 
     timeline::TimelineModel timeline_;
     timeline::TimelineHistory history_;
-    std::vector<ImportedMedia> media_items_;
-    std::vector<std::string> bin_paths_{"Unsorted"};
+    media::MediaLibrary media_library_;
     EditorSelection selection_;
     std::optional<std::filesystem::path> project_path_;
     std::optional<project::ProjectDocument> saved_project_document_;

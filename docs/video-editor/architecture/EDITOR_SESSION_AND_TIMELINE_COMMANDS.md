@@ -1,10 +1,10 @@
 # Editor Session and Timeline Commands
 
-Status: **provisional**. This document records the application boundary introduced by Stage 4 of the [refactoring risk audit](REFACTORING_RISK_AUDIT.md).
+Status: **provisional**. This document records the application boundary introduced by Stages 4 and 5 of the [refactoring risk audit](REFACTORING_RISK_AUDIT.md).
 
 ## Ownership
 
-`application::EditorSession` owns the working timeline model and undo history, imported media records and bins, stable timeline selection, the playhead, the current project path, the saved project baseline, and the dirty flag. The project file format is unchanged.
+`application::EditorSession` owns the working timeline model and undo history, the media library and bins, stable timeline selection, the playhead, the current project path, the saved project baseline, and the dirty flag. The project file format is unchanged. Project lifecycle, media mutation, asynchronous import, and transactional open are described in [Project and Media Controllers](PROJECT_AND_MEDIA_CONTROLLERS.md).
 
 `MainWindow` remains responsible for widgets, dialogs, playback-worker lifecycle, and presenting command results. Timeline indices remain short-lived UI coordinates; commands identify tracks and clips by stable IDs.
 
@@ -18,4 +18,4 @@ Undo and redo are coordinated by the service using session snapshots. Legacy tim
 
 ## Transitional scope
 
-Inspector edits for audio, text styling, transforms, and keyframes; track management; and clearing the timeline remain in legacy `MainWindow` handlers. `EditorSession::legacyTimelineForUi()` is the temporary mutable access path for those handlers. Project serialization, media probing, and asynchronous import remain outside this stage and are covered by later audit stages.
+Inspector edits for audio, text styling, transforms, and keyframes; track management; and clearing the timeline remain in legacy `MainWindow` handlers. `EditorSession::legacyTimelineForUi()` is the temporary mutable access path for those handlers. Project serialization, parsing, migration, and validation now use focused codec modules behind the compatible `project::load/save` API. Media probing, first-frame decoding, asynchronous import, and transactional project preparation run through the Stage 5 services documented in [Project and Media Controllers](PROJECT_AND_MEDIA_CONTROLLERS.md).

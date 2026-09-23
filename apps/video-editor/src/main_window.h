@@ -1,11 +1,12 @@
 #pragma once
 
-#include "media/video_decoder.h"
-#include "media/still_image_decoder.h"
 #include "media/media_library.h"
 #include "media/video_metadata.h"
-#include "media/video_probe.h"
 #include "application/editor_session.h"
+#include "application/media_controller.h"
+#include "application/media_import_service.h"
+#include "application/project_controller.h"
+#include "application/project_open_service.h"
 #include "application/timeline_command_service.h"
 #include "playback/playback_worker.h"
 #include "playback/playback_frame_mailbox.h"
@@ -18,13 +19,17 @@
 #include <QMainWindow>
 #include <QString>
 #include <QThread>
+#include <QThreadPool>
 #include <QtGlobal>
 
 #include <cstdint>
+#include <atomic>
 #include <array>
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <functional>
+#include <utility>
 #include <vector>
 
 class QDockWidget;
@@ -37,6 +42,7 @@ class QFontComboBox;
 class QLabel;
 class QPlainTextEdit;
 class QPushButton;
+class QProgressDialog;
 class QPoint;
 class QSlider;
 class QSpinBox;
@@ -133,6 +139,9 @@ private:
         const std::vector<project::AutosaveSnapshot>& snapshots,
         const QString& project_name);
     void openMedia();
+    [[nodiscard]] bool startMediaImport(
+        std::vector<std::filesystem::path> paths);
+    void finishMediaImport(application::MediaImportBatchResult result);
     void updateMediaDetails(int row);
     void populateMediaBrowser(
         const std::filesystem::path& selected_path = {},
@@ -164,15 +173,6 @@ private:
         qint64 timeline_frame);
     [[nodiscard]] std::optional<std::size_t> selectedMediaIndex() const noexcept;
     [[nodiscard]] std::string selectedBinPath() const;
-    [[nodiscard]] media::MediaLibrary buildMediaLibrary() const;
-    void applyMediaLibrary(const media::MediaLibrary& library);
-    void addMediaItem(
-        media::VideoMetadata metadata,
-        media::VideoFrame first_frame,
-        std::string display_name = {},
-        std::string bin_path = "Unsorted",
-        bool offline = false,
-        bool mark_dirty = true);
     void newProject();
     void openProject();
     void saveProject();
@@ -180,7 +180,13 @@ private:
     [[nodiscard]] bool openProjectPath(
         const std::filesystem::path& source_path,
         std::optional<std::filesystem::path> active_project_path = std::nullopt,
-        std::optional<project::ProjectDocument> saved_baseline = std::nullopt);
+        std::optional<project::ProjectDocument> saved_baseline = std::nullopt,
+        std::function<void(bool)> completion = {});
+    void finishProjectOpen(
+        std::uint64_t work_id,
+        std::uint64_t project_generation,
+        application::ProjectOpenResult result);
+    void setProjectLoadingState(bool loading);
     [[nodiscard]] bool confirmProjectChange();
     [[nodiscard]] bool saveProjectTo(
         const std::filesystem::path& project_path,
@@ -188,12 +194,7 @@ private:
     [[nodiscard]] project::ProjectDocument currentProjectDocument() const;
     void updateProjectDirtyState();
     void clearProjectState();
-    void applyLoadedProject(
-        std::vector<ImportedMedia> media_items,
-        timeline::TimelineModel::Snapshot timeline_snapshot,
-        std::optional<std::filesystem::path> project_path,
-        const project::ProjectDocument& loaded_document,
-        std::optional<project::ProjectDocument> saved_baseline = std::nullopt);
+    void applyLoadedProject(application::PreparedProject prepared);
     void addSelectedMediaToTimeline();
     void handleMediaDrop(const QString& source_path);
     void handleMediaDropAt(
@@ -410,14 +411,15 @@ private:
     QAction* move_track_down_action_ = nullptr;
     QAction* remove_track_action_ = nullptr;
     std::unique_ptr<settings::ShortcutManager> shortcut_manager_;
-    project::AutosaveManager autosave_manager_;
     timeline::TimelineWidget* timeline_widget_ = nullptr;
     timeline::TimelineTrackHeaderOverlay* timeline_header_overlay_ = nullptr;
     QScrollArea* timeline_scroll_ = nullptr;
     application::EditorSession editor_session_;
     application::TimelineCommandService timeline_command_service_{editor_session_};
-    std::vector<ImportedMedia>& media_items_ = editor_session_.mediaItemsForUi();
-    std::vector<std::string>& bin_paths_ = editor_session_.binPathsForUi();
+    application::MediaController media_controller_{editor_session_};
+    application::ProjectController project_controller_{editor_session_};
+    const std::vector<ImportedMedia>& media_items_ = editor_session_.mediaItems();
+    const std::vector<std::string>& bin_paths_ = editor_session_.binPaths();
     timeline::TimelineModel& timeline_model_ = editor_session_.legacyTimelineForUi();
     // Stable identities are the source of truth for selection. The index
     // fields below remain as short-lived presentation/worker coordinates.
@@ -432,20 +434,32 @@ private:
     std::optional<ActiveTransition>& active_transition_ =
         editor_session_.selectionForUi().active_transition;
     std::optional<PendingClipActivation> pending_clip_activation_;
-    std::optional<std::filesystem::path>& project_path_ =
-        editor_session_.projectPathForUi();
-    std::optional<project::ProjectDocument>& saved_project_document_ =
-        editor_session_.savedProjectDocumentForUi();
-    std::optional<project::ProjectDocument> last_autosaved_document_;
+    const std::optional<std::filesystem::path>& project_path_ =
+        editor_session_.projectPath();
+    const std::optional<project::ProjectDocument>& saved_project_document_ =
+        editor_session_.savedProjectDocument();
     std::optional<timeline::EditState> pending_audio_edit_;
     std::optional<timeline::EditState> pending_transform_edit_;
-    bool& project_dirty_ = editor_session_.projectDirtyForUi();
+    const bool& project_dirty_ = editor_session_.projectDirtyState();
     WorkspacePage workspace_page_ = WorkspacePage::Edit;
     bool initial_window_layout_pending_ = false;
-    media::VideoProbe video_probe_;
-    media::StillImageDecoder still_image_decoder_;
-    media::VideoDecoder video_decoder_;
     QThread playback_thread_;
+    QThreadPool media_task_pool_;
+    QProgressDialog* media_import_progress_ = nullptr;
+    std::shared_ptr<std::atomic_bool> active_media_import_cancel_;
+    std::uint64_t project_generation_ = 0;
+    std::uint64_t selection_generation_ = 0;
+    std::uint64_t next_media_work_id_ = 1;
+    std::uint64_t active_media_work_id_ = 0;
+    std::uint64_t next_project_work_id_ = 1;
+    std::uint64_t active_project_work_id_ = 0;
+    std::filesystem::path active_project_source_path_;
+    bool project_load_pending_ = false;
+    QProgressDialog* project_load_progress_ = nullptr;
+    std::shared_ptr<std::atomic_bool> project_load_cancel_;
+    std::function<void(bool)> project_open_completion_;
+    std::vector<std::pair<QWidget*, bool>> project_loading_widget_states_;
+    std::vector<std::pair<QAction*, bool>> project_loading_action_states_;
     playback::PlaybackWorker* playback_worker_ = nullptr;
     playback::PlaybackFrameMailbox playback_frame_mailbox_;
     std::int64_t& playback_frame_index_ = editor_session_.playheadFrameForUi();

@@ -4,8 +4,11 @@
 #include "settings/user_preferences.h"
 
 #include <QApplication>
+#include <QEventLoop>
+#include <QDockWidget>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QTimer>
 
 #include <chrono>
 #include <filesystem>
@@ -79,9 +82,29 @@ public:
 
         {
             MainWindow window;
-            require(window.openProjectPath(project_path),
+            QEventLoop open_loop;
+            QTimer timeout;
+            timeout.setSingleShot(true);
+            bool open_succeeded = false;
+            QObject::connect(&timeout, &QTimer::timeout, &open_loop, &QEventLoop::quit);
+            require(window.openProjectPath(
+                        project_path,
+                        std::nullopt,
+                        std::nullopt,
+                        [&open_loop, &open_succeeded](bool succeeded) {
+                            open_succeeded = succeeded;
+                            open_loop.quit();
+                        }),
                     "The MainWindow could not open the multi-track project.");
-            QApplication::processEvents();
+            require(window.project_load_pending_ && window.timeline_dock_ != nullptr &&
+                        !window.timeline_dock_->isEnabled() &&
+                        window.timeline_model_.trackCount() == 1 &&
+                        !window.timeline_model_.hasClip(),
+                    "Opening a project did not preserve the visible session while disabling editing.");
+            timeout.start(30000);
+            open_loop.exec();
+            require(open_succeeded && !window.project_load_pending_,
+                    "The background project open did not finish successfully.");
 
             require(window.timeline_model_.trackCount() == 2,
                     "Opening the project did not preserve both timeline tracks.");
@@ -160,6 +183,66 @@ public:
                         window.active_timeline_track_index_cache_ == 1 &&
                         window.timeline_model_.locateClip(2) == timeline::ClipLocation{1, 0},
                     "Undo did not restore the service-backed move and selection.");
+
+            window.media_controller_.clear();
+            window.populateMediaBrowser();
+            require(window.startMediaImport({first_source}),
+                    "The MainWindow did not start the background media import.");
+            media::VideoMetadata selected_metadata;
+            selected_metadata.source_path = second_source;
+            selected_metadata.display_name = "Keep this selection";
+            require(window.media_controller_.commitImported({
+                        selected_metadata, {}, selected_metadata.display_name,
+                        "Unsorted", true}).changed(),
+                    "The integration test could not add its selection fixture.");
+            const auto selection_after_import_start = window.selection_generation_;
+            window.populateMediaBrowser(second_source);
+            QEventLoop import_loop;
+            QTimer import_timeout;
+            import_timeout.setSingleShot(true);
+            QObject::connect(&import_timeout, &QTimer::timeout,
+                             &import_loop, &QEventLoop::quit);
+            QTimer import_poll;
+            QObject::connect(&import_poll, &QTimer::timeout, &import_loop, [&]() {
+                if (!window.active_media_import_cancel_) import_loop.quit();
+            });
+            require(window.media_import_progress_ != nullptr,
+                    "The MainWindow did not present media import progress.");
+            import_timeout.start(30000);
+            import_poll.start(10);
+            import_loop.exec();
+            require(!window.active_media_import_cancel_ &&
+                        window.media_controller_.library().contains(first_source) &&
+                        window.selection_generation_ > selection_after_import_start,
+                    "The MainWindow did not apply the completed import to the session library.");
+            require(window.selectedMediaIndex().has_value(),
+                    "The media-browser selection was lost after the import completed.");
+            require(window.media_items_[*window.selectedMediaIndex()].metadata.source_path ==
+                        media::MediaLibrary::canonicalPath(second_source),
+                    "A late import changed the selection made while it was running.");
+
+            window.media_controller_.clear();
+            window.populateMediaBrowser();
+            QEventLoop stale_import_loop;
+            QTimer stale_import_timeout;
+            stale_import_timeout.setSingleShot(true);
+            QObject::connect(&stale_import_timeout, &QTimer::timeout,
+                             &stale_import_loop, &QEventLoop::quit);
+            QTimer stale_import_poll;
+            QObject::connect(&stale_import_poll, &QTimer::timeout,
+                             &stale_import_loop, [&]() {
+                if (!window.active_media_import_cancel_) stale_import_loop.quit();
+            });
+            require(window.startMediaImport({second_source}),
+                    "The MainWindow did not start the stale-generation import.");
+            ++window.project_generation_;
+            stale_import_timeout.start(30000);
+            stale_import_poll.start(10);
+            stale_import_loop.exec();
+            require(!window.active_media_import_cancel_ &&
+                        !window.media_controller_.library().contains(second_source) &&
+                        !window.selectedMediaIndex().has_value(),
+                    "An import result from an earlier project generation changed the session.");
         }
 
         std::error_code cleanup_error;

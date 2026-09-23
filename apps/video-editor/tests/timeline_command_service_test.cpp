@@ -1,4 +1,5 @@
 #include "application/editor_session.h"
+#include "application/media_controller.h"
 #include "application/timeline_command_service.h"
 
 #include <filesystem>
@@ -26,9 +27,11 @@ media::VideoMetadata makeMetadata(const std::filesystem::path& path) {
 }
 
 void addMedia(application::EditorSession& session, const std::filesystem::path& path) {
+    application::MediaController controller(session);
     auto metadata = makeMetadata(path);
-    session.mediaItemsForUi().push_back({
+    const auto result = controller.commitImported({
         metadata, {}, metadata.display_name, "Unsorted", false});
+    require(result.changed(), "Could not add test media to the editor session.");
 }
 
 void run() {
@@ -111,8 +114,10 @@ void run() {
 
     auto offline_metadata = makeMetadata(
         std::filesystem::temp_directory_path() / "offline.mkv");
-    session.mediaItemsForUi().push_back({
+    application::MediaController media_controller(session);
+    const auto offline_added = media_controller.commitImported({
         offline_metadata, {}, offline_metadata.display_name, "Unsorted", true});
+    require(offline_added.changed(), "Could not add offline test media.");
     const auto offline_add = service.execute(application::AddMediaClipCommand{
         offline_metadata.source_path, first_track_id, 120});
     require(offline_add.reason == application::EditReason::OfflineMedia &&
@@ -256,12 +261,6 @@ void run() {
                 service.undoCount() == 10,
             "An overlapping text addition changed state or history.");
 
-    session.projectPathForUi() = first_path;
-    session.savedProjectDocumentForUi() = project::ProjectDocument{};
-    session.setProjectDirty(true);
-    require(session.projectPath() == first_path && session.savedProjectDocument().has_value() &&
-                session.projectDirty(),
-            "The session did not retain project path, saved baseline, and dirty state.");
 }
 
 } // namespace

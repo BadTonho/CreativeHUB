@@ -72,10 +72,8 @@ bool MediaLibrary::contains(const std::filesystem::path& path) const {
 
 std::size_t MediaLibrary::indexForPath(const std::filesystem::path& path) const {
     const auto canonical = canonicalPath(path);
-    for (std::size_t index = 0; index < items_.size(); ++index) {
-        if (canonicalPath(items_[index].metadata.source_path) == canonical) return index;
-    }
-    return items_.size();
+    const auto found = path_index_.find(canonical);
+    return found == path_index_.end() ? items_.size() : found->second;
 }
 
 bool MediaLibrary::isInBin(std::size_t index, std::string_view selected_bin) const {
@@ -99,6 +97,7 @@ MediaMutationResult MediaLibrary::addOnline(
     metadata.display_name = display_name;
     items_.push_back({std::move(metadata), std::move(first_frame),
                       std::move(display_name), std::move(bin_path), false});
+    path_index_.emplace(items_.back().metadata.source_path, items_.size() - 1);
     return MediaMutationResult::Changed;
 }
 
@@ -116,6 +115,7 @@ MediaMutationResult MediaLibrary::addOffline(
     metadata.display_name = display_name;
     items_.push_back({std::move(metadata), {}, std::move(display_name),
                       std::move(bin_path), true});
+    path_index_.emplace(items_.back().metadata.source_path, items_.size() - 1);
     return MediaMutationResult::Changed;
 }
 
@@ -209,6 +209,7 @@ MediaMutationResult MediaLibrary::moveBin(
 
 void MediaLibrary::clear() noexcept {
     items_.clear();
+    path_index_.clear();
     bins_.clear();
     bins_.emplace_back(default_bin);
 }

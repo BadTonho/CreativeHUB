@@ -31,6 +31,9 @@
 #include <QMenuBar>
 #include <QMetaObject>
 #include <QMessageBox>
+#include <QPointer>
+#include <QProgressDialog>
+#include <QRunnable>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QScrollArea>
@@ -515,40 +518,8 @@ void MainWindow::beginMediaBrowserBinEdit(const QString& path) {
     });
 }
 
-media::MediaLibrary MainWindow::buildMediaLibrary() const {
-    media::MediaLibrary library;
-    for (const auto& bin : bin_paths_) {
-        if (bin != media::default_bin && media::MediaLibrary::validBinPath(bin)) {
-            static_cast<void>(library.createBin(bin));
-        }
-    }
-    for (const auto& item : media_items_) {
-        static_cast<void>(library.addOffline(
-            item.metadata.source_path,
-            item.display_name,
-            item.bin_path));
-    }
-    return library;
-}
-
-void MainWindow::applyMediaLibrary(const media::MediaLibrary& library) {
-    bin_paths_ = library.bins();
-    if (std::find(bin_paths_.begin(), bin_paths_.end(), media::default_bin) ==
-        bin_paths_.end()) {
-        bin_paths_.emplace_back(media::default_bin);
-    }
-
-    for (auto& item : media_items_) {
-        const auto index = library.indexForPath(item.metadata.source_path);
-        if (index != library.size()) {
-            item.bin_path = library.items()[index].bin_path;
-        }
-    }
-}
-
 void MainWindow::createBin() {
     const auto parent_bin = selectedBinPath();
-    auto library = buildMediaLibrary();
     std::string new_path;
     for (std::size_t suffix = 1; suffix < 100000; ++suffix) {
         const std::string name = suffix == 1
@@ -557,7 +528,7 @@ void MainWindow::createBin() {
         const auto candidate = parent_bin.empty()
             ? name
             : parent_bin + "/" + name;
-        if (library.createBin(candidate) == media::MediaMutationResult::Changed) {
+        if (media_controller_.createBin(candidate).changed()) {
             new_path = candidate;
             break;
         }
@@ -566,7 +537,6 @@ void MainWindow::createBin() {
         statusBar()->showMessage("Could not create a new bin.");
         return;
     }
-    applyMediaLibrary(library);
     updateProjectDirtyState();
     populateMediaBrowser({}, parent_bin);
     beginMediaBrowserBinEdit(QString::fromStdString(new_path));
@@ -605,14 +575,11 @@ void MainWindow::handleMediaBrowserListItemChanged(QListWidgetItem* item) {
             const auto new_path = parent.empty()
                 ? new_name.toStdString()
                 : parent + "/" + new_name.toStdString();
-            auto library = buildMediaLibrary();
-            if (library.renameBin(old_path, new_path) !=
-                media::MediaMutationResult::Changed) {
+            if (!media_controller_.renameBin(old_path, new_path).changed()) {
                 restore();
                 statusBar()->showMessage("That bin name is already in use or invalid.");
                 return;
             }
-            applyMediaLibrary(library);
             updateProjectDirtyState();
             populateMediaBrowser({}, active_bin);
             selectMediaBrowserListBin(QString::fromStdString(new_path));
@@ -643,8 +610,8 @@ void MainWindow::handleMediaBrowserListItemChanged(QListWidgetItem* item) {
             return;
         }
 
-        media_items_[index].display_name = new_name.toStdString();
-        media_items_[index].metadata.display_name = media_items_[index].display_name;
+        static_cast<void>(media_controller_.rename(
+            media_items_[index].metadata.source_path, new_name.toStdString()));
         timeline_model_.updateDisplayNameForSource(
             media_items_[index].metadata.source_path,
             media_items_[index].display_name);
@@ -683,14 +650,11 @@ void MainWindow::handleMediaBrowserBinItemChanged(
         const auto new_path = parent.empty()
             ? new_name.toStdString()
             : parent + "/" + new_name.toStdString();
-        auto library = buildMediaLibrary();
-        if (library.renameBin(old_path, new_path) !=
-            media::MediaMutationResult::Changed) {
+        if (!media_controller_.renameBin(old_path, new_path).changed()) {
             restore();
             statusBar()->showMessage("That bin name is already in use or invalid.");
             return;
         }
-        applyMediaLibrary(library);
         updateProjectDirtyState();
         populateMediaBrowser({}, new_path);
     }, Qt::QueuedConnection);
@@ -713,15 +677,11 @@ void MainWindow::moveSelectedMediaToBin() {
     if (!accepted) return;
     const auto destination_bin = value.toStdString();
     if (destination_bin == media_items_[*index].bin_path) return;
-    auto library = buildMediaLibrary();
-    const auto library_index = library.indexForPath(media_items_[*index].metadata.source_path);
-    if (library_index == library.size() ||
-        library.moveToBin(library_index, destination_bin) !=
-            media::MediaMutationResult::Changed) {
+    if (!media_controller_.moveToBin(
+            media_items_[*index].metadata.source_path, destination_bin).changed()) {
         QMessageBox::warning(this, "Could not move media", "The destination bin is invalid.");
         return;
     }
-    applyMediaLibrary(library);
     updateProjectDirtyState();
     populateMediaBrowser(media_items_[*index].metadata.source_path, destination_bin);
 }
@@ -747,16 +707,11 @@ void MainWindow::handleMediaBrowserMediaDrop(
     const auto destination = destination_bin.toStdString();
     if (item->bin_path == destination) return;
 
-    auto library = buildMediaLibrary();
-    const auto library_index = library.indexForPath(item->metadata.source_path);
-    if (library_index == library.size() ||
-        library.moveToBin(library_index, destination) !=
-            media::MediaMutationResult::Changed) {
+    if (!media_controller_.moveToBin(item->metadata.source_path, destination).changed()) {
         statusBar()->showMessage("Could not move media to that bin.");
         return;
     }
 
-    applyMediaLibrary(library);
     updateProjectDirtyState();
     populateMediaBrowser(normalized_source, destination);
     statusBar()->showMessage(
@@ -778,13 +733,11 @@ void MainWindow::handleMediaBrowserBinDrop(
         separator == std::string::npos ? 0 : separator + 1);
     const auto new_path = destination + "/" + leaf;
 
-    auto library = buildMediaLibrary();
-    if (library.moveBin(source, new_path) != media::MediaMutationResult::Changed) {
+    if (!media_controller_.moveBin(source, new_path).changed()) {
         statusBar()->showMessage("That bin cannot be moved to this location.");
         return;
     }
 
-    applyMediaLibrary(library);
     updateProjectDirtyState();
     populateMediaBrowser({}, new_path);
     statusBar()->showMessage(
@@ -794,8 +747,7 @@ void MainWindow::handleMediaBrowserBinDrop(
 void MainWindow::removeSelectedMedia() {
     const auto index = selectedMediaIndex();
     if (!index.has_value() || media_items_[*index].offline) return;
-    media_items_[*index].offline = true;
-    media_items_[*index].first_frame = {};
+    if (!media_controller_.markOffline(media_items_[*index].metadata.source_path).changed()) return;
     ++playback_generation_;
     playback_is_playing_ = false;
     if (playback_worker_ != nullptr) QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
@@ -809,27 +761,7 @@ void MainWindow::restoreSelectedMedia() {
     const auto index = selectedMediaIndex();
     if (!index.has_value() || !media_items_[*index].offline) return;
     const auto path = media_items_[*index].metadata.source_path;
-    try {
-        const bool is_image = media::StillImageDecoder::supportsPath(path);
-        auto metadata = is_image
-            ? still_image_decoder_.probe(path)
-            : video_probe_.probe(path);
-        auto frame = is_image
-            ? still_image_decoder_.decode_first_frame(path)
-            : video_decoder_.decode_first_frame(path);
-        metadata.display_name = media_items_[*index].display_name;
-        media_items_[*index].metadata = std::move(metadata);
-        media_items_[*index].first_frame = std::move(frame);
-        media_items_[*index].offline = false;
-        updateProjectDirtyState();
-        populateMediaBrowser(path);
-        statusBar()->showMessage("Media restored.");
-    } catch (const media::MediaError& error) {
-        logging::Context context{{"path", pathToUtf8(path)}, {"cause", error.what()}};
-        if (error.error_code().has_value()) context.emplace_back("error_code", std::to_string(*error.error_code()));
-        logging::Logger::instance().log(logging::Level::Error, "media", "restore", error.what(), context);
-        QMessageBox::warning(this, "Could not restore media", fromUtf8(error.what()));
-    }
+    static_cast<void>(startMediaImport({path}));
 }
 
 void MainWindow::showMediaContextMenu(const QPoint& position) {
@@ -877,111 +809,159 @@ void MainWindow::openMedia() {
         "Image Files (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff);;"
         "All Files (*)");
     if (selected_files.isEmpty()) return;
+    std::vector<std::filesystem::path> paths;
+    paths.reserve(static_cast<std::size_t>(selected_files.size()));
+    for (const auto& selected_file : selected_files) {
+        paths.push_back(normalizedPath(QFileInfo(selected_file).filesystemFilePath()));
+    }
+    static_cast<void>(startMediaImport(std::move(paths)));
+}
+
+bool MainWindow::startMediaImport(std::vector<std::filesystem::path> paths) {
+    if (paths.empty()) return false;
+    if (active_media_import_cancel_) {
+        statusBar()->showMessage("A media import batch is already running or cancelling.");
+        return false;
+    }
+
+    const auto work_id = next_media_work_id_++;
+    active_media_work_id_ = work_id;
+    const auto project_generation = project_generation_;
+    const auto selection_generation = selection_generation_;
+    auto cancel = std::make_shared<std::atomic_bool>(false);
+    active_media_import_cancel_ = cancel;
+    auto* progress = new QProgressDialog(
+        "Preparing media...", "Cancel", 0, static_cast<int>(paths.size()), this);
+    progress->setWindowTitle("Import Media");
+    progress->setWindowModality(Qt::NonModal);
+    progress->setAutoClose(false);
+    progress->setAutoReset(false);
+    progress->setMinimumDuration(250);
+    connect(progress, &QProgressDialog::canceled, this, [cancel, progress]() {
+        cancel->store(true, std::memory_order_relaxed);
+        progress->setLabelText("Finishing the current media operation...");
+        progress->setCancelButton(nullptr);
+    });
+    media_import_progress_ = progress;
+    progress->show();
+
+    QPointer<MainWindow> guard(this);
+    media_task_pool_.start(QRunnable::create(
+        [guard, work_id, project_generation, selection_generation,
+         paths = std::move(paths), cancel]() mutable {
+            application::MediaImportService service;
+            auto result = service.process(
+                work_id,
+                project_generation,
+                selection_generation,
+                paths,
+                *cancel,
+                [guard, work_id](std::size_t current,
+                                 std::size_t total,
+                                 const std::filesystem::path& path) {
+                    if (guard.isNull()) return;
+                    const auto path_text = pathToUtf8(path.filename());
+                    QMetaObject::invokeMethod(
+                        guard.data(),
+                        [guard, work_id, current, total, path_text]() {
+                            if (guard.isNull() || guard->media_import_progress_ == nullptr ||
+                                guard->active_media_work_id_ != work_id) return;
+                            guard->media_import_progress_->setValue(static_cast<int>(current));
+                            guard->media_import_progress_->setLabelText(
+                                QString("Processing %1 of %2: %3")
+                                    .arg(current + 1).arg(total)
+                                    .arg(fromUtf8(path_text)));
+                        },
+                        Qt::QueuedConnection);
+                });
+            if (guard.isNull()) return;
+            QMetaObject::invokeMethod(
+                guard.data(),
+                [guard, result = std::move(result)]() mutable {
+                    if (!guard.isNull()) guard->finishMediaImport(std::move(result));
+                },
+                Qt::QueuedConnection);
+        }));
+    return true;
+}
+
+void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
+    if (result.work_id != active_media_work_id_) return;
+    if (media_import_progress_ != nullptr) {
+        media_import_progress_->setValue(media_import_progress_->maximum());
+        media_import_progress_->hide();
+        media_import_progress_->deleteLater();
+        media_import_progress_ = nullptr;
+    }
+    active_media_import_cancel_.reset();
+
+    if (result.project_generation != project_generation_) return;
 
     int imported_count = 0;
     int restored_count = 0;
     int duplicate_count = 0;
+    int failed_count = 0;
+    bool changed = false;
+    std::filesystem::path path_to_select;
     QStringList failures;
+    const bool selection_is_current = result.selection_generation == selection_generation_;
 
-    for (const auto& selected_file : selected_files) {
-        const std::filesystem::path source_path = normalizedPath(
-            QFileInfo(selected_file).filesystemFilePath());
-        try {
-            const auto existing = std::find_if(
-                media_items_.begin(),
-                media_items_.end(),
-                [&source_path](const ImportedMedia& item) {
-                    return item.metadata.source_path == source_path;
-                });
-            const bool is_gif = source_path.extension() == ".gif" ||
-                source_path.extension() == ".GIF";
-            const bool is_image = media::StillImageDecoder::supportsPath(source_path);
-            if (is_gif) {
-                throw media::MediaError("Animated GIF files are not supported.");
-            }
-
-            auto probe = [&]() {
-                return is_image
-                    ? still_image_decoder_.probe(source_path)
-                    : video_probe_.probe(source_path);
-            };
-            auto decode = [&]() {
-                return is_image
-                    ? still_image_decoder_.decode_first_frame(source_path)
-                    : video_decoder_.decode_first_frame(source_path);
-            };
-
-            if (existing != media_items_.end()) {
-                if (existing->offline) {
-                    auto metadata = probe();
-                    auto first_frame = decode();
-                    existing->metadata = std::move(metadata);
-                    existing->metadata.display_name = existing->display_name;
-                    existing->first_frame = std::move(first_frame);
-                    existing->offline = false;
-                    ++restored_count;
-                    updateProjectDirtyState();
-                    populateMediaBrowser(source_path);
-                } else {
-                    ++duplicate_count;
-                    populateMediaBrowser(source_path);
-                }
-                continue;
-            }
-
-            auto metadata = probe();
-            auto first_frame = decode();
-            addMediaItem(std::move(metadata), std::move(first_frame));
-            ++imported_count;
-            logging::Logger::instance().log(
-                logging::Level::Info,
-                "media",
-                "import",
-                "Media metadata and first preview frame imported.",
-                {{"path", pathToUtf8(source_path)},
-                 {"width", std::to_string(media_items_.back().first_frame.width)},
-                 {"height", std::to_string(media_items_.back().first_frame.height)},
-                 {"kind", media_items_.back().metadata.kind == media::MediaKind::Image
-                     ? "image" : "video"}});
-        } catch (const media::MediaError& error) {
-            logging::Context context{{"path", pathToUtf8(source_path)}, {"cause", error.what()}};
-            if (error.error_code().has_value()) {
-                context.emplace_back("error_code", std::to_string(*error.error_code()));
+    for (auto& file : result.files) {
+        if (file.status == application::MediaImportFileStatus::Discarded) continue;
+        if (file.status == application::MediaImportFileStatus::Failed) {
+            ++failed_count;
+            logging::Context context{{"path", pathToUtf8(file.path)}, {"cause", file.cause}};
+            if (file.error_code.has_value()) {
+                context.emplace_back("error_code", std::to_string(*file.error_code));
             }
             logging::Logger::instance().log(
-                logging::Level::Error, "media", "import", error.what(), context);
+                logging::Level::Error, "media", "import", file.cause, context);
             failures.push_back(
-                QFileInfo(selected_file).fileName() + ": " + fromUtf8(error.what()));
-        } catch (const std::exception& error) {
-            logging::Logger::instance().log(
-                logging::Level::Error,
-                "ui",
-                "media_import",
-                error.what(),
-                {{"path", pathToUtf8(source_path)}});
-            failures.push_back(
-                QFileInfo(selected_file).fileName() + ": " + fromUtf8(error.what()));
+                fromUtf8(pathToUtf8(file.path.filename())) + ": " + fromUtf8(file.cause));
+            continue;
+        }
+        if (!file.item.has_value()) continue;
+
+        const auto existing_index = media_controller_.library().indexForPath(file.path);
+        const bool was_offline = existing_index != media_controller_.library().size() &&
+            media_controller_.library().items()[existing_index].offline;
+        const auto committed = media_controller_.commitImported(std::move(*file.item));
+        if (committed.status == application::MediaCommandStatus::Rejected) {
+            if (committed.code == application::MediaCommandCode::Duplicate) {
+                ++duplicate_count;
+                if (selection_is_current) path_to_select = file.path;
+            }
+            continue;
+        }
+        if (committed.changed()) {
+            changed = true;
+            if (was_offline) ++restored_count;
+            else ++imported_count;
+            if (selection_is_current) path_to_select = file.path;
+        } else {
+            ++duplicate_count;
+            if (selection_is_current) path_to_select = file.path;
         }
     }
 
-    const int success_count = imported_count + restored_count;
+    if (changed) updateProjectDirtyState();
+    if (!path_to_select.empty()) populateMediaBrowser(path_to_select);
     statusBar()->showMessage(
-        QString("Media import complete: %1 imported, %2 restored, %3 duplicate(s), %4 failed.")
+        QString("Media import %1: %2 imported, %3 restored, %4 duplicate(s), %5 failed.")
+            .arg(result.cancelled ? "cancelled" : "complete")
             .arg(imported_count)
             .arg(restored_count)
             .arg(duplicate_count)
-            .arg(failures.size()));
+            .arg(failed_count));
     if (!failures.isEmpty()) {
-        QMessageBox::warning(
-            this,
-            "Some media could not be imported",
-            failures.join('\n'));
-    } else if (success_count == 1 && duplicate_count == 0) {
+        QMessageBox::warning(this, "Some media could not be imported", failures.join('\n'));
+    } else if (imported_count + restored_count == 1 && duplicate_count == 0) {
         statusBar()->showMessage("Media imported with preview frame.");
     }
 }
 
 void MainWindow::updateMediaDetails(int row) {
+    ++selection_generation_;
     pending_clip_activation_.reset();
     ++playback_generation_;
     if (playback_worker_ != nullptr) {
@@ -1068,24 +1048,4 @@ void MainWindow::updateMediaDetails(int row) {
              Q_ARG(quint64, playback_generation_));
         sendCompositionToWorker();
     }
-}
-
-void MainWindow::addMediaItem(
-    media::VideoMetadata metadata,
-    media::VideoFrame first_frame,
-    std::string display_name,
-    std::string bin_path,
-    bool offline,
-    bool mark_dirty) {
-    if (display_name.empty()) display_name = metadata.display_name;
-    if (display_name.empty()) display_name = media::MediaLibrary::defaultDisplayName(metadata.source_path);
-    metadata.display_name = display_name;
-    if (std::find(bin_paths_.begin(), bin_paths_.end(), bin_path) == bin_paths_.end()) {
-        bin_paths_.push_back(bin_path);
-    }
-    media_items_.push_back({std::move(metadata), std::move(first_frame),
-                            std::move(display_name), std::move(bin_path), offline});
-    auto& item = media_items_.back();
-    populateMediaBrowser(item.metadata.source_path);
-    if (mark_dirty) updateProjectDirtyState();
 }

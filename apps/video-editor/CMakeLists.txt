@@ -18,6 +18,16 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/main_window.h
     src/application/editor_session.cpp
     src/application/editor_session.h
+    src/application/media_controller.cpp
+    src/application/media_controller.h
+    src/application/media_import_service.cpp
+    src/application/media_import_service.h
+    src/application/project_document_mapper.cpp
+    src/application/project_document_mapper.h
+    src/application/project_controller.cpp
+    src/application/project_controller.h
+    src/application/project_open_service.cpp
+    src/application/project_open_service.h
     src/application/timeline_command_service.cpp
     src/application/timeline_command_service.h
     src/main_window/main_window_support.cpp
@@ -83,6 +93,10 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/project/autosave_manager.h
     src/project/project_file.cpp
     src/project/project_file.h
+    src/project/project_file_detail.h
+    src/project/project_file_reader.cpp
+    src/project/project_file_writer.cpp
+    src/project/project_document_validator.cpp
     src/timeline/timeline_model.cpp
     src/timeline/timeline_model.h
     src/timeline/timeline_clip_edge_command.cpp
