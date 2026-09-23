@@ -131,9 +131,9 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [x] Add basic manual text clips and captions with essential styling,
   worker-side rasterization, and `.csp` version 4 migration; automated model,
   compositor, persistence, and interactive validation passed.
-- [-] Add essential Cross Dissolve and Fade to Black transitions with worker
-  composition and `.csp` version 8 persistence; automated validation is in
-  progress and manual validation is still required before marking complete.
+- [x] Add essential Cross Dissolve and Fade to Black transitions with worker
+  composition and `.csp` version 8 persistence; automated and manual
+  validation passed.
 - [ ] Add common video export formats.
 - [ ] Ensure projects are stable, recoverable, and tested with small, medium,
   and heavy projects.
