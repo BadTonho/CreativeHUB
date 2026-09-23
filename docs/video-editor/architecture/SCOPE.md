@@ -32,6 +32,9 @@ The Main Editor currently includes:
 - atomic project autosave and recovery snapshots with configurable global
   interval and retention;
 - local structured diagnostic logging.
+- Edit and Fusion workspace pages in the same window; Fusion currently reuses
+  the Edit Preview as its Viewer and provides visual-only Node Editor and
+  Inspector placeholders.
 
 The current application does not include:
 
@@ -43,6 +46,7 @@ The current application does not include:
   audio crossfades, and transition effects beyond the essential pair;
 - ripple editing, automatic gap management, or project-wide history;
 - thumbnails, proxies, or complete relinking;
+- Fusion node graphs, composition editing, and Fusion-specific processing;
 - Motion Studio or Rust integration.
 
 The architecture remains application-local until a second real consumer

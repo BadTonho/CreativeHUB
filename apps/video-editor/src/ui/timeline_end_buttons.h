@@ -1,9 +1,16 @@
 #pragma once
 
 class QWidget;
+class QPushButton;
 
 namespace ui {
 
-[[nodiscard]] QWidget* createTimelineEndButtons(QWidget* parent);
+struct TimelineEndButtons {
+    QWidget* container = nullptr;
+    QPushButton* edit = nullptr;
+    QPushButton* fusion = nullptr;
+};
+
+[[nodiscard]] TimelineEndButtons createTimelineEndButtons(QWidget* parent);
 
 }  // namespace ui

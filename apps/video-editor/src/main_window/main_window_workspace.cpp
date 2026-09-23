@@ -8,6 +8,7 @@
 #include "settings/shortcut_manager.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser_list_widget.h"
+#include "ui/workspace_page_view.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -34,6 +35,7 @@
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QSettings>
+#include <QStackedWidget>
 #include <QSlider>
 #include <QStatusBar>
 #include <QToolBar>
@@ -57,7 +59,9 @@ using namespace main_window_detail;
 
 void MainWindow::createWorkspace() {
     preview_widget_ = new PreviewWidget(this);
-    setCentralWidget(preview_widget_);
+    workspace_page_view_ = new ui::WorkspacePageView(
+        preview_widget_, createInspector(), this);
+    setCentralWidget(workspace_page_view_);
     connect(
         preview_widget_,
         &PreviewWidget::gpuFallbackRequested,
@@ -121,7 +125,7 @@ void MainWindow::createWorkspace() {
     inspector_dock_ = createDock(
         "Inspector",
         "inspectorDock",
-        createInspector());
+        workspace_page_view_->inspectorPanel());
     addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
 
     timeline_dock_ = createDock(
@@ -131,6 +135,23 @@ void MainWindow::createWorkspace() {
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
 
     restoreWorkspaceLayout();
+    setWorkspacePage(WorkspacePage::Edit);
+}
+
+void MainWindow::setWorkspacePage(WorkspacePage page) {
+    workspace_page_ = page;
+    if (workspace_page_view_ != nullptr) {
+        workspace_page_view_->setFusionPageActive(page == WorkspacePage::Fusion);
+    }
+
+    const QSignalBlocker edit_blocker(edit_workspace_button_);
+    const QSignalBlocker fusion_blocker(fusion_workspace_button_);
+    if (edit_workspace_button_ != nullptr) {
+        edit_workspace_button_->setChecked(page == WorkspacePage::Edit);
+    }
+    if (fusion_workspace_button_ != nullptr) {
+        fusion_workspace_button_->setChecked(page == WorkspacePage::Fusion);
+    }
 }
 void MainWindow::showSettingsDialog() {
     settings::SettingsDialog dialog(this, *shortcut_manager_);

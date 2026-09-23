@@ -250,10 +250,19 @@ limited to the current paint region so long timelines remain responsive.
 Zoom affects only horizontal timeline presentation and is persisted per project
 without creating a clip-edit history entry.
 At the far right of the Timeline toolbar, after the zoom controls and flexible
-space, two active placeholder buttons are shown in order: `Edit`, then a blank
-button with no visible text or icon. Neither button has an action, shortcut,
-tooltip, or effect on project, playback, history, or Timeline state. The blank
-button exposes an accessible name to assistive technology.
+space, the `Edit` selector and a blank Fusion selector are shown in that order.
+The blank selector has no visible text or icon; its tooltip and accessible name
+identify it as `Fusion`. The active page is highlighted, and the application
+always opens on Edit without saving the selected page as project or workspace
+state.
+
+Edit preserves the current Preview, Inspector, and Timeline presentation. The
+Fusion page keeps Bins, Media, and Timeline available, labels the existing
+Preview as `Viewer`, and shows a visual-only Node Editor panel below it plus a
+Fusion Inspector placeholder. The Node Editor and Fusion Inspector have no
+composition operations. Switching pages changes only these visible panels; it
+does not change the selected clip, playhead, playback, project data, history,
+or dirty state.
 
 Gesture priority is configurable: by default, normal drag moves clips and
 Alt + drag seeks; when the Edit > Require Alt to Move Clips option is enabled,

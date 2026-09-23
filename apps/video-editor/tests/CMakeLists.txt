@@ -1196,3 +1196,35 @@ add_test(
 set_tests_properties(creative-suite-main-editor-timeline-end-buttons PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
+
+add_executable(creative-suite-main-editor-workspace-page-switch-tests
+    workspace_page_switch_test.cpp
+    ../src/ui/timeline_end_buttons.cpp
+    ../src/ui/timeline_end_buttons.h
+    ../src/ui/workspace_page_view.cpp
+    ../src/ui/workspace_page_view.h
+)
+
+target_include_directories(creative-suite-main-editor-workspace-page-switch-tests PRIVATE
+    ../src
+)
+
+target_link_libraries(creative-suite-main-editor-workspace-page-switch-tests PRIVATE
+    Qt6::Widgets
+)
+
+target_compile_features(creative-suite-main-editor-workspace-page-switch-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-workspace-page-switch-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-workspace-page-switch-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-workspace-page-switch
+    COMMAND creative-suite-main-editor-workspace-page-switch-tests
+)
+set_tests_properties(creative-suite-main-editor-workspace-page-switch PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)

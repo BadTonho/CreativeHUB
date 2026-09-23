@@ -51,6 +51,9 @@ class EffectsToolboxWidget;
 class EffectsListWidget;
 class EffectsFavoritesWidget;
 class QWidget;
+namespace ui {
+class WorkspacePageView;
+}
 
 namespace timeline {
 class TimelineWidget;
@@ -73,8 +76,14 @@ protected:
 private:
     struct ImportedMedia;
 
+    enum class WorkspacePage {
+        Edit,
+        Fusion
+    };
+
     void createMenus();
     void createWorkspace();
+    void setWorkspacePage(WorkspacePage page);
     void showSettingsDialog();
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();
@@ -318,6 +327,9 @@ private:
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
+    ui::WorkspacePageView* workspace_page_view_ = nullptr;
+    QPushButton* edit_workspace_button_ = nullptr;
+    QPushButton* fusion_workspace_button_ = nullptr;
     MediaBrowserListWidget* media_list_ = nullptr;
     MediaBrowserBinTreeWidget* bin_tree_ = nullptr;
     EffectsToolboxWidget* effects_toolbox_ = nullptr;
@@ -403,6 +415,7 @@ private:
     std::optional<timeline::EditState> pending_audio_edit_;
     std::optional<timeline::EditState> pending_transform_edit_;
     bool project_dirty_ = false;
+    WorkspacePage workspace_page_ = WorkspacePage::Edit;
     bool initial_window_layout_pending_ = false;
     media::VideoProbe video_probe_;
     media::StillImageDecoder still_image_decoder_;

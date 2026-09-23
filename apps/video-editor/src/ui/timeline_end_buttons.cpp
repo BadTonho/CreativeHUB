@@ -6,7 +6,7 @@
 
 namespace ui {
 
-QWidget* createTimelineEndButtons(QWidget* parent) {
+TimelineEndButtons createTimelineEndButtons(QWidget* parent) {
     auto* container = new QWidget(parent);
     auto* layout = new QHBoxLayout(container);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -15,17 +15,30 @@ QWidget* createTimelineEndButtons(QWidget* parent) {
     auto* edit_button = new QPushButton("Edit", container);
     edit_button->setObjectName("timelineEditButton");
     edit_button->setFixedHeight(28);
-    edit_button->setEnabled(true);
+    edit_button->setCheckable(true);
+    edit_button->setAutoExclusive(true);
+    edit_button->setToolTip("Switch to the Edit workspace");
+    edit_button->setAccessibleName("Edit workspace");
+    edit_button->setChecked(true);
 
     auto* unnamed_button = new QPushButton(container);
     unnamed_button->setObjectName("timelineUnnamedButton");
-    unnamed_button->setAccessibleName("Unassigned timeline action");
+    unnamed_button->setAccessibleName("Fusion");
+    unnamed_button->setToolTip("Switch to the Fusion workspace");
     unnamed_button->setFixedSize(32, 28);
-    unnamed_button->setEnabled(true);
+    unnamed_button->setCheckable(true);
+    unnamed_button->setAutoExclusive(true);
+
+    container->setStyleSheet(
+        "QPushButton:checked {"
+        " background-color: #1680bd;"
+        " border: 1px solid #2c9bd8;"
+        " color: #ffffff;"
+        "}");
 
     layout->addWidget(edit_button);
     layout->addWidget(unnamed_button);
-    return container;
+    return {container, edit_button, unnamed_button};
 }
 
 }  // namespace ui

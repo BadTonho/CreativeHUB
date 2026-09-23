@@ -469,7 +469,20 @@ QWidget* MainWindow::createTimeline() {
     controls->addWidget(zoom_control);
     controls->addWidget(zoom_in_button);
     controls->addStretch();
-    controls->addWidget(ui::createTimelineEndButtons(container));
+    const auto workspace_buttons = ui::createTimelineEndButtons(container);
+    edit_workspace_button_ = workspace_buttons.edit;
+    fusion_workspace_button_ = workspace_buttons.fusion;
+    connect(
+        edit_workspace_button_,
+        &QPushButton::clicked,
+        this,
+        [this]() { setWorkspacePage(WorkspacePage::Edit); });
+    connect(
+        fusion_workspace_button_,
+        &QPushButton::clicked,
+        this,
+        [this]() { setWorkspacePage(WorkspacePage::Fusion); });
+    controls->addWidget(workspace_buttons.container);
     layout->addLayout(controls);
 
     monitor_volume_slider_->setValue(settings::monitorVolumePercent());
