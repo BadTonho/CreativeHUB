@@ -28,7 +28,7 @@ The suite combines the best paradigms of industry-standard tools into a unified,
                     |
            +--------v--------+
            |  Image Editor   |
-           | (Next App Stage)|
+           | (Raster Editing)|
            +-----------------+
 ```
 
@@ -37,10 +37,10 @@ The suite combines the best paradigms of industry-standard tools into a unified,
 1. **Main Editor** *(In Active Development)*:
    - Audiovisual editing combining the editing fluidity and multi-track simplicity of Premiere with the grading and assembly depth of DaVinci Resolve.
    - Core capabilities: multi-track timeline editing, cutting, blade splitting, transitions, text overlays/captions, transform keyframes, synchronized audio playback, and export.
-2. **Image Editor** *(Next Application Stage after the Main Editor foundation)*:
-   - High-performance digital imaging and raster graphics editing (inspired by Photoshop and Affinity Photo).
-   - First validate a linked-image workflow with the Main Editor; the first editing release precedes Motion Studio.
-3. **Motion Studio** *(Planned - Following Image Editor Milestone 4)*:
+2. **Image Editor** *(Standalone minimum under development)*:
+   - Open one raster image, crop and transform it non-destructively, save an editable `.cimg` document, and export PNG or JPEG.
+   - Build the standalone minimum first; linked-image compatibility with the Main Editor follows before the first editing release.
+3. **Motion Studio** *(Planned - Following the Image Editor's first editing release)*:
    - A dedicated application for motion design, advanced compositing, and visual effects (analogous to After Effects).
    - Core capabilities: complex animation curves, bezier keyframes, animated vector masks, nested compositions, chained effects, and shape layers.
 
@@ -125,6 +125,19 @@ Development is currently centered on the **Main Editor** MVP under [`apps/video-
    open build/apps/video-editor/creative-suite-main-editor.app
    ```
 
+5. **Run the Image Editor:**
+   ```powershell
+   # On Windows:
+   .\build\apps\image-editor\Release\creative-suite-image-editor.exe
+   ```
+   ```bash
+   # On Linux:
+   ./build/apps/image-editor/creative-suite-image-editor
+
+   # On macOS:
+   open build/apps/image-editor/creative-suite-image-editor.app
+   ```
+
 ---
 
 ## 5. Running Regression Tests
@@ -186,4 +199,5 @@ This project is licensed under the **GNU General Public License v3.0 or later (G
 
 Third-party dependencies and libraries:
 - **Qt 6**: Licensed under LGPLv3 / GPLv3.
+- **Qt Image Formats**: Provides the TIFF and WebP plugins; review the Qt and bundled codec notices before distribution.
 - **FFmpeg**: Licensed under LGPLv2.1+ / GPLv2+ depending on the enabled codecs and configuration.

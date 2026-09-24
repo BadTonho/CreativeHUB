@@ -1,128 +1,103 @@
 # Image Editor Roadmap
 
-Status: **next planned application effort and provisional**. This roadmap
-covers the Image Editor work area under `apps/image-editor/`. The folders are
-placeholders; the application is not wired into CMake and its final scope has
-not been decided.
-
-The Main Editor remains the first application priority. After its foundation
-is stable, the Image Editor is the next application stage, ahead of Motion
-Studio. Its first milestone is a bounded linked-image compatibility prototype;
-the Image Editor's first editing release follows before Motion Studio begins.
-Keep Main Editor stability as a priority. See the
-[cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
+Status: **standalone minimum in progress**. This roadmap covers the independent
+application under `apps/image-editor/`. Build and validate the first useful
+editor before integrating it with the Main Editor. The Image Editor remains
+ahead of Motion Studio in the application sequence.
 
 ## Principles
 
-- Keep the first Image Editor milestone bounded to the compatibility workflow
-  with the Main Editor.
-- Do not let Image Editor work interrupt critical Main Editor stability work.
-- Keep advanced Image Editor expansion separate from the first editing
-  milestone and review its scope as the project learns from the prototype.
-- Decide through user workflows and technical prototypes whether the Image
-  Editor should be a separate application or an integrated module.
-- Reuse shared document, media, rendering, compositing, color, history, and
-  recovery services when their boundaries are validated.
-- Evaluate memory use, startup time, image dimensions, color management,
-  dependency licenses, and Windows, macOS, and Linux support.
-- Treat feature lists below as candidates for scope definition, not approved
-  product commitments.
+- Keep the Main Editor's stability work on track while developing the Image
+  Editor as a separate executable.
+- Preserve source images; store edits as operations in a versioned document.
+- Keep the first scope to one raster image per document and avoid layer,
+  painting, retouch, color-adjustment, and effect systems in this milestone.
+- Use Qt image I/O and deploy the plugins required for the documented input
+  formats. Track Qt Image Formats and its codec notices for distribution.
+- Keep compatibility with the Main Editor as a later, independently testable
+  milestone. After integration, refresh host output after a successful save;
+  unsaved live previews are outside the first compatibility milestone.
+- Consider Windows, macOS, and Linux paths, packaging, and image dimensions
+  from the beginning.
 
 ## Milestones
 
 ### 0. Readiness
 
-- [x] Reserve `apps/image-editor/` and `docs/image-editor/` for future work.
-- [ ] Confirm that the Main Editor project, media, image-preview, and
-  composition foundations are stable enough to host a linked image revision.
-- [ ] Bound the first prototype to one raster-image workflow and confirm
-  capacity before expanding its scope.
+- [x] Reserve `apps/image-editor/` and `docs/image-editor/`.
+- [x] Select a standalone Qt Widgets executable as the first deliverable.
+- [x] Bound the initial editor to crop, quarter-turn rotation, and horizontal
+  or vertical flips on one raster image.
 
-**Exit criteria:** the Main Editor foundation is stable enough for the
-handoff work, and the project has agreed on a bounded prototype and capacity.
+**Exit criteria:** a standalone scope and build boundary are agreed.
 
-### 1. Product and compatibility discovery
+### 1. Standalone minimum editor
 
-- [ ] Define target users, image-editing workflows, supported document types,
-  and the first prototype boundary.
-- [ ] Decide whether the editor is a separate application or a module shared
-  through the suite's core.
-- [ ] Define the Media Pool companion-document workflow: create on first open,
-  reuse on later opens, preserve the source image, and refresh all uses of the
-  Media Pool item after save.
-- [ ] Decide whether opening a timeline clip reuses the Media Pool edit or
-  creates a clip-specific variant.
-- [ ] Define the host-consumable raster output contract, linked resources,
-  color behavior, revision detection, and version compatibility with the Main
-  Editor.
-- [ ] Compare candidate document, color-management, rendering, and file-format
-  approaches, including their costs, risks, licenses, and distribution needs.
+- [x] Add an independently buildable `creative-suite-image-editor` target.
+- [x] Add a versioned `.cimg` editable document that references its original
+  image and stores an ordered list of non-destructive operations.
+- [x] Keep undo and redo in memory, preserve the original source, and support
+  explicit relinking when the source path is unavailable.
+- [x] Export flattened PNG and JPEG images, preserving PNG transparency and
+  flattening JPEG output over white.
+- [x] Add local autosave snapshots, recovery, and bounded structured error
+  logging.
+- [x] Add canvas fit, zoom, pan, and drag-to-crop controls.
+- [-] Pass Release build and automated tests for documents, edits, relinking,
+  export, recovery, logging, and the UI boundary.
+- [ ] Complete the manual workflow in
+  [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md), including a restart and
+  recovery check.
+- [ ] Validate Windows packaging with PNG, JPEG, BMP, WebP, and TIFF plugins;
+  then repeat build and interaction checks on macOS and Linux.
 
-**Exit criteria:** scope and application boundaries are documented, with
-technical alternatives and a testable Main Editor handoff contract recorded as
-provisional decisions.
+**Exit criteria:** the application builds independently, opens and edits a
+raster image without changing its source, saves and reopens `.cimg`, exports
+PNG/JPEG, and recovers an autosave. Required image plugins are present in the
+packaged application. Automated and manual checks pass.
 
-### 2. Main Editor compatibility prototype
+### 2. Main Editor linked-image compatibility
 
-- [ ] Open a raster image from the Main Editor Media Pool and create or reopen
-  one companion document in the Image Editor's native format.
-- [ ] Preserve the original image and save a host-consumable rendered image
-  output with a detectable saved revision.
-- [ ] Refresh the corresponding Media Pool preview and all timeline uses after
-  a successful save; invalidate affected render-cache entries.
-- [ ] Validate one simple non-destructive edit, save/reopen, missing-resource
-  behavior, and stale-revision handling.
-- [ ] Measure startup, memory, and interaction performance on small, medium,
-  and large images.
-- [ ] Validate file paths, color handling, and build/run support on Windows,
-  macOS, and Linux.
-- [ ] Record third-party library, codec, and color-profile licensing
-  requirements.
+Start after the standalone minimum passes its exit criteria.
 
-**Exit criteria:** the end-to-end linked image workflow works without
-overwriting the source or leaving stale preview/cache output, and its measured
-performance and platform limitations are documented. Unsaved live preview
-streaming is not required for this prototype.
+- [ ] Add an image action in the Main Editor Media Pool and timeline to create
+  or reopen an editable companion document.
+- [ ] Preserve the original source and publish a host-consumable raster output
+  beside or through the companion document.
+- [ ] Refresh the Main Editor preview and all timeline uses after a successful
+  Image Editor save; invalidate dependent render caches.
+- [ ] Reuse the companion document on later opens and define behavior for
+  timeline variants before supporting them.
+- [ ] Handle moved sources, missing documents, unsupported versions, and stale
+  saved revisions with actionable recovery guidance.
+- [ ] Validate save/reopen, transparent and large images, repeated opens, and
+  updates across multiple timeline uses on Windows, macOS, and Linux.
 
-### 3. Document and editing foundation
+**Exit criteria:** saving a linked image document refreshes every intended
+Main Editor use without modifying the original or leaving stale previews.
+Unsaved live preview streaming remains out of scope.
 
-Proceed after the compatibility prototype passes. This document and editing
-foundation is part of the Image Editor stage that precedes Motion Studio.
+### 3. First editing release
 
-- [ ] Define a versioned, documented image project format and recovery behavior.
-- [ ] Implement the approved document model and non-destructive layer,
-  transform, and mask behavior using validated shared services where
-  appropriate.
-- [ ] Add undo/redo, autosave, recovery, and actionable local error logging.
-- [ ] Add automated coverage for document persistence, compositing, and module
-  boundaries.
+Proceed after the compatibility milestone. Keep advanced image workflows
+separate from this release.
 
-**Exit criteria:** a user can create, save, reopen, and recover a layered image
-document with its supported edits intact.
+- [ ] Confirm the release workflow list and supported image sizes from user
+  validation.
+- [ ] Add only the next approved editing capabilities, with automated
+  regression coverage and manual visual validation.
+- [ ] Validate recovery, export, and linked asset handoff as a complete
+  workflow.
 
-### 4. First editing release
+**Exit criteria:** the first release workflows pass automated regression
+coverage and manual visual validation on supported platforms. Begin the Motion
+Studio foundation after this milestone passes.
 
-The following capabilities are candidates to assess during scope definition;
-none are approved until the discovery milestone is complete:
+### 4. Future expansion
 
-- [ ] Selection and crop tools.
-- [ ] Brush and basic retouch workflows.
-- [ ] Color adjustments and a small, documented set of effects.
-- [ ] Text and shape layers, if required by validated workflows.
-- [ ] Export to selected common image formats with documented color behavior.
-- [ ] Validate small, medium, and large documents, recovery, and cross-app
-  asset handoff.
-
-**Exit criteria:** the approved first-release workflows pass automated
-regression coverage and manual visual validation on all supported platforms.
-After this milestone, begin the Motion Studio foundation as described in its
-roadmap; keep advanced Image Editor expansion scoped separately.
-
-### 5. Future expansion
-
-- [ ] Revisit advanced retouching, larger effect libraries, automation, and
-  other image workflows only when user needs, performance measurements, and
-  maintenance capacity justify them.
+- [ ] Revisit layers, masks, brushes, retouching, color adjustments, and larger
+  effect sets only when user workflows and performance measurements justify
+  them.
 
 ## Status legend
 
@@ -131,6 +106,6 @@ roadmap; keep advanced Image Editor expansion scoped separately.
 - `[x]` Completed
 - `[!]` Blocked or requiring a decision
 
-Do not add target dates until the product scope, shared-core boundaries, and
-project capacity are validated. Update this roadmap when a milestone,
-dependency, or decision changes.
+Do not add target dates until project capacity and cross-platform packaging
+have been validated. Update this roadmap when a milestone, dependency, or
+decision changes.

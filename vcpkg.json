@@ -5,6 +5,7 @@
   "dependencies": [
     "ffmpeg",
     "qtbase",
+    "qtimageformats",
     "qtmultimedia"
   ]
 }

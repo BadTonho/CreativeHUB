@@ -6,15 +6,15 @@ priorities.
 
 ## Goal
 
-Allow the Main Editor, Motion Studio, and a future Image Editor to share stable
+Allow the Main Editor, Motion Studio, and Image Editor to share stable
 domain capabilities and continue supported work across applications. Keep
 shared code reuse and document handoff as separate concerns: applications can
 reuse a library without sharing project files, and they can exchange a linked
 document without sharing their entire editing workflow.
 
-The Image Editor is not implemented yet. The current roadmap schedules its
-linked-image prototype after the Main Editor foundation, followed by the Image
-Editor's first editing release before Motion Studio. This is a sequencing
+The Image Editor standalone minimum is being implemented first. The linked
+image prototype will follow that application milestone, and the Image Editor's
+first editing release remains ahead of Motion Studio. This is a sequencing
 direction; technical contracts in this proposal remain provisional.
 
 ## Recommended Boundaries
@@ -184,14 +184,16 @@ Before making this direction final, prototype and document:
 
 1. Maintain a capability ownership matrix for the applications.
 2. Specify and validate the composition contract inside the Main Editor.
-3. After the Main Editor foundation is stable, validate the linked raster
-   handoff with a bounded Image Editor prototype.
-4. Extract only the proven capabilities used by both applications into
+3. Build and validate the standalone Image Editor minimum before adding
+   cross-application behavior.
+4. After the standalone editor is usable, validate the linked raster handoff
+   with a bounded Main Editor compatibility prototype.
+5. Extract only the proven capabilities used by both applications into
    focused libraries.
-5. Complete and validate Image Editor Milestone 4 (first editing release),
-   then start the Motion Studio foundation and validate composition handoff as
-   part of its integration.
-6. Review advanced Image Editor expansion separately against project capacity.
+6. Complete and validate the Image Editor's first editing release, then start
+   the Motion Studio foundation and validate composition handoff as part of
+   its integration.
+7. Review advanced Image Editor expansion separately against project capacity.
 
 This sequence keeps shared libraries aligned with real consumers, gives each
 document type a suitable contract, and avoids duplicating media, rendering,
