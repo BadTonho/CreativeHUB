@@ -148,6 +148,54 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [ ] Add proxies, caching, and incremental rendering.
 - [ ] Improve performance through profiling and measurement.
 
+### Photo Editor handoff readiness
+
+This is Main Editor integration work, not a commitment to start the Image
+Editor. Begin the integration after the Main Editor and Motion Studio
+foundations are stable and the project has capacity. Follow the provisional
+[cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
+
+- [ ] Define how a Media Pool image maps to one companion Photo Editor
+  document, including create-on-first-open and reuse on later opens while
+  preserving the original source image.
+- [ ] Define the `.csp` link data and migration strategy for the companion
+  document location, document identity and version, saved revision, source
+  relationship, and relinking when files move. Keep the current project format
+  unchanged until this contract is validated.
+- [ ] Choose and document whether the companion document references its source
+  image or embeds image data, including portability, storage, and recovery
+  behavior.
+- [ ] Define a host-consumable image output contract covering dimensions,
+  alpha, pixel format, and color behavior so the Main Editor does not need to
+  interpret the Photo Editor's full native document format.
+- [ ] Decide timeline invocation semantics: reuse the Media Pool item's linked
+  edit or create a clip-specific variant. Media Pool edits are asset-level and
+  should update every timeline use of that item.
+- [ ] Add an explicit open/edit action for Media Pool images and image clips;
+  create or reopen the linked document and launch the Photo Editor through a
+  cross-platform handoff boundary.
+- [ ] Detect a successfully saved linked revision and refresh its host output,
+  media preview, and affected timeline composition. Invalidate only dependent
+  render-cache entries, and discard stale refresh results after a project
+  change.
+- [ ] Handle missing or moved documents and source images, unsupported document
+  versions, read-only locations, and stale concurrent revisions with recovery
+  guidance and actionable technical logs.
+- [ ] Add automated coverage for link creation and reuse, project persistence
+  and migration, source preservation, asset-level updates, stale results,
+  missing resources, and unsupported versions.
+- [ ] Document manual validation for repeated Media Pool opens, multiple
+  timeline uses of one image, the chosen timeline edit behavior, large and
+  transparent images, save and reopen, moved files, and the handoff on Windows,
+  macOS, and Linux.
+
+**Exit criteria:** a Media Pool image opens the same linked editable document
+on repeat use; the source remains intact; saving publishes a compatible image
+revision that refreshes every use of that media item without stale preview
+frames or render-cache results. Timeline-specific behavior and recovery cases
+are documented and validated. Unsaved live preview streaming remains a later
+milestone.
+
 ## 6. Motion Studio
 
 - [x] Reserve the `apps/motion-editor/` and `docs/motion-editor/` placeholders.
@@ -173,7 +221,8 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
   module.
 - [ ] Plan layers, masks, selections, text, color adjustments, filters, and
   export.
-- [ ] Define how image documents will be shared with the other applications.
+- [ ] Coordinate the native image document and revision contract with the
+  Main Editor handoff work above.
 
 ## 8. Cross-Platform and Release Work
 
