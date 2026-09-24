@@ -30,6 +30,8 @@ add_executable(creative-suite-image-editor
     src/main.cpp
     src/image_editor_window.cpp
     src/image_editor_window.h
+    src/new_canvas_dialog.cpp
+    src/new_canvas_dialog.h
     src/image_canvas.cpp
     src/image_canvas.h
 )

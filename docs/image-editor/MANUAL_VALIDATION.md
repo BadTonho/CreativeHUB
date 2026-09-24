@@ -8,24 +8,36 @@ run.
 
 1. Configure and build `creative-suite-image-editor` in Release mode, then
    launch it from the build output.
-2. Open PNG, JPEG, BMP, WebP, and TIFF examples. Confirm each is decoded and
+2. Use **File > New Canvas**. Try the square, portrait, story/reel, Full HD,
+   and A4 presets, then create a custom-size canvas. Choose transparent, white,
+   and a custom-color background in separate runs. Confirm transparent areas
+   show a checkerboard and the status bar reports the canvas dimensions. With
+   unsaved changes, start another canvas and verify the save/discard/cancel prompt.
+3. Crop, rotate, and flip a canvas; use Undo and Redo and confirm its displayed
+   dimensions follow the edits.
+4. Save a new canvas as `.cimg`, close it, reopen it, and confirm its dimensions,
+   background, and edits are unchanged. Confirm an unsaved canvas can be
+   recovered after restarting the application.
+5. Export a transparent canvas to PNG and JPEG. Confirm PNG transparency is
+   retained and transparent JPEG pixels become white.
+6. Open PNG, JPEG, BMP, WebP, and TIFF examples. Confirm each is decoded and
    its dimensions are shown. If a format fails, check that the Qt Image Formats
    plugins are present in the deployed `imageformats` directory.
-3. Fit the image, zoom with the mouse wheel, pan with the middle mouse button,
+7. Fit the image, zoom with the mouse wheel, pan with the middle mouse button,
    and drag a crop. Rotate both directions, flip horizontally and vertically,
    then use Undo and Redo. Confirm the canvas and dirty marker update.
-4. Save an editable `.cimg`, close it, reopen it, and confirm the rendered
+8. Save an editable `.cimg`, close it, reopen it, and confirm the rendered
    result is unchanged. Compare the original source file before and after to
    verify it was not overwritten.
-5. Export a transparent image to PNG and JPEG. Confirm PNG transparency is
+9. Export a transparent image to PNG and JPEG. Confirm PNG transparency is
    retained and transparent JPEG pixels become white.
-6. Move the source image, reopen the `.cimg`, and relink the moved file. Confirm
+10. Move the source image, reopen the `.cimg`, and relink the moved file. Confirm
    a replacement with different dimensions is rejected and the original-sized
    image restores the edit.
-7. Make an edit, wait for the 60-second recovery interval, close and discard
+11. Make an edit, wait for the 60-second recovery interval, close and discard
    the unsaved edit, then relaunch. Restore the recovery snapshot and confirm
    that the edit is present and still marked unsaved.
-8. Try a corrupt image, an invalid `.cimg`, a read-only destination, and an
+12. Try a corrupt image, an invalid `.cimg`, a read-only destination, and an
    unsupported export extension. Confirm the UI reports the failure and a
    structured entry is written to the local Image Editor log.
 

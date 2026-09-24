@@ -25,6 +25,8 @@ QString RecoveryStore::recoveryDirectory() const {
 QString RecoveryStore::pathFor(const ImageDocumentSession& session) const {
     QString identity = session.documentPath();
     if (identity.isEmpty()) identity = session.sourcePath();
+    if (identity.isEmpty()) identity = session.recoverySessionId();
+    if (identity.isEmpty()) return {};
     const auto bytes = identity.toUtf8();
     const auto digest = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
     return QDir(recoveryDirectory()).filePath(
@@ -40,6 +42,7 @@ bool RecoveryStore::save(const ImageDocumentSession& session, QString* error) co
     RecoveryDocumentData recovery;
     recovery.document = session.data();
     recovery.target_document_path = session.recoveryTargetPath();
+    recovery.session_id = session.recoverySessionId();
     return ImageDocumentStore::saveRecovery(pathFor(session), recovery, error);
 }
 

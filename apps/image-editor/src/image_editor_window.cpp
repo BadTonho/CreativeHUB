@@ -2,6 +2,7 @@
 
 #include "image_canvas.h"
 #include "image_document_store.h"
+#include "new_canvas_dialog.h"
 
 #include <QAction>
 #include <QCloseEvent>
@@ -39,6 +40,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     setCentralWidget(central);
 
     status_label_ = new QLabel(QStringLiteral("No image open"), this);
+    status_label_->setObjectName(QStringLiteral("imageStatusLabel"));
     statusBar()->addWidget(status_label_, 1);
 
     createActions();
@@ -55,7 +57,10 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
         if (!session_.isDirty() || !session_.hasSource()) return;
         QString error;
         if (!recovery_store_.save(session_, &error)) {
-            logger_.logError(QStringLiteral("autosave"), error, session_.sourcePath());
+            QString context = session_.sourcePath();
+            if (context.isEmpty()) context = session_.documentPath();
+            if (context.isEmpty()) context = session_.recoverySessionId();
+            logger_.logError(QStringLiteral("autosave"), error, context);
             statusBar()->showMessage(QStringLiteral("Recovery snapshot could not be saved"), 5000);
         }
     });
@@ -74,6 +79,10 @@ void ImageEditorWindow::createActions() {
         return action;
     };
 
+    new_canvas_action_ = makeAction(
+        QStringLiteral("New Canvas..."), QKeySequence::New,
+        [this]() { createNewCanvas(); });
+    new_canvas_action_->setObjectName(QStringLiteral("newCanvasAction"));
     auto* open_image_action = makeAction(
         QStringLiteral("Open Image..."), QKeySequence::Open, [this]() { openImage(); });
     open_image_action->setObjectName(QStringLiteral("openImageAction"));
@@ -128,6 +137,8 @@ void ImageEditorWindow::createActions() {
         QStringLiteral("Fit Image"), {}, [this]() { canvas_->fitToWindow(); });
 
     auto* file_menu = menuBar()->addMenu(QStringLiteral("File"));
+    file_menu->addAction(new_canvas_action_);
+    file_menu->addSeparator();
     file_menu->addAction(open_image_action);
     file_menu->addAction(open_document_action);
     file_menu->addAction(relink_action_);
@@ -153,6 +164,7 @@ void ImageEditorWindow::createActions() {
 
     auto* toolbar = addToolBar(QStringLiteral("Image Editing"));
     toolbar->setMovable(false);
+    toolbar->addAction(new_canvas_action_);
     toolbar->addAction(open_image_action);
     toolbar->addAction(open_document_action);
     toolbar->addSeparator();
@@ -183,8 +195,12 @@ void ImageEditorWindow::updateView() {
     fit_action_->setEnabled(session_.hasSource());
 
     QString title = QStringLiteral("Image Editor");
-    if (!session_.sourcePath().isEmpty()) {
+    if (!session_.documentPath().isEmpty()) {
+        title = QFileInfo(session_.documentPath()).fileName() + QStringLiteral(" — Image Editor");
+    } else if (!session_.sourcePath().isEmpty()) {
         title = QFileInfo(session_.sourcePath()).fileName() + QStringLiteral(" — Image Editor");
+    } else if (session_.hasDocument()) {
+        title = QStringLiteral("Untitled Canvas — Image Editor");
     }
     if (session_.isDirty()) title.prepend('*');
     setWindowTitle(title);
@@ -199,6 +215,19 @@ void ImageEditorWindow::updateView() {
     status_label_->setText(QStringLiteral("%1 × %2 px  |  %3%")
         .arg(size.width()).arg(size.height())
         .arg(static_cast<int>(canvas_->zoomFactor() * 100.0)));
+}
+
+void ImageEditorWindow::createNewCanvas() {
+    NewCanvasDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted || !confirmDiscardOrSave()) return;
+
+    QString error;
+    if (!session_.createCanvas(dialog.canvasSize(), dialog.backgroundColor(), &error)) {
+        reportError(QStringLiteral("create_canvas"), error);
+        return;
+    }
+    updateView();
+    statusBar()->showMessage(QStringLiteral("New canvas created"), 3000);
 }
 
 bool ImageEditorWindow::confirmDiscardOrSave() {

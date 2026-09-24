@@ -29,6 +29,7 @@ protected:
 private:
     void createActions();
     void updateView();
+    void createNewCanvas();
     void openImage();
     void openDocument();
     void relinkSource();
@@ -50,6 +51,7 @@ private:
     QLabel* status_label_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
     QAction* relink_action_ = nullptr;
+    QAction* new_canvas_action_ = nullptr;
     QAction* save_action_ = nullptr;
     QAction* save_as_action_ = nullptr;
     QAction* export_action_ = nullptr;

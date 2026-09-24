@@ -26,6 +26,8 @@ add_executable(creative-suite-image-editor-ui-tests
     image_editor_ui_test.cpp
     ../src/image_editor_window.cpp
     ../src/image_editor_window.h
+    ../src/new_canvas_dialog.cpp
+    ../src/new_canvas_dialog.h
     ../src/image_canvas.cpp
     ../src/image_canvas.h
 )

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QRect>
 #include <QString>
 #include <QStringList>
@@ -7,6 +8,11 @@
 #include <QVector>
 
 namespace image_editor {
+
+enum class ImageBaseKind {
+    SourceImage,
+    Canvas,
+};
 
 enum class OperationKind {
     Crop,
@@ -24,8 +30,10 @@ struct ImageOperation {
 };
 
 struct ImageDocumentData {
+    ImageBaseKind base_kind = ImageBaseKind::SourceImage;
     QString source_path;
     QSize source_size;
+    QColor canvas_background = QColor(0, 0, 0, 0);
     QVector<ImageOperation> operations;
 
     bool operator==(const ImageDocumentData&) const = default;
@@ -34,10 +42,15 @@ struct ImageDocumentData {
 struct RecoveryDocumentData {
     ImageDocumentData document;
     QString target_document_path;
+    QString session_id;
 };
 
 class ImageDocumentStore final {
 public:
+    static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
+
+    [[nodiscard]] static bool isValidCanvasSize(const QSize& size) noexcept;
+
     [[nodiscard]] static bool saveDocument(
         const QString& document_path,
         const ImageDocumentData& document,

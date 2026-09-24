@@ -4,6 +4,7 @@ The editor uses Qt standard key sequences, which follow platform conventions.
 
 | Action | Shortcut |
 | --- | --- |
+| New canvas | `Ctrl+N` on Windows/Linux; `Cmd+N` on macOS |
 | Open image | `Ctrl+O` on Windows/Linux; `Cmd+O` on macOS |
 | Save editable document | `Ctrl+S` on Windows/Linux; `Cmd+S` on macOS |
 | Save editable document as | `Ctrl+Shift+S` on Windows/Linux; `Cmd+Shift+S` on macOS |

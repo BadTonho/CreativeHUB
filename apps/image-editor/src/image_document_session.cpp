@@ -7,6 +7,7 @@
 #include <QSaveFile>
 #include <QTransform>
 #include <QDir>
+#include <QUuid>
 
 namespace image_editor {
 namespace {
@@ -20,6 +21,39 @@ QString absoluteCleanPath(const QString& path) {
 }
 
 } // namespace
+
+bool ImageDocumentSession::createCanvas(const QSize& size,
+                                        const QColor& background,
+                                        QString* error) {
+    if (!ImageDocumentStore::isValidCanvasSize(size) || !background.isValid()) {
+        assignError(error, QStringLiteral("Choose valid canvas dimensions and a valid background."));
+        return false;
+    }
+
+    QImage canvas(size, QImage::Format_ARGB32);
+    if (canvas.isNull()) {
+        assignError(error, QStringLiteral("The canvas could not be allocated. Try smaller dimensions."));
+        return false;
+    }
+    canvas.fill(background);
+
+    data_ = {};
+    data_.base_kind = ImageBaseKind::Canvas;
+    data_.source_size = size;
+    data_.canvas_background = background;
+    source_image_ = std::move(canvas);
+    document_path_.clear();
+    recovery_session_id_ = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    baseline_source_path_.clear();
+    baseline_source_size_ = size;
+    baseline_base_kind_ = ImageBaseKind::Canvas;
+    baseline_canvas_background_ = background;
+    baseline_operations_.clear();
+    force_dirty_ = true;
+    undo_stack_.clear();
+    redo_stack_.clear();
+    return true;
+}
 
 bool ImageDocumentSession::loadSource(const QString& source_path,
                                       QImage* image,
@@ -47,11 +81,16 @@ bool ImageDocumentSession::openImage(const QString& source_path, QString* error)
     if (!loadSource(source_path, &decoded, error)) return false;
 
     data_ = {};
+    data_.base_kind = ImageBaseKind::SourceImage;
     data_.source_path = absoluteCleanPath(source_path);
     data_.source_size = decoded.size();
     source_image_ = std::move(decoded);
     document_path_.clear();
+    recovery_session_id_.clear();
     baseline_source_path_ = data_.source_path;
+    baseline_source_size_ = data_.source_size;
+    baseline_base_kind_ = data_.base_kind;
+    baseline_canvas_background_ = data_.canvas_background;
     baseline_operations_.clear();
     force_dirty_ = false;
     undo_stack_.clear();
@@ -64,19 +103,32 @@ bool ImageDocumentSession::openDocument(const QString& document_path, QString* e
     if (!ImageDocumentStore::loadDocument(document_path, &candidate, error)) return false;
 
     QImage decoded;
-    const bool missing = !QFileInfo::exists(candidate.source_path);
-    if (!missing) {
-        if (!loadSource(candidate.source_path, &decoded, error)) return false;
-        if (decoded.size() != candidate.source_size) {
-            assignError(error, QStringLiteral("The source image dimensions no longer match the document."));
+    if (candidate.base_kind == ImageBaseKind::Canvas) {
+        decoded = QImage(candidate.source_size, QImage::Format_ARGB32);
+        if (decoded.isNull()) {
+            assignError(error, QStringLiteral("The canvas could not be allocated. Try smaller dimensions."));
             return false;
+        }
+        decoded.fill(candidate.canvas_background);
+    } else {
+        const bool missing = !QFileInfo::exists(candidate.source_path);
+        if (!missing) {
+            if (!loadSource(candidate.source_path, &decoded, error)) return false;
+            if (decoded.size() != candidate.source_size) {
+                assignError(error, QStringLiteral("The source image dimensions no longer match the document."));
+                return false;
+            }
         }
     }
 
     data_ = std::move(candidate);
     source_image_ = std::move(decoded);
     document_path_ = absoluteCleanPath(document_path);
+    recovery_session_id_.clear();
     baseline_source_path_ = data_.source_path;
+    baseline_source_size_ = data_.source_size;
+    baseline_base_kind_ = data_.base_kind;
+    baseline_canvas_background_ = data_.canvas_background;
     baseline_operations_ = data_.operations;
     force_dirty_ = false;
     undo_stack_.clear();
@@ -89,19 +141,35 @@ bool ImageDocumentSession::restoreRecovery(const QString& recovery_path, QString
     if (!ImageDocumentStore::loadRecovery(recovery_path, &recovery, error)) return false;
 
     QImage decoded;
-    const bool missing = !QFileInfo::exists(recovery.document.source_path);
-    if (!missing) {
-        if (!loadSource(recovery.document.source_path, &decoded, error)) return false;
-        if (decoded.size() != recovery.document.source_size) {
-            assignError(error, QStringLiteral("The recovery source dimensions no longer match."));
+    if (recovery.document.base_kind == ImageBaseKind::Canvas) {
+        decoded = QImage(recovery.document.source_size, QImage::Format_ARGB32);
+        if (decoded.isNull()) {
+            assignError(error, QStringLiteral("The recovered canvas could not be allocated."));
             return false;
+        }
+        decoded.fill(recovery.document.canvas_background);
+    } else {
+        const bool missing = !QFileInfo::exists(recovery.document.source_path);
+        if (!missing) {
+            if (!loadSource(recovery.document.source_path, &decoded, error)) return false;
+            if (decoded.size() != recovery.document.source_size) {
+                assignError(error, QStringLiteral("The recovery source dimensions no longer match."));
+                return false;
+            }
         }
     }
 
     data_ = std::move(recovery.document);
     source_image_ = std::move(decoded);
     document_path_ = recovery.target_document_path;
+    recovery_session_id_ = recovery.session_id;
+    if (recovery_session_id_.isEmpty() && data_.base_kind == ImageBaseKind::Canvas) {
+        recovery_session_id_ = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    }
     baseline_source_path_ = data_.source_path;
+    baseline_source_size_ = data_.source_size;
+    baseline_base_kind_ = data_.base_kind;
+    baseline_canvas_background_ = data_.canvas_background;
     baseline_operations_.clear();
     force_dirty_ = true;
     undo_stack_.clear();
@@ -110,6 +178,10 @@ bool ImageDocumentSession::restoreRecovery(const QString& recovery_path, QString
 }
 
 bool ImageDocumentSession::relinkSource(const QString& source_path, QString* error) {
+    if (data_.base_kind != ImageBaseKind::SourceImage || !sourceIsMissing()) {
+        assignError(error, QStringLiteral("This document does not need a source image to be relinked."));
+        return false;
+    }
     QImage decoded;
     if (!loadSource(source_path, &decoded, error)) return false;
     if (decoded.size() != data_.source_size) {
@@ -136,6 +208,9 @@ bool ImageDocumentSession::saveDocument(QString document_path, QString* error) {
     if (!ImageDocumentStore::saveDocument(document_path, data_, error)) return false;
     document_path_ = absoluteCleanPath(document_path);
     baseline_source_path_ = data_.source_path;
+    baseline_source_size_ = data_.source_size;
+    baseline_base_kind_ = data_.base_kind;
+    baseline_canvas_background_ = data_.canvas_background;
     baseline_operations_ = data_.operations;
     force_dirty_ = false;
     return true;
@@ -282,6 +357,8 @@ bool ImageDocumentSession::redo() {
 
 bool ImageDocumentSession::isDirty() const noexcept {
     return force_dirty_ || data_.source_path != baseline_source_path_ ||
+        data_.source_size != baseline_source_size_ || data_.base_kind != baseline_base_kind_ ||
+        data_.canvas_background != baseline_canvas_background_ ||
         data_.operations != baseline_operations_;
 }
 

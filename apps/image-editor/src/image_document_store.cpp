@@ -15,7 +15,9 @@
 namespace image_editor {
 namespace {
 
-constexpr int kDocumentVersion = 1;
+constexpr int kLegacyDocumentVersion = 1;
+constexpr int kDocumentVersion = 2;
+constexpr int kRecoveryVersion = 1;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr auto kRecoveryFormat = "creative-suite-image-recovery";
 
@@ -37,21 +39,29 @@ bool isInteger(const QJsonValue& value, int* result) {
 
 QJsonObject encodeDocument(const ImageDocumentData& document,
                            const QString& document_path) {
-    const QFileInfo source_info(document.source_path);
-    const QString source_absolute = source_info.absoluteFilePath();
-    QString stored_source = source_absolute;
-    const QString relative = QDir(QFileInfo(document_path).absolutePath())
-                                 .relativeFilePath(source_absolute);
-    const QString clean_relative = QDir::cleanPath(relative);
-    if (!QDir::isAbsolutePath(relative) && clean_relative != ".." &&
-        !clean_relative.startsWith("../") && !clean_relative.startsWith("..\\")) {
-        stored_source = QDir::fromNativeSeparators(clean_relative);
-    }
+    QJsonObject base;
+    if (document.base_kind == ImageBaseKind::Canvas) {
+        base.insert("kind", "canvas");
+        base.insert("width", document.source_size.width());
+        base.insert("height", document.source_size.height());
+        base.insert("background", document.canvas_background.name(QColor::HexArgb));
+    } else {
+        const QFileInfo source_info(document.source_path);
+        const QString source_absolute = source_info.absoluteFilePath();
+        QString stored_source = source_absolute;
+        const QString relative = QDir(QFileInfo(document_path).absolutePath())
+                                     .relativeFilePath(source_absolute);
+        const QString clean_relative = QDir::cleanPath(relative);
+        if (!QDir::isAbsolutePath(relative) && clean_relative != ".." &&
+            !clean_relative.startsWith("../") && !clean_relative.startsWith("..\\")) {
+            stored_source = QDir::fromNativeSeparators(clean_relative);
+        }
 
-    QJsonObject source;
-    source.insert("path", stored_source);
-    source.insert("width", document.source_size.width());
-    source.insert("height", document.source_size.height());
+        base.insert("kind", "source_image");
+        base.insert("path", stored_source);
+        base.insert("width", document.source_size.width());
+        base.insert("height", document.source_size.height());
+    }
 
     QJsonArray operations;
     for (const auto& operation : document.operations) {
@@ -81,7 +91,7 @@ QJsonObject encodeDocument(const ImageDocumentData& document,
     QJsonObject root;
     root.insert("format", kDocumentFormat);
     root.insert("version", kDocumentVersion);
-    root.insert("source", source);
+    root.insert("base", base);
     root.insert("operations", operations);
     return root;
 }
@@ -95,28 +105,55 @@ bool decodeDocument(const QJsonObject& root,
         return false;
     }
     int version = 0;
-    if (!isInteger(root.value("version"), &version) || version != kDocumentVersion) {
+    if (!isInteger(root.value("version"), &version) ||
+        (version != kLegacyDocumentVersion && version != kDocumentVersion)) {
         assignError(error, QStringLiteral("This Image Editor document version is not supported."));
         return false;
     }
 
-    const auto source = root.value("source").toObject();
-    const QString path = source.value("path").toString();
+    const auto source = version == kLegacyDocumentVersion
+        ? root.value("source").toObject()
+        : QJsonObject{};
+    const auto base = version == kDocumentVersion
+        ? root.value("base").toObject()
+        : QJsonObject{};
+    const QString base_kind = version == kLegacyDocumentVersion
+        ? QStringLiteral("source_image") : base.value("kind").toString();
+    const auto base_data = version == kLegacyDocumentVersion ? source : base;
+    const QString path = base_data.value("path").toString();
     int source_width = 0;
     int source_height = 0;
-    if (path.isEmpty() || !isInteger(source.value("width"), &source_width) ||
-        !isInteger(source.value("height"), &source_height) ||
+    if (!isInteger(base_data.value("width"), &source_width) ||
+        !isInteger(base_data.value("height"), &source_height) ||
         source_width <= 0 || source_height <= 0) {
-        assignError(error, QStringLiteral("The document source reference is invalid."));
+        assignError(error, QStringLiteral("The document base dimensions are invalid."));
         return false;
     }
 
     ImageDocumentData decoded;
     decoded.source_size = QSize(source_width, source_height);
-    decoded.source_path = QDir::isAbsolutePath(path)
-        ? QFileInfo(path).absoluteFilePath()
-        : QFileInfo(QDir(QFileInfo(document_path).absolutePath()).filePath(path))
-              .absoluteFilePath();
+    if (base_kind == "source_image") {
+        if (path.isEmpty()) {
+            assignError(error, QStringLiteral("The document source reference is invalid."));
+            return false;
+        }
+        decoded.base_kind = ImageBaseKind::SourceImage;
+        decoded.source_path = QDir::isAbsolutePath(path)
+            ? QFileInfo(path).absoluteFilePath()
+            : QFileInfo(QDir(QFileInfo(document_path).absolutePath()).filePath(path))
+                  .absoluteFilePath();
+    } else if (base_kind == "canvas" && version == kDocumentVersion) {
+        const QColor background(base.value("background").toString());
+        if (!ImageDocumentStore::isValidCanvasSize(decoded.source_size) || !background.isValid()) {
+            assignError(error, QStringLiteral("The canvas base is invalid or too large."));
+            return false;
+        }
+        decoded.base_kind = ImageBaseKind::Canvas;
+        decoded.canvas_background = background;
+    } else {
+        assignError(error, QStringLiteral("The document base type is not supported."));
+        return false;
+    }
 
     const auto operations_value = root.value("operations");
     if (!operations_value.isArray()) {
@@ -218,9 +255,14 @@ bool writeJson(const QString& file_path, const QJsonObject& object, QString* err
 bool ImageDocumentStore::saveDocument(const QString& document_path,
                                       const ImageDocumentData& document,
                                       QString* error) {
-    if (document_path.isEmpty() || document.source_path.isEmpty() ||
-        !document.source_size.isValid() || document.source_size.isEmpty()) {
-        assignError(error, QStringLiteral("The document path or image source is invalid."));
+    const bool valid_source = document.base_kind == ImageBaseKind::SourceImage &&
+        !document.source_path.isEmpty() && document.source_size.isValid() &&
+        !document.source_size.isEmpty();
+    const bool valid_canvas = document.base_kind == ImageBaseKind::Canvas &&
+        document.source_path.isEmpty() && isValidCanvasSize(document.source_size) &&
+        document.canvas_background.isValid();
+    if (document_path.isEmpty() || (!valid_source && !valid_canvas)) {
+        assignError(error, QStringLiteral("The document path or image base is invalid."));
         return false;
     }
     return writeJson(document_path, encodeDocument(document, document_path), error);
@@ -241,15 +283,22 @@ bool ImageDocumentStore::loadDocument(const QString& document_path,
 bool ImageDocumentStore::saveRecovery(const QString& recovery_path,
                                       const RecoveryDocumentData& recovery,
                                       QString* error) {
-    if (recovery_path.isEmpty() || recovery.document.source_path.isEmpty() ||
-        !recovery.document.source_size.isValid() || recovery.document.source_size.isEmpty()) {
+    const bool valid_source = recovery.document.base_kind == ImageBaseKind::SourceImage &&
+        !recovery.document.source_path.isEmpty() && recovery.document.source_size.isValid() &&
+        !recovery.document.source_size.isEmpty();
+    const bool valid_canvas = recovery.document.base_kind == ImageBaseKind::Canvas &&
+        recovery.document.source_path.isEmpty() &&
+        isValidCanvasSize(recovery.document.source_size) &&
+        recovery.document.canvas_background.isValid();
+    if (recovery_path.isEmpty() || (!valid_source && !valid_canvas)) {
         assignError(error, QStringLiteral("The recovery document is invalid."));
         return false;
     }
     QJsonObject root;
     root.insert("format", kRecoveryFormat);
-    root.insert("version", kDocumentVersion);
+    root.insert("version", kRecoveryVersion);
     root.insert("target_document_path", recovery.target_document_path);
+    if (!recovery.session_id.isEmpty()) root.insert("session_id", recovery.session_id);
     root.insert("document", encodeDocument(recovery.document, recovery_path));
     return writeJson(recovery_path, root, error);
 }
@@ -265,7 +314,7 @@ bool ImageDocumentStore::loadRecovery(const QString& recovery_path,
     if (!readJson(recovery_path, &root, error)) return false;
     int version = 0;
     if (root.value("format").toString() != kRecoveryFormat ||
-        !isInteger(root.value("version"), &version) || version != kDocumentVersion ||
+        !isInteger(root.value("version"), &version) || version != kRecoveryVersion ||
         !root.value("document").isObject()) {
         assignError(error, QStringLiteral("This recovery snapshot is not supported."));
         return false;
@@ -276,11 +325,21 @@ bool ImageDocumentStore::loadRecovery(const QString& recovery_path,
         return false;
     }
     recovery->document = std::move(document);
+    recovery->session_id = root.value("session_id").toString();
     const QString target = root.value("target_document_path").toString();
     recovery->target_document_path = target.isEmpty()
         ? QString{}
         : QFileInfo(target).absoluteFilePath();
     return true;
+}
+
+bool ImageDocumentStore::isValidCanvasSize(const QSize& size) noexcept {
+    if (size.width() <= 0 || size.height() <= 0 ||
+        size.width() > 32768 || size.height() > 32768) {
+        return false;
+    }
+    const qint64 pixel_count = static_cast<qint64>(size.width()) * size.height();
+    return pixel_count <= kMaximumCanvasPixels;
 }
 
 QStringList ImageDocumentStore::supportedImageExtensions() {

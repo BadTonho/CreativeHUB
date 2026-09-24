@@ -9,16 +9,22 @@ the active image document, ordered edit operations, persistence, and recovery.
 
 ## Runtime boundaries
 
-- `ImageDocumentSession` owns the decoded source image and the document's
-  ordered crop, rotation, and flip operations. The source file remains
-  unchanged. Rendering applies operations in sequence to an owning `QImage`.
+- `ImageDocumentSession` owns either a decoded, linked source image or a
+  self-contained canvas base, plus the document's ordered crop, rotation, and
+  flip operations. Linked source files remain unchanged. Rendering applies
+  operations in sequence to an owning `QImage`.
 - `ImageDocumentStore` reads and atomically writes versioned `.cimg` documents
   and recovery snapshots. Its data format is specified in
   [`FORMAT.md`](FORMAT.md).
-- `RecoveryStore` writes a local snapshot every 60 seconds while a dirty image
-  with an available source is open. On the next launch, the UI offers the
-  newest available snapshot for restoration.
-- `ImageCanvas` handles fit, zoom, middle-button panning, and crop selection.
+- `RecoveryStore` writes a local snapshot every 60 seconds while a dirty
+  document with a renderable base is open. Unsaved canvases use a persisted
+  session identity so they remain recoverable without a source path. On the
+  next launch, the UI offers the newest available snapshot for restoration.
+- `NewCanvasDialog` offers fixed pixel presets or custom dimensions and
+  requires a transparent, white, or custom-color background. Canvas documents
+  store this base metadata without generating a companion raster file.
+- `ImageCanvas` handles fit, zoom, middle-button panning, crop selection, and
+  a checkerboard behind transparent pixels.
   `ImageEditorWindow` routes menu and toolbar actions, prompts before discarding
   edits, and projects session state into the window.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local

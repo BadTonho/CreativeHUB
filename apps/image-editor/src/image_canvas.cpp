@@ -81,6 +81,22 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
 
     const QRectF target = imageTargetRect();
     painter.fillRect(target.adjusted(-2, -2, 2, 2), QColor(18, 19, 22));
+    constexpr qreal checker_size = 16.0;
+    painter.save();
+    painter.setClipRect(target);
+    const int first_column = static_cast<int>(std::floor(target.left() / checker_size));
+    const int last_column = static_cast<int>(std::ceil(target.right() / checker_size));
+    const int first_row = static_cast<int>(std::floor(target.top() / checker_size));
+    const int last_row = static_cast<int>(std::ceil(target.bottom() / checker_size));
+    for (int row = first_row; row < last_row; ++row) {
+        for (int column = first_column; column < last_column; ++column) {
+            const QColor color = ((row + column) % 2 == 0)
+                ? QColor(205, 208, 214) : QColor(158, 162, 170);
+            painter.fillRect(QRectF(column * checker_size, row * checker_size,
+                                    checker_size, checker_size), color);
+        }
+    }
+    painter.restore();
     painter.drawImage(target, image_);
 
     if (crop_mode_ && selecting_crop_) {

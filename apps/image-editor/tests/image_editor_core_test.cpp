@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QImageReader>
 #include <QImageWriter>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -106,6 +107,135 @@ void testDocumentEditingAndUndoRedo(const QString& root) {
 
     require(!reopened.canUndo() && !reopened.canRedo(),
             QStringLiteral("Undo history should remain in memory only."));
+}
+
+void testCanvasCreationPersistenceAndRecovery(const QString& root) {
+    image_editor::ImageDocumentSession session;
+    QString error;
+    const QColor custom_background(24, 96, 180, 128);
+    require(session.createCanvas(QSize(32, 20), custom_background, &error), error);
+    require(session.hasDocument() && session.hasSource() && !session.sourceIsMissing() &&
+                session.sourcePath().isEmpty(),
+            QStringLiteral("A new canvas was not represented as a self-contained document."));
+    require(session.renderedImage().size() == QSize(32, 20) &&
+                session.renderedImage().pixelColor(5, 5) == custom_background,
+            QStringLiteral("The new canvas dimensions or custom background are incorrect."));
+    require(session.isDirty(), QStringLiteral("A new, unsaved canvas should be dirty."));
+
+    session.rotateRight();
+    require(session.renderedImage().size() == QSize(20, 32),
+            QStringLiteral("Rotation did not apply to a new canvas."));
+    require(session.undo() && session.renderedImage().size() == QSize(32, 20),
+            QStringLiteral("Undo did not restore the canvas dimensions."));
+    require(session.redo() && session.renderedImage().size() == QSize(20, 32),
+            QStringLiteral("Redo did not reapply the canvas rotation."));
+    require(session.applyCrop(QRect(0, 0, 12, 18), &error), error);
+    require(session.renderedImage().size() == QSize(12, 18),
+            QStringLiteral("Crop did not apply to a new canvas."));
+    require(session.undo() && session.undo() && session.renderedImage().size() == QSize(32, 20),
+            QStringLiteral("Undo did not restore canvas edits in order."));
+
+    const QString recovery_directory = root + QStringLiteral("/canvas-recovery");
+    image_editor::RecoveryStore recovery(recovery_directory);
+    require(recovery.save(session, &error), error);
+    const auto snapshots = recovery.snapshots();
+    require(snapshots.size() == 1,
+            QStringLiteral("An unsaved canvas was not included in recovery."));
+    const QString recovery_path = recovery.pathFor(session);
+    image_editor::ImageDocumentSession restored;
+    require(restored.restoreRecovery(snapshots.front(), &error), error);
+    require(restored.data() == session.data() && restored.renderedImage() == session.renderedImage() &&
+                restored.isDirty() && !restored.sourceIsMissing() &&
+                recovery.pathFor(restored) == recovery_path,
+            QStringLiteral("Canvas recovery did not preserve pixels, edits, or its recovery identity."));
+    require(recovery.remove(snapshots.front()),
+            QStringLiteral("The canvas recovery snapshot could not be removed."));
+
+    const QString document_path = root + QStringLiteral("/canvas.cimg");
+    require(session.saveDocument(document_path, &error), error);
+    require(!session.isDirty(), QStringLiteral("Saving a canvas did not clear its dirty state."));
+    session.rotateLeft();
+    require(session.isDirty() && session.undo() && !session.isDirty(),
+            QStringLiteral("Undo did not return a saved canvas to its clean baseline."));
+    session.rotateRight();
+    require(session.isDirty() && session.undo() && !session.isDirty(),
+            QStringLiteral("Canvas redo history or its saved baseline is inconsistent."));
+    QFile document_file(document_path);
+    require(document_file.open(QIODevice::ReadOnly),
+            QStringLiteral("The saved canvas document could not be read."));
+    const auto document_json = QJsonDocument::fromJson(document_file.readAll()).object();
+    require(document_json.value("version").toInt() == 2 &&
+                document_json.value("base").toObject().value("kind").toString() == "canvas",
+            QStringLiteral("Canvas save did not use the version 2 canvas representation."));
+
+    image_editor::ImageDocumentSession reopened;
+    require(reopened.openDocument(document_path, &error), error);
+    require(reopened.data() == session.data() &&
+                reopened.renderedImage() == session.renderedImage() && !reopened.isDirty(),
+            QStringLiteral("A saved canvas did not round-trip through the document format."));
+
+    image_editor::ImageDocumentSession transparent;
+    require(transparent.createCanvas(QSize(10, 8), QColor(0, 0, 0, 0), &error), error);
+    require(transparent.renderedImage().pixelColor(2, 2).alpha() == 0,
+            QStringLiteral("A transparent canvas was not transparent."));
+    const QString png_path = root + QStringLiteral("/transparent-canvas.png");
+    require(transparent.exportImage(png_path, &error), error);
+    QImage png(png_path);
+    require(!png.isNull() && png.pixelColor(2, 2).alpha() == 0,
+            QStringLiteral("PNG export did not preserve transparent canvas pixels."));
+    const QString jpeg_path = root + QStringLiteral("/transparent-canvas.jpg");
+    require(transparent.exportImage(jpeg_path, &error), error);
+    QImage jpeg(jpeg_path);
+    require(!jpeg.isNull() && jpeg.pixelColor(2, 2).red() > 245 &&
+                jpeg.pixelColor(2, 2).green() > 245 && jpeg.pixelColor(2, 2).blue() > 245,
+            QStringLiteral("JPEG export did not flatten transparent canvas pixels over white."));
+
+    image_editor::ImageDocumentSession white;
+    require(white.createCanvas(QSize(5, 5), Qt::white, &error), error);
+    require(white.renderedImage().pixelColor(0, 0) == QColor(Qt::white),
+            QStringLiteral("A white canvas background was not preserved."));
+
+    const QImage original = session.renderedImage();
+    require(!session.createCanvas(QSize(0, 20), Qt::white, &error) && !error.isEmpty(),
+            QStringLiteral("Invalid canvas dimensions were accepted."));
+    require(!session.createCanvas(QSize(32768, 32768), Qt::white, &error),
+            QStringLiteral("Canvas dimensions above the pixel budget were accepted."));
+    require(session.renderedImage() == original,
+            QStringLiteral("A rejected canvas creation replaced the current document."));
+}
+
+void testLegacyVersionOneDocument(const QString& root) {
+    const QString source_path = root + QStringLiteral("/legacy-source.png");
+    require(writeImage(source_path, sampleImage()),
+            QStringLiteral("Could not create the version 1 source image."));
+    const QString path = root + QStringLiteral("/legacy.cimg");
+    QJsonObject source;
+    source.insert("path", QFileInfo(source_path).fileName());
+    source.insert("width", 4);
+    source.insert("height", 3);
+    QJsonObject root_object;
+    root_object.insert("format", "creative-suite-image-document");
+    root_object.insert("version", 1);
+    root_object.insert("source", source);
+    root_object.insert("operations", QJsonArray{});
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly),
+            QStringLiteral("Could not create the version 1 document fixture."));
+    file.write(QJsonDocument(root_object).toJson());
+    file.close();
+
+    image_editor::ImageDocumentSession session;
+    QString error;
+    require(session.openDocument(path, &error), error);
+    require(session.data().base_kind == image_editor::ImageBaseKind::SourceImage &&
+                session.renderedImage() == sampleImage() && !session.isDirty(),
+            QStringLiteral("A version 1 source-image document did not remain compatible."));
+    require(session.saveDocument({}, &error), error);
+    QFile upgraded(path);
+    require(upgraded.open(QIODevice::ReadOnly),
+            QStringLiteral("The upgraded version 1 document could not be read."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 2,
+            QStringLiteral("Saving a version 1 document did not upgrade it to version 2."));
 }
 
 void testCropNoOpAndInvalidOperations(const QString& root) {
@@ -271,6 +401,8 @@ int main(int argc, char* argv[]) {
     const QString root = temporary.path();
     try {
         testDocumentEditingAndUndoRedo(root);
+        testCanvasCreationPersistenceAndRecovery(root);
+        testLegacyVersionOneDocument(root);
         testCropNoOpAndInvalidOperations(root);
         testMissingSourceAndRelink(root);
         testExportAndFormatPlugins(root);

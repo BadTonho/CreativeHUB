@@ -9,6 +9,9 @@ namespace image_editor {
 
 class ImageDocumentSession final {
 public:
+    [[nodiscard]] bool createCanvas(const QSize& size,
+                                    const QColor& background,
+                                    QString* error = nullptr);
     [[nodiscard]] bool openImage(const QString& source_path, QString* error = nullptr);
     [[nodiscard]] bool openDocument(const QString& document_path, QString* error = nullptr);
     [[nodiscard]] bool restoreRecovery(const QString& recovery_path, QString* error = nullptr);
@@ -31,10 +34,13 @@ public:
     [[nodiscard]] bool isDirty() const noexcept;
     [[nodiscard]] bool canUndo() const noexcept { return !undo_stack_.isEmpty(); }
     [[nodiscard]] bool canRedo() const noexcept { return !redo_stack_.isEmpty(); }
-    [[nodiscard]] bool hasDocument() const noexcept { return !data_.source_path.isEmpty(); }
+    [[nodiscard]] bool hasDocument() const noexcept {
+        return data_.base_kind == ImageBaseKind::Canvas || !data_.source_path.isEmpty();
+    }
     [[nodiscard]] QString sourcePath() const { return data_.source_path; }
     [[nodiscard]] QString documentPath() const { return document_path_; }
     [[nodiscard]] QString recoveryTargetPath() const { return document_path_; }
+    [[nodiscard]] QString recoverySessionId() const { return recovery_session_id_; }
     [[nodiscard]] const ImageDocumentData& data() const noexcept { return data_; }
 
 private:
@@ -49,7 +55,11 @@ private:
     ImageDocumentData data_;
     QImage source_image_;
     QString document_path_;
+    QString recovery_session_id_;
     QString baseline_source_path_;
+    QSize baseline_source_size_;
+    ImageBaseKind baseline_base_kind_ = ImageBaseKind::SourceImage;
+    QColor baseline_canvas_background_ = QColor(0, 0, 0, 0);
     QVector<ImageOperation> baseline_operations_;
     bool force_dirty_ = false;
     QVector<EditSnapshot> undo_stack_;
