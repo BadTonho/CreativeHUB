@@ -40,7 +40,14 @@ run.
    stroke, and a click paints a dot. Switch to **Edit > Crop Selection** and
    confirm that Paint deactivates; activate Paint and confirm crop mode exits.
    Use Undo and Redo and confirm each complete gesture is one history entry.
-   Open **Settings > Keyboard Shortcuts**. Change Paint from `B` to another
+   While Paint is active, hold `Ctrl+Alt`, press the left mouse button over the
+   image, and drag away from the press point. Confirm the brush outline, slider,
+   and numeric field grow together; drag back toward the press point and confirm
+   the size returns toward its starting value. Release and verify the image is
+   still clean and Undo has no new entry. Repeat with Paint inactive and confirm
+   the gesture does not change the brush. Open **Settings > Keyboard Shortcuts**
+   and confirm the dialog is larger, can be resized, and keeps the shortcut list
+   scrollable when made shorter. Change Paint from `B` to another
    combination, accept, close and reopen the dialog, and confirm the new value
    remains. Cancel an unconfirmed change and confirm it is discarded. Assign a
    shortcut already used by another command and verify the dialog reports the

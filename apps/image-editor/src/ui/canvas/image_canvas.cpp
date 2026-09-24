@@ -31,6 +31,7 @@ void ImageCanvas::setImage(QImage image, bool resetView) {
     image_ = std::move(image);
     paint_points_.clear();
     painting_ = false;
+    resizing_brush_ = false;
     if (resetView) {
         pan_ = {};
         fit_to_window_ = true;
@@ -45,6 +46,7 @@ void ImageCanvas::setCropMode(bool enabled) {
     if (enabled) paint_mode_ = false;
     selecting_crop_ = false;
     painting_ = false;
+    resizing_brush_ = false;
     paint_points_.clear();
     crop_selection_ = {};
     brush_cursor_visible_ = false;
@@ -57,6 +59,7 @@ void ImageCanvas::setPaintMode(bool enabled) {
     paint_mode_ = enabled;
     if (enabled) crop_mode_ = false;
     painting_ = false;
+    resizing_brush_ = false;
     paint_points_.clear();
     selecting_crop_ = false;
     crop_selection_ = {};
@@ -225,6 +228,19 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    const auto modifiers = event->modifiers();
+    if (paint_mode_ && !crop_mode_ && event->button() == Qt::LeftButton &&
+        modifiers.testFlag(Qt::ControlModifier) && modifiers.testFlag(Qt::AltModifier) &&
+        imageTargetRect().contains(event->position())) {
+        resizing_brush_ = true;
+        brush_resize_start_ = event->position();
+        brush_resize_initial_diameter_ = brush_diameter_;
+        brush_cursor_position_ = event->position();
+        brush_cursor_visible_ = true;
+        update();
+        event->accept();
+        return;
+    }
     if (crop_mode_ && event->button() == Qt::LeftButton &&
         imageTargetRect().contains(event->position())) {
         selecting_crop_ = true;
@@ -252,6 +268,21 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
     if (panning_) {
         pan_ = initial_pan_ + event->position() - pan_start_;
         fit_to_window_ = false;
+        update();
+        event->accept();
+        return;
+    }
+    if (resizing_brush_) {
+        const QPointF displacement = event->position() - brush_resize_start_;
+        const double distance = std::hypot(displacement.x(), displacement.y());
+        const int adjustment = static_cast<int>(std::floor(distance / 2.0));
+        const int diameter = std::clamp(brush_resize_initial_diameter_ + adjustment, 1, 512);
+        if (diameter != brush_diameter_) {
+            brush_diameter_ = diameter;
+            emit brushDiameterChanged(brush_diameter_);
+        }
+        brush_cursor_position_ = event->position();
+        brush_cursor_visible_ = imageTargetRect().contains(event->position());
         update();
         event->accept();
         return;
@@ -284,6 +315,14 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         panning_ = false;
         setCursor(crop_mode_ ? Qt::CrossCursor
                              : (paint_mode_ ? Qt::BlankCursor : Qt::ArrowCursor));
+        event->accept();
+        return;
+    }
+    if (event->button() == Qt::LeftButton && resizing_brush_) {
+        resizing_brush_ = false;
+        brush_cursor_position_ = event->position();
+        brush_cursor_visible_ = imageTargetRect().contains(event->position());
+        update();
         event->accept();
         return;
     }
@@ -331,7 +370,7 @@ void ImageCanvas::wheelEvent(QWheelEvent* event) {
 }
 
 void ImageCanvas::leaveEvent(QEvent* event) {
-    if (!painting_) {
+    if (!painting_ && !resizing_brush_) {
         brush_cursor_visible_ = false;
         update();
     }

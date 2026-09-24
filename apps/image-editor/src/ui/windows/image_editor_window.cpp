@@ -68,6 +68,8 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             [this](const QVector<QPointF>& points, const QColor& color, int diameter) {
                 handlePaintStroke(points, color, diameter);
             });
+    connect(canvas_, &ImageCanvas::brushDiameterChanged,
+            brush_size_spin_, &QSpinBox::setValue);
     connect(tool_sidebar_, &ToolSidebar::paintToolToggled, this, [this](bool active) {
         if (active) crop_action_->setChecked(false);
         if (paint_tool_action_ != nullptr && paint_tool_action_->isChecked() != active) {

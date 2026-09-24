@@ -33,6 +33,7 @@ signals:
     void paintStrokeSelected(const QVector<QPointF>& image_points,
                              const QColor& color,
                              int diameter);
+    void brushDiameterChanged(int diameter);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -58,11 +59,14 @@ private:
     bool paint_mode_ = false;
     bool selecting_crop_ = false;
     bool painting_ = false;
+    bool resizing_brush_ = false;
     bool panning_ = false;
     QPointF crop_start_;
     QRectF crop_selection_;
     QPointF pan_start_;
     QPointF initial_pan_;
+    QPointF brush_resize_start_;
+    int brush_resize_initial_diameter_ = 12;
     QVector<QPointF> paint_points_;
     QColor brush_color_ = Qt::black;
     int brush_diameter_ = 12;

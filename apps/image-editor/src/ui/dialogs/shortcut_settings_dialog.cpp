@@ -2,13 +2,18 @@
 
 #include <QAbstractItemView>
 #include <QDialogButtonBox>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QKeySequenceEdit>
 #include <QLabel>
 #include <QPushButton>
+#include <QScreen>
+#include <QSize>
 #include <QTableWidget>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace image_editor {
 
@@ -17,7 +22,21 @@ ShortcutSettingsDialog::ShortcutSettingsDialog(
     : QDialog(parent), initial_bindings_(bindings) {
     setObjectName(QStringLiteral("shortcutSettingsDialog"));
     setWindowTitle(QStringLiteral("Keyboard Shortcuts"));
-    resize(620, 520);
+    setSizeGripEnabled(true);
+    QScreen* target_screen = parent != nullptr ? parent->screen() : nullptr;
+    if (target_screen == nullptr) target_screen = QGuiApplication::primaryScreen();
+    const QSize available = target_screen != nullptr
+        ? target_screen->availableGeometry().size()
+        : QSize(900, 900);
+    const QSize preferred_size(900, 900);
+    const QSize screen_limit(
+        static_cast<int>(available.width() * 0.9),
+        static_cast<int>(available.height() * 0.9));
+    const QSize initial_size(std::min(preferred_size.width(), screen_limit.width()),
+                             std::min(preferred_size.height(), screen_limit.height()));
+    setMinimumSize(std::min(760, initial_size.width()),
+                   std::min(600, initial_size.height()));
+    resize(initial_size);
 
     auto* layout = new QVBoxLayout(this);
     auto* table = new QTableWidget(static_cast<int>(bindings.size()), 2, this);

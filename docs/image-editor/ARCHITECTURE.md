@@ -45,7 +45,10 @@ persistence, and recovery.
   store this base metadata without generating a companion raster file.
 - `ImageCanvas` handles fit, zoom, middle-button panning, crop selection, and a
   checkerboard behind transparent pixels. It previews a round paint stroke
-  during a drag and emits one image-space stroke when the gesture ends.
+  during a drag and emits one image-space stroke when the gesture ends. While
+  Paint is active, `Ctrl+Alt` plus a left-button drag over the image adjusts the
+  brush size relative to the press point; that gesture updates the window's
+  brush controls without changing the document or history.
 - `ToolSidebar` currently contains one checkable, icon-only Paint tool in a
   compact rail and an always-visible color swatch at the bottom. The swatch opens
   an alpha-capable color picker. `ImageEditorWindow` owns a persistent top tool
@@ -73,7 +76,9 @@ persistence, and recovery.
   Keyboard Shortcuts** dialog. Stable action names identify preferences stored
   with `QSettings`, separately from editable documents. Defaults use Qt standard
   sequences plus `B` for Paint and `Esc` to cancel crop; duplicate assignments
-  are rejected, and Paint's action stays disabled without an editable layer.
+  are rejected, and Paint's action stays disabled without an editable layer. The
+  fixed brush-resize mouse gesture is documented separately and is not part of
+  the keyboard shortcut preferences.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
   is shown; expected dialog cancellation is not an error.

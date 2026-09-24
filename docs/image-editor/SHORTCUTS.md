@@ -29,3 +29,10 @@ rejected. Use **Reset All** to restore the defaults.
 Use the mouse wheel to zoom, the middle mouse button to pan, and the Crop
 Selection toolbar or Edit menu action to start a crop gesture. Commands listed
 as unassigned can be given a shortcut in the settings dialog.
+
+With Paint active and an editable layer selected, hold `Ctrl+Alt`, then press
+and drag the left mouse button over the image to resize the brush. The press
+point is the reference: moving away increases the size, and moving back toward
+it reduces the adjustment to the size at the start of the gesture. The brush
+changes by 1 pixel for every 2 screen pixels of movement, within the 1–512 px
+range. This fixed mouse gesture is not configurable in Keyboard Shortcuts.

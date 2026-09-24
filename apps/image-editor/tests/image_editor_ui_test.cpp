@@ -19,6 +19,8 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPushButton>
+#include <QScrollBar>
+#include <QScreen>
 #include <QSettings>
 #include <QTableWidget>
 #include <QSlider>
@@ -29,6 +31,7 @@
 #include <QTemporaryDir>
 #include <QTimer>
 
+#include <algorithm>
 #include <array>
 #include <QTest>
 #include <QSignalSpy>
@@ -122,8 +125,29 @@ int main(int argc, char* argv[]) {
                 QStringLiteral("shortcutEditor_paintToolAction"));
             auto* buttons = dialog->findChild<QDialogButtonBox*>(
                 QStringLiteral("shortcutSettingsButtons"));
+            const QScreen* dialog_screen = dialog->screen();
+            const QSize available = dialog_screen != nullptr
+                ? dialog_screen->availableGeometry().size()
+                : QSize{};
+            const bool should_expand_width = available.width() * 0.9 > 620;
+            const bool should_expand_height = available.height() * 0.9 > 520;
             if (table == nullptr || table->rowCount() < 19 || editor == nullptr ||
-                buttons == nullptr) {
+                buttons == nullptr || !dialog->isSizeGripEnabled() ||
+                (should_expand_width && dialog->width() <= 620) ||
+                (should_expand_height && dialog->height() <= 520)) {
+                dialog->reject();
+                return;
+            }
+            const int initial_height = dialog->height();
+            dialog->resize(dialog->width(),
+                           std::max(dialog->minimumHeight(),
+                                    std::min(initial_height, 640)));
+            QCoreApplication::processEvents();
+            const bool list_scrolls_when_compact =
+                table->verticalScrollBar()->maximum() > 0;
+            dialog->resize(dialog->width(), initial_height);
+            QCoreApplication::processEvents();
+            if (!list_scrolls_when_compact) {
                 dialog->reject();
                 return;
             }
@@ -482,10 +506,60 @@ int main(int argc, char* argv[]) {
         std::cerr << "Turning Paint off from its tool button did not hide its options.\n";
         return 1;
     }
+    const QPoint brush_resize_anchor = canvas->rect().center();
+    QTest::mousePress(canvas, Qt::LeftButton,
+                      Qt::ControlModifier | Qt::AltModifier,
+                      brush_resize_anchor);
+    QTest::mouseMove(canvas, brush_resize_anchor + QPoint(20, 0));
+    QTest::mouseRelease(canvas, Qt::LeftButton,
+                        Qt::ControlModifier | Qt::AltModifier,
+                        brush_resize_anchor + QPoint(20, 0));
+    if (brush_size->value() != 2 || brush_size_slider->value() != 2) {
+        std::cerr << "The brush resize gesture worked while Paint was inactive.\n";
+        return 1;
+    }
     paint_button->click();
     if (!paint_button->isChecked() || !canvas->paintMode() ||
         !paint_options_action->isVisible() || !paint_size_options->isVisible()) {
         std::cerr << "Reactivating Paint did not restore its options.\n";
+        return 1;
+    }
+    const bool document_was_clean_before_brush_resize =
+        !window.windowTitle().startsWith('*') && !undo_action->isEnabled();
+    QTest::mousePress(canvas, Qt::LeftButton,
+                      Qt::ControlModifier | Qt::AltModifier,
+                      brush_resize_anchor);
+    QTest::mouseMove(canvas, brush_resize_anchor + QPoint(20, 0));
+    const bool brush_size_grew_and_synced = brush_size->value() == 12 &&
+        brush_size_slider->value() == 12;
+    QTest::mouseMove(canvas, brush_resize_anchor + QPoint(8, 0));
+    const bool moving_inward_reduced_brush = brush_size->value() == 6 &&
+        brush_size_slider->value() == 6;
+    QTest::mouseMove(canvas, brush_resize_anchor);
+    const bool returning_to_anchor_restored_size = brush_size->value() == 2 &&
+        brush_size_slider->value() == 2;
+    QTest::mouseRelease(canvas, Qt::LeftButton,
+                        Qt::ControlModifier | Qt::AltModifier,
+                        brush_resize_anchor);
+    brush_size->setValue(500);
+    QTest::mousePress(canvas, Qt::LeftButton,
+                      Qt::ControlModifier | Qt::AltModifier,
+                      brush_resize_anchor);
+    QTest::mouseMove(canvas, brush_resize_anchor + QPoint(100, 0));
+    const bool brush_size_is_capped = brush_size->value() == 512 &&
+        brush_size_slider->value() == 512;
+    QTest::mouseMove(canvas, brush_resize_anchor);
+    const bool capped_brush_returns_to_baseline = brush_size->value() == 500 &&
+        brush_size_slider->value() == 500;
+    QTest::mouseRelease(canvas, Qt::LeftButton,
+                        Qt::ControlModifier | Qt::AltModifier,
+                        brush_resize_anchor);
+    brush_size->setValue(2);
+    if (!document_was_clean_before_brush_resize || !brush_size_grew_and_synced ||
+        !moving_inward_reduced_brush || !returning_to_anchor_restored_size ||
+        !brush_size_is_capped || !capped_brush_returns_to_baseline ||
+        window.windowTitle().startsWith('*') || undo_action->isEnabled()) {
+        std::cerr << "The brush resize gesture did not update controls without editing the document.\n";
         return 1;
     }
     const QPoint paint_center = canvas->rect().center();
