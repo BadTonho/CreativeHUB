@@ -14,7 +14,6 @@
 #include <QPushButton>
 #include <QStatusBar>
 #include <QTimer>
-#include <QToolBar>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -162,20 +161,6 @@ void ImageEditorWindow::createActions() {
     auto* view_menu = menuBar()->addMenu(QStringLiteral("View"));
     view_menu->addAction(fit_action_);
 
-    auto* toolbar = addToolBar(QStringLiteral("Image Editing"));
-    toolbar->setMovable(false);
-    toolbar->addAction(new_canvas_action_);
-    toolbar->addAction(open_image_action);
-    toolbar->addAction(open_document_action);
-    toolbar->addSeparator();
-    toolbar->addAction(save_action_);
-    toolbar->addAction(export_action_);
-    toolbar->addAction(crop_action_);
-    toolbar->addAction(rotate_left_action_);
-    toolbar->addAction(rotate_right_action_);
-    toolbar->addAction(flip_horizontal_action_);
-    toolbar->addAction(flip_vertical_action_);
-    toolbar->addAction(fit_action_);
 }
 
 void ImageEditorWindow::updateView() {
