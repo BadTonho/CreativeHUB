@@ -1,5 +1,6 @@
 docs/video-editor/IDEIA_SUITE_CRIATIVA.md
 docs/video-editor/ideia.md
+docs/image-editor/ideia.md
 /.vscode/
 /build/
 /out/
@@ -12,5 +13,3 @@ docs/video-editor/ideia.md
 /prototypes/archive/**/target/
 /prototypes/testdata/
 /prototypes/results/
-
-docs/image-editor/ideia.md
