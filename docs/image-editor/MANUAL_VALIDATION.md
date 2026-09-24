@@ -29,8 +29,11 @@ run.
 8. Open a disposable image and create a canvas in separate runs. Confirm Paint
    is the only tool in the compact left sidebar, appears as an icon without a
    label, and starts inactive. Hover over the icon until its tooltip appears and
-   confirm it says Paint. Activate it, choose a color (including a partially
-   transparent color), and change the brush size.
+   confirm it says Paint. Confirm the top options bar remains visible but empty.
+   Use the color swatch at the bottom of the sidebar to choose a color (including
+   a partially transparent color), then activate Paint. Confirm the top bar
+   shows a slider and numeric brush-size field, and that changing either control
+   updates the other and the brush preview.
    Verify the brush outline follows the pointer, a drag paints a continuous
    stroke, and a click paints a dot. Switch to **Edit > Crop Selection** and
    confirm that Paint deactivates; activate Paint and confirm crop mode exits.

@@ -15,7 +15,10 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSlider>
+#include <QSpinBox>
 #include <QStatusBar>
+#include <QToolBar>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -48,6 +51,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     status_label_->setObjectName(QStringLiteral("imageStatusLabel"));
     statusBar()->addWidget(status_label_, 1);
 
+    createToolOptionsBar();
     createActions();
     connect(canvas_, &ImageCanvas::cropSelected, this,
             [this](const QRect& crop) { handleCrop(crop); });
@@ -61,15 +65,12 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             });
     connect(tool_sidebar_, &ToolSidebar::paintToolToggled, this, [this](bool active) {
         if (active) crop_action_->setChecked(false);
+        updateToolOptions();
         canvas_->setPaintMode(active && session_.hasSource());
     });
     connect(tool_sidebar_, &ToolSidebar::brushColorChanged,
             canvas_, [this](const QColor& color) {
-                canvas_->setBrush(color, tool_sidebar_->brushDiameter());
-            });
-    connect(tool_sidebar_, &ToolSidebar::brushDiameterChanged,
-            canvas_, [this](int diameter) {
-                canvas_->setBrush(tool_sidebar_->brushColor(), diameter);
+                canvas_->setBrush(color, brush_size_spin_->value());
             });
 
     autosave_timer_ = new QTimer(this);
@@ -89,6 +90,60 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
 
     QTimer::singleShot(0, this, [this]() { maybeOfferRecovery(); });
     updateView();
+}
+
+void ImageEditorWindow::createToolOptionsBar() {
+    tool_options_toolbar_ = new QToolBar(QStringLiteral("Tool Options"), this);
+    tool_options_toolbar_->setObjectName(QStringLiteral("toolOptionsToolBar"));
+    tool_options_toolbar_->setMovable(false);
+    tool_options_toolbar_->setFloatable(false);
+    tool_options_toolbar_->setAllowedAreas(Qt::TopToolBarArea);
+    tool_options_toolbar_->setMinimumHeight(40);
+    addToolBar(Qt::TopToolBarArea, tool_options_toolbar_);
+
+    paint_size_options_ = new QWidget(tool_options_toolbar_);
+    paint_size_options_->setObjectName(QStringLiteral("paintBrushSizeOptions"));
+    paint_size_options_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    auto* options_layout = new QHBoxLayout(paint_size_options_);
+    options_layout->setContentsMargins(8, 3, 8, 3);
+    options_layout->setSpacing(8);
+
+    auto* size_label = new QLabel(QStringLiteral("Brush Size"), paint_size_options_);
+    size_label->setObjectName(QStringLiteral("paintBrushSizeLabel"));
+    options_layout->addWidget(size_label);
+
+    brush_size_slider_ = new QSlider(Qt::Horizontal, paint_size_options_);
+    brush_size_slider_->setObjectName(QStringLiteral("paintBrushSizeSlider"));
+    brush_size_slider_->setAccessibleName(QStringLiteral("Brush size"));
+    brush_size_slider_->setRange(1, 512);
+    brush_size_slider_->setValue(12);
+    brush_size_slider_->setMinimumWidth(140);
+    brush_size_slider_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    options_layout->addWidget(brush_size_slider_, 1);
+
+    brush_size_spin_ = new QSpinBox(paint_size_options_);
+    brush_size_spin_->setObjectName(QStringLiteral("paintBrushSizeSpinBox"));
+    brush_size_spin_->setAccessibleName(QStringLiteral("Brush size in pixels"));
+    brush_size_spin_->setRange(1, 512);
+    brush_size_spin_->setValue(12);
+    brush_size_spin_->setSuffix(QStringLiteral(" px"));
+    brush_size_spin_->setFixedWidth(96);
+    options_layout->addWidget(brush_size_spin_);
+
+    tool_options_toolbar_->addWidget(paint_size_options_);
+    paint_size_options_->hide();
+
+    connect(brush_size_slider_, &QSlider::valueChanged,
+            brush_size_spin_, &QSpinBox::setValue);
+    connect(brush_size_spin_, &QSpinBox::valueChanged, this, [this](int diameter) {
+        brush_size_slider_->setValue(diameter);
+        canvas_->setBrush(tool_sidebar_->brushColor(), diameter);
+    });
+}
+
+void ImageEditorWindow::updateToolOptions() {
+    if (paint_size_options_ == nullptr || tool_sidebar_ == nullptr) return;
+    paint_size_options_->setVisible(tool_sidebar_->paintToolActive());
 }
 
 void ImageEditorWindow::createActions() {
@@ -154,6 +209,7 @@ void ImageEditorWindow::createActions() {
         if (enabled && tool_sidebar_->paintToolActive()) {
             tool_sidebar_->setPaintToolActive(false);
         }
+        updateToolOptions();
         canvas_->setPaintMode(false);
         canvas_->setCropMode(enabled && session_.hasSource());
         statusBar()->showMessage(enabled
@@ -209,7 +265,8 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     const QImage rendered = session_.renderedImage();
     canvas_->setImage(rendered, !preserveCanvasView);
     tool_sidebar_->setDocumentAvailable(session_.hasSource());
-    canvas_->setBrush(tool_sidebar_->brushColor(), tool_sidebar_->brushDiameter());
+    updateToolOptions();
+    canvas_->setBrush(tool_sidebar_->brushColor(), brush_size_spin_->value());
     undo_action_->setEnabled(session_.canUndo());
     redo_action_->setEnabled(session_.canRedo());
     save_action_->setEnabled(session_.hasSource());
@@ -422,6 +479,7 @@ void ImageEditorWindow::handlePaintStroke(const QVector<QPointF>& points,
 
 void ImageEditorWindow::deactivateCanvasTools() {
     tool_sidebar_->setPaintToolActive(false);
+    updateToolOptions();
     if (crop_action_ != nullptr && crop_action_->isChecked()) {
         crop_action_->setChecked(false);
     }

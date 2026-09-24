@@ -9,7 +9,11 @@
 class QAction;
 class QCloseEvent;
 class QLabel;
+class QSlider;
+class QSpinBox;
+class QToolBar;
 class QTimer;
+class QWidget;
 
 namespace image_editor {
 
@@ -29,6 +33,8 @@ protected:
 
 private:
     void createActions();
+    void createToolOptionsBar();
+    void updateToolOptions();
     void updateView(bool preserveCanvasView = false);
     void deactivateCanvasTools();
     void createNewCanvas();
@@ -54,6 +60,10 @@ private:
     RecoveryStore recovery_store_;
     ToolSidebar* tool_sidebar_ = nullptr;
     ImageCanvas* canvas_ = nullptr;
+    QToolBar* tool_options_toolbar_ = nullptr;
+    QWidget* paint_size_options_ = nullptr;
+    QSlider* brush_size_slider_ = nullptr;
+    QSpinBox* brush_size_spin_ = nullptr;
     QLabel* status_label_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
     QAction* relink_action_ = nullptr;

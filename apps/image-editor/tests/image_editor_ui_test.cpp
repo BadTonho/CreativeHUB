@@ -4,6 +4,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -12,7 +13,9 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSlider>
 #include <QSpinBox>
+#include <QToolBar>
 #include <QToolButton>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -93,31 +96,74 @@ int main(int argc, char* argv[]) {
     auto* tool_sidebar = window.findChild<image_editor::ToolSidebar*>(
         QStringLiteral("imageEditorToolSidebar"));
     auto* paint_button = window.findChild<QToolButton*>(QStringLiteral("paintToolButton"));
-    auto* brush_options = window.findChild<QWidget*>(QStringLiteral("paintBrushOptions"));
+    auto* color_button = window.findChild<QToolButton*>(QStringLiteral("paintBrushColorButton"));
+    auto* tool_options_toolbar = window.findChild<QToolBar*>(
+        QStringLiteral("toolOptionsToolBar"));
+    auto* paint_size_options = window.findChild<QWidget*>(
+        QStringLiteral("paintBrushSizeOptions"));
+    auto* brush_size_slider = window.findChild<QSlider*>(
+        QStringLiteral("paintBrushSizeSlider"));
     auto* brush_size = window.findChild<QSpinBox*>(QStringLiteral("paintBrushSizeSpinBox"));
     auto* redo_action = window.findChild<QAction*>(QStringLiteral("redoAction"));
     auto* crop_action = window.findChild<QAction*>(QStringLiteral("cropSelectionAction"));
-    if (tool_sidebar == nullptr || paint_button == nullptr || brush_options == nullptr ||
-        brush_size == nullptr || redo_action == nullptr || crop_action == nullptr ||
-        tool_sidebar->findChildren<QToolButton*>().size() != 1 ||
-        paint_button->isChecked() || brush_options->isVisible() ||
+    if (tool_sidebar == nullptr || paint_button == nullptr || color_button == nullptr ||
+        tool_options_toolbar == nullptr || paint_size_options == nullptr ||
+        brush_size_slider == nullptr || brush_size == nullptr || redo_action == nullptr ||
+        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 2 ||
+        paint_button->isChecked() || paint_size_options->isVisible() ||
+        !tool_options_toolbar->isVisible() || tool_options_toolbar->height() < 40 ||
+        !color_button->isVisible() ||
+        !color_button->isEnabled() || color_button->y() <= paint_button->y() ||
+        color_button->geometry().bottom() < tool_sidebar->height() - 20 ||
+        color_button->text().size() != 0 || color_button->toolTip() != QStringLiteral("Paint color") ||
+        color_button->icon().isNull() ||
         !paint_button->text().isEmpty() ||
         paint_button->toolButtonStyle() != Qt::ToolButtonIconOnly ||
         paint_button->toolTip() != QStringLiteral("Paint") ||
         tool_sidebar->width() != 56 ||
         tool_sidebar->brushColor() != QColor(Qt::black) ||
-        tool_sidebar->brushDiameter() != 12) {
-        std::cerr << "The paint tool sidebar did not start as a compact icon-only tool.\n";
+        brush_size->value() != 12 || brush_size_slider->value() != 12 ||
+        brush_size->minimum() != 1 || brush_size->maximum() != 512 ||
+        brush_size_slider->minimum() != 1 || brush_size_slider->maximum() != 512) {
+        std::cerr << "The paint controls did not start in the expected compact layout.\n";
+        return 1;
+    }
+
+    const QColor selected_brush_color(211, 75, 20, 128);
+    bool color_dialog_was_used = false;
+    QTimer::singleShot(0, [&]() {
+        auto* dialog = qobject_cast<QColorDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr) return;
+        dialog->setCurrentColor(selected_brush_color);
+        dialog->accept();
+        color_dialog_was_used = true;
+    });
+    color_button->click();
+    if (!color_dialog_was_used || tool_sidebar->brushColor() != selected_brush_color ||
+        window.windowTitle().startsWith('*') || undo_action->isEnabled()) {
+        std::cerr << "The color swatch did not open and apply the alpha-capable color picker.\n";
         return 1;
     }
 
     paint_button->click();
-    if (!paint_button->isChecked() || !brush_options->isVisible() || !canvas->paintMode() ||
-        tool_sidebar->width() != 132) {
-        std::cerr << "Activating the paint tool did not expose its brush controls and canvas mode.\n";
+    if (!paint_button->isChecked() || !paint_size_options->isVisible() ||
+        !brush_size->isVisible() || !brush_size_slider->isVisible() ||
+        !canvas->paintMode() || tool_sidebar->width() != 56 ||
+        !tool_options_toolbar->isVisible()) {
+        std::cerr << "Activating Paint did not expose its top-bar controls and canvas mode.\n";
+        return 1;
+    }
+    brush_size_slider->setValue(14);
+    if (brush_size->value() != 14) {
+        std::cerr << "The brush size slider did not synchronize with the numeric field.\n";
         return 1;
     }
     brush_size->setValue(2);
+    if (brush_size_slider->value() != 2 || window.windowTitle().startsWith('*') ||
+        undo_action->isEnabled()) {
+        std::cerr << "The brush size field did not synchronize with the slider.\n";
+        return 1;
+    }
     const QPoint paint_center = canvas->rect().center();
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier,
                       paint_center - QPoint(20, 0));
@@ -143,7 +189,8 @@ int main(int argc, char* argv[]) {
     undo_action->trigger();
     crop_action->trigger();
     if (!crop_action->isChecked() || paint_button->isChecked() ||
-        !canvas->cropMode() || canvas->paintMode() || tool_sidebar->width() != 56) {
+        !canvas->cropMode() || canvas->paintMode() || tool_sidebar->width() != 56 ||
+        paint_size_options->isVisible() || !tool_options_toolbar->isVisible()) {
         std::cerr << "Crop mode did not deactivate the paint tool.\n";
         return 1;
     }

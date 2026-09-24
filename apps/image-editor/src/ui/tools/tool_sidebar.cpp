@@ -1,15 +1,11 @@
 #include "tool_sidebar.h"
 
 #include <QColorDialog>
-#include <QHBoxLayout>
 #include <QIcon>
-#include <QLabel>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
-#include <QPushButton>
 #include <QSignalBlocker>
-#include <QSpinBox>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -17,7 +13,6 @@ namespace image_editor {
 namespace {
 
 constexpr int kCollapsedSidebarWidth = 56;
-constexpr int kExpandedSidebarWidth = 132;
 
 QIcon paintToolIcon() {
     QPixmap icon(32, 32);
@@ -70,39 +65,22 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     paint_button_->setFixedSize(40, 40);
     layout->addWidget(paint_button_, 0, Qt::AlignHCenter);
 
-    brush_options_ = new QWidget(this);
-    brush_options_->setObjectName(QStringLiteral("paintBrushOptions"));
-    auto* options_layout = new QVBoxLayout(brush_options_);
-    options_layout->setContentsMargins(0, 4, 0, 0);
-    options_layout->setSpacing(6);
-
-    auto* color_label = new QLabel(QStringLiteral("Color"), brush_options_);
-    options_layout->addWidget(color_label);
-    color_button_ = new QPushButton(QStringLiteral("Choose..."), brush_options_);
-    color_button_->setObjectName(QStringLiteral("paintBrushColorButton"));
-    color_button_->setIconSize(QSize(20, 20));
-    options_layout->addWidget(color_button_);
-
-    auto* diameter_label = new QLabel(QStringLiteral("Size (px)"), brush_options_);
-    options_layout->addWidget(diameter_label);
-    diameter_spin_ = new QSpinBox(brush_options_);
-    diameter_spin_->setObjectName(QStringLiteral("paintBrushSizeSpinBox"));
-    diameter_spin_->setRange(1, 512);
-    diameter_spin_->setValue(12);
-    diameter_spin_->setSuffix(QStringLiteral(" px"));
-    options_layout->addWidget(diameter_spin_);
-
-    brush_options_->hide();
-    layout->addWidget(brush_options_);
     layout->addStretch(1);
+
+    color_button_ = new QToolButton(this);
+    color_button_->setObjectName(QStringLiteral("paintBrushColorButton"));
+    color_button_->setToolTip(QStringLiteral("Paint color"));
+    color_button_->setAccessibleName(QStringLiteral("Paint color"));
+    color_button_->setIconSize(QSize(24, 24));
+    color_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    color_button_->setFixedSize(40, 40);
+    layout->addWidget(color_button_, 0, Qt::AlignHCenter);
 
     connect(paint_button_, &QToolButton::toggled, this, [this](bool active) {
         updateControls();
         emit paintToolToggled(active);
     });
-    connect(diameter_spin_, &QSpinBox::valueChanged,
-            this, &ToolSidebar::brushDiameterChanged);
-    connect(color_button_, &QPushButton::clicked, this, [this]() {
+    connect(color_button_, &QToolButton::clicked, this, [this]() {
         const QColor selected = QColorDialog::getColor(
             brush_color_, this, QStringLiteral("Brush Color"),
             QColorDialog::ShowAlphaChannel);
@@ -136,16 +114,9 @@ QColor ToolSidebar::brushColor() const {
     return brush_color_;
 }
 
-int ToolSidebar::brushDiameter() const {
-    return diameter_spin_->value();
-}
-
 void ToolSidebar::updateControls() {
     paint_button_->setEnabled(document_available_);
-    const bool options_enabled = document_available_ && paint_button_->isChecked();
-    setFixedWidth(options_enabled ? kExpandedSidebarWidth : kCollapsedSidebarWidth);
-    brush_options_->setVisible(options_enabled);
-    brush_options_->setEnabled(options_enabled);
+    color_button_->setEnabled(true);
 }
 
 void ToolSidebar::updateColorButton() {
