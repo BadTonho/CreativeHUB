@@ -1,5 +1,7 @@
 #include "layer_panel.h"
 
+#include "../transparency_checkerboard.h"
+
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QEvent>
@@ -36,16 +38,16 @@ QRect eyeHitRect(const QRect& row) {
     return QRect(row.right() - 36, row.top(), 36, row.height());
 }
 
-void drawCheckerboard(QPainter* painter, const QRect& rect, const QPalette& palette) {
+void drawCheckerboard(QPainter* painter, const QRect& rect) {
     constexpr int cell_size = 8;
-    const QColor light = palette.color(QPalette::Base).lighter(135);
-    const QColor dark = palette.color(QPalette::Base).darker(125);
-    painter->fillRect(rect, light);
+    const QColor light = QColor::fromRgba(ui::kTransparencyCheckerLight);
+    const QColor dark = QColor::fromRgba(ui::kTransparencyCheckerDark);
+    painter->fillRect(rect, dark);
     for (int y = 0; y < rect.height(); y += cell_size) {
         for (int x = 0; x < rect.width(); x += cell_size) {
             if (((x / cell_size) + (y / cell_size)) % 2 == 0) {
                 painter->fillRect(QRect(rect.left() + x, rect.top() + y,
-                                        cell_size, cell_size).intersected(rect), dark);
+                                        cell_size, cell_size).intersected(rect), light);
             }
         }
     }
@@ -80,7 +82,7 @@ public:
                                    row.center().y() - LayerPanel::kThumbnailHeight / 2,
                                    LayerPanel::kThumbnailWidth,
                                    LayerPanel::kThumbnailHeight);
-        drawCheckerboard(painter, thumbnail_rect, option.palette);
+        drawCheckerboard(painter, thumbnail_rect);
 
         const QImage thumbnail = index.data(kThumbnailRole).value<QImage>();
         if (!thumbnail.isNull()) {

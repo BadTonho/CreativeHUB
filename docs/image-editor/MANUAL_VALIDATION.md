@@ -48,10 +48,11 @@ run.
 11. In the right-side Layers dock, confirm a new image or canvas has a locked
     Background and a selected transparent Layer 1. Paint on Layer 1 and verify
     the Background remains unchanged. Confirm each row shows an isolated
-    thumbnail on a transparency checkerboard at the left, the name in the
-    middle, and an eye button at the right. Verify that the thumbnail keeps its
-    content while the layer is hidden or its opacity is zero. Click the eye and
-    confirm visibility changes without selecting that row. Add another layer,
+    thumbnail on the same transparency checkerboard colors as the canvas at the
+    left, the name in the middle, and an eye button at the right. Verify that
+    the thumbnail keeps its content while the layer is hidden or its opacity
+    is zero. Click the eye and confirm visibility changes without selecting
+    that row. Add another layer,
     rename it, reorder it, hide/show it, and adjust its opacity; use Undo/Redo
     and confirm layer thumbnails refresh after content edits and undo/redo,
     while the composite preview responds to visibility and opacity changes.

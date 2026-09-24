@@ -1,5 +1,7 @@
 #include "image_canvas.h"
 
+#include "../transparency_checkerboard.h"
+
 #include <QEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -150,8 +152,8 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     const int last_row = static_cast<int>(std::ceil(target.bottom() / checker_size));
     for (int row = first_row; row < last_row; ++row) {
         for (int column = first_column; column < last_column; ++column) {
-            const QColor color = ((row + column) % 2 == 0)
-                ? QColor(205, 208, 214) : QColor(158, 162, 170);
+            const QColor color = QColor::fromRgba(((row + column) % 2 == 0)
+                ? ui::kTransparencyCheckerLight : ui::kTransparencyCheckerDark);
             painter.fillRect(QRectF(column * checker_size, row * checker_size,
                                     checker_size, checker_size), color);
         }

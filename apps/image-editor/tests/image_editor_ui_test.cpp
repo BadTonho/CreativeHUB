@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
@@ -98,6 +99,20 @@ int main(int argc, char* argv[]) {
         background_thumbnail.pixelColor(background_thumbnail.width() / 2,
                                         background_thumbnail.height() / 2) != Qt::blue) {
         std::cerr << "The layer rows did not receive isolated, aspect-fitted previews.\n";
+        return 1;
+    }
+    QImage rendered_layer_list(layer_list->viewport()->size(), QImage::Format_ARGB32);
+    rendered_layer_list.fill(Qt::transparent);
+    {
+        QPainter painter(&rendered_layer_list);
+        layer_list->viewport()->render(&painter);
+    }
+    const QRect editable_row = layer_list->visualItemRect(layer_list->item(0));
+    if (rendered_layer_list.pixelColor(editable_row.left() + 8, editable_row.top() + 6) !=
+            QColor(205, 208, 214) ||
+        rendered_layer_list.pixelColor(editable_row.left() + 16, editable_row.top() + 6) !=
+            QColor(158, 162, 170)) {
+        std::cerr << "Layer transparency checkerboard colors do not match the canvas.\n";
         return 1;
     }
     const QRect background_row = layer_list->visualItemRect(layer_list->item(1));
