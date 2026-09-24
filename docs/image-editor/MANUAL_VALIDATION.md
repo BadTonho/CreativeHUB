@@ -47,9 +47,10 @@ run.
    Move vertically without changing the horizontal position and confirm the
    size stays the same. Move the pointer outside the image and confirm the
    anchored outline remains visible until release. Verify the size clamps at 1
-   and 1024 px. Release outside the image and confirm the outline hides; move
-   back over the image and confirm it follows the pointer again. Verify the
-   image is still clean and Undo has no new entry. Repeat with Paint inactive
+   and 1024 px. Release outside the image and confirm the system pointer returns
+   to the press point and the outline remains there. Move the pointer and confirm
+   the outline follows it again. Verify the image is still clean and Undo has no
+   new entry. Repeat with Paint inactive
    and confirm the gesture does not change the brush. Open
    **Settings > Keyboard Shortcuts**
    and confirm the dialog is larger, can be resized, and keeps the shortcut list

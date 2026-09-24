@@ -4,6 +4,7 @@
 #include "../transparency_checkerboard.h"
 
 #include <QEvent>
+#include <QCursor>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -236,6 +237,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         imageTargetRect().contains(event->position())) {
         resizing_brush_ = true;
         brush_resize_start_ = event->position();
+        brush_resize_global_start_ = event->globalPosition().toPoint();
         brush_resize_initial_diameter_ = brush_diameter_;
         brush_cursor_position_ = event->position();
         brush_cursor_visible_ = true;
@@ -324,8 +326,9 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
     }
     if (event->button() == Qt::LeftButton && resizing_brush_) {
         resizing_brush_ = false;
-        brush_cursor_position_ = event->position();
-        brush_cursor_visible_ = imageTargetRect().contains(event->position());
+        brush_cursor_position_ = brush_resize_start_;
+        brush_cursor_visible_ = imageTargetRect().contains(brush_resize_start_);
+        QCursor::setPos(brush_resize_global_start_);
         update();
         event->accept();
         return;

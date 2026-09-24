@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QCursor>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
@@ -601,6 +602,7 @@ int main(int argc, char* argv[]) {
     };
     brush_size->setValue(12);
     const QPoint preview_anchor = canvas->rect().center();
+    const QPoint expected_restored_cursor = canvas->mapToGlobal(preview_anchor);
     QTest::mousePress(canvas, Qt::LeftButton,
                       Qt::ControlModifier | Qt::AltModifier, preview_anchor);
     const QPoint preview_drag_position = preview_anchor + QPoint(20, 5);
@@ -632,9 +634,11 @@ int main(int argc, char* argv[]) {
     QTest::mouseRelease(canvas, Qt::LeftButton,
                         Qt::ControlModifier | Qt::AltModifier, outside_image);
     QCoreApplication::processEvents();
-    const QImage released_outside_preview = canvas->grab().toImage();
-    const bool brush_preview_hidden_after_outside_release =
-        !hasBrightPixelNear(released_outside_preview, outside_drag_anchor_edge);
+    const QImage released_preview = canvas->grab().toImage();
+    const bool cursor_restored_to_press_position =
+        QCursor::pos() == expected_restored_cursor;
+    const bool brush_preview_stayed_at_anchor_after_release =
+        hasBrightPixelNear(released_preview, outside_drag_anchor_edge);
     const QPoint reentered_image = preview_anchor + QPoint(80, 0);
     QTest::mouseMove(canvas, reentered_image);
     QCoreApplication::processEvents();
@@ -647,7 +651,8 @@ int main(int argc, char* argv[]) {
     brush_size->setValue(2);
     if (!brush_preview_stayed_at_anchor ||
         !brush_preview_remained_visible_outside_image ||
-        !brush_preview_hidden_after_outside_release ||
+        !cursor_restored_to_press_position ||
+        !brush_preview_stayed_at_anchor_after_release ||
         !brush_preview_followed_cursor_after_release ||
         window.windowTitle().startsWith('*') || undo_action->isEnabled()) {
         std::cerr << "The brush preview did not stay anchored during resizing and resume cursor tracking after release.\n";

@@ -50,9 +50,10 @@ persistence, and recovery.
   brush size from the signed horizontal displacement at the press point: right
   increases and left decreases at 1 px per screen pixel. Vertical movement is
   ignored. The brush outline stays anchored at the press point during the drag,
-  including when the pointer leaves the image; after release, normal hover
-  tracking resumes. The gesture updates the window's brush controls without
-  changing the document or history.
+  including when the pointer leaves the image. On release, the system pointer
+  returns to the press point; normal hover tracking resumes on subsequent mouse
+  movement. The gesture updates the window's brush controls without changing
+  the document or history.
 - `ToolSidebar` currently contains one checkable, icon-only Paint tool in a
   compact rail and an always-visible color swatch at the bottom. The swatch opens
   an alpha-capable color picker. `ImageEditorWindow` owns a persistent top tool

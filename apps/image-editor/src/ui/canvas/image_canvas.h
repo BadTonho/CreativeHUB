@@ -2,6 +2,7 @@
 
 #include <QImage>
 #include <QColor>
+#include <QPoint>
 #include <QPointF>
 #include <QRect>
 #include <QVector>
@@ -66,6 +67,7 @@ private:
     QPointF pan_start_;
     QPointF initial_pan_;
     QPointF brush_resize_start_;
+    QPoint brush_resize_global_start_;
     int brush_resize_initial_diameter_ = 12;
     QVector<QPointF> paint_points_;
     QColor brush_color_ = Qt::black;
