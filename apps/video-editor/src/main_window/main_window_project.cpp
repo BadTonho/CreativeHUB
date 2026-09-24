@@ -476,7 +476,7 @@ bool MainWindow::openProjectPath(
     auto* progress = new QProgressDialog(
         "Preparing project…", "Cancel", 0, 0, this);
     progress->setWindowTitle("Open Project");
-    progress->setWindowModality(Qt::WindowModal);
+    progress->setWindowModality(Qt::NonModal);
     progress->setAutoClose(false);
     progress->setAutoReset(false);
     progress->setMinimumDuration(150);
@@ -548,11 +548,11 @@ void MainWindow::setProjectLoadingState(bool loading) {
             widget->setEnabled(false);
         };
         remember_widget(centralWidget());
-        remember_widget(menuBar());
         const auto docks = findChildren<QDockWidget*>();
         for (auto* dock : docks) remember_widget(dock);
         const auto actions = findChildren<QAction*>();
         for (auto* action : actions) {
+            if (!action->property("disabledDuringProjectLoad").toBool()) continue;
             project_loading_action_states_.emplace_back(action, action->isEnabled());
             action->setEnabled(false);
         }

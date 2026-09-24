@@ -7,6 +7,9 @@
 #include <QApplication>
 #include <QEventLoop>
 #include <QDockWidget>
+#include <QMenu>
+#include <QMenuBar>
+#include <QProgressDialog>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
@@ -101,9 +104,29 @@ public:
                     "The MainWindow could not open the multi-track project.");
             require(window.project_load_pending_ && window.timeline_dock_ != nullptr &&
                         !window.timeline_dock_->isEnabled() &&
+                        window.menuBar()->isEnabled() &&
+                        window.project_load_progress_ != nullptr &&
+                        window.project_load_progress_->windowModality() == Qt::NonModal &&
+                        window.new_project_action_ != nullptr &&
+                        !window.new_project_action_->isEnabled() &&
                         window.timeline_model_.trackCount() == 1 &&
                         !window.timeline_model_.hasClip(),
                     "Opening a project did not preserve the visible session while disabling editing.");
+            const auto menu_is_available = [&window](const QString& title) {
+                for (auto* action : window.menuBar()->actions()) {
+                    auto visible_title = action->text();
+                    visible_title.remove('&');
+                    if (visible_title == title && action->menu() != nullptr) {
+                        return action->isEnabled() && action->menu()->isEnabled();
+                    }
+                }
+                return false;
+            };
+            require(menu_is_available(QStringLiteral("File")) &&
+                        menu_is_available(QStringLiteral("Edit")) &&
+                        menu_is_available(QStringLiteral("View")) &&
+                        menu_is_available(QStringLiteral("Help")),
+                    "The top-level menus were unavailable during project preparation.");
             timeout.start(30000);
             open_loop.exec();
             require(open_succeeded && !window.project_load_pending_,

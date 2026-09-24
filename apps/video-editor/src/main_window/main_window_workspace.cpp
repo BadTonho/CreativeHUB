@@ -211,6 +211,11 @@ void MainWindow::showSettingsDialog() {
     dialog.exec();
 }
 void MainWindow::createMenus() {
+    const auto disableDuringProjectLoad = [](QAction* action) {
+        if (action != nullptr) {
+            action->setProperty("disabledDuringProjectLoad", true);
+        }
+    };
     const auto register_shortcut =
         [this](const QString& id, const QString& label, QAction* action) {
             shortcut_manager_->registerAction(id, label, action);
@@ -218,6 +223,7 @@ void MainWindow::createMenus() {
 
     auto* file_menu = menuBar()->addMenu("&File");
     new_project_action_ = file_menu->addAction("&New Project");
+    disableDuringProjectLoad(new_project_action_);
     new_project_action_->setShortcut(QKeySequence("Ctrl+N"));
     new_project_action_->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
@@ -225,8 +231,10 @@ void MainWindow::createMenus() {
         new_project_action_);
     connect(new_project_action_, &QAction::triggered, this, &MainWindow::newProject);
     auto* open_media_action = file_menu->addAction("Open &Media...");
+    disableDuringProjectLoad(open_media_action);
     connect(open_media_action, &QAction::triggered, this, &MainWindow::openMedia);
     open_project_action_ = file_menu->addAction("&Open Project...");
+    disableDuringProjectLoad(open_project_action_);
     open_project_action_->setShortcut(QKeySequence("Ctrl+O"));
     open_project_action_->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
@@ -234,6 +242,7 @@ void MainWindow::createMenus() {
         open_project_action_);
     connect(open_project_action_, &QAction::triggered, this, &MainWindow::openProject);
     save_project_action_ = file_menu->addAction("&Save Project");
+    disableDuringProjectLoad(save_project_action_);
     save_project_action_->setShortcut(QKeySequence("Ctrl+S"));
     save_project_action_->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
@@ -241,6 +250,7 @@ void MainWindow::createMenus() {
         save_project_action_);
     connect(save_project_action_, &QAction::triggered, this, &MainWindow::saveProject);
     save_project_as_action_ = file_menu->addAction("Save Project &As...");
+    disableDuringProjectLoad(save_project_as_action_);
     save_project_as_action_->setShortcut(QKeySequence("Ctrl+Shift+S"));
     save_project_as_action_->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
@@ -253,6 +263,7 @@ void MainWindow::createMenus() {
 
     auto* edit_menu = menuBar()->addMenu("&Edit");
     auto* undo_action = edit_menu->addAction("&Undo");
+    disableDuringProjectLoad(undo_action);
     undo_action->setShortcut(QKeySequence::Undo);
     undo_action->setShortcutContext(Qt::WindowShortcut);
     undo_action_ = undo_action;
@@ -260,6 +271,7 @@ void MainWindow::createMenus() {
         QStringLiteral("edit.undo"), QStringLiteral("Undo"), undo_action_);
     connect(undo_action_, &QAction::triggered, this, &MainWindow::undoTimelineEdit);
     auto* redo_action = edit_menu->addAction("&Redo");
+    disableDuringProjectLoad(redo_action);
     redo_action->setShortcut(QKeySequence::Redo);
     redo_action->setShortcutContext(Qt::WindowShortcut);
     redo_action_ = redo_action;
@@ -268,6 +280,7 @@ void MainWindow::createMenus() {
     connect(redo_action_, &QAction::triggered, this, &MainWindow::redoTimelineEdit);
     edit_menu->addSeparator();
     auto* delete_clip_action = edit_menu->addAction("Delete Selected Clip");
+    disableDuringProjectLoad(delete_clip_action);
     delete_clip_action->setShortcut(QKeySequence(Qt::Key_Delete));
     delete_clip_action->setShortcutContext(Qt::WindowShortcut);
     delete_clip_action_ = delete_clip_action;
@@ -281,6 +294,7 @@ void MainWindow::createMenus() {
         this,
         &MainWindow::deleteActiveTimelineClip);
     auto* split_clip_action = edit_menu->addAction("Split Clip at Playhead");
+    disableDuringProjectLoad(split_clip_action);
     split_clip_action->setShortcut(QKeySequence("Ctrl+K"));
     split_clip_action->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
@@ -293,18 +307,23 @@ void MainWindow::createMenus() {
         &MainWindow::splitActiveClipAtPlayhead);
     edit_menu->addSeparator();
     add_video_track_action_ = edit_menu->addAction("Add Video Track");
+    disableDuringProjectLoad(add_video_track_action_);
     connect(add_video_track_action_, &QAction::triggered,
             this, &MainWindow::addVideoTrack);
     rename_track_action_ = edit_menu->addAction("Rename Track");
+    disableDuringProjectLoad(rename_track_action_);
     connect(rename_track_action_, &QAction::triggered,
             this, &MainWindow::renameActiveTrack);
     move_track_up_action_ = edit_menu->addAction("Move Track Up");
+    disableDuringProjectLoad(move_track_up_action_);
     connect(move_track_up_action_, &QAction::triggered,
             this, [this]() { moveActiveTrack(-1); });
     move_track_down_action_ = edit_menu->addAction("Move Track Down");
+    disableDuringProjectLoad(move_track_down_action_);
     connect(move_track_down_action_, &QAction::triggered,
             this, [this]() { moveActiveTrack(1); });
     remove_track_action_ = edit_menu->addAction("Remove Track");
+    disableDuringProjectLoad(remove_track_action_);
     connect(remove_track_action_, &QAction::triggered,
             this, &MainWindow::removeActiveTrack);
     auto* razor_tool_action = edit_menu->addAction("Blade Tool");
@@ -540,6 +559,7 @@ void MainWindow::createMenus() {
     addAction(next_frame_action);
 
     auto* move_left_action = new QAction(this);
+    disableDuringProjectLoad(move_left_action);
     move_left_action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Left));
     move_left_action->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
@@ -551,6 +571,7 @@ void MainWindow::createMenus() {
     addAction(move_left_action);
 
     auto* move_right_action = new QAction(this);
+    disableDuringProjectLoad(move_right_action);
     move_right_action->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Right));
     move_right_action->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(

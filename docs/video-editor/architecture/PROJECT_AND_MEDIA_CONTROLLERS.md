@@ -24,7 +24,7 @@ Technical failures are logged in the application layer before presentation. Expe
 
 `application::ProjectOpenService` loads and validates a document, resolves media paths, probes and decodes the first frame for online media using the media kind recorded in the project, preserves missing files as offline entries, constructs the media library and timeline snapshot, and reports progress and typed warnings or failures. Existing media that fails to decode rejects the whole preparation. This keeps legacy project classification behavior separate from extension-based classification of newly imported files.
 
-`MainWindow` keeps the current project visible while preparation runs, disables editing, and offers progress and cancellation. On success, `ProjectController::commitPrepared` replaces the session in one UI-thread operation. On cancellation or failure, the active session remains intact. Project-generation checks discard stale completion results. Recovery cleanup is performed only after a successful commit.
+`MainWindow` keeps the current project visible while preparation runs, disables session-editing controls and commands, and offers a non-modal progress dialog with cancellation. The File, Edit, View, and Help menus remain accessible; commands that could replace or mutate the active project are disabled until preparation completes. On success, `ProjectController::commitPrepared` replaces the session in one UI-thread operation. On cancellation or failure, the active session remains intact. Project-generation checks discard stale completion results. Recovery cleanup is performed only after a successful commit.
 
 Save and autosave remain synchronous in this stage. Dialogs, unsaved-change confirmation, progress presentation, worker scheduling, and error logging remain application/UI responsibilities.
 
@@ -34,7 +34,7 @@ The service tests run without constructing `MainWindow`. They cover project roun
 
 ## Manual validation
 
-1. Open a project containing several large video files. Confirm the current project remains visible while progress advances and editing is disabled.
+1. Open a project containing several large video files. Confirm the current project remains visible while progress advances, session edits are disabled, and File, Edit, View, and Help can still be opened. Confirm project-changing commands remain disabled while safe view and help commands remain available.
 2. Cancel during an active file. Confirm the existing project remains unchanged and no later files begin importing.
 3. Repeat and allow preparation to finish. Confirm the new timeline, bins, media metadata, and preview frames appear together after completion.
 4. Start a multi-file import, change the selected media item while it runs, and confirm completion does not replace that newer selection.
