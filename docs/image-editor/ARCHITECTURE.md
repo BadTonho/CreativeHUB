@@ -38,7 +38,9 @@ the active image document, ordered edit operations, persistence, and recovery.
 - `ImageCanvas` handles fit, zoom, middle-button panning, crop selection, and a
   checkerboard behind transparent pixels. It previews a round paint stroke
   during a drag and emits one image-space stroke when the gesture ends.
-- `ToolSidebar` currently contains one checkable Paint tool. Its brush controls
+- `ToolSidebar` currently contains one checkable, icon-only Paint tool in a
+  compact rail. The standard tooltip names the tool on hover, and activating the
+  tool expands the rail to show its brush controls. Those brush controls
   provide an alpha-capable color picker and a 1–512 pixel diameter setting. The
   tool starts inactive, and the sidebar and crop menu action cannot be active at
   the same time.

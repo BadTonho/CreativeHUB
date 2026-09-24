@@ -27,8 +27,10 @@ run.
    and drag a crop. Rotate both directions, flip horizontally and vertically,
    then use Undo and Redo. Confirm the canvas and dirty marker update.
 8. Open a disposable image and create a canvas in separate runs. Confirm Paint
-   is the only tool in the left sidebar and starts inactive. Activate it, choose
-   a color (including a partially transparent color), and change the brush size.
+   is the only tool in the compact left sidebar, appears as an icon without a
+   label, and starts inactive. Hover over the icon until its tooltip appears and
+   confirm it says Paint. Activate it, choose a color (including a partially
+   transparent color), and change the brush size.
    Verify the brush outline follows the pointer, a drag paints a continuous
    stroke, and a click paints a dot. Switch to **Edit > Crop Selection** and
    confirm that Paint deactivates; activate Paint and confirm crop mode exits.

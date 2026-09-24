@@ -16,6 +16,9 @@
 namespace image_editor {
 namespace {
 
+constexpr int kCollapsedSidebarWidth = 56;
+constexpr int kExpandedSidebarWidth = 132;
+
 QIcon paintToolIcon() {
     QPixmap icon(32, 32);
     icon.fill(Qt::transparent);
@@ -49,24 +52,23 @@ QIcon paintToolIcon() {
 
 ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     setObjectName(QStringLiteral("imageEditorToolSidebar"));
-    setFixedWidth(132);
+    setFixedWidth(kCollapsedSidebarWidth);
     setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(8, 10, 8, 10);
+    layout->setContentsMargins(4, 10, 4, 10);
     layout->setSpacing(10);
 
     paint_button_ = new QToolButton(this);
     paint_button_->setObjectName(QStringLiteral("paintToolButton"));
-    paint_button_->setText(QStringLiteral("Paint"));
-    paint_button_->setToolTip(QStringLiteral("Paint on the image"));
+    paint_button_->setToolTip(QStringLiteral("Paint"));
     paint_button_->setAccessibleName(QStringLiteral("Paint tool"));
     paint_button_->setIcon(paintToolIcon());
-    paint_button_->setIconSize(QSize(28, 28));
-    paint_button_->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+    paint_button_->setIconSize(QSize(24, 24));
+    paint_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
     paint_button_->setCheckable(true);
-    paint_button_->setMinimumHeight(64);
-    layout->addWidget(paint_button_);
+    paint_button_->setFixedSize(40, 40);
+    layout->addWidget(paint_button_, 0, Qt::AlignHCenter);
 
     brush_options_ = new QWidget(this);
     brush_options_->setObjectName(QStringLiteral("paintBrushOptions"));
@@ -141,6 +143,7 @@ int ToolSidebar::brushDiameter() const {
 void ToolSidebar::updateControls() {
     paint_button_->setEnabled(document_available_);
     const bool options_enabled = document_available_ && paint_button_->isChecked();
+    setFixedWidth(options_enabled ? kExpandedSidebarWidth : kCollapsedSidebarWidth);
     brush_options_->setVisible(options_enabled);
     brush_options_->setEnabled(options_enabled);
 }

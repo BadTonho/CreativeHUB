@@ -101,14 +101,19 @@ int main(int argc, char* argv[]) {
         brush_size == nullptr || redo_action == nullptr || crop_action == nullptr ||
         tool_sidebar->findChildren<QToolButton*>().size() != 1 ||
         paint_button->isChecked() || brush_options->isVisible() ||
+        !paint_button->text().isEmpty() ||
+        paint_button->toolButtonStyle() != Qt::ToolButtonIconOnly ||
+        paint_button->toolTip() != QStringLiteral("Paint") ||
+        tool_sidebar->width() != 56 ||
         tool_sidebar->brushColor() != QColor(Qt::black) ||
         tool_sidebar->brushDiameter() != 12) {
-        std::cerr << "The paint tool sidebar did not start with its expected single inactive tool.\n";
+        std::cerr << "The paint tool sidebar did not start as a compact icon-only tool.\n";
         return 1;
     }
 
     paint_button->click();
-    if (!paint_button->isChecked() || !brush_options->isVisible() || !canvas->paintMode()) {
+    if (!paint_button->isChecked() || !brush_options->isVisible() || !canvas->paintMode() ||
+        tool_sidebar->width() != 132) {
         std::cerr << "Activating the paint tool did not expose its brush controls and canvas mode.\n";
         return 1;
     }
@@ -138,7 +143,7 @@ int main(int argc, char* argv[]) {
     undo_action->trigger();
     crop_action->trigger();
     if (!crop_action->isChecked() || paint_button->isChecked() ||
-        !canvas->cropMode() || canvas->paintMode()) {
+        !canvas->cropMode() || canvas->paintMode() || tool_sidebar->width() != 56) {
         std::cerr << "Crop mode did not deactivate the paint tool.\n";
         return 1;
     }
