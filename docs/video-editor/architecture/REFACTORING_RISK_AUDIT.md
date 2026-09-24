@@ -683,7 +683,7 @@ Definição final de concluído:
 - Media import and project preparation run on the dedicated one-worker pool. Import batches are sequential and cancellable; project open commits only after successful preparation, preserving the active session on cancellation or failure.
 - Service tests cover migration and round-trip, dirty state, recovery, canonical media lookup, duplicates, offline restoration, partial import failure, cancellation, project-open failures, and legacy video-kind GIF media. The MainWindow integration test covers the visible project during loading, applies prepared media and timeline state, protects a newer selection from a late import, and rejects stale project-generation results.
 - Release build: passed. Full CTest suite: 34/34 passed. `git diff --check`: passed.
-- Manual large-media import and project-open validation: documented in [Project and Media Controllers](PROJECT_AND_MEDIA_CONTROLLERS.md), not performed in this environment.
+- Manual large-media import and project-open validation: reported complete by the project owner; detailed outcomes are not recorded here. The procedure remains documented in [Project and Media Controllers](PROJECT_AND_MEDIA_CONTROLLERS.md).
 
 ## Stage 6 implementation record
 
@@ -692,7 +692,7 @@ Definição final de concluído:
 - Worker adapter requests continue using the existing video, audio, and composition modules. `TrackId` and `ClipId` remain the application-facing identities, with vector indexes derived only while building worker requests.
 - Controller tests exercise command flow, rapid activation, stale readiness, frames and completion, frame-mailbox coalescing, seeking, stepping between clips, invalidation during playback, and shutdown without constructing `MainWindow`. The integration test verifies that a committed activation updates the visible selection and media-browser projection.
 - Release build: passed. Full CTest suite: 35/35 passed. `git diff --check`: passed.
-- Manual playback-boundary and close-during-playback validation: documented in [Playback Controller](PLAYBACK_CONTROLLER.md), not performed in this environment.
+- Manual playback-boundary and close-during-playback validation: reported complete by the project owner; detailed outcomes are not recorded here. The procedure remains documented in [Playback Controller](PLAYBACK_CONTROLLER.md).
 
 ## Stage 7 implementation record
 
@@ -701,7 +701,7 @@ Definição final de concluído:
 - `MainWindow` routes track and inspector edits through `TimelineCommandService` and projects results to the widgets and playback composition. The timeline widget no longer emits index-based edit signals, and the unused index-based move, trim, and split handlers were removed. Qt input dispatch, context menus, and local hit-test positions remain in the widget boundary.
 - Added independent geometry, interaction-controller, and painter coverage. Updated widget and MainWindow integration checks for stable-ID signals, command results, selection projection, snapping, drag/drop, and media rename label synchronization.
 - Release build: passed. Full CTest suite: 37/37 passed. `git diff --check`: passed.
-- Manual visual validation for move, trim, split, media drop, slider undo grouping, and multi-track projects: documented in [Timeline Widget Boundary](TIMELINE_WIDGET_BOUNDARY.md), not performed in this environment.
+- Manual visual validation for move, trim, split, media drop, slider undo grouping, and multi-track projects: reported complete by the project owner; detailed outcomes are not recorded here. The procedure remains documented in [Timeline Widget Boundary](TIMELINE_WIDGET_BOUNDARY.md).
 
 ## Stage 8 implementation record
 
@@ -710,4 +710,4 @@ Definição final de concluído:
 - Playback requests for media activation, composition refresh, rendering, and seeking preserve the captured generation at the worker boundary. The controller continues to discard stale worker events and frames before they can update the session or preview.
 - Regression coverage now checks stable IDs and selection after creation, split, reorder, restore, undo/redo, and playback activation; dirty state when returning to the saved baseline; project-open failure atomicity; and current versus stale playback generations and events.
 - Release build: passed. Full CTest suite: 37/37 passed. `git diff --check`: passed.
-- Stage 7 manual visual validation remains pending: move, trim, split, media drop, slider undo grouping, and multi-track projects. It is documented in [Timeline Widget Boundary](TIMELINE_WIDGET_BOUNDARY.md) and was not part of this automated hardening round.
+- Manual validations from Stages 5-7 were reported complete by the project owner after this automated hardening round. Detailed outcomes were not supplied, so this record tracks completion without claiming a specific pass/fail result; the validation procedures remain documented in [Project and Media Controllers](PROJECT_AND_MEDIA_CONTROLLERS.md), [Playback Controller](PLAYBACK_CONTROLLER.md), and [Timeline Widget Boundary](TIMELINE_WIDGET_BOUNDARY.md).
