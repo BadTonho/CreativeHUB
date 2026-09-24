@@ -32,7 +32,7 @@ as unassigned can be given a shortcut in the settings dialog.
 
 With Paint active and an editable layer selected, hold `Ctrl+Alt`, then press
 and drag the left mouse button over the image to resize the brush. The press
-point is the reference: moving away increases the size, and moving back toward
-it reduces the adjustment to the size at the start of the gesture. The brush
-changes by 1 pixel for every 2 screen pixels of movement, within the 1–512 px
-range. This fixed mouse gesture is not configurable in Keyboard Shortcuts.
+point is the reference: dragging right increases the size and dragging left
+decreases it by 1 px per screen pixel. Vertical movement does not affect the
+size. The range is 1–1024 px. This fixed mouse gesture is not configurable in
+Keyboard Shortcuts.

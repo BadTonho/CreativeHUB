@@ -89,7 +89,7 @@ it transparent; it does not resize the document. Rotation is around the canvas
 center, and content outside the canvas is clipped. Flips mirror within the
 canvas bounds. Paint points use floating-point pixel coordinates in the canvas
 at that point in the layer's operation list. A paint color uses `#AARRGGBB`, a
-diameter is from 1 through 512 pixels, and a stroke contains 1 through 100,000
+diameter is from 1 through 1024 pixels, and a stroke contains 1 through 100,000
 points.
 
 For legacy top-level operations, crops use the current image bounds and change

@@ -160,7 +160,7 @@ bool decodeOperations(const QJsonValue& value,
                 encoded_points.size() > ImageDocumentStore::kMaximumPaintStrokePoints ||
                 !isArgbHexColor(encoded_color) || !color.isValid() ||
                 !isInteger(object.value("diameter"), &diameter) ||
-                diameter < 1 || diameter > 512) {
+                diameter < 1 || diameter > ImageDocumentStore::kMaximumPaintBrushDiameter) {
                 assignError(error, QStringLiteral("The document contains an invalid paint stroke."));
                 return false;
             }

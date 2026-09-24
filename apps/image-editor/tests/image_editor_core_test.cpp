@@ -426,7 +426,10 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
             QStringLiteral("An invalid paint color was accepted."));
     require(!session.applyPaintStroke(points, Qt::black, 0, &error) && !error.isEmpty(),
             QStringLiteral("An invalid paint diameter was accepted."));
-    require(!session.applyPaintStroke(points, Qt::black, 513, &error) && !error.isEmpty(),
+    require(!session.applyPaintStroke(
+                points, Qt::black,
+                image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter + 1, &error) &&
+                !error.isEmpty(),
             QStringLiteral("A paint diameter above the supported range was accepted."));
     error = QStringLiteral("previous failure");
     require(!session.applyPaintStroke(points, QColor(0, 0, 0, 0), 12, &error) && error.isEmpty(),
@@ -434,6 +437,33 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     require(session.data().layers.at(1).operations.size() == operation_count &&
                 session.renderedImage() == painted && session.canUndo(),
             QStringLiteral("A rejected or invisible stroke changed the document or history."));
+
+    image_editor::ImageDocumentSession maximum_brush_session;
+    require(maximum_brush_session.openImage(source_path, &error), error);
+    require(maximum_brush_session.applyPaintStroke(
+                {QPointF(8.0, 6.0)}, Qt::black,
+                image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter, &error), error);
+    const QString maximum_brush_path = root + QStringLiteral("/maximum-brush.cimg");
+    require(maximum_brush_session.saveDocument(maximum_brush_path, &error), error);
+    QFile maximum_brush_file(maximum_brush_path);
+    require(maximum_brush_file.open(QIODevice::ReadOnly),
+            QStringLiteral("The maximum-brush document could not be read."));
+    const QJsonObject maximum_brush_json =
+        QJsonDocument::fromJson(maximum_brush_file.readAll()).object();
+    const int serialized_maximum_diameter = maximum_brush_json.value("layers").toArray()
+        .at(1).toObject().value("operations").toArray()
+        .at(0).toObject().value("diameter").toInt();
+    require(maximum_brush_json.value("version").toInt() == 4 &&
+                serialized_maximum_diameter ==
+                    image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter,
+            QStringLiteral("The 1024 px paint diameter was not saved in version 4."));
+    image_editor::ImageDocumentSession reopened_maximum_brush;
+    require(reopened_maximum_brush.openDocument(maximum_brush_path, &error), error);
+    require(reopened_maximum_brush.data() == maximum_brush_session.data() &&
+                reopened_maximum_brush.data().layers.at(1).operations.front()
+                        .paint_stroke.diameter ==
+                    image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter,
+            QStringLiteral("A 1024 px paint stroke did not round-trip through version 4."));
 
     require(session.undo() && session.renderedImage() == source && !session.isDirty(),
             QStringLiteral("Undo did not remove the complete paint stroke."));
@@ -859,6 +889,32 @@ void testInvalidDocument(const QString& root) {
     require(session.sourcePath() == QFileInfo(source_path).absoluteFilePath() &&
                 session.renderedImage() == original_render,
             QStringLiteral("An invalid paint document replaced the current image."));
+
+    QJsonObject valid_paint_point;
+    valid_paint_point.insert("x", 1.0);
+    valid_paint_point.insert("y", 1.0);
+    QJsonArray valid_paint_points;
+    valid_paint_points.append(valid_paint_point);
+    QJsonObject oversized_stroke;
+    oversized_stroke.insert("kind", "paint_stroke");
+    oversized_stroke.insert("color", "#FF000000");
+    oversized_stroke.insert("diameter",
+                            image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter + 1);
+    oversized_stroke.insert("points", valid_paint_points);
+    QJsonArray oversized_operations;
+    oversized_operations.append(oversized_stroke);
+    invalid_paint_document.insert("operations", oversized_operations);
+    const QString oversized_stroke_path = root + QStringLiteral("/oversized-stroke.cimg");
+    QFile oversized_stroke_file(oversized_stroke_path);
+    require(oversized_stroke_file.open(QIODevice::WriteOnly),
+            QStringLiteral("Could not create an oversized paint document."));
+    oversized_stroke_file.write(QJsonDocument(invalid_paint_document).toJson());
+    oversized_stroke_file.close();
+    require(!session.openDocument(oversized_stroke_path, &error) && !error.isEmpty(),
+            QStringLiteral("A paint stroke above 1024 px was accepted from a document."));
+    require(session.sourcePath() == QFileInfo(source_path).absoluteFilePath() &&
+                session.renderedImage() == original_render,
+            QStringLiteral("An oversized paint stroke replaced the current image."));
     auto duplicate_layer_ids = session.data();
     duplicate_layer_ids.layers[1].id = duplicate_layer_ids.layers.front().id;
     require(!image_editor::ImageDocumentStore::saveDocument(

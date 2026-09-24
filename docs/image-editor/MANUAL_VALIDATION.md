@@ -41,11 +41,13 @@ run.
    confirm that Paint deactivates; activate Paint and confirm crop mode exits.
    Use Undo and Redo and confirm each complete gesture is one history entry.
    While Paint is active, hold `Ctrl+Alt`, press the left mouse button over the
-   image, and drag away from the press point. Confirm the brush outline, slider,
-   and numeric field grow together; drag back toward the press point and confirm
-   the size returns toward its starting value. Release and verify the image is
-   still clean and Undo has no new entry. Repeat with Paint inactive and confirm
-   the gesture does not change the brush. Open **Settings > Keyboard Shortcuts**
+   image, and drag right. Confirm the brush outline, slider, and numeric field
+   increase by 1 px per screen pixel; drag left and confirm the size decreases
+   at the same rate. Move vertically without changing the horizontal position
+   and confirm the size stays the same. Verify the size clamps at 1 and 1024 px.
+   Release and verify the image is still clean and Undo has no new entry. Repeat
+   with Paint inactive and confirm the gesture does not change the brush. Open
+   **Settings > Keyboard Shortcuts**
    and confirm the dialog is larger, can be resized, and keeps the shortcut list
    scrollable when made shorter. Change Paint from `B` to another
    combination, accept, close and reopen the dialog, and confirm the new value

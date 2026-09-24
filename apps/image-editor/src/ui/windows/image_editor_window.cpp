@@ -186,7 +186,7 @@ void ImageEditorWindow::createToolOptionsBar() {
     brush_size_slider_ = new QSlider(Qt::Horizontal, paint_size_options_);
     brush_size_slider_->setObjectName(QStringLiteral("paintBrushSizeSlider"));
     brush_size_slider_->setAccessibleName(QStringLiteral("Brush size"));
-    brush_size_slider_->setRange(1, 512);
+    brush_size_slider_->setRange(1, ImageDocumentStore::kMaximumPaintBrushDiameter);
     brush_size_slider_->setValue(12);
     brush_size_slider_->setMinimumWidth(140);
     brush_size_slider_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -195,7 +195,7 @@ void ImageEditorWindow::createToolOptionsBar() {
     brush_size_spin_ = new QSpinBox(paint_size_options_);
     brush_size_spin_->setObjectName(QStringLiteral("paintBrushSizeSpinBox"));
     brush_size_spin_->setAccessibleName(QStringLiteral("Brush size in pixels"));
-    brush_size_spin_->setRange(1, 512);
+    brush_size_spin_->setRange(1, ImageDocumentStore::kMaximumPaintBrushDiameter);
     brush_size_spin_->setValue(12);
     brush_size_spin_->setSuffix(QStringLiteral(" px"));
     brush_size_spin_->setFixedWidth(96);

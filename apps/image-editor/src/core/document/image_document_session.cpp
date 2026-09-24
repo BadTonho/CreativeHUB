@@ -564,8 +564,8 @@ bool ImageDocumentSession::applyPaintStroke(const QVector<QPointF>& points,
         assignError(error, QStringLiteral("Choose a valid paint color."));
         return false;
     }
-    if (diameter < 1 || diameter > 512) {
-        assignError(error, QStringLiteral("The paint brush diameter must be between 1 and 512 pixels."));
+    if (diameter < 1 || diameter > ImageDocumentStore::kMaximumPaintBrushDiameter) {
+        assignError(error, QStringLiteral("The paint brush diameter must be between 1 and 1024 pixels."));
         return false;
     }
     const QSize size = renderedSize();

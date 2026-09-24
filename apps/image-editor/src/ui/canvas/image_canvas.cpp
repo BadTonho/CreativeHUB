@@ -1,5 +1,6 @@
 #include "image_canvas.h"
 
+#include "image_document_store.h"
 #include "../transparency_checkerboard.h"
 
 #include <QEvent>
@@ -71,7 +72,8 @@ void ImageCanvas::setPaintMode(bool enabled) {
 
 void ImageCanvas::setBrush(QColor color, int diameter) {
     if (color.isValid()) brush_color_ = std::move(color);
-    brush_diameter_ = std::clamp(diameter, 1, 512);
+    brush_diameter_ = std::clamp(
+        diameter, 1, ImageDocumentStore::kMaximumPaintBrushDiameter);
     update();
 }
 
@@ -274,9 +276,10 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
     }
     if (resizing_brush_) {
         const QPointF displacement = event->position() - brush_resize_start_;
-        const double distance = std::hypot(displacement.x(), displacement.y());
-        const int adjustment = static_cast<int>(std::floor(distance / 2.0));
-        const int diameter = std::clamp(brush_resize_initial_diameter_ + adjustment, 1, 512);
+        const int adjustment = static_cast<int>(std::round(displacement.x()));
+        const int diameter = std::clamp(
+            brush_resize_initial_diameter_ + adjustment,
+            1, ImageDocumentStore::kMaximumPaintBrushDiameter);
         if (diameter != brush_diameter_) {
             brush_diameter_ = diameter;
             emit brushDiameterChanged(brush_diameter_);

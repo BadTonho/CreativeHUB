@@ -451,8 +451,10 @@ int main(int argc, char* argv[]) {
         tool_sidebar->width() != 56 ||
         tool_sidebar->brushColor() != QColor(Qt::black) ||
         brush_size->value() != 12 || brush_size_slider->value() != 12 ||
-        brush_size->minimum() != 1 || brush_size->maximum() != 512 ||
-        brush_size_slider->minimum() != 1 || brush_size_slider->maximum() != 512) {
+        brush_size->minimum() != 1 ||
+        brush_size->maximum() != image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter ||
+        brush_size_slider->minimum() != 1 ||
+        brush_size_slider->maximum() != image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter) {
         std::cerr << "The paint controls did not start in the expected compact layout.\n";
         return 1;
     }
@@ -530,34 +532,56 @@ int main(int argc, char* argv[]) {
                       Qt::ControlModifier | Qt::AltModifier,
                       brush_resize_anchor);
     QTest::mouseMove(canvas, brush_resize_anchor + QPoint(20, 0));
-    const bool brush_size_grew_and_synced = brush_size->value() == 12 &&
-        brush_size_slider->value() == 12;
-    QTest::mouseMove(canvas, brush_resize_anchor + QPoint(8, 0));
-    const bool moving_inward_reduced_brush = brush_size->value() == 6 &&
-        brush_size_slider->value() == 6;
-    QTest::mouseMove(canvas, brush_resize_anchor);
-    const bool returning_to_anchor_restored_size = brush_size->value() == 2 &&
+    const bool moving_right_increased_brush = brush_size->value() == 22 &&
+        brush_size_slider->value() == 22;
+    QTest::mouseMove(canvas, brush_resize_anchor + QPoint(0, 40));
+    const bool vertical_motion_did_not_change_brush = brush_size->value() == 2 &&
         brush_size_slider->value() == 2;
+    QTest::mouseMove(canvas, brush_resize_anchor + QPoint(-1, 0));
+    const bool moving_left_reduced_brush_to_minimum = brush_size->value() == 1 &&
+        brush_size_slider->value() == 1;
     QTest::mouseRelease(canvas, Qt::LeftButton,
                         Qt::ControlModifier | Qt::AltModifier,
-                        brush_resize_anchor);
+                        brush_resize_anchor + QPoint(-1, 0));
+
+    brush_size->setValue(20);
+    QTest::mousePress(canvas, Qt::LeftButton,
+                      Qt::ControlModifier | Qt::AltModifier,
+                      brush_resize_anchor);
+    QTest::mouseMove(canvas, brush_resize_anchor + QPoint(-5, 0));
+    const bool moving_left_reduced_brush = brush_size->value() == 15 &&
+        brush_size_slider->value() == 15;
+    QTest::mouseMove(canvas, brush_resize_anchor + QPoint(5, 0));
+    const bool crossing_anchor_increased_brush = brush_size->value() == 25 &&
+        brush_size_slider->value() == 25;
+    QTest::mouseRelease(canvas, Qt::LeftButton,
+                        Qt::ControlModifier | Qt::AltModifier,
+                        brush_resize_anchor + QPoint(5, 0));
+
     brush_size->setValue(500);
     QTest::mousePress(canvas, Qt::LeftButton,
                       Qt::ControlModifier | Qt::AltModifier,
                       brush_resize_anchor);
-    QTest::mouseMove(canvas, brush_resize_anchor + QPoint(100, 0));
-    const bool brush_size_is_capped = brush_size->value() == 512 &&
-        brush_size_slider->value() == 512;
+    QTest::mouseMove(canvas, brush_resize_anchor + QPoint(600, 0));
+    const bool brush_size_is_capped = brush_size->value() ==
+            image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter &&
+        brush_size_slider->value() ==
+            image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter;
+    QTest::mouseMove(canvas, brush_resize_anchor + QPoint(-600, 0));
+    const bool brush_size_is_clamped_to_minimum = brush_size->value() == 1 &&
+        brush_size_slider->value() == 1;
     QTest::mouseMove(canvas, brush_resize_anchor);
-    const bool capped_brush_returns_to_baseline = brush_size->value() == 500 &&
+    const bool brush_returns_to_press_value = brush_size->value() == 500 &&
         brush_size_slider->value() == 500;
     QTest::mouseRelease(canvas, Qt::LeftButton,
                         Qt::ControlModifier | Qt::AltModifier,
                         brush_resize_anchor);
     brush_size->setValue(2);
-    if (!document_was_clean_before_brush_resize || !brush_size_grew_and_synced ||
-        !moving_inward_reduced_brush || !returning_to_anchor_restored_size ||
-        !brush_size_is_capped || !capped_brush_returns_to_baseline ||
+    if (!document_was_clean_before_brush_resize || !moving_right_increased_brush ||
+        !vertical_motion_did_not_change_brush || !moving_left_reduced_brush_to_minimum ||
+        !moving_left_reduced_brush || !crossing_anchor_increased_brush ||
+        !brush_size_is_capped || !brush_size_is_clamped_to_minimum ||
+        !brush_returns_to_press_value ||
         window.windowTitle().startsWith('*') || undo_action->isEnabled()) {
         std::cerr << "The brush resize gesture did not update controls without editing the document.\n";
         return 1;

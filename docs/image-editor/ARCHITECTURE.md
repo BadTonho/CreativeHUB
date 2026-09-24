@@ -47,13 +47,15 @@ persistence, and recovery.
   checkerboard behind transparent pixels. It previews a round paint stroke
   during a drag and emits one image-space stroke when the gesture ends. While
   Paint is active, `Ctrl+Alt` plus a left-button drag over the image adjusts the
-  brush size relative to the press point; that gesture updates the window's
-  brush controls without changing the document or history.
+  brush size from the signed horizontal displacement at the press point: right
+  increases and left decreases at 1 px per screen pixel. Vertical movement is
+  ignored, and the gesture updates the window's brush controls without changing
+  the document or history.
 - `ToolSidebar` currently contains one checkable, icon-only Paint tool in a
   compact rail and an always-visible color swatch at the bottom. The swatch opens
   an alpha-capable color picker. `ImageEditorWindow` owns a persistent top tool
   options bar; it is empty when no tool is active and shows synchronized slider
-  and numeric brush-size controls (1–512 pixels) while Paint is active. Paint
+  and numeric brush-size controls (1–1024 pixels) while Paint is active. Paint
   starts inactive. The options are visible only while both the Paint button and
   canvas paint mode are active; the sidebar and crop menu action cannot be
   active at the same time.

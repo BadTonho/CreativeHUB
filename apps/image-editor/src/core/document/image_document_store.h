@@ -74,6 +74,7 @@ class ImageDocumentStore final {
 public:
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
+    static constexpr int kMaximumPaintBrushDiameter = 1024;
     static constexpr qsizetype kMaximumLayers = 512;
     static constexpr qsizetype kMaximumLayerNameLength = 128;
     static constexpr qsizetype kMaximumOperations = 100'000;
