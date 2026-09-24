@@ -43,8 +43,9 @@ the active image document, ordered edit operations, persistence, and recovery.
   an alpha-capable color picker. `ImageEditorWindow` owns a persistent top tool
   options bar; it is empty when no tool is active and shows synchronized slider
   and numeric brush-size controls (1–512 pixels) while Paint is active. Paint
-  starts inactive, and the sidebar and crop menu action cannot be active at the
-  same time.
+  starts inactive. The options are visible only while both the Paint button and
+  canvas paint mode are active; the sidebar and crop menu action cannot be
+  active at the same time.
 - `ImageEditorWindow` routes menu and sidebar actions, prompts before discarding
   edits, and projects session state into the window. A completed paint gesture
   is one undoable document operation; changing tools does not modify the image.

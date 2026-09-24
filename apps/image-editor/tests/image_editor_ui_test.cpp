@@ -164,6 +164,18 @@ int main(int argc, char* argv[]) {
         std::cerr << "The brush size field did not synchronize with the slider.\n";
         return 1;
     }
+    paint_button->click();
+    if (paint_button->isChecked() || canvas->paintMode() ||
+        paint_size_options->isVisible()) {
+        std::cerr << "Turning Paint off from its tool button did not hide its options.\n";
+        return 1;
+    }
+    paint_button->click();
+    if (!paint_button->isChecked() || !canvas->paintMode() ||
+        !paint_size_options->isVisible()) {
+        std::cerr << "Reactivating Paint did not restore its options.\n";
+        return 1;
+    }
     const QPoint paint_center = canvas->rect().center();
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier,
                       paint_center - QPoint(20, 0));

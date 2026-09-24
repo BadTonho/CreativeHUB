@@ -5,7 +5,6 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
-#include <QSignalBlocker>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -101,7 +100,6 @@ void ToolSidebar::setDocumentAvailable(bool available) {
 }
 
 void ToolSidebar::setPaintToolActive(bool active) {
-    const QSignalBlocker blocker(paint_button_);
     paint_button_->setChecked(active && document_available_);
     updateControls();
 }

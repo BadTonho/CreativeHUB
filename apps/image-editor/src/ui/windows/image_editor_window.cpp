@@ -65,8 +65,8 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             });
     connect(tool_sidebar_, &ToolSidebar::paintToolToggled, this, [this](bool active) {
         if (active) crop_action_->setChecked(false);
-        updateToolOptions();
         canvas_->setPaintMode(active && session_.hasSource());
+        updateToolOptions();
     });
     connect(tool_sidebar_, &ToolSidebar::brushColorChanged,
             canvas_, [this](const QColor& color) {
@@ -143,7 +143,9 @@ void ImageEditorWindow::createToolOptionsBar() {
 
 void ImageEditorWindow::updateToolOptions() {
     if (paint_size_options_ == nullptr || tool_sidebar_ == nullptr) return;
-    paint_size_options_->setVisible(tool_sidebar_->paintToolActive());
+    const bool paint_active = tool_sidebar_->paintToolActive() && canvas_->paintMode();
+    paint_size_options_->setVisible(paint_active);
+    paint_size_options_->setEnabled(paint_active);
 }
 
 void ImageEditorWindow::createActions() {

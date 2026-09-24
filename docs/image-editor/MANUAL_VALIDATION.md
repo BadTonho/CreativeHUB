@@ -33,7 +33,9 @@ run.
    Use the color swatch at the bottom of the sidebar to choose a color (including
    a partially transparent color), then activate Paint. Confirm the top bar
    shows a slider and numeric brush-size field, and that changing either control
-   updates the other and the brush preview.
+   updates the other and the brush preview. Click Paint again to deactivate it
+   and confirm the top bar is empty; click it once more and confirm the controls
+   return.
    Verify the brush outline follows the pointer, a drag paints a continuous
    stroke, and a click paints a dot. Switch to **Edit > Crop Selection** and
    confirm that Paint deactivates; activate Paint and confirm crop mode exits.
