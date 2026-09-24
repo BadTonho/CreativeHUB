@@ -4,11 +4,13 @@
 #include "image_editor_logger.h"
 #include "recovery_store.h"
 
+#include <QList>
 #include <QMainWindow>
 
 class QAction;
 class QCloseEvent;
 class QDockWidget;
+class QKeySequence;
 class QLabel;
 class QSlider;
 class QSpinBox;
@@ -38,6 +40,9 @@ private:
     void createActions();
     void createToolOptionsBar();
     void createLayerPanel();
+    void registerShortcutAction(QAction* action, const QKeySequence& default_sequence);
+    void loadShortcutPreferences();
+    void openShortcutSettings();
     void updateToolOptions();
     void updateView(bool preserveCanvasView = false);
     void deactivateCanvasTools();
@@ -81,11 +86,14 @@ private:
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
     QAction* crop_action_ = nullptr;
+    QAction* cancel_crop_action_ = nullptr;
     QAction* rotate_left_action_ = nullptr;
     QAction* rotate_right_action_ = nullptr;
     QAction* flip_horizontal_action_ = nullptr;
     QAction* flip_vertical_action_ = nullptr;
     QAction* fit_action_ = nullptr;
+    QAction* paint_tool_action_ = nullptr;
+    QList<QAction*> shortcut_actions_;
 };
 
 } // namespace image_editor

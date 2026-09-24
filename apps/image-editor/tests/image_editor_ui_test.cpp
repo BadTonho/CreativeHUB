@@ -12,11 +12,15 @@
 #include <QDockWidget>
 #include <QImage>
 #include <QImageWriter>
+#include <QKeySequenceEdit>
 #include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QMenu>
 #include <QPainter>
 #include <QPushButton>
+#include <QSettings>
+#include <QTableWidget>
 #include <QSlider>
 #include <QSpinBox>
 #include <QToolBar>
@@ -41,6 +45,9 @@ int main(int argc, char* argv[]) {
     QStandardPaths::setTestModeEnabled(true);
     QTemporaryDir temporary;
     if (!temporary.isValid()) return 1;
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, temporary.path());
+    QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, temporary.path());
 
     image_editor::ImageEditorWindow window;
     window.show();
@@ -65,6 +72,168 @@ int main(int argc, char* argv[]) {
         std::cerr << "The Image Editor window or canvas was not created.\n";
         return 1;
     }
+
+    auto* settings_menu = window.findChild<QMenu*>(QStringLiteral("settingsMenu"));
+    auto* keyboard_shortcuts_action = window.findChild<QAction*>(
+        QStringLiteral("keyboardShortcutsAction"));
+    auto* paint_tool_action = window.findChild<QAction*>(QStringLiteral("paintToolAction"));
+    auto* cancel_crop_action = window.findChild<QAction*>(QStringLiteral("cancelCropAction"));
+    if (settings_menu == nullptr || keyboard_shortcuts_action == nullptr ||
+        paint_tool_action == nullptr || cancel_crop_action == nullptr ||
+        cancel_crop_action->shortcut() != QKeySequence(Qt::Key_Escape) ||
+        settings_menu->title() != QStringLiteral("Settings") ||
+        paint_tool_action->shortcut() != QKeySequence(Qt::Key_B) ||
+        paint_tool_action->isChecked() || paint_tool_action->isEnabled()) {
+        std::cerr << "Settings or the default, inactive Paint shortcut was not created.\n";
+        return 1;
+    }
+
+    auto run_shortcut_dialog = [&](auto interaction) {
+        bool dialog_found = false;
+        QTimer interaction_timeout;
+        interaction_timeout.setSingleShot(true);
+        QObject::connect(&interaction_timeout, &QTimer::timeout, &window, [&]() {
+            auto* active_modal = QApplication::activeModalWidget();
+            if (auto* message = qobject_cast<QMessageBox*>(active_modal)) message->accept();
+            if (auto* dialog = window.findChild<QDialog*>(
+                    QStringLiteral("shortcutSettingsDialog"))) {
+                dialog->reject();
+            }
+        });
+        QTimer::singleShot(0, [&]() {
+            auto* dialog = window.findChild<QDialog*>(
+                QStringLiteral("shortcutSettingsDialog"));
+            if (dialog == nullptr) return;
+            dialog_found = true;
+            interaction(dialog);
+        });
+        interaction_timeout.start(5000);
+        keyboard_shortcuts_action->trigger();
+        interaction_timeout.stop();
+        return dialog_found;
+    };
+
+    const QKeySequence custom_paint_shortcut(QStringLiteral("Ctrl+Alt+P"));
+    const bool custom_shortcut_saved = run_shortcut_dialog(
+        [&](QDialog* dialog) {
+            auto* table = dialog->findChild<QTableWidget*>(
+                QStringLiteral("shortcutSettingsTable"));
+            auto* editor = dialog->findChild<QKeySequenceEdit*>(
+                QStringLiteral("shortcutEditor_paintToolAction"));
+            auto* buttons = dialog->findChild<QDialogButtonBox*>(
+                QStringLiteral("shortcutSettingsButtons"));
+            if (table == nullptr || table->rowCount() < 19 || editor == nullptr ||
+                buttons == nullptr) {
+                dialog->reject();
+                return;
+            }
+            editor->setKeySequence(custom_paint_shortcut);
+            buttons->button(QDialogButtonBox::Ok)->click();
+        });
+    if (!custom_shortcut_saved || paint_tool_action->shortcut() != custom_paint_shortcut) {
+        std::cerr << "The shortcut dialog did not apply a custom Paint shortcut.\n";
+        return 1;
+    }
+    {
+        image_editor::ImageEditorWindow reopened_window;
+        auto* reopened_paint_action = reopened_window.findChild<QAction*>(
+            QStringLiteral("paintToolAction"));
+        if (reopened_paint_action == nullptr ||
+            reopened_paint_action->shortcut() != custom_paint_shortcut) {
+            std::cerr << "The custom shortcut was not persisted for the next window.\n";
+            return 1;
+        }
+    }
+
+    const bool cancel_left_shortcut_unchanged = run_shortcut_dialog(
+        [&](QDialog* dialog) {
+            auto* editor = dialog->findChild<QKeySequenceEdit*>(
+                QStringLiteral("shortcutEditor_paintToolAction"));
+            auto* buttons = dialog->findChild<QDialogButtonBox*>(
+                QStringLiteral("shortcutSettingsButtons"));
+            if (editor == nullptr || buttons == nullptr) {
+                dialog->reject();
+                return;
+            }
+            editor->setKeySequence(QKeySequence(QStringLiteral("Ctrl+Alt+Q")));
+            buttons->button(QDialogButtonBox::Cancel)->click();
+        });
+    if (!cancel_left_shortcut_unchanged ||
+        paint_tool_action->shortcut() != custom_paint_shortcut) {
+        std::cerr << "Cancel applied an unconfirmed shortcut change.\n";
+        return 1;
+    }
+
+    bool duplicate_shortcut_rejected = false;
+    const bool duplicate_dialog_completed = run_shortcut_dialog(
+        [&](QDialog* dialog) {
+            auto* editor = dialog->findChild<QKeySequenceEdit*>(
+                QStringLiteral("shortcutEditor_paintToolAction"));
+            auto* validation = dialog->findChild<QLabel*>(
+                QStringLiteral("shortcutValidationMessage"));
+            auto* reset = dialog->findChild<QPushButton*>(
+                QStringLiteral("resetAllShortcutsButton"));
+            auto* buttons = dialog->findChild<QDialogButtonBox*>(
+                QStringLiteral("shortcutSettingsButtons"));
+            if (editor == nullptr || validation == nullptr || reset == nullptr ||
+                buttons == nullptr) {
+                dialog->reject();
+                return;
+            }
+            editor->setKeySequence(QKeySequence::New);
+            buttons->button(QDialogButtonBox::Ok)->click();
+            duplicate_shortcut_rejected = dialog->isVisible() && validation->isVisible() &&
+                validation->text().contains(QStringLiteral("New Canvas"));
+            reset->click();
+            duplicate_shortcut_rejected = duplicate_shortcut_rejected &&
+                editor->keySequence() == QKeySequence(Qt::Key_B);
+            buttons->button(QDialogButtonBox::Ok)->click();
+        });
+    if (!duplicate_dialog_completed || !duplicate_shortcut_rejected ||
+        paint_tool_action->shortcut() != QKeySequence(Qt::Key_B)) {
+        std::cerr << "Duplicate detection or Reset All did not restore the shortcut defaults.\n";
+        return 1;
+    }
+
+    const bool shortcut_cleared = run_shortcut_dialog(
+        [&](QDialog* dialog) {
+            auto* clear = dialog->findChild<QPushButton*>(
+                QStringLiteral("clearShortcut_paintToolAction"));
+            auto* editor = dialog->findChild<QKeySequenceEdit*>(
+                QStringLiteral("shortcutEditor_paintToolAction"));
+            auto* buttons = dialog->findChild<QDialogButtonBox*>(
+                QStringLiteral("shortcutSettingsButtons"));
+            if (clear == nullptr || editor == nullptr || buttons == nullptr) {
+                dialog->reject();
+                return;
+            }
+            clear->click();
+            const bool is_empty = editor->keySequence().isEmpty();
+            buttons->button(QDialogButtonBox::Ok)->click();
+            if (is_empty) QCoreApplication::processEvents();
+        });
+    if (!shortcut_cleared || !paint_tool_action->shortcut().isEmpty()) {
+        std::cerr << "The Clear control did not remove the Paint shortcut.\n";
+        return 1;
+    }
+    const bool defaults_restored = run_shortcut_dialog(
+        [&](QDialog* dialog) {
+            auto* reset = dialog->findChild<QPushButton*>(
+                QStringLiteral("resetAllShortcutsButton"));
+            auto* buttons = dialog->findChild<QDialogButtonBox*>(
+                QStringLiteral("shortcutSettingsButtons"));
+            if (reset == nullptr || buttons == nullptr) {
+                dialog->reject();
+                return;
+            }
+            reset->click();
+            buttons->button(QDialogButtonBox::Ok)->click();
+        });
+    if (!defaults_restored || paint_tool_action->shortcut() != QKeySequence(Qt::Key_B)) {
+        std::cerr << "Reset All did not restore Paint's default B shortcut.\n";
+        return 1;
+    }
+
     const QString source_path = temporary.filePath(QStringLiteral("ui-test.png"));
     QImage source(100, 80, QImage::Format_ARGB32);
     source.fill(Qt::blue);
@@ -174,15 +343,38 @@ int main(int argc, char* argv[]) {
     QCoreApplication::processEvents();
     if (paint_tool_button == nullptr || layer_edit_hint == nullptr ||
         paint_tool_button->isEnabled() || rotate_action->isEnabled() ||
+        paint_tool_action->isEnabled() ||
         !layer_edit_hint->isVisible() ||
         window.windowTitle() != title_before_layer_selection) {
         std::cerr << "Selecting locked Background did not disable painting and transforms.\n";
         return 1;
     }
+    window.activateWindow();
+    QTest::keyClick(&window, Qt::Key_B);
+    QCoreApplication::processEvents();
+    if (paint_tool_button->isChecked() || paint_tool_action->isChecked()) {
+        std::cerr << "The Paint shortcut activated while Background was selected.\n";
+        return 1;
+    }
     layer_list->setCurrentRow(0);
     QCoreApplication::processEvents();
-    if (!paint_tool_button->isEnabled() || !rotate_action->isEnabled()) {
+    if (!paint_tool_button->isEnabled() || !rotate_action->isEnabled() ||
+        !paint_tool_action->isEnabled()) {
         std::cerr << "Selecting an editable layer did not enable its tools.\n";
+        return 1;
+    }
+    QTest::keyClick(&window, Qt::Key_B);
+    QCoreApplication::processEvents();
+    if (!paint_tool_button->isChecked() || !paint_tool_action->isChecked() ||
+        !canvas->paintMode()) {
+        std::cerr << "The B shortcut did not activate Paint and synchronize its button.\n";
+        return 1;
+    }
+    QTest::keyClick(&window, Qt::Key_B);
+    QCoreApplication::processEvents();
+    if (paint_tool_button->isChecked() || paint_tool_action->isChecked() ||
+        canvas->paintMode()) {
+        std::cerr << "The B shortcut did not deactivate Paint and synchronize its button.\n";
         return 1;
     }
     rotate_action->trigger();
@@ -320,14 +512,28 @@ int main(int argc, char* argv[]) {
     }
     undo_action->trigger();
     crop_action->trigger();
-    if (!crop_action->isChecked() || paint_button->isChecked() ||
+    if (!crop_action->isChecked() || !cancel_crop_action->isEnabled() ||
+        paint_button->isChecked() ||
         !canvas->cropMode() || canvas->paintMode() || tool_sidebar->width() != 56 ||
         paint_options_action->isVisible() || paint_size_options->isVisible() ||
         !tool_options_toolbar->isVisible()) {
         std::cerr << "Crop mode did not deactivate the paint tool.\n";
         return 1;
     }
-    crop_action->trigger();
+    QSignalSpy cancel_crop_spy(cancel_crop_action, &QAction::triggered);
+    window.activateWindow();
+    QCoreApplication::processEvents();
+    QTest::keyClick(&window, Qt::Key_Escape);
+    QCoreApplication::processEvents();
+    if (crop_action->isChecked() || cancel_crop_action->isEnabled() ||
+        canvas->cropMode()) {
+        std::cerr << "Escape did not cancel crop through its configurable action. triggered="
+                  << cancel_crop_spy.size() << " active=" << window.isActiveWindow()
+                  << " shortcut=" << cancel_crop_action->shortcut().toString().toStdString()
+                  << " crop=" << crop_action->isChecked()
+                  << " actionEnabled=" << cancel_crop_action->isEnabled() << '\n';
+        return 1;
+    }
 
     auto* new_canvas_action = window.findChild<QAction*>(QStringLiteral("newCanvasAction"));
     auto* status_label = window.findChild<QLabel*>(QStringLiteral("imageStatusLabel"));

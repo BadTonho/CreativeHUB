@@ -69,6 +69,11 @@ persistence, and recovery.
 - `ImageEditorWindow` routes menu and sidebar actions, prompts before discarding
   edits, and projects session state into the window. A completed paint gesture
   is one undoable document operation; changing tools does not modify the image.
+- `ImageEditorWindow` owns the command-action registry and the **Settings >
+  Keyboard Shortcuts** dialog. Stable action names identify preferences stored
+  with `QSettings`, separately from editable documents. Defaults use Qt standard
+  sequences plus `B` for Paint and `Esc` to cancel crop; duplicate assignments
+  are rejected, and Paint's action stays disabled without an editable layer.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
   is shown; expected dialog cancellation is not an error.

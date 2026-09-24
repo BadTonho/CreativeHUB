@@ -40,6 +40,13 @@ run.
    stroke, and a click paints a dot. Switch to **Edit > Crop Selection** and
    confirm that Paint deactivates; activate Paint and confirm crop mode exits.
    Use Undo and Redo and confirm each complete gesture is one history entry.
+   Open **Settings > Keyboard Shortcuts**. Change Paint from `B` to another
+   combination, accept, close and reopen the dialog, and confirm the new value
+   remains. Cancel an unconfirmed change and confirm it is discarded. Assign a
+   shortcut already used by another command and verify the dialog reports the
+   conflict without closing. Clear Paint's shortcut, restore all defaults, and
+   confirm `B` toggles Paint only when an editable layer is selected. With Crop
+   Selection active, confirm `Esc` cancels it.
 9. Save an editable `.cimg`, close it, reopen it, and confirm the rendered
    result is unchanged. Compare the original source file before and after to
    verify it was not overwritten.

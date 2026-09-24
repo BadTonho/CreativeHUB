@@ -3,6 +3,7 @@
 #include "image_canvas.h"
 #include "image_document_store.h"
 #include "new_canvas_dialog.h"
+#include "shortcut_settings_dialog.h"
 #include "tool_sidebar.h"
 #include "layer_panel.h"
 
@@ -14,9 +15,12 @@
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QKeySequence>
+#include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSettings>
 #include <QSize>
 #include <QSlider>
 #include <QSpinBox>
@@ -60,16 +64,15 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     createActions();
     connect(canvas_, &ImageCanvas::cropSelected, this,
             [this](const QRect& crop) { handleCrop(crop); });
-    connect(canvas_, &ImageCanvas::cropModeCancelled, this, [this]() {
-        crop_action_->setChecked(false);
-        statusBar()->showMessage(QStringLiteral("Crop cancelled"), 2500);
-    });
     connect(canvas_, &ImageCanvas::paintStrokeSelected, this,
             [this](const QVector<QPointF>& points, const QColor& color, int diameter) {
                 handlePaintStroke(points, color, diameter);
             });
     connect(tool_sidebar_, &ToolSidebar::paintToolToggled, this, [this](bool active) {
         if (active) crop_action_->setChecked(false);
+        if (paint_tool_action_ != nullptr && paint_tool_action_->isChecked() != active) {
+            paint_tool_action_->setChecked(active);
+        }
         canvas_->setPaintMode(active && session_.hasSource());
         updateToolOptions();
     });
@@ -285,12 +288,69 @@ void ImageEditorWindow::createActions() {
         updateToolOptions();
         canvas_->setPaintMode(false);
         canvas_->setCropMode(enabled && session_.hasSource());
+        if (cancel_crop_action_ != nullptr) {
+            cancel_crop_action_->setEnabled(enabled && session_.hasSource());
+        }
         statusBar()->showMessage(enabled
             ? QStringLiteral("Drag over the image to crop; press Esc to cancel")
             : QStringLiteral("Ready"));
     });
     fit_action_ = makeAction(
         QStringLiteral("Fit Image"), {}, [this]() { canvas_->fitToWindow(); });
+    cancel_crop_action_ = new QAction(QStringLiteral("Cancel Crop"), this);
+    cancel_crop_action_->setObjectName(QStringLiteral("cancelCropAction"));
+    cancel_crop_action_->setEnabled(false);
+    addAction(cancel_crop_action_);
+    connect(cancel_crop_action_, &QAction::triggered, this, [this]() {
+        if (!crop_action_->isChecked()) return;
+        crop_action_->setChecked(false);
+        canvas_->setCropMode(false);
+        statusBar()->showMessage(QStringLiteral("Crop cancelled"), 2500);
+    });
+
+    open_document_action->setObjectName(QStringLiteral("openDocumentAction"));
+    relink_action_->setObjectName(QStringLiteral("relinkSourceAction"));
+    save_action_->setObjectName(QStringLiteral("saveDocumentAction"));
+    save_as_action_->setObjectName(QStringLiteral("saveDocumentAsAction"));
+    export_action_->setObjectName(QStringLiteral("exportImageAction"));
+    quit_action->setObjectName(QStringLiteral("quitAction"));
+    rotate_left_action_->setObjectName(QStringLiteral("rotateLeftAction"));
+    flip_horizontal_action_->setObjectName(QStringLiteral("flipHorizontalAction"));
+    flip_vertical_action_->setObjectName(QStringLiteral("flipVerticalAction"));
+    fit_action_->setObjectName(QStringLiteral("fitImageAction"));
+
+    registerShortcutAction(new_canvas_action_, QKeySequence::New);
+    registerShortcutAction(open_image_action, QKeySequence::Open);
+    registerShortcutAction(open_document_action, {});
+    registerShortcutAction(relink_action_, {});
+    registerShortcutAction(save_action_, QKeySequence::Save);
+    registerShortcutAction(save_as_action_, QKeySequence::SaveAs);
+    registerShortcutAction(export_action_, {});
+    registerShortcutAction(quit_action, QKeySequence::Quit);
+    registerShortcutAction(undo_action_, QKeySequence::Undo);
+    registerShortcutAction(redo_action_, QKeySequence::Redo);
+    registerShortcutAction(crop_action_, {});
+    registerShortcutAction(cancel_crop_action_, QKeySequence(Qt::Key_Escape));
+    registerShortcutAction(rotate_left_action_, {});
+    registerShortcutAction(rotate_right_action_, {});
+    registerShortcutAction(flip_horizontal_action_, {});
+    registerShortcutAction(flip_vertical_action_, {});
+    registerShortcutAction(fit_action_, {});
+
+    paint_tool_action_ = new QAction(QStringLiteral("Paint"), this);
+    paint_tool_action_->setObjectName(QStringLiteral("paintToolAction"));
+    paint_tool_action_->setCheckable(true);
+    registerShortcutAction(paint_tool_action_, QKeySequence(Qt::Key_B));
+    addAction(paint_tool_action_);
+    connect(paint_tool_action_, &QAction::toggled, this, [this](bool active) {
+        tool_sidebar_->setPaintToolActive(active);
+        const bool actual_state = tool_sidebar_->paintToolActive();
+        if (paint_tool_action_->isChecked() != actual_state) {
+            paint_tool_action_->setChecked(actual_state);
+        }
+        canvas_->setPaintMode(actual_state && session_.hasSource());
+        updateToolOptions();
+    });
 
     auto* file_menu = menuBar()->addMenu(QStringLiteral("File"));
     file_menu->addAction(new_canvas_action_);
@@ -319,7 +379,16 @@ void ImageEditorWindow::createActions() {
     view_menu->addAction(fit_action_);
     auto* layers_view_action = layer_dock_->toggleViewAction();
     layers_view_action->setObjectName(QStringLiteral("toggleLayersPanelAction"));
+    registerShortcutAction(layers_view_action, {});
     view_menu->addAction(layers_view_action);
+
+    auto* settings_menu = menuBar()->addMenu(QStringLiteral("Settings"));
+    settings_menu->setObjectName(QStringLiteral("settingsMenu"));
+    auto* shortcuts_action = settings_menu->addAction(
+        QStringLiteral("Keyboard Shortcuts..."));
+    shortcuts_action->setObjectName(QStringLiteral("keyboardShortcutsAction"));
+    connect(shortcuts_action, &QAction::triggered,
+            this, [this]() { openShortcutSettings(); });
 
     auto* help_menu = menuBar()->addMenu(QStringLiteral("&Help"));
     auto* system_action = help_menu->addAction(QStringLiteral("&System"));
@@ -335,6 +404,82 @@ void ImageEditorWindow::createActions() {
                          ? QStringLiteral("N/A")
                          : executable_path));
     });
+
+    loadShortcutPreferences();
+}
+
+void ImageEditorWindow::registerShortcutAction(
+    QAction* action, const QKeySequence& default_sequence) {
+    action->setShortcutContext(Qt::WindowShortcut);
+    action->setProperty("defaultShortcut",
+                        default_sequence.toString(QKeySequence::PortableText));
+    action->setShortcut(default_sequence);
+    shortcut_actions_.append(action);
+}
+
+void ImageEditorWindow::loadShortcutPreferences() {
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("ImageEditor/KeyboardShortcuts"));
+    for (auto* action : shortcut_actions_) {
+        const QString default_text = action->property("defaultShortcut").toString();
+        const QString stored_text = settings.value(action->objectName(), default_text).toString();
+        action->setShortcut(QKeySequence::fromString(
+            stored_text, QKeySequence::PortableText));
+    }
+    settings.endGroup();
+    if (settings.status() != QSettings::NoError) {
+        const QString cause = QStringLiteral(
+            "The keyboard shortcut preferences could not be read.");
+        logger_.logError(QStringLiteral("load_keyboard_shortcuts"),
+                         cause, settings.fileName());
+        statusBar()->showMessage(
+            QStringLiteral("Keyboard shortcut preferences could not be loaded; defaults may be in use."),
+            5000);
+    }
+}
+
+void ImageEditorWindow::openShortcutSettings() {
+    QList<ShortcutBinding> bindings;
+    bindings.reserve(shortcut_actions_.size());
+    for (const auto* action : shortcut_actions_) {
+        ShortcutBinding binding;
+        binding.id = action->objectName();
+        binding.label = action->text();
+        binding.default_sequence = QKeySequence::fromString(
+            action->property("defaultShortcut").toString(),
+            QKeySequence::PortableText);
+        binding.sequence = action->shortcut();
+        bindings.append(binding);
+    }
+
+    ShortcutSettingsDialog dialog(bindings, this);
+    if (dialog.exec() != QDialog::Accepted) return;
+    const auto updated_bindings = dialog.bindings();
+
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("ImageEditor/KeyboardShortcuts"));
+    for (const auto& binding : updated_bindings) {
+        settings.setValue(binding.id,
+                          binding.sequence.toString(QKeySequence::PortableText));
+    }
+    settings.endGroup();
+    settings.sync();
+    if (settings.status() != QSettings::NoError) {
+        const QString cause = QStringLiteral(
+            "The keyboard shortcut preferences could not be saved.");
+        logger_.logError(QStringLiteral("save_keyboard_shortcuts"), cause);
+        QMessageBox::warning(this, QStringLiteral("Settings Error"), cause);
+        return;
+    }
+
+    for (const auto& binding : updated_bindings) {
+        for (auto* action : shortcut_actions_) {
+            if (action->objectName() == binding.id) {
+                action->setShortcut(binding.sequence);
+                break;
+            }
+        }
+    }
 }
 
 void ImageEditorWindow::updateView(bool preserveCanvasView) {
@@ -363,6 +508,8 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     flip_horizontal_action_->setEnabled(selected_layer_editable);
     flip_vertical_action_->setEnabled(selected_layer_editable);
     fit_action_->setEnabled(session_.hasSource());
+    cancel_crop_action_->setEnabled(crop_action_->isChecked() && selected_layer_editable);
+    paint_tool_action_->setEnabled(selected_layer_editable);
 
     QString title = QStringLiteral("Image Editor");
     if (!session_.documentPath().isEmpty()) {

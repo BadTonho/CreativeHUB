@@ -330,16 +330,6 @@ void ImageCanvas::wheelEvent(QWheelEvent* event) {
     event->accept();
 }
 
-void ImageCanvas::keyPressEvent(QKeyEvent* event) {
-    if (event->key() == Qt::Key_Escape && crop_mode_) {
-        setCropMode(false);
-        emit cropModeCancelled();
-        event->accept();
-        return;
-    }
-    QWidget::keyPressEvent(event);
-}
-
 void ImageCanvas::leaveEvent(QEvent* event) {
     if (!painting_) {
         brush_cursor_visible_ = false;

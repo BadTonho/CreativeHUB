@@ -37,3 +37,17 @@ immediately and are stored as global user preferences. Clear a shortcut to
 disable that command; duplicate combinations are rejected. Each command can
 be reset individually, or all commands can be restored with `Reset All`.
 Mouse gestures remain outside the customizable shortcut list.
+
+## Image Editor
+
+| Shortcut | Action | Context |
+| --- | --- | --- |
+| Ctrl + N / Cmd + N | Create a new canvas | Image Editor |
+| Ctrl + O / Cmd + O | Open an image | Image Editor |
+| Ctrl + S / Cmd + S | Save the editable document | Image Editor |
+| Ctrl + Shift + S / Cmd + Shift + S | Save the editable document as a new file | Image Editor |
+| Qt standard Quit sequence | Quit the Image Editor | Image Editor |
+| Ctrl + Z / Cmd + Z | Undo | Image Editor |
+| Ctrl + Y / Ctrl + Shift + Z; platform standard Redo sequence | Redo | Image Editor |
+| B | Activate or deactivate the Paint tool when an editable layer is selected | Image Editor |
+| Esc | Cancel crop selection | Image Editor |
