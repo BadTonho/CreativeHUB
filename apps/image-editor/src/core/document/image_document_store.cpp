@@ -8,6 +8,8 @@
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QSaveFile>
+#include <QSet>
+#include <QUuid>
 
 #include <cmath>
 #include <limits>
@@ -17,7 +19,8 @@ namespace {
 
 constexpr int kLegacyDocumentVersion = 1;
 constexpr int kCanvasDocumentVersion = 2;
-constexpr int kDocumentVersion = 3;
+constexpr int kPaintDocumentVersion = 3;
+constexpr int kDocumentVersion = 4;
 constexpr int kRecoveryVersion = 1;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr auto kRecoveryFormat = "creative-suite-image-recovery";
@@ -50,6 +53,233 @@ bool isArgbHexColor(const QString& value) {
     return true;
 }
 
+QJsonObject encodeOperation(const ImageOperation& operation) {
+    QJsonObject encoded;
+    switch (operation.kind) {
+    case OperationKind::Crop:
+        encoded.insert("kind", "crop");
+        encoded.insert("x", operation.crop.x());
+        encoded.insert("y", operation.crop.y());
+        encoded.insert("width", operation.crop.width());
+        encoded.insert("height", operation.crop.height());
+        break;
+    case OperationKind::Rotate:
+        encoded.insert("kind", "rotate");
+        encoded.insert("quarter_turns", operation.quarter_turns);
+        break;
+    case OperationKind::FlipHorizontal:
+        encoded.insert("kind", "flip_horizontal");
+        break;
+    case OperationKind::FlipVertical:
+        encoded.insert("kind", "flip_vertical");
+        break;
+    case OperationKind::PaintStroke: {
+        encoded.insert("kind", "paint_stroke");
+        encoded.insert("color", operation.paint_stroke.color.name(QColor::HexArgb));
+        encoded.insert("diameter", operation.paint_stroke.diameter);
+        QJsonArray points;
+        for (const auto& point : operation.paint_stroke.points) {
+            QJsonObject encoded_point;
+            encoded_point.insert("x", point.x());
+            encoded_point.insert("y", point.y());
+            points.append(encoded_point);
+        }
+        encoded.insert("points", points);
+        break;
+    }
+    }
+    return encoded;
+}
+
+QJsonArray encodeOperations(const QVector<ImageOperation>& operations) {
+    QJsonArray encoded;
+    for (const auto& operation : operations) encoded.append(encodeOperation(operation));
+    return encoded;
+}
+
+bool decodeOperations(const QJsonValue& value,
+                      int version,
+                      QSize* current_size,
+                      bool fixed_canvas,
+                      QVector<ImageOperation>* decoded,
+                      QString* error) {
+    if (!value.isArray() || current_size == nullptr || decoded == nullptr) {
+        assignError(error, QStringLiteral("The document edit list is invalid."));
+        return false;
+    }
+    const auto operations = value.toArray();
+    if (operations.size() > ImageDocumentStore::kMaximumOperations) {
+        assignError(error, QStringLiteral("The document has too many edit operations."));
+        return false;
+    }
+    decoded->reserve(operations.size());
+    for (const auto& item : operations) {
+        if (!item.isObject()) {
+            assignError(error, QStringLiteral("The document contains an invalid edit."));
+            return false;
+        }
+        const auto object = item.toObject();
+        const QString kind = object.value("kind").toString();
+        ImageOperation operation;
+        if (kind == "crop") {
+            int x = 0;
+            int y = 0;
+            int width = 0;
+            int height = 0;
+            if (!isInteger(object.value("x"), &x) || !isInteger(object.value("y"), &y) ||
+                !isInteger(object.value("width"), &width) ||
+                !isInteger(object.value("height"), &height) ||
+                x < 0 || y < 0 || width <= 0 || height <= 0 ||
+                x > current_size->width() - width || y > current_size->height() - height) {
+                assignError(error, QStringLiteral("The document contains an invalid crop."));
+                return false;
+            }
+            operation.kind = OperationKind::Crop;
+            operation.crop = QRect(x, y, width, height);
+            if (!fixed_canvas) *current_size = operation.crop.size();
+        } else if (kind == "rotate") {
+            int turns = 0;
+            if (!isInteger(object.value("quarter_turns"), &turns) ||
+                (turns != -1 && turns != 1)) {
+                assignError(error, QStringLiteral("The document contains an invalid rotation."));
+                return false;
+            }
+            operation.kind = OperationKind::Rotate;
+            operation.quarter_turns = turns;
+            if (!fixed_canvas) current_size->transpose();
+        } else if (kind == "flip_horizontal") {
+            operation.kind = OperationKind::FlipHorizontal;
+        } else if (kind == "flip_vertical") {
+            operation.kind = OperationKind::FlipVertical;
+        } else if (kind == "paint_stroke" && version >= kPaintDocumentVersion) {
+            const auto encoded_points = object.value("points").toArray();
+            const QString encoded_color = object.value("color").toString();
+            const QColor color(encoded_color);
+            int diameter = 0;
+            if (encoded_points.isEmpty() ||
+                encoded_points.size() > ImageDocumentStore::kMaximumPaintStrokePoints ||
+                !isArgbHexColor(encoded_color) || !color.isValid() ||
+                !isInteger(object.value("diameter"), &diameter) ||
+                diameter < 1 || diameter > 512) {
+                assignError(error, QStringLiteral("The document contains an invalid paint stroke."));
+                return false;
+            }
+            operation.kind = OperationKind::PaintStroke;
+            operation.paint_stroke.color = color;
+            operation.paint_stroke.diameter = diameter;
+            operation.paint_stroke.points.reserve(encoded_points.size());
+            for (const auto& encoded_point_value : encoded_points) {
+                if (!encoded_point_value.isObject()) {
+                    assignError(error, QStringLiteral("The document contains an invalid paint stroke point."));
+                    return false;
+                }
+                const auto encoded_point = encoded_point_value.toObject();
+                const auto x_value = encoded_point.value("x");
+                const auto y_value = encoded_point.value("y");
+                if (!x_value.isDouble() || !y_value.isDouble()) {
+                    assignError(error, QStringLiteral("The document contains an invalid paint stroke point."));
+                    return false;
+                }
+                const double x = x_value.toDouble();
+                const double y = y_value.toDouble();
+                if (!std::isfinite(x) || !std::isfinite(y) || x < 0.0 || y < 0.0 ||
+                    x >= current_size->width() || y >= current_size->height()) {
+                    assignError(error, QStringLiteral("The document contains an out-of-bounds paint stroke point."));
+                    return false;
+                }
+                operation.paint_stroke.points.append(QPointF(x, y));
+            }
+        } else {
+            assignError(error, QStringLiteral("The document contains an unsupported edit."));
+            return false;
+        }
+        decoded->append(std::move(operation));
+    }
+    return true;
+}
+
+QSize sizeAfterOperations(QSize size, const QVector<ImageOperation>& operations) {
+    for (const auto& operation : operations) {
+        if (operation.kind == OperationKind::Crop) size = operation.crop.size();
+        else if (operation.kind == OperationKind::Rotate) size.transpose();
+    }
+    return size;
+}
+
+bool isValidLayerId(const QString& id) {
+    const QUuid uuid(id);
+    return !uuid.isNull() &&
+        uuid.toString(QUuid::WithoutBraces).compare(id, Qt::CaseInsensitive) == 0;
+}
+
+bool validateLayers(const ImageDocumentData& document, QString* error) {
+    if (document.layers.isEmpty() ||
+        document.layers.size() > ImageDocumentStore::kMaximumLayers ||
+        !document.layers.front().background) {
+        assignError(error, QStringLiteral("The document layer stack is invalid."));
+        return false;
+    }
+    QSet<QString> ids;
+    const QSize canvas_size = sizeAfterOperations(document.source_size, document.operations);
+    qsizetype background_count = 0;
+    for (qsizetype index = 0; index < document.layers.size(); ++index) {
+        const auto& layer = document.layers.at(index);
+        const QString normalized_id = layer.id.toLower();
+        if (!isValidLayerId(layer.id) || ids.contains(normalized_id)) {
+            assignError(error, QStringLiteral("The document contains an invalid or duplicate layer ID."));
+            return false;
+        }
+        ids.insert(normalized_id);
+        if (layer.background) {
+            ++background_count;
+            if (index != 0 || layer.name != QStringLiteral("Background") ||
+                layer.opacity != 100 || !layer.operations.isEmpty()) {
+                assignError(error, QStringLiteral("The Background layer is invalid."));
+                return false;
+            }
+            continue;
+        }
+        if (layer.name.trimmed().isEmpty() ||
+            layer.name.size() > ImageDocumentStore::kMaximumLayerNameLength ||
+            layer.opacity < 0 || layer.opacity > 100) {
+            assignError(error, QStringLiteral("A document layer has invalid properties."));
+            return false;
+        }
+        QSize layer_size = canvas_size;
+        QVector<ImageOperation> validated;
+        QJsonArray ops = encodeOperations(layer.operations);
+        if (!decodeOperations(ops, kDocumentVersion, &layer_size, true, &validated, error)) {
+            return false;
+        }
+    }
+    if (background_count != 1) {
+        assignError(error, QStringLiteral("The document must contain exactly one Background layer."));
+        return false;
+    }
+    return true;
+}
+
+bool validateDocument(const ImageDocumentData& document, QString* error) {
+    const bool valid_source = document.base_kind == ImageBaseKind::SourceImage &&
+        !document.source_path.isEmpty() && document.source_size.isValid() &&
+        !document.source_size.isEmpty();
+    const bool valid_canvas = document.base_kind == ImageBaseKind::Canvas &&
+        document.source_path.isEmpty() && ImageDocumentStore::isValidCanvasSize(document.source_size) &&
+        document.canvas_background.isValid();
+    if ((!valid_source && !valid_canvas) ||
+        document.operations.size() > ImageDocumentStore::kMaximumOperations) {
+        assignError(error, QStringLiteral("The document path or image base is invalid."));
+        return false;
+    }
+    QSize base_size = document.source_size;
+    QVector<ImageOperation> checked_operations;
+    if (!decodeOperations(encodeOperations(document.operations), kDocumentVersion,
+                          &base_size, false, &checked_operations, error)) {
+        return false;
+    }
+    return validateLayers(document, error);
+}
+
 QJsonObject encodeDocument(const ImageDocumentData& document,
                            const QString& document_path) {
     QJsonObject base;
@@ -76,50 +306,23 @@ QJsonObject encodeDocument(const ImageDocumentData& document,
         base.insert("height", document.source_size.height());
     }
 
-    QJsonArray operations;
-    for (const auto& operation : document.operations) {
-        QJsonObject encoded;
-        switch (operation.kind) {
-        case OperationKind::Crop:
-            encoded.insert("kind", "crop");
-            encoded.insert("x", operation.crop.x());
-            encoded.insert("y", operation.crop.y());
-            encoded.insert("width", operation.crop.width());
-            encoded.insert("height", operation.crop.height());
-            break;
-        case OperationKind::Rotate:
-            encoded.insert("kind", "rotate");
-            encoded.insert("quarter_turns", operation.quarter_turns);
-            break;
-        case OperationKind::FlipHorizontal:
-            encoded.insert("kind", "flip_horizontal");
-            break;
-        case OperationKind::FlipVertical:
-            encoded.insert("kind", "flip_vertical");
-            break;
-        case OperationKind::PaintStroke: {
-            encoded.insert("kind", "paint_stroke");
-            encoded.insert("color", operation.paint_stroke.color.name(QColor::HexArgb));
-            encoded.insert("diameter", operation.paint_stroke.diameter);
-            QJsonArray points;
-            for (const auto& point : operation.paint_stroke.points) {
-                QJsonObject encoded_point;
-                encoded_point.insert("x", point.x());
-                encoded_point.insert("y", point.y());
-                points.append(encoded_point);
-            }
-            encoded.insert("points", points);
-            break;
-        }
-        }
-        operations.append(encoded);
-    }
-
     QJsonObject root;
     root.insert("format", kDocumentFormat);
     root.insert("version", kDocumentVersion);
     root.insert("base", base);
-    root.insert("operations", operations);
+    root.insert("operations", encodeOperations(document.operations));
+    QJsonArray layers;
+    for (const auto& layer : document.layers) {
+        QJsonObject encoded;
+        encoded.insert("id", layer.id);
+        encoded.insert("name", layer.name);
+        encoded.insert("kind", layer.background ? "background" : "raster");
+        encoded.insert("visible", layer.visible);
+        encoded.insert("opacity", layer.opacity);
+        encoded.insert("operations", encodeOperations(layer.operations));
+        layers.append(encoded);
+    }
+    root.insert("layers", layers);
     return root;
 }
 
@@ -133,8 +336,7 @@ bool decodeDocument(const QJsonObject& root,
     }
     int version = 0;
     if (!isInteger(root.value("version"), &version) ||
-        (version != kLegacyDocumentVersion && version != kCanvasDocumentVersion &&
-         version != kDocumentVersion)) {
+        (version < kLegacyDocumentVersion || version > kDocumentVersion)) {
         assignError(error, QStringLiteral("This Image Editor document version is not supported."));
         return false;
     }
@@ -183,97 +385,63 @@ bool decodeDocument(const QJsonObject& root,
         return false;
     }
 
-    const auto operations_value = root.value("operations");
-    if (!operations_value.isArray()) {
-        assignError(error, QStringLiteral("The document edit list is invalid."));
+    QSize current_size = decoded.source_size;
+    if (!decodeOperations(root.value("operations"), version, &current_size, false,
+                          &decoded.operations, error)) {
         return false;
     }
 
-    QSize current_size = decoded.source_size;
-    const auto operations = operations_value.toArray();
-    decoded.operations.reserve(operations.size());
-    for (const auto& value : operations) {
-        if (!value.isObject()) {
-            assignError(error, QStringLiteral("The document contains an invalid edit."));
+    if (version == kDocumentVersion) {
+        const auto encoded_layers = root.value("layers");
+        if (!encoded_layers.isArray() || encoded_layers.toArray().isEmpty() ||
+            encoded_layers.toArray().size() > ImageDocumentStore::kMaximumLayers) {
+            assignError(error, QStringLiteral("The document layer stack is invalid."));
             return false;
         }
-        const auto object = value.toObject();
-        const QString kind = object.value("kind").toString();
-        ImageOperation operation;
-        if (kind == "crop") {
-            int x = 0;
-            int y = 0;
-            int width = 0;
-            int height = 0;
-            if (!isInteger(object.value("x"), &x) || !isInteger(object.value("y"), &y) ||
-                !isInteger(object.value("width"), &width) ||
-                !isInteger(object.value("height"), &height) ||
-                x < 0 || y < 0 || width <= 0 || height <= 0 ||
-                x > current_size.width() - width || y > current_size.height() - height) {
-                assignError(error, QStringLiteral("The document contains an invalid crop."));
+        const QSize layer_canvas_size = current_size;
+        const auto layer_array = encoded_layers.toArray();
+        decoded.layers.reserve(layer_array.size());
+        for (qsizetype index = 0; index < layer_array.size(); ++index) {
+            const auto encoded_value = layer_array.at(index);
+            if (!encoded_value.isObject()) {
+                assignError(error, QStringLiteral("The document contains an invalid layer."));
                 return false;
             }
-            operation.kind = OperationKind::Crop;
-            operation.crop = QRect(x, y, width, height);
-            current_size = operation.crop.size();
-        } else if (kind == "rotate") {
-            int turns = 0;
-            if (!isInteger(object.value("quarter_turns"), &turns) ||
-                (turns != -1 && turns != 1)) {
-                assignError(error, QStringLiteral("The document contains an invalid rotation."));
+            const auto encoded = encoded_value.toObject();
+            const QString kind = encoded.value("kind").toString();
+            int opacity = -1;
+            if (!isInteger(encoded.value("opacity"), &opacity) ||
+                !encoded.value("visible").isBool()) {
+                assignError(error, QStringLiteral("A document layer has invalid properties."));
                 return false;
             }
-            operation.kind = OperationKind::Rotate;
-            operation.quarter_turns = turns;
-            current_size.transpose();
-        } else if (kind == "flip_horizontal") {
-            operation.kind = OperationKind::FlipHorizontal;
-        } else if (kind == "flip_vertical") {
-            operation.kind = OperationKind::FlipVertical;
-        } else if (kind == "paint_stroke" && version >= kDocumentVersion) {
-            const auto encoded_points = object.value("points").toArray();
-            const QString encoded_color = object.value("color").toString();
-            const QColor color(encoded_color);
-            int diameter = 0;
-            if (encoded_points.isEmpty() ||
-                encoded_points.size() > ImageDocumentStore::kMaximumPaintStrokePoints ||
-                !isArgbHexColor(encoded_color) || !color.isValid() ||
-                !isInteger(object.value("diameter"), &diameter) ||
-                diameter < 1 || diameter > 512) {
-                assignError(error, QStringLiteral("The document contains an invalid paint stroke."));
+            ImageLayerData layer;
+            layer.id = encoded.value("id").toString();
+            layer.name = encoded.value("name").toString();
+            layer.background = kind == QStringLiteral("background");
+            layer.visible = encoded.value("visible").toBool();
+            layer.opacity = opacity;
+            if (kind != QStringLiteral("background") && kind != QStringLiteral("raster")) {
+                assignError(error, QStringLiteral("The document contains an unsupported layer type."));
                 return false;
             }
-
-            operation.kind = OperationKind::PaintStroke;
-            operation.paint_stroke.color = color;
-            operation.paint_stroke.diameter = diameter;
-            operation.paint_stroke.points.reserve(encoded_points.size());
-            for (const auto& encoded_point_value : encoded_points) {
-                if (!encoded_point_value.isObject()) {
-                    assignError(error, QStringLiteral("The document contains an invalid paint stroke point."));
-                    return false;
-                }
-                const auto encoded_point = encoded_point_value.toObject();
-                const auto x_value = encoded_point.value("x");
-                const auto y_value = encoded_point.value("y");
-                if (!x_value.isDouble() || !y_value.isDouble()) {
-                    assignError(error, QStringLiteral("The document contains an invalid paint stroke point."));
-                    return false;
-                }
-                const double x = x_value.toDouble();
-                const double y = y_value.toDouble();
-                if (!std::isfinite(x) || !std::isfinite(y) || x < 0.0 || y < 0.0 ||
-                    x >= current_size.width() || y >= current_size.height()) {
-                    assignError(error, QStringLiteral("The document contains an out-of-bounds paint stroke point."));
-                    return false;
-                }
-                operation.paint_stroke.points.append(QPointF(x, y));
+            QSize layer_size = layer_canvas_size;
+            if (!decodeOperations(encoded.value("operations"), kDocumentVersion,
+                                  &layer_size, true, &layer.operations, error)) {
+                return false;
             }
-        } else {
-            assignError(error, QStringLiteral("The document contains an unsupported edit."));
-            return false;
+            decoded.layers.append(std::move(layer));
         }
-        decoded.operations.append(operation);
+        if (!validateLayers(decoded, error)) return false;
+    } else {
+        ImageLayerData background;
+        background.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        background.name = QStringLiteral("Background");
+        background.background = true;
+        ImageLayerData first_layer;
+        first_layer.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        first_layer.name = QStringLiteral("Layer 1");
+        decoded.layers = {background, first_layer};
     }
 
     *document = std::move(decoded);
@@ -322,16 +490,11 @@ bool writeJson(const QString& file_path, const QJsonObject& object, QString* err
 bool ImageDocumentStore::saveDocument(const QString& document_path,
                                       const ImageDocumentData& document,
                                       QString* error) {
-    const bool valid_source = document.base_kind == ImageBaseKind::SourceImage &&
-        !document.source_path.isEmpty() && document.source_size.isValid() &&
-        !document.source_size.isEmpty();
-    const bool valid_canvas = document.base_kind == ImageBaseKind::Canvas &&
-        document.source_path.isEmpty() && isValidCanvasSize(document.source_size) &&
-        document.canvas_background.isValid();
-    if (document_path.isEmpty() || (!valid_source && !valid_canvas)) {
-        assignError(error, QStringLiteral("The document path or image base is invalid."));
+    if (document_path.isEmpty()) {
+        assignError(error, QStringLiteral("A document path is required."));
         return false;
     }
+    if (!validateDocument(document, error)) return false;
     return writeJson(document_path, encodeDocument(document, document_path), error);
 }
 
@@ -350,17 +513,11 @@ bool ImageDocumentStore::loadDocument(const QString& document_path,
 bool ImageDocumentStore::saveRecovery(const QString& recovery_path,
                                       const RecoveryDocumentData& recovery,
                                       QString* error) {
-    const bool valid_source = recovery.document.base_kind == ImageBaseKind::SourceImage &&
-        !recovery.document.source_path.isEmpty() && recovery.document.source_size.isValid() &&
-        !recovery.document.source_size.isEmpty();
-    const bool valid_canvas = recovery.document.base_kind == ImageBaseKind::Canvas &&
-        recovery.document.source_path.isEmpty() &&
-        isValidCanvasSize(recovery.document.source_size) &&
-        recovery.document.canvas_background.isValid();
-    if (recovery_path.isEmpty() || (!valid_source && !valid_canvas)) {
+    if (recovery_path.isEmpty()) {
         assignError(error, QStringLiteral("The recovery document is invalid."));
         return false;
     }
+    if (!validateDocument(recovery.document, error)) return false;
     QJsonObject root;
     root.insert("format", kRecoveryFormat);
     root.insert("version", kRecoveryVersion);

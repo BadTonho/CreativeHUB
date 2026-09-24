@@ -1,5 +1,6 @@
 #include "image_canvas.h"
 #include "image_editor_window.h"
+#include "layer_panel.h"
 #include "tool_sidebar.h"
 
 #include <QAction>
@@ -8,9 +9,11 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDockWidget>
 #include <QImage>
 #include <QImageWriter>
 #include <QLabel>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSlider>
@@ -74,6 +77,18 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    auto* layers_dock = window.findChild<QDockWidget*>(
+        QStringLiteral("imageEditorLayersDock"));
+    auto* layer_list = window.findChild<QListWidget*>(QStringLiteral("imageLayerList"));
+    if (layers_dock == nullptr || layer_list == nullptr || !layers_dock->isVisible() ||
+        window.dockWidgetArea(layers_dock) != Qt::RightDockWidgetArea ||
+        layer_list->count() != 2 || layer_list->item(0)->text() != QStringLiteral("Layer 1") ||
+        layer_list->item(1)->text() != QStringLiteral("Background") ||
+        layer_list->currentRow() != 0) {
+        std::cerr << "The right-side layer dock did not show the default selected layer stack.\n";
+        return 1;
+    }
+
     canvas->setCropMode(true);
     QSignalSpy crop_spy(canvas, &image_editor::ImageCanvas::cropSelected);
     const QPoint crop_center = canvas->rect().center();
@@ -89,6 +104,24 @@ int main(int argc, char* argv[]) {
     auto* undo_action = window.findChild<QAction*>(QStringLiteral("undoAction"));
     if (rotate_action == nullptr || undo_action == nullptr) {
         std::cerr << "Expected edit actions were not exposed by the window.\n";
+        return 1;
+    }
+    auto* paint_tool_button = window.findChild<QToolButton*>(QStringLiteral("paintToolButton"));
+    auto* layer_edit_hint = window.findChild<QLabel*>(QStringLiteral("layerEditingHint"));
+    const QString title_before_layer_selection = window.windowTitle();
+    layer_list->setCurrentRow(1);
+    QCoreApplication::processEvents();
+    if (paint_tool_button == nullptr || layer_edit_hint == nullptr ||
+        paint_tool_button->isEnabled() || rotate_action->isEnabled() ||
+        !layer_edit_hint->isVisible() ||
+        window.windowTitle() != title_before_layer_selection) {
+        std::cerr << "Selecting locked Background did not disable painting and transforms.\n";
+        return 1;
+    }
+    layer_list->setCurrentRow(0);
+    QCoreApplication::processEvents();
+    if (!paint_tool_button->isEnabled() || !rotate_action->isEnabled()) {
+        std::cerr << "Selecting an editable layer did not enable its tools.\n";
         return 1;
     }
     rotate_action->trigger();
@@ -286,8 +319,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     rotate_action->trigger();
-    if (!status_label->text().contains(QStringLiteral("1920 × 1080 px"))) {
-        std::cerr << "Rotation did not update the canvas dimensions in the window.\n";
+    if (!status_label->text().contains(story_size)) {
+        std::cerr << "Layer rotation changed the fixed canvas dimensions in the window.\n";
         return 1;
     }
     undo_action->trigger();
@@ -327,6 +360,56 @@ int main(int argc, char* argv[]) {
     if (!status_label->text().contains(QStringLiteral("100 × 80 px")) ||
         !window.windowTitle().startsWith('*')) {
         std::cerr << "Custom canvas creation or dirty replacement handling failed.\n";
+        return 1;
+    }
+
+    auto* add_layer_button = window.findChild<QToolButton*>(
+        QStringLiteral("addImageLayerButton"));
+    auto* delete_layer_button = window.findChild<QToolButton*>(
+        QStringLiteral("deleteImageLayerButton"));
+    auto* move_layer_down_button = window.findChild<QToolButton*>(
+        QStringLiteral("moveImageLayerDownButton"));
+    auto* opacity_slider = window.findChild<QSlider*>(
+        QStringLiteral("imageLayerOpacitySlider"));
+    if (add_layer_button == nullptr || delete_layer_button == nullptr ||
+        move_layer_down_button == nullptr || opacity_slider == nullptr) {
+        std::cerr << "The layer panel controls were not created.\n";
+        return 1;
+    }
+    add_layer_button->click();
+    if (layer_list->count() != 3 || layer_list->currentItem() == nullptr ||
+        layer_list->currentItem()->text() != QStringLiteral("Layer 2")) {
+        std::cerr << "The layer panel did not add and select a new layer.\n";
+        return 1;
+    }
+    layer_list->currentItem()->setText(QStringLiteral("Overlay"));
+    QCoreApplication::processEvents();
+    if (layer_list->currentItem() == nullptr ||
+        layer_list->currentItem()->text() != QStringLiteral("Overlay")) {
+        std::cerr << "Inline layer renaming did not update the selected layer.\n";
+        return 1;
+    }
+    move_layer_down_button->click();
+    if (layer_list->currentRow() != 1 ||
+        layer_list->currentItem()->text() != QStringLiteral("Overlay")) {
+        std::cerr << "Layer reordering did not preserve selection and order.\n";
+        return 1;
+    }
+    opacity_slider->setValue(60);
+    if (opacity_slider->value() != 60) {
+        std::cerr << "The selected layer opacity control did not update.\n";
+        return 1;
+    }
+    delete_layer_button->click();
+    if (layer_list->count() != 2 || layer_list->currentItem() == nullptr ||
+        layer_list->currentItem()->text() != QStringLiteral("Layer 1")) {
+        std::cerr << "Deleting a layer did not select the adjacent editable layer.\n";
+        return 1;
+    }
+    layer_list->setCurrentRow(1);
+    QCoreApplication::processEvents();
+    if (paint_button->isEnabled() || opacity_slider->isEnabled()) {
+        std::cerr << "The panel did not lock editing controls for Background.\n";
         return 1;
     }
     return 0;

@@ -40,12 +40,26 @@ struct ImageOperation {
     bool operator==(const ImageOperation&) const = default;
 };
 
+struct ImageLayerData {
+    QString id;
+    QString name;
+    bool background = false;
+    bool visible = true;
+    int opacity = 100;
+    QVector<ImageOperation> operations;
+
+    bool operator==(const ImageLayerData&) const = default;
+};
+
 struct ImageDocumentData {
     ImageBaseKind base_kind = ImageBaseKind::SourceImage;
     QString source_path;
     QSize source_size;
     QColor canvas_background = QColor(0, 0, 0, 0);
+    // Version 1-3 edits remain in this sequence and render as Background content.
     QVector<ImageOperation> operations;
+    // Ordered bottom-to-top. The first entry is the locked Background layer.
+    QVector<ImageLayerData> layers;
 
     bool operator==(const ImageDocumentData&) const = default;
 };
@@ -60,6 +74,9 @@ class ImageDocumentStore final {
 public:
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
+    static constexpr qsizetype kMaximumLayers = 512;
+    static constexpr qsizetype kMaximumLayerNameLength = 128;
+    static constexpr qsizetype kMaximumOperations = 100'000;
 
     [[nodiscard]] static bool isValidCanvasSize(const QSize& size) noexcept;
 

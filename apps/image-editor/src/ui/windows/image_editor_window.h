@@ -8,6 +8,7 @@
 
 class QAction;
 class QCloseEvent;
+class QDockWidget;
 class QLabel;
 class QSlider;
 class QSpinBox;
@@ -19,6 +20,7 @@ class QWidgetAction;
 namespace image_editor {
 
 class ImageCanvas;
+class LayerPanel;
 class ToolSidebar;
 
 class ImageEditorWindow final : public QMainWindow {
@@ -35,6 +37,7 @@ protected:
 private:
     void createActions();
     void createToolOptionsBar();
+    void createLayerPanel();
     void updateToolOptions();
     void updateView(bool preserveCanvasView = false);
     void deactivateCanvasTools();
@@ -61,6 +64,8 @@ private:
     RecoveryStore recovery_store_;
     ToolSidebar* tool_sidebar_ = nullptr;
     ImageCanvas* canvas_ = nullptr;
+    QDockWidget* layer_dock_ = nullptr;
+    LayerPanel* layer_panel_ = nullptr;
     QToolBar* tool_options_toolbar_ = nullptr;
     QWidgetAction* paint_options_action_ = nullptr;
     QWidget* paint_size_options_ = nullptr;

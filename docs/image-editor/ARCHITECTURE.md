@@ -4,8 +4,9 @@ Status: **initial standalone boundary, provisional**.
 
 The Image Editor is an independent Qt Widgets application. Its application
 core lives under `apps/image-editor/src/` and links Qt Core and Qt Gui without
-depending on Qt Widgets. The UI owns dialogs and window state; the core owns
-the active image document, ordered edit operations, persistence, and recovery.
+depending on Qt Widgets. The UI owns dialogs, dock widgets, and window state;
+the core owns the active image document, layer stack, edit operations,
+persistence, and recovery.
 
 ## Source layout
 
@@ -14,19 +15,26 @@ the active image document, ordered edit operations, persistence, and recovery.
   serialization.
 - `src/core/recovery/` contains local recovery snapshot persistence.
 - `src/core/diagnostics/` contains bounded technical error logging.
-- `src/ui/canvas/`, `src/ui/dialogs/`, `src/ui/tools/`, and `src/ui/windows/`
-  contain the canvas widget, creation dialogs, tool sidebar, and main
-  application window respectively.
+- `src/ui/canvas/`, `src/ui/dialogs/`, `src/ui/layers/`, `src/ui/tools/`, and
+  `src/ui/windows/` contain the canvas widget, creation dialogs, layer dock
+  panel, tool sidebar, and main application window respectively.
 
 ## Runtime boundaries
 
 - `ImageDocumentSession` owns either a decoded, linked source image or a
-  self-contained canvas base, plus the document's ordered crop, rotation, flip,
-  and paint-stroke operations. Linked source files remain unchanged. Rendering
-  applies operations in sequence to an owning `QImage`; paint strokes are stored
-  in `.cimg`, included in recovery, and flattened only for raster export.
+  self-contained canvas base, the locked Background, editable raster layers,
+  and the active layer identity. Layer visibility, opacity, order, names,
+  painting, and transforms are document edits with undo/redo. The active layer
+  selection is session state and does not make the document dirty.
+- Version 1–3 operation sequences remain attached to Background so legacy
+  documents render unchanged. New layer operations render on the fixed canvas;
+  layer crops clear pixels outside the selected rectangle, while rotations and
+  flips clip to the canvas bounds. The renderer composites visible layers from
+  bottom to top. Export and recovery use that same composition; linked source
+  files remain unchanged.
 - `ImageDocumentStore` reads and atomically writes versioned `.cimg` documents
-  and recovery snapshots. Its data format is specified in
+  and recovery snapshots. Version 4 stores layer UUIDs and properties, and the
+  reader continues to accept versions 1–3. Its data format is specified in
   [`FORMAT.md`](FORMAT.md).
 - `RecoveryStore` writes a local snapshot every 60 seconds while a dirty
   document with a renderable base is open. Unsaved canvases use a persisted
@@ -46,6 +54,12 @@ the active image document, ordered edit operations, persistence, and recovery.
   starts inactive. The options are visible only while both the Paint button and
   canvas paint mode are active; the sidebar and crop menu action cannot be
   active at the same time.
+- `LayerPanel` is hosted by a resizable, dockable right-side `QDockWidget`. It
+  presents the stack top-to-bottom and sends layer commands to the session.
+  Background remains fixed at the bottom, with visibility as its only editable
+  property. Selecting Background disables painting and transforms and explains
+  that an editable layer is required. Opacity slider drags are grouped into one
+  undo entry.
 - `ImageEditorWindow` routes menu and sidebar actions, prompts before discarding
   edits, and projects session state into the window. A completed paint gesture
   is one undoable document operation; changing tools does not modify the image.
@@ -65,10 +79,10 @@ license, and its WebP codec uses the BSD 3-Clause license. Distribution
 packages must include the plugins and preserve the applicable license notices
 for the codecs actually shipped.
 
-Decoded images are currently loaded into memory as `QImage`, and edit
-operations are rendered synchronously. Very large images can therefore use
-substantial memory or pause the UI; profile representative image sizes before
-expanding this workflow. Undo and redo retain up to 100 in-memory operation
+Decoded images and transparent layer buffers are currently rendered
+synchronously as `QImage`. Very large images or many painted layers can use
+substantial memory or pause the UI; profile representative documents before
+expanding this workflow. Undo and redo retain up to 100 in-memory document
 snapshots and are not stored in the `.cimg` file.
 
 The `.cimg` format is application-specific and does not change or embed into

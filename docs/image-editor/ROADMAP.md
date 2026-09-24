@@ -9,9 +9,11 @@ ahead of Motion Studio in the application sequence.
 
 - Keep the Main Editor's stability work on track while developing the Image
   Editor as a separate executable.
-- Preserve source images; store edits as operations in a versioned document.
-- Keep the first scope to one raster image per document and avoid layer,
-  painting, retouch, color-adjustment, and effect systems in this milestone.
+- Preserve linked source images; store editable document operations in a
+  versioned format.
+- Keep the current standalone scope to one raster document with a Background
+  and editable raster layers. Defer masks, retouching, color adjustment, and
+  effect systems until they are justified by validated workflows.
 - Use Qt image I/O and deploy the plugins required for the documented input
   formats. Track Qt Image Formats and its codec notices for distribution.
 - Keep compatibility with the Main Editor as a later, independently testable
@@ -44,6 +46,9 @@ ahead of Motion Studio in the application sequence.
   logging.
 - [x] Add self-contained blank canvases with standard and custom dimensions,
   selectable backgrounds, `.cimg` v2 persistence, and v1 document compatibility.
+- [x] Add a locked Background and editable raster layers with visibility,
+  opacity, ordering, rename, delete, painting, fixed-canvas transforms, and
+  `.cimg` v4 persistence while retaining v1–v3 compatibility.
 - [x] Add canvas fit, zoom, pan, and drag-to-crop controls.
 - [-] Pass Release build and automated tests for documents, edits, relinking,
   export, recovery, logging, and the UI boundary.
@@ -97,9 +102,8 @@ Studio foundation after this milestone passes.
 
 ### 4. Future expansion
 
-- [ ] Revisit layers, masks, brushes, retouching, color adjustments, and larger
-  effect sets only when user workflows and performance measurements justify
-  them.
+- [ ] Revisit masks, retouching, color adjustments, and larger effect sets only
+  when user workflows and performance measurements justify them.
 
 ## Status legend
 

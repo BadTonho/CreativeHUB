@@ -4,10 +4,12 @@
 #include "image_document_store.h"
 #include "new_canvas_dialog.h"
 #include "tool_sidebar.h"
+#include "layer_panel.h"
 
 #include <QAction>
 #include <QCoreApplication>
 #include <QCloseEvent>
+#include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -53,6 +55,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     statusBar()->addWidget(status_label_, 1);
 
     createToolOptionsBar();
+    createLayerPanel();
     createActions();
     connect(canvas_, &ImageCanvas::cropSelected, this,
             [this](const QRect& crop) { handleCrop(crop); });
@@ -73,6 +76,54 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             canvas_, [this](const QColor& color) {
                 canvas_->setBrush(color, brush_size_spin_->value());
             });
+    connect(layer_panel_, &LayerPanel::layerSelected, this, [this](const QString& id) {
+        if (!session_.selectLayer(id)) return;
+        if (!session_.selectedLayerIsEditable()) deactivateCanvasTools();
+        updateView(true);
+    });
+    connect(layer_panel_, &LayerPanel::layerVisibilityChanged, this,
+            [this](const QString& id, bool visible) {
+                if (session_.setLayerVisible(id, visible)) updateView(true);
+            });
+    connect(layer_panel_, &LayerPanel::layerRenamed, this,
+            [this](const QString& id, const QString& name) {
+                QString error;
+                if (session_.renameLayer(id, name, &error)) updateView(true);
+                else {
+                    updateView(true);
+                    if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
+                }
+            });
+    connect(layer_panel_, &LayerPanel::addLayerRequested, this, [this]() {
+        const QString id = session_.addLayer();
+        if (id.isEmpty()) {
+            statusBar()->showMessage(QStringLiteral("A layer could not be added"), 3000);
+            return;
+        }
+        static_cast<void>(session_.selectLayer(id));
+        updateView(true);
+        statusBar()->showMessage(QStringLiteral("Layer added"), 1800);
+    });
+    connect(layer_panel_, &LayerPanel::deleteLayerRequested, this,
+            [this](const QString& id) {
+                if (!session_.deleteLayer(id)) return;
+                if (!session_.selectedLayerIsEditable()) deactivateCanvasTools();
+                updateView(true);
+            });
+    connect(layer_panel_, &LayerPanel::moveLayerRequested, this,
+            [this](const QString& id, int direction) {
+                if (session_.moveLayer(id, direction)) updateView(true);
+            });
+    connect(layer_panel_, &LayerPanel::opacityEditStarted, this,
+            [this]() { session_.beginLayerOpacityEdit(); });
+    connect(layer_panel_, &LayerPanel::layerOpacityChanged, this,
+            [this](const QString& id, int opacity) {
+                if (session_.setLayerOpacity(id, opacity)) updateView(true);
+            });
+    connect(layer_panel_, &LayerPanel::opacityEditFinished, this, [this]() {
+        session_.endLayerOpacityEdit();
+        updateView(true);
+    });
 
     autosave_timer_ = new QTimer(this);
     autosave_timer_->setInterval(60'000);
@@ -91,6 +142,19 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
 
     QTimer::singleShot(0, this, [this]() { maybeOfferRecovery(); });
     updateView();
+}
+
+void ImageEditorWindow::createLayerPanel() {
+    layer_dock_ = new QDockWidget(QStringLiteral("Layers"), this);
+    layer_dock_->setObjectName(QStringLiteral("imageEditorLayersDock"));
+    layer_dock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    layer_dock_->setFeatures(QDockWidget::DockWidgetMovable |
+                             QDockWidget::DockWidgetFloatable |
+                             QDockWidget::DockWidgetClosable);
+    layer_panel_ = new LayerPanel(layer_dock_);
+    layer_dock_->setWidget(layer_panel_);
+    layer_dock_->setMinimumWidth(220);
+    addDockWidget(Qt::RightDockWidgetArea, layer_dock_);
 }
 
 void ImageEditorWindow::createToolOptionsBar() {
@@ -252,6 +316,9 @@ void ImageEditorWindow::createActions() {
 
     auto* view_menu = menuBar()->addMenu(QStringLiteral("View"));
     view_menu->addAction(fit_action_);
+    auto* layers_view_action = layer_dock_->toggleViewAction();
+    layers_view_action->setObjectName(QStringLiteral("toggleLayersPanelAction"));
+    view_menu->addAction(layers_view_action);
 
     auto* help_menu = menuBar()->addMenu(QStringLiteral("&Help"));
     auto* system_action = help_menu->addAction(QStringLiteral("&System"));
@@ -273,6 +340,9 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     const QImage rendered = session_.renderedImage();
     canvas_->setImage(rendered, !preserveCanvasView);
     tool_sidebar_->setDocumentAvailable(session_.hasSource());
+    tool_sidebar_->setPaintingAllowed(session_.hasSource() &&
+                                      session_.selectedLayerIsEditable());
+    layer_panel_->setLayers(session_.data().layers, session_.selectedLayerId());
     updateToolOptions();
     canvas_->setBrush(tool_sidebar_->brushColor(), brush_size_spin_->value());
     undo_action_->setEnabled(session_.canUndo());
@@ -281,11 +351,13 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     save_as_action_->setEnabled(session_.hasSource());
     export_action_->setEnabled(session_.hasSource());
     relink_action_->setEnabled(session_.sourceIsMissing());
-    crop_action_->setEnabled(session_.hasSource());
-    rotate_left_action_->setEnabled(session_.hasSource());
-    rotate_right_action_->setEnabled(session_.hasSource());
-    flip_horizontal_action_->setEnabled(session_.hasSource());
-    flip_vertical_action_->setEnabled(session_.hasSource());
+    const bool selected_layer_editable = session_.hasSource() &&
+        session_.selectedLayerIsEditable();
+    crop_action_->setEnabled(selected_layer_editable);
+    rotate_left_action_->setEnabled(selected_layer_editable);
+    rotate_right_action_->setEnabled(selected_layer_editable);
+    flip_horizontal_action_->setEnabled(selected_layer_editable);
+    flip_vertical_action_->setEnabled(selected_layer_editable);
     fit_action_->setEnabled(session_.hasSource());
 
     QString title = QStringLiteral("Image Editor");

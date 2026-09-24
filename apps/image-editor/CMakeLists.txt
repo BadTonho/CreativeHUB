@@ -38,6 +38,8 @@ add_executable(creative-suite-image-editor
     src/ui/canvas/image_canvas.h
     src/ui/tools/tool_sidebar.cpp
     src/ui/tools/tool_sidebar.h
+    src/ui/layers/layer_panel.cpp
+    src/ui/layers/layer_panel.h
 )
 
 target_include_directories(creative-suite-image-editor PRIVATE
@@ -46,6 +48,7 @@ target_include_directories(creative-suite-image-editor PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/dialogs
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/windows
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/tools
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/layers
 )
 
 target_link_libraries(creative-suite-image-editor PRIVATE

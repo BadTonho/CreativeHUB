@@ -14,6 +14,7 @@ public:
     explicit ToolSidebar(QWidget* parent = nullptr);
 
     void setDocumentAvailable(bool available);
+    void setPaintingAllowed(bool allowed);
     void setPaintToolActive(bool active);
 
     [[nodiscard]] bool paintToolActive() const noexcept;
@@ -31,6 +32,7 @@ private:
     QToolButton* color_button_ = nullptr;
     QColor brush_color_ = Qt::black;
     bool document_available_ = false;
+    bool painting_allowed_ = false;
 };
 
 } // namespace image_editor

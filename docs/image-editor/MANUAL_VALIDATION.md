@@ -13,8 +13,8 @@ run.
    and a custom-color background in separate runs. Confirm transparent areas
    show a checkerboard and the status bar reports the canvas dimensions. With
    unsaved changes, start another canvas and verify the save/discard/cancel prompt.
-3. Crop, rotate, and flip a canvas; use Undo and Redo and confirm its displayed
-   dimensions follow the edits.
+3. Select the editable layer and crop, rotate, and flip its content. Confirm the
+   canvas dimensions remain fixed and Undo/Redo restores each operation.
 4. Save a new canvas as `.cimg`, close it, reopen it, and confirm its dimensions,
    background, and edits are unchanged. Confirm an unsaved canvas can be
    recovered after restarting the application.
@@ -45,13 +45,23 @@ run.
    verify it was not overwritten.
 10. Export painted content to PNG and JPEG. Confirm paint strokes are included,
     PNG retains alpha, and transparent JPEG pixels become white.
-11. Move the source image, reopen the `.cimg`, and relink the moved file. Confirm
+11. In the right-side Layers dock, confirm a new image or canvas has a locked
+    Background and a selected transparent Layer 1. Paint on Layer 1 and verify
+    the Background remains unchanged. Add another layer, rename it, reorder it,
+    hide/show it, and adjust its opacity; use Undo/Redo and confirm the composite
+    preview responds to each property. Delete the editable layers and verify
+    Background cannot be deleted, renamed, reordered, painted, transformed, or
+    given a different opacity. Confirm Paint and transforms are disabled while
+    Background is selected, then add/select an editable layer to continue.
+    Save as `.cimg`, close, reopen, and confirm layer IDs, stack order, visibility,
+    opacity, operations, and flattened PNG/JPEG exports are preserved.
+12. Move the source image, reopen the `.cimg`, and relink the moved file. Confirm
    a replacement with different dimensions is rejected and the original-sized
    image restores the edit.
-12. Make a paint stroke, wait for the 60-second recovery interval, close and
+13. Make a paint stroke, wait for the 60-second recovery interval, close and
     discard the unsaved edit, then relaunch. Restore the recovery snapshot and
-    confirm the stroke is present and still marked unsaved.
-13. Try a corrupt image, an invalid `.cimg`, a read-only destination, and an
+    confirm the stroke and layer stack are present and still marked unsaved.
+14. Try a corrupt image, an invalid `.cimg`, a read-only destination, and an
    unsupported export extension. Confirm the UI reports the failure and a
    structured entry is written to the local Image Editor log.
 

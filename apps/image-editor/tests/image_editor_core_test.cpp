@@ -61,17 +61,21 @@ void testDocumentEditingAndUndoRedo(const QString& root) {
     QString error;
     require(session.openImage(source_path, &error), error);
     require(session.renderedImage() == sampleImage(), QStringLiteral("Initial image pixels changed."));
+    require(session.data().layers.size() == 2 &&
+                session.data().layers.front().background &&
+                session.selectedLayerIsEditable(),
+            QStringLiteral("Opening an image did not create Background and an editable layer."));
+    const QString selected_layer = session.selectedLayerId();
     require(session.applyCrop(QRect(1, 0, 3, 2), &error), error);
     session.rotateRight();
     session.flipHorizontal();
-    require(session.renderedImage().size() == QSize(2, 3),
-            QStringLiteral("Crop and rotation did not produce the expected dimensions."));
+    require(session.renderedImage().size() == QSize(4, 3),
+            QStringLiteral("Layer transforms changed the fixed document canvas dimensions."));
     session.rotateLeft();
     session.flipVertical();
-    require(session.renderedImage().size() == QSize(3, 2),
-            QStringLiteral("The second rotation did not restore the crop dimensions."));
-    require(session.renderedImage() == sampleImage().copy(QRect(1, 0, 3, 2)),
-            QStringLiteral("The ordered rotations and flips produced unexpected pixels."));
+    require(session.renderedImage().size() == QSize(4, 3) &&
+                session.renderedImage().pixelColor(0, 0) == sampleImage().pixelColor(0, 0),
+            QStringLiteral("Layer transforms changed the Background pixels or canvas size."));
     require(session.isDirty(), QStringLiteral("Edits did not mark the document dirty."));
 
     const QString document_path = root + QStringLiteral("/image.cimg");
@@ -98,6 +102,8 @@ void testDocumentEditingAndUndoRedo(const QString& root) {
             QStringLiteral("Rendered pixels changed after saving and reopening."));
     require(reopened.sourcePath() == QFileInfo(source_path).absoluteFilePath(),
             QStringLiteral("Relative source path did not resolve from the document."));
+    require(reopened.selectedLayerId() == selected_layer,
+            QStringLiteral("Opening a layered document did not select its top editable layer."));
 
     const auto after_save = [&]() {
         QFile file(source_path);
@@ -124,15 +130,16 @@ void testCanvasCreationPersistenceAndRecovery(const QString& root) {
     require(session.isDirty(), QStringLiteral("A new, unsaved canvas should be dirty."));
 
     session.rotateRight();
-    require(session.renderedImage().size() == QSize(20, 32),
-            QStringLiteral("Rotation did not apply to a new canvas."));
+    require(session.renderedImage().size() == QSize(32, 20) &&
+                session.renderedImage().pixelColor(5, 5) == custom_background,
+            QStringLiteral("A layer rotation changed the canvas size or Background."));
     require(session.undo() && session.renderedImage().size() == QSize(32, 20),
-            QStringLiteral("Undo did not restore the canvas dimensions."));
-    require(session.redo() && session.renderedImage().size() == QSize(20, 32),
-            QStringLiteral("Redo did not reapply the canvas rotation."));
+            QStringLiteral("Undo did not restore the layer rotation."));
+    require(session.redo() && session.renderedImage().size() == QSize(32, 20),
+            QStringLiteral("Redo did not reapply the layer rotation."));
     require(session.applyCrop(QRect(0, 0, 12, 18), &error), error);
-    require(session.renderedImage().size() == QSize(12, 18),
-            QStringLiteral("Crop did not apply to a new canvas."));
+    require(session.renderedImage().size() == QSize(32, 20),
+            QStringLiteral("A layer crop changed the fixed canvas dimensions."));
     require(session.undo() && session.undo() && session.renderedImage().size() == QSize(32, 20),
             QStringLiteral("Undo did not restore canvas edits in order."));
 
@@ -165,9 +172,9 @@ void testCanvasCreationPersistenceAndRecovery(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The saved canvas document could not be read."));
     const auto document_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(document_json.value("version").toInt() == 3 &&
+    require(document_json.value("version").toInt() == 4 &&
                 document_json.value("base").toObject().value("kind").toString() == "canvas",
-            QStringLiteral("Canvas save did not use the version 3 canvas representation."));
+            QStringLiteral("Canvas save did not use the version 4 layered representation."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -250,8 +257,8 @@ void testLegacyVersionOneDocument(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 1 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 3,
-            QStringLiteral("Saving a version 1 document did not upgrade it to version 3."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 4,
+            QStringLiteral("Saving a version 1 document did not upgrade it to version 4."));
 }
 
 void testVersionTwoDocumentCompatibility(const QString& root) {
@@ -284,8 +291,8 @@ void testVersionTwoDocumentCompatibility(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 2 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 3,
-            QStringLiteral("Saving a version 2 document did not upgrade it to version 3."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 4,
+            QStringLiteral("Saving a version 2 document did not upgrade it to version 4."));
 
     base.remove("path");
     base.insert("kind", "canvas");
@@ -304,6 +311,57 @@ void testVersionTwoDocumentCompatibility(const QString& root) {
     require(version_two_canvas.renderedImage().size() == QSize(3, 2) &&
                 version_two_canvas.renderedImage().pixelColor(0, 0) == QColor(64, 32, 16, 128),
             QStringLiteral("A version 2 self-contained canvas did not remain compatible."));
+}
+
+void testVersionThreeMigrationToBackground(const QString& root) {
+    QJsonObject base;
+    base.insert("kind", "canvas");
+    base.insert("width", 8);
+    base.insert("height", 6);
+    base.insert("background", "#00000000");
+    QJsonObject point;
+    point.insert("x", 3.0);
+    point.insert("y", 2.0);
+    QJsonObject stroke;
+    stroke.insert("kind", "paint_stroke");
+    stroke.insert("color", "#FFFF0000");
+    stroke.insert("diameter", 2);
+    stroke.insert("points", QJsonArray{point});
+    QJsonObject root_object;
+    root_object.insert("format", "creative-suite-image-document");
+    root_object.insert("version", 3);
+    root_object.insert("base", base);
+    root_object.insert("operations", QJsonArray{stroke});
+    const QString path = root + QStringLiteral("/version-three-painted.cimg");
+    QFile file(path);
+    require(file.open(QIODevice::WriteOnly),
+            QStringLiteral("Could not create the version 3 compatibility fixture."));
+    file.write(QJsonDocument(root_object).toJson());
+    file.close();
+
+    image_editor::ImageDocumentSession session;
+    QString error;
+    require(session.openDocument(path, &error), error);
+    const QImage original_render = session.renderedImage();
+    require(original_render.pixelColor(3, 2).red() > 240 &&
+                session.data().operations.size() == 1 &&
+                session.data().layers.size() == 2 &&
+                session.selectedLayerIsEditable(),
+            QStringLiteral("A version 3 paint edit was not preserved on migrated Background."));
+    require(session.setLayerVisible(session.data().layers.front().id, false) &&
+                session.renderedImage().pixelColor(3, 2).alpha() == 0,
+            QStringLiteral("Migrated version 3 content was not attached to Background."));
+    require(session.undo() && session.renderedImage() == original_render,
+            QStringLiteral("Undo did not restore the migrated Background visibility."));
+    require(session.saveDocument({}, &error), error);
+    QFile upgraded(path);
+    require(upgraded.open(QIODevice::ReadOnly),
+            QStringLiteral("The migrated version 3 document could not be reopened."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 4,
+            QStringLiteral("Saving a version 3 document did not upgrade it to version 4."));
+    image_editor::ImageDocumentSession reopened;
+    require(reopened.openDocument(path, &error) && reopened.renderedImage() == original_render,
+            QStringLiteral("Upgrading a version 3 document changed its visible pixels."));
 }
 
 void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
@@ -326,9 +384,10 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     const QImage painted = session.renderedImage();
     require(painted.pixelColor(7, 6) == QColor(220, 20, 40) && session.isDirty(),
             QStringLiteral("The paint stroke did not render at its image-space position."));
-    require(session.data().operations.size() == 1 &&
-                session.data().operations.front().kind == image_editor::OperationKind::PaintStroke,
-            QStringLiteral("The paint gesture was not stored as one document operation."));
+    require(session.data().layers.at(1).operations.size() == 1 &&
+                session.data().layers.at(1).operations.front().kind ==
+                    image_editor::OperationKind::PaintStroke,
+            QStringLiteral("The paint gesture was not stored on the selected layer."));
 
     image_editor::ImageDocumentSession ordered_edits;
     require(ordered_edits.openImage(source_path, &error), error);
@@ -336,17 +395,18 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     require(ordered_edits.applyPaintStroke(
                 {QPointF(4.0, 3.0)}, QColor(Qt::blue), 4, &error), error);
     const QImage cropped_and_painted = ordered_edits.renderedImage();
-    require(cropped_and_painted.size() == QSize(10, 8) &&
-                cropped_and_painted.pixelColor(4, 3) == QColor(Qt::blue),
-            QStringLiteral("Paint coordinates did not use the current cropped image bounds."));
+    require(cropped_and_painted.size() == QSize(16, 12) &&
+                cropped_and_painted.pixelColor(4, 3) == QColor(Qt::blue) &&
+                cropped_and_painted.pixelColor(0, 0) == QColor(Qt::white),
+            QStringLiteral("Layer crop or paint did not preserve fixed canvas coordinates."));
     ordered_edits.rotateRight();
-    require(ordered_edits.renderedImage().size() == QSize(8, 10) &&
+    require(ordered_edits.renderedImage().size() == QSize(16, 12) &&
                 ordered_edits.undo() && ordered_edits.renderedImage() == cropped_and_painted &&
                 ordered_edits.undo() &&
-                ordered_edits.renderedImage() == source.copy(QRect(2, 1, 10, 8)),
+                ordered_edits.renderedImage() == source,
             QStringLiteral("Paint and geometry operations were not ordered in history."));
 
-    const int operation_count = session.data().operations.size();
+    const int operation_count = session.data().layers.at(1).operations.size();
     const QVector<QPointF> invalid_points{QPointF(-1.0, 0.0)};
     require(!session.applyPaintStroke({}, Qt::black, 12, &error) && !error.isEmpty(),
             QStringLiteral("An empty paint stroke was accepted."));
@@ -365,7 +425,7 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     error = QStringLiteral("previous failure");
     require(!session.applyPaintStroke(points, QColor(0, 0, 0, 0), 12, &error) && error.isEmpty(),
             QStringLiteral("A fully transparent paint stroke should have no effect."));
-    require(session.data().operations.size() == operation_count &&
+    require(session.data().layers.at(1).operations.size() == operation_count &&
                 session.renderedImage() == painted && session.canUndo(),
             QStringLiteral("A rejected or invisible stroke changed the document or history."));
 
@@ -380,10 +440,11 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The painted document could not be read."));
     const QJsonObject saved_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(saved_json.value("version").toInt() == 3 &&
-                saved_json.value("operations").toArray().at(0).toObject()
+    require(saved_json.value("version").toInt() == 4 &&
+                saved_json.value("layers").toArray().at(1).toObject()
+                    .value("operations").toArray().at(0).toObject()
                     .value("kind").toString() == "paint_stroke",
-            QStringLiteral("Paint was not serialized using the version 3 stroke operation."));
+            QStringLiteral("Paint was not serialized in the version 4 layer operations."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -400,8 +461,9 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
             QStringLiteral("The painted document was not included in recovery."));
     image_editor::ImageDocumentSession restored;
     require(restored.restoreRecovery(snapshots.front(), &error), error);
-    require(restored.renderedImage() == reopened.renderedImage() && restored.isDirty(),
-            QStringLiteral("Recovery did not preserve the painted operation."));
+    require(restored.data() == reopened.data() &&
+                restored.renderedImage() == reopened.renderedImage() && restored.isDirty(),
+            QStringLiteral("Recovery did not preserve the painted layer stack and operations."));
 
     const QString export_path = root + QStringLiteral("/painted.png");
     require(reopened.exportImage(export_path, &error), error);
@@ -439,8 +501,158 @@ void testCropNoOpAndInvalidOperations(const QString& root) {
             QStringLiteral("An empty out-of-bounds crop was accepted."));
     require(session.applyCrop(QRect(-1, 0, 2, 2), &error),
             QStringLiteral("A partially intersecting crop was not clipped to the image."));
-    require(session.renderedImage().size() == QSize(1, 2),
-            QStringLiteral("The clipped crop dimensions are incorrect."));
+    require(session.renderedImage().size() == QSize(4, 3),
+            QStringLiteral("The clipped layer crop changed the fixed canvas dimensions."));
+}
+
+void testLayerManagementTransformsAndOpacity(const QString& root) {
+    image_editor::ImageDocumentSession session;
+    QString error;
+    require(session.createCanvas(QSize(12, 8), Qt::transparent, &error), error);
+    const QString background_id = session.data().layers.front().id;
+    const QString first_id = session.selectedLayerId();
+    require(session.data().layers.size() == 2 &&
+                session.data().layers.front().name == QStringLiteral("Background") &&
+                session.data().layers.at(1).name == QStringLiteral("Layer 1"),
+            QStringLiteral("A new canvas did not start with Background and Layer 1."));
+
+    const QVector<QPointF> red_stroke{QPointF(2, 4), QPointF(6, 4)};
+    require(session.applyPaintStroke(red_stroke, Qt::red, 2, &error), error);
+    const QImage painted = session.renderedImage();
+    require(painted.size() == QSize(12, 8) && painted.pixelColor(4, 4).red() > 240,
+            QStringLiteral("Paint did not render into the selected transparent layer."));
+    require(session.selectLayer(background_id) && !session.selectedLayerIsEditable(),
+            QStringLiteral("The Background layer could not be selected as a locked layer."));
+    require(!session.applyPaintStroke({QPointF(4, 4)}, Qt::blue, 2, &error) &&
+                !error.isEmpty() && session.data().layers.front().operations.isEmpty(),
+            QStringLiteral("Painting into Background was not rejected."));
+    require(!session.deleteLayer(background_id) &&
+                !session.setLayerOpacity(background_id, 50) &&
+                !session.moveLayer(background_id, 1),
+            QStringLiteral("A locked Background layer was modified."));
+    require(session.setLayerVisible(background_id, false) &&
+                session.renderedImage().pixelColor(4, 4).red() > 240,
+            QStringLiteral("Hiding Background also hid a normal editable layer."));
+    require(session.undo() && session.renderedImage().pixelColor(4, 4).red() > 240,
+            QStringLiteral("Undo did not restore Background visibility."));
+    require(session.selectLayer(first_id), QStringLiteral("The editable layer could not be reselected."));
+
+    require(session.applyCrop(QRect(3, 0, 6, 8), &error), error);
+    const QImage cropped = session.renderedImage();
+    require(cropped.size() == QSize(12, 8) && cropped.pixelColor(2, 4).alpha() == 0 &&
+                cropped.pixelColor(4, 4).red() > 240,
+            QStringLiteral("Layer crop did not clear only pixels outside the selection."));
+    session.rotateRight();
+    const QImage rotated = session.renderedImage();
+    require(rotated.size() == QSize(12, 8) && rotated != cropped,
+            QStringLiteral("Layer rotation did not rotate content within fixed canvas bounds."));
+    require(session.undo() && session.renderedImage() == cropped && session.redo() &&
+                session.renderedImage() == rotated,
+            QStringLiteral("Undo/redo did not restore the selected layer transform."));
+
+    image_editor::ImageDocumentSession flips;
+    require(flips.createCanvas(QSize(8, 8), Qt::transparent, &error), error);
+    require(flips.applyPaintStroke({QPointF(1, 3)}, Qt::green, 2, &error), error);
+    const QColor original_mark = flips.renderedImage().pixelColor(1, 3);
+    flips.flipHorizontal();
+    require(flips.renderedImage().size() == QSize(8, 8) &&
+                flips.renderedImage().pixelColor(6, 3) == original_mark,
+            QStringLiteral("Horizontal flip did not mirror selected-layer content."));
+    flips.flipVertical();
+    require(flips.renderedImage().size() == QSize(8, 8) &&
+                flips.renderedImage().pixelColor(6, 4) == original_mark &&
+                flips.undo() && flips.undo() && flips.renderedImage().pixelColor(1, 3) == original_mark,
+            QStringLiteral("Vertical flip or undo changed canvas bounds or layer content."));
+
+    const QString second_id = session.addLayer();
+    require(!second_id.isEmpty() && session.selectedLayerId() == second_id &&
+                session.data().layers.size() == 3 && session.data().layers.at(2).id == second_id,
+            QStringLiteral("A new layer was not inserted above the selected layer."));
+    require(session.renameLayer(second_id, QStringLiteral("Overlay"), &error), error);
+    require(session.moveLayer(second_id, -1) && session.data().layers.at(1).id == second_id,
+            QStringLiteral("Layer rename or reordering failed."));
+    require(session.deleteLayer(second_id) && session.data().layers.size() == 2 &&
+                session.selectedLayerId() == first_id,
+            QStringLiteral("Deleting the selected layer did not select the adjacent layer."));
+    require(session.deleteLayer(first_id) && session.data().layers.size() == 1 &&
+                session.selectedLayerId() == background_id && !session.selectedLayerIsEditable(),
+            QStringLiteral("Deleting the last editable layer did not select Background."));
+
+    image_editor::ImageDocumentSession stacking;
+    require(stacking.createCanvas(QSize(8, 8), Qt::transparent, &error), error);
+    const QString red_layer = stacking.selectedLayerId();
+    require(stacking.applyPaintStroke({QPointF(4, 4)}, Qt::red, 2, &error), error);
+    const QString blue_layer = stacking.addLayer();
+    require(stacking.applyPaintStroke({QPointF(4, 4)}, Qt::blue, 2, &error), error);
+    require(stacking.renderedImage().pixelColor(4, 4).blue() >
+                stacking.renderedImage().pixelColor(4, 4).red(),
+            QStringLiteral("The top layer did not composite above lower layers: %1,%2,%3,%4.")
+                .arg(stacking.renderedImage().pixelColor(4, 4).red())
+                .arg(stacking.renderedImage().pixelColor(4, 4).green())
+                .arg(stacking.renderedImage().pixelColor(4, 4).blue())
+                .arg(stacking.renderedImage().pixelColor(4, 4).alpha()));
+    require(stacking.moveLayer(blue_layer, -1) &&
+                stacking.renderedImage().pixelColor(4, 4).red() >
+                    stacking.renderedImage().pixelColor(4, 4).blue(),
+            QStringLiteral("Reordering did not change the layer composite order."));
+    require(stacking.setLayerVisible(red_layer, false) &&
+                stacking.renderedImage().pixelColor(4, 4).blue() >
+                    stacking.renderedImage().pixelColor(4, 4).red(),
+            QStringLiteral("Layer visibility did not update the composite."));
+    const int full_opacity_alpha = stacking.renderedImage().pixelColor(4, 4).alpha();
+    require(stacking.setLayerOpacity(blue_layer, 50),
+            QStringLiteral("Layer opacity could not be changed."));
+    const QColor half_opacity = stacking.renderedImage().pixelColor(4, 4);
+    require(stacking.data().layers.at(1).opacity == 50 &&
+                half_opacity.alpha() >= full_opacity_alpha * 0.45 &&
+                half_opacity.alpha() <= full_opacity_alpha * 0.55 &&
+                half_opacity.blue() > half_opacity.red(),
+            QStringLiteral("Layer opacity was not applied during compositing."));
+
+    image_editor::ImageDocumentSession selection_source;
+    require(selection_source.createCanvas(QSize(8, 8), Qt::transparent, &error), error);
+    const QString bottom_layer = selection_source.selectedLayerId();
+    const QString top_layer = selection_source.addLayer();
+    const QString selection_path = root + QStringLiteral("/layer-selection.cimg");
+    require(selection_source.saveDocument(selection_path, &error), error);
+    image_editor::ImageDocumentSession selection;
+    require(selection.openDocument(selection_path, &error), error);
+    require(selection.selectLayer(bottom_layer) && !selection.isDirty() &&
+                !selection.canUndo(),
+            QStringLiteral("Changing the selected layer marked the document dirty or added history."));
+    const QString inserted_layer = selection.addLayer();
+    require(selection.selectedLayerId() == inserted_layer &&
+                selection.data().layers.at(2).id == inserted_layer,
+            QStringLiteral("A layer was not inserted above the selected middle layer."));
+    require(selection.undo() && selection.selectedLayerId() == bottom_layer &&
+                selection.redo() && selection.selectedLayerId() == inserted_layer &&
+                selection.data().layers.at(3).id == top_layer,
+            QStringLiteral("Undo/redo did not preserve the relevant layer selection."));
+
+    image_editor::ImageDocumentSession opacity;
+    require(opacity.createCanvas(QSize(8, 8), Qt::transparent, &error), error);
+    const QString opacity_layer = opacity.selectedLayerId();
+    const QString saved_path = root + QStringLiteral("/layer-opacity.cimg");
+    require(opacity.saveDocument(saved_path, &error), error);
+    opacity.beginLayerOpacityEdit();
+    require(opacity.setLayerOpacity(opacity_layer, 75) &&
+                opacity.setLayerOpacity(opacity_layer, 40),
+            QStringLiteral("Layer opacity changes were not applied during the gesture."));
+    opacity.endLayerOpacityEdit();
+    require(opacity.canUndo() && opacity.data().layers.at(1).opacity == 40,
+            QStringLiteral("Opacity drag did not create one undoable change."));
+    require(opacity.undo() && !opacity.canUndo() && !opacity.isDirty() &&
+                opacity.data().layers.at(1).opacity == 100,
+            QStringLiteral("Undo did not restore the opacity baseline."));
+    require(!opacity.setLayerOpacity(opacity_layer, 100) && !opacity.canUndo(),
+            QStringLiteral("An opacity no-op created history."));
+    require(opacity.redo() && opacity.data().layers.at(1).opacity == 40,
+            QStringLiteral("Redo did not restore the grouped opacity change."));
+    require(opacity.saveDocument(saved_path, &error), error);
+    image_editor::ImageDocumentSession reopened;
+    require(reopened.openDocument(saved_path, &error), error);
+    require(reopened.data() == opacity.data() && reopened.selectedLayerId() == opacity_layer,
+            QStringLiteral("Layer IDs or properties did not round-trip."));
 }
 
 void testMissingSourceAndRelink(const QString& root) {
@@ -592,6 +804,12 @@ void testInvalidDocument(const QString& root) {
     require(session.sourcePath() == QFileInfo(source_path).absoluteFilePath() &&
                 session.renderedImage() == original_render,
             QStringLiteral("An invalid paint document replaced the current image."));
+    auto duplicate_layer_ids = session.data();
+    duplicate_layer_ids.layers[1].id = duplicate_layer_ids.layers.front().id;
+    require(!image_editor::ImageDocumentStore::saveDocument(
+                root + QStringLiteral("/duplicate-layer-ids.cimg"), duplicate_layer_ids, &error) &&
+                !error.isEmpty(),
+            QStringLiteral("A document with duplicate layer IDs was saved."));
     require(!session.openImage(root + QStringLiteral("/missing.png"), &error),
             QStringLiteral("A missing raster image was accepted."));
     require(session.sourcePath() == QFileInfo(source_path).absoluteFilePath() &&
@@ -625,8 +843,10 @@ int main(int argc, char* argv[]) {
         testCanvasCreationPersistenceAndRecovery(root);
         testLegacyVersionOneDocument(root);
         testVersionTwoDocumentCompatibility(root);
+        testVersionThreeMigrationToBackground(root);
         testPaintStrokesPersistenceUndoRedoAndValidation(root);
         testCropNoOpAndInvalidOperations(root);
+        testLayerManagementTransformsAndOpacity(root);
         testMissingSourceAndRelink(root);
         testExportAndFormatPlugins(root);
         testRecoveryAndLogging(root);

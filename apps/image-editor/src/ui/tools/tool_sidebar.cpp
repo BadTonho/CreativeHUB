@@ -95,12 +95,18 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
 void ToolSidebar::setDocumentAvailable(bool available) {
     document_available_ = available;
-    if (!document_available_) setPaintToolActive(false);
+    if (!document_available_ || !painting_allowed_) setPaintToolActive(false);
+    updateControls();
+}
+
+void ToolSidebar::setPaintingAllowed(bool allowed) {
+    painting_allowed_ = allowed;
+    if (!painting_allowed_) setPaintToolActive(false);
     updateControls();
 }
 
 void ToolSidebar::setPaintToolActive(bool active) {
-    paint_button_->setChecked(active && document_available_);
+    paint_button_->setChecked(active && document_available_ && painting_allowed_);
     updateControls();
 }
 
@@ -113,7 +119,13 @@ QColor ToolSidebar::brushColor() const {
 }
 
 void ToolSidebar::updateControls() {
-    paint_button_->setEnabled(document_available_);
+    const bool enabled = document_available_ && painting_allowed_;
+    paint_button_->setEnabled(enabled);
+    paint_button_->setToolTip(enabled
+        ? QStringLiteral("Paint")
+        : (document_available_
+            ? QStringLiteral("Select or create an editable layer to paint")
+            : QStringLiteral("Open an image to paint")));
     color_button_->setEnabled(true);
 }
 
