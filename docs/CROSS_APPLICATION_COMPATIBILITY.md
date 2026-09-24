@@ -182,14 +182,14 @@ Before making this direction final, prototype and document:
 
 1. Maintain a capability ownership matrix for the applications.
 2. Specify and validate the composition contract inside the Main Editor.
-3. Build a Motion Studio prototype that consumes the same operation.
-4. Extract proven capabilities into focused libraries once a second real
-   consumer exists.
-5. Define and validate saved-revision handoff for a concrete Motion Studio
-   composition workflow.
-6. Evaluate Image Editor adoption and its linked-image workflow after the Main
-   Editor and Motion Studio foundations are stable and the project has
-   capacity.
+3. After the Main Editor foundation is stable, validate the linked raster
+   handoff with a bounded Photo Editor prototype.
+4. Extract only the proven capabilities used by both applications into
+   focused libraries.
+5. Complete and validate Photo Editor Milestone 4 (first editing release),
+   then start the Motion Studio foundation and validate composition handoff as
+   part of its integration.
+6. Review advanced Photo Editor expansion separately against project capacity.
 
 This sequence keeps shared libraries aligned with real consumers, gives each
 document type a suitable contract, and avoids duplicating media, rendering,

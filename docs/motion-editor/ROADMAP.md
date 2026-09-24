@@ -5,14 +5,19 @@ area stored under `apps/motion-editor/`. The folders are placeholders; the
 application is not wired into CMake and no final architecture or technology
 choices have been made.
 
-Motion Studio follows the Main Editor foundation. Its purpose is advanced
-motion design and compositing, while the applications share media, rendering,
-animation, and project services when those boundaries are technically clear.
+Motion Studio follows the Main Editor foundation and Photo Editor Milestone 4
+(first editing release). Its purpose is advanced motion design and
+compositing, while the applications share media, rendering, animation, and
+project services when those boundaries are technically clear. The Photo
+Editor is the next application stage; its linked-image compatibility
+prototype is the first milestone in that stage.
 
 ## Principles
 
 - Do not delay the Main Editor foundation by developing Motion Studio in
   parallel from the beginning.
+- Start the Motion Studio foundation after Photo Editor Milestone 4 reaches
+  its documented exit criteria.
 - Reuse shared media, rendering, animation, caching, and recovery services
   instead of building duplicate engines.
 - Keep video frames and GPU resources shared or referenced efficiently across
@@ -38,8 +43,8 @@ animation, and project services when those boundaries are technically clear.
   compositions and cross-application references.
 
 **Exit criteria:** the MVP and application boundary are documented, required
-shared services are identified, and the Main Editor foundation is stable enough
-to support the next application without duplicating core engines.
+shared services are identified, the Main Editor foundation is stable, and
+Photo Editor Milestone 4 has passed its exit criteria.
 
 ### 1. Technical validation
 

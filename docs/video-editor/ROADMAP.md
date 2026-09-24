@@ -14,8 +14,10 @@ and must be updated whenever priorities, decisions, or project status change.
   benefit.
 - Real applications must be created outside `prototypes/`. Shared libraries
   should be added only when more than one application genuinely needs them.
-- Motion Studio will follow the Main Editor foundation instead of being built
-  in parallel from the beginning.
+- After the Main Editor foundation, the Photo Editor is the next application
+  stage, ahead of Motion Studio. Its linked-image compatibility prototype is
+  the first milestone; Motion Studio follows the Photo Editor's first editing
+  release milestone.
 
 ## Status Legend
 
@@ -150,10 +152,11 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 
 ### Photo Editor handoff readiness
 
-This is Main Editor integration work, not a commitment to start the Image
-Editor. Begin the integration after the Main Editor and Motion Studio
-foundations are stable and the project has capacity. Follow the provisional
-[cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
+This is Main Editor integration work for the next application stage after the
+Main Editor foundation. Photo Editor Milestone 2 is the bounded compatibility
+prototype, and Milestone 4 is the first editing release. Start Motion Studio
+after Milestone 4 passes its exit criteria. See the
+[provisional cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
 
 - [ ] Define how a Media Pool image maps to one companion Photo Editor
   document, including create-on-first-open and reuse on later opens while
@@ -196,13 +199,26 @@ frames or render-cache results. Timeline-specific behavior and recovery cases
 are documented and validated. Unsaved live preview streaming remains a later
 milestone.
 
-## 6. Motion Studio
+## 6. Photo Editor
+
+- [x] Reserve the `apps/photo-editor/` and `docs/photo-editor/` placeholders.
+- [ ] Define the image-editing scope and application boundary; see the
+  [Photo Editor roadmap](../photo-editor/ROADMAP.md).
+- [ ] Build and validate the bounded Main Editor handoff prototype described
+  in the Photo Editor roadmap as its first milestone.
+- [ ] Coordinate the native image document, host output, and revision contract
+  with the Main Editor handoff work above.
+- [ ] Complete and validate the Photo Editor's first editing release milestone
+  (Photo Editor roadmap Milestone 4) before starting the Motion Studio
+  foundation; keep advanced expansion scoped separately.
+
+## 7. Motion Studio
 
 - [x] Reserve the `apps/motion-editor/` and `docs/motion-editor/` placeholders.
 - [ ] Define the Motion Studio scope and boundaries with the Main Editor; see
   the [Motion Studio roadmap](../motion-editor/ROADMAP.md).
-- [ ] Build the application in `apps/motion-editor/` after the shared
-  foundation is stable.
+- [ ] Build the application in `apps/motion-editor/` after the Main Editor
+  foundation and the Photo Editor roadmap Milestone 4 exit criteria pass.
 - [ ] Add advanced keyframes and property curves.
 - [ ] Add nested compositions.
 - [ ] Add animated masks.
@@ -211,18 +227,6 @@ milestone.
 - [ ] Define how Motion Studio compositions are linked to Main Editor projects.
 - [ ] Evaluate particles, node-based workflows, and 3D features for future
   phases.
-
-## 7. Image Editor
-
-- [x] Reserve the `apps/photo-editor/` and `docs/photo-editor/` placeholders.
-- [ ] Revisit the image editor after the Main Editor and Motion Studio
-  foundations are stable; see the [Image Editor roadmap](../photo-editor/ROADMAP.md).
-- [ ] Define whether it will be a separate application or an integrated
-  module.
-- [ ] Plan layers, masks, selections, text, color adjustments, filters, and
-  export.
-- [ ] Coordinate the native image document and revision contract with the
-  Main Editor handoff work above.
 
 ## 8. Cross-Platform and Release Work
 
