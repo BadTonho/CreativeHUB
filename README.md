@@ -28,7 +28,7 @@ The suite combines the best paradigms of industry-standard tools into a unified,
                     |
            +--------v--------+
            |  Image Editor   |
-           |  (Future Stage) |
+           | (Next App Stage)|
            +-----------------+
 ```
 
@@ -37,12 +37,12 @@ The suite combines the best paradigms of industry-standard tools into a unified,
 1. **Main Editor** *(In Active Development)*:
    - Audiovisual editing combining the editing fluidity and multi-track simplicity of Premiere with the grading and assembly depth of DaVinci Resolve.
    - Core capabilities: multi-track timeline editing, cutting, blade splitting, transitions, text overlays/captions, transform keyframes, synchronized audio playback, and export.
-2. **Motion Studio** *(Planned - Following Main Editor)*:
+2. **Image Editor** *(Next Application Stage after the Main Editor foundation)*:
+   - High-performance digital imaging and raster graphics editing (inspired by Photoshop and Affinity Photo).
+   - First validate a linked-image workflow with the Main Editor; the first editing release precedes Motion Studio.
+3. **Motion Studio** *(Planned - Following Image Editor Milestone 4)*:
    - A dedicated application for motion design, advanced compositing, and visual effects (analogous to After Effects).
    - Core capabilities: complex animation curves, bezier keyframes, animated vector masks, nested compositions, chained effects, and shape layers.
-3. **Image Editor** *(Future Milestone)*:
-   - High-performance digital imaging and raster graphics editing (inspired by Photoshop and Affinity Photo).
-   - Designed to share the core composition engine without delaying the audiovisual tools.
 
 ---
 
@@ -175,7 +175,7 @@ Key reference documents:
 - [Subsystem Architecture Boundaries](docs/video-editor/architecture/)
 - [Project Roadmap](docs/video-editor/ROADMAP.md)
 - [Motion Studio Roadmap](docs/motion-editor/ROADMAP.md)
-- [Image Editor Roadmap](docs/photo-editor/ROADMAP.md)
+- [Image Editor Roadmap](docs/image-editor/ROADMAP.md)
 - [Technical Prototype Comparison](docs/video-editor/TECHNICAL_PROTOTYPE_COMPARISON.md)
 
 ---

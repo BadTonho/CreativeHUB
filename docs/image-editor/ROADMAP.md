@@ -1,23 +1,23 @@
 # Image Editor Roadmap
 
 Status: **next planned application effort and provisional**. This roadmap
-covers the Photo Editor work area under `apps/photo-editor/`. The folders are
+covers the Image Editor work area under `apps/image-editor/`. The folders are
 placeholders; the application is not wired into CMake and its final scope has
 not been decided.
 
 The Main Editor remains the first application priority. After its foundation
-is stable, the Photo Editor is the next application stage, ahead of Motion
+is stable, the Image Editor is the next application stage, ahead of Motion
 Studio. Its first milestone is a bounded linked-image compatibility prototype;
-the Photo Editor's first editing release follows before Motion Studio begins.
+the Image Editor's first editing release follows before Motion Studio begins.
 Keep Main Editor stability as a priority. See the
 [cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
 
 ## Principles
 
-- Keep the first Photo Editor milestone bounded to the compatibility workflow
+- Keep the first Image Editor milestone bounded to the compatibility workflow
   with the Main Editor.
-- Do not let Photo Editor work interrupt critical Main Editor stability work.
-- Keep advanced Photo Editor expansion separate from the first editing
+- Do not let Image Editor work interrupt critical Main Editor stability work.
+- Keep advanced Image Editor expansion separate from the first editing
   milestone and review its scope as the project learns from the prototype.
 - Decide through user workflows and technical prototypes whether the Image
   Editor should be a separate application or an integrated module.
@@ -32,7 +32,7 @@ Keep Main Editor stability as a priority. See the
 
 ### 0. Readiness
 
-- [x] Reserve `apps/photo-editor/` and `docs/photo-editor/` for future work.
+- [x] Reserve `apps/image-editor/` and `docs/image-editor/` for future work.
 - [ ] Confirm that the Main Editor project, media, image-preview, and
   composition foundations are stable enough to host a linked image revision.
 - [ ] Bound the first prototype to one raster-image workflow and confirm
@@ -65,7 +65,7 @@ provisional decisions.
 ### 2. Main Editor compatibility prototype
 
 - [ ] Open a raster image from the Main Editor Media Pool and create or reopen
-  one companion document in the Photo Editor's native format.
+  one companion document in the Image Editor's native format.
 - [ ] Preserve the original image and save a host-consumable rendered image
   output with a detectable saved revision.
 - [ ] Refresh the corresponding Media Pool preview and all timeline uses after
@@ -87,7 +87,7 @@ streaming is not required for this prototype.
 ### 3. Document and editing foundation
 
 Proceed after the compatibility prototype passes. This document and editing
-foundation is part of the Photo Editor stage that precedes Motion Studio.
+foundation is part of the Image Editor stage that precedes Motion Studio.
 
 - [ ] Define a versioned, documented image project format and recovery behavior.
 - [ ] Implement the approved document model and non-destructive layer,
@@ -116,7 +116,7 @@ none are approved until the discovery milestone is complete:
 **Exit criteria:** the approved first-release workflows pass automated
 regression coverage and manual visual validation on all supported platforms.
 After this milestone, begin the Motion Studio foundation as described in its
-roadmap; keep advanced Photo Editor expansion scoped separately.
+roadmap; keep advanced Image Editor expansion scoped separately.
 
 ### 5. Future expansion
 

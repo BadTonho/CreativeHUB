@@ -44,9 +44,9 @@ A separate application for motion design and advanced compositing:
 ### Image Editor
 
 The Image Editor is part of the product vision. After the Main Editor
-foundation, the Photo Editor is the next application stage, ahead of Motion
+foundation, the Image Editor is the next application stage, ahead of Motion
 Studio. Start with a bounded linked-image compatibility prototype and continue
-through the Photo Editor's first editing release milestone before beginning
+through the Image Editor's first editing release milestone before beginning
 Motion Studio. Keep Main Editor stability as a priority and revisit scope if
 work would compromise it.
 
@@ -225,12 +225,12 @@ Do not commit or push automatically. These actions require explicit user authori
 - The product vision is still being defined.
 - The project does not yet have a final decision between Rust and C++.
 - The target platforms are Windows, macOS, and Linux.
-- The planned applications are the Main Editor, Photo Editor, and Motion
+- The planned applications are the Main Editor, Image Editor, and Motion
   Studio.
-- The Main Editor remains first; the Photo Editor is the next application
+- The Main Editor remains first; the Image Editor is the next application
   stage, ahead of Motion Studio. Its first editing release follows the initial
   linked-image compatibility prototype.
 - The architecture must remain in a single repository.
-- The next application sequence is the linked-image Photo Editor prototype
+- The next application sequence is the linked-image Image Editor prototype
   and first editing release, followed by the Motion Studio foundation, after
   the Main Editor foundation is stable.

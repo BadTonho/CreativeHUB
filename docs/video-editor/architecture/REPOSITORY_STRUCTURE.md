@@ -12,19 +12,19 @@ monorepo structure.
 apps/
   video-editor/      # Active audiovisual editor
   motion-editor/     # Placeholder for the future Motion Studio
-  photo-editor/      # Placeholder for the future Image Editor
+  image-editor/      # Placeholder for the future Image Editor
 libs/                # Shared libraries added only when multiple apps need them
 platform/            # Platform adapters when a shared abstraction requires them
 prototypes/          # Isolated technical experiments and references
 docs/
   video-editor/      # Current audiovisual editor documentation
   motion-editor/     # Future Motion Studio documentation
-  photo-editor/      # Future Image Editor documentation
+  image-editor/      # Future Image Editor documentation
 ```
 
 The first real application is located at `apps/video-editor/`. The archived
 technical prototypes remain under `prototypes/` and are not application
-dependencies. The motion and photo editor application directories are empty
+dependencies. The motion and image editor application directories are empty
 placeholders and are not wired into CMake yet. Their documentation folders
 contain provisional roadmaps only.
 
