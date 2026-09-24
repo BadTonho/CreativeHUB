@@ -17,6 +17,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSize>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
@@ -342,7 +343,10 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     tool_sidebar_->setDocumentAvailable(session_.hasSource());
     tool_sidebar_->setPaintingAllowed(session_.hasSource() &&
                                       session_.selectedLayerIsEditable());
-    layer_panel_->setLayers(session_.data().layers, session_.selectedLayerId());
+    layer_panel_->setLayers(session_.data().layers, session_.selectedLayerId(),
+                            session_.renderedLayerThumbnails(QSize(
+                                LayerPanel::kThumbnailWidth,
+                                LayerPanel::kThumbnailHeight)));
     updateToolOptions();
     canvas_->setBrush(tool_sidebar_->brushColor(), brush_size_spin_->value());
     undo_action_->setEnabled(session_.canUndo());

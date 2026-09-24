@@ -88,6 +88,52 @@ int main(int argc, char* argv[]) {
         std::cerr << "The right-side layer dock did not show the default selected layer stack.\n";
         return 1;
     }
+    const QImage editable_thumbnail =
+        layer_list->item(0)->data(Qt::UserRole + 4).value<QImage>();
+    const QImage background_thumbnail =
+        layer_list->item(1)->data(Qt::UserRole + 4).value<QImage>();
+    if (editable_thumbnail.isNull() || background_thumbnail.isNull() ||
+        editable_thumbnail.width() > image_editor::LayerPanel::kThumbnailWidth ||
+        editable_thumbnail.height() > image_editor::LayerPanel::kThumbnailHeight ||
+        background_thumbnail.pixelColor(background_thumbnail.width() / 2,
+                                        background_thumbnail.height() / 2) != Qt::blue) {
+        std::cerr << "The layer rows did not receive isolated, aspect-fitted previews.\n";
+        return 1;
+    }
+    const QRect background_row = layer_list->visualItemRect(layer_list->item(1));
+    QTest::mouseClick(layer_list->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      QPoint(background_row.right() - 17, background_row.center().y()));
+    QCoreApplication::processEvents();
+    if (layer_list->currentRow() != 0 ||
+        !layer_list->item(1)->data(Qt::AccessibleDescriptionRole).toString()
+             .contains(QStringLiteral("Hidden"))) {
+        std::cerr << "The right-side eye control did not hide Background independently of selection.\n";
+        return 1;
+    }
+    const QRect hidden_background_row = layer_list->visualItemRect(layer_list->item(1));
+    QTest::mouseClick(layer_list->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      QPoint(hidden_background_row.right() - 17,
+                             hidden_background_row.center().y()));
+    QCoreApplication::processEvents();
+    if (layer_list->currentRow() != 0 ||
+        !layer_list->item(1)->data(Qt::AccessibleDescriptionRole).toString()
+             .contains(QStringLiteral("Visible"))) {
+        std::cerr << "The right-side eye control did not restore Background visibility.\n";
+        return 1;
+    }
+    auto* visibility_undo_action = window.findChild<QAction*>(QStringLiteral("undoAction"));
+    if (visibility_undo_action == nullptr) {
+        std::cerr << "The visibility undo action was not exposed by the window.\n";
+        return 1;
+    }
+    visibility_undo_action->trigger();
+    visibility_undo_action->trigger();
+    if (window.windowTitle().startsWith('*') || visibility_undo_action->isEnabled() ||
+        layer_list->item(1)->data(Qt::AccessibleDescriptionRole).toString()
+            .contains(QStringLiteral("Hidden"))) {
+        std::cerr << "Undo did not restore the visibility baseline after the eye-button check.\n";
+        return 1;
+    }
 
     canvas->setCropMode(true);
     QSignalSpy crop_spy(canvas, &image_editor::ImageCanvas::cropSelected);

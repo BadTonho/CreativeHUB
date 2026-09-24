@@ -55,11 +55,16 @@ persistence, and recovery.
   canvas paint mode are active; the sidebar and crop menu action cannot be
   active at the same time.
 - `LayerPanel` is hosted by a resizable, dockable right-side `QDockWidget`. It
-  presents the stack top-to-bottom and sends layer commands to the session.
-  Background remains fixed at the bottom, with visibility as its only editable
-  property. Selecting Background disables painting and transforms and explains
-  that an editable layer is required. Opacity slider drags are grouped into one
-  undo entry.
+  presents the stack top-to-bottom with an isolated, aspect-fitted thumbnail
+  on the left, the layer name, and an eye visibility button on the right.
+  Thumbnails use a checkerboard behind transparent pixels and remain visible
+  when a layer is hidden or has zero opacity. The session renders operations
+  at thumbnail resolution and caches small per-layer previews by source and
+  content, so selection and visibility changes do not rerender them. Background
+  remains fixed at the bottom, with visibility as its only editable property.
+  Selecting Background disables painting and transforms and explains that an
+  editable layer is required. Opacity slider drags are grouped into one undo
+  entry.
 - `ImageEditorWindow` routes menu and sidebar actions, prompts before discarding
   edits, and projects session state into the window. A completed paint gesture
   is one undoable document operation; changing tools does not modify the image.

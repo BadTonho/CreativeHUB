@@ -2,6 +2,7 @@
 
 #include "image_document_store.h"
 
+#include <QHash>
 #include <QImage>
 #include <QString>
 #include <QVector>
@@ -45,6 +46,8 @@ public:
     [[nodiscard]] bool redo();
 
     [[nodiscard]] QImage renderedImage() const;
+    [[nodiscard]] QHash<QString, QImage> renderedLayerThumbnails(
+        const QSize& maximum_size) const;
     [[nodiscard]] bool hasSource() const noexcept { return !source_image_.isNull(); }
     [[nodiscard]] bool sourceIsMissing() const noexcept { return !hasSource() && !data_.source_path.isEmpty(); }
     [[nodiscard]] bool isDirty() const noexcept;
@@ -65,6 +68,15 @@ private:
     struct EditSnapshot {
         ImageDocumentData document;
         QString selected_layer_id;
+    };
+
+    struct LayerThumbnailCacheEntry {
+        QVector<ImageOperation> operations;
+        QSize source_size;
+        QSize maximum_size;
+        qint64 source_cache_key = 0;
+        bool background = false;
+        QImage thumbnail;
     };
 
     void initializeDefaultLayers();
@@ -88,6 +100,7 @@ private:
     bool force_dirty_ = false;
     QVector<EditSnapshot> undo_stack_;
     QVector<EditSnapshot> redo_stack_;
+    mutable QHash<QString, LayerThumbnailCacheEntry> layer_thumbnail_cache_;
     ImageDocumentData opacity_edit_snapshot_;
     bool opacity_edit_active_ = false;
     static constexpr qsizetype kMaximumHistoryEntries = 100;

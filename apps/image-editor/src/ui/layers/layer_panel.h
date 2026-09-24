@@ -2,10 +2,14 @@
 
 #include "image_document_store.h"
 
+#include <QHash>
+#include <QImage>
 #include <QWidget>
 
 class QListWidget;
 class QLabel;
+class QEvent;
+class QObject;
 class QSlider;
 class QToolButton;
 
@@ -15,9 +19,14 @@ class LayerPanel final : public QWidget {
     Q_OBJECT
 
 public:
+    static constexpr int kThumbnailWidth = 48;
+    static constexpr int kThumbnailHeight = 36;
+
     explicit LayerPanel(QWidget* parent = nullptr);
 
-    void setLayers(const QVector<ImageLayerData>& layers, const QString& selected_layer_id);
+    void setLayers(const QVector<ImageLayerData>& layers,
+                   const QString& selected_layer_id,
+                   const QHash<QString, QImage>& thumbnails);
 
 signals:
     void layerSelected(const QString& layer_id);
@@ -31,6 +40,7 @@ signals:
     void opacityEditFinished();
 
 private:
+    bool eventFilter(QObject* watched, QEvent* event) override;
     [[nodiscard]] QString selectedLayerId() const;
     void updateControls();
 
@@ -44,6 +54,7 @@ private:
     QToolButton* move_down_button_ = nullptr;
     QVector<ImageLayerData> layers_;
     bool refreshing_ = false;
+    bool eye_press_consumed_ = false;
 };
 
 } // namespace image_editor

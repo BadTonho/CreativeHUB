@@ -348,6 +348,12 @@ void testVersionThreeMigrationToBackground(const QString& root) {
                 session.data().layers.size() == 2 &&
                 session.selectedLayerIsEditable(),
             QStringLiteral("A version 3 paint edit was not preserved on migrated Background."));
+    const auto layer_thumbnails = session.renderedLayerThumbnails(QSize(48, 36));
+    require(layer_thumbnails.value(session.data().layers.front().id)
+                    .pixelColor(18, 12).red() > 240 &&
+                layer_thumbnails.value(session.selectedLayerId())
+                    .pixelColor(24, 18).alpha() == 0,
+            QStringLiteral("A migrated version 3 operation did not appear on its Background thumbnail."));
     require(session.setLayerVisible(session.data().layers.front().id, false) &&
                 session.renderedImage().pixelColor(3, 2).alpha() == 0,
             QStringLiteral("Migrated version 3 content was not attached to Background."));
@@ -653,6 +659,55 @@ void testLayerManagementTransformsAndOpacity(const QString& root) {
     require(reopened.openDocument(saved_path, &error), error);
     require(reopened.data() == opacity.data() && reopened.selectedLayerId() == opacity_layer,
             QStringLiteral("Layer IDs or properties did not round-trip."));
+
+    image_editor::ImageDocumentSession thumbnail_session;
+    require(thumbnail_session.createCanvas(QSize(16, 8), Qt::transparent, &error), error);
+    const QString thumbnail_layer = thumbnail_session.selectedLayerId();
+    const QString thumbnail_background = thumbnail_session.data().layers.front().id;
+    auto thumbnails = thumbnail_session.renderedLayerThumbnails(QSize(48, 36));
+    require(thumbnails.contains(thumbnail_layer) &&
+                thumbnails.value(thumbnail_layer).size() == QSize(48, 24) &&
+                thumbnails.value(thumbnail_layer).pixelColor(24, 12).alpha() == 0 &&
+                thumbnails.value(thumbnail_background).pixelColor(24, 12).alpha() == 0,
+            QStringLiteral("Layer thumbnails did not preserve the canvas aspect ratio and alpha."));
+    require(thumbnail_session.applyPaintStroke({QPointF(7, 2)}, Qt::red, 3, &error), error);
+    thumbnails = thumbnail_session.renderedLayerThumbnails(QSize(48, 36));
+    const QImage painted_thumbnail = thumbnails.value(thumbnail_layer);
+    require(painted_thumbnail.pixelColor(21, 6).red() > 240 &&
+                painted_thumbnail.pixelColor(21, 6).alpha() > 0,
+            QStringLiteral("A painted layer thumbnail did not show its isolated content."));
+    const qint64 painted_thumbnail_key = painted_thumbnail.cacheKey();
+    require(thumbnail_session.setLayerVisible(thumbnail_layer, false) &&
+                thumbnail_session.setLayerOpacity(thumbnail_layer, 0),
+            QStringLiteral("Could not hide and fade the thumbnail test layer."));
+    require(thumbnail_session.selectLayer(thumbnail_background) &&
+                thumbnail_session.selectLayer(thumbnail_layer),
+            QStringLiteral("Could not change selection in the thumbnail cache test."));
+    require(thumbnail_session.renameLayer(thumbnail_layer, QStringLiteral("Painted"), &error),
+            error);
+    thumbnails = thumbnail_session.renderedLayerThumbnails(QSize(48, 36));
+    require(thumbnails.value(thumbnail_layer).cacheKey() == painted_thumbnail_key &&
+                thumbnails.value(thumbnail_layer).pixelColor(21, 6).red() > 240,
+            QStringLiteral("Selection, name, visibility, or opacity incorrectly changed the isolated thumbnail."));
+    require(thumbnail_session.undo() && thumbnail_session.undo() &&
+                thumbnail_session.undo(),
+            QStringLiteral("Could not undo the thumbnail name, visibility, and opacity edits."));
+    thumbnail_session.rotateRight();
+    const QImage transformed_thumbnail =
+        thumbnail_session.renderedLayerThumbnails(QSize(48, 36)).value(thumbnail_layer);
+    require(transformed_thumbnail != painted_thumbnail &&
+                transformed_thumbnail.pixelColor(30, 9).red() > 240,
+            QStringLiteral("A transform did not refresh the layer thumbnail."));
+    require(thumbnail_session.undo(), QStringLiteral("Could not undo the thumbnail transform."));
+    require(thumbnail_session.renderedLayerThumbnails(QSize(48, 36)).value(thumbnail_layer) ==
+                painted_thumbnail,
+            QStringLiteral("Undo did not restore the previous layer thumbnail."));
+    require(thumbnail_session.createCanvas(QSize(16, 8), Qt::blue, &error), error);
+    const auto replacement_thumbnails =
+        thumbnail_session.renderedLayerThumbnails(QSize(48, 36));
+    const QString replacement_background = thumbnail_session.data().layers.front().id;
+    require(replacement_thumbnails.value(replacement_background).pixelColor(24, 12) == Qt::blue,
+            QStringLiteral("Opening a replacement document returned a stale Background thumbnail."));
 }
 
 void testMissingSourceAndRelink(const QString& root) {

@@ -101,6 +101,68 @@ QImage applyOperations(QImage image,
     return image;
 }
 
+QImage renderLayerThumbnail(QImage image,
+                            QSize virtual_size,
+                            const QVector<ImageOperation>& operations,
+                            bool fixed_canvas,
+                            const QSize& maximum_size,
+                            bool transparent_base) {
+    if (!virtual_size.isValid() || virtual_size.isEmpty()) return {};
+    const QSize initial_size = virtual_size.scaled(maximum_size, Qt::KeepAspectRatio);
+    if (initial_size.isEmpty()) return {};
+    if (transparent_base) {
+        image = QImage(initial_size, QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+    } else {
+        if (image.isNull()) return {};
+        image = image.scaled(initial_size, Qt::IgnoreAspectRatio,
+                             Qt::SmoothTransformation);
+    }
+
+    for (const auto& operation : operations) {
+        const qreal scale_x = static_cast<qreal>(image.width()) / virtual_size.width();
+        const qreal scale_y = static_cast<qreal>(image.height()) / virtual_size.height();
+        ImageOperation scaled_operation = operation;
+        switch (operation.kind) {
+        case OperationKind::Crop: {
+            const int left = static_cast<int>(std::floor(operation.crop.x() * scale_x));
+            const int top = static_cast<int>(std::floor(operation.crop.y() * scale_y));
+            const int right = static_cast<int>(std::ceil(
+                (operation.crop.x() + operation.crop.width()) * scale_x));
+            const int bottom = static_cast<int>(std::ceil(
+                (operation.crop.y() + operation.crop.height()) * scale_y));
+            const QRect scaled_crop(left, top, std::max(1, right - left),
+                                    std::max(1, bottom - top));
+            scaled_operation.crop = scaled_crop.intersected(
+                QRect(QPoint(0, 0), image.size()));
+            if (scaled_operation.crop.isEmpty()) return {};
+            if (!fixed_canvas) virtual_size = operation.crop.size();
+            break;
+        }
+        case OperationKind::Rotate:
+            if (!fixed_canvas && std::abs(operation.quarter_turns) % 2 != 0) {
+                virtual_size.transpose();
+            }
+            break;
+        case OperationKind::PaintStroke: {
+            for (auto& point : scaled_operation.paint_stroke.points) {
+                point.setX(point.x() * scale_x);
+                point.setY(point.y() * scale_y);
+            }
+            scaled_operation.paint_stroke.diameter = std::max(
+                1, qRound(operation.paint_stroke.diameter * std::min(scale_x, scale_y)));
+            break;
+        }
+        case OperationKind::FlipHorizontal:
+        case OperationKind::FlipVertical:
+            break;
+        }
+        image = applyOperations(std::move(image), {scaled_operation}, fixed_canvas);
+    }
+
+    return image.scaled(maximum_size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+}
+
 } // namespace
 
 bool ImageDocumentSession::createCanvas(const QSize& size,
@@ -404,6 +466,56 @@ QImage ImageDocumentSession::renderedImage() const {
     }
     painter.end();
     return composite;
+}
+
+QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
+    const QSize& maximum_size) const {
+    QHash<QString, QImage> thumbnails;
+    if (maximum_size.width() <= 0 || maximum_size.height() <= 0) {
+        return thumbnails;
+    }
+    if (!hasSource()) {
+        layer_thumbnail_cache_.clear();
+        return thumbnails;
+    }
+
+    const QSize canvas_size = renderedSize();
+    const qint64 source_cache_key = source_image_.cacheKey();
+    for (const auto& layer : data_.layers) {
+        const QVector<ImageOperation>& operations = layer.background
+            ? data_.operations : layer.operations;
+        auto cached = layer_thumbnail_cache_.find(layer.id);
+        const bool cache_matches = cached != layer_thumbnail_cache_.end() &&
+            cached->operations.size() == operations.size() &&
+            cached->operations.constData() == operations.constData() &&
+            cached->source_size == canvas_size &&
+            cached->maximum_size == maximum_size &&
+            cached->source_cache_key == source_cache_key &&
+            cached->background == layer.background;
+
+        if (!cache_matches) {
+            QImage thumbnail = renderLayerThumbnail(
+                layer.background ? source_image_ : QImage{},
+                layer.background ? data_.source_size : canvas_size,
+                operations, !layer.background, maximum_size, !layer.background);
+            LayerThumbnailCacheEntry entry;
+            entry.operations = operations;
+            entry.source_size = canvas_size;
+            entry.maximum_size = maximum_size;
+            entry.source_cache_key = source_cache_key;
+            entry.background = layer.background;
+            entry.thumbnail = std::move(thumbnail);
+            cached = layer_thumbnail_cache_.insert(layer.id, std::move(entry));
+        }
+        thumbnails.insert(layer.id, cached->thumbnail);
+    }
+
+    for (auto cached = layer_thumbnail_cache_.begin();
+         cached != layer_thumbnail_cache_.end();) {
+        if (!thumbnails.contains(cached.key())) cached = layer_thumbnail_cache_.erase(cached);
+        else ++cached;
+    }
+    return thumbnails;
 }
 
 bool ImageDocumentSession::applyCrop(const QRect& crop, QString* error) {
