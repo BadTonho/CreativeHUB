@@ -92,8 +92,15 @@ that workflow justifies the added runtime coordination.
 
 ### Image document workflow
 
-- From an image in the Media Pool, the user can create or open a linked image
-  document in the Image Editor.
+- Opening an image from the Media Pool can create a companion document in the
+  Image Editor's native format, initialized from that image. Later opens should
+  reuse the existing companion document instead of creating another copy.
+- The original image remains unchanged. The companion document may reference
+  the original as its source layer or embed a copy when portability requires
+  it; the storage policy must be validated, especially for large images.
+- A Media Pool edit applies to that media item, so every timeline clip that
+  uses the item receives the newly saved revision. The document location,
+  native extension, and behavior when the source moves remain open decisions.
 - From an image clip in the timeline, the user can open or create a linked
   image document for editing. Whether this link edits every use of the Media
   Pool item or creates a clip-specific variant is an open product decision;
