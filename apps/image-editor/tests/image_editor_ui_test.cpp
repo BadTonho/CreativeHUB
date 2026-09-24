@@ -586,6 +586,74 @@ int main(int argc, char* argv[]) {
         std::cerr << "The brush resize gesture did not update controls without editing the document.\n";
         return 1;
     }
+
+    const auto hasBrightPixelNear = [](const QImage& image, const QPoint& center) {
+        for (int y = center.y() - 3; y <= center.y() + 3; ++y) {
+            for (int x = center.x() - 3; x <= center.x() + 3; ++x) {
+                if (!image.rect().contains(x, y)) continue;
+                const QColor pixel = image.pixelColor(x, y);
+                if (pixel.red() >= 220 && pixel.green() >= 220 && pixel.blue() >= 220) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    brush_size->setValue(12);
+    const QPoint preview_anchor = canvas->rect().center();
+    QTest::mousePress(canvas, Qt::LeftButton,
+                      Qt::ControlModifier | Qt::AltModifier, preview_anchor);
+    const QPoint preview_drag_position = preview_anchor + QPoint(20, 5);
+    QTest::mouseMove(canvas, preview_drag_position);
+    QCoreApplication::processEvents();
+    const QImage resized_brush_preview = canvas->grab().toImage();
+    const qreal resized_brush_radius = std::max(
+        3.0, brush_size->value() * canvas->zoomFactor()) / 2.0;
+    const QPoint anchored_edge(qRound(preview_anchor.x() + resized_brush_radius),
+                               preview_anchor.y());
+    const QPoint moved_edge(qRound(preview_drag_position.x() + resized_brush_radius),
+                            preview_drag_position.y());
+    const bool brush_preview_stayed_at_anchor =
+        hasBrightPixelNear(resized_brush_preview, anchored_edge) &&
+        !hasBrightPixelNear(resized_brush_preview, moved_edge);
+
+    const QPoint outside_image(0, preview_anchor.y());
+    QTest::mouseMove(canvas, outside_image);
+    QCoreApplication::processEvents();
+    const QImage resized_outside_preview = canvas->grab().toImage();
+    const qreal minimum_brush_radius = std::max(
+        3.0, brush_size->value() * canvas->zoomFactor()) / 2.0;
+    const QPoint outside_drag_anchor_edge(
+        qRound(preview_anchor.x() + minimum_brush_radius), preview_anchor.y());
+    const bool brush_preview_remained_visible_outside_image =
+        brush_size->value() == 1 &&
+        hasBrightPixelNear(resized_outside_preview, outside_drag_anchor_edge);
+
+    QTest::mouseRelease(canvas, Qt::LeftButton,
+                        Qt::ControlModifier | Qt::AltModifier, outside_image);
+    QCoreApplication::processEvents();
+    const QImage released_outside_preview = canvas->grab().toImage();
+    const bool brush_preview_hidden_after_outside_release =
+        !hasBrightPixelNear(released_outside_preview, outside_drag_anchor_edge);
+    const QPoint reentered_image = preview_anchor + QPoint(80, 0);
+    QTest::mouseMove(canvas, reentered_image);
+    QCoreApplication::processEvents();
+    const QImage reentered_preview = canvas->grab().toImage();
+    const bool brush_preview_followed_cursor_after_release =
+        hasBrightPixelNear(reentered_preview,
+                           QPoint(qRound(reentered_image.x() + minimum_brush_radius),
+                                  reentered_image.y())) &&
+        !hasBrightPixelNear(reentered_preview, outside_drag_anchor_edge);
+    brush_size->setValue(2);
+    if (!brush_preview_stayed_at_anchor ||
+        !brush_preview_remained_visible_outside_image ||
+        !brush_preview_hidden_after_outside_release ||
+        !brush_preview_followed_cursor_after_release ||
+        window.windowTitle().startsWith('*') || undo_action->isEnabled()) {
+        std::cerr << "The brush preview did not stay anchored during resizing and resume cursor tracking after release.\n";
+        return 1;
+    }
+
     const QPoint paint_center = canvas->rect().center();
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier,
                       paint_center - QPoint(20, 0));

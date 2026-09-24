@@ -284,8 +284,9 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
             brush_diameter_ = diameter;
             emit brushDiameterChanged(brush_diameter_);
         }
-        brush_cursor_position_ = event->position();
-        brush_cursor_visible_ = imageTargetRect().contains(event->position());
+        // Keep the brush preview anchored at the gesture's press point. The
+        // cursor may leave the image while its horizontal displacement still
+        // controls the diameter.
         update();
         event->accept();
         return;
