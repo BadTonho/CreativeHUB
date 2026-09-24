@@ -30,11 +30,14 @@ add_executable(creative-suite-image-editor-ui-tests
     ../src/ui/dialogs/new_canvas_dialog.h
     ../src/ui/canvas/image_canvas.cpp
     ../src/ui/canvas/image_canvas.h
+    ../src/ui/tools/tool_sidebar.cpp
+    ../src/ui/tools/tool_sidebar.h
 )
 target_include_directories(creative-suite-image-editor-ui-tests PRIVATE
     ../src/ui/canvas
     ../src/ui/dialogs
     ../src/ui/windows
+    ../src/ui/tools
 )
 target_link_libraries(creative-suite-image-editor-ui-tests PRIVATE
     creative-suite-image-editor-core

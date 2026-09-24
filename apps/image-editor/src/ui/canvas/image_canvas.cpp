@@ -1,14 +1,22 @@
 #include "image_canvas.h"
 
+#include <QEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
+#include <QPen>
 #include <QWheelEvent>
 
 #include <algorithm>
 #include <cmath>
 
 namespace image_editor {
+namespace {
+
+constexpr qsizetype kMaximumPaintPreviewPoints = 100'000;
+
+} // namespace
 
 ImageCanvas::ImageCanvas(QWidget* parent) : QWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
@@ -17,20 +25,48 @@ ImageCanvas::ImageCanvas(QWidget* parent) : QWidget(parent) {
     setAutoFillBackground(false);
 }
 
-void ImageCanvas::setImage(QImage image) {
+void ImageCanvas::setImage(QImage image, bool resetView) {
     image_ = std::move(image);
-    pan_ = {};
-    fit_to_window_ = true;
-    crop_selection_ = {};
-    fitToWindow();
+    paint_points_.clear();
+    painting_ = false;
+    if (resetView) {
+        pan_ = {};
+        fit_to_window_ = true;
+        crop_selection_ = {};
+        fitToWindow();
+    }
     update();
 }
 
 void ImageCanvas::setCropMode(bool enabled) {
     crop_mode_ = enabled;
+    if (enabled) paint_mode_ = false;
+    selecting_crop_ = false;
+    painting_ = false;
+    paint_points_.clear();
+    crop_selection_ = {};
+    brush_cursor_visible_ = false;
+    setCursor(enabled ? Qt::CrossCursor
+                      : (paint_mode_ ? Qt::BlankCursor : Qt::ArrowCursor));
+    update();
+}
+
+void ImageCanvas::setPaintMode(bool enabled) {
+    paint_mode_ = enabled;
+    if (enabled) crop_mode_ = false;
+    painting_ = false;
+    paint_points_.clear();
     selecting_crop_ = false;
     crop_selection_ = {};
-    setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    brush_cursor_visible_ = false;
+    setCursor(enabled ? Qt::BlankCursor
+                      : (crop_mode_ ? Qt::CrossCursor : Qt::ArrowCursor));
+    update();
+}
+
+void ImageCanvas::setBrush(QColor color, int diameter) {
+    if (color.isValid()) brush_color_ = std::move(color);
+    brush_diameter_ = std::clamp(diameter, 1, 512);
     update();
 }
 
@@ -66,6 +102,30 @@ QRect ImageCanvas::cropToImageCoordinates(const QRectF& selection) const {
     const int bottom = std::clamp(static_cast<int>(std::ceil((clipped.bottom() - target.top()) / zoom_)),
                                   0, image_.height());
     return QRect(left, top, right - left, bottom - top);
+}
+
+QPointF ImageCanvas::widgetToImageCoordinates(const QPointF& position) const {
+    const QRectF target = imageTargetRect();
+    if (target.isEmpty() || zoom_ <= 0.0) return {};
+    const qreal x = (position.x() - target.left()) / zoom_;
+    const qreal y = (position.y() - target.top()) / zoom_;
+    return {std::clamp(x, 0.0, static_cast<qreal>(image_.width() - 1)),
+            std::clamp(y, 0.0, static_cast<qreal>(image_.height() - 1))};
+}
+
+void ImageCanvas::appendPaintPoint(const QPointF& point) {
+    if (!paint_points_.isEmpty() && paint_points_.back() == point) return;
+    if (paint_points_.size() >= kMaximumPaintPreviewPoints) {
+        paint_points_.last() = point;
+        return;
+    }
+    paint_points_.append(point);
+}
+
+void ImageCanvas::updateHoverCursor(const QPointF& position) {
+    brush_cursor_visible_ = paint_mode_ && imageTargetRect().contains(position);
+    if (brush_cursor_visible_) brush_cursor_position_ = position;
+    update();
 }
 
 void ImageCanvas::paintEvent(QPaintEvent*) {
@@ -106,6 +166,47 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
         painter.setPen(pen);
         painter.drawRect(selection);
     }
+
+    if (paint_mode_) {
+        if (painting_ && !paint_points_.isEmpty()) {
+            QPainterPath path;
+            const auto toWidget = [&target, this](const QPointF& point) {
+                return QPointF(target.left() + point.x() * zoom_,
+                               target.top() + point.y() * zoom_);
+            };
+            path.moveTo(toWidget(paint_points_.front()));
+            for (qsizetype i = 1; i < paint_points_.size(); ++i) {
+                path.lineTo(toWidget(paint_points_.at(i)));
+            }
+            painter.save();
+            painter.setClipRect(target);
+            painter.setRenderHint(QPainter::Antialiasing, true);
+            QPen pen(brush_color_, brush_diameter_ * zoom_, Qt::SolidLine,
+                     Qt::RoundCap, Qt::RoundJoin);
+            painter.setPen(pen);
+            if (paint_points_.size() == 1) {
+                const QPointF center = toWidget(paint_points_.front());
+                const qreal radius = brush_diameter_ * zoom_ / 2.0;
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(brush_color_);
+                painter.drawEllipse(center, radius, radius);
+            } else {
+                painter.drawPath(path);
+            }
+            painter.restore();
+        }
+        if (brush_cursor_visible_ && target.contains(brush_cursor_position_)) {
+            const qreal diameter = std::max(3.0, brush_diameter_ * zoom_);
+            const QRectF cursor(brush_cursor_position_.x() - diameter / 2.0,
+                                brush_cursor_position_.y() - diameter / 2.0,
+                                diameter, diameter);
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(QColor(18, 19, 22), 3.0));
+            painter.drawEllipse(cursor);
+            painter.setPen(QPen(QColor(242, 244, 248), 1.0));
+            painter.drawEllipse(cursor);
+        }
+    }
 }
 
 void ImageCanvas::resizeEvent(QResizeEvent* event) {
@@ -131,6 +232,17 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if (paint_mode_ && event->button() == Qt::LeftButton &&
+        imageTargetRect().contains(event->position())) {
+        painting_ = true;
+        paint_points_.clear();
+        paint_points_.append(widgetToImageCoordinates(event->position()));
+        brush_cursor_position_ = event->position();
+        brush_cursor_visible_ = true;
+        update();
+        event->accept();
+        return;
+    }
     QWidget::mousePressEvent(event);
 }
 
@@ -148,13 +260,28 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if (painting_) {
+        const QPointF point = widgetToImageCoordinates(event->position());
+        appendPaintPoint(point);
+        brush_cursor_position_ = event->position();
+        brush_cursor_visible_ = imageTargetRect().contains(event->position());
+        update();
+        event->accept();
+        return;
+    }
+    if (paint_mode_) {
+        updateHoverCursor(event->position());
+        event->accept();
+        return;
+    }
     QWidget::mouseMoveEvent(event);
 }
 
 void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::MiddleButton && panning_) {
         panning_ = false;
-        setCursor(crop_mode_ ? Qt::CrossCursor : Qt::ArrowCursor);
+        setCursor(crop_mode_ ? Qt::CrossCursor
+                             : (paint_mode_ ? Qt::BlankCursor : Qt::ArrowCursor));
         event->accept();
         return;
     }
@@ -164,6 +291,20 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         crop_selection_ = {};
         if (selection.width() > 1 && selection.height() > 1) emit cropSelected(selection);
         update();
+        event->accept();
+        return;
+    }
+    if (event->button() == Qt::LeftButton && painting_) {
+        const QPointF point = widgetToImageCoordinates(event->position());
+        appendPaintPoint(point);
+        const QVector<QPointF> points = std::move(paint_points_);
+        painting_ = false;
+        brush_cursor_position_ = event->position();
+        brush_cursor_visible_ = imageTargetRect().contains(event->position());
+        update();
+        if (!points.isEmpty()) {
+            emit paintStrokeSelected(points, brush_color_, brush_diameter_);
+        }
         event->accept();
         return;
     }
@@ -195,6 +336,14 @@ void ImageCanvas::keyPressEvent(QKeyEvent* event) {
         return;
     }
     QWidget::keyPressEvent(event);
+}
+
+void ImageCanvas::leaveEvent(QEvent* event) {
+    if (!painting_) {
+        brush_cursor_visible_ = false;
+        update();
+    }
+    QWidget::leaveEvent(event);
 }
 
 } // namespace image_editor

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QPointF>
 #include <QRect>
 #include <QString>
 #include <QStringList>
@@ -19,12 +20,22 @@ enum class OperationKind {
     Rotate,
     FlipHorizontal,
     FlipVertical,
+    PaintStroke,
+};
+
+struct ImagePaintStroke {
+    QVector<QPointF> points;
+    QColor color = Qt::black;
+    int diameter = 12;
+
+    bool operator==(const ImagePaintStroke&) const = default;
 };
 
 struct ImageOperation {
     OperationKind kind = OperationKind::Crop;
     QRect crop;
     int quarter_turns = 0;
+    ImagePaintStroke paint_stroke;
 
     bool operator==(const ImageOperation&) const = default;
 };
@@ -48,6 +59,7 @@ struct RecoveryDocumentData {
 class ImageDocumentStore final {
 public:
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
+    static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
 
     [[nodiscard]] static bool isValidCanvasSize(const QSize& size) noexcept;
 

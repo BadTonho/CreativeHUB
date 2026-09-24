@@ -3,12 +3,14 @@
 #include "image_canvas.h"
 #include "image_document_store.h"
 #include "new_canvas_dialog.h"
+#include "tool_sidebar.h"
 
 #include <QAction>
 #include <QCoreApplication>
 #include <QCloseEvent>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -33,8 +35,11 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     resize(1180, 760);
 
     auto* central = new QWidget(this);
-    auto* layout = new QVBoxLayout(central);
+    auto* layout = new QHBoxLayout(central);
     layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    tool_sidebar_ = new ToolSidebar(central);
+    layout->addWidget(tool_sidebar_);
     canvas_ = new ImageCanvas(central);
     layout->addWidget(canvas_, 1);
     setCentralWidget(central);
@@ -50,6 +55,22 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
         crop_action_->setChecked(false);
         statusBar()->showMessage(QStringLiteral("Crop cancelled"), 2500);
     });
+    connect(canvas_, &ImageCanvas::paintStrokeSelected, this,
+            [this](const QVector<QPointF>& points, const QColor& color, int diameter) {
+                handlePaintStroke(points, color, diameter);
+            });
+    connect(tool_sidebar_, &ToolSidebar::paintToolToggled, this, [this](bool active) {
+        if (active) crop_action_->setChecked(false);
+        canvas_->setPaintMode(active && session_.hasSource());
+    });
+    connect(tool_sidebar_, &ToolSidebar::brushColorChanged,
+            canvas_, [this](const QColor& color) {
+                canvas_->setBrush(color, tool_sidebar_->brushDiameter());
+            });
+    connect(tool_sidebar_, &ToolSidebar::brushDiameterChanged,
+            canvas_, [this](int diameter) {
+                canvas_->setBrush(tool_sidebar_->brushColor(), diameter);
+            });
 
     autosave_timer_ = new QTimer(this);
     autosave_timer_->setInterval(60'000);
@@ -108,6 +129,7 @@ void ImageEditorWindow::createActions() {
         QStringLiteral("Redo"), QKeySequence::Redo, [this]() {
             if (session_.redo()) updateView();
         });
+    redo_action_->setObjectName(QStringLiteral("redoAction"));
     rotate_left_action_ = makeAction(
         QStringLiteral("Rotate Left 90°"), {}, [this]() {
             if (session_.hasSource()) { session_.rotateLeft(); updateView(); }
@@ -126,8 +148,13 @@ void ImageEditorWindow::createActions() {
             if (session_.hasSource()) { session_.flipVertical(); updateView(); }
         });
     crop_action_ = new QAction(QStringLiteral("Crop Selection"), this);
+    crop_action_->setObjectName(QStringLiteral("cropSelectionAction"));
     crop_action_->setCheckable(true);
     connect(crop_action_, &QAction::toggled, this, [this](bool enabled) {
+        if (enabled && tool_sidebar_->paintToolActive()) {
+            tool_sidebar_->setPaintToolActive(false);
+        }
+        canvas_->setPaintMode(false);
         canvas_->setCropMode(enabled && session_.hasSource());
         statusBar()->showMessage(enabled
             ? QStringLiteral("Drag over the image to crop; press Esc to cancel")
@@ -178,9 +205,11 @@ void ImageEditorWindow::createActions() {
     });
 }
 
-void ImageEditorWindow::updateView() {
+void ImageEditorWindow::updateView(bool preserveCanvasView) {
     const QImage rendered = session_.renderedImage();
-    canvas_->setImage(rendered);
+    canvas_->setImage(rendered, !preserveCanvasView);
+    tool_sidebar_->setDocumentAvailable(session_.hasSource());
+    canvas_->setBrush(tool_sidebar_->brushColor(), tool_sidebar_->brushDiameter());
     undo_action_->setEnabled(session_.canUndo());
     redo_action_->setEnabled(session_.canRedo());
     save_action_->setEnabled(session_.hasSource());
@@ -226,6 +255,7 @@ void ImageEditorWindow::createNewCanvas() {
         reportError(QStringLiteral("create_canvas"), error);
         return;
     }
+    deactivateCanvasTools();
     updateView();
     statusBar()->showMessage(QStringLiteral("New canvas created"), 3000);
 }
@@ -260,6 +290,7 @@ bool ImageEditorWindow::openImagePath(const QString& path) {
         reportError(QStringLiteral("open_image"), error, path);
         return false;
     }
+    deactivateCanvasTools();
     updateView();
     statusBar()->showMessage(QStringLiteral("Image opened"), 3000);
     return true;
@@ -281,6 +312,7 @@ bool ImageEditorWindow::openDocumentPath(const QString& path) {
         reportError(QStringLiteral("open_document"), error, path);
         return false;
     }
+    deactivateCanvasTools();
     updateView();
     if (session_.sourceIsMissing()) {
         QMessageBox prompt(QMessageBox::Warning,
@@ -305,6 +337,7 @@ void ImageEditorWindow::relinkSource() {
         reportError(QStringLiteral("relink_source"), error, path);
         return;
     }
+    deactivateCanvasTools();
     updateView();
     statusBar()->showMessage(QStringLiteral("Source image relinked"), 3000);
 }
@@ -375,6 +408,27 @@ void ImageEditorWindow::handleCrop(const QRect& crop) {
     }
 }
 
+void ImageEditorWindow::handlePaintStroke(const QVector<QPointF>& points,
+                                          const QColor& color,
+                                          int diameter) {
+    QString error;
+    if (session_.applyPaintStroke(points, color, diameter, &error)) {
+        updateView(true);
+        statusBar()->showMessage(QStringLiteral("Paint stroke applied"), 1800);
+    } else if (!error.isEmpty()) {
+        reportError(QStringLiteral("paint_stroke"), error, session_.sourcePath());
+    }
+}
+
+void ImageEditorWindow::deactivateCanvasTools() {
+    tool_sidebar_->setPaintToolActive(false);
+    if (crop_action_ != nullptr && crop_action_->isChecked()) {
+        crop_action_->setChecked(false);
+    }
+    canvas_->setPaintMode(false);
+    canvas_->setCropMode(false);
+}
+
 void ImageEditorWindow::maybeOfferRecovery() {
     const auto snapshots = recovery_store_.snapshots();
     if (snapshots.isEmpty()) return;
@@ -398,6 +452,7 @@ void ImageEditorWindow::maybeOfferRecovery() {
         reportError(QStringLiteral("restore_recovery"), error, latest);
         return;
     }
+    deactivateCanvasTools();
     updateView();
     if (session_.sourceIsMissing()) {
         QMessageBox::information(this, QStringLiteral("Source image is missing"),

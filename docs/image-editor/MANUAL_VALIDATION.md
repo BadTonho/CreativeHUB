@@ -26,18 +26,25 @@ run.
 7. Fit the image, zoom with the mouse wheel, pan with the middle mouse button,
    and drag a crop. Rotate both directions, flip horizontally and vertically,
    then use Undo and Redo. Confirm the canvas and dirty marker update.
-8. Save an editable `.cimg`, close it, reopen it, and confirm the rendered
+8. Open a disposable image and create a canvas in separate runs. Confirm Paint
+   is the only tool in the left sidebar and starts inactive. Activate it, choose
+   a color (including a partially transparent color), and change the brush size.
+   Verify the brush outline follows the pointer, a drag paints a continuous
+   stroke, and a click paints a dot. Switch to **Edit > Crop Selection** and
+   confirm that Paint deactivates; activate Paint and confirm crop mode exits.
+   Use Undo and Redo and confirm each complete gesture is one history entry.
+9. Save an editable `.cimg`, close it, reopen it, and confirm the rendered
    result is unchanged. Compare the original source file before and after to
    verify it was not overwritten.
-9. Export a transparent image to PNG and JPEG. Confirm PNG transparency is
-   retained and transparent JPEG pixels become white.
-10. Move the source image, reopen the `.cimg`, and relink the moved file. Confirm
+10. Export painted content to PNG and JPEG. Confirm paint strokes are included,
+    PNG retains alpha, and transparent JPEG pixels become white.
+11. Move the source image, reopen the `.cimg`, and relink the moved file. Confirm
    a replacement with different dimensions is rejected and the original-sized
    image restores the edit.
-11. Make an edit, wait for the 60-second recovery interval, close and discard
-   the unsaved edit, then relaunch. Restore the recovery snapshot and confirm
-   that the edit is present and still marked unsaved.
-12. Try a corrupt image, an invalid `.cimg`, a read-only destination, and an
+12. Make a paint stroke, wait for the 60-second recovery interval, close and
+    discard the unsaved edit, then relaunch. Restore the recovery snapshot and
+    confirm the stroke is present and still marked unsaved.
+13. Try a corrupt image, an invalid `.cimg`, a read-only destination, and an
    unsupported export extension. Confirm the UI reports the failure and a
    structured entry is written to the local Image Editor log.
 

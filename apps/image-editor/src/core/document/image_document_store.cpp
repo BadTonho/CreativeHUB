@@ -16,7 +16,8 @@ namespace image_editor {
 namespace {
 
 constexpr int kLegacyDocumentVersion = 1;
-constexpr int kDocumentVersion = 2;
+constexpr int kCanvasDocumentVersion = 2;
+constexpr int kDocumentVersion = 3;
 constexpr int kRecoveryVersion = 1;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr auto kRecoveryFormat = "creative-suite-image-recovery";
@@ -34,6 +35,18 @@ bool isInteger(const QJsonValue& value, int* result) {
         return false;
     }
     *result = static_cast<int>(number);
+    return true;
+}
+
+bool isArgbHexColor(const QString& value) {
+    if (value.size() != 9 || value.front() != QLatin1Char('#')) return false;
+    for (qsizetype i = 1; i < value.size(); ++i) {
+        const QChar character = value.at(i);
+        const bool digit = character >= QLatin1Char('0') && character <= QLatin1Char('9');
+        const bool lower_hex = character >= QLatin1Char('a') && character <= QLatin1Char('f');
+        const bool upper_hex = character >= QLatin1Char('A') && character <= QLatin1Char('F');
+        if (!digit && !lower_hex && !upper_hex) return false;
+    }
     return true;
 }
 
@@ -84,6 +97,20 @@ QJsonObject encodeDocument(const ImageDocumentData& document,
         case OperationKind::FlipVertical:
             encoded.insert("kind", "flip_vertical");
             break;
+        case OperationKind::PaintStroke: {
+            encoded.insert("kind", "paint_stroke");
+            encoded.insert("color", operation.paint_stroke.color.name(QColor::HexArgb));
+            encoded.insert("diameter", operation.paint_stroke.diameter);
+            QJsonArray points;
+            for (const auto& point : operation.paint_stroke.points) {
+                QJsonObject encoded_point;
+                encoded_point.insert("x", point.x());
+                encoded_point.insert("y", point.y());
+                points.append(encoded_point);
+            }
+            encoded.insert("points", points);
+            break;
+        }
         }
         operations.append(encoded);
     }
@@ -106,7 +133,8 @@ bool decodeDocument(const QJsonObject& root,
     }
     int version = 0;
     if (!isInteger(root.value("version"), &version) ||
-        (version != kLegacyDocumentVersion && version != kDocumentVersion)) {
+        (version != kLegacyDocumentVersion && version != kCanvasDocumentVersion &&
+         version != kDocumentVersion)) {
         assignError(error, QStringLiteral("This Image Editor document version is not supported."));
         return false;
     }
@@ -114,7 +142,7 @@ bool decodeDocument(const QJsonObject& root,
     const auto source = version == kLegacyDocumentVersion
         ? root.value("source").toObject()
         : QJsonObject{};
-    const auto base = version == kDocumentVersion
+    const auto base = version >= kCanvasDocumentVersion
         ? root.value("base").toObject()
         : QJsonObject{};
     const QString base_kind = version == kLegacyDocumentVersion
@@ -142,7 +170,7 @@ bool decodeDocument(const QJsonObject& root,
             ? QFileInfo(path).absoluteFilePath()
             : QFileInfo(QDir(QFileInfo(document_path).absolutePath()).filePath(path))
                   .absoluteFilePath();
-    } else if (base_kind == "canvas" && version == kDocumentVersion) {
+    } else if (base_kind == "canvas" && version >= kCanvasDocumentVersion) {
         const QColor background(base.value("background").toString());
         if (!ImageDocumentStore::isValidCanvasSize(decoded.source_size) || !background.isValid()) {
             assignError(error, QStringLiteral("The canvas base is invalid or too large."));
@@ -202,6 +230,45 @@ bool decodeDocument(const QJsonObject& root,
             operation.kind = OperationKind::FlipHorizontal;
         } else if (kind == "flip_vertical") {
             operation.kind = OperationKind::FlipVertical;
+        } else if (kind == "paint_stroke" && version >= kDocumentVersion) {
+            const auto encoded_points = object.value("points").toArray();
+            const QString encoded_color = object.value("color").toString();
+            const QColor color(encoded_color);
+            int diameter = 0;
+            if (encoded_points.isEmpty() ||
+                encoded_points.size() > ImageDocumentStore::kMaximumPaintStrokePoints ||
+                !isArgbHexColor(encoded_color) || !color.isValid() ||
+                !isInteger(object.value("diameter"), &diameter) ||
+                diameter < 1 || diameter > 512) {
+                assignError(error, QStringLiteral("The document contains an invalid paint stroke."));
+                return false;
+            }
+
+            operation.kind = OperationKind::PaintStroke;
+            operation.paint_stroke.color = color;
+            operation.paint_stroke.diameter = diameter;
+            operation.paint_stroke.points.reserve(encoded_points.size());
+            for (const auto& encoded_point_value : encoded_points) {
+                if (!encoded_point_value.isObject()) {
+                    assignError(error, QStringLiteral("The document contains an invalid paint stroke point."));
+                    return false;
+                }
+                const auto encoded_point = encoded_point_value.toObject();
+                const auto x_value = encoded_point.value("x");
+                const auto y_value = encoded_point.value("y");
+                if (!x_value.isDouble() || !y_value.isDouble()) {
+                    assignError(error, QStringLiteral("The document contains an invalid paint stroke point."));
+                    return false;
+                }
+                const double x = x_value.toDouble();
+                const double y = y_value.toDouble();
+                if (!std::isfinite(x) || !std::isfinite(y) || x < 0.0 || y < 0.0 ||
+                    x >= current_size.width() || y >= current_size.height()) {
+                    assignError(error, QStringLiteral("The document contains an out-of-bounds paint stroke point."));
+                    return false;
+                }
+                operation.paint_stroke.points.append(QPointF(x, y));
+            }
         } else {
             assignError(error, QStringLiteral("The document contains an unsupported edit."));
             return false;

@@ -14,6 +14,7 @@ class QTimer;
 namespace image_editor {
 
 class ImageCanvas;
+class ToolSidebar;
 
 class ImageEditorWindow final : public QMainWindow {
 public:
@@ -28,7 +29,8 @@ protected:
 
 private:
     void createActions();
-    void updateView();
+    void updateView(bool preserveCanvasView = false);
+    void deactivateCanvasTools();
     void createNewCanvas();
     void openImage();
     void openDocument();
@@ -40,6 +42,9 @@ private:
     [[nodiscard]] bool confirmDiscardOrSave();
     [[nodiscard]] bool saveToPath(QString path = {});
     void handleCrop(const QRect& crop);
+    void handlePaintStroke(const QVector<QPointF>& points,
+                           const QColor& color,
+                           int diameter);
     void reportError(const QString& operation,
                      const QString& cause,
                      const QString& path = {});
@@ -47,6 +52,7 @@ private:
     ImageDocumentSession session_;
     ImageEditorLogger logger_;
     RecoveryStore recovery_store_;
+    ToolSidebar* tool_sidebar_ = nullptr;
     ImageCanvas* canvas_ = nullptr;
     QLabel* status_label_ = nullptr;
     QTimer* autosave_timer_ = nullptr;

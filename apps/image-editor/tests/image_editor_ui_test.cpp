@@ -1,5 +1,6 @@
 #include "image_canvas.h"
 #include "image_editor_window.h"
+#include "tool_sidebar.h"
 
 #include <QAction>
 #include <QApplication>
@@ -12,6 +13,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QToolButton>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -88,6 +90,60 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    auto* tool_sidebar = window.findChild<image_editor::ToolSidebar*>(
+        QStringLiteral("imageEditorToolSidebar"));
+    auto* paint_button = window.findChild<QToolButton*>(QStringLiteral("paintToolButton"));
+    auto* brush_options = window.findChild<QWidget*>(QStringLiteral("paintBrushOptions"));
+    auto* brush_size = window.findChild<QSpinBox*>(QStringLiteral("paintBrushSizeSpinBox"));
+    auto* redo_action = window.findChild<QAction*>(QStringLiteral("redoAction"));
+    auto* crop_action = window.findChild<QAction*>(QStringLiteral("cropSelectionAction"));
+    if (tool_sidebar == nullptr || paint_button == nullptr || brush_options == nullptr ||
+        brush_size == nullptr || redo_action == nullptr || crop_action == nullptr ||
+        tool_sidebar->findChildren<QToolButton*>().size() != 1 ||
+        paint_button->isChecked() || brush_options->isVisible() ||
+        tool_sidebar->brushColor() != QColor(Qt::black) ||
+        tool_sidebar->brushDiameter() != 12) {
+        std::cerr << "The paint tool sidebar did not start with its expected single inactive tool.\n";
+        return 1;
+    }
+
+    paint_button->click();
+    if (!paint_button->isChecked() || !brush_options->isVisible() || !canvas->paintMode()) {
+        std::cerr << "Activating the paint tool did not expose its brush controls and canvas mode.\n";
+        return 1;
+    }
+    brush_size->setValue(2);
+    const QPoint paint_center = canvas->rect().center();
+    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier,
+                      paint_center - QPoint(20, 0));
+    QTest::mouseMove(canvas, paint_center + QPoint(20, 0));
+    QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier,
+                        paint_center + QPoint(20, 0));
+    if (!window.windowTitle().startsWith('*') || !undo_action->isEnabled() ||
+        !canvas->paintMode()) {
+        std::cerr << "A paint drag did not create one undoable document edit.\n";
+        return 1;
+    }
+    undo_action->trigger();
+    if (window.windowTitle().startsWith('*') || !redo_action->isEnabled() ||
+        undo_action->isEnabled()) {
+        std::cerr << "Undo did not restore the saved image after a paint stroke.\n";
+        return 1;
+    }
+    redo_action->trigger();
+    if (!window.windowTitle().startsWith('*')) {
+        std::cerr << "Redo did not restore the paint stroke in the window.\n";
+        return 1;
+    }
+    undo_action->trigger();
+    crop_action->trigger();
+    if (!crop_action->isChecked() || paint_button->isChecked() ||
+        !canvas->cropMode() || canvas->paintMode()) {
+        std::cerr << "Crop mode did not deactivate the paint tool.\n";
+        return 1;
+    }
+    crop_action->trigger();
+
     auto* new_canvas_action = window.findChild<QAction*>(QStringLiteral("newCanvasAction"));
     auto* status_label = window.findChild<QLabel*>(QStringLiteral("imageStatusLabel"));
     if (new_canvas_action == nullptr || status_label == nullptr ||
@@ -96,6 +152,11 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    paint_button->click();
+    if (!paint_button->isChecked() || !canvas->paintMode()) {
+        std::cerr << "The paint tool could not be activated before replacing the document.\n";
+        return 1;
+    }
     bool preset_values_valid = true;
     QTimer::singleShot(0, [&preset_values_valid]() {
         auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
@@ -128,7 +189,8 @@ int main(int argc, char* argv[]) {
     }
     const QString story_size = QStringLiteral("1080 × 1920 px");
     if (!status_label->text().contains(story_size) ||
-        !window.windowTitle().startsWith('*')) {
+        !window.windowTitle().startsWith('*') || paint_button->isChecked() ||
+        canvas->paintMode()) {
         std::cerr << "Creating a preset canvas did not update dimensions and dirty state.\n";
         return 1;
     }

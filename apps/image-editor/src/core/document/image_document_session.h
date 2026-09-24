@@ -21,6 +21,10 @@ public:
     [[nodiscard]] bool exportImage(const QString& output_path, QString* error = nullptr) const;
 
     [[nodiscard]] bool applyCrop(const QRect& crop, QString* error = nullptr);
+    [[nodiscard]] bool applyPaintStroke(const QVector<QPointF>& points,
+                                        const QColor& color,
+                                        int diameter,
+                                        QString* error = nullptr);
     void rotateLeft();
     void rotateRight();
     void flipHorizontal();

@@ -14,15 +14,17 @@ the active image document, ordered edit operations, persistence, and recovery.
   serialization.
 - `src/core/recovery/` contains local recovery snapshot persistence.
 - `src/core/diagnostics/` contains bounded technical error logging.
-- `src/ui/canvas/`, `src/ui/dialogs/`, and `src/ui/windows/` contain the image
-  canvas widget, creation dialogs, and main application window respectively.
+- `src/ui/canvas/`, `src/ui/dialogs/`, `src/ui/tools/`, and `src/ui/windows/`
+  contain the canvas widget, creation dialogs, tool sidebar, and main
+  application window respectively.
 
 ## Runtime boundaries
 
 - `ImageDocumentSession` owns either a decoded, linked source image or a
-  self-contained canvas base, plus the document's ordered crop, rotation, and
-  flip operations. Linked source files remain unchanged. Rendering applies
-  operations in sequence to an owning `QImage`.
+  self-contained canvas base, plus the document's ordered crop, rotation, flip,
+  and paint-stroke operations. Linked source files remain unchanged. Rendering
+  applies operations in sequence to an owning `QImage`; paint strokes are stored
+  in `.cimg`, included in recovery, and flattened only for raster export.
 - `ImageDocumentStore` reads and atomically writes versioned `.cimg` documents
   and recovery snapshots. Its data format is specified in
   [`FORMAT.md`](FORMAT.md).
@@ -33,10 +35,16 @@ the active image document, ordered edit operations, persistence, and recovery.
 - `NewCanvasDialog` offers fixed pixel presets or custom dimensions and
   requires a transparent, white, or custom-color background. Canvas documents
   store this base metadata without generating a companion raster file.
-- `ImageCanvas` handles fit, zoom, middle-button panning, crop selection, and
-  a checkerboard behind transparent pixels.
-  `ImageEditorWindow` routes menu and toolbar actions, prompts before discarding
-  edits, and projects session state into the window.
+- `ImageCanvas` handles fit, zoom, middle-button panning, crop selection, and a
+  checkerboard behind transparent pixels. It previews a round paint stroke
+  during a drag and emits one image-space stroke when the gesture ends.
+- `ToolSidebar` currently contains one checkable Paint tool. Its brush controls
+  provide an alpha-capable color picker and a 1–512 pixel diameter setting. The
+  tool starts inactive, and the sidebar and crop menu action cannot be active at
+  the same time.
+- `ImageEditorWindow` routes menu and sidebar actions, prompts before discarding
+  edits, and projects session state into the window. A completed paint gesture
+  is one undoable document operation; changing tools does not modify the image.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
   is shown; expected dialog cancellation is not an error.

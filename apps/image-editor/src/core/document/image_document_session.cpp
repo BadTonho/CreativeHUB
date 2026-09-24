@@ -4,10 +4,14 @@
 #include <QImageReader>
 #include <QImageWriter>
 #include <QPainter>
+#include <QPainterPath>
+#include <QPen>
 #include <QSaveFile>
 #include <QTransform>
 #include <QDir>
 #include <QUuid>
+
+#include <cmath>
 
 namespace image_editor {
 namespace {
@@ -288,6 +292,30 @@ QImage ImageDocumentSession::renderedImage() const {
         case OperationKind::FlipVertical:
             result = result.mirrored(false, true);
             break;
+        case OperationKind::PaintStroke: {
+            result = result.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+            QPainter painter(&result);
+            painter.setRenderHint(QPainter::Antialiasing, true);
+            const auto& stroke = operation.paint_stroke;
+            QPen pen(stroke.color, stroke.diameter, Qt::SolidLine,
+                     Qt::RoundCap, Qt::RoundJoin);
+            painter.setPen(pen);
+            if (stroke.points.size() == 1) {
+                const qreal radius = static_cast<qreal>(stroke.diameter) / 2.0;
+                painter.setBrush(stroke.color);
+                painter.setPen(Qt::NoPen);
+                painter.drawEllipse(stroke.points.front(), radius, radius);
+            } else if (!stroke.points.isEmpty()) {
+                QPainterPath path;
+                path.moveTo(stroke.points.front());
+                for (qsizetype i = 1; i < stroke.points.size(); ++i) {
+                    path.lineTo(stroke.points.at(i));
+                }
+                painter.drawPath(path);
+            }
+            painter.end();
+            break;
+        }
         }
     }
     return result;
@@ -310,6 +338,49 @@ bool ImageDocumentSession::applyCrop(const QRect& crop, QString* error) {
     operation.kind = OperationKind::Crop;
     operation.crop = valid;
     data_.operations.append(operation);
+    return true;
+}
+
+bool ImageDocumentSession::applyPaintStroke(const QVector<QPointF>& points,
+                                            const QColor& color,
+                                            int diameter,
+                                            QString* error) {
+    if (error != nullptr) error->clear();
+    if (!hasSource()) {
+        assignError(error, QStringLiteral("Open or relink an image before painting."));
+        return false;
+    }
+    if (points.isEmpty() ||
+        points.size() > ImageDocumentStore::kMaximumPaintStrokePoints) {
+        assignError(error, QStringLiteral("The paint stroke has an invalid number of points."));
+        return false;
+    }
+    if (!color.isValid()) {
+        assignError(error, QStringLiteral("Choose a valid paint color."));
+        return false;
+    }
+    if (diameter < 1 || diameter > 512) {
+        assignError(error, QStringLiteral("The paint brush diameter must be between 1 and 512 pixels."));
+        return false;
+    }
+    const QSize size = renderedSize();
+    for (const auto& point : points) {
+        if (!std::isfinite(point.x()) || !std::isfinite(point.y()) ||
+            point.x() < 0.0 || point.y() < 0.0 ||
+            point.x() >= size.width() || point.y() >= size.height()) {
+            assignError(error, QStringLiteral("The paint stroke contains a point outside the image."));
+            return false;
+        }
+    }
+    if (color.alpha() == 0) return false;
+
+    pushEdit();
+    ImageOperation operation;
+    operation.kind = OperationKind::PaintStroke;
+    operation.paint_stroke.points = points;
+    operation.paint_stroke.color = color;
+    operation.paint_stroke.diameter = diameter;
+    data_.operations.append(std::move(operation));
     return true;
 }
 
