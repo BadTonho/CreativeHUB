@@ -21,6 +21,7 @@ enum class OperationKind {
     FlipHorizontal,
     FlipVertical,
     PaintStroke,
+    EraseStroke,
 };
 
 struct ImagePaintStroke {
@@ -31,11 +32,19 @@ struct ImagePaintStroke {
     bool operator==(const ImagePaintStroke&) const = default;
 };
 
+struct ImageEraseStroke {
+    QVector<QPointF> points;
+    int diameter = 12;
+
+    bool operator==(const ImageEraseStroke&) const = default;
+};
+
 struct ImageOperation {
     OperationKind kind = OperationKind::Crop;
     QRect crop;
     int quarter_turns = 0;
     ImagePaintStroke paint_stroke;
+    ImageEraseStroke erase_stroke;
 
     bool operator==(const ImageOperation&) const = default;
 };

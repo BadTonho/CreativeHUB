@@ -27,6 +27,9 @@ public:
                                         const QColor& color,
                                         int diameter,
                                         QString* error = nullptr);
+    [[nodiscard]] bool applyEraseStroke(const QVector<QPointF>& points,
+                                        int diameter,
+                                        QString* error = nullptr);
     [[nodiscard]] QString addLayer();
     [[nodiscard]] bool deleteLayer(const QString& layer_id);
     [[nodiscard]] bool renameLayer(const QString& layer_id,
@@ -46,6 +49,8 @@ public:
     [[nodiscard]] bool redo();
 
     [[nodiscard]] QImage renderedImage() const;
+    [[nodiscard]] QImage renderedImageWithEraseStroke(
+        const QVector<QPointF>& points, int diameter) const;
     [[nodiscard]] QHash<QString, QImage> renderedLayerThumbnails(
         const QSize& maximum_size) const;
     [[nodiscard]] bool hasSource() const noexcept { return !source_image_.isNull(); }

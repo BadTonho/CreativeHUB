@@ -9,6 +9,7 @@
 #include <QWidget>
 
 class QEvent;
+class QKeyEvent;
 class QMouseEvent;
 class QWheelEvent;
 
@@ -23,10 +24,14 @@ public:
     void setImage(QImage image, bool resetView = true);
     void setCropMode(bool enabled);
     void setPaintMode(bool enabled);
+    void setEraserMode(bool enabled);
+    void setEraserPreviewEnabled(bool enabled);
+    void setTransientImage(QImage image);
     void setBrush(QColor color, int diameter);
     void fitToWindow();
     [[nodiscard]] bool cropMode() const noexcept { return crop_mode_; }
     [[nodiscard]] bool paintMode() const noexcept { return paint_mode_; }
+    [[nodiscard]] bool eraserMode() const noexcept { return eraser_mode_; }
     [[nodiscard]] double zoomFactor() const noexcept { return zoom_; }
 
 signals:
@@ -34,6 +39,9 @@ signals:
     void paintStrokeSelected(const QVector<QPointF>& image_points,
                              const QColor& color,
                              int diameter);
+    void erasePreviewRequested(const QVector<QPointF>& image_points, int diameter);
+    void erasePreviewCleared();
+    void eraseStrokeSelected(const QVector<QPointF>& image_points, int diameter);
     void brushDiameterChanged(int diameter);
 
 protected:
@@ -44,6 +52,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void leaveEvent(QEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
 
 private:
     [[nodiscard]] QRectF imageTargetRect() const;
@@ -53,13 +62,17 @@ private:
     void updateHoverCursor(const QPointF& position);
 
     QImage image_;
+    QImage transient_image_;
     double zoom_ = 1.0;
     QPointF pan_;
     bool fit_to_window_ = true;
     bool crop_mode_ = false;
     bool paint_mode_ = false;
+    bool eraser_mode_ = false;
+    bool eraser_preview_enabled_ = false;
     bool selecting_crop_ = false;
     bool painting_ = false;
+    bool erasing_ = false;
     bool resizing_brush_ = false;
     bool panning_ = false;
     QPointF crop_start_;

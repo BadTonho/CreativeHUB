@@ -5,6 +5,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
+#include <QSignalBlocker>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -42,6 +43,29 @@ QIcon paintToolIcon() {
     return QIcon(icon);
 }
 
+QIcon eraserToolIcon() {
+    QPixmap icon(32, 32);
+    icon.fill(Qt::transparent);
+    QPainter painter(&icon);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPainterPath eraser;
+    eraser.moveTo(8, 19);
+    eraser.lineTo(19, 8);
+    eraser.quadTo(21, 6, 23, 8);
+    eraser.lineTo(28, 13);
+    eraser.quadTo(30, 15, 28, 17);
+    eraser.lineTo(17, 28);
+    eraser.lineTo(8, 19);
+    eraser.closeSubpath();
+    painter.setPen(QPen(QColor(24, 28, 34), 1.5));
+    painter.setBrush(QColor(226, 105, 147));
+    painter.drawPath(eraser);
+    painter.setPen(QPen(QColor(242, 224, 232), 1.3));
+    painter.drawLine(QPointF(9, 20), QPointF(17, 28));
+    painter.end();
+    return QIcon(icon);
+}
+
 } // namespace
 
 ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
@@ -64,6 +88,17 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     paint_button_->setFixedSize(40, 40);
     layout->addWidget(paint_button_, 0, Qt::AlignHCenter);
 
+    eraser_button_ = new QToolButton(this);
+    eraser_button_->setObjectName(QStringLiteral("eraserToolButton"));
+    eraser_button_->setToolTip(QStringLiteral("Eraser"));
+    eraser_button_->setAccessibleName(QStringLiteral("Eraser tool"));
+    eraser_button_->setIcon(eraserToolIcon());
+    eraser_button_->setIconSize(QSize(24, 24));
+    eraser_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    eraser_button_->setCheckable(true);
+    eraser_button_->setFixedSize(40, 40);
+    layout->addWidget(eraser_button_, 0, Qt::AlignHCenter);
+
     layout->addStretch(1);
 
     color_button_ = new QToolButton(this);
@@ -76,8 +111,12 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     layout->addWidget(color_button_, 0, Qt::AlignHCenter);
 
     connect(paint_button_, &QToolButton::toggled, this, [this](bool active) {
-        updateControls();
-        emit paintToolToggled(active);
+        if (active) setActiveTool(Tool::Paint);
+        else if (active_tool_ == Tool::Paint) setActiveTool(Tool::None);
+    });
+    connect(eraser_button_, &QToolButton::toggled, this, [this](bool active) {
+        if (active) setActiveTool(Tool::Eraser);
+        else if (active_tool_ == Tool::Eraser) setActiveTool(Tool::None);
     });
     connect(color_button_, &QToolButton::clicked, this, [this]() {
         const QColor selected = QColorDialog::getColor(
@@ -95,23 +134,46 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
 void ToolSidebar::setDocumentAvailable(bool available) {
     document_available_ = available;
-    if (!document_available_ || !painting_allowed_) setPaintToolActive(false);
+    if (!document_available_ || !painting_allowed_) setActiveTool(Tool::None);
     updateControls();
 }
 
 void ToolSidebar::setPaintingAllowed(bool allowed) {
     painting_allowed_ = allowed;
-    if (!painting_allowed_) setPaintToolActive(false);
+    if (!painting_allowed_) setActiveTool(Tool::None);
     updateControls();
 }
 
 void ToolSidebar::setPaintToolActive(bool active) {
-    paint_button_->setChecked(active && document_available_ && painting_allowed_);
+    setActiveTool(active ? Tool::Paint :
+        (active_tool_ == Tool::Paint ? Tool::None : active_tool_));
+}
+
+void ToolSidebar::setEraserToolActive(bool active) {
+    setActiveTool(active ? Tool::Eraser :
+        (active_tool_ == Tool::Eraser ? Tool::None : active_tool_));
+}
+
+void ToolSidebar::setActiveTool(Tool tool) {
+    if (!document_available_ || !painting_allowed_) tool = Tool::None;
+    const bool changed = active_tool_ != tool;
+    active_tool_ = tool;
+    {
+        const QSignalBlocker paint_blocker(paint_button_);
+        const QSignalBlocker eraser_blocker(eraser_button_);
+        paint_button_->setChecked(tool == Tool::Paint);
+        eraser_button_->setChecked(tool == Tool::Eraser);
+    }
     updateControls();
+    if (changed) emit activeToolChanged(active_tool_);
 }
 
 bool ToolSidebar::paintToolActive() const noexcept {
-    return paint_button_->isChecked();
+    return active_tool_ == Tool::Paint;
+}
+
+bool ToolSidebar::eraserToolActive() const noexcept {
+    return active_tool_ == Tool::Eraser;
 }
 
 QColor ToolSidebar::brushColor() const {
@@ -121,11 +183,17 @@ QColor ToolSidebar::brushColor() const {
 void ToolSidebar::updateControls() {
     const bool enabled = document_available_ && painting_allowed_;
     paint_button_->setEnabled(enabled);
+    eraser_button_->setEnabled(enabled);
     paint_button_->setToolTip(enabled
         ? QStringLiteral("Paint")
         : (document_available_
             ? QStringLiteral("Select or create an editable layer to paint")
             : QStringLiteral("Open an image to paint")));
+    eraser_button_->setToolTip(enabled
+        ? QStringLiteral("Eraser")
+        : (document_available_
+            ? QStringLiteral("Select or create an editable layer to erase")
+            : QStringLiteral("Open an image to erase")));
     color_button_->setEnabled(true);
 }
 

@@ -3,11 +3,13 @@
 #include "image_document_session.h"
 #include "image_editor_logger.h"
 #include "recovery_store.h"
+#include "../tools/tool_sidebar.h"
 
 #include <QList>
 #include <QMainWindow>
 
 class QAction;
+class QCheckBox;
 class QCloseEvent;
 class QDockWidget;
 class QKeySequence;
@@ -60,6 +62,9 @@ private:
     void handlePaintStroke(const QVector<QPointF>& points,
                            const QColor& color,
                            int diameter);
+    void handleEraseStroke(const QVector<QPointF>& points, int diameter);
+    void updateCanvasToolState(ToolSidebar::Tool tool);
+    void updateCanvasBrush();
     void reportError(const QString& operation,
                      const QString& cause,
                      const QString& path = {});
@@ -76,6 +81,8 @@ private:
     QWidget* paint_size_options_ = nullptr;
     QSlider* brush_size_slider_ = nullptr;
     QSpinBox* brush_size_spin_ = nullptr;
+    QLabel* tool_size_label_ = nullptr;
+    QCheckBox* eraser_preview_check_ = nullptr;
     QLabel* status_label_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
     QAction* relink_action_ = nullptr;
@@ -93,6 +100,9 @@ private:
     QAction* flip_vertical_action_ = nullptr;
     QAction* fit_action_ = nullptr;
     QAction* paint_tool_action_ = nullptr;
+    QAction* eraser_tool_action_ = nullptr;
+    int paint_diameter_ = 12;
+    int eraser_diameter_ = 12;
     QList<QAction*> shortcut_actions_;
 };
 

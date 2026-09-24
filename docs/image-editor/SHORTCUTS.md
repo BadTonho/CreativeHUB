@@ -16,6 +16,7 @@ rejected. Use **Reset All** to restore the defaults.
 | Undo | `Ctrl+Z` on Windows/Linux; `Cmd+Z` on macOS |
 | Redo | Qt standard Redo sequence (`Ctrl+Y` on Windows/Linux; `Cmd+Shift+Z` on macOS) |
 | Paint tool | `B` (toggle Paint on or off when an editable layer is available) |
+| Eraser tool | `E` (toggle Eraser on or off when an editable layer is available) |
 | Cancel crop selection | `Esc` |
 | Open editable document | Unassigned by default |
 | Relink source image | Unassigned by default |
@@ -30,10 +31,11 @@ Use the mouse wheel to zoom, the middle mouse button to pan, and the Crop
 Selection toolbar or Edit menu action to start a crop gesture. Commands listed
 as unassigned can be given a shortcut in the settings dialog.
 
-With Paint active and an editable layer selected, hold `Ctrl+Alt`, then press
-and drag the left mouse button over the image to resize the brush. The press
-point is the reference: dragging right increases the size and dragging left
-decreases it by 1 px per screen pixel. The brush outline stays at the press
+With Paint or Eraser active and an editable layer selected, hold `Ctrl+Alt`,
+then press and drag the left mouse button over the image to resize the active
+tool. Paint and Eraser keep independent sizes. The press point is the reference:
+dragging right increases the size and dragging left
+decreases it by 1 px per screen pixel. The active tool outline stays at the press
 point while resizing, even if the pointer leaves the image. On release, the
 system pointer returns to the press point; the outline resumes following it
 after the next mouse movement. Vertical movement does not affect the size. The

@@ -50,6 +50,31 @@ QImage paintStroke(QImage image, const ImagePaintStroke& stroke) {
     return image;
 }
 
+QImage eraseStroke(QImage image, const ImageEraseStroke& stroke) {
+    image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setCompositionMode(QPainter::CompositionMode_DestinationOut);
+    QPen pen(Qt::black, stroke.diameter, Qt::SolidLine,
+             Qt::RoundCap, Qt::RoundJoin);
+    painter.setPen(pen);
+    if (stroke.points.size() == 1) {
+        const qreal radius = static_cast<qreal>(stroke.diameter) / 2.0;
+        painter.setBrush(Qt::black);
+        painter.setPen(Qt::NoPen);
+        painter.drawEllipse(stroke.points.front(), radius, radius);
+    } else if (!stroke.points.isEmpty()) {
+        QPainterPath path;
+        path.moveTo(stroke.points.front());
+        for (qsizetype i = 1; i < stroke.points.size(); ++i) {
+            path.lineTo(stroke.points.at(i));
+        }
+        painter.drawPath(path);
+    }
+    painter.end();
+    return image;
+}
+
 QImage applyOperations(QImage image,
                        const QVector<ImageOperation>& operations,
                        bool fixed_canvas) {
@@ -95,6 +120,9 @@ QImage applyOperations(QImage image,
             break;
         case OperationKind::PaintStroke:
             image = paintStroke(std::move(image), operation.paint_stroke);
+            break;
+        case OperationKind::EraseStroke:
+            image = eraseStroke(std::move(image), operation.erase_stroke);
             break;
         }
     }
@@ -151,6 +179,15 @@ QImage renderLayerThumbnail(QImage image,
             }
             scaled_operation.paint_stroke.diameter = std::max(
                 1, qRound(operation.paint_stroke.diameter * std::min(scale_x, scale_y)));
+            break;
+        }
+        case OperationKind::EraseStroke: {
+            for (auto& point : scaled_operation.erase_stroke.points) {
+                point.setX(point.x() * scale_x);
+                point.setY(point.y() * scale_y);
+            }
+            scaled_operation.erase_stroke.diameter = std::max(
+                1, qRound(operation.erase_stroke.diameter * std::min(scale_x, scale_y)));
             break;
         }
         case OperationKind::FlipHorizontal:
@@ -468,6 +505,52 @@ QImage ImageDocumentSession::renderedImage() const {
     return composite;
 }
 
+QImage ImageDocumentSession::renderedImageWithEraseStroke(
+    const QVector<QPointF>& points, int diameter) const {
+    if (!hasSource() || !selectedLayerIsEditable() || points.isEmpty() ||
+        diameter < 1 || diameter > ImageDocumentStore::kMaximumPaintBrushDiameter) {
+        return renderedImage();
+    }
+    const QSize size = renderedSize();
+    for (const QPointF& point : points) {
+        if (!std::isfinite(point.x()) || !std::isfinite(point.y()) ||
+            point.x() < 0.0 || point.y() < 0.0 ||
+            point.x() >= size.width() || point.y() >= size.height()) {
+            return renderedImage();
+        }
+    }
+
+    QImage background = applyOperations(source_image_, data_.operations, false);
+    QImage composite = !data_.layers.isEmpty() && data_.layers.front().visible
+        ? background.convertToFormat(QImage::Format_ARGB32)
+        : QImage(size, QImage::Format_ARGB32);
+    if (composite.isNull()) return {};
+    if (data_.layers.isEmpty() || !data_.layers.front().visible) {
+        composite.fill(Qt::transparent);
+    }
+    QPainter painter(&composite);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    for (qsizetype index = 1; index < data_.layers.size(); ++index) {
+        const auto& layer = data_.layers.at(index);
+        if (!layer.visible || layer.opacity == 0) continue;
+        QImage pixels(size, QImage::Format_ARGB32_Premultiplied);
+        pixels.fill(Qt::transparent);
+        QVector<ImageOperation> operations = layer.operations;
+        if (layer.id == selected_layer_id_) {
+            ImageOperation preview;
+            preview.kind = OperationKind::EraseStroke;
+            preview.erase_stroke.points = points;
+            preview.erase_stroke.diameter = diameter;
+            operations.append(std::move(preview));
+        }
+        pixels = applyOperations(std::move(pixels), operations, true);
+        painter.setOpacity(layer.opacity / 100.0);
+        painter.drawImage(0, 0, pixels);
+    }
+    painter.end();
+    return composite;
+}
+
 QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
     const QSize& maximum_size) const {
     QHash<QString, QImage> thumbnails;
@@ -585,6 +668,46 @@ bool ImageDocumentSession::applyPaintStroke(const QVector<QPointF>& points,
     operation.paint_stroke.points = points;
     operation.paint_stroke.color = color;
     operation.paint_stroke.diameter = diameter;
+    data_.layers[layerIndex(selected_layer_id_)].operations.append(std::move(operation));
+    return true;
+}
+
+bool ImageDocumentSession::applyEraseStroke(const QVector<QPointF>& points,
+                                            int diameter,
+                                            QString* error) {
+    if (error != nullptr) error->clear();
+    if (!hasSource()) {
+        assignError(error, QStringLiteral("Open or relink an image before erasing."));
+        return false;
+    }
+    if (!selectedLayerIsEditable()) {
+        assignError(error, QStringLiteral("Select an editable layer before erasing."));
+        return false;
+    }
+    if (points.isEmpty() ||
+        points.size() > ImageDocumentStore::kMaximumPaintStrokePoints) {
+        assignError(error, QStringLiteral("The erase stroke has an invalid number of points."));
+        return false;
+    }
+    if (diameter < 1 || diameter > ImageDocumentStore::kMaximumPaintBrushDiameter) {
+        assignError(error, QStringLiteral("The eraser diameter must be between 1 and 1024 pixels."));
+        return false;
+    }
+    const QSize size = renderedSize();
+    for (const auto& point : points) {
+        if (!std::isfinite(point.x()) || !std::isfinite(point.y()) ||
+            point.x() < 0.0 || point.y() < 0.0 ||
+            point.x() >= size.width() || point.y() >= size.height()) {
+            assignError(error, QStringLiteral("The erase stroke contains a point outside the image."));
+            return false;
+        }
+    }
+
+    pushEdit();
+    ImageOperation operation;
+    operation.kind = OperationKind::EraseStroke;
+    operation.erase_stroke.points = points;
+    operation.erase_stroke.diameter = diameter;
     data_.layers[layerIndex(selected_layer_id_)].operations.append(std::move(operation));
     return true;
 }

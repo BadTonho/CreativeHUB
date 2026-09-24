@@ -5,6 +5,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QCursor>
@@ -81,14 +82,17 @@ int main(int argc, char* argv[]) {
     auto* keyboard_shortcuts_action = window.findChild<QAction*>(
         QStringLiteral("keyboardShortcutsAction"));
     auto* paint_tool_action = window.findChild<QAction*>(QStringLiteral("paintToolAction"));
+    auto* eraser_tool_action = window.findChild<QAction*>(QStringLiteral("eraserToolAction"));
     auto* cancel_crop_action = window.findChild<QAction*>(QStringLiteral("cancelCropAction"));
     if (settings_menu == nullptr || keyboard_shortcuts_action == nullptr ||
-        paint_tool_action == nullptr || cancel_crop_action == nullptr ||
+        paint_tool_action == nullptr || eraser_tool_action == nullptr || cancel_crop_action == nullptr ||
         cancel_crop_action->shortcut() != QKeySequence(Qt::Key_Escape) ||
         settings_menu->title() != QStringLiteral("Settings") ||
         paint_tool_action->shortcut() != QKeySequence(Qt::Key_B) ||
-        paint_tool_action->isChecked() || paint_tool_action->isEnabled()) {
-        std::cerr << "Settings or the default, inactive Paint shortcut was not created.\n";
+        eraser_tool_action->shortcut() != QKeySequence(Qt::Key_E) ||
+        paint_tool_action->isChecked() || paint_tool_action->isEnabled() ||
+        eraser_tool_action->isChecked() || eraser_tool_action->isEnabled()) {
+        std::cerr << "Settings or the default, inactive tool shortcuts were not created.\n";
         return 1;
     }
 
@@ -170,6 +174,36 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    const QKeySequence custom_eraser_shortcut(QStringLiteral("Ctrl+Alt+E"));
+    const bool custom_eraser_shortcut_saved = run_shortcut_dialog(
+        [&](QDialog* dialog) {
+            auto* editor = dialog->findChild<QKeySequenceEdit*>(
+                QStringLiteral("shortcutEditor_eraserToolAction"));
+            auto* buttons = dialog->findChild<QDialogButtonBox*>(
+                QStringLiteral("shortcutSettingsButtons"));
+            if (editor == nullptr || buttons == nullptr) {
+                dialog->reject();
+                return;
+            }
+            editor->setKeySequence(custom_eraser_shortcut);
+            buttons->button(QDialogButtonBox::Ok)->click();
+        });
+    if (!custom_eraser_shortcut_saved ||
+        eraser_tool_action->shortcut() != custom_eraser_shortcut) {
+        std::cerr << "The shortcut dialog did not configure the Eraser shortcut.\n";
+        return 1;
+    }
+    {
+        image_editor::ImageEditorWindow reopened_window;
+        auto* reopened_eraser_action = reopened_window.findChild<QAction*>(
+            QStringLiteral("eraserToolAction"));
+        if (reopened_eraser_action == nullptr ||
+            reopened_eraser_action->shortcut() != custom_eraser_shortcut) {
+            std::cerr << "The custom Eraser shortcut was not persisted.\n";
+            return 1;
+        }
+    }
+
     const bool cancel_left_shortcut_unchanged = run_shortcut_dialog(
         [&](QDialog* dialog) {
             auto* editor = dialog->findChild<QKeySequenceEdit*>(
@@ -211,11 +245,15 @@ int main(int argc, char* argv[]) {
                 validation->text().contains(QStringLiteral("New Canvas"));
             reset->click();
             duplicate_shortcut_rejected = duplicate_shortcut_rejected &&
-                editor->keySequence() == QKeySequence(Qt::Key_B);
+                editor->keySequence() == QKeySequence(Qt::Key_B) &&
+                dialog->findChild<QKeySequenceEdit*>(
+                    QStringLiteral("shortcutEditor_eraserToolAction"))->keySequence() ==
+                    QKeySequence(Qt::Key_E);
             buttons->button(QDialogButtonBox::Ok)->click();
         });
     if (!duplicate_dialog_completed || !duplicate_shortcut_rejected ||
-        paint_tool_action->shortcut() != QKeySequence(Qt::Key_B)) {
+        paint_tool_action->shortcut() != QKeySequence(Qt::Key_B) ||
+        eraser_tool_action->shortcut() != QKeySequence(Qt::Key_E)) {
         std::cerr << "Duplicate detection or Reset All did not restore the shortcut defaults.\n";
         return 1;
     }
@@ -254,7 +292,8 @@ int main(int argc, char* argv[]) {
             reset->click();
             buttons->button(QDialogButtonBox::Ok)->click();
         });
-    if (!defaults_restored || paint_tool_action->shortcut() != QKeySequence(Qt::Key_B)) {
+    if (!defaults_restored || paint_tool_action->shortcut() != QKeySequence(Qt::Key_B) ||
+        eraser_tool_action->shortcut() != QKeySequence(Qt::Key_E)) {
         std::cerr << "Reset All did not restore Paint's default B shortcut.\n";
         return 1;
     }
@@ -369,6 +408,7 @@ int main(int argc, char* argv[]) {
     if (paint_tool_button == nullptr || layer_edit_hint == nullptr ||
         paint_tool_button->isEnabled() || rotate_action->isEnabled() ||
         paint_tool_action->isEnabled() ||
+        eraser_tool_action->isEnabled() ||
         !layer_edit_hint->isVisible() ||
         window.windowTitle() != title_before_layer_selection) {
         std::cerr << "Selecting locked Background did not disable painting and transforms.\n";
@@ -384,7 +424,7 @@ int main(int argc, char* argv[]) {
     layer_list->setCurrentRow(0);
     QCoreApplication::processEvents();
     if (!paint_tool_button->isEnabled() || !rotate_action->isEnabled() ||
-        !paint_tool_action->isEnabled()) {
+        !paint_tool_action->isEnabled() || !eraser_tool_action->isEnabled()) {
         std::cerr << "Selecting an editable layer did not enable its tools.\n";
         return 1;
     }
@@ -400,6 +440,22 @@ int main(int argc, char* argv[]) {
     if (paint_tool_button->isChecked() || paint_tool_action->isChecked() ||
         canvas->paintMode()) {
         std::cerr << "The B shortcut did not deactivate Paint and synchronize its button.\n";
+        return 1;
+    }
+    auto* eraser_tool_button = window.findChild<QToolButton*>(
+        QStringLiteral("eraserToolButton"));
+    QTest::keyClick(&window, Qt::Key_E);
+    QCoreApplication::processEvents();
+    if (eraser_tool_button == nullptr || !eraser_tool_button->isChecked() ||
+        !eraser_tool_action->isChecked() || !canvas->eraserMode() || canvas->paintMode()) {
+        std::cerr << "The E shortcut did not activate the exclusive Eraser tool.\n";
+        return 1;
+    }
+    QTest::keyClick(&window, Qt::Key_E);
+    QCoreApplication::processEvents();
+    if (eraser_tool_button->isChecked() || eraser_tool_action->isChecked() ||
+        canvas->eraserMode()) {
+        std::cerr << "The E shortcut did not deactivate Eraser.\n";
         return 1;
     }
     rotate_action->trigger();
@@ -421,6 +477,7 @@ int main(int argc, char* argv[]) {
     auto* tool_sidebar = window.findChild<image_editor::ToolSidebar*>(
         QStringLiteral("imageEditorToolSidebar"));
     auto* paint_button = window.findChild<QToolButton*>(QStringLiteral("paintToolButton"));
+    auto* eraser_button = window.findChild<QToolButton*>(QStringLiteral("eraserToolButton"));
     auto* color_button = window.findChild<QToolButton*>(QStringLiteral("paintBrushColorButton"));
     auto* tool_options_toolbar = window.findChild<QToolBar*>(
         QStringLiteral("toolOptionsToolBar"));
@@ -431,13 +488,16 @@ int main(int argc, char* argv[]) {
     auto* brush_size_slider = window.findChild<QSlider*>(
         QStringLiteral("paintBrushSizeSlider"));
     auto* brush_size = window.findChild<QSpinBox*>(QStringLiteral("paintBrushSizeSpinBox"));
+    auto* tool_size_label = window.findChild<QLabel*>(QStringLiteral("paintBrushSizeLabel"));
+    auto* eraser_preview = window.findChild<QCheckBox*>(QStringLiteral("eraserPreviewCheckBox"));
     auto* redo_action = window.findChild<QAction*>(QStringLiteral("redoAction"));
     auto* crop_action = window.findChild<QAction*>(QStringLiteral("cropSelectionAction"));
-    if (tool_sidebar == nullptr || paint_button == nullptr || color_button == nullptr ||
+    if (tool_sidebar == nullptr || paint_button == nullptr || eraser_button == nullptr ||
+        color_button == nullptr || tool_size_label == nullptr || eraser_preview == nullptr ||
         tool_options_toolbar == nullptr || paint_options_action == nullptr ||
         paint_size_options == nullptr ||
         brush_size_slider == nullptr || brush_size == nullptr || redo_action == nullptr ||
-        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 2 ||
+        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 3 ||
         paint_button->isChecked() || paint_options_action->isVisible() ||
         paint_size_options->isVisible() ||
         !tool_options_toolbar->isVisible() || tool_options_toolbar->height() < 40 ||
@@ -451,6 +511,7 @@ int main(int argc, char* argv[]) {
         paint_button->toolTip() != QStringLiteral("Paint") ||
         tool_sidebar->width() != 56 ||
         tool_sidebar->brushColor() != QColor(Qt::black) ||
+        eraser_button->isChecked() || eraser_preview->isVisible() ||
         brush_size->value() != 12 || brush_size_slider->value() != 12 ||
         brush_size->minimum() != 1 ||
         brush_size->maximum() != image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter ||
@@ -681,11 +742,94 @@ int main(int argc, char* argv[]) {
         std::cerr << "Redo did not restore the paint stroke in the window.\n";
         return 1;
     }
+
+    QSignalSpy live_erase_preview_spy(canvas, &image_editor::ImageCanvas::erasePreviewRequested);
+    QSignalSpy erase_committed_spy(canvas, &image_editor::ImageCanvas::eraseStrokeSelected);
+    const QColor painted_center_pixel = canvas->grab().toImage().pixelColor(paint_center);
+    eraser_button->click();
+    if (!eraser_button->isChecked() || paint_button->isChecked() || !canvas->eraserMode() ||
+        !paint_options_action->isVisible() || !eraser_preview->isVisible() ||
+        eraser_preview->isChecked() || tool_size_label->text() != QStringLiteral("Eraser Size") ||
+        brush_size->value() != 12) {
+        std::cerr << "Eraser did not activate with its independent size and Preview off.\n";
+        return 1;
+    }
+    brush_size->setValue(18);
+    paint_button->click();
+    const bool paint_size_was_independent = brush_size->value() == 2 && canvas->paintMode();
+    eraser_button->click();
+    const bool eraser_size_was_restored = brush_size->value() == 18 && canvas->eraserMode();
+    const QPoint erase_start = paint_center - QPoint(20, 0);
+    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, erase_start);
+    QTest::mouseMove(canvas, paint_center + QPoint(20, 0));
+    QCoreApplication::processEvents();
+    const bool default_eraser_preview_was_live = live_erase_preview_spy.size() > 0;
+    const QColor live_erased_center_pixel = canvas->grab().toImage().pixelColor(paint_center);
+    QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier,
+                        paint_center + QPoint(20, 0));
+    const bool live_erase_committed_once = erase_committed_spy.size() == 1 &&
+        window.windowTitle().startsWith('*') && undo_action->isEnabled();
+    undo_action->trigger();
+    const bool live_erase_undo_restored_paint = window.windowTitle().startsWith('*');
+    redo_action->trigger();
+    undo_action->trigger();
+
+    eraser_preview->setChecked(true);
+    const int live_preview_count_before_overlay = live_erase_preview_spy.size();
+    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, erase_start);
+    QTest::mouseMove(canvas, paint_center + QPoint(20, 0));
+    QCoreApplication::processEvents();
+    const bool overlay_preview_kept_layer_pixels_until_release =
+        live_erase_preview_spy.size() == live_preview_count_before_overlay &&
+        erase_committed_spy.size() == 1;
+    const QColor overlay_center_pixel = canvas->grab().toImage().pixelColor(paint_center);
+    QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier,
+                        paint_center + QPoint(20, 0));
+    const bool overlay_erase_committed_once = erase_committed_spy.size() == 2;
+    undo_action->trigger();
+    redo_action->trigger();
+    undo_action->trigger();
+    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, erase_start);
+    QTest::mouseMove(canvas, paint_center + QPoint(15, 0));
+    QTest::keyClick(canvas, Qt::Key_Escape);
+    QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier,
+                        paint_center + QPoint(15, 0));
+    const bool erase_cancelled_without_commit = erase_committed_spy.size() == 2;
+    eraser_preview->setChecked(false);
+    const QPoint eraser_resize_anchor = canvas->rect().center();
+    const bool clean_before_eraser_resize = window.windowTitle().startsWith('*') &&
+        undo_action->isEnabled();
+    QTest::mousePress(canvas, Qt::LeftButton,
+                      Qt::ControlModifier | Qt::AltModifier, eraser_resize_anchor);
+    QTest::mouseMove(canvas, eraser_resize_anchor + QPoint(5, 0));
+    QTest::mouseRelease(canvas, Qt::LeftButton,
+                        Qt::ControlModifier | Qt::AltModifier,
+                        eraser_resize_anchor + QPoint(5, 0));
+    const bool eraser_resize_changed_only_eraser_size = brush_size->value() == 23;
+    paint_button->click();
+    const bool paint_size_survived_eraser_resize = brush_size->value() == 2;
+    eraser_button->click();
+    const bool eraser_size_survived_tool_switch = brush_size->value() == 23;
+    if (!paint_size_was_independent || !eraser_size_was_restored ||
+        !default_eraser_preview_was_live || !live_erase_committed_once ||
+        painted_center_pixel.blue() <= painted_center_pixel.red() ||
+        live_erased_center_pixel.blue() <= live_erased_center_pixel.red() * 2 ||
+        !live_erase_undo_restored_paint || !overlay_preview_kept_layer_pixels_until_release ||
+        overlay_center_pixel.red() <= overlay_center_pixel.blue() ||
+        !overlay_erase_committed_once || !erase_cancelled_without_commit ||
+        !clean_before_eraser_resize || !eraser_resize_changed_only_eraser_size ||
+        !paint_size_survived_eraser_resize || !eraser_size_survived_tool_switch ||
+        !canvas->eraserMode() || !eraser_button->isChecked()) {
+        std::cerr << "Eraser preview, commit/cancel, independent sizing, or resize gesture failed.\n";
+        return 1;
+    }
+
     undo_action->trigger();
     crop_action->trigger();
     if (!crop_action->isChecked() || !cancel_crop_action->isEnabled() ||
-        paint_button->isChecked() ||
-        !canvas->cropMode() || canvas->paintMode() || tool_sidebar->width() != 56 ||
+        paint_button->isChecked() || eraser_button->isChecked() ||
+        !canvas->cropMode() || canvas->paintMode() || canvas->eraserMode() ||
+        tool_sidebar->width() != 56 ||
         paint_options_action->isVisible() || paint_size_options->isVisible() ||
         !tool_options_toolbar->isVisible()) {
         std::cerr << "Crop mode did not deactivate the paint tool.\n";

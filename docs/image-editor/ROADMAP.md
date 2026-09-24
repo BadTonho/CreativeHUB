@@ -47,8 +47,8 @@ ahead of Motion Studio in the application sequence.
 - [x] Add self-contained blank canvases with standard and custom dimensions,
   selectable backgrounds, `.cimg` v2 persistence, and v1 document compatibility.
 - [x] Add a locked Background and editable raster layers with visibility,
-  opacity, ordering, rename, delete, painting, fixed-canvas transforms, and
-  `.cimg` v4 persistence while retaining v1–v3 compatibility.
+  opacity, ordering, rename, delete, painting, erasing, fixed-canvas transforms, and
+  `.cimg` v5 persistence while retaining v1–v4 compatibility.
 - [x] Add canvas fit, zoom, pan, and drag-to-crop controls.
 - [-] Pass Release build and automated tests for documents, edits, relinking,
   export, recovery, logging, and the UI boundary.

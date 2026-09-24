@@ -1,8 +1,8 @@
 # Image Editor Document Format
 
-Status: **provisional version 4**. The `.cimg` extension is temporary until a
-later format review. Version 4 adds editable raster layers. Versions 1, 2, and
-3 remain readable.
+Status: **provisional version 5**. The `.cimg` extension is temporary until a
+later format review. Version 4 added editable raster layers; version 5 adds
+eraser strokes. Versions 1 through 4 remain readable.
 
 ## Document contents
 
@@ -11,10 +11,10 @@ A `.cimg` file is UTF-8 JSON with these top-level fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite-image-document`. |
-| `version` | integer | Current version is `4`. |
+| `version` | integer | Current version is `5`. |
 | `base` | object | A linked source image or a self-contained canvas. |
 | `operations` | array | Version 1–3 edits retained as Background content. |
-| `layers` | array | Version 4 layer stack ordered bottom-to-top. |
+| `layers` | array | Version 4 and later layer stack ordered bottom-to-top. |
 
 Source-image bases contain `kind: "source_image"`, `path`, `width`, and
 `height`. When the source is in the document directory or one of its
@@ -30,8 +30,8 @@ without an external raster file. Canvas dimensions must be positive, at most
 
 ## Layer stack
 
-Version 4 stores every layer's stable UUID, name, type, visibility, opacity,
-and ordered operations. There must be exactly one `background` layer at index
+Version 4 and later store every layer's stable UUID, name, type, visibility,
+opacity, and ordered operations. There must be exactly one `background` layer at index
 zero. It is named `Background`, has 100% opacity, and has no layer operations;
 its pixels come from the base and the top-level legacy `operations` array.
 Other layers use `kind: "raster"`, have opacity from 0 through 100, and may be
@@ -41,7 +41,7 @@ canonical UUIDs. The stack is composited from bottom to top.
 ```json
 {
   "format": "creative-suite-image-document",
-  "version": 4,
+  "version": 5,
   "base": {
     "kind": "canvas",
     "width": 1920,
@@ -80,7 +80,7 @@ deleted, painted, transformed, or given a different opacity.
 
 The top-level `operations` array preserves the ordered, non-destructive edits
 from versions 1–3 and renders them as part of `Background`. This keeps old
-documents visually unchanged when they are opened and later saved as version 4.
+documents visually unchanged when they are opened and later saved as version 5.
 New edits are stored in the selected raster layer's `operations` array.
 
 Each layer operation is evaluated on the fixed document canvas. Crop keeps the
@@ -90,13 +90,24 @@ center, and content outside the canvas is clipped. Flips mirror within the
 canvas bounds. Paint points use floating-point pixel coordinates in the canvas
 at that point in the layer's operation list. A paint color uses `#AARRGGBB`, a
 diameter is from 1 through 1024 pixels, and a stroke contains 1 through 100,000
-points.
+points. Version 5 adds `erase_stroke`, with the same point and diameter limits;
+it clears alpha in its raster layer with antialiased edges. It has no color
+field and reveals visible content in lower layers.
+
+```json
+{
+  "kind": "erase_stroke",
+  "diameter": 12,
+  "points": [{ "x": 48.0, "y": 32.0 }, { "x": 55.0, "y": 32.0 }]
+}
+```
 
 For legacy top-level operations, crops use the current image bounds and change
 the rendered Background size; rotations may swap its dimensions. This behavior
 is retained only to read and preserve documents created by versions 1–3.
 Version 1 uses the legacy `source` object. Version 2 adds canvas bases. Version
-3 adds top-level paint strokes. Saving any supported version writes version 4.
+3 adds top-level paint strokes. Version 4 adds layers. Version 5 adds
+layer-local eraser strokes. Saving any supported version writes version 5.
 
 Undo and redo history are in memory and are not stored in `.cimg`. A save writes
 to a temporary file and atomically replaces the destination. Export is a
@@ -107,7 +118,7 @@ pixels over white.
 Recovery snapshots use a separate `creative-suite-image-recovery` JSON wrapper
 with the document payload, intended `.cimg` destination, and a session identity
 for unsaved canvases. Recovery wrapper version 1 accepts document payloads in
-versions 1 through 4. Autosave and recovery preserve layer order, properties,
+versions 1 through 5. Autosave and recovery preserve layer order, properties,
 IDs, and operations.
 
 Unsupported versions, invalid layer stacks, and invalid operation data are

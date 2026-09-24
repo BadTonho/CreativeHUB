@@ -20,7 +20,8 @@ namespace {
 constexpr int kLegacyDocumentVersion = 1;
 constexpr int kCanvasDocumentVersion = 2;
 constexpr int kPaintDocumentVersion = 3;
-constexpr int kDocumentVersion = 4;
+constexpr int kLayerDocumentVersion = 4;
+constexpr int kDocumentVersion = 5;
 constexpr int kRecoveryVersion = 1;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr auto kRecoveryFormat = "creative-suite-image-recovery";
@@ -79,6 +80,19 @@ QJsonObject encodeOperation(const ImageOperation& operation) {
         encoded.insert("diameter", operation.paint_stroke.diameter);
         QJsonArray points;
         for (const auto& point : operation.paint_stroke.points) {
+            QJsonObject encoded_point;
+            encoded_point.insert("x", point.x());
+            encoded_point.insert("y", point.y());
+            points.append(encoded_point);
+        }
+        encoded.insert("points", points);
+        break;
+    }
+    case OperationKind::EraseStroke: {
+        encoded.insert("kind", "erase_stroke");
+        encoded.insert("diameter", operation.erase_stroke.diameter);
+        QJsonArray points;
+        for (const auto& point : operation.erase_stroke.points) {
             QJsonObject encoded_point;
             encoded_point.insert("x", point.x());
             encoded_point.insert("y", point.y());
@@ -188,6 +202,40 @@ bool decodeOperations(const QJsonValue& value,
                     return false;
                 }
                 operation.paint_stroke.points.append(QPointF(x, y));
+            }
+        } else if (kind == "erase_stroke" && version >= kDocumentVersion && fixed_canvas) {
+            const auto encoded_points = object.value("points").toArray();
+            int diameter = 0;
+            if (encoded_points.isEmpty() ||
+                encoded_points.size() > ImageDocumentStore::kMaximumPaintStrokePoints ||
+                !isInteger(object.value("diameter"), &diameter) || diameter < 1 ||
+                diameter > ImageDocumentStore::kMaximumPaintBrushDiameter) {
+                assignError(error, QStringLiteral("The document contains an invalid erase stroke."));
+                return false;
+            }
+            operation.kind = OperationKind::EraseStroke;
+            operation.erase_stroke.diameter = diameter;
+            operation.erase_stroke.points.reserve(encoded_points.size());
+            for (const auto& encoded_point_value : encoded_points) {
+                if (!encoded_point_value.isObject()) {
+                    assignError(error, QStringLiteral("The document contains an invalid erase stroke point."));
+                    return false;
+                }
+                const auto encoded_point = encoded_point_value.toObject();
+                const auto x_value = encoded_point.value("x");
+                const auto y_value = encoded_point.value("y");
+                if (!x_value.isDouble() || !y_value.isDouble()) {
+                    assignError(error, QStringLiteral("The document contains an invalid erase stroke point."));
+                    return false;
+                }
+                const double x = x_value.toDouble();
+                const double y = y_value.toDouble();
+                if (!std::isfinite(x) || !std::isfinite(y) || x < 0.0 || y < 0.0 ||
+                    x >= current_size->width() || y >= current_size->height()) {
+                    assignError(error, QStringLiteral("The document contains an out-of-bounds erase stroke point."));
+                    return false;
+                }
+                operation.erase_stroke.points.append(QPointF(x, y));
             }
         } else {
             assignError(error, QStringLiteral("The document contains an unsupported edit."));
@@ -391,7 +439,7 @@ bool decodeDocument(const QJsonObject& root,
         return false;
     }
 
-    if (version == kDocumentVersion) {
+    if (version >= kLayerDocumentVersion) {
         const auto encoded_layers = root.value("layers");
         if (!encoded_layers.isArray() || encoded_layers.toArray().isEmpty() ||
             encoded_layers.toArray().size() > ImageDocumentStore::kMaximumLayers) {
@@ -426,7 +474,7 @@ bool decodeDocument(const QJsonObject& root,
                 return false;
             }
             QSize layer_size = layer_canvas_size;
-            if (!decodeOperations(encoded.value("operations"), kDocumentVersion,
+            if (!decodeOperations(encoded.value("operations"), version,
                                   &layer_size, true, &layer.operations, error)) {
                 return false;
             }

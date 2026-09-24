@@ -172,9 +172,9 @@ void testCanvasCreationPersistenceAndRecovery(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The saved canvas document could not be read."));
     const auto document_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(document_json.value("version").toInt() == 4 &&
+    require(document_json.value("version").toInt() == 5 &&
                 document_json.value("base").toObject().value("kind").toString() == "canvas",
-            QStringLiteral("Canvas save did not use the version 4 layered representation."));
+            QStringLiteral("Canvas save did not use the version 5 layered representation."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -257,8 +257,8 @@ void testLegacyVersionOneDocument(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 1 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 4,
-            QStringLiteral("Saving a version 1 document did not upgrade it to version 4."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 5,
+            QStringLiteral("Saving a version 1 document did not upgrade it to version 5."));
 }
 
 void testVersionTwoDocumentCompatibility(const QString& root) {
@@ -291,8 +291,8 @@ void testVersionTwoDocumentCompatibility(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 2 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 4,
-            QStringLiteral("Saving a version 2 document did not upgrade it to version 4."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 5,
+            QStringLiteral("Saving a version 2 document did not upgrade it to version 5."));
 
     base.remove("path");
     base.insert("kind", "canvas");
@@ -363,8 +363,8 @@ void testVersionThreeMigrationToBackground(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The migrated version 3 document could not be reopened."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 4,
-            QStringLiteral("Saving a version 3 document did not upgrade it to version 4."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 5,
+            QStringLiteral("Saving a version 3 document did not upgrade it to version 5."));
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(path, &error) && reopened.renderedImage() == original_render,
             QStringLiteral("Upgrading a version 3 document changed its visible pixels."));
@@ -453,17 +453,17 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     const int serialized_maximum_diameter = maximum_brush_json.value("layers").toArray()
         .at(1).toObject().value("operations").toArray()
         .at(0).toObject().value("diameter").toInt();
-    require(maximum_brush_json.value("version").toInt() == 4 &&
+    require(maximum_brush_json.value("version").toInt() == 5 &&
                 serialized_maximum_diameter ==
                     image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter,
-            QStringLiteral("The 1024 px paint diameter was not saved in version 4."));
+            QStringLiteral("The 1024 px paint diameter was not saved in version 5."));
     image_editor::ImageDocumentSession reopened_maximum_brush;
     require(reopened_maximum_brush.openDocument(maximum_brush_path, &error), error);
     require(reopened_maximum_brush.data() == maximum_brush_session.data() &&
                 reopened_maximum_brush.data().layers.at(1).operations.front()
                         .paint_stroke.diameter ==
                     image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter,
-            QStringLiteral("A 1024 px paint stroke did not round-trip through version 4."));
+            QStringLiteral("A 1024 px paint stroke did not round-trip through version 5."));
 
     require(session.undo() && session.renderedImage() == source && !session.isDirty(),
             QStringLiteral("Undo did not remove the complete paint stroke."));
@@ -476,11 +476,11 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The painted document could not be read."));
     const QJsonObject saved_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(saved_json.value("version").toInt() == 4 &&
+    require(saved_json.value("version").toInt() == 5 &&
                 saved_json.value("layers").toArray().at(1).toObject()
                     .value("operations").toArray().at(0).toObject()
                     .value("kind").toString() == "paint_stroke",
-            QStringLiteral("Paint was not serialized in the version 4 layer operations."));
+            QStringLiteral("Paint was not serialized in the version 5 layer operations."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -521,6 +521,173 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     require(unchanged_source.open(QIODevice::ReadOnly) &&
                 unchanged_source.readAll() == original_bytes,
             QStringLiteral("Painting modified the original source image."));
+}
+
+void testEraseStrokesPersistenceUndoRedoAndValidation(const QString& root) {
+    const QString source_path = root + QStringLiteral("/erase-source.png");
+    QImage source(16, 12, QImage::Format_ARGB32);
+    source.fill(Qt::white);
+    require(writeImage(source_path, source),
+            QStringLiteral("Could not create the erase source image."));
+    QFile original_file(source_path);
+    require(original_file.open(QIODevice::ReadOnly),
+            QStringLiteral("Could not read the original erase source."));
+    const QByteArray original_bytes = original_file.readAll();
+    original_file.close();
+
+    image_editor::ImageDocumentSession session;
+    QString error;
+    require(session.openImage(source_path, &error), error);
+    const QVector<QPointF> paint_points{QPointF(3, 6), QPointF(12, 6)};
+    require(session.applyPaintStroke(paint_points, QColor(220, 20, 40), 5, &error), error);
+    const QImage painted = session.renderedImage();
+    require(painted.pixelColor(8, 6).red() > 200,
+            QStringLiteral("The test paint stroke was not visible before erasing."));
+
+    const QString v4_path = root + QStringLiteral("/erase-v4-compatible.cimg");
+    const QString current_path = root + QStringLiteral("/erase-current.cimg");
+    image_editor::ImageDocumentSession compatibility_session;
+    require(compatibility_session.openImage(source_path, &error), error);
+    require(compatibility_session.applyPaintStroke(
+                paint_points, QColor(220, 20, 40), 5, &error), error);
+    require(compatibility_session.saveDocument(current_path, &error), error);
+    QFile current_file(current_path);
+    require(current_file.open(QIODevice::ReadOnly),
+            QStringLiteral("Could not read the current document fixture."));
+    QJsonObject v4_document = QJsonDocument::fromJson(current_file.readAll()).object();
+    current_file.close();
+    v4_document.insert("version", 4);
+    QFile v4_file(v4_path);
+    require(v4_file.open(QIODevice::WriteOnly),
+            QStringLiteral("Could not create the version 4 fixture."));
+    v4_file.write(QJsonDocument(v4_document).toJson());
+    v4_file.close();
+    image_editor::ImageDocumentSession v4_reopened;
+    require(v4_reopened.openDocument(v4_path, &error) &&
+                v4_reopened.renderedImage() == painted,
+            QStringLiteral("A version 4 layered document did not remain readable."));
+
+    const QVector<QPointF> erase_points{QPointF(8, 6)};
+    const auto before_preview = session.data();
+    const bool undo_before_preview = session.canUndo();
+    const QImage preview = session.renderedImageWithEraseStroke(erase_points, 5);
+    require(preview.pixelColor(8, 6) == QColor(Qt::white) &&
+                session.data() == before_preview && session.renderedImage() == painted &&
+                session.canUndo() == undo_before_preview,
+            QStringLiteral("The temporary erase preview changed the document or history."));
+
+    require(session.applyEraseStroke(erase_points, 5, &error), error);
+    const QImage erased = session.renderedImage();
+    require(erased.pixelColor(8, 6) == QColor(Qt::white) && session.isDirty() &&
+                session.data().layers.at(1).operations.size() == 2 &&
+                session.data().layers.at(1).operations.back().kind ==
+                    image_editor::OperationKind::EraseStroke,
+            QStringLiteral("The eraser did not clear alpha from the selected layer."));
+    require(session.undo() && session.renderedImage() == painted &&
+                session.undo() && session.renderedImage() == source && !session.isDirty(),
+            QStringLiteral("The erase gesture was not one undoable edit."));
+    require(session.redo() && session.renderedImage() == painted &&
+                session.redo() && session.renderedImage() == erased,
+            QStringLiteral("Redo did not restore the complete erase stroke."));
+
+    const int operation_count = session.data().layers.at(1).operations.size();
+    const auto rejectErase = [&](const QVector<QPointF>& points, int diameter,
+                                 const QString& message) {
+        error.clear();
+        require(!session.applyEraseStroke(points, diameter, &error) && !error.isEmpty(), message);
+        require(session.data().layers.at(1).operations.size() == operation_count &&
+                    session.renderedImage() == erased,
+                QStringLiteral("A rejected erase stroke changed the document."));
+    };
+    rejectErase({}, 12, QStringLiteral("An empty erase stroke was accepted."));
+    rejectErase({QPointF(-1, 0)}, 12,
+                QStringLiteral("An out-of-bounds erase point was accepted."));
+    rejectErase({QPointF(std::numeric_limits<double>::infinity(), 1)}, 12,
+                QStringLiteral("A non-finite erase point was accepted."));
+    rejectErase(erase_points, 0, QStringLiteral("A zero-diameter eraser was accepted."));
+    rejectErase(erase_points,
+                image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter + 1,
+                QStringLiteral("An oversized eraser was accepted."));
+
+    const QString maximum_path = root + QStringLiteral("/maximum-eraser.cimg");
+    image_editor::ImageDocumentSession maximum_eraser;
+    require(maximum_eraser.openImage(source_path, &error), error);
+    require(maximum_eraser.applyPaintStroke({QPointF(8, 6)}, Qt::red, 1024, &error), error);
+    require(maximum_eraser.applyEraseStroke({QPointF(8, 6)}, 1024, &error), error);
+    require(maximum_eraser.saveDocument(maximum_path, &error), error);
+    QFile maximum_file(maximum_path);
+    require(maximum_file.open(QIODevice::ReadOnly),
+            QStringLiteral("The maximum eraser document could not be read."));
+    const QJsonObject maximum_json = QJsonDocument::fromJson(maximum_file.readAll()).object();
+    const auto operations = maximum_json.value("layers").toArray().at(1).toObject()
+        .value("operations").toArray();
+    require(maximum_json.value("version").toInt() == 5 && operations.size() == 2 &&
+                operations.at(1).toObject().value("kind").toString() == "erase_stroke" &&
+                operations.at(1).toObject().value("diameter").toInt() == 1024,
+            QStringLiteral("A maximum-size erase stroke was not serialized as version 5."));
+    QJsonObject version_four_with_erase = maximum_json;
+    version_four_with_erase.insert("version", 4);
+    const QString invalid_v4_path = root + QStringLiteral("/version-four-erase.cimg");
+    QFile invalid_v4_file(invalid_v4_path);
+    require(invalid_v4_file.open(QIODevice::WriteOnly),
+            QStringLiteral("Could not create a version 4 eraser fixture."));
+    invalid_v4_file.write(QJsonDocument(version_four_with_erase).toJson());
+    invalid_v4_file.close();
+    image_editor::ImageDocumentSession invalid_v4_session;
+    require(!invalid_v4_session.openDocument(invalid_v4_path, &error) && !error.isEmpty(),
+            QStringLiteral("A version 4 document incorrectly accepted an eraser operation."));
+
+    auto invalid_erase_layers = maximum_json.value("layers").toArray();
+    auto invalid_erase_layer = invalid_erase_layers.at(1).toObject();
+    auto invalid_erase_operations = invalid_erase_layer.value("operations").toArray();
+    auto invalid_erase = invalid_erase_operations.at(1).toObject();
+    invalid_erase.insert("diameter", 1025);
+    invalid_erase_operations.replace(1, invalid_erase);
+    invalid_erase_layer.insert("operations", invalid_erase_operations);
+    invalid_erase_layers.replace(1, invalid_erase_layer);
+    QJsonObject oversized_erase_document = maximum_json;
+    oversized_erase_document.insert("layers", invalid_erase_layers);
+    const QString oversized_erase_path = root + QStringLiteral("/oversized-erase.cimg");
+    QFile oversized_erase_file(oversized_erase_path);
+    require(oversized_erase_file.open(QIODevice::WriteOnly),
+            QStringLiteral("Could not create an oversized eraser fixture."));
+    oversized_erase_file.write(QJsonDocument(oversized_erase_document).toJson());
+    oversized_erase_file.close();
+    image_editor::ImageDocumentSession oversized_erase_session;
+    require(!oversized_erase_session.openDocument(oversized_erase_path, &error) &&
+                !error.isEmpty(),
+            QStringLiteral("A version 5 erase stroke above 1024 px was accepted."));
+
+    image_editor::ImageDocumentSession maximum_reopened;
+    require(maximum_reopened.openDocument(maximum_path, &error) &&
+                maximum_reopened.data() == maximum_eraser.data() &&
+                maximum_reopened.renderedImage() == maximum_eraser.renderedImage(), error);
+
+    const QString document_path = root + QStringLiteral("/erased.cimg");
+    require(session.saveDocument(document_path, &error), error);
+    image_editor::ImageDocumentSession reopened;
+    require(reopened.openDocument(document_path, &error) &&
+                reopened.data() == session.data() && reopened.renderedImage() == erased,
+            QStringLiteral("The paint and erase operations did not round-trip."));
+    const QString recovery_directory = root + QStringLiteral("/erase-recovery");
+    image_editor::RecoveryStore recovery(recovery_directory);
+    reopened.rotateRight();
+    require(recovery.save(reopened, &error), error);
+    image_editor::ImageDocumentSession restored;
+    const auto snapshots = recovery.snapshots();
+    require(snapshots.size() == 1 && restored.restoreRecovery(snapshots.front(), &error) &&
+                restored.data() == reopened.data() &&
+                restored.renderedImage() == reopened.renderedImage(),
+            QStringLiteral("Recovery did not preserve the eraser operation."));
+
+    require(reopened.selectLayer(reopened.data().layers.front().id),
+            QStringLiteral("Could not select Background for the eraser lock check."));
+    require(!reopened.applyEraseStroke(erase_points, 5, &error) && !error.isEmpty(),
+            QStringLiteral("The locked Background layer accepted an erase stroke."));
+    QFile unchanged_source(source_path);
+    require(unchanged_source.open(QIODevice::ReadOnly) &&
+                unchanged_source.readAll() == original_bytes,
+            QStringLiteral("Erasing modified the original source image."));
 }
 
 void testCropNoOpAndInvalidOperations(const QString& root) {
@@ -956,6 +1123,7 @@ int main(int argc, char* argv[]) {
         testVersionTwoDocumentCompatibility(root);
         testVersionThreeMigrationToBackground(root);
         testPaintStrokesPersistenceUndoRedoAndValidation(root);
+        testEraseStrokesPersistenceUndoRedoAndValidation(root);
         testCropNoOpAndInvalidOperations(root);
         testLayerManagementTransformsAndOpacity(root);
         testMissingSourceAndRelink(root);

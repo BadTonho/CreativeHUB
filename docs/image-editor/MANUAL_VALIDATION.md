@@ -27,21 +27,36 @@ run.
    and drag a crop. Rotate both directions, flip horizontally and vertically,
    then use Undo and Redo. Confirm the canvas and dirty marker update.
 8. Open a disposable image and create a canvas in separate runs. Confirm Paint
-   is the only tool in the compact left sidebar, appears as an icon without a
-   label, and starts inactive. Hover over the icon until its tooltip appears and
-   confirm it says Paint. Confirm the top options bar remains visible but empty.
+   and Eraser are the only tools in the compact left sidebar, appear as icons
+   without labels, and start inactive. Hover over each icon until its tooltip
+   appears and confirm its name. Confirm the top options bar remains visible but
+   empty.
    Use the color swatch at the bottom of the sidebar to choose a color (including
    a partially transparent color), then activate Paint. Confirm the top bar
    shows a slider and numeric brush-size field, and that changing either control
    updates the other and the brush preview. Click Paint again to deactivate it
    and confirm the top bar is empty; click it once more and confirm the controls
-   return.
+   return. Activate Eraser and confirm the label changes to Eraser Size, Preview
+   appears, and the starting size is 12 px. Change Eraser size, switch to Paint,
+   and confirm Paint retains its own size; switch back and confirm Eraser does
+   too. Confirm clicking either tool deactivates the other and clicking the
+   active tool turns both off.
    Verify the brush outline follows the pointer, a drag paints a continuous
    stroke, and a click paints a dot. Switch to **Edit > Crop Selection** and
-   confirm that Paint deactivates; activate Paint and confirm crop mode exits.
+   confirm that the active tool deactivates; activate Paint or Eraser and confirm
+   crop mode exits.
    Use Undo and Redo and confirm each complete gesture is one history entry.
-   While Paint is active, hold `Ctrl+Alt`, press the left mouse button over the
-   image, and drag right. Confirm the brush outline stays centered at the press
+   Draw a visible stroke on an editable layer, activate Eraser, and erase across
+   it. With Preview unchecked, confirm pixels disappear as the pointer moves
+   and the lower Background is revealed. Release and confirm one Undo restores
+   the paint and a Redo erases it again. Undo the erase and enable Preview; drag
+   over the stroke and confirm the pixels remain while a translucent mark shows
+   the erased area. Release and confirm the erase is committed as one history
+   entry. Press Escape during another erase and confirm no history entry is
+   created. Select Background and confirm Eraser is disabled. Press `E` to toggle
+   Eraser when an editable layer is available, then press it again to deactivate.
+   With Eraser active, hold `Ctrl+Alt`, press the left mouse button over the
+   image, and drag right. Confirm the eraser outline stays centered at the press
    point while its diameter, slider, and numeric field increase by 1 px per
    screen pixel. Drag left and confirm the size decreases at the same rate.
    Move vertically without changing the horizontal position and confirm the
@@ -49,9 +64,9 @@ run.
    anchored outline remains visible until release. Verify the size clamps at 1
    and 1024 px. Release outside the image and confirm the system pointer returns
    to the press point and the outline remains there. Move the pointer and confirm
-   the outline follows it again. Verify the image is still clean and Undo has no
-   new entry. Repeat with Paint inactive
-   and confirm the gesture does not change the brush. Open
+   the outline follows it again. Verify the image pixels and Undo availability
+   did not change during resizing. Repeat with both tools inactive and confirm
+   the gesture does not change either size. Open
    **Settings > Keyboard Shortcuts**
    and confirm the dialog is larger, can be resized, and keeps the shortcut list
    scrollable when made shorter. Change Paint from `B` to another
@@ -59,12 +74,13 @@ run.
    remains. Cancel an unconfirmed change and confirm it is discarded. Assign a
    shortcut already used by another command and verify the dialog reports the
    conflict without closing. Clear Paint's shortcut, restore all defaults, and
-   confirm `B` toggles Paint only when an editable layer is selected. With Crop
-   Selection active, confirm `Esc` cancels it.
+   confirm `B` toggles Paint and `E` toggles Eraser only when an editable layer
+   is selected. With Crop Selection active, confirm `Esc` cancels it.
 9. Save an editable `.cimg`, close it, reopen it, and confirm the rendered
    result is unchanged. Compare the original source file before and after to
    verify it was not overwritten.
-10. Export painted content to PNG and JPEG. Confirm paint strokes are included,
+10. Export painted and erased content to PNG and JPEG. Confirm paint strokes
+    are included and erased pixels reveal the lower visible layer,
     PNG retains alpha, and transparent JPEG pixels become white.
 11. In the right-side Layers dock, confirm a new image or canvas has a locked
     Background and a selected transparent Layer 1. Paint on Layer 1 and verify
@@ -80,16 +96,18 @@ run.
     Replace the document and confirm thumbnails show the new layer contents.
     Delete the editable layers and verify
     Background cannot be deleted, renamed, reordered, painted, transformed, or
-    given a different opacity. Confirm Paint and transforms are disabled while
-    Background is selected, then add/select an editable layer to continue.
+    given a different opacity. Confirm Paint, Eraser, and transforms are
+    disabled while Background is selected, then add/select an editable layer to
+    continue.
     Save as `.cimg`, close, reopen, and confirm layer IDs, stack order, visibility,
     opacity, operations, and flattened PNG/JPEG exports are preserved.
 12. Move the source image, reopen the `.cimg`, and relink the moved file. Confirm
    a replacement with different dimensions is rejected and the original-sized
    image restores the edit.
-13. Make a paint stroke, wait for the 60-second recovery interval, close and
-    discard the unsaved edit, then relaunch. Restore the recovery snapshot and
-    confirm the stroke and layer stack are present and still marked unsaved.
+13. Make a paint stroke and an erase stroke, wait for the 60-second recovery
+    interval, close and discard the unsaved edit, then relaunch. Restore the
+    recovery snapshot and confirm both strokes and the layer stack are present
+    and still marked unsaved.
 14. Try a corrupt image, an invalid `.cimg`, a read-only destination, and an
    unsupported export extension. Confirm the UI reports the failure and a
    structured entry is written to the local Image Editor log.

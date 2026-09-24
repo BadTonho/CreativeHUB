@@ -8,6 +8,7 @@
 #include "layer_panel.h"
 
 #include <QAction>
+#include <QCheckBox>
 #include <QCoreApplication>
 #include <QCloseEvent>
 #include <QDockWidget>
@@ -20,6 +21,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSettings>
 #include <QSize>
 #include <QSlider>
@@ -68,20 +70,24 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             [this](const QVector<QPointF>& points, const QColor& color, int diameter) {
                 handlePaintStroke(points, color, diameter);
             });
+    connect(canvas_, &ImageCanvas::erasePreviewRequested, this,
+            [this](const QVector<QPointF>& points, int diameter) {
+                canvas_->setTransientImage(
+                    session_.renderedImageWithEraseStroke(points, diameter));
+            });
+    connect(canvas_, &ImageCanvas::erasePreviewCleared, canvas_, [this]() {
+        canvas_->setTransientImage({});
+    });
+    connect(canvas_, &ImageCanvas::eraseStrokeSelected, this,
+            [this](const QVector<QPointF>& points, int diameter) {
+                handleEraseStroke(points, diameter);
+            });
     connect(canvas_, &ImageCanvas::brushDiameterChanged,
             brush_size_spin_, &QSpinBox::setValue);
-    connect(tool_sidebar_, &ToolSidebar::paintToolToggled, this, [this](bool active) {
-        if (active) crop_action_->setChecked(false);
-        if (paint_tool_action_ != nullptr && paint_tool_action_->isChecked() != active) {
-            paint_tool_action_->setChecked(active);
-        }
-        canvas_->setPaintMode(active && session_.hasSource());
-        updateToolOptions();
-    });
+    connect(tool_sidebar_, &ToolSidebar::activeToolChanged,
+            this, [this](ToolSidebar::Tool tool) { updateCanvasToolState(tool); });
     connect(tool_sidebar_, &ToolSidebar::brushColorChanged,
-            canvas_, [this](const QColor& color) {
-                canvas_->setBrush(color, brush_size_spin_->value());
-            });
+            this, [this](const QColor&) { updateCanvasBrush(); });
     connect(layer_panel_, &LayerPanel::layerSelected, this, [this](const QString& id) {
         if (!session_.selectLayer(id)) return;
         if (!session_.selectedLayerIsEditable()) deactivateCanvasTools();
@@ -179,9 +185,9 @@ void ImageEditorWindow::createToolOptionsBar() {
     options_layout->setContentsMargins(8, 3, 8, 3);
     options_layout->setSpacing(8);
 
-    auto* size_label = new QLabel(QStringLiteral("Brush Size"), paint_size_options_);
-    size_label->setObjectName(QStringLiteral("paintBrushSizeLabel"));
-    options_layout->addWidget(size_label);
+    tool_size_label_ = new QLabel(QStringLiteral("Brush Size"), paint_size_options_);
+    tool_size_label_->setObjectName(QStringLiteral("paintBrushSizeLabel"));
+    options_layout->addWidget(tool_size_label_);
 
     brush_size_slider_ = new QSlider(Qt::Horizontal, paint_size_options_);
     brush_size_slider_->setObjectName(QStringLiteral("paintBrushSizeSlider"));
@@ -201,6 +207,14 @@ void ImageEditorWindow::createToolOptionsBar() {
     brush_size_spin_->setFixedWidth(96);
     options_layout->addWidget(brush_size_spin_);
 
+    eraser_preview_check_ = new QCheckBox(QStringLiteral("Preview"), paint_size_options_);
+    eraser_preview_check_->setObjectName(QStringLiteral("eraserPreviewCheckBox"));
+    eraser_preview_check_->setToolTip(
+        QStringLiteral("Show a translucent erase preview and apply it when the stroke ends"));
+    eraser_preview_check_->setChecked(false);
+    eraser_preview_check_->setVisible(false);
+    options_layout->addWidget(eraser_preview_check_);
+
     paint_options_action_ = new QWidgetAction(tool_options_toolbar_);
     paint_options_action_->setObjectName(QStringLiteral("paintBrushSizeAction"));
     paint_options_action_->setDefaultWidget(paint_size_options_);
@@ -211,17 +225,71 @@ void ImageEditorWindow::createToolOptionsBar() {
             brush_size_spin_, &QSpinBox::setValue);
     connect(brush_size_spin_, &QSpinBox::valueChanged, this, [this](int diameter) {
         brush_size_slider_->setValue(diameter);
-        canvas_->setBrush(tool_sidebar_->brushColor(), diameter);
+        if (tool_sidebar_->activeTool() == ToolSidebar::Tool::Paint) {
+            paint_diameter_ = diameter;
+        } else if (tool_sidebar_->activeTool() == ToolSidebar::Tool::Eraser) {
+            eraser_diameter_ = diameter;
+        }
+        updateCanvasBrush();
     });
+    connect(eraser_preview_check_, &QCheckBox::toggled,
+            canvas_, &ImageCanvas::setEraserPreviewEnabled);
 }
 
 void ImageEditorWindow::updateToolOptions() {
     if (paint_options_action_ == nullptr || paint_size_options_ == nullptr ||
         tool_sidebar_ == nullptr || canvas_ == nullptr) return;
-    const bool paint_active = tool_sidebar_->paintToolActive() && canvas_->paintMode();
-    paint_options_action_->setVisible(paint_active);
-    paint_size_options_->setVisible(paint_active);
-    paint_size_options_->setEnabled(paint_active);
+    const ToolSidebar::Tool active_tool = tool_sidebar_->activeTool();
+    const bool tool_active = active_tool != ToolSidebar::Tool::None && session_.hasSource();
+    const bool paint_active = active_tool == ToolSidebar::Tool::Paint && canvas_->paintMode();
+    const bool eraser_active = active_tool == ToolSidebar::Tool::Eraser && canvas_->eraserMode();
+    paint_options_action_->setVisible(tool_active && (paint_active || eraser_active));
+    paint_size_options_->setVisible(tool_active && (paint_active || eraser_active));
+    paint_size_options_->setEnabled(tool_active);
+    tool_size_label_->setText(eraser_active ? QStringLiteral("Eraser Size")
+                                            : QStringLiteral("Brush Size"));
+    brush_size_slider_->setAccessibleName(
+        eraser_active ? QStringLiteral("Eraser size") : QStringLiteral("Brush size"));
+    brush_size_spin_->setAccessibleName(
+        eraser_active ? QStringLiteral("Eraser size in pixels")
+                      : QStringLiteral("Brush size in pixels"));
+    eraser_preview_check_->setVisible(eraser_active);
+}
+
+void ImageEditorWindow::updateCanvasBrush() {
+    if (canvas_ == nullptr || tool_sidebar_ == nullptr) return;
+    const int diameter = tool_sidebar_->activeTool() == ToolSidebar::Tool::Eraser
+        ? eraser_diameter_ : paint_diameter_;
+    canvas_->setBrush(tool_sidebar_->brushColor(), diameter);
+}
+
+void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool) {
+    if (tool != ToolSidebar::Tool::None && crop_action_ != nullptr &&
+        crop_action_->isChecked()) {
+        crop_action_->setChecked(false);
+    }
+    if (paint_tool_action_ != nullptr) {
+        const QSignalBlocker blocker(paint_tool_action_);
+        paint_tool_action_->setChecked(tool == ToolSidebar::Tool::Paint);
+    }
+    if (eraser_tool_action_ != nullptr) {
+        const QSignalBlocker blocker(eraser_tool_action_);
+        eraser_tool_action_->setChecked(tool == ToolSidebar::Tool::Eraser);
+    }
+
+    canvas_->setPaintMode(tool == ToolSidebar::Tool::Paint && session_.hasSource());
+    canvas_->setEraserMode(tool == ToolSidebar::Tool::Eraser && session_.hasSource());
+    canvas_->setEraserPreviewEnabled(eraser_preview_check_->isChecked());
+    const int diameter = tool == ToolSidebar::Tool::Eraser
+        ? eraser_diameter_ : paint_diameter_;
+    {
+        const QSignalBlocker slider_blocker(brush_size_slider_);
+        const QSignalBlocker spin_blocker(brush_size_spin_);
+        brush_size_slider_->setValue(diameter);
+        brush_size_spin_->setValue(diameter);
+    }
+    updateCanvasBrush();
+    updateToolOptions();
 }
 
 void ImageEditorWindow::createActions() {
@@ -284,11 +352,12 @@ void ImageEditorWindow::createActions() {
     crop_action_->setObjectName(QStringLiteral("cropSelectionAction"));
     crop_action_->setCheckable(true);
     connect(crop_action_, &QAction::toggled, this, [this](bool enabled) {
-        if (enabled && tool_sidebar_->paintToolActive()) {
-            tool_sidebar_->setPaintToolActive(false);
+        if (enabled && tool_sidebar_->activeTool() != ToolSidebar::Tool::None) {
+            tool_sidebar_->setActiveTool(ToolSidebar::Tool::None);
         }
         updateToolOptions();
         canvas_->setPaintMode(false);
+        canvas_->setEraserMode(false);
         canvas_->setCropMode(enabled && session_.hasSource());
         if (cancel_crop_action_ != nullptr) {
             cancel_crop_action_->setEnabled(enabled && session_.hasSource());
@@ -345,13 +414,20 @@ void ImageEditorWindow::createActions() {
     registerShortcutAction(paint_tool_action_, QKeySequence(Qt::Key_B));
     addAction(paint_tool_action_);
     connect(paint_tool_action_, &QAction::toggled, this, [this](bool active) {
-        tool_sidebar_->setPaintToolActive(active);
-        const bool actual_state = tool_sidebar_->paintToolActive();
-        if (paint_tool_action_->isChecked() != actual_state) {
-            paint_tool_action_->setChecked(actual_state);
-        }
-        canvas_->setPaintMode(actual_state && session_.hasSource());
-        updateToolOptions();
+        const auto current = tool_sidebar_->activeTool();
+        tool_sidebar_->setActiveTool(active ? ToolSidebar::Tool::Paint
+            : (current == ToolSidebar::Tool::Paint ? ToolSidebar::Tool::None : current));
+    });
+
+    eraser_tool_action_ = new QAction(QStringLiteral("Eraser"), this);
+    eraser_tool_action_->setObjectName(QStringLiteral("eraserToolAction"));
+    eraser_tool_action_->setCheckable(true);
+    registerShortcutAction(eraser_tool_action_, QKeySequence(Qt::Key_E));
+    addAction(eraser_tool_action_);
+    connect(eraser_tool_action_, &QAction::toggled, this, [this](bool active) {
+        const auto current = tool_sidebar_->activeTool();
+        tool_sidebar_->setActiveTool(active ? ToolSidebar::Tool::Eraser
+            : (current == ToolSidebar::Tool::Eraser ? ToolSidebar::Tool::None : current));
     });
 
     auto* file_menu = menuBar()->addMenu(QStringLiteral("File"));
@@ -495,7 +571,7 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
                                 LayerPanel::kThumbnailWidth,
                                 LayerPanel::kThumbnailHeight)));
     updateToolOptions();
-    canvas_->setBrush(tool_sidebar_->brushColor(), brush_size_spin_->value());
+    updateCanvasBrush();
     undo_action_->setEnabled(session_.canUndo());
     redo_action_->setEnabled(session_.canRedo());
     save_action_->setEnabled(session_.hasSource());
@@ -512,6 +588,7 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     fit_action_->setEnabled(session_.hasSource());
     cancel_crop_action_->setEnabled(crop_action_->isChecked() && selected_layer_editable);
     paint_tool_action_->setEnabled(selected_layer_editable);
+    eraser_tool_action_->setEnabled(selected_layer_editable);
 
     QString title = QStringLiteral("Image Editor");
     if (!session_.documentPath().isEmpty()) {
@@ -710,13 +787,24 @@ void ImageEditorWindow::handlePaintStroke(const QVector<QPointF>& points,
     }
 }
 
+void ImageEditorWindow::handleEraseStroke(const QVector<QPointF>& points, int diameter) {
+    QString error;
+    if (session_.applyEraseStroke(points, diameter, &error)) {
+        updateView(true);
+        statusBar()->showMessage(QStringLiteral("Erase stroke applied"), 1800);
+    } else if (!error.isEmpty()) {
+        reportError(QStringLiteral("erase_stroke"), error, session_.sourcePath());
+    }
+}
+
 void ImageEditorWindow::deactivateCanvasTools() {
-    tool_sidebar_->setPaintToolActive(false);
+    tool_sidebar_->setActiveTool(ToolSidebar::Tool::None);
     updateToolOptions();
     if (crop_action_ != nullptr && crop_action_->isChecked()) {
         crop_action_->setChecked(false);
     }
     canvas_->setPaintMode(false);
+    canvas_->setEraserMode(false);
     canvas_->setCropMode(false);
 }
 

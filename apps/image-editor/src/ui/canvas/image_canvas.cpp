@@ -30,9 +30,12 @@ ImageCanvas::ImageCanvas(QWidget* parent) : QWidget(parent) {
 }
 
 void ImageCanvas::setImage(QImage image, bool resetView) {
+    if (erasing_ || !transient_image_.isNull()) emit erasePreviewCleared();
     image_ = std::move(image);
+    transient_image_ = {};
     paint_points_.clear();
     painting_ = false;
+    erasing_ = false;
     resizing_brush_ = false;
     if (resetView) {
         pan_ = {};
@@ -44,30 +47,83 @@ void ImageCanvas::setImage(QImage image, bool resetView) {
 }
 
 void ImageCanvas::setCropMode(bool enabled) {
+    if (erasing_ || !transient_image_.isNull()) emit erasePreviewCleared();
     crop_mode_ = enabled;
-    if (enabled) paint_mode_ = false;
+    if (enabled) {
+        paint_mode_ = false;
+        eraser_mode_ = false;
+    }
     selecting_crop_ = false;
     painting_ = false;
+    erasing_ = false;
+    transient_image_ = {};
     resizing_brush_ = false;
     paint_points_.clear();
     crop_selection_ = {};
     brush_cursor_visible_ = false;
     setCursor(enabled ? Qt::CrossCursor
-                      : (paint_mode_ ? Qt::BlankCursor : Qt::ArrowCursor));
+                      : ((paint_mode_ || eraser_mode_) ? Qt::BlankCursor : Qt::ArrowCursor));
     update();
 }
 
 void ImageCanvas::setPaintMode(bool enabled) {
+    if (erasing_ || !transient_image_.isNull()) emit erasePreviewCleared();
     paint_mode_ = enabled;
-    if (enabled) crop_mode_ = false;
+    if (enabled) {
+        crop_mode_ = false;
+        eraser_mode_ = false;
+    }
     painting_ = false;
+    erasing_ = false;
+    transient_image_ = {};
     resizing_brush_ = false;
     paint_points_.clear();
     selecting_crop_ = false;
     crop_selection_ = {};
     brush_cursor_visible_ = false;
     setCursor(enabled ? Qt::BlankCursor
-                      : (crop_mode_ ? Qt::CrossCursor : Qt::ArrowCursor));
+                      : (crop_mode_ ? Qt::CrossCursor
+                                    : (eraser_mode_ ? Qt::BlankCursor : Qt::ArrowCursor)));
+    update();
+}
+
+void ImageCanvas::setEraserMode(bool enabled) {
+    if (erasing_ || !transient_image_.isNull()) emit erasePreviewCleared();
+    eraser_mode_ = enabled;
+    if (enabled) {
+        crop_mode_ = false;
+        paint_mode_ = false;
+    }
+    painting_ = false;
+    erasing_ = false;
+    resizing_brush_ = false;
+    transient_image_ = {};
+    paint_points_.clear();
+    selecting_crop_ = false;
+    crop_selection_ = {};
+    brush_cursor_visible_ = false;
+    setCursor(enabled ? Qt::BlankCursor
+                      : (crop_mode_ ? Qt::CrossCursor
+                                     : (paint_mode_ ? Qt::BlankCursor : Qt::ArrowCursor)));
+    update();
+}
+
+void ImageCanvas::setEraserPreviewEnabled(bool enabled) {
+    eraser_preview_enabled_ = enabled;
+    if (erasing_ && !enabled) emit erasePreviewRequested(paint_points_, brush_diameter_);
+    if (erasing_ && enabled) {
+        transient_image_ = {};
+        emit erasePreviewCleared();
+    }
+    update();
+}
+
+void ImageCanvas::setTransientImage(QImage image) {
+    if (!image.isNull() && image.size() == image_.size()) {
+        transient_image_ = std::move(image);
+    } else {
+        transient_image_ = {};
+    }
     update();
 }
 
@@ -131,7 +187,8 @@ void ImageCanvas::appendPaintPoint(const QPointF& point) {
 }
 
 void ImageCanvas::updateHoverCursor(const QPointF& position) {
-    brush_cursor_visible_ = paint_mode_ && imageTargetRect().contains(position);
+    brush_cursor_visible_ = (paint_mode_ || eraser_mode_) &&
+        imageTargetRect().contains(position);
     if (brush_cursor_visible_) brush_cursor_position_ = position;
     update();
 }
@@ -165,7 +222,7 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
         }
     }
     painter.restore();
-    painter.drawImage(target, image_);
+    painter.drawImage(target, transient_image_.isNull() ? image_ : transient_image_);
 
     if (crop_mode_ && selecting_crop_) {
         const QRectF selection = crop_selection_.normalized().intersected(target);
@@ -175,8 +232,8 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
         painter.drawRect(selection);
     }
 
-    if (paint_mode_) {
-        if (painting_ && !paint_points_.isEmpty()) {
+    if (paint_mode_ || eraser_mode_) {
+        if ((painting_ || (erasing_ && eraser_preview_enabled_)) && !paint_points_.isEmpty()) {
             QPainterPath path;
             const auto toWidget = [&target, this](const QPointF& point) {
                 return QPointF(target.left() + point.x() * zoom_,
@@ -189,14 +246,16 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
             painter.save();
             painter.setClipRect(target);
             painter.setRenderHint(QPainter::Antialiasing, true);
-            QPen pen(brush_color_, brush_diameter_ * zoom_, Qt::SolidLine,
+            const QColor stroke_color = eraser_mode_
+                ? QColor(240, 80, 125, 115) : brush_color_;
+            QPen pen(stroke_color, brush_diameter_ * zoom_, Qt::SolidLine,
                      Qt::RoundCap, Qt::RoundJoin);
             painter.setPen(pen);
             if (paint_points_.size() == 1) {
                 const QPointF center = toWidget(paint_points_.front());
                 const qreal radius = brush_diameter_ * zoom_ / 2.0;
                 painter.setPen(Qt::NoPen);
-                painter.setBrush(brush_color_);
+                painter.setBrush(stroke_color);
                 painter.drawEllipse(center, radius, radius);
             } else {
                 painter.drawPath(path);
@@ -232,7 +291,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         return;
     }
     const auto modifiers = event->modifiers();
-    if (paint_mode_ && !crop_mode_ && event->button() == Qt::LeftButton &&
+    if ((paint_mode_ || eraser_mode_) && !crop_mode_ && event->button() == Qt::LeftButton &&
         modifiers.testFlag(Qt::ControlModifier) && modifiers.testFlag(Qt::AltModifier) &&
         imageTargetRect().contains(event->position())) {
         resizing_brush_ = true;
@@ -261,6 +320,18 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         paint_points_.append(widgetToImageCoordinates(event->position()));
         brush_cursor_position_ = event->position();
         brush_cursor_visible_ = true;
+        update();
+        event->accept();
+        return;
+    }
+    if (eraser_mode_ && event->button() == Qt::LeftButton &&
+        imageTargetRect().contains(event->position())) {
+        erasing_ = true;
+        paint_points_.clear();
+        paint_points_.append(widgetToImageCoordinates(event->position()));
+        brush_cursor_position_ = event->position();
+        brush_cursor_visible_ = true;
+        if (!eraser_preview_enabled_) emit erasePreviewRequested(paint_points_, brush_diameter_);
         update();
         event->accept();
         return;
@@ -299,16 +370,19 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (painting_) {
+    if (painting_ || erasing_) {
         const QPointF point = widgetToImageCoordinates(event->position());
         appendPaintPoint(point);
         brush_cursor_position_ = event->position();
         brush_cursor_visible_ = imageTargetRect().contains(event->position());
+        if (erasing_ && !eraser_preview_enabled_) {
+            emit erasePreviewRequested(paint_points_, brush_diameter_);
+        }
         update();
         event->accept();
         return;
     }
-    if (paint_mode_) {
+    if (paint_mode_ || eraser_mode_) {
         updateHoverCursor(event->position());
         event->accept();
         return;
@@ -320,7 +394,8 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::MiddleButton && panning_) {
         panning_ = false;
         setCursor(crop_mode_ ? Qt::CrossCursor
-                             : (paint_mode_ ? Qt::BlankCursor : Qt::ArrowCursor));
+                             : ((paint_mode_ || eraser_mode_)
+                                    ? Qt::BlankCursor : Qt::ArrowCursor));
         event->accept();
         return;
     }
@@ -339,6 +414,19 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         crop_selection_ = {};
         if (selection.width() > 1 && selection.height() > 1) emit cropSelected(selection);
         update();
+        event->accept();
+        return;
+    }
+    if (event->button() == Qt::LeftButton && erasing_) {
+        appendPaintPoint(widgetToImageCoordinates(event->position()));
+        const QVector<QPointF> points = std::move(paint_points_);
+        erasing_ = false;
+        transient_image_ = {};
+        emit erasePreviewCleared();
+        brush_cursor_position_ = event->position();
+        brush_cursor_visible_ = imageTargetRect().contains(event->position());
+        update();
+        if (!points.isEmpty()) emit eraseStrokeSelected(points, brush_diameter_);
         event->accept();
         return;
     }
@@ -377,11 +465,25 @@ void ImageCanvas::wheelEvent(QWheelEvent* event) {
 }
 
 void ImageCanvas::leaveEvent(QEvent* event) {
-    if (!painting_ && !resizing_brush_) {
+    if (!painting_ && !erasing_ && !resizing_brush_) {
         brush_cursor_visible_ = false;
         update();
     }
     QWidget::leaveEvent(event);
+}
+
+void ImageCanvas::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Escape && erasing_) {
+        erasing_ = false;
+        paint_points_.clear();
+        transient_image_ = {};
+        emit erasePreviewCleared();
+        brush_cursor_visible_ = false;
+        update();
+        event->accept();
+        return;
+    }
+    QWidget::keyPressEvent(event);
 }
 
 } // namespace image_editor

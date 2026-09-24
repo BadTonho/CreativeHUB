@@ -33,8 +33,9 @@ persistence, and recovery.
   bottom to top. Export and recovery use that same composition; linked source
   files remain unchanged.
 - `ImageDocumentStore` reads and atomically writes versioned `.cimg` documents
-  and recovery snapshots. Version 4 stores layer UUIDs and properties, and the
-  reader continues to accept versions 1–3. Its data format is specified in
+  and recovery snapshots. Version 4 stores layer UUIDs and properties; version
+  5 adds layer-local eraser strokes. The reader continues to accept versions
+  1–4. Its data format is specified in
   [`FORMAT.md`](FORMAT.md).
 - `RecoveryStore` writes a local snapshot every 60 seconds while a dirty
   document with a renderable base is open. Unsaved canvases use a persisted
@@ -44,24 +45,28 @@ persistence, and recovery.
   requires a transparent, white, or custom-color background. Canvas documents
   store this base metadata without generating a companion raster file.
 - `ImageCanvas` handles fit, zoom, middle-button panning, crop selection, and a
-  checkerboard behind transparent pixels. It previews a round paint stroke
-  during a drag and emits one image-space stroke when the gesture ends. While
-  Paint is active, `Ctrl+Alt` plus a left-button drag over the image adjusts the
-  brush size from the signed horizontal displacement at the press point: right
-  increases and left decreases at 1 px per screen pixel. Vertical movement is
-  ignored. The brush outline stays anchored at the press point during the drag,
-  including when the pointer leaves the image. On release, the system pointer
-  returns to the press point; normal hover tracking resumes on subsequent mouse
-  movement. The gesture updates the window's brush controls without changing
-  the document or history.
-- `ToolSidebar` currently contains one checkable, icon-only Paint tool in a
-  compact rail and an always-visible color swatch at the bottom. The swatch opens
-  an alpha-capable color picker. `ImageEditorWindow` owns a persistent top tool
-  options bar; it is empty when no tool is active and shows synchronized slider
-  and numeric brush-size controls (1–1024 pixels) while Paint is active. Paint
-  starts inactive. The options are visible only while both the Paint button and
-  canvas paint mode are active; the sidebar and crop menu action cannot be
-  active at the same time.
+  checkerboard behind transparent pixels. Paint and Eraser preview round strokes
+  during a drag and commit one image-space operation when released. Eraser's
+  default live preview renders a temporary composite with the selected layer
+  erased but does not mutate the document or history; the optional overlay
+  preview draws a translucent mark instead. Escape cancels an in-progress erase.
+  The eraser clears alpha only in the selected editable layer, revealing visible
+  lower layers; Background cannot be painted or erased. For either active tool,
+  `Ctrl+Alt` plus a left-button drag over the image adjusts that tool's size from
+  signed horizontal displacement at the press point: right increases and left
+  decreases at 1 px per screen pixel. Vertical movement is ignored. The tool
+  outline stays anchored at the press point during the drag, including when the
+  pointer leaves the image. On release, the system pointer returns to the press
+  point; normal hover tracking resumes on subsequent mouse movement. The gesture
+  updates the window controls without changing the document or history.
+- `ToolSidebar` contains mutually exclusive, checkable, icon-only Paint and
+  Eraser tools in a compact rail; both can be inactive. The always-visible color
+  swatch remains specific to Paint. `ImageEditorWindow` owns a persistent top
+  tool options bar; it is empty when no tool is active and shows synchronized
+  size controls (1–1024 pixels) for the active tool. Paint and Eraser sizes are
+  independent and start at 12 px. The Eraser-only Preview option starts off and
+  is session state, not document data. The sidebar tools and crop action cannot
+  be active at the same time.
 - `LayerPanel` is hosted by a resizable, dockable right-side `QDockWidget`. It
   presents the stack top-to-bottom with an isolated, aspect-fitted thumbnail
   on the left, the layer name, and an eye visibility button on the right.
@@ -80,10 +85,10 @@ persistence, and recovery.
 - `ImageEditorWindow` owns the command-action registry and the **Settings >
   Keyboard Shortcuts** dialog. Stable action names identify preferences stored
   with `QSettings`, separately from editable documents. Defaults use Qt standard
-  sequences plus `B` for Paint and `Esc` to cancel crop; duplicate assignments
-  are rejected, and Paint's action stays disabled without an editable layer. The
-  fixed brush-resize mouse gesture is documented separately and is not part of
-  the keyboard shortcut preferences.
+  sequences plus `B` for Paint, `E` for Eraser, and `Esc` to cancel crop;
+  duplicate assignments are rejected, and tool actions stay disabled without an
+  editable layer. The fixed tool-size mouse gesture is documented separately
+  and is not part of the keyboard shortcut preferences.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
   is shown; expected dialog cancellation is not an error.
