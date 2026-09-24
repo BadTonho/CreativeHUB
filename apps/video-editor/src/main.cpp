@@ -52,12 +52,12 @@ int main(int argc, char* argv[]) {
         "application",
         "startup",
         "Main Editor started.",
-        {{"version", "Beta 0.1.0"}, {"log_path", pathToUtf8(logger.log_path())}});
+        {{"version", "Beta 0.1.2"}, {"log_path", pathToUtf8(logger.log_path())}});
 
     try {
         QApplication application(argc, argv);
         QApplication::setApplicationName("Main Editor");
-        QApplication::setApplicationVersion("Beta 0.1.0");
+        QApplication::setApplicationVersion("Beta 0.1.2");
 
         MainWindow window;
         window.show();
