@@ -32,8 +32,6 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/application/timeline_command_service.h
     src/main_window/main_window_support.cpp
     src/main_window/main_window_support.h
-    src/main_window/frame_step_navigation.cpp
-    src/main_window/frame_step_navigation.h
     src/main_window/main_window_workspace.cpp
     src/main_window/main_window_effects.cpp
     src/main_window/main_window_project.cpp
@@ -63,6 +61,10 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/rendering/text_renderer.h
     src/playback/playback_worker.cpp
     src/playback/playback_worker.h
+    src/playback/playback_controller.cpp
+    src/playback/playback_controller.h
+    src/playback/frame_step_navigation.cpp
+    src/playback/frame_step_navigation.h
     src/playback/playback_transition_plan.cpp
     src/playback/playback_transition_plan.h
     src/playback/playback_audio_pacing.h

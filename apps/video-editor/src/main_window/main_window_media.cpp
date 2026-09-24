@@ -748,9 +748,10 @@ void MainWindow::removeSelectedMedia() {
     const auto index = selectedMediaIndex();
     if (!index.has_value() || media_items_[*index].offline) return;
     if (!media_controller_.markOffline(media_items_[*index].metadata.source_path).changed()) return;
-    ++playback_generation_;
+    if (playback_controller_ != nullptr) {
+        playback_controller_->invalidate(true);
+    }
     playback_is_playing_ = false;
-    if (playback_worker_ != nullptr) QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
     preview_widget_->clearFrame("Preview area\n\nThe selected media is offline.");
     updateProjectDirtyState();
     populateMediaBrowser(media_items_[*index].metadata.source_path);
@@ -962,10 +963,8 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
 
 void MainWindow::updateMediaDetails(int row) {
     ++selection_generation_;
-    pending_clip_activation_.reset();
-    ++playback_generation_;
-    if (playback_worker_ != nullptr) {
-        QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
+    if (playback_controller_ != nullptr) {
+        playback_controller_->invalidate(true);
     }
     playback_is_playing_ = false;
     playback_frame_index_ = 0;
@@ -1002,50 +1001,9 @@ void MainWindow::updateMediaDetails(int row) {
     updatePlaybackControls();
     updatePlaybackStatus();
 
-    if (playback_worker_ != nullptr && canPlaybackSelectedMedia()) {
-        if (item.metadata.kind == media::MediaKind::Image) {
-            sendCompositionToWorker();
-            return;
-        }
-        const QString source_path = fromUtf8(pathToUtf8(item.metadata.source_path));
-        const double frame_rate = item.metadata.frame_rate.value_or(30.0);
-        std::int64_t source_start_frame = 0;
-        std::int64_t segment_frame_count = item.metadata.frame_count.value_or(0);
-        if (active_timeline_track_index_cache_.has_value() &&
-            active_timeline_clip_index_cache_.has_value() &&
-            *active_timeline_track_index_cache_ < timeline_model_.trackCount() &&
-            *active_timeline_clip_index_cache_ < timeline_model_.clipCount(
-                *active_timeline_track_index_cache_)) {
-            const auto& clip = timeline_model_.tracks()[*active_timeline_track_index_cache_]
-                .clips[*active_timeline_clip_index_cache_];
-            source_start_frame = clip.source_start_frame;
-            segment_frame_count = clip.timeline_duration_frames;
-        }
-        QMetaObject::invokeMethod(
-            playback_worker_,
-            "setMedia",
-            Qt::QueuedConnection,
-            Q_ARG(QString, source_path),
-            Q_ARG(double, frame_rate),
-             Q_ARG(qint64, static_cast<qint64>(source_start_frame)),
-             Q_ARG(qint64, static_cast<qint64>(segment_frame_count)),
-             Q_ARG(double, active_timeline_track_index_cache_.has_value()
-                 ? timeline_model_.tracks()[*active_timeline_track_index_cache_].audio_gain : 1.0),
-             Q_ARG(bool, active_timeline_track_index_cache_.has_value()
-                 ? timeline_model_.tracks()[*active_timeline_track_index_cache_].audio_muted : false),
-             Q_ARG(double, active_timeline_track_index_cache_.has_value() &&
-                 active_timeline_clip_index_cache_.has_value()
-                 ? timeline_model_.tracks()[*active_timeline_track_index_cache_]
-                     .clips[*active_timeline_clip_index_cache_].audio_gain : 1.0),
-             Q_ARG(bool, active_timeline_track_index_cache_.has_value() &&
-                 active_timeline_clip_index_cache_.has_value()
-                 ? timeline_model_.tracks()[*active_timeline_track_index_cache_]
-                     .clips[*active_timeline_clip_index_cache_].audio_muted : false),
-             Q_ARG(qint64, active_timeline_track_index_cache_.has_value()
-                 ? static_cast<qint64>(*active_timeline_track_index_cache_) : -1),
-             Q_ARG(qint64, active_timeline_clip_index_cache_.has_value()
-                 ? static_cast<qint64>(*active_timeline_clip_index_cache_) : -1),
-             Q_ARG(quint64, playback_generation_));
-        sendCompositionToWorker();
+    if (playback_controller_ != nullptr && canPlaybackSelectedMedia() &&
+        active_timeline_clip_id_.has_value()) {
+        (void)playback_controller_->activateClip(
+            *active_timeline_clip_id_, 0, false);
     }
 }

@@ -684,3 +684,12 @@ Definição final de concluído:
 - Service tests cover migration and round-trip, dirty state, recovery, canonical media lookup, duplicates, offline restoration, partial import failure, cancellation, project-open failures, and legacy video-kind GIF media. The MainWindow integration test covers the visible project during loading, applies prepared media and timeline state, protects a newer selection from a late import, and rejects stale project-generation results.
 - Release build: passed. Full CTest suite: 34/34 passed. `git diff --check`: passed.
 - Manual large-media import and project-open validation: documented in [Project and Media Controllers](PROJECT_AND_MEDIA_CONTROLLERS.md), not performed in this environment.
+
+## Stage 6 implementation record
+
+- `playback::PlaybackController` now owns the worker thread and lifecycle, playback generations, pending activation, composition snapshots, stale-event filtering, and the latest-frame mailbox. It reads the timeline, media library, stable selection, and playhead from `EditorSession`.
+- Timeline, media, project, inspector, and workspace handlers now route playback operations through typed controller commands. `MainWindow` projects accepted controller events to widgets, selection, playhead, preview, status, and the technical error log; it keeps only a loading presentation flag derived from activation events and no longer owns the worker, thread, generations, pending activation details, or mailbox.
+- Worker adapter requests continue using the existing video, audio, and composition modules. `TrackId` and `ClipId` remain the application-facing identities, with vector indexes derived only while building worker requests.
+- Controller tests exercise command flow, rapid activation, stale readiness, frames and completion, frame-mailbox coalescing, seeking, stepping between clips, invalidation during playback, and shutdown without constructing `MainWindow`. The integration test verifies that a committed activation updates the visible selection and media-browser projection.
+- Release build: passed. Full CTest suite: 35/35 passed. `git diff --check`: passed.
+- Manual playback-boundary and close-during-playback validation: documented in [Playback Controller](PLAYBACK_CONTROLLER.md), not performed in this environment.

@@ -56,7 +56,7 @@ struct CompositionTransitionSpec {
     timeline::TransitionKind kind = timeline::TransitionKind::CrossDissolve;
 };
 
-class PlaybackWorker final : public QObject {
+class PlaybackWorker : public QObject {
     Q_OBJECT
 
 public:
@@ -64,11 +64,11 @@ public:
     ~PlaybackWorker() override;
 
     // Thread-safe entry point used by the UI to replace an older pending seek.
-    void requestSeek(qint64 frame_index, quint64 generation);
+    virtual void requestSeek(qint64 frame_index, quint64 generation);
 
 public slots:
-    void initializeDiagnostics();
-    void setMedia(
+    virtual void initializeDiagnostics();
+    virtual void setMedia(
         QString source_path,
         double frame_rate,
         qint64 source_start_frame,
@@ -80,27 +80,27 @@ public slots:
         qint64 track_index,
         qint64 clip_index,
         quint64 generation);
-    void play();
-    void pause();
-    void stop();
-    void setAudioParameters(
+    virtual void play();
+    virtual void pause();
+    virtual void stop();
+    virtual void setAudioParameters(
         double track_audio_gain,
         bool track_audio_muted,
         double clip_audio_gain,
         bool clip_audio_muted);
-    void setMonitorVolume(double gain);
-    void setComposition(
+    virtual void setMonitorVolume(double gain);
+    virtual void setComposition(
         QVector<CompositionLayerSpec> layers,
         QVector<CompositionTransitionSpec> transitions,
         quint64 generation);
-    void setActiveCompositionClip(qint64 track_index, qint64 clip_index);
-    void renderCompositionFrame(
+    virtual void setActiveCompositionClip(qint64 track_index, qint64 clip_index);
+    virtual void renderCompositionFrame(
         qint64 global_frame,
         qint64 frame_index,
         quint64 generation);
-    void stepForward();
-    void stepBackward();
-    void seekToFrame(qint64 frame_index, quint64 generation);
+    virtual void stepForward();
+    virtual void stepBackward();
+    virtual void seekToFrame(qint64 frame_index, quint64 generation);
 
 signals:
     void frameReady(VideoFramePtr frame, qint64 frame_index, quint64 generation);

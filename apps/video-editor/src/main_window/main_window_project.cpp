@@ -354,14 +354,12 @@ void MainWindow::clearProjectState() {
             error.what(),
             { {"cause", error.what()} });
     }
-    pending_clip_activation_.reset();
     pending_audio_edit_.reset();
     pending_transform_edit_.reset();
-    ++playback_generation_;
-    playback_is_playing_ = false;
-    if (playback_worker_ != nullptr) {
-        QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
+    if (playback_controller_ != nullptr) {
+        playback_controller_->invalidate(true);
     }
+    playback_is_playing_ = false;
 
     project_controller_.reset();
     ++project_generation_;
@@ -401,8 +399,7 @@ void MainWindow::newProject() {
             error.what(),
             {{"project_path", project_path_.has_value()
                     ? pathToUtf8(*project_path_)
-                    : ""},
-             {"generation", std::to_string(playback_generation_)}});
+                    : ""}});
         QMessageBox::warning(this, "Could not create project", "The new project could not be created.");
         statusBar()->showMessage("Could not create project.");
     }
@@ -668,14 +665,12 @@ void MainWindow::finishProjectOpen(
 }
 void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
     const auto& loaded_document = prepared.document;
-    pending_clip_activation_.reset();
     pending_audio_edit_.reset();
     pending_transform_edit_.reset();
-    ++playback_generation_;
-    playback_is_playing_ = false;
-    if (playback_worker_ != nullptr) {
-        QMetaObject::invokeMethod(playback_worker_, "stop", Qt::QueuedConnection);
+    if (playback_controller_ != nullptr) {
+        playback_controller_->invalidate(true);
     }
+    playback_is_playing_ = false;
 
     project_controller_.commitPrepared(
         std::move(prepared.media_library),

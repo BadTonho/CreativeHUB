@@ -1,4 +1,4 @@
-#include "main_window/frame_step_navigation.h"
+#include "playback/frame_step_navigation.h"
 
 #include <cstdint>
 #include <iostream>
@@ -10,8 +10,8 @@
 
 namespace {
 
-using main_window_detail::FrameStepAction;
-using main_window_detail::FrameStepDirection;
+using playback::detail::FrameStepAction;
+using playback::detail::FrameStepDirection;
 
 struct ClipRange {
     std::int64_t start;
@@ -55,7 +55,7 @@ void expectDecision(
     FrameStepAction action,
     std::optional<timeline::ClipLocation> destination = std::nullopt,
     std::int64_t destination_local_frame = 0) {
-    const auto decision = main_window_detail::decideFrameStep(
+    const auto decision = playback::detail::decideFrameStep(
         model, active, local_frame, direction);
     require(decision.action == action &&
                 decision.destination == destination &&

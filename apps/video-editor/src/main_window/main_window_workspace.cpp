@@ -513,7 +513,7 @@ void MainWindow::createMenus() {
         QStringLiteral("playback.play_pause"),
         QStringLiteral("Play or Pause"), play_action);
     connect(play_action, &QAction::triggered, this, [this]() {
-        sendPlaybackCommand(playback_is_playing_ ? "pause" : "play");
+        sendPlaybackCommand(playback_is_playing_ ? playback::PlaybackCommand::Pause : playback::PlaybackCommand::Play);
     });
     addAction(play_action);
 
@@ -524,7 +524,7 @@ void MainWindow::createMenus() {
         QStringLiteral("playback.previous_frame"),
         QStringLiteral("Previous Frame"), previous_frame_action);
     connect(previous_frame_action, &QAction::triggered, this, [this]() {
-        sendPlaybackCommand("stepBackward");
+        sendPlaybackCommand(playback::PlaybackCommand::StepBackward);
     });
     addAction(previous_frame_action);
 
@@ -535,7 +535,7 @@ void MainWindow::createMenus() {
         QStringLiteral("playback.next_frame"),
         QStringLiteral("Next Frame"), next_frame_action);
     connect(next_frame_action, &QAction::triggered, this, [this]() {
-        sendPlaybackCommand("stepForward");
+        sendPlaybackCommand(playback::PlaybackCommand::StepForward);
     });
     addAction(next_frame_action);
 

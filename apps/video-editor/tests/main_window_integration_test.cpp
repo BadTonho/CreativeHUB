@@ -2,6 +2,7 @@
 
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
+#include "ui/media_browser_list_widget.h"
 
 #include <QApplication>
 #include <QEventLoop>
@@ -149,23 +150,41 @@ public:
                         round_tripped.timeline_tracks[1].clips.size() == 1,
                     "The round-trip project lost a track or clip.");
 
-            window.pending_clip_activation_ = MainWindow::PendingClipActivation{
-                0,
-                0,
-                1,
-                false,
-                window.playback_generation_,
-                false,
-                1,
-                first_source};
+            window.clearActiveTimelineSelection();
+            require(window.playback_controller_ != nullptr &&
+                        window.playback_controller_->activateClip(1, 0, false) ==
+                            playback::PlaybackCommandResult::Pending,
+                    "The playback controller did not accept a stable-identity activation.");
+            QEventLoop activation_loop;
+            QTimer activation_timeout;
+            activation_timeout.setSingleShot(true);
+            QObject::connect(&activation_timeout, &QTimer::timeout,
+                             &activation_loop, &QEventLoop::quit);
+            QTimer activation_poll;
+            QObject::connect(&activation_poll, &QTimer::timeout, &activation_loop, [&]() {
+                if (window.playback_controller_ == nullptr ||
+                    !window.playback_activation_loading_) {
+                    activation_loop.quit();
+                }
+            });
+            activation_timeout.start(30000);
+            activation_poll.start(10);
+            activation_loop.exec();
+            require(window.playback_controller_ != nullptr &&
+                        !window.playback_activation_loading_,
+                    "The controller activation did not leave its pending state.");
+            require(window.active_timeline_track_id_ == 1 &&
+                        window.active_timeline_clip_id_ == 1 &&
+                        window.active_timeline_track_index_cache_ == 0 &&
+                        window.active_timeline_clip_index_cache_ == 0,
+                    "A controller activation did not update the timeline selection projection.");
+            require(window.media_list_ != nullptr &&
+                        window.media_list_->currentRow() == 0,
+                    "A controller activation did not update the media-browser selection projection.");
             require(window.timeline_model_.removeClip(0, 0) ==
                         timeline::RemoveClipResult::Removed,
-                    "The stale activation test could not remove its source clip.");
-            window.handlePlaybackMediaReady(window.playback_generation_);
-            require(!window.pending_clip_activation_.has_value() &&
-                        !window.active_timeline_clip_id_.has_value() &&
-                        !window.playback_is_playing_,
-                    "A stale activation for a removed clip was not discarded safely.");
+                    "The integration test could not prepare its cross-track move fixture.");
+            window.clearActiveTimelineSelection();
 
             window.setActiveTimelineSelection(timeline::ClipLocation{1, 0});
             window.handleTimelineClipMoveAt(1, 0, 0, 0);

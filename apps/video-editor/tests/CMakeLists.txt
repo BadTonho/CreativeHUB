@@ -295,6 +295,30 @@ set_tests_properties(creative-suite-main-editor-playback-worker-errors PROPERTIE
     ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;QT_QPA_PLATFORM=offscreen"
 )
 
+add_executable(creative-suite-main-editor-playback-controller-tests
+    playback_controller_test.cpp
+)
+
+target_link_libraries(creative-suite-main-editor-playback-controller-tests PRIVATE
+    creative-suite-main-editor-core
+)
+
+target_compile_features(creative-suite-main-editor-playback-controller-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-playback-controller-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-playback-controller-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-playback-controller
+    COMMAND creative-suite-main-editor-playback-controller-tests
+)
+set_tests_properties(creative-suite-main-editor-playback-controller PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1"
+)
+
 if(EXISTS "${REFERENCE_VIDEO}")
     add_test(
         NAME creative-suite-main-editor-playback-worker-reference
@@ -397,8 +421,8 @@ add_test(
 
 add_executable(creative-suite-main-editor-frame-step-navigation-tests
     frame_step_navigation_test.cpp
-    ../src/main_window/frame_step_navigation.cpp
-    ../src/main_window/frame_step_navigation.h
+    ../src/playback/frame_step_navigation.cpp
+    ../src/playback/frame_step_navigation.h
     ../src/timeline/timeline_model.cpp
     ../src/timeline/timeline_model.h
     ../src/timeline/timeline_transform.cpp

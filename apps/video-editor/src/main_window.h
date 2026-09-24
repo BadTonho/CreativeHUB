@@ -8,8 +8,7 @@
 #include "application/project_controller.h"
 #include "application/project_open_service.h"
 #include "application/timeline_command_service.h"
-#include "playback/playback_worker.h"
-#include "playback/playback_frame_mailbox.h"
+#include "playback/playback_controller.h"
 #include "project/autosave_manager.h"
 #include "project/project_document.h"
 #include "system/performance_usage.h"
@@ -18,7 +17,6 @@
 
 #include <QMainWindow>
 #include <QString>
-#include <QThread>
 #include <QThreadPool>
 #include <QtGlobal>
 
@@ -266,7 +264,7 @@ private:
     void applyTrackAudioControls();
     void updatePlaybackAudioParameters();
     void applyMonitorVolumePercent(int percent);
-    void sendCompositionToWorker();
+    void refreshPlaybackComposition();
     void updateInspector();
     void beginTransformEdit();
     void finishTransformEdit();
@@ -287,26 +285,15 @@ private:
     timelineClipAtPlayhead() const noexcept;
     [[nodiscard]] bool canPlaybackTimelineAtPlayhead() const noexcept;
     [[nodiscard]] std::int64_t timelinePlayheadFrame() const noexcept;
-    void sendPlaybackCommand(const char* command);
-    void discardPendingClipActivation(timeline::ClipId clip_id);
+    void sendPlaybackCommand(playback::PlaybackCommand command);
     void updatePlaybackControls();
     void updatePlaybackStatus();
-    void handlePlaybackFrame(
-        playback::VideoFramePtr frame,
-        qint64 frame_index,
-        quint64 generation);
-    void queuePlaybackFrame(
-        playback::VideoFramePtr frame,
-        qint64 frame_index,
-        quint64 generation);
-    void drainPlaybackFrameMailbox();
-    void handlePlaybackMediaReady(quint64 generation);
-    void handlePlaybackStateChanged(bool playing, quint64 generation);
-    void handlePlaybackFinished(quint64 generation, bool during_playback);
-    void handlePlaybackError(
-        const QString& message,
-        qint64 error_code,
-        quint64 generation);
+    void handlePlaybackEvent(const playback::PlaybackControllerEvent& event);
+    void handlePlaybackFrame(const playback::PlaybackFrameEvent& event);
+    void handlePlaybackActivation(const playback::PlaybackActivationEvent& event);
+    void handlePlaybackStateChanged(bool playing);
+    void handlePlaybackFinished(bool during_playback, bool gap);
+    void handlePlaybackError(const playback::PlaybackErrorEvent& event);
     void handleTimelineClipSelected(qint64 clip_index);
     void handleTimelineSeekStarted();
     void handleTimelineSeek(qint64 global_frame);
@@ -321,23 +308,10 @@ private:
         bool resume_playback,
         bool preserve_timeline_playhead = false);
     void commitTimelineClipActivation(
-        std::size_t track_index,
-        std::size_t clip_index,
-        std::size_t media_index,
+        timeline::ClipId clip_id,
         std::int64_t frame_index,
         bool show_cached_frame,
         bool preserve_timeline_playhead = false);
-
-    struct PendingClipActivation {
-        std::int64_t target_frame = 0;
-        std::int64_t source_start_frame = 0;
-        std::int64_t segment_frame_count = 0;
-        bool resume_playback = false;
-        quint64 generation = 0;
-        bool preserve_timeline_playhead = false;
-        timeline::ClipId clip_id = 0;
-        std::filesystem::path media_source_path;
-    };
 
     QDockWidget* bins_dock_ = nullptr;
     QDockWidget* media_dock_ = nullptr;
@@ -415,6 +389,7 @@ private:
     timeline::TimelineTrackHeaderOverlay* timeline_header_overlay_ = nullptr;
     QScrollArea* timeline_scroll_ = nullptr;
     application::EditorSession editor_session_;
+    std::unique_ptr<playback::PlaybackController> playback_controller_;
     application::TimelineCommandService timeline_command_service_{editor_session_};
     application::MediaController media_controller_{editor_session_};
     application::ProjectController project_controller_{editor_session_};
@@ -433,7 +408,6 @@ private:
         editor_session_.preservedPlayheadFrameForUi();
     std::optional<ActiveTransition>& active_transition_ =
         editor_session_.selectionForUi().active_transition;
-    std::optional<PendingClipActivation> pending_clip_activation_;
     const std::optional<std::filesystem::path>& project_path_ =
         editor_session_.projectPath();
     const std::optional<project::ProjectDocument>& saved_project_document_ =
@@ -443,7 +417,7 @@ private:
     const bool& project_dirty_ = editor_session_.projectDirtyState();
     WorkspacePage workspace_page_ = WorkspacePage::Edit;
     bool initial_window_layout_pending_ = false;
-    QThread playback_thread_;
+    bool playback_activation_loading_ = false;
     QThreadPool media_task_pool_;
     QProgressDialog* media_import_progress_ = nullptr;
     std::shared_ptr<std::atomic_bool> active_media_import_cancel_;
@@ -460,10 +434,7 @@ private:
     std::function<void(bool)> project_open_completion_;
     std::vector<std::pair<QWidget*, bool>> project_loading_widget_states_;
     std::vector<std::pair<QAction*, bool>> project_loading_action_states_;
-    playback::PlaybackWorker* playback_worker_ = nullptr;
-    playback::PlaybackFrameMailbox playback_frame_mailbox_;
     std::int64_t& playback_frame_index_ = editor_session_.playheadFrameForUi();
-    quint64 playback_generation_ = 0;
     bool playback_is_playing_ = false;
     std::array<std::uint8_t, 4> text_color_{255, 255, 255, 255};
 };

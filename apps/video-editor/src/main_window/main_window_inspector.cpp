@@ -561,12 +561,10 @@ void MainWindow::applyTextStyle() {
             : timeline::TextAlignment::Center;
 
     const auto before = captureTimelineEditState();
-    pending_clip_activation_.reset();
-    ++playback_generation_;
-    playback_is_playing_ = false;
-    if (playback_worker_ != nullptr) {
-        QMetaObject::invokeMethod(playback_worker_, "pause", Qt::QueuedConnection);
+    if (playback_controller_ != nullptr) {
+        playback_controller_->invalidate(false);
     }
+    playback_is_playing_ = false;
     const auto result = timeline_model_.setClipText(track_index, clip_index, text);
     if (result != timeline::TextParameterResult::Changed) {
         updateInspector();
@@ -575,19 +573,14 @@ void MainWindow::applyTextStyle() {
     recordTimelineEdit(before);
     updateTimelineState();
     updateProjectDirtyState();
-    sendCompositionToWorker();
-    if (playback_worker_ != nullptr &&
+    refreshPlaybackComposition();
+    if (playback_controller_ != nullptr &&
         timeline_model_.tracks()[track_index].clips[clip_index].kind ==
             timeline::ClipKind::Text) {
-        QMetaObject::invokeMethod(
-            playback_worker_,
-            "renderCompositionFrame",
-            Qt::QueuedConnection,
-            Q_ARG(qint64, static_cast<qint64>(timelinePlayheadFrame())),
-            Q_ARG(qint64, static_cast<qint64>(playback_frame_index_)),
-            Q_ARG(quint64, playback_generation_));
-    } else if (playback_worker_ != nullptr && canPlaybackSelectedMedia()) {
-        playback_worker_->requestSeek(playback_frame_index_, playback_generation_);
+        playback_controller_->renderCompositionFrame(
+            timelinePlayheadFrame(), playback_frame_index_);
+    } else if (playback_controller_ != nullptr && canPlaybackSelectedMedia()) {
+        playback_controller_->seekActiveClip(playback_frame_index_);
     }
     statusBar()->showMessage("Text style updated.");
 }
@@ -607,12 +600,10 @@ void MainWindow::applyTransformProperty(int property_index, double value) {
     const auto property = static_cast<timeline::TransformProperty>(property_index);
     const auto local_frame = std::max<std::int64_t>(0, playback_frame_index_);
     timeline::TransformParameterResult result = timeline::TransformParameterResult::NoChange;
-    pending_clip_activation_.reset();
-    ++playback_generation_;
-    playback_is_playing_ = false;
-    if (playback_worker_ != nullptr) {
-        QMetaObject::invokeMethod(playback_worker_, "pause", Qt::QueuedConnection);
+    if (playback_controller_ != nullptr) {
+        playback_controller_->invalidate(false);
     }
+    playback_is_playing_ = false;
 
     const auto& clip = timeline_model_.tracks()[track_index].clips[clip_index];
     const auto& keys = timeline::keyframesFor(clip.keyframes, property);
@@ -642,9 +633,9 @@ void MainWindow::applyTransformProperty(int property_index, double value) {
     }
     updateProjectDirtyState();
     updateTimelineState();
-    sendCompositionToWorker();
-    if (playback_worker_ != nullptr && canPlaybackSelectedMedia()) {
-        playback_worker_->requestSeek(local_frame, playback_generation_);
+    refreshPlaybackComposition();
+    if (playback_controller_ != nullptr && canPlaybackSelectedMedia()) {
+        playback_controller_->seekActiveClip(local_frame);
     }
     statusBar()->showMessage("Transform updated.");
 }
@@ -667,12 +658,10 @@ void MainWindow::toggleTransformKeyframe(int property_index) {
             return key.frame == frame;
         });
     const auto before = captureTimelineEditState();
-    pending_clip_activation_.reset();
-    ++playback_generation_;
-    playback_is_playing_ = false;
-    if (playback_worker_ != nullptr) {
-        QMetaObject::invokeMethod(playback_worker_, "pause", Qt::QueuedConnection);
+    if (playback_controller_ != nullptr) {
+        playback_controller_->invalidate(false);
     }
+    playback_is_playing_ = false;
     timeline::TransformParameterResult result = timeline::TransformParameterResult::NoChange;
     if (has_key) {
         result = timeline_model_.removeClipKeyframe(
@@ -691,9 +680,9 @@ void MainWindow::toggleTransformKeyframe(int property_index) {
         recordTimelineEdit(before);
         updateTimelineState();
         updateProjectDirtyState();
-        sendCompositionToWorker();
-        if (playback_worker_ != nullptr && canPlaybackSelectedMedia()) {
-            playback_worker_->requestSeek(frame, playback_generation_);
+        refreshPlaybackComposition();
+        if (playback_controller_ != nullptr && canPlaybackSelectedMedia()) {
+            playback_controller_->seekActiveClip(frame);
         }
         statusBar()->showMessage(has_key ? "Keyframe removed." : "Keyframe added.");
     } else {
