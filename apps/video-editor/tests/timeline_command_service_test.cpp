@@ -263,11 +263,150 @@ void run() {
 
 }
 
+void runInspectorAndTrackCommands() {
+    application::EditorSession session;
+    application::TimelineCommandService service(session);
+    const auto track_id = session.timeline().tracks().front().track_id;
+    const auto source = std::filesystem::temp_directory_path() / "command-coverage.mkv";
+    addMedia(session, source);
+    const auto added_clip = service.execute(application::AddMediaClipCommand{
+        source, track_id, 0});
+    require(added_clip.changed(), "Could not prepare inspector command coverage.");
+    const auto clip_id = added_clip.affected_clip_ids.front();
+
+    const auto empty_name = service.execute(application::AddTrackCommand{"  "});
+    require(empty_name.status == application::EditStatus::Rejected &&
+                empty_name.reason == application::EditReason::InvalidName &&
+                service.undoCount() == 1,
+            "An invalid track name changed history.");
+    const auto added_track = service.execute(application::AddTrackCommand{"Overlay"});
+    require(added_track.changed() && added_track.affected_track_ids.size() == 1 &&
+                session.selection().active_track_id == added_track.affected_track_ids.front() &&
+                service.undoCount() == 2,
+            "Adding a track did not return and select its stable ID.");
+    const auto overlay_id = added_track.affected_track_ids.front();
+    const auto renamed = service.execute(application::RenameTrackCommand{overlay_id, "Titles"});
+    const auto rename_noop = service.execute(application::RenameTrackCommand{overlay_id, "Titles"});
+    const auto missing_rename = service.execute(application::RenameTrackCommand{999, "Missing"});
+    require(renamed.changed() && rename_noop.status == application::EditStatus::NoChange &&
+                missing_rename.reason == application::EditReason::InvalidTarget &&
+                service.undoCount() == 3,
+            "Track rename did not distinguish changes, no-ops, and missing IDs.");
+
+    const auto moved_track = service.execute(application::MoveTrackCommand{track_id, 0});
+    require(moved_track.changed() && session.timeline().tracks().front().track_id == track_id &&
+                service.undoCount() == 4,
+            "Track movement did not resolve the source by stable ID.");
+    const auto missing_track_move = service.execute(application::MoveTrackCommand{999, 0});
+    require(missing_track_move.reason == application::EditReason::InvalidTarget &&
+                service.undoCount() == 4,
+            "Moving a missing track changed history.");
+    const auto invalid_track_position = service.execute(
+        application::MoveTrackCommand{track_id, 99});
+    const auto missing_track_remove = service.execute(
+        application::RemoveTrackCommand{999});
+    require(invalid_track_position.reason == application::EditReason::InvalidTarget &&
+                missing_track_remove.reason == application::EditReason::InvalidTarget &&
+                service.undoCount() == 4,
+            "Invalid track IDs or positions changed history.");
+
+    const auto nonempty_remove = service.execute(application::RemoveTrackCommand{track_id});
+    const auto removed_track = service.execute(application::RemoveTrackCommand{overlay_id});
+    require(nonempty_remove.reason == application::EditReason::TrackNotEmpty &&
+                removed_track.changed() && service.undoCount() == 5,
+            "Track removal did not reject occupied tracks or remove an empty one.");
+
+    const auto batch = service.beginEditBatch();
+    const auto audio_first = service.execute(application::SetClipAudioCommand{clip_id, 1.4, false});
+    const auto audio_second = service.execute(application::SetClipAudioCommand{clip_id, 0.75, true});
+    require(audio_first.changed() && audio_second.changed() &&
+                service.undoCount() == 5 && !audio_second.invalidate_playback,
+            "Audio changes inside a batch were not applied live or were recorded individually.");
+    const auto batch_result = service.finishEditBatch(batch);
+    require(batch_result.changed() && service.undoCount() == 6,
+            "A changed slider batch did not create exactly one history entry.");
+    const auto audio_undo = service.undo();
+    require(audio_undo.changed() &&
+                session.timeline().tracks()[*session.timeline().locateTrack(track_id)]
+                    .clips.front().audio_gain == 1.0 &&
+                !session.timeline().tracks()[*session.timeline().locateTrack(track_id)]
+                    .clips.front().audio_muted,
+            "Undo did not restore the audio state before the batch.");
+    const auto no_op_batch = service.beginEditBatch();
+    const auto no_op_batch_result = service.finishEditBatch(no_op_batch);
+    require(no_op_batch_result.status == application::EditStatus::NoChange &&
+                service.undoCount() == 5,
+            "An unchanged edit batch created history.");
+
+    const auto invalid_audio = service.execute(application::SetClipAudioCommand{clip_id, 5.0, false});
+    const auto missing_audio = service.execute(application::SetClipAudioCommand{999, 1.0, false});
+    const auto track_audio = service.execute(application::SetTrackAudioCommand{track_id, 0.5, true});
+    require(invalid_audio.reason == application::EditReason::InvalidValue &&
+                missing_audio.reason == application::EditReason::InvalidTarget &&
+                track_audio.changed() && service.undoCount() == 6,
+            "Audio commands did not validate values/IDs or record a valid track edit.");
+
+    const auto text_added = service.execute(application::AddTextClipCommand{
+        track_id, 120, 60, 30.0});
+    require(text_added.changed(), "Could not prepare a text clip for inspector commands.");
+    const auto text_id = text_added.affected_clip_ids.front();
+    timeline::TextStyle text_style;
+    text_style.content = "Updated title";
+    const auto text_changed = service.execute(application::SetClipTextCommand{text_id, text_style});
+    const auto text_noop = service.execute(application::SetClipTextCommand{text_id, text_style});
+    auto invalid_text_style = text_style;
+    invalid_text_style.font_size_pixels = -1.0;
+    const auto invalid_text = service.execute(
+        application::SetClipTextCommand{text_id, invalid_text_style});
+    require(text_changed.changed() && text_changed.invalidate_playback &&
+                text_noop.status == application::EditStatus::NoChange &&
+                invalid_text.reason == application::EditReason::InvalidValue,
+            "Text-style commands did not report effective and no-op edits correctly.");
+
+    const auto base_transform = service.execute(application::SetTransformPropertyCommand{
+        clip_id, timeline::TransformProperty::PositionX, 10, 0.25});
+    const auto added_key = service.execute(application::ToggleTransformKeyframeCommand{
+        clip_id, timeline::TransformProperty::PositionX, 10});
+    const auto changed_key = service.execute(application::SetTransformPropertyCommand{
+        clip_id, timeline::TransformProperty::PositionX, 10, 0.8});
+    const auto removed_key = service.execute(application::ToggleTransformKeyframeCommand{
+        clip_id, timeline::TransformProperty::PositionX, 10});
+    require(base_transform.changed() && added_key.changed() && changed_key.changed() &&
+                removed_key.changed() &&
+                session.timeline().tracks()[*session.timeline().locateTrack(track_id)]
+                    .clips.front().keyframes.position_x.empty(),
+            "Transform property and keyframe commands did not apply through the service.");
+    const auto invalid_transform = service.execute(application::SetTransformPropertyCommand{
+        999, timeline::TransformProperty::Scale, 0, 1.0});
+    const auto invalid_transform_value = service.execute(
+        application::SetTransformPropertyCommand{
+            clip_id, timeline::TransformProperty::Scale, 0, 0.0});
+    const auto invalid_transform_frame = service.execute(
+        application::SetTransformPropertyCommand{
+            clip_id, timeline::TransformProperty::PositionX, -1, 2.0});
+    require(invalid_transform.reason == application::EditReason::InvalidTarget &&
+                invalid_transform_value.reason == application::EditReason::InvalidValue &&
+                invalid_transform_frame.reason == application::EditReason::InvalidPosition,
+            "Transform commands did not reject missing IDs, invalid values, or frames.");
+
+    const auto count_before_clear = service.undoCount();
+    const auto cleared = service.execute(application::ClearTimelineCommand{});
+    const auto clear_noop = service.execute(application::ClearTimelineCommand{});
+    require(cleared.changed() && cleared.invalidate_playback &&
+                session.timeline().clipCount() == 0 &&
+                clear_noop.status == application::EditStatus::NoChange &&
+                service.undoCount() == count_before_clear + 1,
+            "Clearing the timeline did not record one effective change.");
+    require(service.undo().changed() && session.timeline().clipCount() == 2,
+            "Undo did not restore the clips cleared by the typed command.");
+}
+
 } // namespace
 
 int main() {
     try {
         run();
+        runInspectorAndTrackCommands();
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

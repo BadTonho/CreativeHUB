@@ -57,6 +57,88 @@ EditReason reasonForTransition(timeline::TransitionMutationResult result) noexce
     return EditReason::InvalidTarget;
 }
 
+EditReason reasonForTrack(timeline::TrackMutationResult result) noexcept {
+    switch (result) {
+    case timeline::TrackMutationResult::InvalidIndex:
+        return EditReason::InvalidTarget;
+    case timeline::TrackMutationResult::InvalidName:
+        return EditReason::InvalidName;
+    case timeline::TrackMutationResult::NotEmpty:
+        return EditReason::TrackNotEmpty;
+    case timeline::TrackMutationResult::Changed:
+    case timeline::TrackMutationResult::NoChange:
+        return EditReason::None;
+    }
+    return EditReason::InvalidTarget;
+}
+
+EditReason reasonForAudio(timeline::AudioParameterResult result) noexcept {
+    switch (result) {
+    case timeline::AudioParameterResult::InvalidIndex:
+        return EditReason::InvalidTarget;
+    case timeline::AudioParameterResult::InvalidValue:
+        return EditReason::InvalidValue;
+    case timeline::AudioParameterResult::Changed:
+    case timeline::AudioParameterResult::NoChange:
+        return EditReason::None;
+    }
+    return EditReason::InvalidTarget;
+}
+
+EditReason reasonForTransform(timeline::TransformParameterResult result) noexcept {
+    switch (result) {
+    case timeline::TransformParameterResult::InvalidIndex:
+        return EditReason::InvalidTarget;
+    case timeline::TransformParameterResult::InvalidValue:
+        return EditReason::InvalidValue;
+    case timeline::TransformParameterResult::Changed:
+    case timeline::TransformParameterResult::NoChange:
+        return EditReason::None;
+    }
+    return EditReason::InvalidTarget;
+}
+
+void setTransformValue(
+    timeline::Transform2D& transform,
+    timeline::TransformProperty property,
+    double value) noexcept {
+    switch (property) {
+    case timeline::TransformProperty::PositionX: transform.position_x = value; break;
+    case timeline::TransformProperty::PositionY: transform.position_y = value; break;
+    case timeline::TransformProperty::Scale: transform.scale = value; break;
+    case timeline::TransformProperty::Rotation: transform.rotation_degrees = value; break;
+    case timeline::TransformProperty::Opacity: transform.opacity = value; break;
+    }
+}
+
+double evaluatedTransformValue(
+    const timeline::Transform2D& transform,
+    const timeline::TransformKeyframes& keyframes,
+    timeline::TransformProperty property,
+    std::int64_t frame) {
+    const auto evaluated = timeline::evaluateTransform(transform, keyframes, frame);
+    switch (property) {
+    case timeline::TransformProperty::PositionX: return evaluated.position_x;
+    case timeline::TransformProperty::PositionY: return evaluated.position_y;
+    case timeline::TransformProperty::Scale: return evaluated.scale;
+    case timeline::TransformProperty::Rotation: return evaluated.rotation_degrees;
+    case timeline::TransformProperty::Opacity: return evaluated.opacity;
+    }
+    return 0.0;
+}
+
+bool validTransformProperty(timeline::TransformProperty property) noexcept {
+    switch (property) {
+    case timeline::TransformProperty::PositionX:
+    case timeline::TransformProperty::PositionY:
+    case timeline::TransformProperty::Scale:
+    case timeline::TransformProperty::Rotation:
+    case timeline::TransformProperty::Opacity:
+        return true;
+    }
+    return false;
+}
+
 } // namespace
 
 TimelineCommandService::TimelineCommandService(EditorSession& session) noexcept
@@ -75,7 +157,9 @@ TimelineEditResult TimelineCommandService::result(
 }
 
 void TimelineCommandService::recordSuccessfulEdit(timeline::EditState before) {
-    session_.history_.recordBeforeEdit(std::move(before));
+    if (!active_edit_batch_.has_value()) {
+        session_.history_.recordBeforeEdit(std::move(before));
+    }
 }
 
 void TimelineCommandService::selectClip(timeline::ClipLocation location) {
@@ -425,7 +509,249 @@ TimelineEditResult TimelineCommandService::execute(const RemoveTransitionCommand
     return output;
 }
 
+TimelineEditResult TimelineCommandService::execute(const AddTrackCommand& command) {
+    const auto before = session_.captureEditState();
+    const auto new_track_id = before.timeline.next_track_id;
+    const auto added = session_.timeline_.addTrack(command.name);
+    if (added != timeline::AddTrackResult::Added) {
+        return result(EditStatus::Rejected, EditReason::InvalidName);
+    }
+    recordSuccessfulEdit(before);
+    session_.selection_.active_track_id = new_track_id;
+    session_.selection_.active_clip_id.reset();
+    session_.selection_.active_transition.reset();
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {new_track_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(const RenameTrackCommand& command) {
+    const auto track = session_.timeline_.locateTrack(command.track_id);
+    if (!track) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.renameTrack(*track, command.name);
+    if (mutation == timeline::TrackMutationResult::NoChange) return result(EditStatus::NoChange);
+    if (mutation != timeline::TrackMutationResult::Changed) {
+        return result(EditStatus::Rejected, reasonForTrack(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {command.track_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(const MoveTrackCommand& command) {
+    const auto track = session_.timeline_.locateTrack(command.track_id);
+    if (!track || command.target_index >= session_.timeline_.trackCount()) {
+        return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    }
+    if (*track == command.target_index) return result(EditStatus::NoChange);
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.moveTrack(*track, command.target_index);
+    if (mutation == timeline::TrackMutationResult::NoChange) return result(EditStatus::NoChange);
+    if (mutation != timeline::TrackMutationResult::Changed) {
+        return result(EditStatus::Rejected, reasonForTrack(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {command.track_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(const RemoveTrackCommand& command) {
+    const auto track = session_.timeline_.locateTrack(command.track_id);
+    if (!track) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.removeTrack(*track);
+    if (mutation == timeline::TrackMutationResult::NoChange) return result(EditStatus::NoChange);
+    if (mutation != timeline::TrackMutationResult::Changed) {
+        return result(EditStatus::Rejected, reasonForTrack(mutation));
+    }
+    recordSuccessfulEdit(before);
+    if (session_.selection_.active_track_id == command.track_id) {
+        const auto next_index = std::min(*track, session_.timeline_.trackCount() - 1);
+        const auto& next_track = session_.timeline_.tracks()[next_index];
+        session_.selection_.active_track_id = next_track.track_id;
+        session_.selection_.active_clip_id.reset();
+        session_.selection_.active_transition.reset();
+    }
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {command.track_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(const ClearTimelineCommand&) {
+    if (!session_.timeline_.hasClip()) return result(EditStatus::NoChange);
+    const auto before = session_.captureEditState();
+    session_.timeline_.clear();
+    recordSuccessfulEdit(before);
+    session_.selection_.active_clip_id.reset();
+    session_.selection_.active_transition.reset();
+    session_.playhead_frame_ = 0;
+    session_.preserved_playhead_frame_.reset();
+    auto output = result(EditStatus::Applied);
+    for (const auto& track : before.timeline.tracks) {
+        output.affected_track_ids.push_back(track.track_id);
+        for (const auto& clip : track.clips) output.affected_clip_ids.push_back(clip.clip_id);
+    }
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(const SetClipAudioCommand& command) {
+    const auto location = session_.timeline_.locateClip(command.clip_id);
+    if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setClipAudio(
+        location->track_index, location->clip_index, command.gain, command.muted);
+    if (mutation == timeline::AudioParameterResult::NoChange) return result(EditStatus::NoChange);
+    if (mutation != timeline::AudioParameterResult::Changed) {
+        return result(EditStatus::Rejected, reasonForAudio(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {session_.timeline_.tracks()[location->track_index].track_id};
+    output.affected_clip_ids = {command.clip_id};
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(const SetTrackAudioCommand& command) {
+    const auto track = session_.timeline_.locateTrack(command.track_id);
+    if (!track) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setTrackAudio(*track, command.gain, command.muted);
+    if (mutation == timeline::AudioParameterResult::NoChange) return result(EditStatus::NoChange);
+    if (mutation != timeline::AudioParameterResult::Changed) {
+        return result(EditStatus::Rejected, reasonForAudio(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {command.track_id};
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(const SetClipTextCommand& command) {
+    const auto location = session_.timeline_.locateClip(command.clip_id);
+    if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setClipText(
+        location->track_index, location->clip_index, command.text);
+    if (mutation == timeline::TextParameterResult::NoChange) return result(EditStatus::NoChange);
+    if (mutation != timeline::TextParameterResult::Changed) {
+        return result(EditStatus::Rejected, mutation == timeline::TextParameterResult::InvalidValue
+            ? EditReason::InvalidValue : EditReason::InvalidTarget);
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {session_.timeline_.tracks()[location->track_index].track_id};
+    output.affected_clip_ids = {command.clip_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(const SetTransformPropertyCommand& command) {
+    const auto location = session_.timeline_.locateClip(command.clip_id);
+    if (!location || command.frame < 0) {
+        return result(EditStatus::Rejected, location ? EditReason::InvalidPosition : EditReason::InvalidTarget);
+    }
+    if (!validTransformProperty(command.property)) {
+        return result(EditStatus::Rejected, EditReason::InvalidValue);
+    }
+    const auto& clip = session_.timeline_.tracks()[location->track_index].clips[location->clip_index];
+    const auto& keys = timeline::keyframesFor(clip.keyframes, command.property);
+    const auto key = std::find_if(keys.begin(), keys.end(), [&command](const auto& candidate) {
+        return candidate.frame == command.frame;
+    });
+    timeline::TransformParameterResult mutation = timeline::TransformParameterResult::NoChange;
+    const auto before = session_.captureEditState();
+    if (key != keys.end()) {
+        mutation = session_.timeline_.setClipKeyframe(
+            location->track_index, location->clip_index,
+            command.property, command.frame, command.value);
+    } else {
+        auto transform = clip.transform;
+        setTransformValue(transform, command.property, command.value);
+        mutation = session_.timeline_.setClipTransform(
+            location->track_index, location->clip_index, transform);
+    }
+    if (mutation == timeline::TransformParameterResult::NoChange) return result(EditStatus::NoChange);
+    if (mutation != timeline::TransformParameterResult::Changed) {
+        return result(EditStatus::Rejected, reasonForTransform(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {session_.timeline_.tracks()[location->track_index].track_id};
+    output.affected_clip_ids = {command.clip_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(const ToggleTransformKeyframeCommand& command) {
+    const auto location = session_.timeline_.locateClip(command.clip_id);
+    if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    if (!validTransformProperty(command.property)) {
+        return result(EditStatus::Rejected, EditReason::InvalidValue);
+    }
+    const auto& clip = session_.timeline_.tracks()[location->track_index].clips[location->clip_index];
+    if (clip.timeline_duration_frames <= 0) {
+        return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    }
+    const auto frame = std::clamp<std::int64_t>(command.frame, 0, clip.timeline_duration_frames - 1);
+    const auto& keys = timeline::keyframesFor(clip.keyframes, command.property);
+    const bool has_key = std::any_of(keys.begin(), keys.end(), [frame](const auto& key) {
+        return key.frame == frame;
+    });
+    const auto before = session_.captureEditState();
+    const auto mutation = has_key
+        ? session_.timeline_.removeClipKeyframe(
+            location->track_index, location->clip_index, command.property, frame)
+        : session_.timeline_.setClipKeyframe(
+            location->track_index, location->clip_index, command.property, frame,
+            evaluatedTransformValue(clip.transform, clip.keyframes, command.property, frame));
+    if (mutation == timeline::TransformParameterResult::NoChange) return result(EditStatus::NoChange);
+    if (mutation != timeline::TransformParameterResult::Changed) {
+        return result(EditStatus::Rejected, reasonForTransform(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {session_.timeline_.tracks()[location->track_index].track_id};
+    output.affected_clip_ids = {command.clip_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineCommandService::EditBatchId TimelineCommandService::beginEditBatch() {
+    if (active_edit_batch_.has_value()) return active_edit_batch_->id;
+    auto id = next_edit_batch_id_++;
+    if (id == 0) id = next_edit_batch_id_++;
+    active_edit_batch_ = EditBatch{id, session_.captureEditState()};
+    return id;
+}
+
+TimelineEditResult TimelineCommandService::finishEditBatch(EditBatchId batch_id) {
+    if (!active_edit_batch_.has_value() || active_edit_batch_->id != batch_id) {
+        return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    }
+    auto before = std::move(active_edit_batch_->before);
+    active_edit_batch_.reset();
+    if (before == session_.captureEditState()) return result(EditStatus::NoChange);
+    session_.history_.recordBeforeEdit(std::move(before));
+    auto output = result(EditStatus::Applied);
+    for (const auto& track : session_.timeline_.tracks()) {
+        output.affected_track_ids.push_back(track.track_id);
+        for (const auto& clip : track.clips) output.affected_clip_ids.push_back(clip.clip_id);
+    }
+    return output;
+}
+
 TimelineEditResult TimelineCommandService::undo() {
+    if (active_edit_batch_.has_value()) {
+        static_cast<void>(finishEditBatch(active_edit_batch_->id));
+    }
     auto state = session_.history_.undo(session_.captureEditState());
     if (!state) return result(EditStatus::UndoUnavailable);
     session_.restoreEditState(std::move(*state));
@@ -439,6 +765,9 @@ TimelineEditResult TimelineCommandService::undo() {
 }
 
 TimelineEditResult TimelineCommandService::redo() {
+    if (active_edit_batch_.has_value()) {
+        static_cast<void>(finishEditBatch(active_edit_batch_->id));
+    }
     auto state = session_.history_.redo(session_.captureEditState());
     if (!state) return result(EditStatus::RedoUnavailable);
     session_.restoreEditState(std::move(*state));
@@ -456,6 +785,7 @@ void TimelineCommandService::recordLegacyEdit(timeline::EditState state) {
 }
 
 void TimelineCommandService::clearHistory() noexcept {
+    active_edit_batch_.reset();
     session_.history_.clear();
 }
 

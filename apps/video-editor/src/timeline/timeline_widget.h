@@ -1,8 +1,11 @@
 #pragma once
 
 #include "timeline_model.h"
+#include "timeline_geometry.h"
+#include "timeline_drop_validation.h"
+#include "timeline_interaction_painter.h"
+#include "timeline_interaction_controller.h"
 #include "timeline_layout.h"
-#include "timeline_trim_gesture.h"
 #include "timeline_zoom.h"
 
 #include <QString>
@@ -72,34 +75,40 @@ public:
         double frame_rate);
 
 signals:
-    // Compatibility signals for the original first-track UI path.
-    void clipSelected(qint64 clip_index);
-    void clipMoveRequested(qint64 from_index, qint64 to_index);
-    void clipSplitRequested(qint64 clip_index, qint64 local_frame);
-    void clipTrimRequested(qint64 clip_index, qint64 local_start_frame, qint64 local_end_frame);
-    void mediaDropRequested(const QString& source_path);
-
-    void clipSelectedAt(qint64 track_index, qint64 clip_index);
-    void clipMoveRequestedAt(qint64 from_track, qint64 from_clip, qint64 to_track, qint64 timeline_start_frame);
-    void clipSplitRequestedAt(qint64 track_index, qint64 clip_index, qint64 local_frame);
-    void clipEdgeTrimRequestedAt(
-        qint64 track_index,
-        qint64 clip_index,
+    void clipSelected(timeline::TrackId track_id, timeline::ClipId clip_id);
+    void clipSelectionCleared();
+    void clipMoveRequested(
+        timeline::ClipId clip_id,
+        timeline::TrackId target_track_id,
+        qint64 timeline_start_frame);
+    void clipSplitRequested(timeline::ClipId clip_id, qint64 local_frame);
+    void clipEdgeTrimRequested(
+        timeline::ClipId clip_id,
         qint64 edge,
         qint64 boundary_frame,
         qint64 mode);
-    void mediaDropRequestedAt(const QString& source_path, qint64 track_index, qint64 timeline_frame);
-    void effectDropRequestedAt(const QString& effect_id, qint64 track_index, qint64 timeline_frame);
-    void transitionSelectedAt(qint64 track_index, qint64 from_clip_index, qint64 to_clip_index);
-    void transitionAddRequestedAt(
-        qint64 track_index,
-        qint64 from_clip_index,
-        qint64 to_clip_index,
+    void mediaDropRequested(
+        const QString& source_path,
+        timeline::TrackId track_id,
+        qint64 timeline_frame);
+    void effectDropRequested(
+        const QString& effect_id,
+        timeline::TrackId track_id,
+        qint64 timeline_frame);
+    void transitionSelected(
+        timeline::TrackId track_id,
+        timeline::ClipId from_clip_id,
+        timeline::ClipId to_clip_id);
+    void transitionSelectionCleared();
+    void transitionAddRequested(
+        timeline::TrackId track_id,
+        timeline::ClipId from_clip_id,
+        timeline::ClipId to_clip_id,
         qint64 kind);
-    void transitionRemoveRequestedAt(
-        qint64 track_index,
-        qint64 from_clip_index,
-        qint64 to_clip_index);
+    void transitionRemoveRequested(
+        timeline::TrackId track_id,
+        timeline::ClipId from_clip_id,
+        timeline::ClipId to_clip_id);
     void trimStarted();
     void seekStarted();
     void seekRequested(qint64 frame_index);
@@ -124,12 +133,8 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
 
 private:
-    struct SnapPlacement {
-        std::int64_t start_frame = 0;
-        std::optional<std::int64_t> guide_frame;
-    };
-
     [[nodiscard]] QRectF trackRect(std::size_t index) const noexcept;
+    [[nodiscard]] TimelineGeometry geometry() const noexcept;
     [[nodiscard]] QRectF rulerRect() const noexcept;
     [[nodiscard]] double rowHeight() const noexcept;
     [[nodiscard]] QRectF trackContentRect(std::size_t index) const noexcept;
@@ -162,7 +167,6 @@ private:
     transitionClipIndexesAt(double x, double y) const noexcept;
     void showTransitionMenu(const QPoint& position, const QPoint& global_position);
     void emitSelected(const ClipLocation& location);
-    void emitLegacySelection(const ClipLocation& location);
     [[nodiscard]] bool isSupportedDrop(
         const QMimeData* mime_data) const noexcept;
     [[nodiscard]] std::int64_t mediaDropDuration(
@@ -178,7 +182,7 @@ private:
         std::size_t track_index,
         std::int64_t start_frame,
         std::int64_t duration_frames) const noexcept;
-    [[nodiscard]] SnapPlacement snapPlacement(
+    [[nodiscard]] timeline::SnapPlacement snapPlacement(
         std::size_t track_index,
         std::int64_t raw_start_frame,
         std::int64_t duration_frames,
@@ -199,38 +203,10 @@ private:
     bool snap_enabled_ = true;
     std::optional<ClipLocation> active_clip_;
     std::int64_t playhead_frame_ = 0;
-    std::optional<std::int64_t> drag_frame_;
-    std::optional<std::int64_t> ruler_frame_;
-    std::optional<double> ruler_content_x_;
-    bool dragging_ = false;
-    bool ruler_seeking_ = false;
     bool move_requires_alt_ = false;
-    bool move_pending_ = false;
-    bool moving_active_ = false;
-    ClipLocation moving_clip_{};
-    QPointF move_press_position_{};
-    std::optional<std::size_t> move_target_track_;
-    std::int64_t move_target_frame_ = 0;
-    TimelineTrimGesture trim_gesture_;
+    TimelineInteractionController interaction_controller_;
     bool razor_mode_ = false;
-    bool razor_clicking_ = false;
-    bool razor_gesture_moved_ = false;
-    ClipLocation razor_clip_{};
-    std::int64_t razor_frame_ = 0;
-    QPointF razor_press_position_{};
-    bool seek_pending_ = false;
-    QPointF seek_press_position_{};
-    ClipLocation seek_clip_{};
-    enum class DragPreviewKind { None, MediaDrop };
-    DragPreviewKind drag_preview_kind_ = DragPreviewKind::None;
-    QPointF drag_preview_position_{};
-    std::int64_t drag_preview_duration_frames_ = 1;
-    QString drag_preview_label_;
-    bool drag_preview_valid_ = false;
-    bool drag_hovering_ = false;
-    std::optional<std::size_t> drop_hover_track_;
-    std::optional<std::int64_t> drop_hover_frame_;
-    std::optional<std::int64_t> snap_guide_frame_;
+    QPointF move_preview_position_{};
     struct SelectedTransition {
         std::size_t track_index = 0;
         std::size_t from_clip_index = 0;

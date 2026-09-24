@@ -42,6 +42,10 @@ void testMediaController() {
 
     require(controller.commitImported(itemAt(source)).changed(),
             "A media item was not committed into the session library.");
+    require(session.legacyTimelineForUi().addClip(
+                0, controller.library().items().front().metadata, 0) ==
+                timeline::AddClipResult::Added,
+            "A clip referencing renamed media could not be prepared.");
     require(controller.library().contains(source),
             "The canonical media path index did not resolve the imported item.");
     require(controller.commitImported(itemAt(source)).code ==
@@ -49,6 +53,8 @@ void testMediaController() {
             "An online duplicate was not rejected as an expected domain result.");
     require(controller.rename(source, "Renamed clip").changed(),
             "The media controller did not rename an item.");
+    require(session.timeline().tracks().front().clips.front().display_name == "Renamed clip",
+            "Renaming a media item did not synchronize its timeline clip labels.");
     require(controller.moveToBin(source, "Footage/Selected").changed(),
             "The media controller did not move an item to a bin.");
     require(controller.createBin("Footage/Empty").changed(),

@@ -574,6 +574,14 @@ add_executable(creative-suite-main-editor-timeline-widget-tests
     ../src/timeline/timeline_model.cpp
     ../src/timeline/timeline_model.h
     ../src/timeline/timeline_layout.h
+    ../src/timeline/timeline_geometry.cpp
+    ../src/timeline/timeline_geometry.h
+    ../src/timeline/timeline_drop_validation.cpp
+    ../src/timeline/timeline_drop_validation.h
+    ../src/timeline/timeline_interaction_painter.cpp
+    ../src/timeline/timeline_interaction_painter.h
+    ../src/timeline/timeline_interaction_controller.cpp
+    ../src/timeline/timeline_interaction_controller.h
     ../src/timeline/timeline_track_header_overlay.cpp
     ../src/timeline/timeline_track_header_overlay.h
     ../src/timeline/timeline_trim_gesture.cpp
@@ -639,6 +647,68 @@ add_test(
 )
 set_tests_properties(creative-suite-main-editor-timeline-widget PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
+add_executable(creative-suite-main-editor-timeline-geometry-tests
+    timeline_geometry_test.cpp
+    ../src/media/video_metadata.h
+    ../src/timeline/timeline_geometry.cpp
+    ../src/timeline/timeline_geometry.h
+    ../src/timeline/timeline_drop_validation.cpp
+    ../src/timeline/timeline_drop_validation.h
+    ../src/timeline/timeline_interaction_painter.cpp
+    ../src/timeline/timeline_interaction_painter.h
+    ../src/timeline/timeline_model.cpp
+    ../src/timeline/timeline_model.h
+    ../src/timeline/timeline_transform.cpp
+    ../src/timeline/timeline_transform.h
+)
+
+target_include_directories(creative-suite-main-editor-timeline-geometry-tests PRIVATE ../src)
+target_link_libraries(creative-suite-main-editor-timeline-geometry-tests PRIVATE Qt6::Gui)
+target_compile_features(creative-suite-main-editor-timeline-geometry-tests PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-timeline-geometry-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-timeline-geometry-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(
+    NAME creative-suite-main-editor-timeline-geometry
+    COMMAND creative-suite-main-editor-timeline-geometry-tests
+)
+
+add_executable(creative-suite-main-editor-timeline-interaction-controller-tests
+    timeline_interaction_controller_test.cpp
+    ../src/timeline/timeline_interaction_controller.cpp
+    ../src/timeline/timeline_interaction_controller.h
+    ../src/timeline/timeline_trim_gesture.cpp
+    ../src/timeline/timeline_trim_gesture.h
+    ../src/timeline/timeline_model.cpp
+    ../src/timeline/timeline_model.h
+    ../src/timeline/timeline_transform.cpp
+    ../src/timeline/timeline_transform.h
+)
+
+target_include_directories(creative-suite-main-editor-timeline-interaction-controller-tests PRIVATE
+    ../src
+)
+
+target_link_libraries(creative-suite-main-editor-timeline-interaction-controller-tests PRIVATE
+    Qt6::Core
+    Qt6::Gui
+)
+
+target_compile_features(creative-suite-main-editor-timeline-interaction-controller-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-timeline-interaction-controller-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-timeline-interaction-controller-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_test(
+    NAME creative-suite-main-editor-timeline-interaction-controller
+    COMMAND creative-suite-main-editor-timeline-interaction-controller-tests
 )
 
 add_executable(creative-suite-main-editor-effects-panel-tests

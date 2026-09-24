@@ -181,13 +181,14 @@ public:
             require(window.media_list_ != nullptr &&
                         window.media_list_->currentRow() == 0,
                     "A controller activation did not update the media-browser selection projection.");
-            require(window.timeline_model_.removeClip(0, 0) ==
-                        timeline::RemoveClipResult::Removed,
+            require(window.timeline_command_service_.execute(
+                        application::DeleteClipCommand{1}).changed(),
                     "The integration test could not prepare its cross-track move fixture.");
+            window.timeline_command_service_.clearHistory();
             window.clearActiveTimelineSelection();
 
             window.setActiveTimelineSelection(timeline::ClipLocation{1, 0});
-            window.handleTimelineClipMoveAt(1, 0, 0, 0);
+            window.handleTimelineClipMove(2, 1, 0);
             require(window.active_timeline_track_id_ == 1 &&
                         window.active_timeline_clip_id_ == 2 &&
                         window.active_timeline_track_index_cache_ == 0 &&

@@ -36,6 +36,8 @@ timeline::TimelineClip makeClip(
     std::int64_t duration,
     const std::string& name) {
     timeline::TimelineClip clip;
+    static timeline::ClipId next_clip_id = 1;
+    clip.clip_id = next_clip_id++;
     clip.timeline_start_frame = timeline_start;
     clip.source_start_frame = 0;
     clip.timeline_duration_frames = duration;
@@ -148,15 +150,16 @@ int main(int argc, char* argv[]) {
         bool effect_drop_received = false;
         qint64 effect_drop_track = -1;
         qint64 effect_drop_frame = -1;
+        timeline::TrackId effect_drop_expected_track = top_track.track_id;
         QObject::connect(
             &widget,
-            &timeline::TimelineWidget::effectDropRequestedAt,
+            &timeline::TimelineWidget::effectDropRequested,
             [&effect_drop_received, &effect_drop_track, &effect_drop_frame](
                 const QString& effect_id,
-                qint64 track_index,
+                timeline::TrackId track_id,
                 qint64 timeline_frame) {
                 effect_drop_received = effect_id == "text.text";
-                effect_drop_track = track_index;
+                effect_drop_track = static_cast<qint64>(track_id);
                 effect_drop_frame = timeline_frame;
             });
         const QPointF effect_drop_position(500.0, 120.0);
@@ -185,7 +188,8 @@ int main(int argc, char* argv[]) {
             Qt::LeftButton,
             Qt::NoModifier);
         QApplication::sendEvent(&widget, &effect_drop);
-        require(effect_drop_received && effect_drop_track == 0 &&
+        require(effect_drop_received && effect_drop_track ==
+                    static_cast<qint64>(effect_drop_expected_track) &&
                     effect_drop_frame > 0,
                 "Text effect drop did not preserve the target track and frame.");
 
@@ -215,13 +219,13 @@ int main(int argc, char* argv[]) {
 
             QObject::connect(
                 &transition_widget,
-                &timeline::TimelineWidget::transitionAddRequestedAt,
+            &timeline::TimelineWidget::transitionAddRequested,
                 [&transition_drop_count, &transition_drop_kind](
                     qint64 track,
                     qint64 from,
                     qint64 to,
                     qint64 kind) {
-                    if (track == 0 && from == 0 && to == 1) {
+                    if (track == 3 && from == 1 && to == 2) {
                         ++transition_drop_count;
                         transition_drop_kind = kind;
                     }
@@ -259,7 +263,7 @@ int main(int argc, char* argv[]) {
             QByteArrayLiteral("transitions.cross_dissolve"),
             true);
         require(transition_drop_count == 1 && transition_drop_kind == 0,
-                "Cross Dissolve drop did not target the adjacent clip cut.");
+            "Cross Dissolve drop did not target the adjacent clip cut by stable IDs.");
         sendTransitionDrop(
             QByteArrayLiteral("transitions.fade_to_black"),
             true);
@@ -275,15 +279,15 @@ int main(int argc, char* argv[]) {
         qint64 media_drop_frame = -1;
         QObject::connect(
             &widget,
-            &timeline::TimelineWidget::mediaDropRequestedAt,
+            &timeline::TimelineWidget::mediaDropRequested,
             [&media_drop_received, &media_drop_path, &media_drop_track,
              &media_drop_frame](
                 const QString& path,
-                qint64 track,
+                timeline::TrackId track,
                 qint64 frame) {
                 media_drop_received = true;
                 media_drop_path = path;
-                media_drop_track = track;
+                media_drop_track = static_cast<qint64>(track);
                 media_drop_frame = frame;
             });
         QMimeData media_mime;
@@ -321,7 +325,8 @@ int main(int argc, char* argv[]) {
             media_drop_received,
             "Direct media drop did not emit the media signal.");
         require(
-            media_drop_path == "sample.mp4" && media_drop_track == 0 &&
+            media_drop_path == "sample.mp4" && media_drop_track ==
+                static_cast<qint64>(top_track.track_id) &&
                 media_drop_frame > 0,
             "Media drop did not preserve the source path and target position.");
 
@@ -421,14 +426,14 @@ int main(int argc, char* argv[]) {
         qint64 viewport_media_drop_frame = -1;
         QObject::connect(
             viewport_timeline,
-            &timeline::TimelineWidget::mediaDropRequestedAt,
+            &timeline::TimelineWidget::mediaDropRequested,
             [&viewport_media_drop_received, &viewport_media_drop_track,
              &viewport_media_drop_frame](
                 const QString&,
-                qint64 track,
+                timeline::TrackId track,
                 qint64 frame) {
                 viewport_media_drop_received = true;
-                viewport_media_drop_track = track;
+                viewport_media_drop_track = static_cast<qint64>(track);
                 viewport_media_drop_frame = frame;
             });
 
@@ -461,7 +466,8 @@ int main(int argc, char* argv[]) {
             scroll_area.viewport(),
             &viewport_drop);
         require(
-            viewport_media_drop_received && viewport_media_drop_track == 0 &&
+            viewport_media_drop_received && viewport_media_drop_track ==
+                static_cast<qint64>(top_track.track_id) &&
                 viewport_media_drop_frame > 0,
             "Media drop received by the QScrollArea viewport was not forwarded.");
         require(
@@ -511,8 +517,8 @@ int main(int argc, char* argv[]) {
                 "The timeline did not default to moving clips without Alt.");
         widget.setMoveRequiresAlt(true);
 
-        int selected_track = -1;
-        int selected_clip = -1;
+        qint64 selected_track = -1;
+        qint64 selected_clip = -1;
         int seek_started = 0;
         std::vector<qint64> seek_frames;
         qint64 move_from_track = -1;
@@ -522,18 +528,25 @@ int main(int argc, char* argv[]) {
         qint64 trim_edge = -1;
         qint64 trim_boundary = -1;
         qint64 trim_mode = -1;
-        int transition_track = -1;
-        int transition_from = -1;
-        int transition_to = -1;
+        qint64 transition_track = -1;
+        qint64 transition_from = -1;
+        qint64 transition_to = -1;
         int zoom_requests = 0;
         double requested_zoom = 0.0;
 
         QObject::connect(
             &widget,
-            &timeline::TimelineWidget::clipSelectedAt,
-            [&selected_track, &selected_clip](qint64 track, qint64 clip) {
-                selected_track = static_cast<int>(track);
-                selected_clip = static_cast<int>(clip);
+            &timeline::TimelineWidget::clipSelected,
+            [&selected_track, &selected_clip](timeline::TrackId track, timeline::ClipId clip) {
+                selected_track = static_cast<qint64>(track);
+                selected_clip = static_cast<qint64>(clip);
+            });
+        QObject::connect(
+            &widget,
+            &timeline::TimelineWidget::clipSelectionCleared,
+            [&selected_track, &selected_clip]() {
+                selected_track = -1;
+                selected_clip = -1;
             });
         QObject::connect(
             &widget,
@@ -545,39 +558,38 @@ int main(int argc, char* argv[]) {
             [&seek_frames](qint64 frame) { seek_frames.push_back(frame); });
         QObject::connect(
             &widget,
-            &timeline::TimelineWidget::clipMoveRequestedAt,
+            &timeline::TimelineWidget::clipMoveRequested,
             [&move_from_track, &move_to_track](
-                qint64 from_track,
-                qint64,
-                qint64 to_track,
+                timeline::ClipId clip_id,
+                timeline::TrackId target_track_id,
                 qint64) {
-                move_from_track = from_track;
-                move_to_track = to_track;
+                move_from_track = static_cast<qint64>(clip_id);
+                move_to_track = static_cast<qint64>(target_track_id);
             });
         QObject::connect(
             &widget,
-            &timeline::TimelineWidget::clipSplitRequestedAt,
-            [&split_count, &split_frame](qint64, qint64, qint64 frame) {
+            &timeline::TimelineWidget::clipSplitRequested,
+            [&split_count, &split_frame](timeline::ClipId, qint64 frame) {
                 ++split_count;
                 split_frame = frame;
             });
         QObject::connect(
             &widget,
-            &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
+            &timeline::TimelineWidget::clipEdgeTrimRequested,
             [&trim_edge, &trim_boundary, &trim_mode](
-                qint64, qint64, qint64 edge, qint64 boundary, qint64 mode) {
+                timeline::ClipId, qint64 edge, qint64 boundary, qint64 mode) {
                 trim_edge = edge;
                 trim_boundary = boundary;
                 trim_mode = mode;
             });
         QObject::connect(
             &widget,
-            &timeline::TimelineWidget::transitionSelectedAt,
+            &timeline::TimelineWidget::transitionSelected,
             [&transition_track, &transition_from, &transition_to](
-                qint64 track, qint64 from, qint64 to) {
-                transition_track = static_cast<int>(track);
-                transition_from = static_cast<int>(from);
-                transition_to = static_cast<int>(to);
+                timeline::TrackId track, timeline::ClipId from, timeline::ClipId to) {
+                transition_track = static_cast<qint64>(track);
+                transition_from = static_cast<qint64>(from);
+                transition_to = static_cast<qint64>(to);
             });
         QObject::connect(
             &widget,
@@ -797,7 +809,8 @@ int main(int argc, char* argv[]) {
                   Qt::LeftButton);
         sendMouse(widget, QEvent::MouseButtonRelease, QPointF(500, 120),
                   Qt::NoButton);
-        require(selected_track == 0 && selected_clip == 0,
+        require(selected_track == static_cast<qint64>(top_track.track_id) &&
+                    selected_clip == static_cast<qint64>(top_track.clips.front().clip_id),
                 "Clicking a clip did not select the expected occurrence.");
         require(seek_started == 0 && seek_frames.empty(),
                 "Selecting an inactive clip unexpectedly started seeking.");
@@ -823,7 +836,8 @@ int main(int argc, char* argv[]) {
                   Qt::LeftButton, Qt::AltModifier);
         sendMouse(widget, QEvent::MouseButtonRelease, QPointF(500, 320),
                   Qt::NoButton, Qt::AltModifier);
-        require(move_from_track == 0 && move_to_track == 1,
+        require(move_from_track == static_cast<qint64>(top_track.clips.front().clip_id) &&
+                    move_to_track == static_cast<qint64>(lower_track.track_id),
                 "Alt-drag did not request a move to the lower track.");
         require(seek_frames.size() == 1,
                 "Alt-drag was incorrectly treated as seeking.");
@@ -841,7 +855,8 @@ int main(int argc, char* argv[]) {
                   Qt::LeftButton);
         sendMouse(widget, QEvent::MouseButtonRelease, QPointF(500, 120),
                   Qt::NoButton);
-        require(selected_track == 0 && selected_clip == 0 &&
+        require(selected_track == static_cast<qint64>(top_track.track_id) &&
+                    selected_clip == static_cast<qint64>(top_track.clips.front().clip_id) &&
                     move_from_track == -1 && move_to_track == -1,
                 "A normal click in movement mode did not select without moving.");
         sendMouse(widget, QEvent::MouseButtonPress, QPointF(500, 120),
@@ -850,7 +865,8 @@ int main(int argc, char* argv[]) {
                   Qt::LeftButton);
         sendMouse(widget, QEvent::MouseButtonRelease, QPointF(500, 320),
                   Qt::NoButton);
-        require(move_from_track == 0 && move_to_track == 1,
+        require(move_from_track == static_cast<qint64>(top_track.clips.front().clip_id) &&
+                    move_to_track == static_cast<qint64>(lower_track.track_id),
                 "A normal drag did not move the clip after disabling Alt requirement.");
         require(seek_frames.size() == 1,
                 "A normal move drag was incorrectly treated as seeking.");
@@ -885,7 +901,8 @@ int main(int argc, char* argv[]) {
                   Qt::LeftButton);
         sendMouse(widget, QEvent::MouseButtonRelease, QPointF(500, 320),
                   Qt::NoButton);
-        require(selected_track == 1 && selected_clip == 0,
+        require(selected_track == static_cast<qint64>(lower_track.track_id) &&
+                    selected_clip == static_cast<qint64>(lower_track.clips.front().clip_id),
                 "The Timeline did not select the clip in the clicked row.");
 
         // Alt becomes the seek override when movement no longer requires it.
@@ -970,7 +987,9 @@ int main(int argc, char* argv[]) {
                   Qt::LeftButton);
         sendMouse(widget, QEvent::MouseButtonRelease, QPointF(568, 120),
                   Qt::NoButton);
-        require(transition_track == 0 && transition_from == 0 && transition_to == 1,
+        require(transition_track == static_cast<qint64>(junction_track.track_id) &&
+                    transition_from == static_cast<qint64>(junction_track.clips[0].clip_id) &&
+                    transition_to == static_cast<qint64>(junction_track.clips[1].clip_id),
                 "The contiguous junction was not detected for transition selection.");
 
         timeline::TimelineWidget trim_preview_widget;
@@ -1006,9 +1025,9 @@ int main(int argc, char* argv[]) {
         qint64 edge_edit_mode = -1;
         QObject::connect(
             &trim_preview_widget,
-            &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
+            &timeline::TimelineWidget::clipEdgeTrimRequested,
             [&edge_edit_count, &edge_edit_boundary, &edge_edit_mode](
-                qint64, qint64, qint64, qint64 boundary, qint64 mode) {
+                timeline::ClipId, qint64, qint64 boundary, qint64 mode) {
                 ++edge_edit_count;
                 edge_edit_boundary = boundary;
                 edge_edit_mode = mode;
@@ -1060,10 +1079,10 @@ int main(int argc, char* argv[]) {
         qint64 single_clip_edit_boundary = -1;
         QObject::connect(
             &single_clip_edge_widget,
-            &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
+            &timeline::TimelineWidget::clipEdgeTrimRequested,
             [&single_clip_edit_count, &single_clip_edit_edge, &single_clip_edit_mode,
              &single_clip_edit_boundary](
-                qint64, qint64, qint64 edge, qint64 boundary, qint64 mode) {
+                timeline::ClipId, qint64 edge, qint64 boundary, qint64 mode) {
                 ++single_clip_edit_count;
                 single_clip_edit_edge = edge;
                 single_clip_edit_boundary = boundary;
@@ -1158,9 +1177,9 @@ int main(int argc, char* argv[]) {
         qint64 last_drag_boundary = -1;
         QObject::connect(
             &edge_drag_widget,
-            &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
+            &timeline::TimelineWidget::clipEdgeTrimRequested,
             [&edge_drag_commit_count, &last_drag_edge, &last_drag_boundary](
-                qint64, qint64, qint64 edge, qint64 boundary, qint64) {
+                timeline::ClipId, qint64 edge, qint64 boundary, qint64) {
                 ++edge_drag_commit_count;
                 last_drag_edge = edge;
                 last_drag_boundary = boundary;
@@ -1230,6 +1249,8 @@ int main(int argc, char* argv[]) {
         gesture_widget.setTimelineViewportWidth(1000);
         auto gesture_first = makeClip("gesture-first.mkv", 0, 100, "First");
         auto gesture_second = makeClip("gesture-second.mkv", 100, 100, "Second");
+        gesture_first.clip_id = 501;
+        gesture_second.clip_id = 502;
         gesture_first.frame_count = 300;
         gesture_second.source_start_frame = 100;
         gesture_second.frame_count = 300;
@@ -1243,29 +1264,25 @@ int main(int argc, char* argv[]) {
         std::vector<std::string> gesture_signals;
         qint64 gesture_boundary = -1;
         QObject::connect(
-            &gesture_widget, &timeline::TimelineWidget::transitionSelectedAt,
-            [&gesture_signals](qint64, qint64 from, qint64 to) {
+            &gesture_widget, &timeline::TimelineWidget::transitionSelected,
+            [&gesture_signals](timeline::TrackId, timeline::ClipId from,
+                               timeline::ClipId to) {
                 if (from >= 0 && to >= 0) gesture_signals.emplace_back("transition");
             });
         QObject::connect(
-            &gesture_widget, &timeline::TimelineWidget::clipSelectedAt,
-            [&gesture_signals](qint64, qint64) {
+            &gesture_widget, &timeline::TimelineWidget::clipSelected,
+            [&gesture_signals](timeline::TrackId, timeline::ClipId) {
                 gesture_signals.emplace_back("select");
             });
         QObject::connect(
             &gesture_widget, &timeline::TimelineWidget::trimStarted,
             [&gesture_signals]() { gesture_signals.emplace_back("start"); });
         QObject::connect(
-            &gesture_widget, &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
+            &gesture_widget, &timeline::TimelineWidget::clipEdgeTrimRequested,
             [&gesture_signals, &gesture_boundary](
-                qint64, qint64, qint64, qint64 boundary, qint64) {
+                timeline::ClipId, qint64, qint64 boundary, qint64) {
                 gesture_signals.emplace_back("modern");
                 gesture_boundary = boundary;
-            });
-        QObject::connect(
-            &gesture_widget, &timeline::TimelineWidget::clipTrimRequested,
-            [&gesture_signals](qint64, qint64, qint64) {
-                gesture_signals.emplace_back("legacy");
             });
         const auto gesture_seam_x = gesture_widget.contentXForFrame(100);
         sendMouse(gesture_widget, QEvent::MouseButtonPress,
@@ -1293,7 +1310,7 @@ int main(int argc, char* argv[]) {
         std::string gesture_result;
         for (const auto& signal : gesture_signals) gesture_result += signal + ",";
         require(gesture_signals ==
-                    (std::vector<std::string>{"select", "start", "modern", "legacy"}) &&
+                    (std::vector<std::string>{"select", "start", "modern"}) &&
                     gesture_boundary == 112,
                 "A shared-cut release did not request one trim at its final position: " +
                     gesture_result + " boundary=" + std::to_string(gesture_boundary));
@@ -1302,8 +1319,9 @@ int main(int argc, char* argv[]) {
         // selection signal. Promotion must survive that refresh.
         gesture_signals.clear();
         const auto selection_refresh = QObject::connect(
-            &gesture_widget, &timeline::TimelineWidget::clipSelectedAt,
-            [&gesture_widget, &gesture_first, &gesture_second](qint64, qint64) {
+            &gesture_widget, &timeline::TimelineWidget::clipSelected,
+            [&gesture_widget, &gesture_first, &gesture_second](
+                timeline::TrackId, timeline::ClipId) {
                 gesture_widget.setTracks({timeline::TimelineTrack{
                     1, "Video 1", 1.0, false,
                     {gesture_first, gesture_second}}});
@@ -1317,7 +1335,7 @@ int main(int argc, char* argv[]) {
                   QPointF(gesture_widget.contentXForFrame(112), 110), Qt::NoButton);
         QObject::disconnect(selection_refresh);
         require(gesture_signals ==
-                    (std::vector<std::string>{"select", "start", "modern", "legacy"}),
+                    (std::vector<std::string>{"select", "start", "modern"}),
                 "A synchronous selection refresh cancelled the shared-cut trim.");
 
         gesture_signals.clear();
@@ -1369,11 +1387,9 @@ int main(int argc, char* argv[]) {
         legacy_trim_widget.show();
         application.processEvents();
         std::vector<std::string> legacy_signals;
-        qint64 legacy_start = -1;
-        qint64 legacy_end = -1;
         QObject::connect(&legacy_trim_widget,
-                         &timeline::TimelineWidget::clipSelectedAt,
-                         [&legacy_signals](qint64, qint64) {
+                         &timeline::TimelineWidget::clipSelected,
+                         [&legacy_signals](timeline::TrackId, timeline::ClipId) {
                              legacy_signals.emplace_back("select");
                          });
         QObject::connect(&legacy_trim_widget,
@@ -1382,17 +1398,9 @@ int main(int argc, char* argv[]) {
                              legacy_signals.emplace_back("start");
                          });
         QObject::connect(&legacy_trim_widget,
-                         &timeline::TimelineWidget::clipEdgeTrimRequestedAt,
-                         [&legacy_signals](qint64, qint64, qint64, qint64, qint64) {
+                         &timeline::TimelineWidget::clipEdgeTrimRequested,
+                         [&legacy_signals](timeline::ClipId, qint64, qint64, qint64) {
                              legacy_signals.emplace_back("modern");
-                         });
-        QObject::connect(&legacy_trim_widget,
-                         &timeline::TimelineWidget::clipTrimRequested,
-                         [&legacy_signals, &legacy_start, &legacy_end](
-                             qint64, qint64 start, qint64 end) {
-                             legacy_signals.emplace_back("legacy");
-                             legacy_start = start;
-                             legacy_end = end;
                          });
         const auto legacy_left_x = legacy_trim_widget.contentXForFrame(50);
         sendMouse(legacy_trim_widget, QEvent::MouseButtonPress,
@@ -1415,9 +1423,8 @@ int main(int argc, char* argv[]) {
                   QPointF(legacy_trim_widget.contentXForFrame(70), 110),
                   Qt::NoButton);
         require(legacy_signals ==
-                    (std::vector<std::string>{"select", "start", "modern", "legacy"}) &&
-                    legacy_start == 20 && legacy_end == 50,
-                "An individual trim changed the modern/legacy signal order or range.");
+                    (std::vector<std::string>{"select", "start", "modern"}),
+                "An individual trim did not emit one stable-ID trim request.");
         legacy_trim_widget.close();
 
         // The viewport is the scale reference for the standard one-hour
@@ -1524,8 +1531,8 @@ int main(int argc, char* argv[]) {
         int preview_move_count = 0;
         QObject::connect(
             &drag_preview_widget,
-            &timeline::TimelineWidget::clipMoveRequestedAt,
-            [&preview_move_count](qint64, qint64, qint64, qint64) {
+            &timeline::TimelineWidget::clipMoveRequested,
+            [&preview_move_count](timeline::ClipId, timeline::TrackId, qint64) {
                 ++preview_move_count;
             });
         const auto source_press = QPointF(
@@ -1720,9 +1727,9 @@ int main(int argc, char* argv[]) {
         qint64 snap_target_frame = -1;
         QObject::connect(
             &snap_widget,
-            &timeline::TimelineWidget::clipMoveRequestedAt,
+            &timeline::TimelineWidget::clipMoveRequested,
             [&snap_move_count, &snap_target_track, &snap_target_frame](
-                qint64, qint64, qint64 track, qint64 frame) {
+                timeline::ClipId, timeline::TrackId track, qint64 frame) {
                 ++snap_move_count;
                 snap_target_track = track;
                 snap_target_frame = frame;
@@ -1761,7 +1768,8 @@ int main(int argc, char* argv[]) {
             QEvent::MouseButtonRelease,
             snap_near_target,
             Qt::NoButton);
-        require(snap_move_count == 1 && snap_target_track == 0 &&
+        require(snap_move_count == 1 && snap_target_track ==
+                    static_cast<qint64>(snap_same_track.track_id) &&
                     snap_target_frame == 18000,
                 "A clip edge did not snap to the adjacent clip boundary.");
 
@@ -1837,7 +1845,8 @@ int main(int argc, char* argv[]) {
             QEvent::MouseButtonRelease,
             snap_cross_track,
             Qt::NoButton);
-        require(snap_move_count == 4 && snap_target_track == 1 &&
+        require(snap_move_count == 4 && snap_target_track ==
+                    static_cast<qint64>(snap_destination_track.track_id) &&
                     snap_target_frame == 18000,
                 "Moving a clip between tracks did not preserve magnetic snapping.");
 
@@ -1896,7 +1905,7 @@ int main(int argc, char* argv[]) {
         qint64 media_snap_frame = -1;
         QObject::connect(
             &media_snap_widget,
-            &timeline::TimelineWidget::mediaDropRequestedAt,
+            &timeline::TimelineWidget::mediaDropRequested,
             [&media_snap_drop_count, &media_snap_frame](
                 const QString&, qint64, qint64 frame) {
                 ++media_snap_drop_count;
@@ -1952,7 +1961,7 @@ int main(int argc, char* argv[]) {
         qint64 fallback_drop_frame = -1;
         QObject::connect(
             &fallback_snap_widget,
-            &timeline::TimelineWidget::mediaDropRequestedAt,
+            &timeline::TimelineWidget::mediaDropRequested,
             [&fallback_drop_count, &fallback_drop_frame](
                 const QString&, qint64, qint64 frame) {
                 ++fallback_drop_count;

@@ -610,11 +610,13 @@ void MainWindow::handleMediaBrowserListItemChanged(QListWidgetItem* item) {
             return;
         }
 
-        static_cast<void>(media_controller_.rename(
-            media_items_[index].metadata.source_path, new_name.toStdString()));
-        timeline_model_.updateDisplayNameForSource(
-            media_items_[index].metadata.source_path,
-            media_items_[index].display_name);
+        const auto rename_result = media_controller_.rename(
+            media_items_[index].metadata.source_path, new_name.toStdString());
+        if (!rename_result.changed()) {
+            restore();
+            statusBar()->showMessage("The media name could not be changed.");
+            return;
+        }
         const auto source_path = media_items_[index].metadata.source_path;
         updateProjectDirtyState();
         populateMediaBrowser(source_path);

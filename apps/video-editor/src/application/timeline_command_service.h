@@ -23,6 +23,9 @@ enum class EditReason {
     OfflineMedia,
     MediaNotFound,
     TransitionNotFound,
+    InvalidName,
+    InvalidValue,
+    TrackNotEmpty,
 };
 
 struct TimelineEditResult {
@@ -110,8 +113,48 @@ struct RemoveTransitionCommand {
     timeline::ClipId to_clip_id = 0;
 };
 
+struct AddTrackCommand { std::string name; };
+struct RenameTrackCommand {
+    timeline::TrackId track_id = 0;
+    std::string name;
+};
+struct MoveTrackCommand {
+    timeline::TrackId track_id = 0;
+    std::size_t target_index = 0;
+};
+struct RemoveTrackCommand { timeline::TrackId track_id = 0; };
+struct ClearTimelineCommand {};
+
+struct SetClipAudioCommand {
+    timeline::ClipId clip_id = 0;
+    double gain = 1.0;
+    bool muted = false;
+};
+struct SetTrackAudioCommand {
+    timeline::TrackId track_id = 0;
+    double gain = 1.0;
+    bool muted = false;
+};
+struct SetClipTextCommand {
+    timeline::ClipId clip_id = 0;
+    timeline::TextStyle text;
+};
+struct SetTransformPropertyCommand {
+    timeline::ClipId clip_id = 0;
+    timeline::TransformProperty property = timeline::TransformProperty::PositionX;
+    std::int64_t frame = 0;
+    double value = 0.0;
+};
+struct ToggleTransformKeyframeCommand {
+    timeline::ClipId clip_id = 0;
+    timeline::TransformProperty property = timeline::TransformProperty::PositionX;
+    std::int64_t frame = 0;
+};
+
 class TimelineCommandService final {
 public:
+    using EditBatchId = std::uint64_t;
+
     explicit TimelineCommandService(EditorSession& session) noexcept;
 
     [[nodiscard]] TimelineEditResult execute(const MoveClipCommand& command);
@@ -125,6 +168,19 @@ public:
     [[nodiscard]] TimelineEditResult execute(const AddTransitionCommand& command);
     [[nodiscard]] TimelineEditResult execute(const UpdateTransitionCommand& command);
     [[nodiscard]] TimelineEditResult execute(const RemoveTransitionCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const AddTrackCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const RenameTrackCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const MoveTrackCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const RemoveTrackCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const ClearTimelineCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const SetClipAudioCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const SetTrackAudioCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const SetClipTextCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const SetTransformPropertyCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const ToggleTransformKeyframeCommand& command);
+
+    [[nodiscard]] EditBatchId beginEditBatch();
+    [[nodiscard]] TimelineEditResult finishEditBatch(EditBatchId batch_id);
 
     [[nodiscard]] TimelineEditResult undo();
     [[nodiscard]] TimelineEditResult redo();
@@ -146,7 +202,14 @@ private:
         timeline::ClipId from_clip_id,
         timeline::ClipId to_clip_id);
 
+    struct EditBatch {
+        EditBatchId id = 0;
+        timeline::EditState before;
+    };
+
     EditorSession& session_;
+    EditBatchId next_edit_batch_id_ = 1;
+    std::optional<EditBatch> active_edit_batch_;
 };
 
 } // namespace application

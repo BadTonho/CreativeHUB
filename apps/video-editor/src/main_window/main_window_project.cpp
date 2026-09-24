@@ -354,8 +354,9 @@ void MainWindow::clearProjectState() {
             error.what(),
             { {"cause", error.what()} });
     }
-    pending_audio_edit_.reset();
-    pending_transform_edit_.reset();
+    timeline_command_service_.clearHistory();
+    pending_audio_edit_batch_id_.reset();
+    pending_transform_edit_batch_id_.reset();
     if (playback_controller_ != nullptr) {
         playback_controller_->invalidate(true);
     }
@@ -665,8 +666,9 @@ void MainWindow::finishProjectOpen(
 }
 void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
     const auto& loaded_document = prepared.document;
-    pending_audio_edit_.reset();
-    pending_transform_edit_.reset();
+    timeline_command_service_.clearHistory();
+    pending_audio_edit_batch_id_.reset();
+    pending_transform_edit_batch_id_.reset();
     if (playback_controller_ != nullptr) {
         playback_controller_->invalidate(true);
     }

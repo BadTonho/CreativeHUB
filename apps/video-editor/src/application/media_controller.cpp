@@ -94,7 +94,12 @@ MediaCommandResult MediaController::rename(
     if (index == session_.media_library_.size()) {
         return apply(media::MediaMutationResult::InvalidIndex, canonical);
     }
-    return apply(session_.media_library_.rename(index, std::move(display_name)), canonical);
+    const auto mutation = session_.media_library_.rename(index, std::move(display_name));
+    if (mutation == media::MediaMutationResult::Changed) {
+        session_.timeline_.updateDisplayNameForSource(
+            canonical, session_.media_library_.items()[index].display_name);
+    }
+    return apply(mutation, canonical);
 }
 
 MediaCommandResult MediaController::moveToBin(

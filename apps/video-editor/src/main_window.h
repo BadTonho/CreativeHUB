@@ -164,10 +164,10 @@ private:
     void renameActiveTrack();
     void moveActiveTrack(int direction);
     void removeActiveTrack();
-    void addTextClipAt(qint64 track_index, qint64 timeline_frame);
+    void addTextClipAt(timeline::TrackId track_id, qint64 timeline_frame);
     void handleEffectDropAt(
         const QString& effect_id,
-        qint64 track_index,
+        timeline::TrackId track_id,
         qint64 timeline_frame);
     [[nodiscard]] std::optional<std::size_t> selectedMediaIndex() const noexcept;
     [[nodiscard]] std::string selectedBinPath() const;
@@ -197,48 +197,41 @@ private:
     void handleMediaDrop(const QString& source_path);
     void handleMediaDropAt(
         const QString& source_path,
-        qint64 track_index,
+        timeline::TrackId track_id,
         qint64 timeline_frame);
     void clearTimeline();
-    void handleTimelineClipMove(qint64 from_index, qint64 to_index);
     void moveActiveTimelineClip(int direction);
     void deleteActiveTimelineClip();
     void splitActiveClipAtPlayhead();
-    void handleTimelineClipSplit(qint64 clip_index, qint64 local_frame);
-    void handleTimelineClipSelectedAt(qint64 track_index, qint64 clip_index);
-    void handleTimelineClipMoveAt(
-        qint64 from_track,
-        qint64 from_clip,
-        qint64 to_track,
+    void handleTimelineClipSelectionChanged(
+        timeline::TrackId track_id,
+        timeline::ClipId clip_id);
+    void handleTimelineClipSelectionCleared();
+    void handleTimelineClipMove(
+        timeline::ClipId clip_id,
+        timeline::TrackId target_track_id,
         qint64 timeline_start_frame);
-    void handleTimelineClipSplitAt(
-        qint64 track_index,
-        qint64 clip_index,
-        qint64 local_frame);
+    void handleTimelineClipSplit(timeline::ClipId clip_id, qint64 local_frame);
     void handleTimelineTrimStarted();
     void handleTimelineClipTrim(
-        qint64 clip_index,
-        qint64 local_start_frame,
-        qint64 local_end_frame);
-    void handleTimelineClipTrimAt(
-        qint64 track_index,
-        qint64 clip_index,
+        timeline::ClipId clip_id,
         qint64 edge,
         qint64 boundary_frame,
         qint64 mode);
-    void handleTimelineTransitionSelectedAt(
-        qint64 track_index,
-        qint64 from_clip_index,
-        qint64 to_clip_index);
-    void handleTimelineTransitionAddRequestedAt(
-        qint64 track_index,
-        qint64 from_clip_index,
-        qint64 to_clip_index,
+    void handleTimelineTransitionSelected(
+        timeline::TrackId track_id,
+        timeline::ClipId from_clip_id,
+        timeline::ClipId to_clip_id);
+    void handleTimelineTransitionSelectionCleared();
+    void handleTimelineTransitionAddRequested(
+        timeline::TrackId track_id,
+        timeline::ClipId from_clip_id,
+        timeline::ClipId to_clip_id,
         qint64 kind);
-    void handleTimelineTransitionRemoveRequestedAt(
-        qint64 track_index,
-        qint64 from_clip_index,
-        qint64 to_clip_index);
+    void handleTimelineTransitionRemoveRequested(
+        timeline::TrackId track_id,
+        timeline::ClipId from_clip_id,
+        timeline::ClipId to_clip_id);
     void applyTransitionSettings();
     void removeSelectedTransition();
     void undoTimelineEdit();
@@ -294,7 +287,7 @@ private:
     void handlePlaybackStateChanged(bool playing);
     void handlePlaybackFinished(bool during_playback, bool gap);
     void handlePlaybackError(const playback::PlaybackErrorEvent& event);
-    void handleTimelineClipSelected(qint64 clip_index);
+    void handleTimelineClipSelected(timeline::ClipId clip_id);
     void handleTimelineSeekStarted();
     void handleTimelineSeek(qint64 global_frame);
     void activateTimelineClip(
@@ -395,7 +388,7 @@ private:
     application::ProjectController project_controller_{editor_session_};
     const std::vector<ImportedMedia>& media_items_ = editor_session_.mediaItems();
     const std::vector<std::string>& bin_paths_ = editor_session_.binPaths();
-    timeline::TimelineModel& timeline_model_ = editor_session_.legacyTimelineForUi();
+    const timeline::TimelineModel& timeline_model_ = editor_session_.timeline();
     // Stable identities are the source of truth for selection. The index
     // fields below remain as short-lived presentation/worker coordinates.
     std::optional<timeline::TrackId>& active_timeline_track_id_ =
@@ -412,8 +405,10 @@ private:
         editor_session_.projectPath();
     const std::optional<project::ProjectDocument>& saved_project_document_ =
         editor_session_.savedProjectDocument();
-    std::optional<timeline::EditState> pending_audio_edit_;
-    std::optional<timeline::EditState> pending_transform_edit_;
+    std::optional<application::TimelineCommandService::EditBatchId>
+        pending_audio_edit_batch_id_;
+    std::optional<application::TimelineCommandService::EditBatchId>
+        pending_transform_edit_batch_id_;
     const bool& project_dirty_ = editor_session_.projectDirtyState();
     WorkspacePage workspace_page_ = WorkspacePage::Edit;
     bool initial_window_layout_pending_ = false;

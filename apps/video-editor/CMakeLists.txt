@@ -104,6 +104,14 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/timeline/timeline_clip_edge_command.cpp
     src/timeline/timeline_clip_edge_command.h
     src/timeline/timeline_layout.h
+    src/timeline/timeline_geometry.cpp
+    src/timeline/timeline_geometry.h
+    src/timeline/timeline_drop_validation.cpp
+    src/timeline/timeline_drop_validation.h
+    src/timeline/timeline_interaction_painter.cpp
+    src/timeline/timeline_interaction_painter.h
+    src/timeline/timeline_interaction_controller.cpp
+    src/timeline/timeline_interaction_controller.h
     src/timeline/timeline_zoom.h
     src/timeline/timeline_transform.cpp
     src/timeline/timeline_transform.h

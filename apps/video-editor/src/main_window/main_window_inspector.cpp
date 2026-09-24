@@ -560,17 +560,17 @@ void MainWindow::applyTextStyle() {
             ? timeline::TextAlignment::Right
             : timeline::TextAlignment::Center;
 
-    const auto before = captureTimelineEditState();
     if (playback_controller_ != nullptr) {
         playback_controller_->invalidate(false);
     }
     playback_is_playing_ = false;
-    const auto result = timeline_model_.setClipText(track_index, clip_index, text);
-    if (result != timeline::TextParameterResult::Changed) {
+    const auto clip_id = timeline_model_.tracks()[track_index].clips[clip_index].clip_id;
+    const auto result = executeTimelineCommand(application::SetClipTextCommand{clip_id, text});
+    if (!result.changed()) {
         updateInspector();
         return;
     }
-    recordTimelineEdit(before);
+    applyTimelineEditResult(result, false);
     updateTimelineState();
     updateProjectDirtyState();
     refreshPlaybackComposition();
@@ -596,41 +596,18 @@ void MainWindow::applyTransformProperty(int property_index, double value) {
     if (track_index >= timeline_model_.trackCount() ||
         clip_index >= timeline_model_.clipCount(track_index)) return;
 
-    const auto before = captureTimelineEditState();
     const auto property = static_cast<timeline::TransformProperty>(property_index);
     const auto local_frame = std::max<std::int64_t>(0, playback_frame_index_);
-    timeline::TransformParameterResult result = timeline::TransformParameterResult::NoChange;
     if (playback_controller_ != nullptr) {
         playback_controller_->invalidate(false);
     }
     playback_is_playing_ = false;
 
-    const auto& clip = timeline_model_.tracks()[track_index].clips[clip_index];
-    const auto& keys = timeline::keyframesFor(clip.keyframes, property);
-    const bool has_key_at_frame = std::any_of(keys.begin(), keys.end(),
-        [local_frame](const auto& key) {
-            return key.frame == local_frame;
-        });
-    if (has_key_at_frame) {
-        result = timeline_model_.setClipKeyframe(
-            track_index, clip_index, property, local_frame, value);
-    } else {
-        auto transform = timeline_model_.tracks()[track_index].clips[clip_index].transform;
-        switch (property) {
-        case timeline::TransformProperty::PositionX: transform.position_x = value; break;
-        case timeline::TransformProperty::PositionY: transform.position_y = value; break;
-        case timeline::TransformProperty::Scale: transform.scale = value; break;
-        case timeline::TransformProperty::Rotation: transform.rotation_degrees = value; break;
-        case timeline::TransformProperty::Opacity: transform.opacity = value; break;
-        }
-        result = timeline_model_.setClipTransform(track_index, clip_index, transform);
-    }
-    if (result != timeline::TransformParameterResult::Changed) {
-        return;
-    }
-    if (!pending_transform_edit_.has_value()) {
-        recordTimelineEdit(before);
-    }
+    const auto clip_id = timeline_model_.tracks()[track_index].clips[clip_index].clip_id;
+    const auto result = executeTimelineCommand(application::SetTransformPropertyCommand{
+        clip_id, property, local_frame, value});
+    if (!result.changed()) return;
+    applyTimelineEditResult(result, false);
     updateProjectDirtyState();
     updateTimelineState();
     refreshPlaybackComposition();
@@ -652,39 +629,24 @@ void MainWindow::toggleTransformKeyframe(int property_index) {
     const auto frame = std::clamp<std::int64_t>(
         playback_frame_index_, 0, std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
     const auto property = static_cast<timeline::TransformProperty>(property_index);
-    const auto& keys = timeline::keyframesFor(clip.keyframes, property);
-    const bool has_key = std::any_of(keys.begin(), keys.end(),
-        [frame](const auto& key) {
-            return key.frame == frame;
-        });
-    const auto before = captureTimelineEditState();
+    const auto& existing_keys = timeline::keyframesFor(clip.keyframes, property);
+    const bool had_key = std::any_of(existing_keys.begin(), existing_keys.end(),
+        [frame](const auto& key) { return key.frame == frame; });
     if (playback_controller_ != nullptr) {
         playback_controller_->invalidate(false);
     }
     playback_is_playing_ = false;
-    timeline::TransformParameterResult result = timeline::TransformParameterResult::NoChange;
-    if (has_key) {
-        result = timeline_model_.removeClipKeyframe(
-            track_index, clip_index, property, frame);
-    } else {
-        const auto evaluated = timeline::evaluateTransform(
-            clip.transform, clip.keyframes, frame);
-        const std::array<double, 5> values{
-            evaluated.position_x, evaluated.position_y, evaluated.scale,
-            evaluated.rotation_degrees, evaluated.opacity};
-        result = timeline_model_.setClipKeyframe(
-            track_index, clip_index, property, frame,
-            values[static_cast<std::size_t>(property_index)]);
-    }
-    if (result == timeline::TransformParameterResult::Changed) {
-        recordTimelineEdit(before);
+    const auto result = executeTimelineCommand(application::ToggleTransformKeyframeCommand{
+        clip.clip_id, property, frame});
+    if (result.changed()) {
+        applyTimelineEditResult(result, false);
         updateTimelineState();
         updateProjectDirtyState();
         refreshPlaybackComposition();
         if (playback_controller_ != nullptr && canPlaybackSelectedMedia()) {
             playback_controller_->seekActiveClip(frame);
         }
-        statusBar()->showMessage(has_key ? "Keyframe removed." : "Keyframe added.");
+        statusBar()->showMessage(had_key ? "Keyframe removed." : "Keyframe added.");
     } else {
         updateInspector();
     }

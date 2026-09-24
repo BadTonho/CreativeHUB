@@ -588,8 +588,8 @@ Critérios de conclusão:
 5. Extrair o estado dos gestos de mover, trim, blade, snapping e
    drag-and-drop.
 6. Extrair a pintura do estado de interação.
-7. Preservar temporariamente os sinais atuais e removê-los quando todos os
-   callers estiverem usando resultados ou eventos tipados.
+7. Remover os sinais e handlers de interação baseados em índices depois de
+   migrar todos os consumidores para pedidos por IDs estáveis.
 
 Critérios de conclusão:
 
@@ -693,3 +693,12 @@ Definição final de concluído:
 - Controller tests exercise command flow, rapid activation, stale readiness, frames and completion, frame-mailbox coalescing, seeking, stepping between clips, invalidation during playback, and shutdown without constructing `MainWindow`. The integration test verifies that a committed activation updates the visible selection and media-browser projection.
 - Release build: passed. Full CTest suite: 35/35 passed. `git diff --check`: passed.
 - Manual playback-boundary and close-during-playback validation: documented in [Playback Controller](PLAYBACK_CONTROLLER.md), not performed in this environment.
+
+## Stage 7 implementation record
+
+- `TimelineCommandService` now handles track add, rename, reorder, removal, and clearing, plus audio, text, transform, and keyframe inspector edits. Slider previews are grouped into a single undo entry when their edit batch finishes. `MediaController::rename` also synchronizes clip display labels without adding timeline history.
+- `TimelineGeometry` and `TimelineHitTester` own coordinate mapping and target detection. `TimelineDropValidator` owns overlap and snapping calculations. `TimelineInteractionController` owns move, trim, blade, ruler seek, clip seek, and drag-and-drop preview state; completed edit requests use stable `TrackId` and `ClipId` values. `TimelineInteractionPainter` draws interaction overlays.
+- `MainWindow` routes track and inspector edits through `TimelineCommandService` and projects results to the widgets and playback composition. The timeline widget no longer emits index-based edit signals, and the unused index-based move, trim, and split handlers were removed. Qt input dispatch, context menus, and local hit-test positions remain in the widget boundary.
+- Added independent geometry, interaction-controller, and painter coverage. Updated widget and MainWindow integration checks for stable-ID signals, command results, selection projection, snapping, drag/drop, and media rename label synchronization.
+- Release build: passed. Full CTest suite: 37/37 passed. `git diff --check`: passed.
+- Manual visual validation for move, trim, split, media drop, slider undo grouping, and multi-track projects: documented in [Timeline Widget Boundary](TIMELINE_WIDGET_BOUNDARY.md), not performed in this environment.
