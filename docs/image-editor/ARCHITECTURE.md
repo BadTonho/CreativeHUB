@@ -7,6 +7,16 @@ core lives under `apps/image-editor/src/` and links Qt Core and Qt Gui without
 depending on Qt Widgets. The UI owns dialogs and window state; the core owns
 the active image document, ordered edit operations, persistence, and recovery.
 
+## Source layout
+
+- `src/app/` contains the executable entry point.
+- `src/core/document/` contains the editable document session and `.cimg`
+  serialization.
+- `src/core/recovery/` contains local recovery snapshot persistence.
+- `src/core/diagnostics/` contains bounded technical error logging.
+- `src/ui/canvas/`, `src/ui/dialogs/`, and `src/ui/windows/` contain the image
+  canvas widget, creation dialogs, and main application window respectively.
+
 ## Runtime boundaries
 
 - `ImageDocumentSession` owns either a decoded, linked source image or a

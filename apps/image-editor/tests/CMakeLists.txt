@@ -24,12 +24,17 @@ set_tests_properties(creative-suite-image-editor-image-formats PROPERTIES SKIP_R
 
 add_executable(creative-suite-image-editor-ui-tests
     image_editor_ui_test.cpp
-    ../src/image_editor_window.cpp
-    ../src/image_editor_window.h
-    ../src/new_canvas_dialog.cpp
-    ../src/new_canvas_dialog.h
-    ../src/image_canvas.cpp
-    ../src/image_canvas.h
+    ../src/ui/windows/image_editor_window.cpp
+    ../src/ui/windows/image_editor_window.h
+    ../src/ui/dialogs/new_canvas_dialog.cpp
+    ../src/ui/dialogs/new_canvas_dialog.h
+    ../src/ui/canvas/image_canvas.cpp
+    ../src/ui/canvas/image_canvas.h
+)
+target_include_directories(creative-suite-image-editor-ui-tests PRIVATE
+    ../src/ui/canvas
+    ../src/ui/dialogs
+    ../src/ui/windows
 )
 target_link_libraries(creative-suite-image-editor-ui-tests PRIVATE
     creative-suite-image-editor-core

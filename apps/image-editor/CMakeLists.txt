@@ -5,18 +5,20 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets)
 
 add_library(creative-suite-image-editor-core STATIC
-    src/image_document_store.cpp
-    src/image_document_store.h
-    src/image_document_session.cpp
-    src/image_document_session.h
-    src/image_editor_logger.cpp
-    src/image_editor_logger.h
-    src/recovery_store.cpp
-    src/recovery_store.h
+    src/core/document/image_document_store.cpp
+    src/core/document/image_document_store.h
+    src/core/document/image_document_session.cpp
+    src/core/document/image_document_session.h
+    src/core/diagnostics/image_editor_logger.cpp
+    src/core/diagnostics/image_editor_logger.h
+    src/core/recovery/recovery_store.cpp
+    src/core/recovery/recovery_store.h
 )
 
 target_include_directories(creative-suite-image-editor-core PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/document
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/diagnostics
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/recovery
 )
 
 target_link_libraries(creative-suite-image-editor-core PUBLIC
@@ -27,13 +29,20 @@ target_link_libraries(creative-suite-image-editor-core PUBLIC
 target_compile_features(creative-suite-image-editor-core PUBLIC cxx_std_20)
 
 add_executable(creative-suite-image-editor
-    src/main.cpp
-    src/image_editor_window.cpp
-    src/image_editor_window.h
-    src/new_canvas_dialog.cpp
-    src/new_canvas_dialog.h
-    src/image_canvas.cpp
-    src/image_canvas.h
+    src/app/main.cpp
+    src/ui/windows/image_editor_window.cpp
+    src/ui/windows/image_editor_window.h
+    src/ui/dialogs/new_canvas_dialog.cpp
+    src/ui/dialogs/new_canvas_dialog.h
+    src/ui/canvas/image_canvas.cpp
+    src/ui/canvas/image_canvas.h
+)
+
+target_include_directories(creative-suite-image-editor PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/app
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/canvas
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/dialogs
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/windows
 )
 
 target_link_libraries(creative-suite-image-editor PRIVATE
