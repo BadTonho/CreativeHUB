@@ -305,6 +305,17 @@ int main(int argc, char** argv) {
 
         writeText(
             project_path,
+            R"({"format":"creative-suite.main-editor","version":9,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"zoom":1,"row_height":70,"tracks":[{"track_id":1,"name":"Video 1","clips":[{"clip_id":1,"kind":"text","timeline_start_frame":0,"source_start_frame":0,"duration_frames":10,"text":{"content":"First"}},{"clip_id":1,"kind":"text","timeline_start_frame":10,"source_start_frame":0,"duration_frames":10,"text":{"content":"Second"}}],"transitions":[]}]}})");
+        try {
+            static_cast<void>(project::load(project_path));
+            throw std::runtime_error("Duplicate clip identifiers were accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::InvalidTimeline,
+                    "Duplicate clip identifiers returned the wrong error category.");
+        }
+
+        writeText(
+            project_path,
             R"({"format":"creative-suite.main-editor","version":9,"canvas":{"width":1920,"height":1080},"media":[],"timeline":{"zoom":1,"row_height":70,"tracks":[{"track_id":1,"name":"Video 1","clips":[{"clip_id":0,"kind":"text","timeline_start_frame":0,"source_start_frame":0,"duration_frames":10,"text":{"content":"Invalid"}}],"transitions":[]}]}})");
         try {
             static_cast<void>(project::load(project_path));

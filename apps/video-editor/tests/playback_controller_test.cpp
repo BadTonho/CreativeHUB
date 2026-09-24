@@ -25,10 +25,26 @@ void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
 }
 
+bool selectionMatchesClip(const application::EditorSession& session, timeline::ClipId clip_id) {
+    const auto& selection = session.selection();
+    if (selection.active_clip_id != clip_id || !selection.active_track_id.has_value()) {
+        return false;
+    }
+    const auto clip = session.timeline().locateClip(clip_id);
+    const auto track = session.timeline().locateTrack(*selection.active_track_id);
+    return clip.has_value() && track.has_value() && clip->track_index == *track &&
+        session.timeline().tracks()[*track].clips[clip->clip_index].track_id ==
+            *selection.active_track_id;
+}
+
 struct FakeWorkerState {
     std::atomic<int> stop_calls{0};
     std::atomic<int> play_calls{0};
     std::atomic<int> pause_calls{0};
+    std::atomic<quint64> media_request_generation{0};
+    std::atomic<quint64> composition_request_generation{0};
+    std::atomic<quint64> render_request_generation{0};
+    std::atomic<quint64> seek_request_generation{0};
 };
 
 class FakePlaybackWorker final : public playback::PlaybackWorker {
@@ -48,6 +64,7 @@ public:
         qint64,
         qint64,
         quint64 generation) override {
+        state_->media_request_generation.store(generation, std::memory_order_release);
         generation_.store(generation, std::memory_order_release);
         if (fail_next_media_.exchange(false, std::memory_order_acq_rel)) {
             emit playbackError(QStringLiteral("Simulated media failure"), 42, generation);
@@ -78,11 +95,13 @@ public:
         QVector<playback::CompositionLayerSpec>,
         QVector<playback::CompositionTransitionSpec>,
         quint64 generation) override {
+        state_->composition_request_generation.store(generation, std::memory_order_release);
         composition_generation_ = generation;
     }
     void setActiveCompositionClip(qint64, qint64) override {}
 
     void renderCompositionFrame(qint64, qint64 frame, quint64 generation) override {
+        state_->render_request_generation.store(generation, std::memory_order_release);
         generation_.store(generation, std::memory_order_release);
         emit frameReady(makeFrame(static_cast<int>(frame)), frame, generation);
     }
@@ -96,6 +115,7 @@ public:
     }
 
     void requestSeek(qint64 frame, quint64 generation) override {
+        state_->seek_request_generation.store(generation, std::memory_order_release);
         QMetaObject::invokeMethod(
             this,
             [this, frame, generation]() {
@@ -259,6 +279,19 @@ void runControllerTests() {
 
     require(session.selection().active_clip_id == 2,
             "A stale activation replaced the current stable clip identity.");
+    require(selectionMatchesClip(session, 2),
+            "Playback activation left the selected clip detached from its stable track ID.");
+    const auto second_activation_generation = fake_worker->currentGeneration();
+    require(fake_state->media_request_generation.load(std::memory_order_acquire) ==
+                second_activation_generation &&
+                fake_state->composition_request_generation.load(std::memory_order_acquire) ==
+                    second_activation_generation,
+            "A playback worker request lost its activation generation.");
+    controller.renderCompositionFrame(5, 0);
+    require(waitUntil([&]() {
+        return fake_state->render_request_generation.load(std::memory_order_acquire) ==
+            second_activation_generation;
+    }), "A composition render request did not retain its captured generation.");
     require(std::none_of(events.begin(), events.end(), [](const auto& event) {
         const auto* frame = std::get_if<playback::PlaybackFrameEvent>(&event);
         return frame != nullptr && frame->clip_id == 1;
@@ -279,25 +312,33 @@ void runControllerTests() {
         events.begin(), events.end(), [](const auto& event) {
             return std::holds_alternative<playback::PlaybackFrameEvent>(event);
         });
+    const auto playhead_before_invalidation = session.playheadFrame();
     controller.invalidate(true);
     fake_worker->emitFrameLater(99, play_generation);
     QEventLoop invalidation_loop;
     QTimer::singleShot(40, &invalidation_loop, &QEventLoop::quit);
     invalidation_loop.exec();
     require(!controller.isPlaying() &&
+                session.playheadFrame() == playhead_before_invalidation &&
                 std::count_if(events.begin(), events.end(), [](const auto& event) {
                     return std::holds_alternative<playback::PlaybackFrameEvent>(event);
                 }) == frames_before_invalidation,
-            "Invalidation did not stop playback and reject its stale frame.");
+            "Invalidation did not stop playback and reject its stale frame without changing the playhead.");
 
+    const auto frames_before_seek = std::count_if(
+        events.begin(), events.end(), [](const auto& event) {
+            return std::holds_alternative<playback::PlaybackFrameEvent>(event);
+        });
     require(controller.seekTimeline(3) == playback::PlaybackCommandResult::Applied,
             "Seeking within the active clip was rejected.");
     require(waitUntil([&]() {
-        return std::any_of(events.begin(), events.end(), [](const auto& event) {
-            const auto* frame = std::get_if<playback::PlaybackFrameEvent>(&event);
-            return frame != nullptr && frame->clip_id == 2;
-        });
+        return std::count_if(events.begin(), events.end(), [](const auto& event) {
+            return std::holds_alternative<playback::PlaybackFrameEvent>(event);
+        }) > frames_before_seek;
     }), "The seek result did not arrive through the controller.");
+    require(fake_state->seek_request_generation.load(std::memory_order_acquire) ==
+                fake_worker->currentGeneration(),
+            "A seek worker request did not carry the active generation.");
 
     require(controller.step(playback::PlaybackStepDirection::Backward) ==
                 playback::PlaybackCommandResult::Pending,
@@ -310,6 +351,8 @@ void runControllerTests() {
                     activation->phase == playback::PlaybackActivationPhase::Committed;
             });
     }), "Crossing the clip boundary did not update selection by stable identity.");
+    require(selectionMatchesClip(session, 1),
+            "Stepping across clips left the selected clip detached from its track ID.");
     require(waitUntil([&]() {
         return std::any_of(events.begin(), events.end(), [](const auto& event) {
             const auto* frame = std::get_if<playback::PlaybackFrameEvent>(&event);
@@ -346,6 +389,7 @@ void runControllerTests() {
             "The frame mailbox did not retain the latest frame in the burst.");
 
     const auto stale_generation = fake_worker->currentGeneration();
+    const auto playhead_before_stale_events = session.playheadFrame();
     const auto finished_count = std::count_if(
         events.begin(), events.end(), [](const auto& event) {
             return std::holds_alternative<playback::PlaybackFinishedEvent>(event);
@@ -354,6 +398,10 @@ void runControllerTests() {
     require(model.moveClip({0, 1}, {0, 1}, 9) == timeline::MoveClipResult::Moved,
             "The editing-during-playback fixture could not alter the timeline.");
     controller.refreshComposition();
+    require(waitUntil([&]() {
+        return fake_state->composition_request_generation.load(std::memory_order_acquire) !=
+            stale_generation;
+    }), "A refreshed composition request did not receive the new playback generation.");
     fake_worker->emitFrameLater(2, stale_generation);
     fake_worker->emitFinishedLater(stale_generation, true);
     const auto frames_before_stale = std::count_if(
@@ -375,6 +423,8 @@ void runControllerTests() {
         });
     require(finished_after_stale == finished_count,
             "A stale playback-finished event reached the application boundary.");
+    require(session.playheadFrame() == playhead_before_stale_events,
+            "An event from before the edit changed the session playhead.");
 
     require(controller.activateClip(9999, 0, false) ==
                 playback::PlaybackCommandResult::Rejected,

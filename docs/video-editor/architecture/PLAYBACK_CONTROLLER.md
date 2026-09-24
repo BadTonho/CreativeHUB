@@ -16,6 +16,8 @@ Worker state and completion signals are queued to the controller's UI-thread aff
 
 The controller validates pending activation against the current `ClipId`, canonical media path, and online library item before committing it. It updates the session playhead and stable selection, then emits a typed event. `MainWindow` projects accepted events to the preview, timeline, media browser, playback controls, status bar, and technical error log. It keeps only a loading presentation flag derived from activation events; pending activation details remain in the controller.
 
+Generation-tagged composition, media, render, and seek requests retain the generation captured when the request is queued. Debug checks verify this association at the worker boundary; events and frames from older generations are discarded before they can update session state or the preview.
+
 On shutdown, the controller stops the worker on its thread, quits and joins the thread, and clears the frame mailbox. Calls made after shutdown are ignored.
 
 ## Regression coverage

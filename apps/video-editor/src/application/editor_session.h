@@ -12,6 +12,10 @@
 #include <string>
 #include <vector>
 
+namespace playback {
+class PlaybackController;
+}
+
 namespace application {
 
 using ImportedMedia = media::MediaItem;
@@ -57,6 +61,9 @@ private:
     friend class TimelineCommandService;
     friend class MediaController;
     friend class ProjectController;
+    friend class playback::PlaybackController;
+
+    void assertInvariants() const;
 
     timeline::TimelineModel timeline_;
     timeline::TimelineHistory history_;

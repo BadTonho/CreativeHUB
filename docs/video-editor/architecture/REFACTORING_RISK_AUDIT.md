@@ -702,3 +702,12 @@ Definição final de concluído:
 - Added independent geometry, interaction-controller, and painter coverage. Updated widget and MainWindow integration checks for stable-ID signals, command results, selection projection, snapping, drag/drop, and media rename label synchronization.
 - Release build: passed. Full CTest suite: 37/37 passed. `git diff --check`: passed.
 - Manual visual validation for move, trim, split, media drop, slider undo grouping, and multi-track projects: documented in [Timeline Widget Boundary](TIMELINE_WIDGET_BOUNDARY.md), not performed in this environment.
+
+## Stage 8 implementation record
+
+- Debug assertions now check that timeline track and clip IDs are nonzero and unique, each clip belongs to its owning track, stable selections resolve to the current timeline, and selected transitions still exist between adjacent clips. Project loading continues to reject invalid external IDs through the project document validator.
+- `ProjectController` checks that the dirty flag matches the mapped document and saved baseline after dirty-state updates and successful saves. Recovery commits retain their existing deferred dirty-state recomputation because presentation state is not available at commit time.
+- Playback requests for media activation, composition refresh, rendering, and seeking preserve the captured generation at the worker boundary. The controller continues to discard stale worker events and frames before they can update the session or preview.
+- Regression coverage now checks stable IDs and selection after creation, split, reorder, restore, undo/redo, and playback activation; dirty state when returning to the saved baseline; project-open failure atomicity; and current versus stale playback generations and events.
+- Release build: passed. Full CTest suite: 37/37 passed. `git diff --check`: passed.
+- Stage 7 manual visual validation remains pending: move, trim, split, media drop, slider undo grouping, and multi-track projects. It is documented in [Timeline Widget Boundary](TIMELINE_WIDGET_BOUNDARY.md) and was not part of this automated hardening round.

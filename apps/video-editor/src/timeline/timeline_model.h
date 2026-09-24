@@ -12,6 +12,10 @@
 #include <utility>
 #include <vector>
 
+namespace application {
+class EditorSession;
+}
+
 namespace timeline {
 
 using TrackId = std::uint64_t;
@@ -300,6 +304,8 @@ public:
     [[nodiscard]] static bool validTextStyle(const TextStyle& text) noexcept;
 
 private:
+    friend class application::EditorSession;
+
     [[nodiscard]] static std::optional<std::int64_t> durationInFrames(
         const media::VideoMetadata& metadata);
     [[nodiscard]] static std::filesystem::path canonicalPath(
@@ -325,6 +331,7 @@ private:
     [[nodiscard]] TimelineTrack* trackAt(std::size_t track_index) noexcept;
     [[nodiscard]] const TimelineTrack* trackAt(std::size_t track_index) const noexcept;
     void ensureIdentifiers();
+    void assertIdentityInvariants() const;
 
     std::vector<TimelineTrack> tracks_;
     TrackId next_track_id_ = 1;

@@ -6,11 +6,62 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 
 namespace {
 
 void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
+}
+
+bool hasUniqueStableIds(const timeline::TimelineModel& model) {
+    std::unordered_set<timeline::TrackId> track_ids;
+    std::unordered_set<timeline::ClipId> clip_ids;
+    for (const auto& track : model.tracks()) {
+        if (track.track_id == 0 || !track_ids.insert(track.track_id).second) return false;
+        for (const auto& clip : track.clips) {
+            if (clip.clip_id == 0 || clip.track_id != track.track_id ||
+                !clip_ids.insert(clip.clip_id).second) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool hasValidSelection(const application::EditorSession& session) {
+    const auto& model = session.timeline();
+    const auto& selection = session.selection();
+    if (selection.active_track_id.has_value() &&
+        !model.locateTrack(*selection.active_track_id).has_value()) {
+        return false;
+    }
+    if (selection.active_clip_id.has_value()) {
+        const auto location = model.locateClip(*selection.active_clip_id);
+        if (!location.has_value() || !selection.active_track_id.has_value() ||
+            model.tracks()[location->track_index].track_id != *selection.active_track_id) {
+            return false;
+        }
+    }
+    if (selection.active_transition.has_value()) {
+        const auto& active = *selection.active_transition;
+        const auto track = model.locateTrack(active.track_id);
+        const auto from = model.locateClip(active.from_clip_id);
+        const auto to = model.locateClip(active.to_clip_id);
+        if (!track.has_value() || !from.has_value() || !to.has_value() ||
+            from->track_index != *track || to->track_index != *track ||
+            from->clip_index + 1 != to->clip_index ||
+            model.transitionBetween(*track, from->clip_index, to->clip_index) == nullptr) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void requireSessionInvariants(
+    const application::EditorSession& session,
+    const std::string& message) {
+    require(hasUniqueStableIds(session.timeline()) && hasValidSelection(session), message);
 }
 
 media::VideoMetadata makeMetadata(const std::filesystem::path& path) {
@@ -56,6 +107,7 @@ void run() {
             "Adding media did not return its stable clip ID.");
     require(session.selection().active_clip_id == 1 && service.undoCount() == 1,
             "Adding media did not select the new clip and create one history entry.");
+    requireSessionInvariants(session, "Adding media broke stable IDs or selection validity.");
 
     const auto no_op_move = service.execute(application::MoveClipCommand{
         1, first_track_id, 0});
@@ -142,12 +194,18 @@ void run() {
     require(moved.changed() && session.selection().active_track_id == second_track_id &&
                 session.selection().active_clip_id == 1 && service.undoCount() == 2,
             "Moving a clip did not resolve the target track by ID.");
+    requireSessionInvariants(session, "Moving a clip broke its parent track ID or selection.");
 
     const auto split = service.execute(application::SplitClipCommand{1, 60});
     require(split.changed() && split.affected_clip_ids.size() == 2 &&
                 session.selection().active_clip_id == 2 && session.playheadFrame() == 0 &&
                 service.undoCount() == 3,
             "Splitting did not return and select the new right-hand clip.");
+    requireSessionInvariants(session, "Splitting a clip produced duplicate IDs or invalid selection.");
+    timeline::TimelineModel restored_model;
+    restored_model.restore(model.snapshot());
+    require(hasUniqueStableIds(restored_model),
+            "Restoring a timeline snapshot did not preserve unique stable IDs.");
 
     const auto missing_transition = service.execute(application::AddTransitionCommand{
         second_track_id, 1, 999, timeline::TransitionKind::CrossDissolve, 15});
@@ -167,6 +225,7 @@ void run() {
                 session.selection().active_transition == timeline::TransitionSelection{
                     second_track_id, 1, 2} && service.undoCount() == 4,
             "Adding a transition did not select it and record one edit.");
+    requireSessionInvariants(session, "Adding a transition left an invalid stable selection.");
     const auto duplicate_transition = service.execute(application::AddTransitionCommand{
         second_track_id, 1, 2, timeline::TransitionKind::CrossDissolve, 15});
     require(duplicate_transition.status == application::EditStatus::NoChange &&
@@ -222,9 +281,11 @@ void run() {
     require(undone.changed() && session.selection().active_clip_id == 2 &&
                 model.locateClip(2).has_value() && service.canRedo(),
             "Undo did not restore the clip and its selection.");
+    requireSessionInvariants(session, "Undo restored an invalid selection or duplicate IDs.");
     const auto redone = service.redo();
     require(redone.changed() && !model.locateClip(2).has_value() && service.canUndo(),
             "Redo did not reapply the clip deletion.");
+    requireSessionInvariants(session, "Redo restored an invalid selection or duplicate IDs.");
 
     application::EditorSession reorder_session;
     application::TimelineCommandService reorder_service(reorder_session);
@@ -244,11 +305,15 @@ void run() {
                 reorder_model.tracks().front().clips.front().clip_id ==
                     first_media_added.affected_clip_ids.front(),
             "The legacy single-track reorder command did not reorder by clip identity.");
+    requireSessionInvariants(reorder_session,
+            "Reordering clips changed stable IDs or invalidated the selection.");
     const auto reorder_undo = reorder_service.undo();
     require(reorder_undo.changed() &&
                 reorder_model.tracks().front().clips.front().clip_id ==
                     second_media_added.affected_clip_ids.front(),
             "Undo did not restore a single-track reorder.");
+    requireSessionInvariants(reorder_session,
+            "Undoing a reorder changed stable IDs or invalidated the selection.");
 
     const auto text_added = service.execute(application::AddTextClipCommand{
         first_track_id, 240, 60, 30.0});
@@ -297,6 +362,8 @@ void runInspectorAndTrackCommands() {
     require(moved_track.changed() && session.timeline().tracks().front().track_id == track_id &&
                 service.undoCount() == 4,
             "Track movement did not resolve the source by stable ID.");
+    requireSessionInvariants(session,
+            "Reordering a track changed stable IDs or invalidated its clip selection.");
     const auto missing_track_move = service.execute(application::MoveTrackCommand{999, 0});
     require(missing_track_move.reason == application::EditReason::InvalidTarget &&
                 service.undoCount() == 4,

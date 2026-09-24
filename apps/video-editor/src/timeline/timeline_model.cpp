@@ -1,9 +1,11 @@
 #include "timeline_model.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <limits>
 #include <system_error>
+#include <unordered_set>
 #include <utility>
 
 namespace timeline {
@@ -151,6 +153,7 @@ bool sameOverlapClass(const TimelineClip& left, const TimelineClip& right) noexc
 
 TimelineModel::TimelineModel() {
     tracks_.push_back({next_track_id_++, "Video 1", 1.0, false, {}});
+    assertIdentityInvariants();
 }
 
 bool TimelineModel::validName(const std::string& name) noexcept {
@@ -449,6 +452,7 @@ AddTrackResult TimelineModel::addTrack(std::string name) {
     tracks_.insert(
         tracks_.begin(),
         TimelineTrack{next_track_id_++, std::move(name), 1.0, false, {}});
+    assertIdentityInvariants();
     return AddTrackResult::Added;
 }
 
@@ -478,6 +482,7 @@ TrackMutationResult TimelineModel::moveTrack(
     for (auto& track : tracks_) {
         for (auto& clip : track.clips) clip.track_id = track.track_id;
     }
+    assertIdentityInvariants();
     return TrackMutationResult::Changed;
 }
 
@@ -486,6 +491,7 @@ TrackMutationResult TimelineModel::removeTrack(std::size_t track_index) {
     if (!tracks_[track_index].clips.empty()) return TrackMutationResult::NotEmpty;
     if (tracks_.size() == 1) return TrackMutationResult::NoChange;
     tracks_.erase(tracks_.begin() + static_cast<std::ptrdiff_t>(track_index));
+    assertIdentityInvariants();
     return TrackMutationResult::Changed;
 }
 
@@ -529,6 +535,7 @@ AddClipResult TimelineModel::addClip(
               [](const auto& left, const auto& right) {
                   return left.timeline_start_frame < right.timeline_start_frame;
               });
+    assertIdentityInvariants();
     return AddClipResult::Added;
 }
 
@@ -566,6 +573,7 @@ AddClipResult TimelineModel::addTextClip(
               [](const auto& left, const auto& right) {
                   return left.timeline_start_frame < right.timeline_start_frame;
               });
+    assertIdentityInvariants();
     return AddClipResult::Added;
 }
 
@@ -608,6 +616,7 @@ MoveClipResult TimelineModel::moveClip(
               });
     removeInvalidTransitions(*source_track);
     if (target_track != source_track) removeInvalidTransitions(*target_track);
+    assertIdentityInvariants();
     return MoveClipResult::Moved;
 }
 
@@ -649,6 +658,7 @@ SplitClipResult TimelineModel::splitClip(
         track->clips.begin() + static_cast<std::ptrdiff_t>(clip_index + 1),
         std::move(right));
     removeInvalidTransitions(*track);
+    assertIdentityInvariants();
     return SplitClipResult::Split;
 }
 
@@ -661,6 +671,7 @@ RemoveClipResult TimelineModel::removeClip(
     }
     track->clips.erase(track->clips.begin() + static_cast<std::ptrdiff_t>(clip_index));
     removeInvalidTransitions(*track);
+    assertIdentityInvariants();
     return RemoveClipResult::Removed;
 }
 
@@ -905,6 +916,7 @@ const TimelineTransition* TimelineModel::transitionBetween(
 }
 
 TimelineModel::Snapshot TimelineModel::snapshot() const {
+    assertIdentityInvariants();
     Snapshot result;
     result.tracks = tracks_;
     result.next_track_id = next_track_id_;
@@ -937,6 +949,23 @@ void TimelineModel::restore(Snapshot snapshot) {
         tracks_.push_back({next_track_id_++, "Video 1", 1.0, false, {}});
     }
     for (auto& track : tracks_) removeInvalidTransitions(track);
+    assertIdentityInvariants();
+}
+
+void TimelineModel::assertIdentityInvariants() const {
+#ifndef NDEBUG
+    std::unordered_set<TrackId> track_ids;
+    std::unordered_set<ClipId> clip_ids;
+    for (const auto& track : tracks_) {
+        assert(track.track_id != 0);
+        assert(track_ids.insert(track.track_id).second);
+        for (const auto& clip : track.clips) {
+            assert(clip.clip_id != 0);
+            assert(clip.track_id == track.track_id);
+            assert(clip_ids.insert(clip.clip_id).second);
+        }
+    }
+#endif
 }
 
 std::optional<std::pair<std::size_t, std::size_t>>

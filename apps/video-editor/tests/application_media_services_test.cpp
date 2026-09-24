@@ -146,6 +146,7 @@ void testProjectControllerDirtyAutosaveSaveAndReset() {
     application::ProjectController controller(session, root / "recovery", "test-session");
     const auto presentation = application::TimelinePresentationState{1.25, 46.0};
     const auto baseline = controller.document(presentation);
+    const auto original_track_name = session.timeline().tracks().front().name;
     controller.establishBaseline(baseline);
     require(!controller.updateDirtyState(presentation),
             "An untouched session was marked dirty.");
@@ -155,6 +156,15 @@ void testProjectControllerDirtyAutosaveSaveAndReset() {
             "The test could not mutate the timeline.");
     require(controller.updateDirtyState(presentation),
             "A changed timeline was not reflected in the dirty state.");
+    require(session.legacyTimelineForUi().renameTrack(0, original_track_name) ==
+                timeline::TrackMutationResult::Changed &&
+                !controller.updateDirtyState(presentation) &&
+                controller.document(presentation) == baseline,
+            "Returning to the canonical saved document did not clear the dirty state.");
+    require(session.legacyTimelineForUi().renameTrack(0, "Edited Track") ==
+                timeline::TrackMutationResult::Changed &&
+                controller.updateDirtyState(presentation),
+            "A new edit after restoring the baseline was not marked dirty.");
     const auto autosave = controller.autosave(true, 5, presentation);
     require(autosave.status == application::ProjectOperationStatus::Applied,
             "The controller did not create an autosave snapshot.");

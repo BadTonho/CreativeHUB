@@ -1,6 +1,7 @@
 #include "editor_session.h"
 
 #include <algorithm>
+#include <cassert>
 #include <utility>
 
 namespace application {
@@ -67,6 +68,7 @@ std::optional<std::int64_t>& EditorSession::preservedPlayheadFrameForUi() noexce
 }
 
 timeline::EditState EditorSession::captureEditState() const {
+    assertInvariants();
     timeline::EditState state;
     state.timeline = timeline_.snapshot();
     state.active_track_id = selection_.active_track_id;
@@ -86,6 +88,45 @@ void EditorSession::restoreEditState(timeline::EditState state) {
     selection_.active_transition = state.active_transition;
     playhead_frame_ = std::max<std::int64_t>(0, state.playhead_frame);
     preserved_playhead_frame_ = state.preserved_playhead_frame;
+    assertInvariants();
+}
+
+void EditorSession::assertInvariants() const {
+#ifndef NDEBUG
+    timeline_.assertIdentityInvariants();
+    assert(playhead_frame_ >= 0);
+
+    if (selection_.active_track_id.has_value()) {
+        assert(timeline_.locateTrack(*selection_.active_track_id).has_value());
+    }
+
+    if (selection_.active_clip_id.has_value()) {
+        const auto location = timeline_.locateClip(*selection_.active_clip_id);
+        assert(location.has_value());
+        if (!location.has_value()) return;
+        assert(selection_.active_track_id.has_value());
+        if (!selection_.active_track_id.has_value()) return;
+        const auto& track = timeline_.tracks()[location->track_index];
+        assert(track.track_id == *selection_.active_track_id);
+        assert(track.clips[location->clip_index].track_id == track.track_id);
+    }
+
+    if (selection_.active_transition.has_value()) {
+        const auto& selected = *selection_.active_transition;
+        const auto track_index = timeline_.locateTrack(selected.track_id);
+        const auto from = timeline_.locateClip(selected.from_clip_id);
+        const auto to = timeline_.locateClip(selected.to_clip_id);
+        assert(track_index.has_value());
+        assert(from.has_value());
+        assert(to.has_value());
+        if (!track_index.has_value() || !from.has_value() || !to.has_value()) return;
+        assert(from->track_index == *track_index);
+        assert(to->track_index == *track_index);
+        assert(from->clip_index + 1 == to->clip_index);
+        assert(timeline_.transitionBetween(
+                   *track_index, from->clip_index, to->clip_index) != nullptr);
+    }
+#endif
 }
 
 } // namespace application

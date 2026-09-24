@@ -141,8 +141,16 @@ bool PlaybackController::isPlaying() const noexcept {
 }
 
 void PlaybackController::queueWorker(
-    std::function<void(PlaybackWorker&)> operation) {
+    std::function<void(PlaybackWorker&)> operation,
+    std::optional<quint64> request_generation) {
     if (!available() || !operation) return;
+#ifndef NDEBUG
+    if (request_generation.has_value()) {
+        Q_ASSERT(*request_generation == generation_);
+    }
+#else
+    static_cast<void>(request_generation);
+#endif
     auto* worker = worker_;
     QMetaObject::invokeMethod(
         worker,
@@ -150,6 +158,15 @@ void PlaybackController::queueWorker(
             if (worker != nullptr) operation(*worker);
         },
         Qt::QueuedConnection);
+}
+
+void PlaybackController::requestSeekForGeneration(
+    qint64 frame,
+    quint64 request_generation) {
+#ifndef NDEBUG
+    Q_ASSERT(request_generation == generation_);
+#endif
+    if (worker_ != nullptr) worker_->requestSeek(frame, request_generation);
 }
 
 void PlaybackController::refreshComposition() {
@@ -233,7 +250,7 @@ void PlaybackController::refreshComposition() {
                 (PlaybackWorker& worker) mutable {
         worker.setActiveCompositionClip(active_track, active_clip);
         worker.setComposition(std::move(layers), std::move(transitions), generation);
-    });
+    }, generation_);
 }
 
 void PlaybackController::setMonitorVolume(double gain) {
@@ -267,6 +284,7 @@ void PlaybackController::discardPendingActivation(bool clear_selection) {
         auto& selection = session_.selectionForUi();
         selection.active_clip_id.reset();
         selection.active_track_id.reset();
+        session_.assertInvariants();
     }
     playing_ = false;
     emitEvent(PlaybackActivationEvent{
@@ -318,7 +336,7 @@ void PlaybackController::seekActiveClip(std::int64_t local_frame) {
         local_frame, 0, std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
     refreshComposition();
     session_.setPlayheadFrame(clamped);
-    worker_->requestSeek(static_cast<qint64>(clamped), generation_);
+    requestSeekForGeneration(static_cast<qint64>(clamped), generation_);
 }
 
 void PlaybackController::renderCompositionFrame(
@@ -332,7 +350,7 @@ void PlaybackController::renderCompositionFrame(
             static_cast<qint64>(global_frame),
             static_cast<qint64>(local_frame),
             generation);
-    });
+    }, generation);
 }
 
 PlaybackCommandResult PlaybackController::activateClip(
@@ -366,6 +384,7 @@ PlaybackCommandResult PlaybackController::activateClip(
     auto& selection = session_.selectionForUi();
     selection.active_track_id = track.track_id;
     selection.active_clip_id = clip.clip_id;
+    session_.assertInvariants();
     if (!preserve_timeline_playhead) {
         session_.preservedPlayheadFrameForUi().reset();
     }
@@ -415,7 +434,7 @@ PlaybackCommandResult PlaybackController::activateClip(
             source_path, frame_rate, source_start, segment_duration,
             track_gain, track_muted, clip_gain, clip_muted,
             track_index, clip_index, generation);
-    });
+    }, generation);
     refreshComposition();
     return PlaybackCommandResult::Pending;
 }
@@ -567,7 +586,7 @@ PlaybackCommandResult PlaybackController::seekTimeline(std::int64_t global_frame
     if (!clipCanPlay(clip)) return PlaybackCommandResult::Rejected;
     session_.setPlayheadFrame(local);
     refreshComposition();
-    worker_->requestSeek(static_cast<qint64>(local), generation_);
+    requestSeekForGeneration(static_cast<qint64>(local), generation_);
     return PlaybackCommandResult::Applied;
 }
 
@@ -581,7 +600,7 @@ void PlaybackController::handleWorkerMediaReady(quint64 generation) {
     const auto pending = *pending_activation_;
     if (pending.target_frame > 0 || pending.source_start_frame > 0) {
         if (worker_ != nullptr) {
-            worker_->requestSeek(static_cast<qint64>(pending.target_frame), generation);
+            requestSeekForGeneration(static_cast<qint64>(pending.target_frame), generation);
         }
         return;
     }
@@ -590,7 +609,7 @@ void PlaybackController::handleWorkerMediaReady(quint64 generation) {
     emitEvent(PlaybackActivationEvent{
         pending.clip_id, PlaybackActivationPhase::Committed, 0, true,
         pending.preserve_timeline_playhead});
-    if (worker_ != nullptr) worker_->requestSeek(0, generation);
+    requestSeekForGeneration(0, generation);
     if (pending.resume_playback) {
         queueWorker([](PlaybackWorker& worker) { worker.play(); });
     }
@@ -652,6 +671,7 @@ void PlaybackController::handleWorkerError(
             selection.active_clip_id.reset();
             selection.active_track_id.reset();
         }
+        session_.assertInvariants();
     }
     playing_ = false;
     emitEvent(std::move(event));

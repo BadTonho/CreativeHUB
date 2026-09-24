@@ -135,7 +135,10 @@ private:
         quint64 generation = 0;
     };
 
-    void queueWorker(std::function<void(PlaybackWorker&)> operation);
+    void queueWorker(
+        std::function<void(PlaybackWorker&)> operation,
+        std::optional<quint64> request_generation = std::nullopt);
+    void requestSeekForGeneration(qint64 frame, quint64 request_generation);
     void handleWorkerMediaReady(quint64 generation);
     void handleWorkerStateChanged(bool playing, quint64 generation);
     void handleWorkerFinished(quint64 generation, bool during_playback);

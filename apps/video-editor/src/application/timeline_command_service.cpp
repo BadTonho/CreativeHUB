@@ -147,6 +147,7 @@ TimelineCommandService::TimelineCommandService(EditorSession& session) noexcept
 TimelineEditResult TimelineCommandService::result(
     EditStatus status,
     EditReason reason) const {
+    session_.assertInvariants();
     TimelineEditResult output;
     output.status = status;
     output.reason = reason;

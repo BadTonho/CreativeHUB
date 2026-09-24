@@ -10,9 +10,11 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QMessageBox>
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -127,6 +129,56 @@ public:
             require(window.windowTitle() == QStringLiteral("Main Editor"),
                     "Opening a saved multi-track project incorrectly added the dirty marker.");
 
+            const auto failed_open_path = directory / "corrupt.csp";
+            {
+                std::ofstream corrupt_file(failed_open_path, std::ios::binary);
+                corrupt_file << "not a project document";
+            }
+            const auto preserved_timeline = window.editor_session_.timeline().snapshot();
+            const auto preserved_project_path = window.project_controller_.projectPath();
+            const auto preserved_media_count = window.editor_session_.mediaItems().size();
+            const auto preserved_selection = window.editor_session_.selection();
+            const auto preserved_playhead = window.editor_session_.playheadFrame();
+            QEventLoop failed_open_loop;
+            QTimer failed_open_timeout;
+            failed_open_timeout.setSingleShot(true);
+            QTimer dismiss_project_error;
+            dismiss_project_error.setInterval(10);
+            QObject::connect(&dismiss_project_error, &QTimer::timeout, []() {
+                auto* modal = QApplication::activeModalWidget();
+                auto* message = qobject_cast<QMessageBox*>(modal);
+                if (message != nullptr &&
+                    message->windowTitle() == QStringLiteral("Could not open project")) {
+                    message->accept();
+                }
+            });
+            bool failed_open_succeeded = true;
+            QObject::connect(&failed_open_timeout, &QTimer::timeout,
+                             &failed_open_loop, &QEventLoop::quit);
+            require(window.openProjectPath(
+                        failed_open_path,
+                        std::nullopt,
+                        std::nullopt,
+                        [&failed_open_loop, &failed_open_succeeded](bool succeeded) {
+                            failed_open_succeeded = succeeded;
+                            failed_open_loop.quit();
+                        }),
+                    "The MainWindow did not start a corrupt-project open attempt.");
+            dismiss_project_error.start();
+            failed_open_timeout.start(30000);
+            failed_open_loop.exec();
+            dismiss_project_error.stop();
+            require(!failed_open_succeeded && !window.project_load_pending_ &&
+                        window.editor_session_.timeline().snapshot() == preserved_timeline &&
+                        window.project_controller_.projectPath() == preserved_project_path &&
+                        window.editor_session_.mediaItems().size() == preserved_media_count &&
+                        window.editor_session_.selection().active_track_id ==
+                            preserved_selection.active_track_id &&
+                        window.editor_session_.selection().active_clip_id ==
+                            preserved_selection.active_clip_id &&
+                        window.editor_session_.playheadFrame() == preserved_playhead,
+                    "A failed project open replaced or changed the current editor session.");
+
             const auto current = window.currentProjectDocument();
             require(current.canvas_width == loaded.canvas_width &&
                         current.canvas_height == loaded.canvas_height &&
@@ -176,7 +228,9 @@ public:
             require(window.active_timeline_track_id_ == 1 &&
                         window.active_timeline_clip_id_ == 1 &&
                         window.active_timeline_track_index_cache_ == 0 &&
-                        window.active_timeline_clip_index_cache_ == 0,
+                        window.active_timeline_clip_index_cache_ == 0 &&
+                        window.editor_session_.selection().active_track_id == 1 &&
+                        window.editor_session_.selection().active_clip_id == 1,
                     "A controller activation did not update the timeline selection projection.");
             require(window.media_list_ != nullptr &&
                         window.media_list_->currentRow() == 0,
@@ -192,7 +246,10 @@ public:
             require(window.active_timeline_track_id_ == 1 &&
                         window.active_timeline_clip_id_ == 2 &&
                         window.active_timeline_track_index_cache_ == 0 &&
-                        window.active_timeline_clip_index_cache_ == 0,
+                        window.active_timeline_clip_index_cache_ == 0 &&
+                        window.editor_session_.selection().active_track_id == 1 &&
+                        window.editor_session_.selection().active_clip_id == 2 &&
+                        window.playback_frame_index_ == window.editor_session_.playheadFrame(),
                     "A service-backed move did not update the MainWindow selection projection.");
             require(window.project_dirty_,
                     "A service-backed move did not update the project dirty state.");

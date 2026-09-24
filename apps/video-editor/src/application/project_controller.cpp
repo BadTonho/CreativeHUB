@@ -3,6 +3,7 @@
 #include "media/media_library.h"
 #include "project/project_file.h"
 
+#include <cassert>
 #include <utility>
 
 namespace application {
@@ -45,7 +46,19 @@ bool ProjectController::updateDirtyState(TimelinePresentationState presentation)
     } else {
         session_.project_dirty_ = document(presentation) != *session_.saved_project_document_;
     }
+    assertDirtyInvariant(presentation);
     return session_.project_dirty_;
+}
+
+void ProjectController::assertDirtyInvariant(
+    TimelinePresentationState presentation) const {
+#ifndef NDEBUG
+    const bool expected_dirty = session_.saved_project_document_.has_value() &&
+        document(presentation) != *session_.saved_project_document_;
+    assert(session_.project_dirty_ == expected_dirty);
+#else
+    static_cast<void>(presentation);
+#endif
 }
 
 void ProjectController::establishBaseline(project::ProjectDocument document) {
@@ -67,6 +80,7 @@ ProjectOperationResult ProjectController::saveTo(
         session_.saved_project_document_ = current;
         session_.project_dirty_ = false;
         last_autosaved_document_.reset();
+        assertDirtyInvariant(presentation);
         result.status = ProjectOperationStatus::Applied;
         result.path = canonical;
     } catch (const project::ProjectError& error) {
@@ -131,6 +145,7 @@ void ProjectController::reset() {
     session_.playhead_frame_ = 0;
     session_.preserved_playhead_frame_.reset();
     last_autosaved_document_.reset();
+    session_.assertInvariants();
 }
 
 void ProjectController::commitPrepared(
@@ -153,6 +168,7 @@ void ProjectController::commitPrepared(
     session_.playhead_frame_ = 0;
     session_.preserved_playhead_frame_.reset();
     last_autosaved_document_.reset();
+    session_.assertInvariants();
 }
 
 std::vector<project::AutosaveSnapshot> ProjectController::validSnapshotsForProject(

@@ -16,6 +16,14 @@ Results carry a status and domain reason, affected track and clip IDs, the resul
 
 Undo and redo are coordinated by the service using session snapshots. Slider gestures use edit batches: previews update the model while the gesture is active, then one history entry is committed on release if the value changed. A no-op gesture does not add history.
 
+## Internal invariants
+
+Debug assertions check that track and clip IDs are nonzero and unique, and that each clip's stored track ID matches its owning track after structural timeline edits and snapshot restoration. Session checks verify that selected track and clip IDs resolve consistently and that a selected transition still exists between adjacent clips on its selected track. A selected media path is independent because the media browser can select an item without selecting a timeline clip.
+
+`ProjectController` derives the dirty flag from the mapped project document and its saved baseline. Save completion and dirty-state updates check that relationship. Recovery may temporarily install a document whose saved baseline differs; the UI recomputes the canonical dirty state once presentation state is available.
+
+These assertions diagnose internal programming errors in debug builds. Project files continue to be checked by the project document validator and report invalid IDs as domain errors.
+
 ## Related boundaries and limits
 
 `MainWindow` still owns presentation concerns such as dialogs, status messages, widget composition, and translating hit-tested selection into visible controls. `TimelineWidget` emits stable `TrackId` and `ClipId` requests; its indexes are local coordinates for geometry and painting. The explicitly named `EditorSession::legacyTimelineForUi()` accessor remains for test fixture construction, but application handlers no longer use it to mutate the timeline.

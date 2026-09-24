@@ -78,6 +78,8 @@ public:
     [[nodiscard]] bool dirty() const noexcept;
 
 private:
+    void assertDirtyInvariant(TimelinePresentationState presentation) const;
+
     EditorSession& session_;
     project::AutosaveManager autosave_manager_;
     std::optional<project::ProjectDocument> last_autosaved_document_;
