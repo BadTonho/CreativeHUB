@@ -14,6 +14,7 @@ class QSpinBox;
 class QToolBar;
 class QTimer;
 class QWidget;
+class QWidgetAction;
 
 namespace image_editor {
 
@@ -61,6 +62,7 @@ private:
     ToolSidebar* tool_sidebar_ = nullptr;
     ImageCanvas* canvas_ = nullptr;
     QToolBar* tool_options_toolbar_ = nullptr;
+    QWidgetAction* paint_options_action_ = nullptr;
     QWidget* paint_size_options_ = nullptr;
     QSlider* brush_size_slider_ = nullptr;
     QSpinBox* brush_size_spin_ = nullptr;

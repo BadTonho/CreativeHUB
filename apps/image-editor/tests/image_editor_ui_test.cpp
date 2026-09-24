@@ -42,6 +42,20 @@ int main(int argc, char* argv[]) {
     window.show();
     QCoreApplication::processEvents();
 
+    auto* startup_options_toolbar = window.findChild<QToolBar*>(
+        QStringLiteral("toolOptionsToolBar"));
+    auto* startup_paint_options_action = window.findChild<QAction*>(
+        QStringLiteral("paintBrushSizeAction"));
+    auto* startup_paint_options = window.findChild<QWidget*>(
+        QStringLiteral("paintBrushSizeOptions"));
+    if (startup_options_toolbar == nullptr || startup_paint_options_action == nullptr ||
+        startup_paint_options == nullptr || !startup_options_toolbar->isVisible() ||
+        startup_options_toolbar->height() < 40 || startup_paint_options_action->isVisible() ||
+        startup_paint_options->isVisible()) {
+        std::cerr << "The top options bar did not start empty before opening a document.\n";
+        return 1;
+    }
+
     auto* canvas = window.findChild<image_editor::ImageCanvas*>();
     if (canvas == nullptr || !window.isVisible()) {
         std::cerr << "The Image Editor window or canvas was not created.\n";
@@ -99,6 +113,8 @@ int main(int argc, char* argv[]) {
     auto* color_button = window.findChild<QToolButton*>(QStringLiteral("paintBrushColorButton"));
     auto* tool_options_toolbar = window.findChild<QToolBar*>(
         QStringLiteral("toolOptionsToolBar"));
+    auto* paint_options_action = window.findChild<QAction*>(
+        QStringLiteral("paintBrushSizeAction"));
     auto* paint_size_options = window.findChild<QWidget*>(
         QStringLiteral("paintBrushSizeOptions"));
     auto* brush_size_slider = window.findChild<QSlider*>(
@@ -107,10 +123,12 @@ int main(int argc, char* argv[]) {
     auto* redo_action = window.findChild<QAction*>(QStringLiteral("redoAction"));
     auto* crop_action = window.findChild<QAction*>(QStringLiteral("cropSelectionAction"));
     if (tool_sidebar == nullptr || paint_button == nullptr || color_button == nullptr ||
-        tool_options_toolbar == nullptr || paint_size_options == nullptr ||
+        tool_options_toolbar == nullptr || paint_options_action == nullptr ||
+        paint_size_options == nullptr ||
         brush_size_slider == nullptr || brush_size == nullptr || redo_action == nullptr ||
         crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 2 ||
-        paint_button->isChecked() || paint_size_options->isVisible() ||
+        paint_button->isChecked() || paint_options_action->isVisible() ||
+        paint_size_options->isVisible() ||
         !tool_options_toolbar->isVisible() || tool_options_toolbar->height() < 40 ||
         !color_button->isVisible() ||
         !color_button->isEnabled() || color_button->y() <= paint_button->y() ||
@@ -146,11 +164,19 @@ int main(int argc, char* argv[]) {
     }
 
     paint_button->click();
-    if (!paint_button->isChecked() || !paint_size_options->isVisible() ||
+    if (!paint_button->isChecked() || !paint_options_action->isVisible() ||
+        !paint_size_options->isVisible() ||
         !brush_size->isVisible() || !brush_size_slider->isVisible() ||
         !canvas->paintMode() || tool_sidebar->width() != 56 ||
         !tool_options_toolbar->isVisible()) {
-        std::cerr << "Activating Paint did not expose its top-bar controls and canvas mode.\n";
+        std::cerr << "Activating Paint did not expose its top-bar controls and canvas mode. "
+                  << "checked=" << paint_button->isChecked()
+                  << ", action=" << paint_options_action->isVisible()
+                  << ", options=" << paint_size_options->isVisible()
+                  << ", spin=" << brush_size->isVisible()
+                  << ", slider=" << brush_size_slider->isVisible()
+                  << ", canvas=" << canvas->paintMode()
+                  << ", toolbar=" << tool_options_toolbar->isVisible() << '\n';
         return 1;
     }
     brush_size_slider->setValue(14);
@@ -166,13 +192,13 @@ int main(int argc, char* argv[]) {
     }
     paint_button->click();
     if (paint_button->isChecked() || canvas->paintMode() ||
-        paint_size_options->isVisible()) {
+        paint_options_action->isVisible() || paint_size_options->isVisible()) {
         std::cerr << "Turning Paint off from its tool button did not hide its options.\n";
         return 1;
     }
     paint_button->click();
     if (!paint_button->isChecked() || !canvas->paintMode() ||
-        !paint_size_options->isVisible()) {
+        !paint_options_action->isVisible() || !paint_size_options->isVisible()) {
         std::cerr << "Reactivating Paint did not restore its options.\n";
         return 1;
     }
@@ -202,7 +228,8 @@ int main(int argc, char* argv[]) {
     crop_action->trigger();
     if (!crop_action->isChecked() || paint_button->isChecked() ||
         !canvas->cropMode() || canvas->paintMode() || tool_sidebar->width() != 56 ||
-        paint_size_options->isVisible() || !tool_options_toolbar->isVisible()) {
+        paint_options_action->isVisible() || paint_size_options->isVisible() ||
+        !tool_options_toolbar->isVisible()) {
         std::cerr << "Crop mode did not deactivate the paint tool.\n";
         return 1;
     }

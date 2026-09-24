@@ -22,6 +22,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QWidgetAction>
 
 namespace image_editor {
 namespace {
@@ -130,8 +131,11 @@ void ImageEditorWindow::createToolOptionsBar() {
     brush_size_spin_->setFixedWidth(96);
     options_layout->addWidget(brush_size_spin_);
 
-    tool_options_toolbar_->addWidget(paint_size_options_);
-    paint_size_options_->hide();
+    paint_options_action_ = new QWidgetAction(tool_options_toolbar_);
+    paint_options_action_->setObjectName(QStringLiteral("paintBrushSizeAction"));
+    paint_options_action_->setDefaultWidget(paint_size_options_);
+    tool_options_toolbar_->addAction(paint_options_action_);
+    paint_options_action_->setVisible(false);
 
     connect(brush_size_slider_, &QSlider::valueChanged,
             brush_size_spin_, &QSpinBox::setValue);
@@ -142,8 +146,10 @@ void ImageEditorWindow::createToolOptionsBar() {
 }
 
 void ImageEditorWindow::updateToolOptions() {
-    if (paint_size_options_ == nullptr || tool_sidebar_ == nullptr) return;
+    if (paint_options_action_ == nullptr || paint_size_options_ == nullptr ||
+        tool_sidebar_ == nullptr || canvas_ == nullptr) return;
     const bool paint_active = tool_sidebar_->paintToolActive() && canvas_->paintMode();
+    paint_options_action_->setVisible(paint_active);
     paint_size_options_->setVisible(paint_active);
     paint_size_options_->setEnabled(paint_active);
 }
