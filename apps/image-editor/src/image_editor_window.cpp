@@ -5,6 +5,7 @@
 #include "new_canvas_dialog.h"
 
 #include <QAction>
+#include <QCoreApplication>
 #include <QCloseEvent>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -161,6 +162,20 @@ void ImageEditorWindow::createActions() {
     auto* view_menu = menuBar()->addMenu(QStringLiteral("View"));
     view_menu->addAction(fit_action_);
 
+    auto* help_menu = menuBar()->addMenu(QStringLiteral("&Help"));
+    auto* system_action = help_menu->addAction(QStringLiteral("&System"));
+    connect(system_action, &QAction::triggered, this, [this]() {
+        const auto version = QCoreApplication::applicationVersion();
+        const auto executable_path = QCoreApplication::applicationFilePath();
+        QMessageBox::information(
+            this,
+            QStringLiteral("System"),
+            QStringLiteral("Image Editor\n\nVersion: %1\nExecutable: %2")
+                .arg(version.isEmpty() ? QStringLiteral("Beta 0.1.0") : version,
+                     executable_path.isEmpty()
+                         ? QStringLiteral("N/A")
+                         : executable_path));
+    });
 }
 
 void ImageEditorWindow::updateView() {
