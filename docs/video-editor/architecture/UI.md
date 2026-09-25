@@ -281,6 +281,13 @@ Inspector have no composition operations. Switching pages changes only the
 visible workspace panels; it does not change the selected clip, playhead,
 playback, project data, history, or dirty state.
 
+`ui/workspace/pages/render/RenderWorkspace` supplies the empty central page and
+activates the shared Timeline's read-only presentation through a handler bound
+to `EditWorkspaceController`. The mode hides Timeline controls and its footer;
+leaving Render restores them.
+`WorkspaceHost` remains responsible for selecting that page, while `MainWindow`
+continues to manage dock visibility and the lower dock title at this stage.
+
 Render shows an empty central page with no controls or placeholder text. The
 Timeline dock remains visible at the bottom and displays the project tracks,
 clips, time ruler, and playhead. Its playback, editing, track-management, and

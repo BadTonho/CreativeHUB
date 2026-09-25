@@ -64,6 +64,7 @@ namespace ui {
 class FunctionPalette;
 class EditWorkspace;
 class FusionWorkspace;
+class RenderWorkspace;
 class WorkspaceHost;
 }
 
@@ -263,6 +264,7 @@ private:
     ui::FunctionPalette* function_palette_ = nullptr;
     ui::EditWorkspace* edit_workspace_ = nullptr;
     ui::FusionWorkspace* fusion_workspace_ = nullptr;
+    ui::RenderWorkspace* render_workspace_ = nullptr;
     ui::WorkspaceHost* workspace_host_ = nullptr;
     QWidget* workspace_buttons_container_ = nullptr;
     QPushButton* edit_workspace_button_ = nullptr;

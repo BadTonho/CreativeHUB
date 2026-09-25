@@ -213,6 +213,8 @@ add_executable(creative-suite-main-editor-workspace-page-switch-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_page_id.h
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/pages/fusion/fusion_workspace.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/pages/fusion/fusion_workspace.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/pages/render/render_workspace.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/pages/render/render_workspace.h
 )
 
 target_include_directories(creative-suite-main-editor-workspace-page-switch-tests PRIVATE

@@ -3,6 +3,7 @@
 #include "ui/preview/preview_widget.h"
 #include "ui/workspace/workspace_host.h"
 #include "ui/workspace/pages/fusion/fusion_workspace.h"
+#include "ui/workspace/pages/render/render_workspace.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
 #include "timeline/timeline_widget.h"
@@ -244,7 +245,10 @@ public:
                             window.fusion_workspace_->inspectorPanel() &&
                         window.workspace_host_->findChild<QWidget*>(
                             "workspaceViewerTitle") ==
-                            window.fusion_workspace_->viewerTitle(),
+                            window.fusion_workspace_->viewerTitle() &&
+                        window.render_workspace_ != nullptr &&
+                        window.workspace_host_->renderPage() ==
+                            window.render_workspace_->centralPage(),
                     "The MainWindow must start with Edit selected and expose all workspace selectors.");
             const auto edit_dock_visibility = dock_visibility();
             window.editor_session_.setPlayheadFrame(11);

@@ -12,6 +12,7 @@
 #include "ui/timeline/timeline_end_buttons.h"
 #include "ui/workspace/workspace_host.h"
 #include "ui/workspace/pages/fusion/fusion_workspace.h"
+#include "ui/workspace/pages/render/render_workspace.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -335,6 +336,15 @@ void MainWindow::createWorkspace() {
     edit_workspace_->createPanels(this);
     fusion_workspace_ = new ui::FusionWorkspace(this);
     fusion_workspace_->createPanels(this);
+    auto* edit_controller = edit_workspace_->controller();
+    render_workspace_ = new ui::RenderWorkspace(
+        [edit_controller](bool active) {
+            if (edit_controller != nullptr) {
+                edit_controller->setTimelineReadOnly(active);
+            }
+        },
+        this);
+    render_workspace_->createPanels(this);
     applyMonitorVolumePercent(edit_workspace_->ui().monitor_volume->value());
 
     const auto workspace_buttons = ui::createTimelineEndButtons(this);
@@ -352,7 +362,7 @@ void MainWindow::createWorkspace() {
         setWorkspacePage(ui::WorkspacePageId::Render);
     });
     workspace_host_ = new ui::WorkspaceHost(
-        edit_workspace_, fusion_workspace_, this);
+        edit_workspace_, fusion_workspace_, render_workspace_, this);
     setCentralWidget(workspace_host_);
     statusBar()->setVisible(false);
 
@@ -399,10 +409,6 @@ void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
         if (timeline_dock_ != nullptr) timeline_dock_->show();
     }
 
-    if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
-        edit_workspace_->controller()->setTimelineReadOnly(
-            page == ui::WorkspacePageId::Render);
-    }
     if (workspace_host_ != nullptr) {
         workspace_host_->setPage(page);
     }

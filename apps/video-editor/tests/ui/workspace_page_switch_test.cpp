@@ -1,6 +1,7 @@
 #include "ui/timeline/timeline_end_buttons.h"
 #include "ui/workspace/workspace_host.h"
 #include "ui/workspace/pages/fusion/fusion_workspace.h"
+#include "ui/workspace/pages/render/render_workspace.h"
 
 #include <QApplication>
 #include <QDockWidget>
@@ -34,8 +35,16 @@ int main(int argc, char* argv[]) {
         timeline->setObjectName("timelinePage");
         auto* fusion_workspace = new ui::FusionWorkspace(&window);
         fusion_workspace->createPanels(&window);
+        bool timeline_read_only = false;
+        auto* render_workspace = new ui::RenderWorkspace(
+            [&timeline_read_only](bool active) {
+                timeline_read_only = active;
+            },
+            &window);
+        render_workspace->createPanels(&window);
         auto* workspace_host = new ui::WorkspaceHost(
-            preview, edit_inspector, timeline, fusion_workspace, &window);
+            preview, edit_inspector, timeline, fusion_workspace,
+            render_workspace, &window);
         window.setCentralWidget(workspace_host);
 
         auto* inspector_dock = new QDockWidget("Inspector", &window);
@@ -125,7 +134,10 @@ int main(int argc, char* argv[]) {
                 "Selecting Render must select only the Render button.");
         require(workspace_host->currentPage() == ui::WorkspacePageId::Render &&
                     workspace_host->renderPage() != nullptr &&
-                    workspace_host->renderPage()->isVisible(),
+                    workspace_host->renderPage()->isVisible() &&
+                    workspace_host->renderPage() ==
+                        render_workspace->centralPage() &&
+                    render_workspace->isActive() && timeline_read_only,
                 "Render must display its empty workspace page.");
         require(workspace_host->previewWidget() == preview && preview->isHidden(),
                 "Render must hide the Preview widget.");
@@ -145,6 +157,8 @@ int main(int argc, char* argv[]) {
         require(workspace_host->currentPage() == ui::WorkspacePageId::Fusion &&
                     workspace_host->previewWidget() == preview && preview->isVisible(),
                 "Returning to Fusion must restore the shared Preview.");
+        require(!render_workspace->isActive() && !timeline_read_only,
+                "Leaving Render for Fusion must restore Timeline interaction.");
         require(workspace_host->lowerWorkspacePanel()->currentWidget() ==
                     workspace_host->nodeEditorPanel() &&
                     workspace_host->inspectorPanel()->currentWidget() ==

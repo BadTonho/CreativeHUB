@@ -10,18 +10,21 @@ namespace ui {
 
 class EditWorkspace;
 class FusionWorkspace;
+class RenderWorkspace;
 
 class WorkspaceHost final : public QWidget {
 public:
     explicit WorkspaceHost(
         EditWorkspace* edit_workspace,
         FusionWorkspace* fusion_workspace,
+        RenderWorkspace* render_workspace,
         QWidget* parent = nullptr);
     explicit WorkspaceHost(
         QWidget* preview_widget,
         QWidget* edit_inspector,
         QWidget* timeline_panel,
         FusionWorkspace* fusion_workspace,
+        RenderWorkspace* render_workspace,
         QWidget* parent = nullptr);
 
     void setPage(WorkspacePageId page);
@@ -38,7 +41,7 @@ public:
 
 private:
     QWidget* preview_widget_ = nullptr;
-    QWidget* render_page_ = nullptr;
+    RenderWorkspace* render_workspace_ = nullptr;
     QWidget* timeline_panel_ = nullptr;
     QWidget* node_editor_panel_ = nullptr;
     QWidget* edit_inspector_ = nullptr;

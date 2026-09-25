@@ -1,6 +1,6 @@
 # Plano de Refatoração das Interfaces de Trabalho
 
-Status: Etapas 1, 2 e 3 concluídas; continuar a próxima etapa quando solicitado.
+Status: Etapas 1, 2, 3 e 4 concluídas; continuar a próxima etapa quando solicitado.
 
 ## Objetivo
 
@@ -22,9 +22,11 @@ adiciona recursos de edição, composição ou exportação.
   outra Timeline nem copia os dados do projeto.
 - `FusionWorkspace` monta o título Viewer, o painel Node Editor e o Inspector
   visual do Fusion; o Preview continua compartilhado com Edit.
-- Render mantém a área central vazia, oculta os controles e o rodapé da
-  Timeline e altera temporariamente a visibilidade dos docks. A visibilidade
-  anterior é restaurada ao sair de Render ou ao fechar o aplicativo.
+- `RenderWorkspace` fornece a página central vazia e ativa o modo somente
+  leitura da Timeline compartilhada; `WorkspaceHost` controla sua ativação.
+- `MainWindow` continua controlando a visibilidade temporária dos docks e seus
+  títulos em Render. A visibilidade anterior é restaurada ao sair de Render ou
+  ao fechar o aplicativo.
 
 As etapas seguintes continuam pendentes e devem ser implementadas uma por vez,
 quando solicitadas.
@@ -57,7 +59,7 @@ projeto ou da Timeline.
 
 ## Etapas
 
-Status atual: Etapas 1, 2 e 3 concluídas. A montagem e as interações do Edit foram extraídas para `pages/edit/`, e a apresentação do Fusion para `pages/fusion/`; as etapas seguintes continuam pendentes e serão implementadas uma por vez, quando solicitadas.
+Status atual: Etapas 1, 2, 3 e 4 concluídas. A montagem e as interações do Edit foram extraídas para `pages/edit/`, a apresentação do Fusion para `pages/fusion/` e a página e ativação somente leitura do Render para `pages/render/`; as etapas seguintes continuam pendentes e serão implementadas uma por vez, quando solicitadas.
 
 ### 1. Definir o limite dos espaços de trabalho
 
@@ -90,12 +92,14 @@ Status atual: Etapas 1, 2 e 3 concluídas. A montagem e as interações do Edit 
 
 ### 4. Extrair o espaço Render
 
-- Mover a página central vazia e a apresentação da Timeline somente leitura
-  para `pages/render/render_workspace.*`.
-- Manter o mesmo widget Timeline e os mesmos dados de projeto usados por Edit.
-- Preservar o comportamento atual: ocultar controles e rodapé da Timeline,
-  bloquear edições e drops no canvas e manter as barras de rolagem disponíveis.
-- Confirmar que voltar para Edit ou Fusion restaura a interação com a Timeline.
+- **Concluída.** `RenderWorkspace` fornece a página central vazia e sua ativação
+  solicita o modo somente leitura da Timeline compartilhada.
+- **Concluída.** `WorkspaceHost` ativa e desativa Render ao trocar de página;
+  `MainWindow` continua controlando os docks e o título do dock inferior.
+- **Concluída.** Os testes confirmam a página vazia, o modo somente leitura ao
+  entrar em Render e a restauração dos controles ao voltar para Fusion ou Edit.
+- **Concluída.** O Video Editor e os testes existentes de troca de página e
+  integração da janela foram compilados e validados.
 
 ### 5. Centralizar as transições entre espaços
 
