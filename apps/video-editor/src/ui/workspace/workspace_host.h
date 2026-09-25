@@ -4,22 +4,24 @@
 
 #include <QWidget>
 
-class QLabel;
 class QStackedWidget;
 
 namespace ui {
 
 class EditWorkspace;
+class FusionWorkspace;
 
 class WorkspaceHost final : public QWidget {
 public:
     explicit WorkspaceHost(
         EditWorkspace* edit_workspace,
+        FusionWorkspace* fusion_workspace,
         QWidget* parent = nullptr);
     explicit WorkspaceHost(
         QWidget* preview_widget,
         QWidget* edit_inspector,
         QWidget* timeline_panel,
+        FusionWorkspace* fusion_workspace,
         QWidget* parent = nullptr);
 
     void setPage(WorkspacePageId page);
@@ -41,7 +43,7 @@ private:
     QWidget* node_editor_panel_ = nullptr;
     QWidget* edit_inspector_ = nullptr;
     QWidget* fusion_inspector_ = nullptr;
-    QLabel* viewer_title_ = nullptr;
+    QWidget* viewer_title_ = nullptr;
     QStackedWidget* central_workspace_pages_ = nullptr;
     QStackedWidget* lower_workspace_panel_ = nullptr;
     QStackedWidget* inspector_panel_ = nullptr;

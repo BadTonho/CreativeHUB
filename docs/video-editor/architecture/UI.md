@@ -434,6 +434,12 @@ application boundary and accesses Edit widgets through the shared non-owning UI
 handle set for shell-level tasks such as preferences and layout persistence; it
 keeps no additional widget pointers.
 
+`ui/workspace/pages/fusion/FusionWorkspace` builds the Fusion Viewer title,
+visual-only Node Editor panel, and Inspector placeholder, then exposes those
+widgets to `WorkspaceHost`. The shared Preview remains owned by the application
+shell and is reused as the Viewer surface; the Fusion workspace does not create
+or modify project, selection, playhead, playback, or history state.
+
 The internal `frame_step_navigation` module decides whether a Previous/Next
 Frame command stays within the active clip, activates a clip at the boundary,
 or reports a gap or Timeline limit. It reads Timeline metadata only. The Edit

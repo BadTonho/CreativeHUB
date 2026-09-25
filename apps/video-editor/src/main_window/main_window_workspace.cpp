@@ -11,6 +11,7 @@
 #include "ui/media_browser/media_browser_list_widget.h"
 #include "ui/timeline/timeline_end_buttons.h"
 #include "ui/workspace/workspace_host.h"
+#include "ui/workspace/pages/fusion/fusion_workspace.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -332,6 +333,8 @@ void MainWindow::createWorkspace() {
     populateMediaBrowser();
     updateTimelineState();
     edit_workspace_->createPanels(this);
+    fusion_workspace_ = new ui::FusionWorkspace(this);
+    fusion_workspace_->createPanels(this);
     applyMonitorVolumePercent(edit_workspace_->ui().monitor_volume->value());
 
     const auto workspace_buttons = ui::createTimelineEndButtons(this);
@@ -348,7 +351,8 @@ void MainWindow::createWorkspace() {
     connect(render_workspace_button_, &QPushButton::clicked, this, [this]() {
         setWorkspacePage(ui::WorkspacePageId::Render);
     });
-    workspace_host_ = new ui::WorkspaceHost(edit_workspace_, this);
+    workspace_host_ = new ui::WorkspaceHost(
+        edit_workspace_, fusion_workspace_, this);
     setCentralWidget(workspace_host_);
     statusBar()->setVisible(false);
 

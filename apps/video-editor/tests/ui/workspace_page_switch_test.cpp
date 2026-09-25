@@ -1,5 +1,6 @@
 #include "ui/timeline/timeline_end_buttons.h"
 #include "ui/workspace/workspace_host.h"
+#include "ui/workspace/pages/fusion/fusion_workspace.h"
 
 #include <QApplication>
 #include <QDockWidget>
@@ -31,8 +32,10 @@ int main(int argc, char* argv[]) {
         edit_inspector->setObjectName("editInspectorPage");
         auto* timeline = new QWidget;
         timeline->setObjectName("timelinePage");
+        auto* fusion_workspace = new ui::FusionWorkspace(&window);
+        fusion_workspace->createPanels(&window);
         auto* workspace_host = new ui::WorkspaceHost(
-            preview, edit_inspector, timeline, &window);
+            preview, edit_inspector, timeline, fusion_workspace, &window);
         window.setCentralWidget(workspace_host);
 
         auto* inspector_dock = new QDockWidget("Inspector", &window);
@@ -100,13 +103,19 @@ int main(int argc, char* argv[]) {
         require(lower_dock->windowTitle() == "Node Editor",
                 "The lower workspace dock must be titled Node Editor in Fusion.");
         require(workspace_host->inspectorPanel()->currentWidget() ==
-                    workspace_host->fusionInspectorPage(),
+                    workspace_host->fusionInspectorPage() &&
+                    workspace_host->fusionInspectorPage() ==
+                        fusion_workspace->inspectorPanel(),
                 "Fusion must show the Fusion Inspector placeholder.");
+        require(workspace_host->nodeEditorPanel() ==
+                    fusion_workspace->nodeEditorPanel(),
+                "The Fusion Node Editor must come from FusionWorkspace.");
         require(workspace_host->previewWidget() == preview && preview->isVisible(),
                 "Fusion must keep the same Preview visible as its Viewer.");
         auto* viewer_title = workspace_host->findChild<QLabel*>(
             "workspaceViewerTitle");
-        require(viewer_title != nullptr && viewer_title->isVisible(),
+        require(viewer_title != nullptr && viewer_title->isVisible() &&
+                    viewer_title == fusion_workspace->viewerTitle(),
                 "Fusion must label the existing Preview as Viewer.");
 
         buttons.render->click();

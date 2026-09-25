@@ -1,6 +1,6 @@
 # Plano de Refatoração das Interfaces de Trabalho
 
-Status: Etapas 1 e 2 concluídas; continuar a próxima etapa quando solicitado.
+Status: Etapas 1, 2 e 3 concluídas; continuar a próxima etapa quando solicitado.
 
 ## Objetivo
 
@@ -20,6 +20,8 @@ adiciona recursos de edição, composição ou exportação.
   docks, títulos, seletores e regras de visibilidade de Render.
 - Render usa o mesmo widget Timeline de Edit em modo somente leitura. Não cria
   outra Timeline nem copia os dados do projeto.
+- `FusionWorkspace` monta o título Viewer, o painel Node Editor e o Inspector
+  visual do Fusion; o Preview continua compartilhado com Edit.
 - Render mantém a área central vazia, oculta os controles e o rodapé da
   Timeline e altera temporariamente a visibilidade dos docks. A visibilidade
   anterior é restaurada ao sair de Render ou ao fechar o aplicativo.
@@ -55,7 +57,7 @@ projeto ou da Timeline.
 
 ## Etapas
 
-Status atual: Etapas 1 e 2 concluídas. A montagem e as interações do Edit foram extraídas para `pages/edit/`; as etapas seguintes continuam pendentes e serão implementadas uma por vez, quando solicitadas.
+Status atual: Etapas 1, 2 e 3 concluídas. A montagem e as interações do Edit foram extraídas para `pages/edit/`, e a apresentação do Fusion para `pages/fusion/`; as etapas seguintes continuam pendentes e serão implementadas uma por vez, quando solicitadas.
 
 ### 1. Definir o limite dos espaços de trabalho
 
@@ -77,11 +79,14 @@ Status atual: Etapas 1 e 2 concluídas. A montagem e as interações do Edit for
 - **Concluída.** Aplicativo e alvos focados de controller, integração da janela, Timeline e troca de página compilados e validados.
 ### 3. Extrair o espaço Fusion
 
-- Mover o título Viewer, o painel Node Editor e o placeholder do Inspector de
-  Fusion para `pages/fusion/fusion_workspace.*`.
-- Preservar o comportamento apenas visual e compartilhar o Preview existente.
-- Confirmar que alternar entre Fusion e Edit não muda o projeto, a seleção, o
-  playhead, a reprodução, o histórico ou o estado de alterações não salvas.
+- **Concluída.** `FusionWorkspace` monta e fornece o título Viewer, o painel
+  Node Editor e o placeholder do Inspector ao `WorkspaceHost`.
+- **Concluída.** A composição segue apenas visual; Edit e Fusion continuam
+  usando o mesmo Preview, e a janela continua controlando os docks e o título
+  do dock inferior.
+- **Concluída.** Os testes de troca e integração verificam que navegar entre
+  Edit, Fusion e Render preserva os widgets compartilhados, seleção, playhead,
+  reprodução, histórico e estado de alterações não salvas.
 
 ### 4. Extrair o espaço Render
 

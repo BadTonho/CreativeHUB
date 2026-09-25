@@ -2,6 +2,7 @@
 
 #include "ui/preview/preview_widget.h"
 #include "ui/workspace/workspace_host.h"
+#include "ui/workspace/pages/fusion/fusion_workspace.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
 #include "timeline/timeline_widget.h"
@@ -235,11 +236,82 @@ public:
                         window.edit_workspace_->inspectorPanel() ==
                             window.workspace_host_->editInspectorPage() &&
                         window.edit_workspace_->timelinePanel() ==
-                            window.workspace_host_->timelinePanel(),
+                            window.workspace_host_->timelinePanel() &&
+                        window.fusion_workspace_ != nullptr &&
+                        window.workspace_host_->nodeEditorPanel() ==
+                            window.fusion_workspace_->nodeEditorPanel() &&
+                        window.workspace_host_->fusionInspectorPage() ==
+                            window.fusion_workspace_->inspectorPanel() &&
+                        window.workspace_host_->findChild<QWidget*>(
+                            "workspaceViewerTitle") ==
+                            window.fusion_workspace_->viewerTitle(),
                     "The MainWindow must start with Edit selected and expose all workspace selectors.");
             const auto edit_dock_visibility = dock_visibility();
+            window.editor_session_.setPlayheadFrame(11);
+            const auto history_probe =
+                window.edit_workspace_->controller()->addTrack(
+                    "Workspace history probe");
+            require(history_probe.changed() &&
+                        window.edit_workspace_->controller()->undo().changed() &&
+                        window.edit_workspace_->controller()->canRedo() &&
+                        !window.project_dirty_,
+                    "The workspace preservation check could not prepare a clean redo history state.");
+            const auto selection_before_workspace_switch =
+                window.editor_session_.selection();
+            const auto playhead_before_workspace_switch =
+                window.editor_session_.playheadFrame();
+            const auto can_undo_before_workspace_switch =
+                window.edit_workspace_->controller()->canUndo();
+            const auto can_redo_before_workspace_switch =
+                window.edit_workspace_->controller()->canRedo();
+            const auto playback_controller_before_workspace_switch =
+                window.playback_controller_.get();
+            const auto playback_active_before_workspace_switch =
+                window.playback_is_playing_;
+            const auto playback_worker_active_before_workspace_switch =
+                window.playback_controller_ != nullptr &&
+                window.playback_controller_->isPlaying();
+            const auto project_dirty_before_workspace_switch =
+                window.project_dirty_;
+            const auto require_workspace_state_unchanged = [&window,
+                &selection_before_workspace_switch,
+                playhead_before_workspace_switch,
+                can_undo_before_workspace_switch,
+                can_redo_before_workspace_switch,
+                playback_controller_before_workspace_switch,
+                playback_active_before_workspace_switch,
+                playback_worker_active_before_workspace_switch,
+                project_dirty_before_workspace_switch]() {
+                const auto& selection_after = window.editor_session_.selection();
+                require(
+                    selection_after.active_track_id ==
+                            selection_before_workspace_switch.active_track_id &&
+                        selection_after.active_clip_id ==
+                            selection_before_workspace_switch.active_clip_id &&
+                        selection_after.selected_source_path ==
+                            selection_before_workspace_switch.selected_source_path &&
+                        selection_after.active_transition.has_value() ==
+                            selection_before_workspace_switch.active_transition.has_value() &&
+                        window.editor_session_.playheadFrame() ==
+                            playhead_before_workspace_switch &&
+                        window.edit_workspace_->controller()->canUndo() ==
+                            can_undo_before_workspace_switch &&
+                        window.edit_workspace_->controller()->canRedo() ==
+                            can_redo_before_workspace_switch &&
+                        window.playback_controller_.get() ==
+                            playback_controller_before_workspace_switch &&
+                        window.playback_is_playing_ ==
+                            playback_active_before_workspace_switch &&
+                        window.playback_controller_ != nullptr &&
+                        window.playback_controller_->isPlaying() ==
+                            playback_worker_active_before_workspace_switch &&
+                        window.project_dirty_ == project_dirty_before_workspace_switch,
+                    "Switching workspaces must preserve selection, playhead, playback, history, and dirty state.");
+            };
             window.setWorkspacePage(ui::WorkspacePageId::Fusion);
+            require_workspace_state_unchanged();
             window.setWorkspacePage(ui::WorkspacePageId::Render);
+            require_workspace_state_unchanged();
             QApplication::processEvents();
             require(window.render_workspace_button_->isChecked() &&
                         !window.edit_workspace_button_->isChecked() &&
@@ -266,6 +338,7 @@ public:
             }
             window.setWorkspacePage(ui::WorkspacePageId::Fusion);
             QApplication::processEvents();
+            require_workspace_state_unchanged();
             require_dock_visibility(
                 edit_dock_visibility,
                 "Returning to Fusion must restore the dock visibility from before Render.");
@@ -287,6 +360,7 @@ public:
             window.setWorkspacePage(ui::WorkspacePageId::Render);
             window.setWorkspacePage(ui::WorkspacePageId::Edit);
             QApplication::processEvents();
+            require_workspace_state_unchanged();
             require_dock_visibility(
                 mixed_dock_visibility,
                 "Returning to Edit must restore mixed dock visibility from before Render.");
