@@ -1,10 +1,11 @@
 # Image Editor Roadmap
 
-Status: **standalone minimum and Main Editor handoff validation in progress**.
+Status: **standalone minimum implemented; standalone acceptance in progress**.
 This roadmap covers the independent application under `apps/image-editor/`.
-The linked-image implementation has started while the standalone manual and
-cross-platform packaging checks remain incomplete. The Image Editor remains
-ahead of Motion Studio in the application sequence.
+The Main Editor handoff implementation already exists as a bounded prototype,
+but its acceptance is gated on passing the standalone manual and
+cross-platform packaging checks in Milestone 1. The Image Editor remains ahead
+of Motion Studio in the application sequence.
 
 ## Principles
 
@@ -18,8 +19,12 @@ ahead of Motion Studio in the application sequence.
 - Use Qt image I/O and deploy the plugins required for the documented input
   formats. Track Qt Image Formats and its codec notices for distribution.
 - Keep compatibility with the Main Editor as an independently testable
-  milestone. The first implementation refreshes host output after a successful
-  save; unsaved live previews remain outside its scope.
+  milestone after the standalone minimum passes its exit criteria. The current
+  implementation refreshes host output after a successful save; unsaved live
+  previews remain outside its scope.
+- Complete and accept Milestone 1 before accepting Milestone 2. Existing linked
+  workflow code remains a prototype during standalone validation; do not
+  expand its release scope before the standalone gate passes.
 - Consider Windows, macOS, and Linux paths, packaging, and image dimensions
   from the beginning.
 
@@ -66,8 +71,10 @@ packaged application. Automated and manual checks pass.
 
 ### 2. Main Editor linked-image compatibility
 
-Implementation is underway. The standalone exit criteria remain open until
-the manual and packaging checks above pass.
+The linked-image implementation is already present as a bounded prototype.
+Begin this milestone's acceptance only after Milestone 1 exit criteria pass;
+until then, keep the implementation stable and use its existing regression
+coverage to catch regressions.
 
 - [x] Add Media Pool and timeline actions to create or reopen linked documents.
 - [x] Keep the source unchanged; store linked documents and PNG outputs beside

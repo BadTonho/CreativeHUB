@@ -12,18 +12,20 @@ shared code reuse and document handoff as separate concerns: applications can
 reuse a library without sharing project files, and they can exchange a linked
 document without sharing their entire editing workflow.
 
-The Image Editor standalone minimum was developed first. Its final manual and
-packaging checks remain open while the linked-image prototype is being
-validated. The Image Editor's first editing release remains ahead of Motion
-Studio. This is a sequencing direction; technical contracts in this proposal
-remain provisional.
+The Image Editor standalone minimum was developed first. Its manual and
+packaging checks are the current gate. The Main Editor linked-image
+implementation already exists as a bounded prototype, but compatibility
+acceptance follows the standalone exit criteria; the prototype should remain
+stable until that gate passes. The Image Editor's first editing release
+remains ahead of Motion Studio. This is a sequencing direction; technical
+contracts in this proposal remain provisional.
 
 The initial Main Editor to Image Editor handoff is now implemented as a
 bounded prototype. A user confirmed the basic linked edit/save workflow and
 that the Main Editor refreshed after the Image Editor saved. The broader
-acceptance checks are still pending, and this document remains provisional
-until the file, conflict, and cross-platform workflows have been validated
-manually.
+acceptance checks follow the standalone Image Editor gate and remain pending.
+This document remains provisional until the file, conflict, and cross-platform
+workflows have been validated manually.
 
 ## Recommended Boundaries
 
