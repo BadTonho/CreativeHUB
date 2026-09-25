@@ -54,6 +54,8 @@ public:
     [[nodiscard]] bool razorMode() const noexcept;
     void setMoveRequiresAlt(bool enabled);
     [[nodiscard]] bool moveRequiresAlt() const noexcept;
+    void setReadOnly(bool read_only);
+    [[nodiscard]] bool isReadOnly() const noexcept;
     void setSnapEnabled(bool enabled);
     [[nodiscard]] bool snapEnabled() const noexcept;
     // Rendering bridge used by the fixed header overlay hosted by the
@@ -206,6 +208,7 @@ private:
     std::optional<ClipLocation> active_clip_;
     std::int64_t playhead_frame_ = 0;
     bool move_requires_alt_ = false;
+    bool read_only_ = false;
     TimelineInteractionController interaction_controller_;
     bool razor_mode_ = false;
     QPointF move_preview_position_{};

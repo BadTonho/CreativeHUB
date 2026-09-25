@@ -4,6 +4,7 @@
 #include "ui/workspace/workspace_page_view.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
+#include "timeline/timeline_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
 
 #include <QApplication>
@@ -17,6 +18,7 @@
 #include <QProgressDialog>
 #include <QPushButton>
 #include <QSettings>
+#include <QStackedWidget>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QMessageBox>
@@ -115,12 +117,15 @@ public:
                 render_window.effects_dock_, render_window.inspector_dock_,
                 render_window.timeline_dock_};
             for (std::size_t index = 0; index < docks.size(); ++index) {
+                if (index == docks.size() - 1) {
+                    docks[index]->hide();
+                }
                 dock_visibility_before_close[index] = docks[index]->isVisible();
             }
             render_window.setWorkspacePage(MainWindow::WorkspacePage::Render);
-            for (auto* dock : docks) {
-                require(!dock->isVisible(),
-                        "Render must hide all docks before the close-persistence check.");
+            for (std::size_t index = 0; index < docks.size(); ++index) {
+                require(docks[index]->isVisible() == (index == docks.size() - 1),
+                        "Render must keep only the Timeline dock visible before the close-persistence check.");
             }
             require(render_window.close(),
                     "Closing the editor from Render must be accepted.");
@@ -232,21 +237,34 @@ public:
                     "The MainWindow must select only Render.");
             require(window.workspace_page_view_->renderPage()->isVisible() &&
                         window.preview_widget_->isHidden(),
-                    "Render must show its empty page and hide the Preview.");
+                    "Render must show its empty central page and hide the Preview.");
+            require(window.workspace_page_view_->lowerWorkspacePanel()->currentWidget() ==
+                            window.workspace_page_view_->timelinePanel() &&
+                        window.timeline_dock_->windowTitle() == "Timeline" &&
+                        window.timeline_widget_->isReadOnly() &&
+                        window.timeline_controls_container_->isHidden() &&
+                        window.timeline_footer_->isHidden(),
+                    "Render must show the read-only Timeline without its controls or footer.");
             require(window.render_workspace_button_->isVisible(),
-                    "The Render selector must remain visible when all docks are hidden.");
-            for (auto* dock : workspace_docks) {
-                require(!dock->isVisible(),
-                        "Entering Render must hide every workspace dock.");
+                    "The Render selector must remain visible while Render is active.");
+            for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
+                require(workspace_docks[index]->isVisible() ==
+                            (workspace_docks[index] == window.timeline_dock_),
+                        "Entering Render must keep only the Timeline dock visible.");
             }
             window.setWorkspacePage(MainWindow::WorkspacePage::Fusion);
             QApplication::processEvents();
             require_dock_visibility(
                 edit_dock_visibility,
                 "Returning to Fusion must restore the dock visibility from before Render.");
-            require(window.workspace_page_view_->previewWidget()->isVisible() &&
-                        window.timeline_dock_->windowTitle() == "Node Editor",
-                    "Returning to Fusion must restore its Preview and Node Editor title.");
+            require(window.workspace_page_view_->previewWidget()->isVisible(),
+                    "Returning to Fusion must restore its Preview.");
+            require(window.timeline_dock_->windowTitle() == "Node Editor",
+                    "Returning to Fusion must restore the Node Editor title.");
+            require(!window.timeline_widget_->isReadOnly() &&
+                        !window.timeline_controls_container_->isHidden() &&
+                        !window.timeline_footer_->isHidden(),
+                    "Returning to Fusion must restore Timeline interaction and controls.");
 
             window.media_dock_->hide();
             window.effects_dock_->show();
@@ -258,6 +276,24 @@ public:
             require_dock_visibility(
                 mixed_dock_visibility,
                 "Returning to Edit must restore mixed dock visibility from before Render.");
+
+            window.timeline_dock_->hide();
+            QApplication::processEvents();
+            const auto hidden_timeline_visibility = dock_visibility();
+            window.setWorkspacePage(MainWindow::WorkspacePage::Render);
+            QApplication::processEvents();
+            require(window.timeline_dock_->isVisible(),
+                    "Render must show the Timeline even when its prior workspace visibility was hidden.");
+            window.setWorkspacePage(MainWindow::WorkspacePage::Edit);
+            QApplication::processEvents();
+            require_dock_visibility(
+                hidden_timeline_visibility,
+                "Leaving Render must restore the prior hidden state of the Timeline dock.");
+            require(!window.timeline_widget_->isReadOnly() &&
+                        !window.timeline_controls_container_->isHidden() &&
+                        !window.timeline_footer_->isHidden() &&
+                        !window.project_dirty_,
+                    "Workspace changes must restore Timeline interaction without dirtying the project.");
             window.restoreDefaultLayout();
             window.setWorkspacePage(MainWindow::WorkspacePage::Edit);
             QApplication::processEvents();

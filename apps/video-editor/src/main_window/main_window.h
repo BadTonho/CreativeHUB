@@ -346,6 +346,8 @@ private:
     ui::FunctionPalette* function_palette_ = nullptr;
     ui::WorkspacePageView* workspace_page_view_ = nullptr;
     QWidget* workspace_buttons_container_ = nullptr;
+    QWidget* timeline_controls_container_ = nullptr;
+    QWidget* timeline_footer_ = nullptr;
     QPushButton* edit_workspace_button_ = nullptr;
     QPushButton* fusion_workspace_button_ = nullptr;
     QPushButton* render_workspace_button_ = nullptr;

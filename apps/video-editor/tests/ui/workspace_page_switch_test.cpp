@@ -122,6 +122,8 @@ int main(int argc, char* argv[]) {
                 "Render must hide the Preview widget.");
         require(viewer_title->isHidden(),
                 "Render must hide the Viewer title.");
+        require(page_view->lowerWorkspacePanel()->currentWidget() == timeline,
+                "Render must keep the shared Timeline page in the lower workspace dock.");
         require(page_view->renderPage()->layout() == nullptr &&
                     page_view->renderPage()->findChildren<QWidget*>(
                         QString(), Qt::FindDirectChildrenOnly).isEmpty(),

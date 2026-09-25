@@ -246,6 +246,22 @@ bool TimelineWidget::moveRequiresAlt() const noexcept {
     return move_requires_alt_;
 }
 
+void TimelineWidget::setReadOnly(bool read_only) {
+    if (read_only_ == read_only) return;
+    read_only_ = read_only;
+    if (read_only_) {
+        interaction_controller_.cancelAll();
+        if (QWidget::mouseGrabber() == this) releaseMouse();
+        unsetCursor();
+        suppress_next_context_menu_ = false;
+    }
+    update();
+}
+
+bool TimelineWidget::isReadOnly() const noexcept {
+    return read_only_;
+}
+
 void TimelineWidget::setSnapEnabled(bool enabled) {
     if (snap_enabled_ == enabled) return;
     snap_enabled_ = enabled;
@@ -487,6 +503,18 @@ bool TimelineWidget::eventFilter(QObject* watched, QEvent* event) {
 
     auto* watched_widget = qobject_cast<QWidget*>(watched);
     if (watched_widget != nullptr && watched != this && event != nullptr) {
+        if (read_only_) {
+            switch (event->type()) {
+            case QEvent::DragEnter:
+            case QEvent::DragMove:
+            case QEvent::DragLeave:
+            case QEvent::Drop:
+                event->ignore();
+                return true;
+            default:
+                break;
+            }
+        }
         switch (event->type()) {
         case QEvent::DragEnter: {
             auto* drag_event = static_cast<QDragEnterEvent*>(event);
@@ -1219,6 +1247,10 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
 }
 
 void TimelineWidget::dragEnterEvent(QDragEnterEvent* event) {
+    if (read_only_) {
+        event->ignore();
+        return;
+    }
     if (isSupportedDrop(event->mimeData())) {
         event->acceptProposedAction();
     } else {
@@ -1227,11 +1259,19 @@ void TimelineWidget::dragEnterEvent(QDragEnterEvent* event) {
 }
 
 void TimelineWidget::dragLeaveEvent(QDragLeaveEvent* event) {
+    if (read_only_) {
+        event->ignore();
+        return;
+    }
     clearDropHover();
     event->accept();
 }
 
 void TimelineWidget::dragMoveEvent(QDragMoveEvent* event) {
+    if (read_only_) {
+        event->ignore();
+        return;
+    }
     if (updateDropHover(event->mimeData(), event->position())) {
         event->acceptProposedAction();
     } else {
@@ -1240,6 +1280,10 @@ void TimelineWidget::dragMoveEvent(QDragMoveEvent* event) {
 }
 
 void TimelineWidget::dropEvent(QDropEvent* event) {
+    if (read_only_) {
+        event->ignore();
+        return;
+    }
     if (processDrop(event->mimeData(), event->position())) {
         event->acceptProposedAction();
         update();
@@ -1438,6 +1482,10 @@ void TimelineWidget::showImageClipMenu(
 }
 
 void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
+    if (read_only_) {
+        event->ignore();
+        return;
+    }
     if (suppress_next_context_menu_) {
         suppress_next_context_menu_ = false;
         event->accept();
@@ -1468,6 +1516,10 @@ void TimelineWidget::leaveEvent(QEvent* event) {
 }
 
 void TimelineWidget::mousePressEvent(QMouseEvent* event) {
+    if (read_only_) {
+        event->ignore();
+        return;
+    }
     if (event->button() == Qt::RightButton) {
         const auto indexes = transitionClipIndexesAt(
             event->position().x(), event->position().y());
@@ -1629,6 +1681,10 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (read_only_) {
+        event->ignore();
+        return;
+    }
     if (interaction_controller_.rulerSeekPending()) {
         const auto ruler = rulerRect();
         const auto ruler_x = std::clamp(
@@ -1739,6 +1795,10 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (read_only_) {
+        event->ignore();
+        return;
+    }
     if (event->button() != Qt::LeftButton) {
         event->ignore();
         return;
@@ -1827,6 +1887,10 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
 
 void TimelineWidget::wheelEvent(QWheelEvent* event) {
     if (event == nullptr) return;
+    if (read_only_) {
+        event->ignore();
+        return;
+    }
     const auto modifiers = event->modifiers();
     if (modifiers.testFlag(Qt::ControlModifier)) {
         const auto vertical_delta = event->angleDelta().y();

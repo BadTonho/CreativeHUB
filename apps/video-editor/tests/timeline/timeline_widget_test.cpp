@@ -2054,6 +2054,236 @@ int main(int argc, char* argv[]) {
                 ", edit requested=" + std::to_string(image_edit_requested) + ").");
         image_context_widget.close();
 
+        timeline::TimelineWidget read_only_widget;
+        read_only_widget.resize(900, 180);
+        read_only_widget.setTimelineViewportWidth(900);
+        auto read_only_clip = makeClip(
+            "read-only-still.png", 0, 12000, "Read-only still");
+        read_only_clip.clip_id = 920;
+        read_only_clip.kind = timeline::ClipKind::Image;
+        read_only_widget.setTracks({timeline::TimelineTrack{
+            718, "Images", 1.0, false, {read_only_clip}}});
+        read_only_widget.show();
+        application.processEvents();
+
+        int read_only_interaction_count = 0;
+        const auto count_read_only_interaction =
+            [&read_only_interaction_count](auto&&...) {
+                ++read_only_interaction_count;
+            };
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::clipSelected,
+            count_read_only_interaction);
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::clipSelectionCleared,
+            count_read_only_interaction);
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::editImageClipRequested,
+            count_read_only_interaction);
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::clipMoveRequested,
+            count_read_only_interaction);
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::clipSplitRequested,
+            count_read_only_interaction);
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::clipEdgeTrimRequested,
+            count_read_only_interaction);
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::mediaDropRequested,
+            count_read_only_interaction);
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::effectDropRequested,
+            count_read_only_interaction);
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::transitionSelected,
+            count_read_only_interaction);
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::transitionAddRequested,
+            count_read_only_interaction);
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::transitionRemoveRequested,
+            count_read_only_interaction);
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::seekStarted,
+            count_read_only_interaction);
+        QObject::connect(
+            &read_only_widget,
+            &timeline::TimelineWidget::seekRequested,
+            count_read_only_interaction);
+
+        read_only_widget.setZoomFactor(2.0);
+        const auto read_only_zoom = read_only_widget.zoomFactor();
+        const auto read_only_row_height = read_only_widget.trackRowHeight();
+        read_only_widget.setReadOnly(true);
+        require(read_only_widget.isReadOnly(),
+                "The Timeline did not expose its read-only state.");
+
+        const auto read_only_clip_position = QPointF(
+            read_only_widget.contentXForFrame(3000), 83);
+        sendMouse(
+            read_only_widget,
+            QEvent::MouseButtonPress,
+            read_only_clip_position,
+            Qt::LeftButton);
+        sendMouse(
+            read_only_widget,
+            QEvent::MouseMove,
+            read_only_clip_position + QPointF(80, 0),
+            Qt::LeftButton);
+        sendMouse(
+            read_only_widget,
+            QEvent::MouseButtonRelease,
+            read_only_clip_position + QPointF(80, 0),
+            Qt::NoButton);
+        sendMouse(
+            read_only_widget,
+            QEvent::MouseButtonPress,
+            QPointF(300, 25),
+            Qt::LeftButton);
+        sendMouse(
+            read_only_widget,
+            QEvent::MouseButtonRelease,
+            QPointF(300, 25),
+            Qt::NoButton);
+
+        QTimer::singleShot(0, [&application]() {
+            for (auto* window : application.topLevelWidgets()) {
+                if (auto* menu = qobject_cast<QMenu*>(window)) menu->close();
+            }
+        });
+        const QPoint read_only_context_position(
+            static_cast<int>(read_only_widget.contentXForFrame(3000)), 83);
+        QContextMenuEvent read_only_context_event(
+            QContextMenuEvent::Mouse,
+            read_only_context_position,
+            read_only_widget.mapToGlobal(read_only_context_position),
+            Qt::NoModifier);
+        QApplication::sendEvent(&read_only_widget, &read_only_context_event);
+
+        QMimeData read_only_media_mime;
+        read_only_media_mime.setData(
+            ui::kMediaPathMimeType,
+            QByteArrayLiteral("read-only-drop.mp4"));
+        const auto read_only_drop_position = read_only_clip_position.toPoint();
+        QDragEnterEvent read_only_drag_enter(
+            read_only_drop_position,
+            Qt::CopyAction,
+            &read_only_media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&read_only_widget, &read_only_drag_enter);
+        QDragMoveEvent read_only_drag_move(
+            read_only_drop_position,
+            Qt::CopyAction,
+            &read_only_media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&read_only_widget, &read_only_drag_move);
+        QDropEvent read_only_drop(
+            QPointF(read_only_drop_position),
+            Qt::CopyAction,
+            &read_only_media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&read_only_widget, &read_only_drop);
+        sendWheel(
+            read_only_widget,
+            QPointF(300, 83),
+            120,
+            Qt::ControlModifier);
+        sendWheel(
+            read_only_widget,
+            QPointF(300, 83),
+            120,
+            Qt::ShiftModifier);
+        require(read_only_interaction_count == 0 &&
+                    read_only_widget.zoomFactor() == read_only_zoom &&
+                    read_only_widget.trackRowHeight() == read_only_row_height &&
+                    !read_only_drop.isAccepted(),
+                "Read-only Timeline input selected, sought, edited, dropped, opened a menu, or changed zoom/row height.");
+
+        QScrollArea read_only_drop_scroll;
+        read_only_drop_scroll.resize(500, 150);
+        read_only_drop_scroll.setWidgetResizable(true);
+        read_only_drop_scroll.setAcceptDrops(true);
+        read_only_drop_scroll.viewport()->setAcceptDrops(true);
+        auto* read_only_viewport_timeline = new timeline::TimelineWidget;
+        read_only_viewport_timeline->setTracks({timeline::TimelineTrack{
+            719, "Video", 1.0, false,
+            {makeClip("read-only-viewport.mp4", 0, 12000, "Viewport clip")}}});
+        read_only_viewport_timeline->setAcceptDrops(false);
+        read_only_viewport_timeline->setReadOnly(true);
+        read_only_drop_scroll.setWidget(read_only_viewport_timeline);
+        read_only_drop_scroll.viewport()->installEventFilter(
+            read_only_viewport_timeline);
+        read_only_drop_scroll.show();
+        application.processEvents();
+        int read_only_viewport_drop_count = 0;
+        QObject::connect(
+            read_only_viewport_timeline,
+            &timeline::TimelineWidget::mediaDropRequested,
+            [&read_only_viewport_drop_count](const QString&, qint64, qint64) {
+                ++read_only_viewport_drop_count;
+            });
+        const QPoint read_only_viewport_position(100, 80);
+        QDragEnterEvent read_only_viewport_enter(
+            read_only_viewport_position,
+            Qt::CopyAction,
+            &read_only_media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(
+            read_only_drop_scroll.viewport(), &read_only_viewport_enter);
+        QDragMoveEvent read_only_viewport_move(
+            read_only_viewport_position,
+            Qt::CopyAction,
+            &read_only_media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(
+            read_only_drop_scroll.viewport(), &read_only_viewport_move);
+        QDropEvent read_only_viewport_drop(
+            QPointF(read_only_viewport_position),
+            Qt::CopyAction,
+            &read_only_media_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(
+            read_only_drop_scroll.viewport(), &read_only_viewport_drop);
+        require(read_only_viewport_drop_count == 0 &&
+                    !read_only_viewport_drop.isAccepted(),
+                "The Timeline viewport accepted a media drop while read-only.");
+        read_only_drop_scroll.close();
+
+        read_only_widget.setReadOnly(false);
+        sendMouse(
+            read_only_widget,
+            QEvent::MouseButtonPress,
+            read_only_clip_position,
+            Qt::LeftButton);
+        sendMouse(
+            read_only_widget,
+            QEvent::MouseButtonRelease,
+            read_only_clip_position,
+            Qt::NoButton);
+        require(!read_only_widget.isReadOnly() &&
+                    read_only_interaction_count > 0,
+                "Returning the Timeline to Edit did not restore normal interaction.");
+        read_only_widget.close();
+
         widget.close();
         return 0;
     } catch (const std::exception& error) {

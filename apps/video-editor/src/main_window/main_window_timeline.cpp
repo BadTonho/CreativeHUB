@@ -337,7 +337,9 @@ struct MainWindow::TimelineControls {
 MainWindow::TimelineControls MainWindow::createTimelineControls(
     QWidget* container,
     QVBoxLayout* layout) {
-    auto* controls = new QHBoxLayout;
+    timeline_controls_container_ = new QWidget(container);
+    timeline_controls_container_->setObjectName("timelineControlsContainer");
+    auto* controls = new QHBoxLayout(timeline_controls_container_);
     controls->setSpacing(6);
 
     auto* playback_label = new QLabel("Playback", container);
@@ -477,7 +479,7 @@ MainWindow::TimelineControls MainWindow::createTimelineControls(
         &QPushButton::clicked,
         this,
         [this]() { setWorkspacePage(WorkspacePage::Render); });
-    layout->addLayout(controls);
+    layout->addWidget(timeline_controls_container_);
 
     previous_frame_button_->setToolTip("Step one frame backward");
     play_pause_button_->setToolTip("Play or pause the active clip");
@@ -547,29 +549,30 @@ void MainWindow::createTimelineViewport(QWidget* container, QVBoxLayout* layout)
 void MainWindow::createTimelineFooter(QWidget* container, QVBoxLayout* layout) {
     // Keep the playback status as a compact footer while giving the timeline
     // the expandable space in the dock.
-    auto* playback_footer = new QWidget(container);
-    auto* playback_footer_layout = new QHBoxLayout(playback_footer);
+    timeline_footer_ = new QWidget(container);
+    timeline_footer_->setObjectName("timelinePlaybackFooter");
+    auto* playback_footer_layout = new QHBoxLayout(timeline_footer_);
     playback_footer_layout->setContentsMargins(0, 0, 0, 0);
     playback_footer_layout->setSpacing(12);
 
-    playback_status_label_ = new QLabel("No media selected.", playback_footer);
+    playback_status_label_ = new QLabel("No media selected.", timeline_footer_);
     playback_status_label_->setStyleSheet("color: #9aa4b2;");
     playback_status_label_->setSizePolicy(
         QSizePolicy::Preferred,
         QSizePolicy::Fixed);
     playback_footer_layout->addWidget(playback_status_label_);
 
-    timeline_message_label_ = new QLabel(playback_footer);
+    timeline_message_label_ = new QLabel(timeline_footer_);
     timeline_message_label_->setStyleSheet("color: #9aa4b2;");
     timeline_message_label_->setSizePolicy(
         QSizePolicy::Preferred,
         QSizePolicy::Fixed);
     playback_footer_layout->addWidget(timeline_message_label_);
     playback_footer_layout->addStretch(1);
-    system_memory_indicator_ = new SystemMemoryIndicator(playback_footer);
+    system_memory_indicator_ = new SystemMemoryIndicator(timeline_footer_);
     playback_footer_layout->addWidget(system_memory_indicator_);
-    playback_footer->setFixedHeight(playback_footer->sizeHint().height());
-    layout->addWidget(playback_footer);
+    timeline_footer_->setFixedHeight(timeline_footer_->sizeHint().height());
+    layout->addWidget(timeline_footer_);
 
     connect(
         statusBar(),

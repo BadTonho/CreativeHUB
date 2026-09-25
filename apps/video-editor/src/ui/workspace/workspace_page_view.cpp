@@ -106,6 +106,9 @@ void WorkspacePageView::setRenderPageActive(bool active) {
     if (active) {
         viewer_title_->hide();
         central_workspace_pages_->setCurrentWidget(render_page_);
+        if (timeline_panel_ != nullptr) {
+            lower_workspace_panel_->setCurrentWidget(timeline_panel_);
+        }
     } else if (preview_widget_ != nullptr) {
         central_workspace_pages_->setCurrentWidget(preview_widget_);
     }

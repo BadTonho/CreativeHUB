@@ -160,11 +160,21 @@ void MainWindow::setWorkspacePage(WorkspacePage page) {
         }
         has_render_dock_visibility_snapshot_ = true;
         for (auto* dock : docks) {
-            if (dock != nullptr) dock->hide();
+            if (dock != nullptr && dock != timeline_dock_) dock->hide();
         }
+        if (timeline_dock_ != nullptr) timeline_dock_->show();
     }
 
     workspace_page_ = page;
+    if (timeline_controls_container_ != nullptr) {
+        timeline_controls_container_->setVisible(page != WorkspacePage::Render);
+    }
+    if (timeline_footer_ != nullptr) {
+        timeline_footer_->setVisible(page != WorkspacePage::Render);
+    }
+    if (timeline_widget_ != nullptr) {
+        timeline_widget_->setReadOnly(page == WorkspacePage::Render);
+    }
     if (workspace_page_view_ != nullptr) {
         if (page == WorkspacePage::Render) {
             workspace_page_view_->setRenderPageActive(true);
@@ -174,7 +184,7 @@ void MainWindow::setWorkspacePage(WorkspacePage page) {
                 page == WorkspacePage::Fusion);
         }
     }
-    if (timeline_dock_ != nullptr && page != WorkspacePage::Render) {
+    if (timeline_dock_ != nullptr) {
         timeline_dock_->setWindowTitle(
             page == WorkspacePage::Fusion ? "Node Editor" : "Timeline");
     }

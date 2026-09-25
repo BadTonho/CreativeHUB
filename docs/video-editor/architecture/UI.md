@@ -281,13 +281,18 @@ Inspector have no composition operations. Switching pages changes only the
 visible workspace panels; it does not change the selected clip, playhead,
 playback, project data, history, or dirty state.
 
-Render shows an empty central page with no controls or placeholder text. It
-hides all workspace docks while keeping the top toolbar and workspace
-selectors available. The visibility of each dock is restored when returning
-to Edit or Fusion, including docks that were already hidden before entering
-Render. The Render page does not provide rendering or export operations yet.
-Closing the application from Render preserves the dock layout from before that
-workspace was opened; the next launch still opens on Edit.
+Render shows an empty central page with no controls or placeholder text. The
+Timeline dock remains visible at the bottom and displays the project tracks,
+clips, time ruler, and playhead. Its playback, editing, track-management, and
+zoom controls and its footer are hidden. The Timeline canvas is read-only in
+Render: pointer input cannot select, seek, edit, drop media or effects, open
+context menus, or change zoom or track height. Its scrollbars remain available
+for navigating the project. The other six workspace docks are hidden. The
+Timeline dock is shown in Render even when it was hidden in the prior
+workspace; returning to Edit or Fusion restores the previous visibility of all
+seven docks. Closing the application from Render restores and saves that prior
+layout, and the next launch still opens on Edit. Render does not provide
+rendering or export operations yet.
 
 Gesture priority is configurable: by default, normal drag moves clips and
 Alt + drag seeks; when the Edit > Require Alt to Move Clips option is enabled,
