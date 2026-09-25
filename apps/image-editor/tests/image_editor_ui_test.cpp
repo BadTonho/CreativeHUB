@@ -12,6 +12,9 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <QImageWriter>
 #include <QKeySequenceEdit>
@@ -992,6 +995,192 @@ int main(int argc, char* argv[]) {
     QCoreApplication::processEvents();
     if (paint_button->isEnabled() || opacity_slider->isEnabled()) {
         std::cerr << "The panel did not lock editing controls for Background.\n";
+        return 1;
+    }
+
+    const QString linked_directory = temporary.filePath(QStringLiteral("linked-image"));
+    if (!QDir().mkpath(linked_directory)) {
+        std::cerr << "The linked image test directory could not be created.\n";
+        return 1;
+    }
+    const QString linked_source = linked_directory + QStringLiteral("/original.png");
+    const QString linked_document = linked_directory + QStringLiteral("/asset.cimg");
+    const QString linked_output = linked_directory + QStringLiteral("/published.png");
+    QImage linked_source_image(32, 24, QImage::Format_ARGB32);
+    linked_source_image.fill(QColor(240, 20, 10, 255));
+    linked_source_image.setPixelColor(0, 0, QColor(0, 0, 0, 0));
+    if (!linked_source_image.save(linked_source)) {
+        std::cerr << "The linked source image could not be created.\n";
+        return 1;
+    }
+    QFile original_source_file(linked_source);
+    if (!original_source_file.open(QIODevice::ReadOnly)) return 1;
+    const QByteArray original_source_bytes = original_source_file.readAll();
+    original_source_file.close();
+
+    image_editor::ImageEditorWindow linked_window;
+    linked_window.show();
+    if (!linked_window.openLinkedImage(linked_source, linked_document, linked_output) ||
+        !QFileInfo::exists(linked_document) || !QFileInfo::exists(linked_output)) {
+        std::cerr << "Linked mode did not create and publish its editable document.\n";
+        return 1;
+    }
+    auto* linked_canvas = linked_window.findChild<image_editor::ImageCanvas*>();
+    auto* linked_paint_action = linked_window.findChild<QAction*>(
+        QStringLiteral("paintToolAction"));
+    auto* linked_save_action = linked_window.findChild<QAction*>(
+        QStringLiteral("saveDocumentAction"));
+    if (linked_canvas == nullptr || linked_paint_action == nullptr ||
+        linked_save_action == nullptr) {
+        std::cerr << "Linked mode did not expose the normal editing and save actions.\n";
+        return 1;
+    }
+    QImage published_before_edit(linked_output);
+    if (published_before_edit.isNull() ||
+        published_before_edit.pixelColor(16, 12) != QColor(240, 20, 10, 255) ||
+        published_before_edit.pixelColor(0, 0).alpha() != 0) {
+        std::cerr << "The first linked PNG did not preserve the source pixels and transparency.\n";
+        return 1;
+    }
+    linked_paint_action->trigger();
+    QCoreApplication::processEvents();
+    QTest::mouseClick(linked_canvas, Qt::LeftButton, Qt::NoModifier,
+                      linked_canvas->rect().center());
+    QCoreApplication::processEvents();
+    QImage published_before_save(linked_output);
+    if (published_before_save.isNull() ||
+        published_before_save.pixelColor(16, 12) != QColor(240, 20, 10, 255)) {
+        std::cerr << "Unsaved linked edits were published before Save.\n";
+        return 1;
+    }
+    linked_save_action->trigger();
+    QCoreApplication::processEvents();
+    QImage published_after_save(linked_output);
+    if (published_after_save.isNull() ||
+        published_after_save.pixelColor(16, 12) == QColor(240, 20, 10, 255)) {
+        std::cerr << "Saving the linked document did not publish the edited PNG.\n";
+        return 1;
+    }
+    QFile source_after_edit(linked_source);
+    if (!source_after_edit.open(QIODevice::ReadOnly) ||
+        source_after_edit.readAll() != original_source_bytes) {
+        std::cerr << "Linked editing changed the original image.\n";
+        return 1;
+    }
+    source_after_edit.close();
+
+    QFile external_revision(linked_document);
+    if (!external_revision.open(QIODevice::Append) ||
+        external_revision.write(QByteArrayLiteral("external revision")) < 0) {
+        std::cerr << "The external linked document revision could not be simulated.\n";
+        return 1;
+    }
+    external_revision.close();
+    QFile newer_document(linked_document);
+    if (!newer_document.open(QIODevice::ReadOnly)) return 1;
+    const QByteArray newer_document_bytes = newer_document.readAll();
+    newer_document.close();
+    const QColor latest_published_pixel = published_after_save.pixelColor(16, 12);
+    QTimer::singleShot(0, []() {
+        if (auto* message = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            message->accept();
+        }
+    });
+    linked_save_action->trigger();
+    QFile document_after_conflict(linked_document);
+    if (!document_after_conflict.open(QIODevice::ReadOnly) ||
+        document_after_conflict.readAll() != newer_document_bytes) {
+        std::cerr << "A stale linked editor overwrote a newer document revision.\n";
+        return 1;
+    }
+    QImage output_after_conflict(linked_output);
+    if (output_after_conflict.isNull() ||
+        output_after_conflict.pixelColor(16, 12) != latest_published_pixel) {
+        std::cerr << "A rejected stale save changed the published image.\n";
+        return 1;
+    }
+
+    const QString failed_publish_source =
+        linked_directory + QStringLiteral("/publish-failure-source.png");
+    const QString failed_publish_document =
+        linked_directory + QStringLiteral("/publish-failure.cimg");
+    const QString failed_publish_output =
+        linked_directory + QStringLiteral("/publish-failure.png");
+    QImage failed_publish_image(24, 24, QImage::Format_ARGB32);
+    failed_publish_image.fill(QColor(30, 180, 210, 255));
+    if (!failed_publish_image.save(failed_publish_source)) {
+        std::cerr << "The linked publication-failure source could not be created.\n";
+        return 1;
+    }
+    image_editor::ImageEditorWindow failed_publish_window;
+    failed_publish_window.show();
+    if (!failed_publish_window.openLinkedImage(
+            failed_publish_source, failed_publish_document,
+            failed_publish_output)) {
+        std::cerr << "The linked publication-failure document could not be opened.\n";
+        return 1;
+    }
+    auto* failed_publish_canvas = failed_publish_window.findChild<image_editor::ImageCanvas*>();
+    auto* failed_publish_paint = failed_publish_window.findChild<QAction*>(
+        QStringLiteral("paintToolAction"));
+    auto* failed_publish_save = failed_publish_window.findChild<QAction*>(
+        QStringLiteral("saveDocumentAction"));
+    if (failed_publish_canvas == nullptr || failed_publish_paint == nullptr ||
+        failed_publish_save == nullptr) {
+        std::cerr << "The linked publication-failure actions were unavailable.\n";
+        return 1;
+    }
+    QFile failed_publish_document_before_file(failed_publish_document);
+    if (!failed_publish_document_before_file.open(QIODevice::ReadOnly)) return 1;
+    const QByteArray failed_publish_document_before =
+        failed_publish_document_before_file.readAll();
+    failed_publish_document_before_file.close();
+    failed_publish_paint->trigger();
+    QCoreApplication::processEvents();
+    QTest::mouseClick(failed_publish_canvas, Qt::LeftButton, Qt::NoModifier,
+                      failed_publish_canvas->rect().center());
+    if (!QFile::remove(failed_publish_output) ||
+        !QDir().mkpath(failed_publish_output)) {
+        std::cerr << "The linked publication failure could not be simulated.\n";
+        return 1;
+    }
+    QTimer::singleShot(0, []() {
+        if (auto* message = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            message->accept();
+        }
+    });
+    failed_publish_save->trigger();
+    QFile failed_publish_document_after_file(failed_publish_document);
+    if (!failed_publish_document_after_file.open(QIODevice::ReadOnly)) return 1;
+    const QByteArray failed_publish_document_after =
+        failed_publish_document_after_file.readAll();
+    if (failed_publish_document_after == failed_publish_document_before ||
+        !QFileInfo(failed_publish_output).isDir()) {
+        std::cerr << "A failed PNG publication damaged the document or destination.\n";
+        return 1;
+    }
+
+    const QString incompatible_document =
+        linked_directory + QStringLiteral("/incompatible.cimg");
+    const QString incompatible_output =
+        linked_directory + QStringLiteral("/incompatible.png");
+    QFile incompatible_file(incompatible_document);
+    if (!incompatible_file.open(QIODevice::WriteOnly) ||
+        incompatible_file.write(QByteArrayLiteral("not a supported .cimg document")) < 0) {
+        std::cerr << "The incompatible linked document could not be created.\n";
+        return 1;
+    }
+    incompatible_file.close();
+    image_editor::ImageEditorWindow incompatible_window;
+    QTimer::singleShot(0, []() {
+        if (auto* message = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            message->accept();
+        }
+    });
+    if (incompatible_window.openLinkedImage(
+            failed_publish_source, incompatible_document, incompatible_output) ||
+        QFileInfo::exists(incompatible_output)) {
+        std::cerr << "An incompatible linked document was opened or published.\n";
         return 1;
     }
     return 0;

@@ -44,6 +44,19 @@ bool validTransitionKind(timeline::TransitionKind kind) {
     return false;
 }
 
+bool validLinkedImageReference(
+    const media::LinkedImageReference& link,
+    const std::filesystem::path& source_path) {
+    if (link.id.empty() || link.document_path.empty() ||
+        link.published_output_path.empty()) return false;
+    const auto document_path = media::MediaLibrary::canonicalPath(link.document_path);
+    const auto output_path = media::MediaLibrary::canonicalPath(
+        link.published_output_path);
+    const auto source = media::MediaLibrary::canonicalPath(source_path);
+    return document_path != output_path && document_path != source &&
+        output_path != source;
+}
+
 bool validKeyframeList(
     const std::vector<timeline::Keyframe>& keyframes,
     timeline::TransformProperty property,
@@ -87,6 +100,12 @@ void validateDocument(const ProjectDocument& document,
         if (!media::MediaLibrary::validBinPath(media.bin_path)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid media bin path.");
         }
+        if (media.image_editor_link.has_value() &&
+            (media.kind != media::MediaKind::Image ||
+             !validLinkedImageReference(*media.image_editor_link, media.source_path))) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid Image Editor media link.");
+        }
         const auto canonical = media::MediaLibrary::canonicalPath(media.source_path);
         if (std::find(media_paths.begin(), media_paths.end(), canonical) != media_paths.end()) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains duplicate media paths.");
@@ -123,6 +142,12 @@ void validateDocument(const ProjectDocument& document,
         }
         if (clip.kind == timeline::ClipKind::Text && !validTextStyle(clip.text)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains invalid text clip styling.");
+        }
+        if (clip.image_editor_variant.has_value() &&
+            (clip.kind != timeline::ClipKind::Image ||
+             !validLinkedImageReference(*clip.image_editor_variant, clip.source_path))) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid linked clip image.");
         }
         if (!timeline::validTransform(clip.transform) ||
             !validKeyframeList(clip.keyframes.position_x,

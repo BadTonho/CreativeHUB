@@ -701,6 +701,11 @@ void MainWindow::connectTimelineSignals(const TimelineControls& controls) {
         &MainWindow::handleTimelineClipSelectionChanged);
     connect(
         timeline_widget_,
+        &timeline::TimelineWidget::editImageClipRequested,
+        this,
+        &MainWindow::editTimelineImageClip);
+    connect(
+        timeline_widget_,
         &timeline::TimelineWidget::clipSelectionCleared,
         this,
         &MainWindow::handleTimelineClipSelectionCleared);

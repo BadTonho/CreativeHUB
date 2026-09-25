@@ -6,6 +6,7 @@
 #include "../tools/tool_sidebar.h"
 
 #include <QList>
+#include <QByteArray>
 #include <QMainWindow>
 
 class QAction;
@@ -34,6 +35,10 @@ public:
     // Accepts paths from application launchers or future handoff adapters.
     [[nodiscard]] bool openImagePath(const QString& path);
     [[nodiscard]] bool openDocumentPath(const QString& path);
+    [[nodiscard]] bool openLinkedImage(
+        const QString& source_path,
+        const QString& document_path,
+        const QString& published_output_path);
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -90,6 +95,8 @@ private:
     QAction* save_action_ = nullptr;
     QAction* save_as_action_ = nullptr;
     QAction* export_action_ = nullptr;
+    QAction* open_image_action_ = nullptr;
+    QAction* open_document_action_ = nullptr;
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
     QAction* crop_action_ = nullptr;
@@ -104,6 +111,9 @@ private:
     int paint_diameter_ = 12;
     int eraser_diameter_ = 12;
     QList<QAction*> shortcut_actions_;
+    QString linked_document_path_;
+    QString linked_output_path_;
+    QByteArray linked_document_fingerprint_;
 };
 
 } // namespace image_editor

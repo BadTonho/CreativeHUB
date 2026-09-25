@@ -1,5 +1,6 @@
 #include "main_window.h"
 
+#include "preview_widget.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
 #include "ui/media_browser_list_widget.h"
@@ -7,8 +8,11 @@
 #include <QApplication>
 #include <QEventLoop>
 #include <QDockWidget>
+#include <QImage>
+#include <QImageWriter>
 #include <QMenu>
 #include <QMenuBar>
+#include <QSaveFile>
 #include <QProgressDialog>
 #include <QSettings>
 #include <QStandardPaths>
@@ -56,6 +60,24 @@ project::ProjectDocument makeMultiTrackProject(
     document.timeline_tracks[1].track_id = 2;
     document.timeline_tracks[1].clips[0].clip_id = 2;
     return document;
+}
+
+QColor framePixel(const media::VideoFrame& frame) {
+    if (frame.width <= 0 || frame.height <= 0 || frame.stride < 4 ||
+        frame.rgba_pixels.size() < 4) return {};
+    return QColor(frame.rgba_pixels[0], frame.rgba_pixels[1],
+                  frame.rgba_pixels[2], frame.rgba_pixels[3]);
+}
+
+bool writePngAtomically(const std::filesystem::path& path, const QImage& image) {
+    QSaveFile file(QString::fromStdString(path.string()));
+    if (!file.open(QIODevice::WriteOnly)) return false;
+    QImageWriter writer(&file, QByteArrayLiteral("png"));
+    if (!writer.write(image)) {
+        file.cancelWriting();
+        return false;
+    }
+    return file.commit();
 }
 
 } // namespace
@@ -343,6 +365,160 @@ public:
                         !window.media_controller_.library().contains(second_source) &&
                         !window.selectedMediaIndex().has_value(),
                     "An import result from an earlier project generation changed the session.");
+        }
+
+        const auto linked_source = directory / "linked-original.png";
+        const auto linked_document = directory / "linked-edit.cimg";
+        const auto linked_output = directory / "linked-output.png";
+        const auto variant_document = directory / "linked-clip-variant.cimg";
+        const auto variant_output = directory / "linked-clip-variant.png";
+        const auto linked_project = directory / "linked-image.csp";
+        QImage source_image(16, 16, QImage::Format_ARGB32);
+        source_image.fill(QColor(230, 20, 15, 255));
+        QImage first_output(16, 16, QImage::Format_ARGB32);
+        first_output.fill(QColor(20, 220, 35, 255));
+        QImage isolated_variant(16, 16, QImage::Format_ARGB32);
+        isolated_variant.fill(QColor(230, 210, 15, 255));
+        require(source_image.save(QString::fromStdString(linked_source.string())) &&
+                    writePngAtomically(linked_output, first_output) &&
+                    writePngAtomically(variant_output, isolated_variant),
+                "The MainWindow linked-image fixtures could not be written.");
+        const media::LinkedImageReference shared_link{
+            "shared-main-window-link", linked_document, linked_output};
+        project::ProjectDocument linked_document_data;
+        linked_document_data.media.push_back({
+            linked_source, "Linked still", "Unsorted", false,
+            media::MediaKind::Image, shared_link});
+        project::ProjectTrack linked_track;
+        linked_track.track_id = 71;
+        linked_track.name = "V1";
+        project::ProjectClip linked_clip;
+        linked_clip.clip_id = 81;
+        linked_clip.source_path = linked_source;
+        linked_clip.duration_frames = 30;
+        linked_clip.kind = timeline::ClipKind::Image;
+        linked_track.clips.push_back(linked_clip);
+        project::ProjectClip variant_clip;
+        variant_clip.clip_id = 82;
+        variant_clip.source_path = linked_source;
+        variant_clip.timeline_start_frame = 30;
+        variant_clip.duration_frames = 30;
+        variant_clip.kind = timeline::ClipKind::Image;
+        variant_clip.image_editor_variant = media::LinkedImageReference{
+            "clip-specific-window-link", variant_document, variant_output};
+        linked_track.clips.push_back(variant_clip);
+        linked_document_data.timeline_tracks.push_back(linked_track);
+        project::save(linked_project, linked_document_data);
+
+        {
+            MainWindow linked_window;
+            linked_window.show();
+            QEventLoop linked_open_loop;
+            QTimer linked_open_timeout;
+            linked_open_timeout.setSingleShot(true);
+            QObject::connect(&linked_open_timeout, &QTimer::timeout,
+                             &linked_open_loop, &QEventLoop::quit);
+            bool linked_open_succeeded = false;
+            require(linked_window.openProjectPath(
+                        linked_project, std::nullopt, std::nullopt,
+                        [&linked_open_loop, &linked_open_succeeded](bool succeeded) {
+                            linked_open_succeeded = succeeded;
+                            linked_open_loop.quit();
+                        }),
+                    "The MainWindow could not start opening a linked-image project.");
+            linked_open_timeout.start(30000);
+            linked_open_loop.exec();
+            require(linked_open_succeeded && linked_window.media_items_.size() == 1 &&
+                        framePixel(linked_window.media_items_.front().first_frame) ==
+                            QColor(20, 220, 35, 255) &&
+                        linked_window.timeline_model_.clipCount(0) == 2 &&
+                        linked_window.timeline_model_.tracks().front().clips[1]
+                                .still_image_override != nullptr &&
+                        framePixel(*linked_window.timeline_model_.tracks().front()
+                                        .clips[1].still_image_override) ==
+                            QColor(230, 210, 15, 255),
+                    "The MainWindow did not open the saved shared image output.");
+
+            media::VideoMetadata stale_metadata;
+            stale_metadata.kind = media::MediaKind::Image;
+            stale_metadata.source_path = linked_output;
+            stale_metadata.width = 1;
+            stale_metadata.height = 1;
+            const media::VideoFrame stale_frame{1, 1, 4, {250, 0, 250, 255}};
+            linked_window.applyLinkedImageRefresh(
+                shared_link, linked_source, {}, true,
+                linked_window.project_generation_ - 1, 4,
+                std::filesystem::file_time_type{}, stale_metadata,
+                stale_frame, {});
+            require(framePixel(linked_window.media_items_.front().first_frame) ==
+                        QColor(20, 220, 35, 255),
+                    "A linked-output result from an old project generation changed the current media.");
+
+            std::error_code revision_error;
+            const auto current_output_size = std::filesystem::file_size(
+                linked_output, revision_error);
+            require(!revision_error && current_output_size > 0,
+                    "The linked output revision could not be inspected in the integration test.");
+            const auto current_output_modified = std::filesystem::last_write_time(
+                linked_output, revision_error);
+            require(!revision_error,
+                    "The linked output timestamp could not be inspected in the integration test.");
+            linked_window.applyLinkedImageRefresh(
+                shared_link, linked_source, {}, true,
+                linked_window.project_generation_, current_output_size - 1,
+                current_output_modified, stale_metadata, stale_frame, {});
+            require(framePixel(linked_window.media_items_.front().first_frame) ==
+                        QColor(20, 220, 35, 255),
+                    "A linked-output result from an obsolete file revision changed the current media.");
+
+            QImage next_output(16, 16, QImage::Format_ARGB32);
+            next_output.fill(QColor(25, 40, 235, 255));
+            for (int x = 0; x < next_output.width(); ++x) {
+                next_output.setPixelColor(x, 15, QColor(x * 10, 245 - x * 8, 100, 255));
+            }
+            require(writePngAtomically(linked_output, next_output),
+                    "The updated linked PNG could not be atomically published.");
+
+            QEventLoop linked_refresh_loop;
+            QTimer linked_refresh_timeout;
+            linked_refresh_timeout.setSingleShot(true);
+            QObject::connect(&linked_refresh_timeout, &QTimer::timeout,
+                             &linked_refresh_loop, &QEventLoop::quit);
+            QTimer linked_refresh_poll;
+            QObject::connect(&linked_refresh_poll, &QTimer::timeout,
+                             &linked_refresh_loop, [&]() {
+                const bool media_refreshed = !linked_window.media_items_.empty() &&
+                    framePixel(linked_window.media_items_.front().first_frame) ==
+                        QColor(25, 40, 235, 255);
+                const auto preview = linked_window.preview_widget_->grab().toImage();
+                const bool preview_refreshed = !preview.isNull() &&
+                    preview.pixelColor(preview.width() / 2, preview.height() / 2) ==
+                        QColor(25, 40, 235, 255);
+                if (media_refreshed && preview_refreshed) linked_refresh_loop.quit();
+            });
+            linked_refresh_timeout.start(10000);
+            linked_refresh_poll.start(20);
+            linked_refresh_loop.exec();
+            const auto preview = linked_window.preview_widget_->grab().toImage();
+            const auto media_color = linked_window.media_items_.empty()
+                ? QColor() : framePixel(linked_window.media_items_.front().first_frame);
+            const auto preview_color = preview.isNull()
+                ? QColor() : preview.pixelColor(preview.width() / 2, preview.height() / 2);
+            const auto variant_color = linked_window.timeline_model_.tracks().front()
+                    .clips[1].still_image_override == nullptr
+                ? QColor()
+                : framePixel(*linked_window.timeline_model_.tracks().front()
+                                  .clips[1].still_image_override);
+            require(!linked_window.media_items_.empty() &&
+                        media_color == QColor(25, 40, 235, 255) && !preview.isNull() &&
+                        preview_color == QColor(25, 40, 235, 255) &&
+                        linked_window.timeline_model_.tracks().front().clips[1]
+                                .still_image_override != nullptr &&
+                        variant_color == QColor(230, 210, 15, 255),
+                    "A shared-image save did not refresh its preview while keeping the clip variant isolated. media=" +
+                        media_color.name(QColor::HexArgb).toStdString() + " preview=" +
+                        preview_color.name(QColor::HexArgb).toStdString() + " variant=" +
+                        variant_color.name(QColor::HexArgb).toStdString());
         }
 
         std::error_code cleanup_error;

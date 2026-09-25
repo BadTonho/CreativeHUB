@@ -1,8 +1,9 @@
 # Image Editor Roadmap
 
-Status: **standalone minimum in progress**. This roadmap covers the independent
-application under `apps/image-editor/`. Build and validate the first useful
-editor before integrating it with the Main Editor. The Image Editor remains
+Status: **standalone minimum and Main Editor handoff validation in progress**.
+This roadmap covers the independent application under `apps/image-editor/`.
+The linked-image implementation has started while the standalone manual and
+cross-platform packaging checks remain incomplete. The Image Editor remains
 ahead of Motion Studio in the application sequence.
 
 ## Principles
@@ -16,9 +17,9 @@ ahead of Motion Studio in the application sequence.
   effect systems until they are justified by validated workflows.
 - Use Qt image I/O and deploy the plugins required for the documented input
   formats. Track Qt Image Formats and its codec notices for distribution.
-- Keep compatibility with the Main Editor as a later, independently testable
-  milestone. After integration, refresh host output after a successful save;
-  unsaved live previews are outside the first compatibility milestone.
+- Keep compatibility with the Main Editor as an independently testable
+  milestone. The first implementation refreshes host output after a successful
+  save; unsaved live previews remain outside its scope.
 - Consider Windows, macOS, and Linux paths, packaging, and image dimensions
   from the beginning.
 
@@ -65,24 +66,28 @@ packaged application. Automated and manual checks pass.
 
 ### 2. Main Editor linked-image compatibility
 
-Start after the standalone minimum passes its exit criteria.
+Implementation is underway. The standalone exit criteria remain open until
+the manual and packaging checks above pass.
 
-- [ ] Add an image action in the Main Editor Media Pool and timeline to create
-  or reopen an editable companion document.
-- [ ] Preserve the original source and publish a host-consumable raster output
-  beside or through the companion document.
-- [ ] Refresh the Main Editor preview and all timeline uses after a successful
-  Image Editor save; invalidate dependent render caches.
-- [ ] Reuse the companion document on later opens and define behavior for
-  timeline variants before supporting them.
-- [ ] Handle moved sources, missing documents, unsupported versions, and stale
-  saved revisions with actionable recovery guidance.
-- [ ] Validate save/reopen, transparent and large images, repeated opens, and
-  updates across multiple timeline uses on Windows, macOS, and Linux.
+- [x] Add Media Pool and timeline actions to create or reopen linked documents.
+- [x] Keep the source unchanged; store linked documents and PNG outputs beside
+  the source. Timeline variants use an independent initial image copy.
+- [x] Persist optional shared and per-clip references in `.csp` v10 and retain
+  v1-v9 project compatibility.
+- [x] Publish PNG after a successful `.cimg` save and refresh affected host
+  images asynchronously. Unsaved changes are not streamed.
+- [x] Resolve the Image Editor from a configured path, sibling installation or
+  development build, or `PATH`; allow the user to locate it if unavailable.
+- [x] Reject stale linked document saves using a lock and saved revision hash.
+- [x] Cover project open, shared output, clip
+  variants, stale project generations, and publication failures.
+- [ ] Manually validate transparent images, repeated Media Pool uses, clip
+  variants, save/reopen, large files, and both applications on Windows,
+  macOS, and Linux.
 
-**Exit criteria:** saving a linked image document refreshes every intended
-Main Editor use without modifying the original or leaving stale previews.
-Unsaved live preview streaming remains out of scope.
+**Exit criteria:** automated and manual checks confirm that saving a linked
+image refreshes every intended Main Editor use without modifying the original
+or leaving stale previews. Unsaved live preview streaming remains out of scope.
 
 ### 3. First editing release
 

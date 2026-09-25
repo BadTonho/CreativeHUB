@@ -8,7 +8,7 @@ Status: **provisional**. This boundary is the Stage 5 implementation recorded in
 
 `application::ProjectController` maps the session to a persisted document, updates dirty state, saves, runs synchronous autosave, exposes recovery snapshots, resets the session, and commits a fully prepared project. `application::ProjectDocumentMapper` translates between runtime session state and `project::ProjectDocument`.
 
-The project codec keeps `project::load` and `project::save` as the compatibility facade. JSON reading and legacy migration live in `project_file_reader.cpp`, document validation in `project_document_validator.cpp`, and atomic JSON writing in `project_file_writer.cpp`. The current format remains version 9, and loading migrates versions 1 through 8. This stage does not change the persisted format.
+The project codec keeps `project::load` and `project::save` as the compatibility facade. JSON reading and legacy migration live in `project_file_reader.cpp`, document validation in `project_document_validator.cpp`, and atomic JSON writing in `project_file_writer.cpp`. The current format is version 10; loading migrates versions 1 through 9. Version 10 adds optional linked Image Editor references to image media and timeline clips.
 
 `application::MediaController` owns completed library mutations: commit an import, restore an offline item, mark media offline, rename items, and manage bins. `MediaLibrary` is the sole source for media items and bins. Canonical paths identify media and are indexed for lookup; duplicate imports return an expected no-change result.
 

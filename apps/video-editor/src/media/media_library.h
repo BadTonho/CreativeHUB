@@ -24,6 +24,7 @@ struct MediaItem {
     std::string display_name;
     std::string bin_path{default_bin};
     bool offline = false;
+    std::optional<LinkedImageReference> image_editor_link;
 };
 
 enum class MediaMutationResult {
@@ -55,7 +56,8 @@ public:
     MediaMutationResult addOffline(
         std::filesystem::path source_path,
         std::string display_name = {},
-        std::string bin_path = std::string(default_bin));
+        std::string bin_path = std::string(default_bin),
+        MediaKind kind = MediaKind::Video);
     MediaMutationResult restore(
         std::size_t index,
         VideoMetadata metadata,
@@ -63,6 +65,13 @@ public:
     MediaMutationResult rename(std::size_t index, std::string display_name);
     MediaMutationResult moveToBin(std::size_t index, std::string bin_path);
     MediaMutationResult markOffline(std::size_t index);
+    MediaMutationResult setImageEditorLink(
+        const std::filesystem::path& path,
+        std::optional<LinkedImageReference> link);
+    MediaMutationResult refreshImagePresentation(
+        const std::filesystem::path& path,
+        VideoMetadata metadata,
+        VideoFrame first_frame);
     MediaMutationResult createBin(std::string bin_path);
     MediaMutationResult renameBin(std::string old_path, std::string new_path);
     MediaMutationResult moveBin(std::string old_path, std::string new_path);

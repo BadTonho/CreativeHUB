@@ -190,6 +190,15 @@ void PlaybackController::refreshComposition() {
                 if (imported->offline) continue;
             }
 
+            std::shared_ptr<const media::VideoFrame> still_image_frame;
+            if (clip.kind == timeline::ClipKind::Image) {
+                still_image_frame = clip.still_image_override != nullptr
+                    ? clip.still_image_override
+                    : imported != nullptr
+                        ? std::make_shared<const media::VideoFrame>(imported->first_frame)
+                        : VideoFramePtr{};
+            }
+
             layers.push_back(CompositionLayerSpec{
                 timeline::isMediaClipKind(clip.kind)
                     ? pathToQString(clip.source_path)
@@ -207,9 +216,7 @@ void PlaybackController::refreshComposition() {
                 clip.keyframes,
                 clip.kind,
                 clip.text,
-                imported != nullptr && imported->metadata.kind == media::MediaKind::Image
-                    ? std::make_shared<const media::VideoFrame>(imported->first_frame)
-                    : VideoFramePtr{}});
+                std::move(still_image_frame)});
         }
 
         for (const auto& transition : track.transitions) {

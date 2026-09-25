@@ -2,14 +2,41 @@
 
 Status: provisional.
 
+## Version 10 linked-image references
+
+The current root uses `version: 10`. Version 10 adds optional
+`image_editor_link` data to image media entries and optional
+`image_editor_variant` data to image timeline clips. Each reference contains a
+stable string `id`, a path to the editable `.cimg` document, and a path to the
+published raster output. Paths follow the same relative-within-project and
+absolute-outside-project rule as source media. Video and text records cannot
+carry these references. Version 1 through 9 projects remain readable and load
+without linked-image references; their next save writes version 10.
+
+A Media Pool link is shared by every timeline occurrence of its image source.
+A timeline variant belongs to one stable clip ID and is initialized from an
+independent copy of the currently displayed image. At runtime the clip variant
+output takes precedence over the shared Media Pool output, which takes
+precedence over the original source. The source path remains the media identity
+and is never replaced by a linked output path. Missing variant outputs fall
+back to the shared media image and produce an actionable warning.
+
+The Image Editor writes its native `.cimg` document before atomically
+publishing a PNG. The Main Editor polls linked output files and decodes changed
+images on its media task pool. A project generation check discards results
+after a project replacement. A changed shared output updates the Media Pool
+thumbnail and every clip using that source; a variant updates only its clip.
+The affected composition and preview are refreshed after a successful decode.
+The initial handoff updates after save; unsaved edits are not streamed.
+
 The Main Editor stores editable content in a versioned .csp file. The document
 model is Qt-independent and contains imported media, bins, ordered video tracks,
 and timeline clips. It does not contain selection, playhead, dock geometry,
 Undo/Redo history, decoded frames, FFmpeg sessions, or Qt resources.
 
-## Version 8 format
+## Version 8 additions retained in the current format
 
-The current root uses `version: 8` and adds a fixed `canvas` object with
+Version 8 added a fixed `canvas` object with
 `width: 1920` and `height: 1080`. Timeline clips additionally persist an
 occurrence-local `transform` object and five optional keyframe arrays:
 `position_x`, `position_y`, `scale`, `rotation`, and `opacity`. Keyframe frames
@@ -71,8 +98,9 @@ keyframes. Version 2 files receive the identity transform, an empty keyframe
 set, and the 1920x1080 canvas when opened. Version 1 files containing
 `timeline.clips` remain supported; they are converted to a single Video 1
 track with sequential timeline starts computed from clip durations. The next
-successful save writes version 8 and includes the timeline zoom, row height,
-and explicit media/clip kinds. Existing version 1 through 7 projects continue
+successful save writes version 10 and includes the timeline zoom, row height,
+explicit media/clip kinds, and optional linked-image references. Existing
+version 1 through 9 projects continue
 to load; their media entries default to video unless a version 8 image kind is
 present.
 

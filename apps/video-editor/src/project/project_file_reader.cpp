@@ -156,6 +156,25 @@ QString requiredString(const QJsonObject& object,
     return value.toString();
 }
 
+media::LinkedImageReference parseLinkedImageReference(
+    const QJsonObject& owner,
+    const char* key,
+    const std::filesystem::path& project_path) {
+    const auto value = owner.value(QLatin1String(key));
+    if (!value.isObject()) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid Image Editor link.");
+    }
+    const auto object = value.toObject();
+    media::LinkedImageReference link;
+    link.id = requiredString(object, "id", project_path).toUtf8().toStdString();
+    link.document_path = resolvedPath(
+        project_path, requiredString(object, "document", project_path));
+    link.published_output_path = resolvedPath(
+        project_path, requiredString(object, "output", project_path));
+    return link;
+}
+
 timeline::TextStyle parseTextStyle(
     const QJsonObject& clip_object,
     const std::filesystem::path& project_path) {
@@ -328,6 +347,11 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
             }
             media.offline = object.value("offline").toBool();
         }
+        if (version >= linked_image_format_version &&
+            object.contains("image_editor_link")) {
+            media.image_editor_link = parseLinkedImageReference(
+                object, "image_editor_link", project_path);
+        }
         document.media.push_back(std::move(media));
     }
 
@@ -453,6 +477,11 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                         project_path, requiredString(clip_object, "source", project_path));
                 } else {
                     clip.text = parseTextStyle(clip_object, project_path);
+                }
+                if (version >= linked_image_format_version &&
+                    clip_object.contains("image_editor_variant")) {
+                    clip.image_editor_variant = parseLinkedImageReference(
+                        clip_object, "image_editor_variant", project_path);
                 }
                 clip.timeline_start_frame = requiredInteger(clip_object, "timeline_start_frame", project_path);
                 clip.source_start_frame = requiredInteger(clip_object, "source_start_frame", project_path);

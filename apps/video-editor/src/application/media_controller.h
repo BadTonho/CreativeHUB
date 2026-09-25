@@ -39,6 +39,13 @@ public:
         media::VideoMetadata metadata,
         media::VideoFrame first_frame);
     [[nodiscard]] MediaCommandResult markOffline(const std::filesystem::path& path);
+    [[nodiscard]] MediaCommandResult setImageEditorLink(
+        const std::filesystem::path& path,
+        std::optional<media::LinkedImageReference> link);
+    [[nodiscard]] MediaCommandResult refreshImagePresentation(
+        const std::filesystem::path& path,
+        media::VideoMetadata metadata,
+        media::VideoFrame first_frame);
     [[nodiscard]] MediaCommandResult rename(
         const std::filesystem::path& path,
         std::string display_name);

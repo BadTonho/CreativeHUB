@@ -3,6 +3,7 @@
 #include "ui/media_drag_mime.h"
 
 #include <QApplication>
+#include <QContextMenuEvent>
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
 #include <QDragMoveEvent>
@@ -10,10 +11,12 @@
 #include <QEvent>
 #include <QImage>
 #include <QMimeData>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPointingDevice>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QTimer>
 #include <QWheelEvent>
 
 #include <cstdint>
@@ -1999,6 +2002,57 @@ int main(int argc, char* argv[]) {
         fallback_snap_widget.close();
 
         media_snap_widget.close();
+
+        timeline::TimelineWidget image_context_widget;
+        image_context_widget.resize(900, 180);
+        image_context_widget.setTimelineViewportWidth(900);
+        auto image_context_clip = makeClip(
+            "linked-still.png", 0, 100, "Linked still");
+        image_context_clip.clip_id = 919;
+        image_context_clip.kind = timeline::ClipKind::Image;
+        image_context_widget.setTracks({timeline::TimelineTrack{
+            717, "Images", 1.0, false, {image_context_clip}}});
+        image_context_widget.show();
+        application.processEvents();
+        bool image_clip_selected = false;
+        bool image_edit_requested = false;
+        QObject::connect(
+            &image_context_widget,
+            &timeline::TimelineWidget::clipSelected,
+            [&image_clip_selected](timeline::TrackId track_id, timeline::ClipId clip_id) {
+                image_clip_selected = track_id == 717 && clip_id == 919;
+            });
+        QObject::connect(
+            &image_context_widget,
+            &timeline::TimelineWidget::editImageClipRequested,
+            [&image_edit_requested](timeline::ClipId clip_id) {
+                image_edit_requested = clip_id == 919;
+            });
+        const QPoint image_context_position(
+            static_cast<int>(image_context_widget.contentXForFrame(15)), 100);
+        QTimer::singleShot(0, [&image_context_widget]() {
+            auto* menu = image_context_widget.findChild<QMenu*>();
+            if (menu == nullptr) return;
+            for (auto* action : menu->actions()) {
+                if (action->text() ==
+                    QStringLiteral("Edit Clip Image in Image Editor")) {
+                    action->trigger();
+                    break;
+                }
+            }
+            menu->close();
+        });
+        QContextMenuEvent image_context_event(
+            QContextMenuEvent::Mouse,
+            image_context_position,
+            image_context_widget.mapToGlobal(image_context_position),
+            Qt::NoModifier);
+        QApplication::sendEvent(&image_context_widget, &image_context_event);
+        require(image_clip_selected && image_edit_requested,
+                "The image clip context menu did not select and route the stable clip ID "
+                "(selected=" + std::to_string(image_clip_selected) +
+                ", edit requested=" + std::to_string(image_edit_requested) + ").");
+        image_context_widget.close();
 
         widget.close();
         return 0;

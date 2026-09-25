@@ -86,6 +86,22 @@ MediaCommandResult MediaController::markOffline(const std::filesystem::path& pat
     return apply(session_.media_library_.markOffline(index), canonical);
 }
 
+MediaCommandResult MediaController::setImageEditorLink(
+    const std::filesystem::path& path,
+    std::optional<media::LinkedImageReference> link) {
+    const auto canonical = media::MediaLibrary::canonicalPath(path);
+    return apply(session_.media_library_.setImageEditorLink(canonical, std::move(link)), canonical);
+}
+
+MediaCommandResult MediaController::refreshImagePresentation(
+    const std::filesystem::path& path,
+    media::VideoMetadata metadata,
+    media::VideoFrame first_frame) {
+    const auto canonical = media::MediaLibrary::canonicalPath(path);
+    return apply(session_.media_library_.refreshImagePresentation(
+        canonical, std::move(metadata), std::move(first_frame)), canonical);
+}
+
 MediaCommandResult MediaController::rename(
     const std::filesystem::path& path,
     std::string display_name) {

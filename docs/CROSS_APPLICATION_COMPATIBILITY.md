@@ -12,10 +12,16 @@ shared code reuse and document handoff as separate concerns: applications can
 reuse a library without sharing project files, and they can exchange a linked
 document without sharing their entire editing workflow.
 
-The Image Editor standalone minimum is being implemented first. The linked
-image prototype will follow that application milestone, and the Image Editor's
-first editing release remains ahead of Motion Studio. This is a sequencing
-direction; technical contracts in this proposal remain provisional.
+The Image Editor standalone minimum was developed first. Its final manual and
+packaging checks remain open while the linked-image prototype is being
+validated. The Image Editor's first editing release remains ahead of Motion
+Studio. This is a sequencing direction; technical contracts in this proposal
+remain provisional.
+
+The initial Main Editor to Image Editor handoff is now implemented as a
+bounded prototype. Its acceptance checks are still pending, and this document
+remains provisional until the file, conflict, and cross-platform workflows
+have been validated manually.
 
 ## Recommended Boundaries
 
@@ -94,22 +100,31 @@ that workflow justifies the added runtime coordination.
 
 ### Image document workflow
 
-- Opening an image from the Media Pool can create a companion document in the
-  Image Editor's native format, initialized from that image. Later opens should
-  reuse the existing companion document instead of creating another copy.
-- The original image remains unchanged. The companion document may reference
-  the original as its source layer or embed a copy when portability requires
-  it; the storage policy must be validated, especially for large images.
-- A Media Pool edit applies to that media item, so every timeline clip that
-  uses the item receives the newly saved revision. The document location,
-  native extension, and behavior when the source moves remain open decisions.
-- From an image clip in the timeline, the user can open or create a linked
-  image document for editing. Whether this link edits every use of the Media
-  Pool item or creates a clip-specific variant is an open product decision;
-  define it before implementation.
-- Saving a supported image document makes the new saved revision available to
-  the Main Editor, which refreshes affected previews and invalidates dependent
-  render-cache entries.
+- Opening an image from the Media Pool creates or reopens a shared `.cimg`
+  companion under `<source>.image-editor/asset.cimg`; its flattened PNG is
+  `<source>.image-editor/asset.png`. The source image stays unchanged. All
+  timeline occurrences of that media item use a saved shared revision.
+- Opening an image clip from the timeline creates or reopens an isolated
+  variant under `<source>.image-editor/clips/<uuid>/`. A `source.png` copy
+  captures the image shown when the variant is first created; its editable
+  document and published output remain separate from the shared Media Pool
+  link and other clips.
+- Main Editor `.csp` version 10 stores optional shared and clip-specific
+  references. Versions 1 through 9 load without those references. Resolution
+  order is clip variant, shared Media Pool output, then original source.
+- The Image Editor receives `--linked-source`, `--linked-document`, and
+  `--publish-output`. It opens an existing `.cimg` or creates one from the
+  supplied source. Save writes the native document and then atomically replaces
+  the published PNG. A per-document lock and SHA-256 baseline prevent a second
+  Image Editor instance from replacing a newer saved revision.
+- The Main Editor polls linked output files and decodes changes asynchronously.
+  It refreshes the Media Pool thumbnail and every shared-media use, or only the
+  matching clip variant. It rejects callbacks from a replaced project and
+  invalidates the current composition/preview after a successful decode.
+  Unsaved Image Editor changes are not streamed.
+- Sidecar documents and outputs currently live beside the source. Moving the
+  source after creating the link does not automatically relocate those
+  sidecars; path repair remains a future workflow to validate.
 
 ### Motion composition workflow
 
@@ -128,10 +143,11 @@ and adapters.
 
 ### Update and conflict behavior
 
-For an initial integration, update the Main Editor when a linked document is
-saved. Detecting a new saved revision may use a portable file/revision check;
-the transport mechanism is not decided. Streaming unsaved preview frames
-between running applications is a later capability because it requires
+For the initial integration, the Main Editor polls output size and modification
+time and refreshes after a linked document is saved. The Image Editor compares
+the linked document's saved SHA-256 fingerprint and serializes linked writers
+with a lock file. Streaming unsaved preview frames between running applications
+is a later capability because it requires
 continuous inter-process communication, resource-lifetime rules, and additional
 stale-frame and performance handling.
 

@@ -9,6 +9,8 @@
 
 namespace media {
 
+struct VideoFrame;
+
 enum class MediaKind {
     Video,
     Image,
@@ -21,6 +23,14 @@ struct AudioMetadata {
     std::optional<double> duration_seconds;
 
     friend bool operator==(const AudioMetadata&, const AudioMetadata&) = default;
+};
+
+struct LinkedImageReference {
+    std::string id;
+    std::filesystem::path document_path;
+    std::filesystem::path published_output_path;
+
+    friend bool operator==(const LinkedImageReference&, const LinkedImageReference&) = default;
 };
 
 struct VideoMetadata {

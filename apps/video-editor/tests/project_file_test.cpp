@@ -1,6 +1,10 @@
 #include "project/project_file.h"
 
 #include <QCoreApplication>
+#include <QByteArray>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include <chrono>
 #include <cmath>
@@ -54,6 +58,10 @@ int main(int argc, char** argv) {
             {outside_source, "Offline Asset", "Unsorted", true},
             {image_source, "Still Image", "Footage/Stills", false, media::MediaKind::Image},
         };
+        original.media.back().image_editor_link = media::LinkedImageReference{
+            "shared-still",
+            directory / "media" / "still.png.image-editor" / "asset.cimg",
+            directory / "media" / "still.png.image-editor" / "asset.png"};
         original.timeline_tracks = {
             {"Video 1", 0.75, true, {
                 {first_source, 0, 30, 60, 0.5, true},
@@ -79,6 +87,12 @@ int main(int argc, char** argv) {
         image_clip.timeline_start_frame = 100;
         image_clip.duration_frames = 150;
         image_clip.kind = timeline::ClipKind::Image;
+        image_clip.image_editor_variant = media::LinkedImageReference{
+            "clip-still-uuid",
+            directory / "media" / "still.png.image-editor" / "clips" /
+                "clip-still-uuid" / "document.cimg",
+            directory / "media" / "still.png.image-editor" / "clips" /
+                "clip-still-uuid" / "output.png"};
         original.timeline_tracks.front().clips.push_back(image_clip);
         original.timeline_tracks.front().transitions.push_back(
             project::ProjectTransition{
@@ -127,6 +141,11 @@ int main(int argc, char** argv) {
                     loaded.timeline_tracks[0].clips[0].transform.rotation_degrees == 12.0 &&
                     loaded.timeline_tracks[0].clips[0].keyframes.position_x.size() == 2,
                 "Transform and keyframe data was not preserved.");
+        require(loaded.media.back().image_editor_link ==
+                    original.media.back().image_editor_link &&
+                    loaded.timeline_tracks.front().clips.back().image_editor_variant ==
+                    original.timeline_tracks.front().clips.back().image_editor_variant,
+                "Version 10 linked media and clip variant references were not preserved.");
 
         std::ifstream saved_file(project_path, std::ios::binary);
         const std::string saved_json{
@@ -148,18 +167,65 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 9") != std::string::npos &&
+        require(saved_json.find("\"version\": 10") != std::string::npos &&
                     saved_json.find("\"zoom\": 512") != std::string::npos &&
                     saved_json.find("\"row_height\": 123.5") != std::string::npos &&
                     saved_json.find("\"transitions\"") != std::string::npos &&
-                    saved_json.find("cross_dissolve") != std::string::npos,
-                "Timeline zoom, row height, image, and transition data were not written to the version 9 project.");
+                    saved_json.find("cross_dissolve") != std::string::npos &&
+                    saved_json.find("image_editor_link") != std::string::npos &&
+                    saved_json.find("image_editor_variant") != std::string::npos,
+                "Timeline state and linked image references were not written to the version 10 project.");
         require(saved_json.find("\"kind\": \"image\"") != std::string::npos &&
                     loaded.media.back().kind == media::MediaKind::Image &&
                     loaded.timeline_tracks.front().clips.back().kind == timeline::ClipKind::Image,
                 "Image media and image clip kinds were not persisted.");
 
+        auto version_9_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        version_9_json.insert("version", 9);
+        auto version_9_media = version_9_json.value("media").toArray();
+        for (qsizetype index = 0; index < version_9_media.size(); ++index) {
+            auto media_item = version_9_media.at(index).toObject();
+            media_item.remove("image_editor_link");
+            version_9_media.replace(index, media_item);
+        }
+        version_9_json.insert("media", version_9_media);
+        auto version_9_timeline = version_9_json.value("timeline").toObject();
+        auto version_9_tracks = version_9_timeline.value("tracks").toArray();
+        for (qsizetype track_index = 0; track_index < version_9_tracks.size(); ++track_index) {
+            auto track = version_9_tracks.at(track_index).toObject();
+            auto clips = track.value("clips").toArray();
+            for (qsizetype clip_index = 0; clip_index < clips.size(); ++clip_index) {
+                auto clip = clips.at(clip_index).toObject();
+                clip.remove("image_editor_variant");
+                clips.replace(clip_index, clip);
+            }
+            track.insert("clips", clips);
+            version_9_tracks.replace(track_index, track);
+        }
+        version_9_timeline.insert("tracks", version_9_tracks);
+        version_9_json.insert("timeline", version_9_timeline);
+        writeText(project_path,
+                  QJsonDocument(version_9_json).toJson().toStdString());
+        const auto version_9_document = project::load(project_path);
+        require(!version_9_document.media.back().image_editor_link.has_value() &&
+                    !version_9_document.timeline_tracks.front().clips.back()
+                         .image_editor_variant.has_value(),
+                "A version 9 project did not load without new linked-image fields.");
+        project::save(project_path, original);
+
         const auto original_contents = saved_json;
+        auto unsafe_link_document = original;
+        unsafe_link_document.media.back().image_editor_link->published_output_path =
+            image_source;
+        try {
+            project::save(project_path, unsafe_link_document);
+            throw std::runtime_error(
+                "A linked output that aliases its original image was accepted.");
+        } catch (const project::ProjectError& error) {
+            require(error.code() == project::ProjectErrorCode::InvalidValue,
+                    "An output/source path collision returned the wrong error category.");
+        }
         bool failed = false;
         try {
             project::save(directory, original);

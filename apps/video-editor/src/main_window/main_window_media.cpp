@@ -4,17 +4,22 @@
 #include "logging/logger.h"
 #include "preview_widget.h"
 #include "project/project_file.h"
+#include "media/still_image_decoder.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser_bin_tree_widget.h"
 #include "ui/media_browser_list_widget.h"
 
 #include <QAction>
+#include <QCoreApplication>
+#include <QDir>
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QDockWidget>
 #include <QFileDialog>
+#include <QFile>
 #include <QFileInfo>
+#include <QSaveFile>
 #include <QDesktopServices>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -33,9 +38,11 @@
 #include <QMessageBox>
 #include <QPointer>
 #include <QProgressDialog>
+#include <QProcess>
 #include <QRunnable>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QSettings>
 #include <QScrollArea>
 #include <QSlider>
 #include <QStringList>
@@ -45,6 +52,8 @@
 #include <QToolButton>
 #include <QPixmap>
 #include <QUrl>
+#include <QStandardPaths>
+#include <QUuid>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QTreeWidget>
@@ -109,6 +118,74 @@ bool validInlineBinName(const QString& value) {
         name != QStringLiteral("..") &&
         !name.contains('/') &&
         !name.contains('\\');
+}
+
+QString pathToQString(const std::filesystem::path& path) {
+    return fromUtf8(pathToUtf8(path));
+}
+
+std::filesystem::path imageEditorSidecarDirectory(
+    const std::filesystem::path& source_path) {
+    auto value = source_path;
+    value += ".image-editor";
+    return value;
+}
+
+bool copyFileAtomically(const QString& source, const QString& destination,
+                        QString* cause) {
+    QFile input(source);
+    if (!input.open(QIODevice::ReadOnly)) {
+        if (cause != nullptr) *cause = input.errorString();
+        return false;
+    }
+    QSaveFile output(destination);
+    if (!output.open(QIODevice::WriteOnly)) {
+        if (cause != nullptr) *cause = output.errorString();
+        return false;
+    }
+    while (!input.atEnd()) {
+        const QByteArray block = input.read(1024 * 1024);
+        if (block.isEmpty() && input.error() != QFileDevice::NoError) {
+            if (cause != nullptr) *cause = input.errorString();
+            output.cancelWriting();
+            return false;
+        }
+        if (output.write(block) != block.size()) {
+            if (cause != nullptr) *cause = output.errorString();
+            output.cancelWriting();
+            return false;
+        }
+    }
+    if (!output.commit()) {
+        if (cause != nullptr) *cause = output.errorString();
+        return false;
+    }
+    return true;
+}
+
+QString bundledImageEditorExecutable() {
+#if defined(Q_OS_WIN)
+    const QString binary = QStringLiteral("creative-suite-image-editor.exe");
+#else
+    const QString binary = QStringLiteral("creative-suite-image-editor");
+#endif
+    QSettings settings;
+    const auto configured = settings.value(
+        QStringLiteral("applications/image_editor_executable")).toString();
+    if (!configured.isEmpty() && QFileInfo(configured).isFile()) return configured;
+
+    const QDir app_dir(QCoreApplication::applicationDirPath());
+    const QStringList candidates{
+        app_dir.filePath(binary),
+        app_dir.filePath(QStringLiteral("../image-editor/Release/") + binary),
+        app_dir.filePath(QStringLiteral("../image-editor/Debug/") + binary),
+        app_dir.filePath(QStringLiteral("../../image-editor/Release/") + binary),
+        app_dir.filePath(QStringLiteral("../../image-editor/Debug/") + binary)};
+    for (const auto& candidate : candidates) {
+        const QFileInfo info(candidate);
+        if (info.isFile() && info.isExecutable()) return info.absoluteFilePath();
+    }
+    return QStandardPaths::findExecutable(QStringLiteral("creative-suite-image-editor"));
 }
 
 } // namespace
@@ -767,6 +844,377 @@ void MainWindow::restoreSelectedMedia() {
     static_cast<void>(startMediaImport({path}));
 }
 
+void MainWindow::initializeLinkedImageCompatibility() {
+    linked_image_poll_timer_ = new QTimer(this);
+    linked_image_poll_timer_->setInterval(500);
+    connect(linked_image_poll_timer_, &QTimer::timeout,
+            this, &MainWindow::pollLinkedImageOutputs);
+    linked_image_poll_timer_->start();
+}
+
+void MainWindow::refreshLinkedImageTargets() {
+    const auto previous_targets = std::move(linked_image_watch_targets_);
+    linked_image_watch_targets_.clear();
+    const auto add_target = [this, &previous_targets](const media::LinkedImageReference& link,
+                                   const std::filesystem::path& source,
+                                   std::optional<timeline::ClipId> clip_id,
+                                   bool media_asset) {
+        if (link.id.empty() || link.document_path.empty() ||
+            link.published_output_path.empty()) return;
+        auto target = std::find_if(
+            linked_image_watch_targets_.begin(), linked_image_watch_targets_.end(),
+            [&link](const LinkedImageWatchTarget& current) {
+                return current.link.id == link.id &&
+                    current.link.published_output_path == link.published_output_path;
+            });
+        if (target == linked_image_watch_targets_.end()) {
+            LinkedImageWatchTarget value;
+            value.link = link;
+            value.source_path = media::MediaLibrary::canonicalPath(source);
+            value.media_asset = media_asset;
+            const auto previous = std::find_if(
+                previous_targets.begin(), previous_targets.end(),
+                [&link](const LinkedImageWatchTarget& current) {
+                    return current.link.id == link.id &&
+                        current.link.published_output_path ==
+                            link.published_output_path;
+                });
+            if (previous != previous_targets.end()) {
+                value.has_signature = previous->has_signature;
+                value.size = previous->size;
+                value.modified = previous->modified;
+            }
+            if (clip_id.has_value()) value.clip_ids.push_back(*clip_id);
+            linked_image_watch_targets_.push_back(std::move(value));
+            return;
+        }
+        target->media_asset = target->media_asset || media_asset;
+        if (clip_id.has_value() &&
+            std::find(target->clip_ids.begin(), target->clip_ids.end(), *clip_id) ==
+                target->clip_ids.end()) {
+            target->clip_ids.push_back(*clip_id);
+        }
+    };
+
+    for (const auto& item : media_controller_.library().items()) {
+        if (item.metadata.kind == media::MediaKind::Image &&
+            item.image_editor_link.has_value()) {
+            add_target(*item.image_editor_link, item.metadata.source_path,
+                       std::nullopt, true);
+        }
+    }
+    for (const auto& track : timeline_model_.tracks()) {
+        for (const auto& clip : track.clips) {
+            if (clip.kind == timeline::ClipKind::Image &&
+                clip.image_editor_variant.has_value()) {
+                add_target(*clip.image_editor_variant, clip.source_path,
+                           clip.clip_id, false);
+            }
+        }
+    }
+}
+
+void MainWindow::pollLinkedImageOutputs() {
+    for (auto& target : linked_image_watch_targets_) {
+        if (target.refresh_pending) continue;
+        std::error_code size_error;
+        const auto size = std::filesystem::file_size(
+            target.link.published_output_path, size_error);
+        if (size_error) continue;
+        std::error_code time_error;
+        const auto modified = std::filesystem::last_write_time(
+            target.link.published_output_path, time_error);
+        if (time_error) continue;
+        if (target.has_signature && target.size == size &&
+            target.modified == modified) continue;
+        target.has_signature = true;
+        target.size = size;
+        target.modified = modified;
+        target.refresh_pending = true;
+        refreshLinkedImageOutput(
+            target.link, target.source_path, target.clip_ids,
+            target.media_asset, project_generation_, size, modified);
+    }
+}
+
+void MainWindow::refreshLinkedImageOutput(
+    const media::LinkedImageReference& link,
+    const std::filesystem::path& source_path,
+    std::vector<timeline::ClipId> clip_ids,
+    bool media_asset,
+    std::uint64_t project_generation,
+    std::uintmax_t size,
+    std::filesystem::file_time_type modified) {
+    QPointer<MainWindow> guard(this);
+    media_task_pool_.start(QRunnable::create(
+        [guard, link, source_path, clip_ids = std::move(clip_ids), media_asset,
+         project_generation, size, modified]() mutable {
+            media::VideoMetadata metadata;
+            media::VideoFrame frame;
+            std::string failure;
+            try {
+                const media::StillImageDecoder decoder;
+                metadata = decoder.probe(link.published_output_path);
+                frame = decoder.decode_first_frame(link.published_output_path);
+            } catch (const std::exception& error) {
+                failure = error.what();
+            }
+            if (guard == nullptr) return;
+            QMetaObject::invokeMethod(
+                guard,
+                [guard, link, source_path, clip_ids = std::move(clip_ids),
+                 media_asset, project_generation, size, modified,
+                 metadata = std::move(metadata), frame = std::move(frame),
+                 failure = std::move(failure)]() mutable {
+                    if (guard == nullptr) return;
+                    guard->applyLinkedImageRefresh(
+                        link, source_path, std::move(clip_ids), media_asset,
+                        project_generation, size, modified,
+                        std::move(metadata), std::move(frame), std::move(failure));
+                },
+                Qt::QueuedConnection);
+        }));
+}
+
+void MainWindow::applyLinkedImageRefresh(
+    const media::LinkedImageReference& link,
+    const std::filesystem::path& source_path,
+    std::vector<timeline::ClipId> clip_ids,
+    bool media_asset,
+    std::uint64_t project_generation,
+    std::uintmax_t size,
+    std::filesystem::file_time_type modified,
+    media::VideoMetadata metadata,
+    media::VideoFrame frame,
+    std::string failure) {
+    auto target = std::find_if(
+        linked_image_watch_targets_.begin(), linked_image_watch_targets_.end(),
+        [&link](const LinkedImageWatchTarget& current) {
+            return current.link.id == link.id &&
+                current.link.published_output_path == link.published_output_path;
+        });
+    if (project_generation != project_generation_ ||
+        target == linked_image_watch_targets_.end()) return;
+    target->refresh_pending = false;
+    std::error_code current_size_error;
+    const auto current_size = std::filesystem::file_size(
+        link.published_output_path, current_size_error);
+    std::error_code current_time_error;
+    const auto current_modified = std::filesystem::last_write_time(
+        link.published_output_path, current_time_error);
+    if (current_size_error || current_time_error || current_size != size ||
+        current_modified != modified || target->size != size ||
+        target->modified != modified) {
+        // The PNG was replaced while it was being decoded. Let the next poll
+        // schedule the latest revision instead of applying this stale frame.
+        target->has_signature = false;
+        return;
+    }
+    if (!failure.empty()) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "image_editor_compatibility",
+            "refresh_linked_output",
+            failure,
+            {{"path", pathToUtf8(link.published_output_path)},
+             {"link_id", link.id}});
+        statusBar()->showMessage("The saved Image Editor output could not be decoded.", 5000);
+        return;
+    }
+
+    bool changed = false;
+    if (media_asset) {
+        const auto result = media_controller_.refreshImagePresentation(
+            source_path, std::move(metadata), frame);
+        changed = result.changed();
+    }
+    const auto shared_frame = std::make_shared<const media::VideoFrame>(std::move(frame));
+    for (const auto clip_id : clip_ids) {
+        changed = editor_session_.legacyTimelineForUi().setStillImageOverride(
+                      clip_id, shared_frame) || changed;
+    }
+    if (!changed) return;
+
+    updateTimelineState();
+    if (playback_controller_ != nullptr) playback_controller_->refreshComposition();
+
+    if (media_list_ != nullptr && selectedMediaIndex().has_value() &&
+        media::MediaLibrary::canonicalPath(
+            media_items_[*selectedMediaIndex()].metadata.source_path) ==
+            media::MediaLibrary::canonicalPath(source_path)) {
+        const auto index = media_controller_.library().indexForPath(source_path);
+        if (index < media_controller_.library().size()) {
+            preview_widget_->setFrame(media_controller_.library().items()[index].first_frame);
+            populateMediaBrowser(source_path);
+        }
+    } else if (active_timeline_clip_id_.has_value() &&
+               std::find(clip_ids.begin(), clip_ids.end(), *active_timeline_clip_id_) !=
+                   clip_ids.end()) {
+        preview_widget_->setFrame(*shared_frame);
+    } else if (media_asset && active_timeline_clip_id_.has_value()) {
+        const auto location = timeline_model_.locateClip(*active_timeline_clip_id_);
+        if (location.has_value()) {
+            const auto& clip = timeline_model_.tracks()[location->track_index]
+                .clips[location->clip_index];
+            if (media::MediaLibrary::canonicalPath(clip.source_path) ==
+                    media::MediaLibrary::canonicalPath(source_path) &&
+                !clip.still_image_override) {
+                const auto index = media_controller_.library().indexForPath(source_path);
+                if (index < media_controller_.library().size()) {
+                    preview_widget_->setFrame(
+                        media_controller_.library().items()[index].first_frame);
+                }
+            }
+        }
+    }
+}
+
+bool MainWindow::launchLinkedImageEditor(
+    const media::LinkedImageReference& link,
+    const std::filesystem::path& source_path,
+    std::optional<timeline::ClipId> clip_id) {
+    auto executable = bundledImageEditorExecutable();
+    if (executable.isEmpty()) {
+        executable = QFileDialog::getOpenFileName(
+            this,
+            "Locate Image Editor",
+            QCoreApplication::applicationDirPath(),
+            "Image Editor executable (*)");
+        if (executable.isEmpty()) return false;
+        QSettings settings;
+        settings.setValue(QStringLiteral("applications/image_editor_executable"), executable);
+        settings.sync();
+    }
+    auto linked_source = source_path;
+    if (clip_id.has_value()) {
+        const auto snapshot = link.document_path.parent_path() / "source.png";
+        std::error_code snapshot_error;
+        if (std::filesystem::is_regular_file(snapshot, snapshot_error) && !snapshot_error) {
+            linked_source = snapshot;
+        }
+    }
+    const QStringList arguments{
+        QStringLiteral("--linked-source"), pathToQString(linked_source),
+        QStringLiteral("--linked-document"), pathToQString(link.document_path),
+        QStringLiteral("--publish-output"), pathToQString(link.published_output_path)};
+    qint64 process_id = 0;
+    if (QProcess::startDetached(executable, arguments,
+                                QFileInfo(executable).absolutePath(), &process_id)) {
+        return true;
+    }
+    const QString cause = QStringLiteral("The Image Editor process could not be started.");
+    logging::Logger::instance().log(
+        logging::Level::Error,
+        "image_editor_compatibility",
+        "launch_image_editor",
+        cause.toStdString(),
+        {{"executable", executable.toUtf8().toStdString()},
+         {"document_path", pathToUtf8(link.document_path)},
+         {"source_path", pathToUtf8(linked_source)}});
+    QMessageBox::warning(this, "Could not start Image Editor", cause);
+    return false;
+}
+
+void MainWindow::editSelectedMediaInImageEditor() {
+    const auto index = selectedMediaIndex();
+    if (!index.has_value()) return;
+    const auto item = media_items_[*index];
+    if (item.metadata.kind != media::MediaKind::Image) return;
+    auto link = item.image_editor_link.value_or(media::LinkedImageReference{});
+    if (link.id.empty()) {
+        link.id = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        const auto sidecar = imageEditorSidecarDirectory(item.metadata.source_path);
+        link.document_path = sidecar / "asset.cimg";
+        link.published_output_path = sidecar / "asset.png";
+    }
+    std::error_code directory_error;
+    std::filesystem::create_directories(link.document_path.parent_path(), directory_error);
+    if (directory_error) {
+        const auto cause = directory_error.message();
+        logging::Logger::instance().log(
+            logging::Level::Error, "image_editor_compatibility",
+            "create_link_directory", cause,
+            {{"path", pathToUtf8(link.document_path.parent_path())}});
+        QMessageBox::warning(this, "Could not prepare linked image", fromUtf8(cause));
+        return;
+    }
+    if (!launchLinkedImageEditor(link, item.metadata.source_path)) return;
+    if (!item.image_editor_link.has_value()) {
+        static_cast<void>(media_controller_.setImageEditorLink(
+            item.metadata.source_path, link));
+        updateProjectDirtyState();
+    }
+    refreshLinkedImageTargets();
+    statusBar()->showMessage("Image Editor opened for this Media Pool image.", 3500);
+}
+
+void MainWindow::editTimelineImageClip(timeline::ClipId clip_id) {
+    const auto location = timeline_model_.locateClip(clip_id);
+    if (!location.has_value()) return;
+    const auto& clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    if (clip.kind != timeline::ClipKind::Image) return;
+    const auto source_path = clip.source_path;
+    const auto media_index = media_controller_.library().indexForPath(source_path);
+    if (media_index >= media_controller_.library().size()) {
+        statusBar()->showMessage("The image clip has no matching Media Pool item.", 4000);
+        return;
+    }
+    const auto media_item = media_controller_.library().items()[media_index];
+    auto link = clip.image_editor_variant.value_or(media::LinkedImageReference{});
+    if (link.id.empty()) {
+        link.id = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+        const auto sidecar = imageEditorSidecarDirectory(source_path) / "clips" / link.id;
+        link.document_path = sidecar / "document.cimg";
+        link.published_output_path = sidecar / "output.png";
+    }
+    std::error_code directory_error;
+    std::filesystem::create_directories(link.document_path.parent_path(), directory_error);
+    if (directory_error) {
+        const auto cause = directory_error.message();
+        logging::Logger::instance().log(
+            logging::Level::Error, "image_editor_compatibility",
+            "create_clip_variant_directory", cause,
+            {{"path", pathToUtf8(link.document_path.parent_path())},
+             {"clip_id", std::to_string(clip_id)}});
+        QMessageBox::warning(this, "Could not prepare clip image", fromUtf8(cause));
+        return;
+    }
+    const auto snapshot_path = link.document_path.parent_path() / "source.png";
+    if (!QFileInfo::exists(pathToQString(snapshot_path))) {
+        auto effective_source = source_path;
+        if (media_item.image_editor_link.has_value()) {
+            std::error_code output_error;
+            if (std::filesystem::is_regular_file(
+                    media_item.image_editor_link->published_output_path,
+                    output_error) && !output_error) {
+                effective_source = media_item.image_editor_link->published_output_path;
+            }
+        }
+        QString copy_error;
+        if (!copyFileAtomically(pathToQString(effective_source),
+                                pathToQString(snapshot_path), &copy_error)) {
+            logging::Logger::instance().log(
+                logging::Level::Error, "image_editor_compatibility",
+                "snapshot_clip_image", copy_error.toUtf8().toStdString(),
+                {{"source_path", pathToUtf8(effective_source)},
+                 {"snapshot_path", pathToUtf8(snapshot_path)},
+                 {"clip_id", std::to_string(clip_id)}});
+            QMessageBox::warning(this, "Could not create clip image copy", copy_error);
+            return;
+        }
+    }
+    if (!launchLinkedImageEditor(link, source_path, clip_id)) return;
+    if (!clip.image_editor_variant.has_value()) {
+        static_cast<void>(editor_session_.legacyTimelineForUi()
+                              .setImageEditorVariant(clip_id, link));
+        updateProjectDirtyState();
+        updateTimelineState();
+    }
+    refreshLinkedImageTargets();
+    statusBar()->showMessage("Image Editor opened for this timeline clip.", 3500);
+}
+
 void MainWindow::showMediaContextMenu(const QPoint& position) {
     QMenu menu(this);
     auto* new_bin = menu.addAction("New Bin");
@@ -789,6 +1237,14 @@ void MainWindow::showMediaContextMenu(const QPoint& position) {
     }
     const auto media_index = from_media_list ? selectedMediaIndex() : std::nullopt;
     if (media_index.has_value()) {
+        const auto& selected = media_items_[*media_index];
+        if (selected.metadata.kind == media::MediaKind::Image &&
+            (!selected.offline || selected.image_editor_link.has_value())) {
+            menu.addSeparator();
+            auto* edit_image = menu.addAction("Edit Image in Image Editor");
+            connect(edit_image, &QAction::triggered,
+                    this, &MainWindow::editSelectedMediaInImageEditor);
+        }
         menu.addSeparator();
         auto* move = menu.addAction("Move to Bin");
         connect(move, &QAction::triggered, this, &MainWindow::moveSelectedMediaToBin);

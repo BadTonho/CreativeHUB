@@ -72,6 +72,7 @@ MainWindow::MainWindow(QWidget* parent)
     createWorkspace();
     createMenus();
     initializePlayback();
+    initializeLinkedImageCompatibility();
     configurePreviewPerformanceMetrics(
         settings::previewPerformanceMetricsEnabled());
 
@@ -92,6 +93,7 @@ MainWindow::MainWindow(QWidget* parent)
 
 MainWindow::~MainWindow() {
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
+    if (linked_image_poll_timer_ != nullptr) linked_image_poll_timer_->stop();
     if (active_media_import_cancel_) {
         active_media_import_cancel_->store(true, std::memory_order_relaxed);
     }

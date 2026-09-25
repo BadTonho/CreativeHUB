@@ -76,6 +76,7 @@ public:
 
 signals:
     void clipSelected(timeline::TrackId track_id, timeline::ClipId clip_id);
+    void editImageClipRequested(timeline::ClipId clip_id);
     void clipSelectionCleared();
     void clipMoveRequested(
         timeline::ClipId clip_id,
@@ -166,6 +167,7 @@ private:
     [[nodiscard]] std::optional<std::pair<std::size_t, std::size_t>>
     transitionClipIndexesAt(double x, double y) const noexcept;
     void showTransitionMenu(const QPoint& position, const QPoint& global_position);
+    void showImageClipMenu(const ClipLocation& location, const QPoint& global_position);
     void emitSelected(const ClipLocation& location);
     [[nodiscard]] bool isSupportedDrop(
         const QMimeData* mime_data) const noexcept;

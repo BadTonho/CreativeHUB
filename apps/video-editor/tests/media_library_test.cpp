@@ -1,11 +1,14 @@
 #include "media/media_library.h"
+#include "media/video_frame.h"
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string_view>
+#include <vector>
 
 namespace {
 
@@ -67,6 +70,43 @@ int main() {
     require(library.restore(0, metadata(source), frame) == media::MediaMutationResult::Changed,
             "The media item was not restored.");
     require(!library.items()[0].offline, "Restore did not reactivate the media item.");
+
+    const auto image_source = std::filesystem::temp_directory_path() /
+        ("creative-suite-media-library-image-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count()) + ".png");
+    auto image_metadata = metadata(image_source);
+    image_metadata.kind = media::MediaKind::Image;
+    image_metadata.width = 2;
+    image_metadata.height = 2;
+    media::VideoFrame image_frame{2, 2, 8, std::vector<std::uint8_t>(16, 0x20)};
+    require(library.addOnline(image_metadata, image_frame, "Still", "Stills") ==
+                media::MediaMutationResult::Changed,
+            "The image item was not added.");
+    const media::LinkedImageReference image_link{
+        "shared-image-id", image_source.string() + ".image-editor/asset.cimg",
+        image_source.string() + ".image-editor/asset.png"};
+    require(library.setImageEditorLink(image_source, image_link) ==
+                media::MediaMutationResult::Changed &&
+                library.setImageEditorLink(image_source, image_link) ==
+                media::MediaMutationResult::NoChange &&
+                library.items()[1].image_editor_link == image_link,
+            "A shared Image Editor link was not stored idempotently.");
+    require(library.markOffline(1) == media::MediaMutationResult::Changed,
+            "The linked image item could not be marked offline.");
+    auto refreshed_metadata = metadata(image_link.published_output_path);
+    refreshed_metadata.kind = media::MediaKind::Image;
+    refreshed_metadata.width = 3;
+    refreshed_metadata.height = 1;
+    media::VideoFrame refreshed_frame{3, 1, 12, std::vector<std::uint8_t>(12, 0x80)};
+    require(library.refreshImagePresentation(
+                image_source, refreshed_metadata, refreshed_frame) ==
+                media::MediaMutationResult::Changed &&
+                !library.items()[1].offline &&
+                library.items()[1].metadata.source_path ==
+                    media::MediaLibrary::canonicalPath(image_source) &&
+                library.items()[1].metadata.width == 3 &&
+                library.items()[1].image_editor_link == image_link,
+            "Publishing a linked image did not refresh its presentation while preserving the source identity and link.");
 
     require(library.createBin("Archive") == media::MediaMutationResult::Changed,
             "The archive bin was not created.");

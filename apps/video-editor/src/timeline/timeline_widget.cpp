@@ -1420,6 +1420,23 @@ void TimelineWidget::showTransitionMenu(
     update();
 }
 
+void TimelineWidget::showImageClipMenu(
+    const ClipLocation& location,
+    const QPoint& global_position) {
+    if (location.track_index >= tracks_.size() ||
+        location.clip_index >= tracks_[location.track_index].clips.size()) return;
+    const auto& clip = tracks_[location.track_index].clips[location.clip_index];
+    if (clip.kind != ClipKind::Image) return;
+    const auto clip_id = clip.clip_id;
+    emitSelected(location);
+    QMenu menu(this);
+    auto* edit = menu.addAction(QStringLiteral("Edit Clip Image in Image Editor"));
+    connect(edit, &QAction::triggered, this, [this, clip_id]() {
+        emit editImageClipRequested(clip_id);
+    });
+    menu.exec(global_position);
+}
+
 void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
     if (suppress_next_context_menu_) {
         suppress_next_context_menu_ = false;
@@ -1430,8 +1447,16 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
         event->pos().x(), event->pos().y());
     const auto track_index = trackAt(event->pos().y());
     if (!indexes.has_value() || !track_index.has_value()) {
-        event->ignore();
-        return;
+        const auto location = clipAt(event->pos().x(), event->pos().y());
+        if (location.has_value()) {
+            const auto& clip = tracks_[location->track_index].clips[location->clip_index];
+            if (clip.kind == ClipKind::Image) {
+                showImageClipMenu(*location, event->globalPos());
+                event->accept();
+                return;
+            }
+        }
+        event->ignore(); return;
     }
     showTransitionMenu(event->pos(), event->globalPos());
     event->accept();
@@ -1453,7 +1478,18 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
                 event->globalPosition().toPoint());
             event->accept();
         } else {
-            event->ignore();
+            const auto location = clipAt(
+                event->position().x(), event->position().y());
+            if (location.has_value() &&
+                tracks_[location->track_index].clips[location->clip_index].kind ==
+                    ClipKind::Image) {
+                suppress_next_context_menu_ = true;
+                showImageClipMenu(
+                    *location, event->globalPosition().toPoint());
+                event->accept();
+            } else {
+                event->ignore();
+            }
         }
         return;
     }

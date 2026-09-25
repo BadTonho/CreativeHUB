@@ -89,6 +89,16 @@ persistence, and recovery.
   duplicate assignments are rejected, and tool actions stay disabled without an
   editable layer. The fixed tool-size mouse gesture is documented separately
   and is not part of the keyboard shortcut preferences.
+- In standalone mode, the window opens and saves `.cimg` documents normally. A
+  linked launch accepts `--linked-source`, `--linked-document`, and
+  `--publish-output`. It opens an existing linked document or creates one from
+  the source, pins Save to the linked document, and disables source-changing
+  and Save As actions. Save writes `.cimg` first, then uses `QSaveFile` to
+  atomically publish the flattened PNG. Linked saves use a per-document
+  `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
+  revisions before replacing the document. The source image is never written.
+  The `.cimg` schema remains version 5; host links live in the Main Editor's
+  `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
   is shown; expected dialog cancellation is not an error.
@@ -112,6 +122,8 @@ expanding this workflow. Undo and redo retain up to 100 in-memory document
 snapshots and are not stored in the `.cimg` file.
 
 The `.cimg` format is application-specific and does not change or embed into
-the Main Editor's `.csp` format. The linked-image compatibility contract is a
-later milestone documented in the
+the Main Editor's `.csp` format. The first linked-image handoff is implemented
+as a saved PNG plus a native `.cimg` companion. The Main Editor owns shared
+Media Pool links and clip-specific variants in `.csp` v10; the current
+behavior and remaining validation are documented in the
 [cross-application proposal](../CROSS_APPLICATION_COMPATIBILITY.md).

@@ -118,5 +118,53 @@ Repeat the standalone workflow on Windows, macOS, and Linux. Verify that the
 packaged runtime has the Qt platform plugin and the required image format
 plugins, and inspect the distribution's Qt and codec license notices.
 
+## Main Editor linked-image compatibility
+
+Use disposable source files and a test `.csp` project. The standalone minimum
+remains marked incomplete until this document's standalone and platform checks
+are completed.
+
+1. Configure the Main Editor's Image Editor executable in Settings, or place
+   the two Release executables in their normal sibling build/install folders.
+   If no executable is found, use **Locate Image Editor** and confirm the
+   selected path is remembered.
+2. Import a transparent PNG used by at least two timeline clips. From the Media
+   Pool context menu, choose **Edit Image in Image Editor**. Confirm the
+   companion `.cimg` and `asset.png` appear under
+   `<source>.image-editor/`, and compare the source file bytes to verify it was
+   not changed. Close and reopen the action; confirm it reuses the same
+   document.
+3. Paint or erase in the Image Editor. Before saving, confirm the Main Editor's
+   Media Pool thumbnail, timeline clips, and preview do not change. Save the
+   linked document and confirm the PNG output is published, transparency is
+   preserved, the Media Pool thumbnail updates, and all clips using that media
+   refresh their image.
+4. Create a second image clip from the same media. Right-click only that clip
+   and choose **Edit Clip Image in Image Editor**. Confirm the variant is stored
+   under `<source>.image-editor/clips/<uuid>/` with an independent `source.png`,
+   document, and output. Save a visibly different edit and confirm only that
+   clip changes; the Media Pool image and the other clip retain their prior
+   appearance. Save the project, reopen it, and verify both link types persist.
+5. Open a project with a missing original but a valid shared output. Confirm
+   the published image is usable; remove the output as well and confirm the
+   source remains represented as offline. Open a project with a missing clip
+   variant output and confirm the clip falls back to the shared Media Pool
+   image with a warning.
+6. While a linked document is open in two Image Editor windows, save in one and
+   then attempt to save stale edits in the other. Confirm the stale save is
+   rejected and the newer `.cimg` and published PNG remain intact. Replace the
+   active Main Editor project while a linked PNG refresh is in flight and
+   confirm the old result does not change the new project's selection or
+   preview.
+7. Try a missing Image Editor executable, a read-only sidecar directory, a
+   corrupt published PNG, and an incompatible `.cimg`. Confirm each reported
+   technical failure has an actionable local log entry and does not replace
+   the original media or the currently loaded project.
+
+Run the linked workflow with a large transparent image on Windows, macOS, and
+Linux. Record startup method, project version, output dimensions, refresh
+latency, and any platform-specific path or locking behavior. Unsaved live
+preview is intentionally not part of this milestone.
+
 This checklist records the manual acceptance work; it does not replace the
 automated document, operation, export, recovery, and UI-boundary tests.

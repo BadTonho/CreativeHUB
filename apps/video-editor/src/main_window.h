@@ -146,6 +146,8 @@ private:
         std::optional<std::string> selected_bin = std::nullopt);
     void selectMediaBrowserBin(const QString& path);
     void showMediaContextMenu(const QPoint& position);
+    void editSelectedMediaInImageEditor();
+    void editTimelineImageClip(timeline::ClipId clip_id);
     void handleMediaBrowserMediaDrop(
         const QString& source_path,
         const QString& destination_bin);
@@ -191,6 +193,32 @@ private:
         const char* operation);
     [[nodiscard]] project::ProjectDocument currentProjectDocument() const;
     void updateProjectDirtyState();
+    void initializeLinkedImageCompatibility();
+    void refreshLinkedImageTargets();
+    void pollLinkedImageOutputs();
+    void refreshLinkedImageOutput(
+        const media::LinkedImageReference& link,
+        const std::filesystem::path& source_path,
+        std::vector<timeline::ClipId> clip_ids,
+        bool media_asset,
+        std::uint64_t project_generation,
+        std::uintmax_t size,
+        std::filesystem::file_time_type modified);
+    void applyLinkedImageRefresh(
+        const media::LinkedImageReference& link,
+        const std::filesystem::path& source_path,
+        std::vector<timeline::ClipId> clip_ids,
+        bool media_asset,
+        std::uint64_t project_generation,
+        std::uintmax_t size,
+        std::filesystem::file_time_type modified,
+        media::VideoMetadata metadata,
+        media::VideoFrame frame,
+        std::string failure);
+    [[nodiscard]] bool launchLinkedImageEditor(
+        const media::LinkedImageReference& link,
+        const std::filesystem::path& source_path,
+        std::optional<timeline::ClipId> clip_id = std::nullopt);
     void clearProjectState();
     void applyLoadedProject(application::PreparedProject prepared);
     void addSelectedMediaToTimeline();
@@ -342,6 +370,7 @@ private:
     SystemMemoryIndicator* system_memory_indicator_ = nullptr;
     QTimer* preview_metrics_timer_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
+    QTimer* linked_image_poll_timer_ = nullptr;
     system_monitor::PerformanceSampler performance_sampler_;
     bool media_browser_inline_rename_pending_ = false;
     std::array<QDoubleSpinBox*, 5> transform_spin_boxes_{};
@@ -422,6 +451,17 @@ private:
     std::uint64_t active_media_work_id_ = 0;
     std::uint64_t next_project_work_id_ = 1;
     std::uint64_t active_project_work_id_ = 0;
+    struct LinkedImageWatchTarget {
+        media::LinkedImageReference link;
+        std::filesystem::path source_path;
+        std::vector<timeline::ClipId> clip_ids;
+        bool media_asset = false;
+        bool has_signature = false;
+        std::uintmax_t size = 0;
+        std::filesystem::file_time_type modified{};
+        bool refresh_pending = false;
+    };
+    std::vector<LinkedImageWatchTarget> linked_image_watch_targets_;
     std::filesystem::path active_project_source_path_;
     bool project_load_pending_ = false;
     QProgressDialog* project_load_progress_ = nullptr;

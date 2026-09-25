@@ -1,5 +1,7 @@
 #include "media_library.h"
 
+#include "video_frame.h"
+
 #include <algorithm>
 #include <cctype>
 #include <system_error>
@@ -104,13 +106,15 @@ MediaMutationResult MediaLibrary::addOnline(
 MediaMutationResult MediaLibrary::addOffline(
     std::filesystem::path source_path,
     std::string display_name,
-    std::string bin_path) {
+    std::string bin_path,
+    MediaKind kind) {
     source_path = canonicalPath(source_path);
     if (contains(source_path)) return MediaMutationResult::Duplicate;
     if (!validBinPath(bin_path)) return MediaMutationResult::InvalidBin;
     if (display_name.empty()) display_name = defaultDisplayName(source_path);
     ensureBinPath(bin_path);
     VideoMetadata metadata;
+    metadata.kind = kind;
     metadata.source_path = source_path;
     metadata.display_name = display_name;
     items_.push_back({std::move(metadata), {}, std::move(display_name),
@@ -156,6 +160,43 @@ MediaMutationResult MediaLibrary::markOffline(std::size_t index) {
     if (items_[index].offline) return MediaMutationResult::NoChange;
     items_[index].offline = true;
     items_[index].first_frame = {};
+    return MediaMutationResult::Changed;
+}
+
+MediaMutationResult MediaLibrary::setImageEditorLink(
+    const std::filesystem::path& path,
+    std::optional<LinkedImageReference> link) {
+    const auto index = indexForPath(path);
+    if (index >= items_.size() || items_[index].metadata.kind != MediaKind::Image) {
+        return MediaMutationResult::InvalidIndex;
+    }
+    if (items_[index].image_editor_link == link) return MediaMutationResult::NoChange;
+    items_[index].image_editor_link = std::move(link);
+    return MediaMutationResult::Changed;
+}
+
+MediaMutationResult MediaLibrary::refreshImagePresentation(
+    const std::filesystem::path& path,
+    VideoMetadata metadata,
+    VideoFrame first_frame) {
+    const auto index = indexForPath(path);
+    if (index >= items_.size() || items_[index].metadata.kind != MediaKind::Image ||
+        first_frame.width <= 0 || first_frame.height <= 0 ||
+        first_frame.rgba_pixels.empty()) {
+        return MediaMutationResult::InvalidIndex;
+    }
+    auto& item = items_[index];
+    metadata.kind = MediaKind::Image;
+    metadata.source_path = item.metadata.source_path;
+    metadata.display_name = item.metadata.display_name;
+    const bool unchanged = item.first_frame.width == first_frame.width &&
+        item.first_frame.height == first_frame.height &&
+        item.first_frame.rgba_pixels == first_frame.rgba_pixels &&
+        item.metadata.width == metadata.width && item.metadata.height == metadata.height;
+    if (unchanged) return MediaMutationResult::NoChange;
+    item.metadata = std::move(metadata);
+    item.first_frame = std::move(first_frame);
+    item.offline = false;
     return MediaMutationResult::Changed;
 }
 

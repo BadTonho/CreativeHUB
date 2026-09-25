@@ -6,6 +6,8 @@
 #include "project/project_file.h"
 
 #include <QByteArray>
+#include <QColor>
+#include <QImage>
 
 #include <atomic>
 #include <chrono>
@@ -287,6 +289,86 @@ void testProjectOpenPreparationIsTransactionalAndPreservesOfflineMedia() {
     std::filesystem::remove_all(root);
 }
 
+QColor framePixel(const media::VideoFrame& frame, int x, int y) {
+    const auto offset = static_cast<std::size_t>(y) * frame.stride +
+        static_cast<std::size_t>(x) * 4;
+    return QColor(frame.rgba_pixels.at(offset), frame.rgba_pixels.at(offset + 1),
+                  frame.rgba_pixels.at(offset + 2), frame.rgba_pixels.at(offset + 3));
+}
+
+void testLinkedImageProjectOpenUsesSharedOutputAndClipVariant() {
+    const auto root = std::filesystem::temp_directory_path() /
+        ("creative-suite-linked-open-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(root);
+    const auto missing_source = root / "missing-source.png";
+    const auto shared_document = root / "shared.cimg";
+    const auto shared_output = root / "shared.png";
+    const auto variant_document = root / "variant.cimg";
+    const auto variant_output = root / "variant.png";
+    QImage shared_image(4, 4, QImage::Format_ARGB32);
+    shared_image.fill(QColor(20, 220, 30, 255));
+    QImage variant_image(4, 4, QImage::Format_ARGB32);
+    variant_image.fill(QColor(20, 30, 230, 255));
+    require(shared_image.save(QString::fromStdString(shared_output.string())) &&
+                variant_image.save(QString::fromStdString(variant_output.string())),
+            "The linked-output fixtures could not be written.");
+
+    project::ProjectDocument document;
+    const media::LinkedImageReference shared_link{
+        "shared-image-id", shared_document, shared_output};
+    const media::LinkedImageReference variant_link{
+        "clip-variant-id", variant_document, variant_output};
+    document.media.push_back({missing_source, "Linked still", "Stills", true,
+                              media::MediaKind::Image, shared_link});
+    project::ProjectTrack track;
+    track.track_id = 3;
+    track.name = "V1";
+    project::ProjectClip clip;
+    clip.clip_id = 4;
+    clip.source_path = missing_source;
+    clip.duration_frames = 30;
+    clip.kind = timeline::ClipKind::Image;
+    clip.image_editor_variant = variant_link;
+    track.clips.push_back(clip);
+    document.timeline_tracks.push_back(track);
+    const auto project_path = root / "linked.csp";
+    project::save(project_path, document);
+
+    std::atomic_bool cancel{false};
+    application::ProjectOpenService service;
+    const auto prepared = service.prepare(
+        project_path, std::nullopt, std::nullopt, cancel);
+    require(prepared.status == application::ProjectOpenStatus::Prepared &&
+                prepared.prepared.has_value(),
+            "A linked project with a missing original source did not open.");
+    const auto& media_item = prepared.prepared->media_library.items().front();
+    require(!media_item.offline && media_item.metadata.kind == media::MediaKind::Image &&
+                media_item.metadata.source_path ==
+                    media::MediaLibrary::canonicalPath(missing_source) &&
+                media_item.image_editor_link == shared_link &&
+                framePixel(media_item.first_frame, 1, 1) == QColor(20, 220, 30, 255),
+            "Project open did not use the shared output while preserving original media identity.");
+    const auto& prepared_clip = prepared.prepared->timeline.tracks.front().clips.front();
+    require(prepared_clip.image_editor_variant == variant_link &&
+                prepared_clip.still_image_override != nullptr &&
+                framePixel(*prepared_clip.still_image_override, 1, 1) ==
+                    QColor(20, 30, 230, 255),
+            "A clip-specific output did not take precedence over the shared image.");
+
+    std::filesystem::remove(variant_output);
+    const auto missing_variant = service.prepare(
+        project_path, std::nullopt, std::nullopt, cancel);
+    require(missing_variant.status == application::ProjectOpenStatus::Prepared &&
+                missing_variant.prepared.has_value() &&
+                !missing_variant.prepared->timeline.tracks.front().clips.front()
+                     .still_image_override &&
+                !missing_variant.warnings.empty(),
+            "A missing clip variant did not safely fall back to the shared Media Pool image.");
+
+    std::filesystem::remove_all(root);
+}
+
 } // namespace
 
 int main() {
@@ -296,6 +378,7 @@ int main() {
         testCancellationDiscardsActiveAndSkipsFollowingFiles();
         testProjectControllerDirtyAutosaveSaveAndReset();
         testProjectOpenPreparationIsTransactionalAndPreservesOfflineMedia();
+        testLinkedImageProjectOpenUsesSharedOutputAndClipVariant();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;

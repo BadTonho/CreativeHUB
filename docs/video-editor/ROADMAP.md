@@ -15,9 +15,10 @@ and must be updated whenever priorities, decisions, or project status change.
 - Real applications must be created outside `prototypes/`. Shared libraries
   should be added only when more than one application genuinely needs them.
 - After the Main Editor foundation, the Image Editor is the next application
-  stage, ahead of Motion Studio. Its standalone minimum editor comes first,
-  followed by linked-image compatibility and the first editing release.
-  Motion Studio follows that release.
+  stage, ahead of Motion Studio. Its standalone minimum editor was implemented
+  first; its manual and cross-platform checks remain open. Linked-image
+  compatibility is now in implementation and validation. Motion Studio follows
+  the Image Editor's first editing release.
 
 ## Status Legend
 
@@ -150,54 +151,37 @@ are documented in `TECHNICAL_PROTOTYPE_COMPARISON.md`.
 - [ ] Add proxies, caching, and incremental rendering.
 - [ ] Improve performance through profiling and measurement.
 
-### Image Editor handoff readiness
+### Image Editor linked-image compatibility
 
-This is Main Editor integration work after the Image Editor's standalone
-minimum editor is usable. Image Editor Milestone 2 is the bounded compatibility
-prototype, and Milestone 3 is the first editing release. Start Motion Studio
-after Milestone 3 passes its exit criteria. See the
-[provisional cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
+The initial implementation is in place; automated coverage and manual
+acceptance remain in progress. The contract is recorded in the
+[cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
 
-- [ ] Define how a Media Pool image maps to one companion Image Editor
-  document, including create-on-first-open and reuse on later opens while
-  preserving the original source image.
-- [ ] Define the `.csp` link data and migration strategy for the companion
-  document location, document identity and version, saved revision, source
-  relationship, and relinking when files move. Keep the current project format
-  unchanged until this contract is validated.
-- [ ] Choose and document whether the companion document references its source
-  image or embeds image data, including portability, storage, and recovery
-  behavior.
-- [ ] Define a host-consumable image output contract covering dimensions,
-  alpha, pixel format, and color behavior so the Main Editor does not need to
-  interpret the Image Editor's full native document format.
-- [ ] Decide timeline invocation semantics: reuse the Media Pool item's linked
-  edit or create a clip-specific variant. Media Pool edits are asset-level and
-  should update every timeline use of that item.
-- [ ] Add an explicit open/edit action for Media Pool images and image clips;
-  create or reopen the linked document and launch the Image Editor through a
-  cross-platform handoff boundary.
-- [ ] Detect a successfully saved linked revision and refresh its host output,
-  media preview, and affected timeline composition. Invalidate only dependent
-  render-cache entries, and discard stale refresh results after a project
-  change.
-- [ ] Handle missing or moved documents and source images, unsupported document
-  versions, read-only locations, and stale concurrent revisions with recovery
-  guidance and actionable technical logs.
-- [ ] Add automated coverage for link creation and reuse, project persistence
-  and migration, source preservation, asset-level updates, stale results,
-  missing resources, and unsupported versions.
-- [ ] Document manual validation for repeated Media Pool opens, multiple
-  timeline uses of one image, the chosen timeline edit behavior, large and
-  transparent images, save and reopen, moved files, and the handoff on Windows,
-  macOS, and Linux.
+- [x] Define shared Media Pool links and isolated timeline clip variants.
+- [x] Persist optional image references in `.csp` v10 and retain v1-v9
+  compatibility.
+- [x] Preserve the original source, store companion files beside it, and
+  publish PNG output atomically after `.cimg` saves.
+- [x] Add Media Pool and image-clip actions that create or reopen the linked
+  document and launch the Image Editor through command-line arguments.
+- [x] Refresh linked output, media thumbnails, and affected timeline
+  composition asynchronously; discard results from replaced project
+  generations.
+- [x] Resolve the executable from settings, sibling installation/development
+  builds, or `PATH`, with a file picker fallback.
+- [x] Reject stale linked saves with a per-document lock and baseline hash.
+- [x] Test missing source and variant resources, incompatible linked documents,
+  failed PNG publication, variant priority, stale project generations, and
+  obsolete output revisions.
+- [ ] Complete manual checks for repeated opens, multiple uses, clip variants,
+  transparent and large images, save/reopen, conflicts, and Windows, macOS, and
+  Linux behavior. The Image Editor standalone manual and packaging checks also
+  remain open.
 
-**Exit criteria:** a Media Pool image opens the same linked editable document
-on repeat use; the source remains intact; saving publishes a compatible image
-revision that refreshes every use of that media item without stale preview
-frames or render-cache results. Timeline-specific behavior and recovery cases
-are documented and validated. Unsaved live preview streaming remains a later
-milestone.
+**Exit criteria:** automated and manual validation confirms that shared saves
+refresh all intended uses, clip variants remain isolated, sources remain
+unchanged, and stale previews or concurrent edits do not replace newer data.
+Unsaved live preview streaming remains a later milestone.
 
 ## 6. Image Editor
 

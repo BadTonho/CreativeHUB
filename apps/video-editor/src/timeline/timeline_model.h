@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <array>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -14,6 +15,10 @@
 
 namespace application {
 class EditorSession;
+}
+
+namespace media {
+struct VideoFrame;
 }
 
 namespace timeline {
@@ -69,6 +74,8 @@ struct TimelineClip {
     TransformKeyframes keyframes;
     ClipKind kind = ClipKind::Video;
     TextStyle text;
+    std::optional<media::LinkedImageReference> image_editor_variant;
+    std::shared_ptr<const media::VideoFrame> still_image_override;
 
     friend bool operator==(const TimelineClip&, const TimelineClip&) = default;
 };
@@ -281,6 +288,12 @@ public:
     [[nodiscard]] std::size_t trackCount() const noexcept;
     [[nodiscard]] std::int64_t totalDurationFrames() const noexcept;
     [[nodiscard]] const std::vector<TimelineTrack>& tracks() const noexcept;
+    [[nodiscard]] bool setImageEditorVariant(
+        ClipId clip_id,
+        std::optional<media::LinkedImageReference> link);
+    [[nodiscard]] bool setStillImageOverride(
+        ClipId clip_id,
+        std::shared_ptr<const media::VideoFrame> frame);
     [[nodiscard]] std::optional<std::size_t> firstClipIndexForSource(
         const std::filesystem::path& source_path) const;
     [[nodiscard]] std::optional<ClipLocation> clipAt(

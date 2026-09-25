@@ -837,6 +837,28 @@ const std::vector<TimelineTrack>& TimelineModel::tracks() const noexcept {
     return tracks_;
 }
 
+bool TimelineModel::setImageEditorVariant(
+    ClipId clip_id,
+    std::optional<media::LinkedImageReference> link) {
+    const auto location = locateClip(clip_id);
+    if (!location.has_value()) return false;
+    auto& clip = tracks_[location->track_index].clips[location->clip_index];
+    if (clip.kind != ClipKind::Image || clip.image_editor_variant == link) return false;
+    clip.image_editor_variant = std::move(link);
+    return true;
+}
+
+bool TimelineModel::setStillImageOverride(
+    ClipId clip_id,
+    std::shared_ptr<const media::VideoFrame> frame) {
+    const auto location = locateClip(clip_id);
+    if (!location.has_value()) return false;
+    auto& clip = tracks_[location->track_index].clips[location->clip_index];
+    if (clip.kind != ClipKind::Image || clip.still_image_override == frame) return false;
+    clip.still_image_override = std::move(frame);
+    return true;
+}
+
 std::optional<std::size_t> TimelineModel::firstClipIndexForSource(
     const std::filesystem::path& source_path) const {
     if (tracks_.empty()) return std::nullopt;

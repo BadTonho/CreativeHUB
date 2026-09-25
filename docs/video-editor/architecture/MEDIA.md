@@ -46,6 +46,30 @@ are intentionally not supported in this milestone. The image decoder is used
 only for import, project reopen, and static composition; it never opens an
 FFmpeg or audio playback session.
 
+## Image Editor links
+
+Version 10 `.csp` image media may reference a companion `.cimg` document and a
+published PNG. The source image remains the canonical Media Pool identity;
+`MediaLibrary` keeps the link on that item and updates its metadata and
+thumbnail when a new output is decoded. Project open prefers an existing
+published output and falls back to the original source if that output cannot
+be decoded. Missing source and output files remain offline media.
+
+The Media Pool action opens the shared document. A timeline image clip can
+instead own a clip-specific reference, whose initial `source.png` is an atomic
+copy of the image currently shown for that clip. This keeps later shared-media
+changes from altering the variant's base. The playback composition gives a
+decoded clip variant precedence over the Media Pool frame.
+
+The Main Editor polls linked output timestamps and sizes, then probes and
+decodes on its bounded media task pool. Queued results carry the project
+generation and stable link identity; stale generations and removed targets
+cannot update the current preview. Shared output refreshes all clips using the
+media source. A clip variant refreshes only its clip. Decoding failures are
+logged with the output path and link ID before the UI reports them. Updates are
+published after a successful Image Editor save; unsaved preview sharing is not
+implemented.
+
 ## Import and drag-and-drop
 
 The first import flow supports multiple local files selected through the file

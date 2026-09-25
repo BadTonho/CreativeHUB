@@ -8,15 +8,19 @@
 #include "layer_panel.h"
 
 #include <QAction>
+#include <QCryptographicHash>
 #include <QCheckBox>
 #include <QCoreApplication>
 #include <QCloseEvent>
 #include <QDockWidget>
+#include <QDir>
 #include <QFileDialog>
+#include <QFile>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QKeySequence>
+#include <QLockFile>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -33,12 +37,41 @@
 #include <QWidget>
 #include <QWidgetAction>
 
+#include <memory>
+
 namespace image_editor {
 namespace {
 
 QString imageFilter() {
     return QStringLiteral("Images (%1)").arg(
         ImageDocumentStore::supportedImageExtensions().join(' '));
+}
+
+QByteArray documentFingerprint(const QString& path) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) return {};
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    while (!file.atEnd()) {
+        const QByteArray block = file.read(1024 * 1024);
+        if (block.isEmpty() && file.error() != QFileDevice::NoError) return {};
+        hash.addData(block);
+    }
+    return hash.result();
+}
+
+QString normalizedLinkedPath(const QString& path) {
+    const QFileInfo info(path);
+    const QString canonical = info.canonicalFilePath();
+    return QDir::cleanPath(canonical.isEmpty() ? info.absoluteFilePath() : canonical);
+}
+
+bool sameLinkedPath(const QString& left, const QString& right) {
+#if defined(Q_OS_WIN)
+    return normalizedLinkedPath(left).compare(
+               normalizedLinkedPath(right), Qt::CaseInsensitive) == 0;
+#else
+    return normalizedLinkedPath(left) == normalizedLinkedPath(right);
+#endif
 }
 
 } // namespace
@@ -305,11 +338,12 @@ void ImageEditorWindow::createActions() {
         QStringLiteral("New Canvas..."), QKeySequence::New,
         [this]() { createNewCanvas(); });
     new_canvas_action_->setObjectName(QStringLiteral("newCanvasAction"));
-    auto* open_image_action = makeAction(
+    open_image_action_ = makeAction(
         QStringLiteral("Open Image..."), QKeySequence::Open, [this]() { openImage(); });
-    open_image_action->setObjectName(QStringLiteral("openImageAction"));
-    auto* open_document_action = makeAction(
+    open_image_action_->setObjectName(QStringLiteral("openImageAction"));
+    open_document_action_ = makeAction(
         QStringLiteral("Open Editable Document..."), {}, [this]() { openDocument(); });
+    open_document_action_->setObjectName(QStringLiteral("openEditableDocumentAction"));
     relink_action_ = makeAction(
         QStringLiteral("Relink Source Image..."), {}, [this]() { relinkSource(); });
     save_action_ = makeAction(
@@ -379,7 +413,7 @@ void ImageEditorWindow::createActions() {
         statusBar()->showMessage(QStringLiteral("Crop cancelled"), 2500);
     });
 
-    open_document_action->setObjectName(QStringLiteral("openDocumentAction"));
+    open_document_action_->setObjectName(QStringLiteral("openEditableDocumentAction"));
     relink_action_->setObjectName(QStringLiteral("relinkSourceAction"));
     save_action_->setObjectName(QStringLiteral("saveDocumentAction"));
     save_as_action_->setObjectName(QStringLiteral("saveDocumentAsAction"));
@@ -391,8 +425,8 @@ void ImageEditorWindow::createActions() {
     fit_action_->setObjectName(QStringLiteral("fitImageAction"));
 
     registerShortcutAction(new_canvas_action_, QKeySequence::New);
-    registerShortcutAction(open_image_action, QKeySequence::Open);
-    registerShortcutAction(open_document_action, {});
+    registerShortcutAction(open_image_action_, QKeySequence::Open);
+    registerShortcutAction(open_document_action_, {});
     registerShortcutAction(relink_action_, {});
     registerShortcutAction(save_action_, QKeySequence::Save);
     registerShortcutAction(save_as_action_, QKeySequence::SaveAs);
@@ -433,8 +467,8 @@ void ImageEditorWindow::createActions() {
     auto* file_menu = menuBar()->addMenu(QStringLiteral("File"));
     file_menu->addAction(new_canvas_action_);
     file_menu->addSeparator();
-    file_menu->addAction(open_image_action);
-    file_menu->addAction(open_document_action);
+    file_menu->addAction(open_image_action_);
+    file_menu->addAction(open_document_action_);
     file_menu->addAction(relink_action_);
     file_menu->addSeparator();
     file_menu->addAction(save_action_);
@@ -694,6 +728,75 @@ bool ImageEditorWindow::openDocumentPath(const QString& path) {
     return true;
 }
 
+bool ImageEditorWindow::openLinkedImage(
+    const QString& source_path,
+    const QString& document_path,
+    const QString& published_output_path) {
+    if (source_path.isEmpty() || document_path.isEmpty() ||
+        published_output_path.isEmpty()) {
+        reportError(QStringLiteral("open_linked_image"),
+                    QStringLiteral("The linked image paths are incomplete."), document_path);
+        return false;
+    }
+    if (QFileInfo(document_path).suffix().compare(
+            QStringLiteral("cimg"), Qt::CaseInsensitive) != 0 ||
+        QFileInfo(published_output_path).suffix().compare(
+            QStringLiteral("png"), Qt::CaseInsensitive) != 0) {
+        reportError(QStringLiteral("open_linked_image"),
+                    QStringLiteral("Linked mode requires a .cimg document and a .png published output."),
+                    document_path);
+        return false;
+    }
+    linked_document_path_ = QFileInfo(document_path).absoluteFilePath();
+    linked_output_path_ = QFileInfo(published_output_path).absoluteFilePath();
+    if (sameLinkedPath(linked_document_path_, linked_output_path_) ||
+        sameLinkedPath(linked_document_path_, source_path) ||
+        sameLinkedPath(linked_output_path_, source_path)) {
+        reportError(QStringLiteral("open_linked_image"),
+                    QStringLiteral("The source, editable document, and published image must use different files."),
+                    document_path);
+        linked_document_path_.clear();
+        linked_output_path_.clear();
+        return false;
+    }
+    if (!QDir().mkpath(QFileInfo(linked_document_path_).absolutePath()) ||
+        !QDir().mkpath(QFileInfo(linked_output_path_).absolutePath())) {
+        reportError(QStringLiteral("prepare_linked_image"),
+                    QStringLiteral("The linked image directories could not be created."),
+                    linked_document_path_);
+        linked_document_path_.clear();
+        linked_output_path_.clear();
+        return false;
+    }
+
+    bool opened = false;
+    if (QFileInfo::exists(linked_document_path_)) {
+        opened = openDocumentPath(linked_document_path_);
+    } else if (openImagePath(source_path)) {
+        opened = saveToPath(linked_document_path_);
+    }
+    if (!opened) {
+        linked_document_path_.clear();
+        linked_output_path_.clear();
+        return false;
+    }
+
+    linked_document_fingerprint_ = documentFingerprint(linked_document_path_);
+    if (linked_document_fingerprint_.isEmpty()) {
+        reportError(QStringLiteral("open_linked_image"),
+                    QStringLiteral("The linked document could not be fingerprinted."),
+                    linked_document_path_);
+        return false;
+    }
+    if (open_image_action_ != nullptr) open_image_action_->setEnabled(false);
+    if (open_document_action_ != nullptr) open_document_action_->setEnabled(false);
+    if (new_canvas_action_ != nullptr) new_canvas_action_->setEnabled(false);
+    if (save_as_action_ != nullptr) save_as_action_->setEnabled(false);
+    setWindowTitle(QStringLiteral("%1 — Image Editor [Linked]")
+                       .arg(QFileInfo(linked_document_path_).completeBaseName()));
+    return true;
+}
+
 void ImageEditorWindow::relinkSource() {
     if (!session_.sourceIsMissing()) return;
     const QString path = QFileDialog::getOpenFileName(
@@ -711,6 +814,35 @@ void ImageEditorWindow::relinkSource() {
 
 bool ImageEditorWindow::saveToPath(QString path) {
     const QString previous_recovery = recovery_store_.pathFor(session_);
+    std::unique_ptr<QLockFile> linked_write_lock;
+    if (!linked_document_path_.isEmpty()) {
+        path = linked_document_path_;
+        linked_write_lock = std::make_unique<QLockFile>(
+            linked_document_path_ + QStringLiteral(".lock"));
+        if (!linked_write_lock->tryLock()) {
+            reportError(
+                QStringLiteral("save_linked_document_conflict"),
+                QStringLiteral("Another Image Editor instance is saving this linked document. Try again after it finishes."),
+                linked_document_path_);
+            return false;
+        }
+        if (QFileInfo::exists(linked_document_path_)) {
+            const auto current_fingerprint = documentFingerprint(linked_document_path_);
+            if (current_fingerprint.isEmpty() ||
+                current_fingerprint != linked_document_fingerprint_) {
+                reportError(
+                    QStringLiteral("save_linked_document_conflict"),
+                    QStringLiteral("The linked document changed outside this Image Editor window. Reopen it before saving to avoid overwriting a newer revision."),
+                    linked_document_path_);
+                return false;
+            }
+        } else if (!linked_document_fingerprint_.isEmpty()) {
+            reportError(QStringLiteral("save_linked_document_conflict"),
+                        QStringLiteral("The linked document was removed outside this Image Editor window."),
+                        linked_document_path_);
+            return false;
+        }
+    }
     if (path.isEmpty() && session_.documentPath().isEmpty()) {
         path = QFileDialog::getSaveFileName(
             this, QStringLiteral("Save Editable Image Document"), {},
@@ -726,9 +858,26 @@ bool ImageEditorWindow::saveToPath(QString path) {
         reportError(QStringLiteral("save_document"), error, path);
         return false;
     }
+    if (!linked_document_path_.isEmpty()) {
+        linked_document_fingerprint_ = documentFingerprint(linked_document_path_);
+        if (linked_document_fingerprint_.isEmpty()) {
+            reportError(QStringLiteral("save_linked_document"),
+                        QStringLiteral("The saved linked document could not be verified."),
+                        linked_document_path_);
+            return false;
+        }
+        if (!session_.exportImage(linked_output_path_, &error)) {
+            reportError(QStringLiteral("publish_linked_image"), error,
+                        linked_output_path_);
+            return false;
+        }
+    }
     static_cast<void>(recovery_store_.remove(previous_recovery));
     updateView();
-    statusBar()->showMessage(QStringLiteral("Editable document saved"), 3000);
+    statusBar()->showMessage(
+        linked_document_path_.isEmpty()
+            ? QStringLiteral("Editable document saved")
+            : QStringLiteral("Linked document saved and image published"), 3000);
     return true;
 }
 

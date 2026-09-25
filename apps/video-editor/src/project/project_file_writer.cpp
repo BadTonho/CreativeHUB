@@ -54,6 +54,17 @@ const char* mediaKindName(media::MediaKind kind) {
     return kind == media::MediaKind::Image ? "image" : "video";
 }
 
+QJsonObject linkedImageJson(
+    const std::filesystem::path& project_path,
+    const media::LinkedImageReference& link) {
+    QJsonObject object;
+    object.insert("id", QString::fromUtf8(link.id.data(),
+                                            static_cast<qsizetype>(link.id.size())));
+    object.insert("document", storedPath(project_path, link.document_path));
+    object.insert("output", storedPath(project_path, link.published_output_path));
+    return object;
+}
+
 } // namespace
 
 void save(const std::filesystem::path& project_path, const ProjectDocument& document) {
@@ -74,6 +85,10 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                                                static_cast<int>(media_source.bin_path.size())));
         item.insert("offline", media_source.offline);
         item.insert("kind", mediaKindName(media_source.kind));
+        if (media_source.image_editor_link.has_value()) {
+            item.insert("image_editor_link",
+                        linkedImageJson(project_path, *media_source.image_editor_link));
+        }
         media.append(item);
     }
 
@@ -94,6 +109,10 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                 ? "text"
                 : clip.kind == timeline::ClipKind::Image ? "image" : "video";
             item.insert("kind", clip_kind);
+            if (clip.image_editor_variant.has_value()) {
+                item.insert("image_editor_variant",
+                            linkedImageJson(project_path, *clip.image_editor_variant));
+            }
             if (timeline::isMediaClipKind(clip.kind)) {
                 item.insert("source", storedPath(project_path, clip.source_path));
             } else {

@@ -17,12 +17,14 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
     document.media.reserve(library.size());
     document.bins = library.bins();
     for (const auto& item : library.items()) {
-        document.media.push_back(project::ProjectMedia{
+        project::ProjectMedia project_media{
             media::MediaLibrary::canonicalPath(item.metadata.source_path),
             item.display_name,
             item.bin_path,
             item.offline,
-            item.metadata.kind});
+            item.metadata.kind};
+        project_media.image_editor_link = item.image_editor_link;
+        document.media.push_back(std::move(project_media));
     }
 
     for (const auto& track : session.timeline().tracks()) {
@@ -47,6 +49,7 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             project_clip.keyframes = clip.keyframes;
             project_clip.kind = clip.kind;
             project_clip.text = clip.text;
+            project_clip.image_editor_variant = clip.image_editor_variant;
             project_track.clips.push_back(std::move(project_clip));
         }
         for (const auto& transition : track.transitions) {

@@ -130,10 +130,23 @@ ProjectOpenResult ProjectOpenService::prepare(
                 normalized_media.bin_path = std::string(media::default_bin);
             }
 
+            auto decode_path = project_media.source_path;
             std::error_code file_error;
-            const bool exists = std::filesystem::is_regular_file(
+            bool source_exists = std::filesystem::is_regular_file(
                 project_media.source_path, file_error) && !file_error;
-            if (project_media.offline || !exists) {
+            bool linked_output_exists = false;
+            if (project_media.kind == media::MediaKind::Image &&
+                project_media.image_editor_link.has_value()) {
+                std::error_code output_error;
+                linked_output_exists = std::filesystem::is_regular_file(
+                    project_media.image_editor_link->published_output_path,
+                    output_error) && !output_error;
+                if (linked_output_exists) {
+                    decode_path = project_media.image_editor_link->published_output_path;
+                }
+            }
+            const bool exists = source_exists || linked_output_exists;
+            if (!exists || (project_media.offline && !linked_output_exists)) {
                 if (!exists && !project_media.offline) {
                     normalized_media.offline = true;
                     warnings.push_back({
@@ -154,7 +167,8 @@ ProjectOpenResult ProjectOpenService::prepare(
                 const auto added = loaded_library.addOffline(
                     metadata.source_path,
                     metadata.display_name,
-                    normalized_media.bin_path);
+                    normalized_media.bin_path,
+                    project_media.kind);
                 if (added != media::MediaMutationResult::Changed) {
                     throw project::ProjectError(
                         project::ProjectErrorCode::InvalidValue,
@@ -162,13 +176,31 @@ ProjectOpenResult ProjectOpenService::prepare(
                         std::nullopt,
                         metadata.source_path);
                 }
+                if (project_media.image_editor_link.has_value()) {
+                    static_cast<void>(loaded_library.setImageEditorLink(
+                        metadata.source_path,
+                        project_media.image_editor_link));
+                }
             } else {
                 MediaImportService media_importer(
                     [kind = project_media.kind](const auto& path) {
                         return importProjectMedia(path, kind);
                     });
-                const auto batch = media_importer.process(
-                    1, 0, 0, {project_media.source_path}, cancel_requested);
+                auto batch = media_importer.process(
+                    1, 0, 0, {decode_path}, cancel_requested);
+                if (!batch.cancelled && linked_output_exists &&
+                    (batch.files.empty() ||
+                     batch.files.front().status != MediaImportFileStatus::Imported) &&
+                    source_exists) {
+                    batch = media_importer.process(
+                        1, 0, 0, {project_media.source_path}, cancel_requested);
+                    warnings.push_back({
+                        ProjectOpenIssueKind::Media,
+                        project_media.image_editor_link->published_output_path,
+                        "The linked image output could not be decoded; the original image will be used.",
+                        std::nullopt,
+                        std::nullopt});
+                }
                 if (batch.cancelled) return cancelledResult(std::move(warnings));
                 if (batch.files.empty() ||
                     batch.files.front().status != MediaImportFileStatus::Imported ||
@@ -190,6 +222,8 @@ ProjectOpenResult ProjectOpenService::prepare(
                 item.display_name = display_name;
                 item.metadata.display_name = display_name;
                 item.bin_path = normalized_media.bin_path;
+                item.metadata.source_path = media::MediaLibrary::canonicalPath(
+                    project_media.source_path);
                 normalized_media.display_name = display_name;
                 const auto added = loaded_library.addOnline(
                     std::move(item.metadata),
@@ -202,6 +236,11 @@ ProjectOpenResult ProjectOpenService::prepare(
                         "The project contains duplicate or invalid media entries.",
                         std::nullopt,
                         project_media.source_path);
+                }
+                if (project_media.image_editor_link.has_value()) {
+                    static_cast<void>(loaded_library.setImageEditorLink(
+                        project_media.source_path,
+                        project_media.image_editor_link));
                 }
             }
             ++completed_steps;
@@ -318,6 +357,35 @@ ProjectOpenResult ProjectOpenService::prepare(
                 clip.kind = metadata.kind == media::MediaKind::Image
                     ? timeline::ClipKind::Image
                     : timeline::ClipKind::Video;
+                clip.image_editor_variant = project_clip.image_editor_variant;
+                if (clip.image_editor_variant.has_value() &&
+                    clip.kind == timeline::ClipKind::Image) {
+                    const auto& variant_path =
+                        clip.image_editor_variant->published_output_path;
+                    std::error_code variant_error;
+                    if (std::filesystem::is_regular_file(variant_path, variant_error) &&
+                        !variant_error) {
+                        try {
+                            clip.still_image_override =
+                                std::make_shared<const media::VideoFrame>(
+                                    media::StillImageDecoder{}.decode_first_frame(variant_path));
+                        } catch (const std::exception& error) {
+                            warnings.push_back({
+                                ProjectOpenIssueKind::Media,
+                                variant_path,
+                                std::string("The linked clip image could not be decoded; the Media Pool image will be used. ") + error.what(),
+                                std::nullopt,
+                                std::nullopt});
+                        }
+                    } else {
+                        warnings.push_back({
+                            ProjectOpenIssueKind::Media,
+                            variant_path,
+                            "The linked clip image output is missing; the Media Pool image will be used.",
+                            std::nullopt,
+                            std::nullopt});
+                    }
+                }
                 snapshot.tracks.back().clips.push_back(std::move(clip));
                 next_clip_id = std::max(next_clip_id, project_clip.clip_id + 1);
             }

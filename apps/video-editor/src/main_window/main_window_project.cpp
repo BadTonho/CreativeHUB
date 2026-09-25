@@ -384,6 +384,7 @@ void MainWindow::clearProjectState() {
     updatePlaybackControls();
     updatePlaybackStatus();
     updateHistoryActions();
+    refreshLinkedImageTargets();
 }
 
 void MainWindow::newProject() {
@@ -692,6 +693,7 @@ void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
     }
 
     populateMediaBrowser();
+    refreshLinkedImageTargets();
 
     preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
     updateProjectDirtyState();
