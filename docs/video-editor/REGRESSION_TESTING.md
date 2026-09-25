@@ -68,7 +68,7 @@ in the running Video Editor after UI or integration changes:
 - while a project is being prepared, confirm File, Edit, View, and Help remain
   available, project-changing commands are disabled, and the progress dialog
   does not block the rest of the application;
-- Help > System: confirm the dialog shows project version `Beta 0.1.2` and the full
+- Help > System: confirm the dialog shows project version `Beta 0.1.3` and the full
   path of the executable currently running; after a Release build, confirm the
   path points to the intended updated binary rather than an older installed
   copy;

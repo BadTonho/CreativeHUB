@@ -52,12 +52,12 @@ int main(int argc, char* argv[]) {
         "application",
         "startup",
         "Video Editor started.",
-        {{"version", "Beta 0.1.2"}, {"log_path", pathToUtf8(logger.log_path())}});
+        {{"version", "Beta 0.1.3"}, {"log_path", pathToUtf8(logger.log_path())}});
 
     try {
         QApplication application(argc, argv);
         QApplication::setApplicationName("Video Editor");
-        QApplication::setApplicationVersion("Beta 0.1.2");
+        QApplication::setApplicationVersion("Beta 0.1.3");
 
         MainWindow window;
         window.show();
