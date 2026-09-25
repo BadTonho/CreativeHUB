@@ -144,8 +144,9 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/ui/system/system_memory_indicator.h
     src/ui/timeline/timeline_end_buttons.cpp
     src/ui/timeline/timeline_end_buttons.h
-    src/ui/workspace/workspace_page_view.cpp
-    src/ui/workspace/workspace_page_view.h
+    src/ui/workspace/workspace_host.cpp
+    src/ui/workspace/workspace_host.h
+    src/ui/workspace/workspace_page_id.h
 )
 
 add_library(creative-suite-main-editor-core STATIC

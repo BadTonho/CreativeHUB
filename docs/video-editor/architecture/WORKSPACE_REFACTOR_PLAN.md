@@ -1,6 +1,6 @@
 # Plano de Refatoração das Interfaces de Trabalho
 
-Status: proposta; implementar uma etapa por vez, quando solicitado.
+Status: Etapa 1 concluída; implementar as próximas etapas quando solicitado.
 
 ## Objetivo
 
@@ -13,16 +13,19 @@ adiciona recursos de edição, composição ou exportação.
 
 - `MainWindow` controla a sessão do projeto, os docks compartilhados, os
   seletores de espaço de trabalho, a persistência do layout e a troca de página.
-- `WorkspacePageView` alterna a página central, o painel inferior e o Inspector
+- `WorkspaceHost` alterna a página central, o painel inferior e o Inspector
   entre as apresentações de Edit, Fusion e Render.
+- `WorkspacePageId` identifica Edit, Fusion e Render. O host inicia em Edit e
+  mantém o estado atual da página; `MainWindow` continua responsável pelos
+  docks, títulos, seletores e regras de visibilidade de Render.
 - Render usa o mesmo widget Timeline de Edit em modo somente leitura. Não cria
   outra Timeline nem copia os dados do projeto.
 - Render mantém a área central vazia, oculta os controles e o rodapé da
   Timeline e altera temporariamente a visibilidade dos docks. A visibilidade
   anterior é restaurada ao sair de Render ou ao fechar o aplicativo.
 
-Antes de iniciar a primeira etapa, conferir novamente o código e os testes,
-pois essa situação pode mudar antes da refatoração.
+As etapas seguintes continuam pendentes e devem ser implementadas uma por vez,
+quando solicitadas.
 
 ## Estrutura de arquivos proposta
 
@@ -54,12 +57,13 @@ projeto ou da Timeline.
 
 ### 1. Definir o limite dos espaços de trabalho
 
-- Confirmar as responsabilidades atuais de `MainWindow`, `WorkspacePageView` e
-  dos testes existentes.
-- Criar o identificador mínimo de página e a estrutura de `WorkspaceHost` na
-  pasta da interface de espaços de trabalho.
-- Preservar o comportamento atual e adicionar um teste específico para
-  selecionar cada página pelo host.
+- **Concluída.** Confirmadas as responsabilidades atuais de `MainWindow`, do
+  host e dos testes existentes.
+- **Concluída.** Criado `WorkspacePageId` e renomeada a implementação existente
+  para `WorkspaceHost`, sem adicionar uma camada duplicada.
+- **Concluída.** O host inicia em Edit, oferece `setPage()` e `currentPage()`,
+  e o teste específico seleciona e verifica Edit, Fusion e Render. Os testes de
+  integração da janela e da Timeline também passaram.
 
 ### 2. Extrair o espaço Edit
 

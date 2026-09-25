@@ -9,7 +9,7 @@
 #include "timeline/timeline_widget.h"
 #include "ui/functions/function_palette.h"
 #include "ui/media_browser/media_browser_list_widget.h"
-#include "ui/workspace/workspace_page_view.h"
+#include "ui/workspace/workspace_host.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -122,36 +122,40 @@ void MainWindow::createWorkspace() {
 
     auto* edit_inspector = createInspector();
     auto* edit_timeline = createTimeline();
-    workspace_page_view_ = new ui::WorkspacePageView(
+    workspace_host_ = new ui::WorkspaceHost(
         preview_widget_, edit_inspector, edit_timeline, this);
-    setCentralWidget(workspace_page_view_);
+    setCentralWidget(workspace_host_);
 
     inspector_dock_ = createDock(
         "Inspector",
         "inspectorDock",
-        workspace_page_view_->inspectorPanel());
+        workspace_host_->inspectorPanel());
     addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
 
     timeline_dock_ = createDock(
         "Timeline",
         "timelineDock",
-        workspace_page_view_->lowerWorkspacePanel());
+        workspace_host_->lowerWorkspacePanel());
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
 
     function_palette_ = new ui::FunctionPalette(this, *shortcut_manager_);
 
     restoreWorkspaceLayout();
-    setWorkspacePage(WorkspacePage::Edit);
+    setWorkspacePage(ui::WorkspacePageId::Edit);
 }
 
-void MainWindow::setWorkspacePage(WorkspacePage page) {
+void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
     const auto docks = std::array<QDockWidget*, 7>{
         bins_dock_, media_dock_, toolbox_dock_, favorites_dock_, effects_dock_,
         inspector_dock_, timeline_dock_};
     const bool entering_render =
-        page == WorkspacePage::Render && workspace_page_ != WorkspacePage::Render;
+        page == ui::WorkspacePageId::Render &&
+        workspace_host_ != nullptr &&
+        workspace_host_->currentPage() != ui::WorkspacePageId::Render;
     const bool leaving_render =
-        page != WorkspacePage::Render && workspace_page_ == WorkspacePage::Render;
+        page != ui::WorkspacePageId::Render &&
+        workspace_host_ != nullptr &&
+        workspace_host_->currentPage() == ui::WorkspacePageId::Render;
 
     if (entering_render) {
         for (std::size_t index = 0; index < docks.size(); ++index) {
@@ -165,28 +169,22 @@ void MainWindow::setWorkspacePage(WorkspacePage page) {
         if (timeline_dock_ != nullptr) timeline_dock_->show();
     }
 
-    workspace_page_ = page;
     if (timeline_controls_container_ != nullptr) {
-        timeline_controls_container_->setVisible(page != WorkspacePage::Render);
+        timeline_controls_container_->setVisible(
+            page != ui::WorkspacePageId::Render);
     }
     if (timeline_footer_ != nullptr) {
-        timeline_footer_->setVisible(page != WorkspacePage::Render);
+        timeline_footer_->setVisible(page != ui::WorkspacePageId::Render);
     }
     if (timeline_widget_ != nullptr) {
-        timeline_widget_->setReadOnly(page == WorkspacePage::Render);
+        timeline_widget_->setReadOnly(page == ui::WorkspacePageId::Render);
     }
-    if (workspace_page_view_ != nullptr) {
-        if (page == WorkspacePage::Render) {
-            workspace_page_view_->setRenderPageActive(true);
-        } else {
-            workspace_page_view_->setRenderPageActive(false);
-            workspace_page_view_->setFusionPageActive(
-                page == WorkspacePage::Fusion);
-        }
+    if (workspace_host_ != nullptr) {
+        workspace_host_->setPage(page);
     }
     if (timeline_dock_ != nullptr) {
         timeline_dock_->setWindowTitle(
-            page == WorkspacePage::Fusion ? "Node Editor" : "Timeline");
+            page == ui::WorkspacePageId::Fusion ? "Node Editor" : "Timeline");
     }
 
     if (leaving_render && has_render_dock_visibility_snapshot_) {
@@ -207,13 +205,13 @@ void MainWindow::setWorkspacePage(WorkspacePage page) {
     const QSignalBlocker fusion_blocker(fusion_workspace_button_);
     const QSignalBlocker render_blocker(render_workspace_button_);
     if (edit_workspace_button_ != nullptr) {
-        edit_workspace_button_->setChecked(page == WorkspacePage::Edit);
+        edit_workspace_button_->setChecked(page == ui::WorkspacePageId::Edit);
     }
     if (fusion_workspace_button_ != nullptr) {
-        fusion_workspace_button_->setChecked(page == WorkspacePage::Fusion);
+        fusion_workspace_button_->setChecked(page == ui::WorkspacePageId::Fusion);
     }
     if (render_workspace_button_ != nullptr) {
-        render_workspace_button_->setChecked(page == WorkspacePage::Render);
+        render_workspace_button_->setChecked(page == ui::WorkspacePageId::Render);
     }
 }
 void MainWindow::showSettingsDialog() {

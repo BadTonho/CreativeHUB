@@ -208,8 +208,9 @@ add_executable(creative-suite-main-editor-workspace-page-switch-tests
     workspace_page_switch_test.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/timeline/timeline_end_buttons.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/timeline/timeline_end_buttons.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_page_view.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_page_view.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_host.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_host.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_page_id.h
 )
 
 target_include_directories(creative-suite-main-editor-workspace-page-switch-tests PRIVATE

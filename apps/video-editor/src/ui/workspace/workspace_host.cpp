@@ -1,4 +1,4 @@
-#include "ui/workspace/workspace_page_view.h"
+#include "ui/workspace/workspace_host.h"
 
 #include <QFrame>
 #include <QLabel>
@@ -7,7 +7,7 @@
 
 namespace ui {
 
-WorkspacePageView::WorkspacePageView(
+WorkspaceHost::WorkspaceHost(
     QWidget* preview_widget,
     QWidget* edit_inspector,
     QWidget* timeline_panel,
@@ -16,7 +16,7 @@ WorkspacePageView::WorkspacePageView(
       preview_widget_(preview_widget),
       timeline_panel_(timeline_panel),
       edit_inspector_(edit_inspector) {
-    setObjectName("workspacePageView");
+    setObjectName("workspaceHost");
 
     auto* viewer_layout = new QVBoxLayout(this);
     viewer_layout->setContentsMargins(0, 0, 0, 0);
@@ -91,58 +91,63 @@ WorkspacePageView::WorkspacePageView(
     inspector_panel_->setCurrentWidget(edit_inspector_);
 }
 
-void WorkspacePageView::setFusionPageActive(bool active) {
-    viewer_title_->setVisible(active);
-    if (preview_widget_ != nullptr) {
-        central_workspace_pages_->setCurrentWidget(preview_widget_);
-    }
-    lower_workspace_panel_->setCurrentWidget(
-        active ? node_editor_panel_ : timeline_panel_);
-    inspector_panel_->setCurrentWidget(
-        active ? fusion_inspector_ : edit_inspector_);
-}
-
-void WorkspacePageView::setRenderPageActive(bool active) {
-    if (active) {
+void WorkspaceHost::setPage(WorkspacePageId page) {
+    current_page_ = page;
+    if (page == WorkspacePageId::Render) {
         viewer_title_->hide();
         central_workspace_pages_->setCurrentWidget(render_page_);
         if (timeline_panel_ != nullptr) {
             lower_workspace_panel_->setCurrentWidget(timeline_panel_);
         }
-    } else if (preview_widget_ != nullptr) {
+        return;
+    }
+
+    viewer_title_->setVisible(page == WorkspacePageId::Fusion);
+    if (preview_widget_ != nullptr) {
         central_workspace_pages_->setCurrentWidget(preview_widget_);
+    }
+    if (page == WorkspacePageId::Fusion) {
+        lower_workspace_panel_->setCurrentWidget(node_editor_panel_);
+        inspector_panel_->setCurrentWidget(fusion_inspector_);
+    } else {
+        lower_workspace_panel_->setCurrentWidget(timeline_panel_);
+        inspector_panel_->setCurrentWidget(edit_inspector_);
     }
 }
 
-QWidget* WorkspacePageView::previewWidget() const noexcept {
+WorkspacePageId WorkspaceHost::currentPage() const noexcept {
+    return current_page_;
+}
+
+QWidget* WorkspaceHost::previewWidget() const noexcept {
     return preview_widget_;
 }
 
-QWidget* WorkspacePageView::renderPage() const noexcept {
+QWidget* WorkspaceHost::renderPage() const noexcept {
     return render_page_;
 }
 
-QWidget* WorkspacePageView::timelinePanel() const noexcept {
+QWidget* WorkspaceHost::timelinePanel() const noexcept {
     return timeline_panel_;
 }
 
-QWidget* WorkspacePageView::nodeEditorPanel() const noexcept {
+QWidget* WorkspaceHost::nodeEditorPanel() const noexcept {
     return node_editor_panel_;
 }
 
-QWidget* WorkspacePageView::editInspectorPage() const noexcept {
+QWidget* WorkspaceHost::editInspectorPage() const noexcept {
     return edit_inspector_;
 }
 
-QWidget* WorkspacePageView::fusionInspectorPage() const noexcept {
+QWidget* WorkspaceHost::fusionInspectorPage() const noexcept {
     return fusion_inspector_;
 }
 
-QStackedWidget* WorkspacePageView::inspectorPanel() const noexcept {
+QStackedWidget* WorkspaceHost::inspectorPanel() const noexcept {
     return inspector_panel_;
 }
 
-QStackedWidget* WorkspacePageView::lowerWorkspacePanel() const noexcept {
+QStackedWidget* WorkspaceHost::lowerWorkspacePanel() const noexcept {
     return lower_workspace_panel_;
 }
 

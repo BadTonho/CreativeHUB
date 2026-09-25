@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ui/workspace/workspace_page_id.h"
+
 #include <QWidget>
 
 class QLabel;
@@ -7,16 +9,16 @@ class QStackedWidget;
 
 namespace ui {
 
-class WorkspacePageView final : public QWidget {
+class WorkspaceHost final : public QWidget {
 public:
-    explicit WorkspacePageView(
+    explicit WorkspaceHost(
         QWidget* preview_widget,
         QWidget* edit_inspector,
         QWidget* timeline_panel,
         QWidget* parent = nullptr);
 
-    void setFusionPageActive(bool active);
-    void setRenderPageActive(bool active);
+    void setPage(WorkspacePageId page);
+    [[nodiscard]] WorkspacePageId currentPage() const noexcept;
 
     [[nodiscard]] QWidget* previewWidget() const noexcept;
     [[nodiscard]] QWidget* renderPage() const noexcept;
@@ -38,6 +40,7 @@ private:
     QStackedWidget* central_workspace_pages_ = nullptr;
     QStackedWidget* lower_workspace_panel_ = nullptr;
     QStackedWidget* inspector_panel_ = nullptr;
+    WorkspacePageId current_page_ = WorkspacePageId::Edit;
 };
 
 }  // namespace ui

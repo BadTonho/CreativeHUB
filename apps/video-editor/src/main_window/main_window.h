@@ -14,6 +14,7 @@
 #include "system/performance_usage.h"
 #include "timeline/timeline_history.h"
 #include "timeline/timeline_model.h"
+#include "ui/workspace/workspace_page_id.h"
 
 #include <QMainWindow>
 #include <QString>
@@ -60,7 +61,7 @@ class EffectsFavoritesWidget;
 class QWidget;
 namespace ui {
 class FunctionPalette;
-class WorkspacePageView;
+class WorkspaceHost;
 }
 
 namespace timeline {
@@ -90,15 +91,9 @@ private:
     using ActiveTransition = timeline::TransitionSelection;
     struct TimelineControls;
 
-    enum class WorkspacePage {
-        Edit,
-        Fusion,
-        Render
-    };
-
     void createMenus();
     void createWorkspace();
-    void setWorkspacePage(WorkspacePage page);
+    void setWorkspacePage(ui::WorkspacePageId page);
     void showSettingsDialog();
     void restoreDefaultLayout();
     void restoreWorkspaceLayout();
@@ -344,7 +339,7 @@ private:
     QDockWidget* timeline_dock_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
     ui::FunctionPalette* function_palette_ = nullptr;
-    ui::WorkspacePageView* workspace_page_view_ = nullptr;
+    ui::WorkspaceHost* workspace_host_ = nullptr;
     QWidget* workspace_buttons_container_ = nullptr;
     QWidget* timeline_controls_container_ = nullptr;
     QWidget* timeline_footer_ = nullptr;
@@ -443,7 +438,6 @@ private:
     std::optional<application::TimelineCommandService::EditBatchId>
         pending_transform_edit_batch_id_;
     const bool& project_dirty_ = editor_session_.projectDirtyState();
-    WorkspacePage workspace_page_ = WorkspacePage::Edit;
     std::array<bool, 7> dock_visibility_before_render_{};
     bool has_render_dock_visibility_snapshot_ = false;
     bool initial_window_layout_pending_ = false;

@@ -468,17 +468,17 @@ MainWindow::TimelineControls MainWindow::createTimelineControls(
         edit_workspace_button_,
         &QPushButton::clicked,
         this,
-        [this]() { setWorkspacePage(WorkspacePage::Edit); });
+        [this]() { setWorkspacePage(ui::WorkspacePageId::Edit); });
     connect(
         fusion_workspace_button_,
         &QPushButton::clicked,
         this,
-        [this]() { setWorkspacePage(WorkspacePage::Fusion); });
+        [this]() { setWorkspacePage(ui::WorkspacePageId::Fusion); });
     connect(
         render_workspace_button_,
         &QPushButton::clicked,
         this,
-        [this]() { setWorkspacePage(WorkspacePage::Render); });
+        [this]() { setWorkspacePage(ui::WorkspacePageId::Render); });
     layout->addWidget(timeline_controls_container_);
 
     previous_frame_button_->setToolTip("Step one frame backward");
