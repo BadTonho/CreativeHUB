@@ -21,12 +21,20 @@ public:
     [[nodiscard]] std::uint64_t addJob(RenderJob job);
     [[nodiscard]] bool removeJobAt(int row);
     [[nodiscard]] bool moveJob(int source_row, int destination_row);
+    [[nodiscard]] bool setJobStatus(
+        std::uint64_t id,
+        RenderJobStatus status,
+        int progress_percent = 0,
+        QString error_message = {});
+    void setLocked(bool locked);
+    [[nodiscard]] bool isLocked() const noexcept { return locked_; }
     [[nodiscard]] const RenderJob* jobAt(int row) const noexcept;
     [[nodiscard]] int jobCount() const noexcept;
 
 private:
     std::vector<RenderJob> jobs_;
     std::uint64_t next_id_ = 1;
+    bool locked_ = false;
 };
 
 }  // namespace ui

@@ -284,8 +284,8 @@ playback, project data, history, or dirty state.
 `ui/workspace/pages/render/RenderWorkspace` supplies the Render settings,
 shared Preview, and queue columns and activates the shared Timeline's read-only
 presentation through a handler bound to `EditWorkspaceController`. Its queue
-model owns only session-scoped prepared jobs; each job contains a copy of the
-current project document and its output settings, while media remains
+model stores session-scoped jobs and execution state; each job contains a copy
+of the current project document and its output settings, while media remains
 referenced by path. Leaving Render restores Timeline controls and its footer.
 `WorkspaceHost` remains responsible for selecting that page, while
 `WorkspaceTransitionController` coordinates page changes, workspace selectors,
@@ -320,10 +320,20 @@ across encoders.
 
 Adding a job snapshots the current project document and output settings. Later
 project or form changes do not alter queued jobs; media stays referenced by its
-paths. Users can remove and reorder prepared jobs. The queue exists only for
-the current application session and starts empty after restart. Render does not
-start or execute exports, and preparing a job does not mark the project as
-changed.
+paths. Users can remove and reorder jobs while the queue is idle. The queue
+exists only for the current application session and starts empty after restart.
+**Start Queue** renders eligible jobs in order on a worker separate from
+playback. Each row reports `Prepared`, `Rendering`, `Completed`, `Failed`, or
+`Canceled`, with progress while rendering. Completed jobs are skipped on later
+runs; failed and canceled jobs can be retried. A failure is logged and does not
+stop later jobs. Cancel stops the active job and leaves later jobs prepared.
+Adding, removing, and reordering are disabled during execution, while Settings
+remain editable without changing queued snapshots. Before execution, duplicate
+output paths are rejected and existing destinations are confirmed together.
+Each output is written beside its destination to a temporary file, reopened and
+checked with FFmpeg, then moved into place; a failed or canceled job removes
+only its temporary file. Preparing or rendering a job does not change project
+data or its dirty state.
 
 The Timeline dock remains visible at the bottom and displays the project
 tracks, clips, time ruler, and playhead. Its playback, editing, track-management,
@@ -497,8 +507,10 @@ moves the existing Preview widget into that slot for Render and returns it to
 the central workspace stack for Edit or Fusion. `RenderOutputCapabilities`
 enumerates the active FFmpeg runtime and filters container/encoder combinations
 before they reach the form. `RenderQueueModel` stores immutable project/settings
-snapshots for prepared jobs; it does not encode media or modify project history
-or dirty state.
+snapshots and their in-memory execution state. `RenderQueueController` runs the
+jobs away from the UI and playback threads, while `OfflineExportRenderer`
+composes and encodes each snapshot. Export does not modify project history or
+dirty state.
 
 The internal `frame_step_navigation` module decides whether a Previous/Next
 Frame command stays within the active clip, activates a clip at the boundary,

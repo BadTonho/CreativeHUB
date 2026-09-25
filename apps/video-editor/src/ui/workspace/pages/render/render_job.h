@@ -15,6 +15,14 @@ enum class RenderQualityPreset {
     Custom,
 };
 
+enum class RenderJobStatus {
+    Prepared,
+    Rendering,
+    Completed,
+    Failed,
+    Canceled,
+};
+
 struct RenderJobSettings {
     QString output_path;
     QString container_name;
@@ -34,6 +42,11 @@ struct RenderJob {
     QString display_name;
     RenderJobSettings settings;
     project::ProjectDocument project_snapshot;
+    RenderJobStatus status = RenderJobStatus::Prepared;
+    int progress_percent = 0;
+    QString error_message;
 };
+
+[[nodiscard]] QString renderJobStatusName(RenderJobStatus status);
 
 }  // namespace ui

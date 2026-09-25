@@ -80,6 +80,21 @@ int main(int argc, char* argv[]) {
                     queue.data(queue.index(0, 0), Qt::UserRole + 1).toString() ==
                         QStringLiteral("Prepared"),
                 "Queue rows must expose their stable ID and prepared state.");
+        require(queue.setJobStatus(first_id, ui::RenderJobStatus::Rendering, 42) &&
+                    queue.data(queue.index(0, 0), Qt::UserRole + 1).toString() ==
+                        QStringLiteral("Rendering") &&
+                    queue.data(queue.index(0, 0), Qt::UserRole + 2).toInt() == 42,
+                "Queue rows must expose live render status and progress.");
+        require(queue.setJobStatus(first_id, ui::RenderJobStatus::Failed, 0,
+                                   QStringLiteral("Synthetic failure")) &&
+                    queue.data(queue.index(0, 0), Qt::ToolTipRole).toString().contains(
+                        QStringLiteral("Synthetic failure")),
+                "Failed queue rows must retain their diagnostic message.");
+        require(queue.setJobStatus(first_id, ui::RenderJobStatus::Prepared, 0) &&
+                    queue.data(queue.index(0, 0), Qt::UserRole + 1).toString() ==
+                        QStringLiteral("Prepared") &&
+                    queue.data(queue.index(0, 0), Qt::UserRole + 3).toString().isEmpty(),
+                "Retrying a failed job must clear its error and return it to Prepared.");
 
         const auto second_id = queue.addJob(makeJob(
             QStringLiteral("Second"), QStringLiteral("second.mp4"),
@@ -89,6 +104,13 @@ int main(int argc, char* argv[]) {
             compatible_container.name, compatible_encoder.name));
         require(second_id != first_id && third_id != second_id && queue.jobCount() == 3,
                 "Adding jobs must assign unique IDs and append them to the queue.");
+        queue.setLocked(true);
+        require(queue.addJob(makeJob(
+                    QStringLiteral("Locked"), QStringLiteral("locked.mp4"),
+                    compatible_container.name, compatible_encoder.name)) == 0 &&
+                    !queue.moveJob(0, 1) && !queue.removeJobAt(0),
+                "Queue structure must not change while a render run is active.");
+        queue.setLocked(false);
         require(queue.moveJob(2, 0) && queue.jobAt(0)->id == third_id &&
                     queue.moveJob(0, 2) && queue.jobAt(2)->id == third_id,
                 "Queue jobs must move both up and down without losing identity.");

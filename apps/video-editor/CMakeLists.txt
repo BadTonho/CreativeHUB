@@ -55,6 +55,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/rendering/opengl_preview_surface.h
     src/rendering/frame_compositor.cpp
     src/rendering/frame_compositor.h
+    src/rendering/offline_export_renderer.cpp
+    src/rendering/offline_export_renderer.h
     src/rendering/preview_performance_metrics.cpp
     src/rendering/preview_performance_metrics.h
     src/rendering/text_renderer.cpp
@@ -163,6 +165,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/ui/workspace/pages/render/render_output_capabilities.h
     src/ui/workspace/pages/render/render_queue_model.cpp
     src/ui/workspace/pages/render/render_queue_model.h
+    src/ui/workspace/pages/render/render_queue_controller.cpp
+    src/ui/workspace/pages/render/render_queue_controller.h
 )
 
 add_library(creative-suite-main-editor-core STATIC

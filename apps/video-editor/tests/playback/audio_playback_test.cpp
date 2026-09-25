@@ -91,6 +91,12 @@ void testAudioDecodeAndSeek(const std::filesystem::path& path) {
     }
     assert(decoded_samples > 0);
     assert(session->at_end());
+
+    session->reset();
+    session->seek_to_sample_index(1234);
+    const auto exact_sample = session->decode_samples(512);
+    assert(exact_sample.has_value());
+    assert(exact_sample->first_sample_index >= 1234);
 }
 
 void testMissingAudioDoesNotBecomeAnError(const std::filesystem::path& path) {

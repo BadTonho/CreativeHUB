@@ -231,6 +231,10 @@ int main(int argc, char* argv[]) {
             "renderAudioBitrate");
         auto* add_to_queue = workspace_host->renderPage()->findChild<QPushButton*>(
             "renderAddToQueueButton");
+        auto* start_queue = workspace_host->renderPage()->findChild<QPushButton*>(
+            "renderStartQueueButton");
+        auto* cancel_queue = workspace_host->renderPage()->findChild<QPushButton*>(
+            "renderCancelQueueButton");
         require(render_splitter != nullptr && render_splitter->count() == 3 &&
                     render_workspace->settingsPanel() != nullptr &&
                     render_workspace->previewPanel() != nullptr &&
@@ -246,7 +250,12 @@ int main(int argc, char* argv[]) {
                     frame_rate_spin != nullptr && resolution_combo != nullptr &&
                     custom_width != nullptr && custom_height != nullptr &&
                     quality_preset != nullptr && video_bitrate != nullptr &&
-                    audio_bitrate != nullptr && add_to_queue != nullptr,
+                    audio_bitrate != nullptr && add_to_queue != nullptr &&
+                    start_queue != nullptr && cancel_queue != nullptr &&
+                    start_queue->accessibleName() == QStringLiteral("Start render queue") &&
+                    cancel_queue->accessibleName() ==
+                        QStringLiteral("Cancel current render queue") &&
+                    !start_queue->isEnabled() && !cancel_queue->isEnabled(),
                 "Render must show settings, Preview, and queue columns in order.");
         const auto initial_column_sizes = render_splitter->sizes();
         require(initial_column_sizes.size() == 3 &&
@@ -360,7 +369,11 @@ int main(int argc, char* argv[]) {
                     prepared_job->settings.height == 1080 &&
                     prepared_job->settings.frame_rate == 23.976 &&
                     prepared_job->project_snapshot.timeline_tracks.front().name ==
-                        "Video 1",
+                        "Video 1" &&
+                    render_workspace->queueModel()->data(
+                        render_workspace->queueModel()->index(0, 0),
+                        Qt::UserRole + 1).toString() == QStringLiteral("Prepared") &&
+                    start_queue->isEnabled() && !cancel_queue->isEnabled(),
                 "Adding a Render job must capture its settings and project state.");
         frame_rate_spin->setValue(48.0);
         window.resize(520, 420);

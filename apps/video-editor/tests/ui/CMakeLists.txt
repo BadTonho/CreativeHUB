@@ -254,6 +254,29 @@ set_tests_properties(creative-suite-main-editor-render-queue PROPERTIES
 )
 
 preserve_video_editor_test_working_directory()
+add_executable(creative-suite-main-editor-render-export-tests
+    render_export_test.cpp
+)
+target_link_libraries(creative-suite-main-editor-render-export-tests PRIVATE
+    creative-suite-main-editor-core
+)
+target_compile_features(creative-suite-main-editor-render-export-tests PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-render-export-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-render-export-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+copy_ffmpeg_test_runtime(creative-suite-main-editor-render-export-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-render-export-tests)
+add_test(
+    NAME creative-suite-main-editor-render-export
+    COMMAND creative-suite-main-editor-render-export-tests
+)
+set_tests_properties(creative-suite-main-editor-render-export PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
+preserve_video_editor_test_working_directory()
 add_executable(creative-suite-main-editor-edit-workspace-controller-tests
     edit_workspace_controller_test.cpp
 )

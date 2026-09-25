@@ -280,3 +280,51 @@ Transition failures preserve the last valid preview and use the existing
 and available decoder error information. Audio remains on the normal cut
 path, and advanced easing, image effects, and audio crossfades are future
 work.
+
+## Offline export
+
+Render exports run through `RenderQueueController` on a worker separate from
+the real-time playback worker. Playback may skip intermediate frames to meet
+its deadline; offline export visits every output frame and reports progress to
+the session-only queue model. Queue jobs contain a project-document snapshot
+and settings snapshot, while source media remains referenced by its path.
+Exporting does not alter the open project, its history, or its dirty state.
+
+`OfflineExportRenderer` uses the CPU `FrameCompositor` to compose frames at the
+configured output dimensions. It derives Timeline time from the first valid
+media clip rate (still images use 30 fps; projects without a usable rate fall
+back to 30 fps), then maps each output frame to that Timeline rate. It renders
+through the end of the last clip; uncovered frames are black. The current
+composition path evaluates clip transforms and keyframes and supports video,
+still-image, and text layers plus Cross Dissolve and Fade to Black transitions.
+Preview-only viewing effects such as Grayscale are not applied to exports.
+
+When audio export is enabled, the renderer decodes embedded audio from video
+clips, mixes it at 48 kHz stereo, and applies the current clip and track gain
+and mute settings. Timeline gaps are silent. The result is resampled and
+encoded using the selected audio encoder. Image and text clips do not add audio
+sources.
+
+Containers and compatible encoders come from the active FFmpeg build. The
+selected video and audio encoders remain FFmpeg's responsibility, including
+hardware encoders exposed by that build; frame composition remains on the CPU.
+Hardware availability and accepted pixel formats depend on the installed
+FFmpeg build and system. Each job writes to a uniquely named temporary file in
+the destination directory, closes the muxer, reopens the file with FFmpeg to
+check its stream information, and replaces the destination only after that
+check succeeds. Failure or cancellation removes the temporary file and leaves
+an existing destination untouched.
+
+The queue executes non-completed jobs in order. Its row states are `Prepared`,
+`Rendering`, `Completed`, `Failed`, and `Canceled`. A failed job is logged with
+its job, destination, encoders, and referenced media context; the next job
+still starts. Cancel stops the active job and prevents later jobs from
+starting. Another run retries failed and canceled jobs and skips completed
+ones. Queue structure controls are disabled during execution. Duplicate
+destinations are rejected before starting, and one confirmation covers all
+existing destinations in the pending jobs. The queue and its states are not
+persisted across application sessions.
+
+This is the initial CPU composition and FFmpeg export implementation. Codec
+compatibility, quality, performance, platform-specific hardware paths, and
+large-project resource use still require broader validation before release.

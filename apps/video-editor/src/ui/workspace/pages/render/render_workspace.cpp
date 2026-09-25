@@ -1,7 +1,9 @@
 #include "ui/workspace/pages/render/render_workspace.h"
 
 #include "ui/workspace/pages/render/render_job.h"
+#include "ui/workspace/pages/render/render_queue_controller.h"
 #include "ui/workspace/pages/render/render_queue_model.h"
+#include "logging/logger.h"
 
 #include <QAbstractSpinBox>
 #include <QCheckBox>
@@ -21,6 +23,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListView>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -37,6 +40,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <utility>
 
 namespace ui {
@@ -84,6 +88,20 @@ QString containerLabel(const RenderContainerOption& container) {
     return label;
 }
 
+QString normalizedOutputPath(const QString& path) {
+    const QFileInfo info(path);
+    auto normalized = info.canonicalFilePath();
+    if (normalized.isEmpty()) {
+        auto parent = QFileInfo(info.absolutePath()).canonicalFilePath();
+        if (parent.isEmpty()) parent = info.absolutePath();
+        normalized = QDir::cleanPath(QDir(parent).filePath(info.fileName()));
+    }
+#ifdef _WIN32
+    normalized = normalized.toCaseFolded();
+#endif
+    return normalized;
+}
+
 }  // namespace
 
 RenderWorkspace::RenderWorkspace(
@@ -127,6 +145,72 @@ void RenderWorkspace::createPanels(QWidget* parent) {
     central_page_->installEventFilter(this);
 
     queue_model_ = new RenderQueueModel(this);
+    queue_controller_ = new RenderQueueController(this);
+    connect(queue_controller_, &RenderQueueController::jobStarted,
+            this, [this](qulonglong id) {
+                static_cast<void>(queue_model_->setJobStatus(
+                    static_cast<std::uint64_t>(id), RenderJobStatus::Rendering, 0));
+            });
+    connect(queue_controller_, &RenderQueueController::jobProgress,
+            this, [this](qulonglong id, int progress) {
+                static_cast<void>(queue_model_->setJobStatus(
+                    static_cast<std::uint64_t>(id), RenderJobStatus::Rendering, progress));
+            });
+    connect(queue_controller_, &RenderQueueController::jobCompleted,
+            this, [this](qulonglong id) {
+                static_cast<void>(queue_model_->setJobStatus(
+                    static_cast<std::uint64_t>(id), RenderJobStatus::Completed, 100));
+                updateQueueActions();
+            });
+    connect(queue_controller_, &RenderQueueController::jobFailed,
+            this, [this](qulonglong id, const QString& message, const QString& error_code) {
+                const auto id_value = static_cast<std::uint64_t>(id);
+                static_cast<void>(queue_model_->setJobStatus(
+                    id_value, RenderJobStatus::Failed, 0, message));
+                for (int row = 0; row < queue_model_->jobCount(); ++row) {
+                    const auto* failed = queue_model_->jobAt(row);
+                    if (failed == nullptr || failed->id != id_value) continue;
+                    failed_job_names_.push_back(failed->display_name);
+                    std::string media_paths;
+                    for (const auto& track : failed->project_snapshot.timeline_tracks) {
+                        for (const auto& clip : track.clips) {
+                            if (clip.kind == timeline::ClipKind::Text || clip.source_path.empty()) continue;
+                            if (!media_paths.empty()) media_paths += "; ";
+                            const auto path = clip.source_path.u8string();
+                            media_paths.append(
+                                reinterpret_cast<const char*>(path.data()), path.size());
+                        }
+                    }
+                    logging::Context context{
+                        {"job_id", std::to_string(id_value)},
+                        {"output_path", failed->settings.output_path.toUtf8().constData()},
+                        {"media_paths", media_paths},
+                        {"container", failed->settings.container_name.toUtf8().constData()},
+                        {"video_encoder", failed->settings.video_encoder_name.toUtf8().constData()},
+                        {"audio_encoder", failed->settings.export_audio
+                             ? failed->settings.audio_encoder_name.toUtf8().constData()
+                             : "disabled"}};
+                    if (!error_code.isEmpty()) {
+                        context.emplace_back("error_code", error_code.toStdString());
+                    }
+                    logging::Logger::instance().log(
+                        logging::Level::Error,
+                        "render",
+                        "export_job",
+                        message.toUtf8().constData(),
+                        context);
+                    break;
+                }
+                updateQueueActions();
+            });
+    connect(queue_controller_, &RenderQueueController::jobCanceled,
+            this, [this](qulonglong id) {
+                static_cast<void>(queue_model_->setJobStatus(
+                    static_cast<std::uint64_t>(id), RenderJobStatus::Canceled, 0));
+                updateQueueActions();
+            });
+    connect(queue_controller_, &RenderQueueController::queueFinished,
+            this, [this](bool canceled) { handleQueueFinished(canceled); });
     createSettingsPanel();
     createPreviewPanel();
     createQueuePanel();
@@ -515,6 +599,20 @@ void RenderWorkspace::createQueuePanel() {
     queue_view_->setUniformItemSizes(false);
     layout->addWidget(queue_view_, 1);
 
+    auto* run_actions = new QWidget(queue_panel_);
+    auto* run_layout = new QHBoxLayout(run_actions);
+    run_layout->setContentsMargins(0, 0, 0, 0);
+    start_queue_button_ = new QPushButton(QStringLiteral("Start Queue"), run_actions);
+    start_queue_button_->setObjectName("renderStartQueueButton");
+    start_queue_button_->setAccessibleName(QStringLiteral("Start render queue"));
+    cancel_queue_button_ = new QPushButton(QStringLiteral("Cancel"), run_actions);
+    cancel_queue_button_->setObjectName("renderCancelQueueButton");
+    cancel_queue_button_->setAccessibleName(QStringLiteral("Cancel current render queue"));
+    run_layout->addWidget(start_queue_button_);
+    run_layout->addWidget(cancel_queue_button_);
+    run_layout->addStretch(1);
+    layout->addWidget(run_actions);
+
     auto* queue_actions = new QWidget(queue_panel_);
     auto* action_layout = new QHBoxLayout(queue_actions);
     action_layout->setContentsMargins(0, 0, 0, 0);
@@ -537,6 +635,15 @@ void RenderWorkspace::createQueuePanel() {
             updateQueueActions();
         }
     });
+    connect(start_queue_button_, &QPushButton::clicked,
+            this, [this] { startQueue(); });
+    connect(cancel_queue_button_, &QPushButton::clicked,
+            this, [this] {
+                if (queue_controller_ != nullptr) {
+                    queue_controller_->cancel();
+                    cancel_queue_button_->setEnabled(false);
+                }
+            });
     connect(move_job_up_button_, &QPushButton::clicked, this, [this] {
         const int row = queue_view_->currentIndex().row();
         if (queue_model_->moveJob(row, row - 1)) {
@@ -729,10 +836,105 @@ void RenderWorkspace::updateQueueActions() {
     }
     const int row = queue_view_->currentIndex().row();
     const bool selected = row >= 0 && row < queue_model_->jobCount();
-    remove_job_button_->setEnabled(selected);
-    move_job_up_button_->setEnabled(selected && row > 0);
+    const bool running = queue_controller_ != nullptr && queue_controller_->isRunning();
+    remove_job_button_->setEnabled(selected && !running);
+    move_job_up_button_->setEnabled(selected && row > 0 && !running);
     move_job_down_button_->setEnabled(
-        selected && row + 1 < queue_model_->jobCount());
+        selected && row + 1 < queue_model_->jobCount() && !running);
+    if (start_queue_button_ != nullptr) {
+        bool has_pending = false;
+        for (int index = 0; index < queue_model_->jobCount(); ++index) {
+            const auto* job = queue_model_->jobAt(index);
+            if (job != nullptr && job->status != RenderJobStatus::Completed) {
+                has_pending = true;
+                break;
+            }
+        }
+        start_queue_button_->setEnabled(has_pending && !running);
+    }
+    if (cancel_queue_button_ != nullptr) cancel_queue_button_->setEnabled(running);
+    if (add_job_button_ != nullptr) add_job_button_->setEnabled(
+        add_job_button_->property("renderSettingsValid").toBool() && !running);
+}
+
+void RenderWorkspace::startQueue() {
+    if (queue_controller_ == nullptr || queue_controller_->isRunning() ||
+        queue_model_ == nullptr) return;
+
+    std::vector<RenderJob> jobs;
+    QStringList existing_outputs;
+    QStringList invalid_outputs;
+    std::vector<QString> targets;
+    for (int row = 0; row < queue_model_->jobCount(); ++row) {
+        const auto* job = queue_model_->jobAt(row);
+        if (job == nullptr) continue;
+        const auto normalized = normalizedOutputPath(job->settings.output_path);
+        if (targets.end() != std::find(targets.begin(), targets.end(), normalized)) {
+            QMessageBox::warning(
+                central_page_, QStringLiteral("Duplicate output paths"),
+                QStringLiteral("Two or more queue jobs use the same output file. Change the paths before starting the queue."));
+            return;
+        }
+        targets.push_back(normalized);
+        const QFileInfo output(job->settings.output_path);
+        if (output.absoluteFilePath().trimmed().isEmpty()) {
+            invalid_outputs.push_back(job->settings.output_path);
+            continue;
+        }
+        if (job->status == RenderJobStatus::Completed) continue;
+        if (!QFileInfo::exists(output.absolutePath()) ||
+            !QFileInfo(output.absolutePath()).isDir() || output.isDir()) {
+            invalid_outputs.push_back(job->settings.output_path);
+            continue;
+        }
+        if (output.exists()) existing_outputs.push_back(output.absoluteFilePath());
+        jobs.push_back(*job);
+    }
+    if (!invalid_outputs.empty()) {
+        QMessageBox::warning(
+            central_page_, QStringLiteral("Invalid output folder"),
+            QStringLiteral("The output folder is unavailable for: %1")
+                .arg(invalid_outputs.join(QStringLiteral("\n"))));
+        return;
+    }
+    if (jobs.empty()) {
+        updateQueueActions();
+        return;
+    }
+    if (!existing_outputs.empty()) {
+        const auto answer = QMessageBox::question(
+            central_page_, QStringLiteral("Replace existing files?"),
+            QStringLiteral("The following output files already exist. Replace them after each job completes?\n\n%1")
+                .arg(existing_outputs.join(QStringLiteral("\n"))),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (answer != QMessageBox::Yes) return;
+    }
+
+    failed_job_names_.clear();
+    for (const auto& job : jobs) {
+        static_cast<void>(queue_model_->setJobStatus(
+            job.id, RenderJobStatus::Prepared, 0));
+    }
+    queue_model_->setLocked(true);
+    if (!queue_controller_->start(std::move(jobs))) {
+        queue_model_->setLocked(false);
+        updateQueueActions();
+        return;
+    }
+    updateQueueActions();
+}
+
+void RenderWorkspace::handleQueueFinished(bool canceled) {
+    if (queue_model_ != nullptr) queue_model_->setLocked(false);
+    updateQueueActions();
+    if (!failed_job_names_.empty()) {
+        QMessageBox::warning(
+            central_page_, QStringLiteral("Render queue finished with errors"),
+            QStringLiteral("%1 render job(s) failed. See the queue rows and application log for details.")
+                .arg(failed_job_names_.size()));
+    }
+    Q_UNUSED(canceled);
 }
 
 void RenderWorkspace::updateAddAction() {
@@ -746,9 +948,12 @@ void RenderWorkspace::updateAddAction() {
     const bool valid_dimensions = customWidth() > 0 && customHeight() > 0;
     const bool valid_frame_rate = frame_rate_spin_ != nullptr &&
         std::isfinite(frame_rate_spin_->value()) && frame_rate_spin_->value() > 0.0;
-    add_job_button_->setEnabled(
+    const bool valid =
         !output_path_->text().trimmed().isEmpty() && has_container &&
-        has_video_encoder && has_audio_encoder && valid_dimensions && valid_frame_rate);
+        has_video_encoder && has_audio_encoder && valid_dimensions && valid_frame_rate;
+    add_job_button_->setProperty("renderSettingsValid", valid);
+    const bool running = queue_controller_ != nullptr && queue_controller_->isRunning();
+    add_job_button_->setEnabled(valid && !running);
 }
 
 void RenderWorkspace::updateDefaultFrameRate() {
@@ -839,6 +1044,7 @@ void RenderWorkspace::addCurrentJob() {
 
     const int row = queue_model_->jobCount();
     const auto queued_job_id = queue_model_->addJob(std::move(job));
+    if (queued_job_id == 0) return;
     Q_UNUSED(queued_job_id);
     queue_view_->setCurrentIndex(queue_model_->index(row, 0));
     updateQueueActions();

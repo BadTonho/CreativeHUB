@@ -4,6 +4,7 @@
 #include "ui/workspace/pages/render/render_output_capabilities.h"
 
 #include <QObject>
+#include <QStringList>
 
 #include <array>
 #include <functional>
@@ -25,6 +26,7 @@ class QWidget;
 namespace ui {
 
 class RenderQueueModel;
+class RenderQueueController;
 
 class RenderWorkspace final : public QObject {
 public:
@@ -65,6 +67,8 @@ private:
     void updateResolutionFields();
     void updateQualitySuggestions();
     void updateQueueActions();
+    void startQueue();
+    void handleQueueFinished(bool canceled);
     void updateAddAction();
     void updateDefaultFrameRate();
     void updateOutputPathExtension();
@@ -100,10 +104,14 @@ private:
     QLabel* empty_queue_label_ = nullptr;
     QListView* queue_view_ = nullptr;
     QPushButton* add_job_button_ = nullptr;
+    QPushButton* start_queue_button_ = nullptr;
+    QPushButton* cancel_queue_button_ = nullptr;
     QPushButton* remove_job_button_ = nullptr;
     QPushButton* move_job_up_button_ = nullptr;
     QPushButton* move_job_down_button_ = nullptr;
     RenderQueueModel* queue_model_ = nullptr;
+    RenderQueueController* queue_controller_ = nullptr;
+    QStringList failed_job_names_;
     std::vector<RenderContainerOption> containers_;
     int project_width_ = 1920;
     int project_height_ = 1080;

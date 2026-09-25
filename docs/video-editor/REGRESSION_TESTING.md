@@ -37,7 +37,8 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Timeline edge-trim gesture | Pending transition selection versus valid shared-cut drag, rolling and individual previews, final release boundary, retained preview after an invalid pointer boundary, no-op and invalid requests, legacy trim range, signal order and single commit, and cancellation on track replacement or clearing |
 | Timeline workspace selectors | Edit, blank Fusion, and Render button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
 | Workspace page switching | Edit startup state; FusionWorkspace-provided Viewer title, Node Editor, and Inspector; Render settings, shared Preview, and queue columns; responsive horizontal/vertical layout switching at 1100 px; constrained Settings fields with accessible Browse action and no horizontal scrolling; fixed Add to Queue footer outside the Settings scroll area; wheel scrolling over closed selectors and numeric controls without changing their values; runtime FFmpeg output discovery; project-derived defaults; prepared-job snapshots; controller-coordinated Edit → Fusion → Render transitions; exclusive selectors and lower dock titles; replacement of the Timeline with the Node Editor in the same lower dock; shared Timeline identity; Preview transfer into the middle Render column and restoration to the Edit/Fusion central stack; hidden Timeline controls/footer and blocked Timeline input in Render; project dirty-state preservation when preparing jobs; preservation of mixed prior dock visibility across repeated Render selection and exit, including a previously hidden Timeline; prepare-for-close restoration; and MainWindow close/reopen layout persistence |
-| Render queue model | Runtime container/encoder compatibility filtering; stable job IDs and prepared state; project-document snapshot isolation; append, remove, and reorder behavior; invalid operation rejection; and a new session starting with an empty queue |
+| Render queue model | Runtime container/encoder compatibility filtering; stable job IDs and status/progress/error roles; project-document snapshot isolation; append, remove, and reorder behavior; retry reset; structure locking during execution; invalid operation rejection; and a new session starting with an empty queue |
+| Offline Render export | CPU composition at configured dimensions; Timeline-to-output FPS conversion; black gaps; text clips and transform keyframes; Cross Dissolve; output file reopen and stream validation; embedded video-audio mix with clip/track gain and mute; monotonic progress; cancellation and failure preserving an existing destination and cleaning temporary files; ordered queue continuation after failure; cancellation leaving later jobs unstarted; and no change to the project snapshot |
 | Edit workspace controller | Shared-session clip selection and playhead state; typed playback, media-drop, and seek requests; track creation, renaming, reordering, and removal; media and text insertion, clip movement, nudge, split, trim, delete, and clear; Inspector transform and keyframe commands; command-result, committed-edit, and history signals; rejected and no-op edits; occupied positions; offline or unregistered media; Undo/Redo; and unchanged project state for rejected commands |
 | Functions window shortcut | Offscreen Shift+Space registration, WindowShortcut context, empty non-modal floating window, opening and toggling while focused, inside/outside click behavior, close and destruction through Escape/title bar/deactivation, fresh recreation without duplicates, and regular Space playback shortcut preservation |
 | Timeline interaction | Selection without playhead jumps, row-local clip hit testing, gap deselection for Timeline and Media Browser items, no-op drags from empty rows, optional move-to-start selection preference, seek-on-release, configurable clip movement, checked-by-default Magnetic Snap with eight-pixel tolerance, clip-edge and Timeline-boundary snapping, aligned snap guides, enable/disable behavior, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, one-frame fallback metadata, cancellation cleanup, no pre-release model signal, Blade Tool, edge-hover resize cursor and reset behavior, live left/right edge extension previews and trim-on-release, distinct rolling-center and one-sided shared-cut handles while preserving junction selection on click, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, frozen track-header overlay during horizontal scrolling, vertical header alignment during vertical scrolling, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
@@ -132,8 +133,19 @@ in the running Video Editor after UI or integration changes:
   bitrate behavior. Add two jobs with different output settings, change the
   project or form, and confirm the earlier job retains its snapshot. Reorder
   and remove jobs, confirm preparing a job does not dirty the project, and
-  confirm the queue starts empty in a new application session. No export-start
-  action should be available. The Timeline dock is the only visible workspace
+  confirm the queue starts empty in a new application session. Add two jobs and
+  use **Start Queue**: confirm rows show progress and finish as Completed, the
+  output files open and play, and the project remains clean. While the queue is
+  running, confirm Add, Remove, and Move controls are disabled while Settings
+  remain editable and do not alter queued snapshots. Try adding jobs with the
+  same destination and confirm the queue is rejected; add jobs targeting
+  existing files and confirm a single grouped replacement prompt appears.
+  Cancel during a long job and confirm its previous destination stays intact,
+  the active row becomes Canceled, and later rows remain Prepared. Retry and
+  confirm canceled and failed jobs run again while completed jobs are skipped.
+  Cause one job to fail with offline media and confirm the failure is logged
+  with useful job and media context, later jobs still run, and the failed row
+  can be retried. The Timeline dock is the only visible workspace
   dock, its title remains `Timeline`, and its tracks, clips, ruler, and playhead
   are visible without the control row or footer. Try selecting a
   clip, seeking on the ruler, editing or dragging a clip, dropping media or an
@@ -148,7 +160,7 @@ in the running Video Editor after UI or integration changes:
   the bottom dock in Edit and Fusion. Click all selectors and confirm
   selection, playhead, playback, Timeline contents, Undo/Redo, and project
   dirty state remain unchanged; the Node Editor and Fusion Inspector must not
-  provide composition operations, and Render must not start or execute exports;
+  provide composition operations;
 - Functions window: press Shift + Space with focus in the Timeline, Media
   Browser, and Preview, in both Edit and Fusion, and confirm the empty
   floating `Functions` window opens centered over the editor and receives

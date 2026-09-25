@@ -293,16 +293,25 @@ bool AudioPlaybackSession::at_end() const noexcept {
 void AudioPlaybackSession::seek_to_source_frame(
     std::int64_t source_frame,
     double video_frame_rate) {
+    if (source_frame < 0 || !std::isfinite(video_frame_rate) ||
+        video_frame_rate <= 0.0) {
+        const MediaError error("The requested audio source position is invalid.");
+        logFailure(impl_->source_path, "seek", error);
+        throw error;
+    }
+    const auto sample_index = static_cast<std::int64_t>(std::llround(
+        static_cast<long double>(source_frame) * impl_->output.sample_rate /
+        static_cast<long double>(video_frame_rate)));
+    seek_to_sample_index(sample_index);
+}
+
+void AudioPlaybackSession::seek_to_sample_index(std::int64_t sample_index) {
     try {
-        if (source_frame < 0 || !std::isfinite(video_frame_rate) ||
-            video_frame_rate <= 0.0) {
+        if (sample_index < 0) {
             throw MediaError("The requested audio source position is invalid.");
         }
         if (!has_audio()) return;
 
-        const auto sample_index = static_cast<std::int64_t>(std::llround(
-            static_cast<long double>(source_frame) * impl_->output.sample_rate /
-            static_cast<long double>(video_frame_rate)));
         const auto timestamp = av_rescale_q(
             sample_index,
             AVRational{1, impl_->output.sample_rate},
@@ -320,6 +329,11 @@ void AudioPlaybackSession::seek_to_source_frame(
         if (seek_result < 0) throwFfmpegError(seek_result, "Seeking audio");
 
         avcodec_flush_buffers(impl_->decoder.get());
+        swr_close(impl_->resampler.get());
+        const int resampler_result = swr_init(impl_->resampler.get());
+        if (resampler_result < 0) {
+            throwFfmpegError(resampler_result, "Resetting the audio resampler after a seek");
+        }
         av_packet_unref(impl_->packet.get());
         av_frame_unref(impl_->frame.get());
         impl_->flush_sent = false;

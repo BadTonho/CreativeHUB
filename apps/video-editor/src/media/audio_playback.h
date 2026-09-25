@@ -40,6 +40,7 @@ public:
     void seek_to_source_frame(
         std::int64_t source_frame,
         double video_frame_rate);
+    void seek_to_sample_index(std::int64_t sample_index);
     [[nodiscard]] std::optional<AudioPcmChunk> decode_samples(
         std::size_t maximum_samples = 4096,
         const CancellationPredicate& should_cancel = {});

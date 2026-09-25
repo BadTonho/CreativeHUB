@@ -126,10 +126,14 @@ and required manual validation pass.
 - [ ] Replace hardcoded still-image extension checks with capability-based
   detection from the deployed Qt image plugins. Define how multi-frame images
   retain timing before importing them as animated Timeline clips.
-- [ ] Maximize practical video export compatibility using valid muxer/encoder
-  combinations available in the shipped FFmpeg build. Define output controls,
-  audio handling, progress and cancellation behavior, error reporting, and
-  verification of the produced file.
+- [x] Add the initial offline export workflow: a session-only ordered queue,
+  project/settings snapshots, CPU composition, dynamically discovered FFmpeg
+  muxer and encoder choices, progress, cancellation, failure reporting, and
+  temporary-file verification before publishing.
+- [ ] Validate practical export compatibility across the intended shipped
+  FFmpeg builds and supported platforms. Measure quality and performance,
+  verify hardware-encoder combinations, and complete manual export validation
+  with representative video, image, text, transition, and audio projects.
 - [ ] Add the explicit Ripple Delete / Close Gap command. Ordinary deletion
   must keep subsequent clips in place and leave the gap.
 - [ ] Decide and, if included, implement direct operating-system file drops.
