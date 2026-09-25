@@ -1,4 +1,5 @@
 #include "ui/workspace/workspace_host.h"
+#include "ui/workspace/pages/edit/edit_workspace.h"
 
 #include <QFrame>
 #include <QLabel>
@@ -6,6 +7,13 @@
 #include <QVBoxLayout>
 
 namespace ui {
+
+WorkspaceHost::WorkspaceHost(EditWorkspace* edit_workspace, QWidget* parent)
+    : WorkspaceHost(
+          edit_workspace != nullptr ? edit_workspace->previewWidget() : nullptr,
+          edit_workspace != nullptr ? edit_workspace->inspectorPanel() : nullptr,
+          edit_workspace != nullptr ? edit_workspace->timelinePanel() : nullptr,
+          parent) {}
 
 WorkspaceHost::WorkspaceHost(
     QWidget* preview_widget,

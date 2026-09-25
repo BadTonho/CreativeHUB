@@ -225,7 +225,17 @@ public:
             require(window.edit_workspace_button_ != nullptr &&
                         window.fusion_workspace_button_ != nullptr &&
                         window.render_workspace_button_ != nullptr &&
-                        window.edit_workspace_button_->isChecked(),
+                        window.edit_workspace_button_->isChecked() &&
+                        window.edit_workspace_ != nullptr &&
+                        window.edit_workspace_->controller() != nullptr &&
+                        &window.edit_workspace_->controller()->session() ==
+                            &window.editor_session_ &&
+                        window.edit_workspace_->previewWidget() ==
+                            window.preview_widget_ &&
+                        window.edit_workspace_->inspectorPanel() ==
+                            window.workspace_host_->editInspectorPage() &&
+                        window.edit_workspace_->timelinePanel() ==
+                            window.workspace_host_->timelinePanel(),
                     "The MainWindow must start with Edit selected and expose all workspace selectors.");
             const auto edit_dock_visibility = dock_visibility();
             window.setWorkspacePage(ui::WorkspacePageId::Fusion);
@@ -435,7 +445,7 @@ public:
             window.clearActiveTimelineSelection();
 
             window.setActiveTimelineSelection(timeline::ClipLocation{1, 0});
-            window.handleTimelineClipMove(2, 1, 0);
+            window.edit_workspace_->controller()->moveClip(2, 1, 0);
             require(window.active_timeline_track_id_ == 1 &&
                         window.active_timeline_clip_id_ == 2 &&
                         window.active_timeline_track_index_cache_ == 0 &&
@@ -447,7 +457,7 @@ public:
             require(window.project_dirty_,
                     "A service-backed move did not update the project dirty state.");
 
-            window.undoTimelineEdit();
+            static_cast<void>(window.edit_workspace_->controller()->undo());
             require(window.active_timeline_track_id_ == 2 &&
                         window.active_timeline_clip_id_ == 2 &&
                         window.active_timeline_track_index_cache_ == 1 &&

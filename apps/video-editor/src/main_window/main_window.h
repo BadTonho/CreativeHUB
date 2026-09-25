@@ -15,6 +15,7 @@
 #include "timeline/timeline_history.h"
 #include "timeline/timeline_model.h"
 #include "ui/workspace/workspace_page_id.h"
+#include "ui/workspace/pages/edit/edit_workspace.h"
 
 #include <QMainWindow>
 #include <QString>
@@ -61,6 +62,7 @@ class EffectsFavoritesWidget;
 class QWidget;
 namespace ui {
 class FunctionPalette;
+class EditWorkspace;
 class WorkspaceHost;
 }
 
@@ -158,10 +160,6 @@ private:
     void moveSelectedMediaToBin();
     void removeSelectedMedia();
     void restoreSelectedMedia();
-    void addVideoTrack();
-    void renameActiveTrack();
-    void moveActiveTrack(int direction);
-    void removeActiveTrack();
     void addTextClipAt(timeline::TrackId track_id, qint64 timeline_frame);
     void handleEffectDropAt(
         const QString& effect_id,
@@ -231,10 +229,6 @@ private:
         timeline::TrackId track_id,
         timeline::ClipId clip_id);
     void handleTimelineClipSelectionCleared();
-    void handleTimelineClipMove(
-        timeline::ClipId clip_id,
-        timeline::TrackId target_track_id,
-        qint64 timeline_start_frame);
     void handleTimelineClipSplit(timeline::ClipId clip_id, qint64 local_frame);
     void handleTimelineTrimStarted();
     void handleTimelineClipTrim(
@@ -258,8 +252,6 @@ private:
         timeline::ClipId to_clip_id);
     void applyTransitionSettings();
     void removeSelectedTransition();
-    void undoTimelineEdit();
-    void redoTimelineEdit();
     void synchronizeTimelineSessionSelection();
     [[nodiscard]] timeline::EditState captureTimelineEditState();
     void recordTimelineEdit(timeline::EditState state);
@@ -270,7 +262,9 @@ private:
     [[nodiscard]] application::TimelineEditResult executeTimelineCommand(
         const Command& command) {
         synchronizeTimelineSessionSelection();
-        return timeline_command_service_.execute(command);
+        return edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr
+            ? edit_workspace_->controller()->execute(command)
+            : timeline_command_service_.execute(command);
     }
     void updateHistoryActions();
     void updateTimelineState();
@@ -339,6 +333,7 @@ private:
     QDockWidget* timeline_dock_ = nullptr;
     PreviewWidget* preview_widget_ = nullptr;
     ui::FunctionPalette* function_palette_ = nullptr;
+    ui::EditWorkspace* edit_workspace_ = nullptr;
     ui::WorkspaceHost* workspace_host_ = nullptr;
     QWidget* workspace_buttons_container_ = nullptr;
     QWidget* timeline_controls_container_ = nullptr;

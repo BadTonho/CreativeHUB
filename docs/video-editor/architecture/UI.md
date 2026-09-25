@@ -408,16 +408,27 @@ removed, then the current composition is requested again. Undo/Redo restores
 transition data, selection, and playhead while remaining paused. Invalid
 junctions and gaps are intentional no-op outcomes and are not logged.
 
-The `MainWindow` coordinator is implemented in responsibility-focused
-translation units under `apps/video-editor/src/main_window/`. Workspace,
-project, Media Browser, Timeline, playback, and Inspector construction and
-coordination remain part of the same window class; this organization does not
-introduce additional controllers or change ownership.
-Within `main_window_timeline.cpp`, `createTimeline` assembles the controls,
-scrolling viewport with fixed track headers, and footer through private
-construction helpers, then connects the remaining control and Timeline widget
-signals. Workspace selectors, vertical scrolling, and footer status signals
-are connected when their respective components are created. The control
+`MainWindow` remains the application shell and is implemented in
+responsibility-focused translation units under
+`apps/video-editor/src/main_window/`. It owns the project services, docks,
+workspace selectors, menus, and playback-controller lifecycle.
+
+`ui/workspace/pages/edit/EditWorkspace` groups the existing Preview, Inspector,
+and Timeline surfaces for `WorkspaceHost`; it keeps their identities shared
+with Fusion and Render. Its `EditWorkspaceController` holds references to the
+single `EditorSession` and `TimelineCommandService`, delegates edits and
+history operations to that service, and emits typed Qt signals for command
+results, committed edits, status messages, and history availability. It does
+not keep a second project, selection, playhead, or history. Track creation,
+renaming, reordering, removal, clip movement, and Undo/Redo are handled by the
+Edit controller. Other Timeline and Inspector interactions still use shell
+handlers, while their commands use the same controller and shared service. The
+playback engine and project state remain shared with the application shell.
+
+The Timeline construction helpers in `main_window_timeline.cpp` currently
+assemble controls, the scrolling viewport with fixed track headers, and the
+footer. Workspace selectors, vertical scrolling, and footer status signals are
+connected when their respective components are created. The control
 references needed for later connections are temporary and are not stored as
 additional `MainWindow` state.
 

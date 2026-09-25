@@ -9,8 +9,13 @@ class QStackedWidget;
 
 namespace ui {
 
+class EditWorkspace;
+
 class WorkspaceHost final : public QWidget {
 public:
+    explicit WorkspaceHost(
+        EditWorkspace* edit_workspace,
+        QWidget* parent = nullptr);
     explicit WorkspaceHost(
         QWidget* preview_widget,
         QWidget* edit_inspector,

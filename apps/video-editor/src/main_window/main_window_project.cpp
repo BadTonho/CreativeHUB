@@ -354,7 +354,11 @@ void MainWindow::clearProjectState() {
             error.what(),
             { {"cause", error.what()} });
     }
-    timeline_command_service_.clearHistory();
+    if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+        edit_workspace_->controller()->clearHistory();
+    } else {
+        timeline_command_service_.clearHistory();
+    }
     pending_audio_edit_batch_id_.reset();
     pending_transform_edit_batch_id_.reset();
     if (playback_controller_ != nullptr) {
@@ -667,7 +671,11 @@ void MainWindow::finishProjectOpen(
 }
 void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
     const auto& loaded_document = prepared.document;
-    timeline_command_service_.clearHistory();
+    if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+        edit_workspace_->controller()->clearHistory();
+    } else {
+        timeline_command_service_.clearHistory();
+    }
     pending_audio_edit_batch_id_.reset();
     pending_transform_edit_batch_id_.reset();
     if (playback_controller_ != nullptr) {

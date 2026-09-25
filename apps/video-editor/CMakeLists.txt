@@ -147,6 +147,10 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/ui/workspace/workspace_host.cpp
     src/ui/workspace/workspace_host.h
     src/ui/workspace/workspace_page_id.h
+    src/ui/workspace/pages/edit/edit_workspace.cpp
+    src/ui/workspace/pages/edit/edit_workspace.h
+    src/ui/workspace/pages/edit/edit_workspace_controller.cpp
+    src/ui/workspace/pages/edit/edit_workspace_controller.h
 )
 
 add_library(creative-suite-main-editor-core STATIC

@@ -132,133 +132,6 @@ QIcon timelineSnapIcon() {
 
 } // namespace
 
-void MainWindow::addVideoTrack() {
-    bool accepted = false;
-    const auto name = QInputDialog::getText(
-        this,
-        "Add Video Track",
-        "Track name:",
-        QLineEdit::Normal,
-        QString("Video %1").arg(timeline_model_.trackCount() + 1),
-        &accepted);
-    if (!accepted) return;
-    try {
-        const auto result = executeTimelineCommand(application::AddTrackCommand{
-            name.toUtf8().toStdString()});
-        if (!result.changed()) {
-            statusBar()->showMessage("The track name is invalid.");
-            return;
-        }
-        applyTimelineEditResult(result);
-        updateTimelineState();
-        updatePlaybackControls();
-        statusBar()->showMessage("Video track added.");
-    } catch (const std::exception& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error,
-            "timeline",
-            "add_track",
-            error.what(),
-            {});
-        statusBar()->showMessage("Could not add the video track.");
-    }
-}
-void MainWindow::renameActiveTrack() {
-    synchronizeActiveTimelineSelection();
-    if (!active_timeline_track_id_.has_value()) return;
-    const auto track_index = timeline_model_.locateTrack(*active_timeline_track_id_);
-    if (!track_index.has_value()) return;
-    bool accepted = false;
-    const auto current = fromUtf8(timeline_model_.tracks()[*track_index].name);
-    const auto name = QInputDialog::getText(
-        this,
-        "Rename Track",
-        "Track name:",
-        QLineEdit::Normal,
-        current,
-        &accepted);
-    if (!accepted) return;
-    try {
-        const auto result = executeTimelineCommand(application::RenameTrackCommand{
-            *active_timeline_track_id_, name.toUtf8().toStdString()});
-        if (result.status == application::EditStatus::Rejected) {
-            statusBar()->showMessage("The track name is invalid.");
-            return;
-        }
-        if (!result.changed()) return;
-        applyTimelineEditResult(result);
-        updateTimelineState();
-        statusBar()->showMessage("Track renamed.");
-    } catch (const std::exception& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error,
-            "timeline",
-            "rename_track",
-            error.what(),
-            {{"track_index", std::to_string(*track_index)}});
-        statusBar()->showMessage("Could not rename the track.");
-    }
-}
-
-void MainWindow::moveActiveTrack(int direction) {
-    synchronizeActiveTimelineSelection();
-    if (timeline_model_.trackCount() < 2) return;
-    if (!active_timeline_track_id_.has_value()) return;
-    const auto track_location = timeline_model_.locateTrack(*active_timeline_track_id_);
-    if (!track_location.has_value()) return;
-    const auto from = *track_location;
-    if (direction < 0 && from == 0) return;
-    if (direction > 0 && from + 1 >= timeline_model_.trackCount()) return;
-    const auto to = direction < 0 ? from - 1 : from + 1;
-    try {
-        const auto result = executeTimelineCommand(application::MoveTrackCommand{
-            *active_timeline_track_id_, to});
-        if (!result.changed()) return;
-        applyTimelineEditResult(result);
-        updateTimelineState();
-        refreshPlaybackComposition();
-        statusBar()->showMessage("Track order updated.");
-    } catch (const std::exception& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error,
-            "timeline",
-            "move_track",
-            error.what(),
-            {{"from_index", std::to_string(from)},
-             {"to_index", std::to_string(to)}});
-        statusBar()->showMessage("Could not move the track.");
-    }
-}
-
-void MainWindow::removeActiveTrack() {
-    synchronizeActiveTimelineSelection();
-    if (!active_timeline_track_id_.has_value()) return;
-    const auto track_index = timeline_model_.locateTrack(*active_timeline_track_id_);
-    if (!track_index.has_value()) return;
-    try {
-        const auto result = executeTimelineCommand(application::RemoveTrackCommand{
-            *active_timeline_track_id_});
-        if (result.reason == application::EditReason::TrackNotEmpty) {
-            statusBar()->showMessage("Only empty tracks can be removed.");
-            return;
-        }
-        if (!result.changed()) return;
-        applyTimelineEditResult(result);
-        updateTimelineState();
-        refreshPlaybackComposition();
-        updatePlaybackControls();
-        statusBar()->showMessage("Video track removed.");
-    } catch (const std::exception& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error,
-            "timeline",
-            "remove_track",
-            error.what(),
-            {{"track_index", std::to_string(*track_index)}});
-        statusBar()->showMessage("Could not remove the video track.");
-    }
-}
-
 void MainWindow::addTextClipAt(timeline::TrackId track_id, qint64 requested_frame) {
     const auto track_index = timeline_model_.locateTrack(track_id);
     if (!track_index.has_value() || requested_frame < 0) {
@@ -517,6 +390,7 @@ MainWindow::TimelineControls MainWindow::createTimelineControls(
 
 void MainWindow::createTimelineViewport(QWidget* container, QVBoxLayout* layout) {
     timeline_widget_ = new timeline::TimelineWidget(container);
+    edit_workspace_->controller()->setTimelineWidget(timeline_widget_);
     timeline_scroll_ = new QScrollArea(container);
     timeline_scroll_->setWidgetResizable(true);
     timeline_scroll_->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
@@ -650,16 +524,19 @@ void MainWindow::connectTimelineSignals(const TimelineControls& controls) {
             const QSignalBlocker blocker(snap_button_);
             snap_button_->setChecked(enabled);
         });
-    connect(add_track_button, &QPushButton::clicked,
-            this, &MainWindow::addVideoTrack);
-    connect(rename_track_button, &QPushButton::clicked,
-            this, &MainWindow::renameActiveTrack);
-    connect(move_track_up_button, &QPushButton::clicked,
-            this, [this]() { moveActiveTrack(-1); });
-    connect(move_track_down_button, &QPushButton::clicked,
-            this, [this]() { moveActiveTrack(1); });
-    connect(remove_track_button, &QPushButton::clicked,
-            this, &MainWindow::removeActiveTrack);
+    auto* edit_controller = edit_workspace_->controller();
+    connect(add_track_button, &QPushButton::clicked, this, [this, edit_controller]() {
+        edit_controller->promptAddVideoTrack(this);
+    });
+    connect(rename_track_button, &QPushButton::clicked, this, [this, edit_controller]() {
+        edit_controller->promptRenameActiveTrack(this);
+    });
+    connect(move_track_up_button, &QPushButton::clicked, edit_controller,
+            [edit_controller]() { edit_controller->moveActiveTrack(-1); });
+    connect(move_track_down_button, &QPushButton::clicked, edit_controller,
+            [edit_controller]() { edit_controller->moveActiveTrack(1); });
+    connect(remove_track_button, &QPushButton::clicked, edit_controller,
+            &ui::EditWorkspaceController::removeActiveTrack);
     connect(
         timeline_widget_,
         &timeline::TimelineWidget::zoomRequested,
@@ -738,11 +615,6 @@ void MainWindow::connectTimelineSignals(const TimelineControls& controls) {
         &timeline::TimelineWidget::transitionRemoveRequested,
         this,
         &MainWindow::handleTimelineTransitionRemoveRequested);
-    connect(
-        timeline_widget_,
-        &timeline::TimelineWidget::clipMoveRequested,
-        this,
-        &MainWindow::handleTimelineClipMove);
     connect(
         timeline_widget_,
         &timeline::TimelineWidget::clipSplitRequested,
@@ -1071,7 +943,11 @@ timeline::EditState MainWindow::captureTimelineEditState() {
 
 void MainWindow::recordTimelineEdit(timeline::EditState state) {
     try {
-        timeline_command_service_.recordLegacyEdit(std::move(state));
+        if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+            edit_workspace_->controller()->recordLegacyEdit(std::move(state));
+        } else {
+            timeline_command_service_.recordLegacyEdit(std::move(state));
+        }
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
             logging::Level::Error,
@@ -1084,8 +960,16 @@ void MainWindow::recordTimelineEdit(timeline::EditState state) {
 }
 
 void MainWindow::updateHistoryActions() {
-    if (undo_action_ != nullptr) undo_action_->setEnabled(timeline_command_service_.canUndo());
-    if (redo_action_ != nullptr) redo_action_->setEnabled(timeline_command_service_.canRedo());
+    const bool can_undo = edit_workspace_ != nullptr &&
+            edit_workspace_->controller() != nullptr
+        ? edit_workspace_->controller()->canUndo()
+        : timeline_command_service_.canUndo();
+    const bool can_redo = edit_workspace_ != nullptr &&
+            edit_workspace_->controller() != nullptr
+        ? edit_workspace_->controller()->canRedo()
+        : timeline_command_service_.canRedo();
+    if (undo_action_ != nullptr) undo_action_->setEnabled(can_undo);
+    if (redo_action_ != nullptr) redo_action_->setEnabled(can_redo);
 }
 
 void MainWindow::applyTimelineEditResult(
@@ -1133,13 +1017,22 @@ void MainWindow::beginAudioEdit() {
     if (!pending_audio_edit_batch_id_.has_value() &&
         active_timeline_track_id_.has_value() &&
         active_timeline_clip_id_.has_value()) {
-        pending_audio_edit_batch_id_ = timeline_command_service_.beginEditBatch();
+        pending_audio_edit_batch_id_ = edit_workspace_ != nullptr &&
+                edit_workspace_->controller() != nullptr
+            ? edit_workspace_->controller()->beginEditBatch()
+            : timeline_command_service_.beginEditBatch();
     }
 }
 
 void MainWindow::finishAudioEdit() {
     if (!pending_audio_edit_batch_id_.has_value()) return;
-    static_cast<void>(timeline_command_service_.finishEditBatch(*pending_audio_edit_batch_id_));
+    if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+        static_cast<void>(edit_workspace_->controller()->finishEditBatch(
+            *pending_audio_edit_batch_id_));
+    } else {
+        static_cast<void>(timeline_command_service_.finishEditBatch(
+            *pending_audio_edit_batch_id_));
+    }
     pending_audio_edit_batch_id_.reset();
     updateHistoryActions();
     updateTimelineState();
@@ -1186,13 +1079,22 @@ void MainWindow::applyTrackAudioControls() {
 void MainWindow::beginTransformEdit() {
     if (!pending_transform_edit_batch_id_.has_value() &&
         active_timeline_clip_id_.has_value()) {
-        pending_transform_edit_batch_id_ = timeline_command_service_.beginEditBatch();
+        pending_transform_edit_batch_id_ = edit_workspace_ != nullptr &&
+                edit_workspace_->controller() != nullptr
+            ? edit_workspace_->controller()->beginEditBatch()
+            : timeline_command_service_.beginEditBatch();
     }
 }
 
 void MainWindow::finishTransformEdit() {
     if (!pending_transform_edit_batch_id_.has_value()) return;
-    static_cast<void>(timeline_command_service_.finishEditBatch(*pending_transform_edit_batch_id_));
+    if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+        static_cast<void>(edit_workspace_->controller()->finishEditBatch(
+            *pending_transform_edit_batch_id_));
+    } else {
+        static_cast<void>(timeline_command_service_.finishEditBatch(
+            *pending_transform_edit_batch_id_));
+    }
     pending_transform_edit_batch_id_.reset();
     updateHistoryActions();
     updateProjectDirtyState();
@@ -1769,38 +1671,6 @@ void MainWindow::removeSelectedTransition() {
         selection.track_id, selection.from_clip_id, selection.to_clip_id);
 }
 
-void MainWindow::handleTimelineClipMove(
-    timeline::ClipId clip_id,
-    timeline::TrackId target_track_id,
-    qint64 timeline_start_frame) {
-    if (timeline_start_frame < 0) return;
-    try {
-        const auto result = executeTimelineCommand(application::MoveClipCommand{
-            clip_id, target_track_id, timeline_start_frame});
-        if (!result.changed()) {
-            if (result.status == application::EditStatus::NoChange) return;
-            statusBar()->showMessage("The clip cannot be moved to that position.");
-            return;
-        }
-        applyTimelineEditResult(result);
-        updateTimelineState();
-        updatePlaybackControls();
-        updatePlaybackStatus();
-        refreshPlaybackComposition();
-        statusBar()->showMessage("Timeline clip moved.");
-    } catch (const std::exception& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error,
-            "timeline",
-            "move_clip",
-            error.what(),
-            {{"clip_id", std::to_string(clip_id)},
-             {"target_track_id", std::to_string(target_track_id)},
-             {"timeline_frame", std::to_string(timeline_start_frame)}});
-        statusBar()->showMessage("Could not move the timeline clip.");
-    }
-}
-
 void MainWindow::handleTimelineClipSplit(
     timeline::ClipId clip_id,
     qint64 local_frame) {
@@ -2056,54 +1926,6 @@ void MainWindow::clearTimeline() {
     }
 }
 
-void MainWindow::undoTimelineEdit() {
-    if (!timeline_command_service_.canUndo()) return;
-    try {
-        synchronizeTimelineSessionSelection();
-        const auto result = timeline_command_service_.undo();
-        if (!result.changed()) return;
-        applyTimelineEditResult(result);
-        updateTimelineState();
-        updatePlaybackControls();
-        updatePlaybackStatus();
-        refreshPlaybackComposition();
-        statusBar()->showMessage("Timeline edit undone.");
-    } catch (const std::exception& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error,
-            "timeline",
-            "undo",
-            error.what(),
-            {});
-        updateHistoryActions();
-        statusBar()->showMessage("Could not undo the timeline edit.");
-    }
-}
-
-void MainWindow::redoTimelineEdit() {
-    if (!timeline_command_service_.canRedo()) return;
-    try {
-        synchronizeTimelineSessionSelection();
-        const auto result = timeline_command_service_.redo();
-        if (!result.changed()) return;
-        applyTimelineEditResult(result);
-        updateTimelineState();
-        updatePlaybackControls();
-        updatePlaybackStatus();
-        refreshPlaybackComposition();
-        statusBar()->showMessage("Timeline edit redone.");
-    } catch (const std::exception& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error,
-            "timeline",
-            "redo",
-            error.what(),
-            {});
-        updateHistoryActions();
-        statusBar()->showMessage("Could not redo the timeline edit.");
-    }
-}
-
 void MainWindow::moveActiveTimelineClip(int direction) {
     if (!active_timeline_track_index_cache_.has_value() ||
         !active_timeline_clip_index_cache_.has_value() ||
@@ -2160,8 +1982,11 @@ void MainWindow::deleteActiveTimelineClip() {
     if (timeline::isMediaClipKind(clip.kind) && !canPlaybackSelectedMedia()) return;
 
     try {
-        const auto result = executeTimelineCommand(
-            application::DeleteClipCommand{clip.clip_id});
+        synchronizeTimelineSessionSelection();
+        const auto result = edit_workspace_ != nullptr &&
+                edit_workspace_->controller() != nullptr
+            ? edit_workspace_->controller()->deleteSelectedClip()
+            : executeTimelineCommand(application::DeleteClipCommand{clip.clip_id});
         if (!result.changed()) return;
         applyTimelineEditResult(result);
         if (!timeline_model_.hasClip()) {

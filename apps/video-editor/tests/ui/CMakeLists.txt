@@ -238,3 +238,26 @@ set_tests_properties(creative-suite-main-editor-workspace-page-switch PROPERTIES
 )
 
 preserve_video_editor_test_working_directory()
+add_executable(creative-suite-main-editor-edit-workspace-controller-tests
+    edit_workspace_controller_test.cpp
+)
+target_link_libraries(creative-suite-main-editor-edit-workspace-controller-tests PRIVATE
+    creative-suite-main-editor-core
+)
+target_compile_features(creative-suite-main-editor-edit-workspace-controller-tests PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-edit-workspace-controller-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-edit-workspace-controller-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+copy_ffmpeg_test_runtime(creative-suite-main-editor-edit-workspace-controller-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-edit-workspace-controller-tests)
+add_test(
+    NAME creative-suite-main-editor-edit-workspace-controller
+    COMMAND creative-suite-main-editor-edit-workspace-controller-tests
+)
+set_tests_properties(creative-suite-main-editor-edit-workspace-controller PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
+preserve_video_editor_test_working_directory()

@@ -60,6 +60,41 @@ using namespace main_window_detail;
 
 void MainWindow::createWorkspace() {
     preview_widget_ = new PreviewWidget(this);
+    edit_workspace_ = new ui::EditWorkspace(
+        editor_session_, timeline_command_service_, preview_widget_, nullptr,
+        nullptr, this);
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::historyStateChanged,
+        this,
+        [this](bool can_undo, bool can_redo) {
+            if (undo_action_ != nullptr) undo_action_->setEnabled(can_undo);
+            if (redo_action_ != nullptr) redo_action_->setEnabled(can_redo);
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::statusMessageRequested,
+        this,
+        [this](const QString& message) {
+            statusBar()->showMessage(message);
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::timelineEditCommitted,
+        this,
+        [this](const application::TimelineEditResult& result,
+               bool stop_playback,
+               bool refresh_composition,
+               const QString& status_message) {
+            applyTimelineEditResult(result, stop_playback);
+            updateTimelineState();
+            updatePlaybackControls();
+            updatePlaybackStatus();
+            if (refresh_composition) refreshPlaybackComposition();
+            if (!status_message.isEmpty()) {
+                statusBar()->showMessage(status_message);
+            }
+        });
     connect(
         preview_widget_,
         &PreviewWidget::gpuFallbackRequested,
@@ -122,8 +157,9 @@ void MainWindow::createWorkspace() {
 
     auto* edit_inspector = createInspector();
     auto* edit_timeline = createTimeline();
-    workspace_host_ = new ui::WorkspaceHost(
-        preview_widget_, edit_inspector, edit_timeline, this);
+    edit_workspace_->setSharedPanels(
+        preview_widget_, edit_inspector, edit_timeline);
+    workspace_host_ = new ui::WorkspaceHost(edit_workspace_, this);
     setCentralWidget(workspace_host_);
 
     inspector_dock_ = createDock(
@@ -320,7 +356,9 @@ void MainWindow::createMenus() {
     undo_action_ = undo_action;
     register_shortcut(
         QStringLiteral("edit.undo"), QStringLiteral("Undo"), undo_action_);
-    connect(undo_action_, &QAction::triggered, this, &MainWindow::undoTimelineEdit);
+    connect(undo_action_, &QAction::triggered, this, [this]() {
+        static_cast<void>(edit_workspace_->controller()->undo());
+    });
     auto* redo_action = edit_menu->addAction("&Redo");
     disableDuringProjectLoad(redo_action);
     redo_action->setShortcut(QKeySequence::Redo);
@@ -328,7 +366,9 @@ void MainWindow::createMenus() {
     redo_action_ = redo_action;
     register_shortcut(
         QStringLiteral("edit.redo"), QStringLiteral("Redo"), redo_action_);
-    connect(redo_action_, &QAction::triggered, this, &MainWindow::redoTimelineEdit);
+    connect(redo_action_, &QAction::triggered, this, [this]() {
+        static_cast<void>(edit_workspace_->controller()->redo());
+    });
     edit_menu->addSeparator();
     auto* delete_clip_action = edit_menu->addAction("Delete Selected Clip");
     disableDuringProjectLoad(delete_clip_action);
@@ -359,24 +399,29 @@ void MainWindow::createMenus() {
     edit_menu->addSeparator();
     add_video_track_action_ = edit_menu->addAction("Add Video Track");
     disableDuringProjectLoad(add_video_track_action_);
-    connect(add_video_track_action_, &QAction::triggered,
-            this, &MainWindow::addVideoTrack);
+    connect(add_video_track_action_, &QAction::triggered, this, [this]() {
+        edit_workspace_->controller()->promptAddVideoTrack(this);
+    });
     rename_track_action_ = edit_menu->addAction("Rename Track");
     disableDuringProjectLoad(rename_track_action_);
-    connect(rename_track_action_, &QAction::triggered,
-            this, &MainWindow::renameActiveTrack);
+    connect(rename_track_action_, &QAction::triggered, this, [this]() {
+        edit_workspace_->controller()->promptRenameActiveTrack(this);
+    });
     move_track_up_action_ = edit_menu->addAction("Move Track Up");
     disableDuringProjectLoad(move_track_up_action_);
-    connect(move_track_up_action_, &QAction::triggered,
-            this, [this]() { moveActiveTrack(-1); });
+    connect(move_track_up_action_, &QAction::triggered, this, [this]() {
+        edit_workspace_->controller()->moveActiveTrack(-1);
+    });
     move_track_down_action_ = edit_menu->addAction("Move Track Down");
     disableDuringProjectLoad(move_track_down_action_);
-    connect(move_track_down_action_, &QAction::triggered,
-            this, [this]() { moveActiveTrack(1); });
+    connect(move_track_down_action_, &QAction::triggered, this, [this]() {
+        edit_workspace_->controller()->moveActiveTrack(1);
+    });
     remove_track_action_ = edit_menu->addAction("Remove Track");
     disableDuringProjectLoad(remove_track_action_);
-    connect(remove_track_action_, &QAction::triggered,
-            this, &MainWindow::removeActiveTrack);
+    connect(remove_track_action_, &QAction::triggered, this, [this]() {
+        edit_workspace_->controller()->removeActiveTrack();
+    });
     auto* razor_tool_action = edit_menu->addAction("Blade Tool");
     razor_tool_action->setCheckable(true);
     razor_tool_action_ = razor_tool_action;

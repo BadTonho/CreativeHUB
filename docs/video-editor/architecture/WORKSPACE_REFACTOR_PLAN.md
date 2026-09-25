@@ -55,6 +55,11 @@ projeto ou da Timeline.
 
 ## Etapas
 
+Status atual: Etapa 2 em andamento. O limite `EditWorkspace`/controller e parte
+das interacoes de Timeline ja foram extraidos. A montagem de Inspector/Timeline
+e os handlers de selecao, drops, transicoes, audio, texto, transformacao, zoom
+e playback/seek ainda precisam ser movidos para `pages/edit/`.
+
 ### 1. Definir o limite dos espaços de trabalho
 
 - **Concluída.** Confirmadas as responsabilidades atuais de `MainWindow`, do
