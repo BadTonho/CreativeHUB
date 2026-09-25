@@ -108,8 +108,10 @@ int main(int argc, char* argv[]) {
                 "Grid mode was not applied to the QListWidget.");
         require(widget.iconSize() == QSize(128, 72),
                 "Default grid icon size changed unexpectedly.");
-        require(widget.gridSize() == QSize(168, 126),
+        require(widget.gridSize() == QSize(152, 114),
                 "Default grid cell size changed unexpectedly.");
+        require(widget.spacing() == 2,
+                "Grid items must use compact spacing.");
         require(!item->icon().isNull(),
                 "The Media Browser item did not retain its thumbnail.");
         const auto media_preview = media_browser_ui::createDragPreview(
@@ -186,7 +188,7 @@ int main(int argc, char* argv[]) {
                 "Media Browser did not apply the maximum icon scale.");
         require(widget.iconSize() == QSize(192, 108),
                 "Maximum grid icon size is incorrect.");
-        require(widget.gridSize() == QSize(232, 162),
+        require(widget.gridSize() == QSize(216, 150),
                 "Maximum grid cell size is incorrect.");
         require(settings.value("media_browser/icon_scale_percent").toInt() ==
                     150,

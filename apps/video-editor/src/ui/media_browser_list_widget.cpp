@@ -262,8 +262,8 @@ void MediaBrowserListWidget::applyDisplayMode() {
         QListWidget::setViewMode(QListView::IconMode);
         const auto icon_size = scaledSize(QSize(128, 72));
         setIconSize(icon_size);
-        setGridSize(QSize(icon_size.width() + 40, icon_size.height() + 54));
-        setSpacing(4);
+        setGridSize(QSize(icon_size.width() + 24, icon_size.height() + 42));
+        setSpacing(2);
         setResizeMode(QListView::Adjust);
         setMovement(QListView::Static);
         setWordWrap(true);
