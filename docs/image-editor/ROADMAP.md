@@ -81,9 +81,10 @@ the manual and packaging checks above pass.
 - [x] Reject stale linked document saves using a lock and saved revision hash.
 - [x] Cover project open, shared output, clip
   variants, stale project generations, and publication failures.
-- [ ] Manually validate transparent images, repeated Media Pool uses, clip
-  variants, save/reopen, large files, and both applications on Windows,
-  macOS, and Linux.
+- [x] Confirm the basic linked edit/save workflow manually: saving in the
+  Image Editor refreshed the Main Editor (user-confirmed; platform unspecified).
+- [ ] Validate transparent images, repeated Media Pool uses, clip variants,
+  save/reopen, large files, and both applications on Windows, macOS, and Linux.
 
 **Exit criteria:** automated and manual checks confirm that saving a linked
 image refreshes every intended Main Editor use without modifying the original

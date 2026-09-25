@@ -173,7 +173,9 @@ acceptance remain in progress. The contract is recorded in the
 - [x] Test missing source and variant resources, incompatible linked documents,
   failed PNG publication, variant priority, stale project generations, and
   obsolete output revisions.
-- [ ] Complete manual checks for repeated opens, multiple uses, clip variants,
+- [x] Confirm the basic linked edit/save refresh manually (user-confirmed;
+  platform unspecified).
+- [ ] Complete checks for repeated opens, multiple uses, clip variants,
   transparent and large images, save/reopen, conflicts, and Windows, macOS, and
   Linux behavior. The Image Editor standalone manual and packaging checks also
   remain open.

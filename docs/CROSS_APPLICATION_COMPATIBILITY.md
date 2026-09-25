@@ -19,9 +19,11 @@ Studio. This is a sequencing direction; technical contracts in this proposal
 remain provisional.
 
 The initial Main Editor to Image Editor handoff is now implemented as a
-bounded prototype. Its acceptance checks are still pending, and this document
-remains provisional until the file, conflict, and cross-platform workflows
-have been validated manually.
+bounded prototype. A user confirmed the basic linked edit/save workflow and
+that the Main Editor refreshed after the Image Editor saved. The broader
+acceptance checks are still pending, and this document remains provisional
+until the file, conflict, and cross-platform workflows have been validated
+manually.
 
 ## Recommended Boundaries
 

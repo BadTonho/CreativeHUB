@@ -168,3 +168,12 @@ preview is intentionally not part of this milestone.
 
 This checklist records the manual acceptance work; it does not replace the
 automated document, operation, export, recovery, and UI-boundary tests.
+
+### Recorded smoke test
+
+- [x] User-confirmed basic handoff: open a linked image from the Main Editor,
+  edit and save it in the Image Editor, and confirm the Main Editor refreshes
+  after the save.
+- [ ] The remaining linked-image scenarios above still need manual validation.
+  The platform and test-image details for the confirmed smoke test were not
+  recorded.
