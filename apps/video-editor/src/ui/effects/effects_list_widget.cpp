@@ -1,7 +1,7 @@
-#include "ui/effects_list_widget.h"
+#include "ui/effects/effects_list_widget.h"
 
-#include "ui/effects_catalog.h"
-#include "ui/media_drag_mime.h"
+#include "ui/effects/effects_catalog.h"
+#include "ui/media_browser/media_drag_mime.h"
 
 #include <QAbstractItemView>
 #include <QMimeData>

@@ -1,6 +1,6 @@
 #include "timeline_widget.h"
 
-#include "../ui/media_drag_mime.h"
+#include "../ui/media_browser/media_drag_mime.h"
 
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>

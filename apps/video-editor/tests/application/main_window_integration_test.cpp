@@ -1,9 +1,9 @@
-#include "main_window.h"
+#include "main_window/main_window.h"
 
-#include "preview_widget.h"
+#include "ui/preview/preview_widget.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
-#include "ui/media_browser_list_widget.h"
+#include "ui/media_browser/media_browser_list_widget.h"
 
 #include <QApplication>
 #include <QEventLoop>

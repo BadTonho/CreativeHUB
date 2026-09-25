@@ -1,5 +1,5 @@
-#include "ui/system_memory_details_dialog.h"
-#include "ui/system_memory_indicator.h"
+#include "ui/system/system_memory_details_dialog.h"
+#include "ui/system/system_memory_indicator.h"
 
 #include <QApplication>
 #include <QCoreApplication>

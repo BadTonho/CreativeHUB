@@ -40,13 +40,47 @@ while the product boundaries are still being validated.
 
 ## Video Editor organization
 
-The Video Editor keeps `src/main_window.h` as the public declaration of the
-application window and organizes its implementation by responsibility under
-`apps/video-editor/src/main_window/`:
+The application entry point stays in `src/main.cpp`. The `MainWindow`
+declaration and primary implementation are grouped with the split implementation
+files under `src/main_window/`. UI components are grouped by responsibility,
+and tests follow the subsystem they cover:
+
+```text
+src/
+  main.cpp
+  main_window/
+    main_window.h
+    main_window.cpp
+    main_window_*.cpp
+  ui/
+    effects/
+    functions/
+    media_browser/
+    preview/
+    system/
+    timeline/
+    workspace/
+
+tests/
+  application/
+  effects/
+  logging/
+  media/
+  playback/
+  project/
+  rendering/
+  settings/
+  system/
+  timeline/
+  ui/
+```
+
+The `main_window/` implementation is divided by responsibility:
 
 ```text
 main_window/
   main_window_support.*    # shared UI and path/metadata helpers
+  main_window.cpp          # window construction and lifecycle
   main_window_workspace.cpp # workspace, menus, and layout
   main_window_project.cpp   # project lifecycle and dirty state
   main_window_media.cpp     # Media Browser and imported media
@@ -55,10 +89,16 @@ main_window/
   main_window_inspector.cpp # transform and keyframe Inspector
 ```
 
-`MainWindow` remains the application coordinator: these files are separate
+`ui/preview/preview_widget.*` contains the preview container, while its OpenGL
+surface and composition implementations remain in `rendering/`. The other UI
+subfolders group effects, functions, media-browser, system-memory, timeline,
+and workspace widgets. Each test subfolder has its own CMake registration file;
+`tests/CMakeLists.txt` holds shared helpers and adds those groups.
+
+`MainWindow` remains the application coordinator: its files are separate
 translation units, not independent controllers or ownership boundaries. Media,
 timeline, playback, project, and rendering modules remain the lower-level
-boundaries that the coordinator connects. This refactoring creates no shared
+boundaries that the coordinator connects. This organization creates no shared
 library and does not change the application API or runtime behavior.
 
 An internal Qt-independent `frame_step_navigation` helper under `main_window/`

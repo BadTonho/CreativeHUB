@@ -1,4 +1,4 @@
-#include "ui/workspace_page_view.h"
+#include "ui/workspace/workspace_page_view.h"
 
 #include <QFrame>
 #include <QLabel>

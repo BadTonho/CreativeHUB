@@ -1,5 +1,5 @@
-#include "ui/media_browser_list_widget.h"
-#include "ui/media_drag_mime.h"
+#include "ui/media_browser/media_browser_list_widget.h"
+#include "ui/media_browser/media_drag_mime.h"
 #include "main_window/main_window_support.h"
 
 #include <QApplication>

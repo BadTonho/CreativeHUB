@@ -1,6 +1,6 @@
-#include "ui/effects_toolbox_widget.h"
+#include "ui/effects/effects_toolbox_widget.h"
 
-#include "ui/effects_catalog.h"
+#include "ui/effects/effects_catalog.h"
 
 #include <QAbstractItemView>
 #include <QListWidgetItem>

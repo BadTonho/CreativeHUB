@@ -1,4 +1,4 @@
-#include "ui/function_palette.h"
+#include "ui/functions/function_palette.h"
 
 #include "settings/shortcut_manager.h"
 

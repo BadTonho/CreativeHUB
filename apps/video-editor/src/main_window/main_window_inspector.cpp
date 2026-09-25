@@ -1,11 +1,11 @@
-#include "main_window.h"
+#include "main_window/main_window.h"
 #include "main_window_support.h"
 
 #include "logging/logger.h"
-#include "preview_widget.h"
+#include "ui/preview/preview_widget.h"
 #include "project/project_file.h"
 #include "timeline/timeline_widget.h"
-#include "ui/media_browser_list_widget.h"
+#include "ui/media_browser/media_browser_list_widget.h"
 
 #include <QAction>
 #include <QCheckBox>

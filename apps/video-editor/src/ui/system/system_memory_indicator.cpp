@@ -1,7 +1,7 @@
 #include "system_memory_indicator.h"
 
 #include "system/system_memory_usage.h"
-#include "ui/system_memory_details_dialog.h"
+#include "ui/system/system_memory_details_dialog.h"
 
 #include <QMouseEvent>
 #include <QSizePolicy>

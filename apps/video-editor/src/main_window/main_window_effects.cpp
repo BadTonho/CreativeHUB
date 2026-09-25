@@ -1,8 +1,8 @@
-#include "main_window.h"
+#include "main_window/main_window.h"
 
-#include "ui/effects_favorites_widget.h"
-#include "ui/effects_list_widget.h"
-#include "ui/effects_toolbox_widget.h"
+#include "ui/effects/effects_favorites_widget.h"
+#include "ui/effects/effects_list_widget.h"
+#include "ui/effects/effects_toolbox_widget.h"
 
 QWidget* MainWindow::createEffectsToolbox() {
     effects_toolbox_ = new EffectsToolboxWidget;

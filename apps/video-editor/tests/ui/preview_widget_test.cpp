@@ -1,4 +1,4 @@
-#include "preview_widget.h"
+#include "ui/preview/preview_widget.h"
 
 #include "rendering/preview_performance_metrics.h"
 

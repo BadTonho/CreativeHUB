@@ -1,4 +1,4 @@
-#include "ui/effects_favorites_widget.h"
+#include "ui/effects/effects_favorites_widget.h"
 
 #include <QAbstractItemView>
 

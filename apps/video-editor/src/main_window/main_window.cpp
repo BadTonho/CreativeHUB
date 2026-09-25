@@ -1,4 +1,4 @@
-#include "main_window.h"
+#include "main_window/main_window.h"
 
 #include "logging/logger.h"
 #include "main_window/main_window_support.h"

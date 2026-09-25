@@ -7,6 +7,11 @@ layout, focus, and user input. Qt-specific types stay inside the application
 UI and rendering layers. Future shared interfaces use standard C++ types and
 do not expose QObject, QString, Qt containers, or Qt signals.
 
+UI components live under `apps/video-editor/src/ui/`, grouped into `effects`,
+`functions`, `media_browser`, `preview`, `system`, `timeline`, and `workspace`.
+The Video Editor window declaration and implementation live together under
+`apps/video-editor/src/main_window/`.
+
 The preview uses provisional Qt OpenGL with a CPU fallback. View > Grayscale
 Preview is optional and off by default. GPU failures preserve the current
 frame, switch to CPU rendering, show a short status message, and write a

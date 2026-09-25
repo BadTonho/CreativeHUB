@@ -1,4 +1,4 @@
-#include "ui/effects_catalog.h"
+#include "ui/effects/effects_catalog.h"
 
 namespace effects {
 

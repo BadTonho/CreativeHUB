@@ -52,7 +52,7 @@ mesma função.
 
 ### 1. `MainWindow` é um God Object
 
-`apps/video-editor/src/main_window.h` possui aproximadamente 440 linhas e
+`apps/video-editor/src/main_window/main_window.h` possui aproximadamente 440 linhas e
 declara operações para criação do workspace, gerenciamento de mídia,
 persistência do projeto, edição da timeline, edição do inspector, reprodução,
 autosave e diagnóstico do preview.
@@ -422,7 +422,7 @@ remover sinais de compatibilidade e APIs legadas.
 ### Menor prioridade
 
 - separar a construção do workspace da coordenação da aplicação;
-- reduzir o acoplamento de includes em `main_window.h`;
+- reduzir o acoplamento de includes em `main_window/main_window.h`;
 - substituir o acesso global às métricas por uma interface de diagnóstico
   injetada;
 - organizar o CMake em targets internos depois que as fronteiras estiverem

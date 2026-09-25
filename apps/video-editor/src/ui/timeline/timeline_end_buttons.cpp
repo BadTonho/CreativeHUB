@@ -1,4 +1,4 @@
-#include "ui/timeline_end_buttons.h"
+#include "ui/timeline/timeline_end_buttons.h"
 
 #include <QHBoxLayout>
 #include <QPushButton>

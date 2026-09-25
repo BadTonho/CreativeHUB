@@ -14,8 +14,8 @@ else()
 endif()
 
 set(MAIN_EDITOR_CORE_SOURCES
-    src/main_window.cpp
-    src/main_window.h
+    src/main_window/main_window.cpp
+    src/main_window/main_window.h
     src/application/editor_session.cpp
     src/application/editor_session.h
     src/application/media_controller.cpp
@@ -49,8 +49,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/system/performance_usage.h
     src/system/system_memory_usage.cpp
     src/system/system_memory_usage.h
-    src/preview_widget.cpp
-    src/preview_widget.h
+    src/ui/preview/preview_widget.cpp
+    src/ui/preview/preview_widget.h
     src/rendering/opengl_preview_surface.cpp
     src/rendering/opengl_preview_surface.h
     src/rendering/frame_compositor.cpp
@@ -123,29 +123,29 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/timeline/timeline_trim_gesture.h
     src/timeline/timeline_widget.cpp
     src/timeline/timeline_widget.h
-    src/ui/media_browser_list_widget.cpp
-    src/ui/media_browser_list_widget.h
-    src/ui/media_browser_bin_tree_widget.cpp
-    src/ui/media_browser_bin_tree_widget.h
-    src/ui/media_drag_mime.h
-    src/ui/effects_catalog.cpp
-    src/ui/effects_catalog.h
-    src/ui/effects_favorites_widget.cpp
-    src/ui/effects_favorites_widget.h
-    src/ui/effects_toolbox_widget.cpp
-    src/ui/effects_toolbox_widget.h
-    src/ui/effects_list_widget.cpp
-    src/ui/effects_list_widget.h
-    src/ui/function_palette.cpp
-    src/ui/function_palette.h
-    src/ui/system_memory_details_dialog.cpp
-    src/ui/system_memory_details_dialog.h
-    src/ui/system_memory_indicator.cpp
-    src/ui/system_memory_indicator.h
-    src/ui/timeline_end_buttons.cpp
-    src/ui/timeline_end_buttons.h
-    src/ui/workspace_page_view.cpp
-    src/ui/workspace_page_view.h
+    src/ui/media_browser/media_browser_list_widget.cpp
+    src/ui/media_browser/media_browser_list_widget.h
+    src/ui/media_browser/media_browser_bin_tree_widget.cpp
+    src/ui/media_browser/media_browser_bin_tree_widget.h
+    src/ui/media_browser/media_drag_mime.h
+    src/ui/effects/effects_catalog.cpp
+    src/ui/effects/effects_catalog.h
+    src/ui/effects/effects_favorites_widget.cpp
+    src/ui/effects/effects_favorites_widget.h
+    src/ui/effects/effects_toolbox_widget.cpp
+    src/ui/effects/effects_toolbox_widget.h
+    src/ui/effects/effects_list_widget.cpp
+    src/ui/effects/effects_list_widget.h
+    src/ui/functions/function_palette.cpp
+    src/ui/functions/function_palette.h
+    src/ui/system/system_memory_details_dialog.cpp
+    src/ui/system/system_memory_details_dialog.h
+    src/ui/system/system_memory_indicator.cpp
+    src/ui/system/system_memory_indicator.h
+    src/ui/timeline/timeline_end_buttons.cpp
+    src/ui/timeline/timeline_end_buttons.h
+    src/ui/workspace/workspace_page_view.cpp
+    src/ui/workspace/workspace_page_view.h
 )
 
 add_library(creative-suite-main-editor-core STATIC

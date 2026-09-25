@@ -1,17 +1,17 @@
-#include "main_window.h"
+#include "main_window/main_window.h"
 #include "main_window_support.h"
 
 #include "logging/logger.h"
-#include "preview_widget.h"
+#include "ui/preview/preview_widget.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
 #include "timeline/timeline_clip_edge_command.h"
 #include "timeline/timeline_track_header_overlay.h"
 #include "timeline/timeline_zoom.h"
 #include "timeline/timeline_widget.h"
-#include "ui/media_browser_list_widget.h"
-#include "ui/system_memory_indicator.h"
-#include "ui/timeline_end_buttons.h"
+#include "ui/media_browser/media_browser_list_widget.h"
+#include "ui/system/system_memory_indicator.h"
+#include "ui/timeline/timeline_end_buttons.h"
 
 #include <QAction>
 #include <QCheckBox>

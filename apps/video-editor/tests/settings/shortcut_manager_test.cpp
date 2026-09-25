@@ -1,5 +1,5 @@
 #include "settings/shortcut_manager.h"
-#include "ui/function_palette.h"
+#include "ui/functions/function_palette.h"
 
 #include <QAction>
 #include <QApplication>

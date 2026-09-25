@@ -1,6 +1,6 @@
 #include "timeline/timeline_widget.h"
 #include "timeline/timeline_track_header_overlay.h"
-#include "ui/media_drag_mime.h"
+#include "ui/media_browser/media_drag_mime.h"
 
 #include <QApplication>
 #include <QContextMenuEvent>
