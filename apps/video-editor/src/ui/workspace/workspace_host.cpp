@@ -91,6 +91,11 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
     }
     current_page_ = page;
     if (page == WorkspacePageId::Render) {
+        if (render_workspace_ != nullptr && preview_widget_ != nullptr &&
+            render_workspace_->previewWidget() != preview_widget_) {
+            central_workspace_pages_->removeWidget(preview_widget_);
+            render_workspace_->setPreviewWidget(preview_widget_);
+        }
         if (viewer_title_ != nullptr) viewer_title_->hide();
         if (render_workspace_ != nullptr &&
             render_workspace_->centralPage() != nullptr) {
@@ -101,6 +106,14 @@ void WorkspaceHost::setPage(WorkspacePageId page) {
             lower_workspace_panel_->setCurrentWidget(timeline_panel_);
         }
         return;
+    }
+
+    if (render_workspace_ != nullptr &&
+        render_workspace_->previewWidget() == preview_widget_) {
+        auto* preview_widget = render_workspace_->takePreviewWidget();
+        if (preview_widget != nullptr) {
+            central_workspace_pages_->addWidget(preview_widget);
+        }
     }
 
     if (viewer_title_ != nullptr) {

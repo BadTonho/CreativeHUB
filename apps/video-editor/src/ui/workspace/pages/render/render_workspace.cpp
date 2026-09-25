@@ -99,12 +99,15 @@ void RenderWorkspace::createPanels(QWidget* parent) {
 
     queue_model_ = new RenderQueueModel(this);
     createSettingsPanel();
+    createPreviewPanel();
     createQueuePanel();
     splitter_->addWidget(settings_panel_);
+    splitter_->addWidget(preview_panel_);
     splitter_->addWidget(queue_panel_);
-    splitter_->setStretchFactor(0, 2);
-    splitter_->setStretchFactor(1, 3);
-    splitter_->setSizes({420, 650});
+    splitter_->setStretchFactor(0, 5);
+    splitter_->setStretchFactor(1, 9);
+    splitter_->setStretchFactor(2, 6);
+    splitter_->setSizes({480, 860, 570});
 
     populateContainerOptions();
     updateResolutionFields();
@@ -416,6 +419,23 @@ void RenderWorkspace::createQueuePanel() {
     updateQueueActions();
 }
 
+void RenderWorkspace::createPreviewPanel() {
+    preview_panel_ = new QWidget(splitter_);
+    preview_panel_->setObjectName("renderPreviewPanel");
+    preview_panel_->setMinimumWidth(320);
+    auto* panel_layout = new QVBoxLayout(preview_panel_);
+    panel_layout->setContentsMargins(8, 0, 8, 0);
+    panel_layout->setSpacing(6);
+
+    auto* heading = new QLabel(QStringLiteral("Preview"), preview_panel_);
+    QFont heading_font = heading->font();
+    heading_font.setBold(true);
+    heading_font.setPointSize(heading_font.pointSize() + 1);
+    heading->setFont(heading_font);
+    panel_layout->addWidget(heading);
+    panel_layout->addStretch(1);
+}
+
 void RenderWorkspace::populateContainerOptions() {
     containers_ = RenderOutputCapabilities::availableContainers();
     container_combo_->clear();
@@ -697,6 +717,29 @@ void RenderWorkspace::setActive(bool active) {
     if (timeline_read_only_handler_) {
         timeline_read_only_handler_(active_);
     }
+}
+
+void RenderWorkspace::setPreviewWidget(QWidget* preview_widget) {
+    if (preview_widget_ != nullptr || preview_panel_ == nullptr ||
+        preview_widget == nullptr) {
+        return;
+    }
+
+    auto* layout = static_cast<QVBoxLayout*>(preview_panel_->layout());
+    preview_widget_ = preview_widget;
+    layout->insertWidget(1, preview_widget_, 1);
+    preview_widget_->show();
+}
+
+QWidget* RenderWorkspace::takePreviewWidget() {
+    if (preview_widget_ == nullptr) return nullptr;
+    auto* preview_widget = preview_widget_;
+    if (preview_panel_ != nullptr && preview_panel_->layout() != nullptr) {
+        preview_panel_->layout()->removeWidget(preview_widget);
+    }
+    preview_widget->setParent(nullptr);
+    preview_widget_ = nullptr;
+    return preview_widget;
 }
 
 }  // namespace ui

@@ -281,12 +281,12 @@ Inspector have no composition operations. Switching pages changes only the
 visible workspace panels; it does not change the selected clip, playhead,
 playback, project data, history, or dirty state.
 
-`ui/workspace/pages/render/RenderWorkspace` supplies the Render settings and
-queue columns and activates the shared Timeline's read-only presentation
-through a handler bound to `EditWorkspaceController`. Its queue model owns only
-session-scoped prepared jobs; each job contains a copy of the current project
-document and its output settings, while media remains referenced by path.
-Leaving Render restores Timeline controls and its footer.
+`ui/workspace/pages/render/RenderWorkspace` supplies the Render settings,
+shared Preview, and queue columns and activates the shared Timeline's read-only
+presentation through a handler bound to `EditWorkspaceController`. Its queue
+model owns only session-scoped prepared jobs; each job contains a copy of the
+current project document and its output settings, while media remains
+referenced by path. Leaving Render restores Timeline controls and its footer.
 `WorkspaceHost` remains responsible for selecting that page, while
 `WorkspaceTransitionController` coordinates page changes, workspace selectors,
 the lower dock title, and Render's temporary dock visibility snapshot.
@@ -294,8 +294,11 @@ the lower dock title, and Render's temporary dock visibility snapshot.
 Closing from Render restores the previous dock visibility before the window
 saves its layout.
 
-Render divides its central page into a resizable settings column on the left
-and a wider queue column on the right. Settings include the output file,
+Render divides its central page into resizable settings, Preview, and queue
+columns from left to right. The same Preview widget used by Edit and Fusion is
+moved into the middle column while Render is active; it continues to display
+the current project frame and follows playback. The Preview is returned to the
+central workspace page when leaving Render. Settings include the output file,
 container, compatible video/audio encoders, resolution, frame rate, quality
 profile, and editable bitrate suggestions. Containers and encoders are
 discovered from the active FFmpeg runtime; only containers with a compatible
@@ -481,11 +484,14 @@ widgets to `WorkspaceHost`. The shared Preview remains owned by the application
 shell and is reused as the Viewer surface; the Fusion workspace does not create
 or modify project, selection, playhead, playback, or history state.
 
-`ui/workspace/pages/render/RenderWorkspace` builds the output form and
-session-only queue UI. `RenderOutputCapabilities` enumerates the active FFmpeg
-runtime and filters container/encoder combinations before they reach the form.
-`RenderQueueModel` stores immutable project/settings snapshots for prepared
-jobs; it does not encode media or modify project history or dirty state.
+`ui/workspace/pages/render/RenderWorkspace` builds the output form, a central
+slot for the shared Preview, and the session-only queue UI. `WorkspaceHost`
+moves the existing Preview widget into that slot for Render and returns it to
+the central workspace stack for Edit or Fusion. `RenderOutputCapabilities`
+enumerates the active FFmpeg runtime and filters container/encoder combinations
+before they reach the form. `RenderQueueModel` stores immutable project/settings
+snapshots for prepared jobs; it does not encode media or modify project history
+or dirty state.
 
 The internal `frame_step_navigation` module decides whether a Previous/Next
 Frame command stays within the active clip, activates a clip at the boundary,

@@ -177,8 +177,9 @@ int main(int argc, char* argv[]) {
                         render_workspace->centralPage() &&
                     render_workspace->isActive() && timeline_read_only,
                 "Render must display its settings and queue page.");
-        require(workspace_host->previewWidget() == preview && preview->isHidden(),
-                "Render must hide the Preview widget.");
+        require(workspace_host->previewWidget() == preview && preview->isVisible() &&
+                    render_workspace->previewWidget() == preview,
+                "Render must show the same shared Preview widget.");
         require(viewer_title->isHidden(),
                 "Render must hide the Viewer title.");
         require(workspace_host->lowerWorkspacePanel()->currentWidget() == timeline,
@@ -206,15 +207,26 @@ int main(int argc, char* argv[]) {
             "renderAudioBitrate");
         auto* add_to_queue = workspace_host->renderPage()->findChild<QPushButton*>(
             "renderAddToQueueButton");
-        require(render_splitter != nullptr && render_splitter->count() == 2 &&
+        require(render_splitter != nullptr && render_splitter->count() == 3 &&
                     render_workspace->settingsPanel() != nullptr &&
-                    render_workspace->queuePanel() != nullptr && output_path != nullptr &&
+                    render_workspace->previewPanel() != nullptr &&
+                    render_workspace->queuePanel() != nullptr &&
+                    render_splitter->widget(0) == render_workspace->settingsPanel() &&
+                    render_splitter->widget(1) == render_workspace->previewPanel() &&
+                    render_splitter->widget(2) == render_workspace->queuePanel() &&
+                    render_workspace->previewPanel()->findChild<QWidget*>(
+                        "sharedPreview") == preview && output_path != nullptr &&
                     container_combo != nullptr && video_encoder_combo != nullptr &&
                     frame_rate_spin != nullptr && resolution_combo != nullptr &&
                     custom_width != nullptr && custom_height != nullptr &&
                     quality_preset != nullptr && video_bitrate != nullptr &&
                     audio_bitrate != nullptr && add_to_queue != nullptr,
-                "Render must show its settings and queue columns.");
+                "Render must show settings, Preview, and queue columns in order.");
+        const auto initial_column_sizes = render_splitter->sizes();
+        require(initial_column_sizes.size() == 3 &&
+                    initial_column_sizes[1] > initial_column_sizes[0] &&
+                    initial_column_sizes[1] > initial_column_sizes[2],
+                "Render must initially give the Preview the widest column.");
         require(frame_rate_spin->value() == 23.976 && container_combo->count() > 0 &&
                     video_encoder_combo->count() > 0 &&
                     resolution_combo->currentData().toSize() == QSize(1920, 1080) &&
@@ -274,6 +286,10 @@ int main(int argc, char* argv[]) {
         require(workspace_host->currentPage() == ui::WorkspacePageId::Fusion &&
                     workspace_host->previewWidget() == preview && preview->isVisible(),
                 "Returning to Fusion must restore the shared Preview.");
+        require(render_workspace->previewWidget() == nullptr &&
+                    preview->parentWidget() == workspace_host->findChild<QStackedWidget*>(
+                        "centralWorkspacePages"),
+                "Leaving Render must return the Preview to the central workspace stack.");
         require(!render_workspace->isActive() && !timeline_read_only,
                 "Leaving Render for Fusion must restore Timeline interaction.");
         require(workspace_host->lowerWorkspacePanel()->currentWidget() ==

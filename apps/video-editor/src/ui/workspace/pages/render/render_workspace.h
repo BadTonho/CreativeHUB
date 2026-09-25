@@ -37,9 +37,13 @@ public:
 
     void createPanels(QWidget* parent);
     void setActive(bool active);
+    void setPreviewWidget(QWidget* preview_widget);
+    [[nodiscard]] QWidget* takePreviewWidget();
 
     [[nodiscard]] QWidget* centralPage() const noexcept { return central_page_; }
     [[nodiscard]] QWidget* settingsPanel() const noexcept { return settings_panel_; }
+    [[nodiscard]] QWidget* previewPanel() const noexcept { return preview_panel_; }
+    [[nodiscard]] QWidget* previewWidget() const noexcept { return preview_widget_; }
     [[nodiscard]] QWidget* queuePanel() const noexcept { return queue_panel_; }
     [[nodiscard]] QSplitter* splitter() const noexcept { return splitter_; }
     [[nodiscard]] RenderQueueModel* queueModel() const noexcept {
@@ -49,6 +53,7 @@ public:
 
 private:
     void createSettingsPanel();
+    void createPreviewPanel();
     void createQueuePanel();
     void populateContainerOptions();
     void updateEncoderOptions();
@@ -68,6 +73,8 @@ private:
     FrameRateProvider frame_rate_provider_;
     QWidget* central_page_ = nullptr;
     QWidget* settings_panel_ = nullptr;
+    QWidget* preview_panel_ = nullptr;
+    QWidget* preview_widget_ = nullptr;
     QWidget* queue_panel_ = nullptr;
     QSplitter* splitter_ = nullptr;
     QLineEdit* output_path_ = nullptr;

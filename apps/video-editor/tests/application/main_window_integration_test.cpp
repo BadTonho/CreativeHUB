@@ -324,8 +324,10 @@ public:
                         !window.fusion_workspace_button_->isChecked(),
                     "The MainWindow must select only Render.");
             require(window.workspace_host_->renderPage()->isVisible() &&
-                        window.preview_widget_->isHidden(),
-                    "Render must show its configuration and queue page and hide the Preview.");
+                        window.preview_widget_->isVisible() &&
+                        window.render_workspace_->previewWidget() ==
+                            window.preview_widget_,
+                    "Render must show its settings, shared Preview, and queue page.");
             auto* render_output_path = window.render_workspace_->centralPage()
                 ->findChild<QLineEdit*>("renderOutputPath");
             auto* add_render_job = window.render_workspace_->centralPage()
@@ -333,9 +335,11 @@ public:
             require(window.workspace_host_->renderPage()->findChild<QWidget*>(
                         "renderSettingsPanel") != nullptr &&
                         window.workspace_host_->renderPage()->findChild<QWidget*>(
+                            "renderPreviewPanel") != nullptr &&
+                        window.workspace_host_->renderPage()->findChild<QWidget*>(
                             "renderQueuePanel") != nullptr &&
                         render_output_path != nullptr && add_render_job != nullptr,
-                    "Render must expose settings on the left and its queue on the right.");
+                    "Render must expose settings, the shared Preview, and queue from left to right.");
             render_output_path->setText(QString::fromStdString(
                 (directory / "queued-render.mp4").string()));
             const auto project_before_queue_add = window.currentProjectDocument();
@@ -372,7 +376,8 @@ public:
                 "Returning to Fusion must restore the dock visibility from before Render.");
             require(window.workspace_host_->currentPage() ==
                             ui::WorkspacePageId::Fusion &&
-                        window.workspace_host_->previewWidget()->isVisible(),
+                        window.workspace_host_->previewWidget()->isVisible() &&
+                        window.render_workspace_->previewWidget() == nullptr,
                     "Returning to Fusion must restore its Preview.");
             require(window.timeline_dock_->windowTitle() == "Node Editor",
                     "Returning to Fusion must restore the Node Editor title.");
