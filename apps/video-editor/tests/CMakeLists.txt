@@ -52,6 +52,11 @@ function(deploy_qt_test_runtime target_name)
                 --no-translations
                 --no-compiler-runtime
                 "$<TARGET_FILE:${target_name}>"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory
+                "$<TARGET_FILE_DIR:${target_name}>/platforms"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${QT_BIN_DIR}/../plugins/platforms/qoffscreen.dll"
+                "$<TARGET_FILE_DIR:${target_name}>/platforms"
             VERBATIM
         )
     endif()
