@@ -253,9 +253,9 @@ public:
                         window.workspace_host_->lowerWorkspacePanel()->currentWidget() ==
                             window.workspace_host_->timelinePanel() &&
                         window.timeline_dock_->windowTitle() == "Timeline" &&
-                        window.timeline_widget_->isReadOnly() &&
-                        window.timeline_controls_container_->isHidden() &&
-                        window.timeline_footer_->isHidden(),
+                        window.edit_workspace_->ui().timeline->isReadOnly() &&
+                        window.edit_workspace_->ui().timeline_controls->isHidden() &&
+                        window.edit_workspace_->ui().timeline_footer->isHidden(),
                     "Render must show the read-only Timeline without its controls or footer.");
             require(window.render_workspace_button_->isVisible(),
                     "The Render selector must remain visible while Render is active.");
@@ -275,9 +275,9 @@ public:
                     "Returning to Fusion must restore its Preview.");
             require(window.timeline_dock_->windowTitle() == "Node Editor",
                     "Returning to Fusion must restore the Node Editor title.");
-            require(!window.timeline_widget_->isReadOnly() &&
-                        !window.timeline_controls_container_->isHidden() &&
-                        !window.timeline_footer_->isHidden(),
+            require(!window.edit_workspace_->ui().timeline->isReadOnly() &&
+                        !window.edit_workspace_->ui().timeline_controls->isHidden() &&
+                        !window.edit_workspace_->ui().timeline_footer->isHidden(),
                     "Returning to Fusion must restore Timeline interaction and controls.");
 
             window.media_dock_->hide();
@@ -303,9 +303,9 @@ public:
             require_dock_visibility(
                 hidden_timeline_visibility,
                 "Leaving Render must restore the prior hidden state of the Timeline dock.");
-            require(!window.timeline_widget_->isReadOnly() &&
-                        !window.timeline_controls_container_->isHidden() &&
-                        !window.timeline_footer_->isHidden() &&
+            require(!window.edit_workspace_->ui().timeline->isReadOnly() &&
+                        !window.edit_workspace_->ui().timeline_controls->isHidden() &&
+                        !window.edit_workspace_->ui().timeline_footer->isHidden() &&
                         !window.project_dirty_,
                     "Workspace changes must restore Timeline interaction without dirtying the project.");
             window.restoreDefaultLayout();

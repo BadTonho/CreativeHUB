@@ -9,6 +9,7 @@
 #include "timeline/timeline_widget.h"
 #include "ui/functions/function_palette.h"
 #include "ui/media_browser/media_browser_list_widget.h"
+#include "ui/timeline/timeline_end_buttons.h"
 #include "ui/workspace/workspace_host.h"
 
 #include <QAction>
@@ -61,8 +62,7 @@ using namespace main_window_detail;
 void MainWindow::createWorkspace() {
     preview_widget_ = new PreviewWidget(this);
     edit_workspace_ = new ui::EditWorkspace(
-        editor_session_, timeline_command_service_, preview_widget_, nullptr,
-        nullptr, this);
+        editor_session_, timeline_command_service_, preview_widget_, this);
     connect(
         edit_workspace_->controller(),
         &ui::EditWorkspaceController::historyStateChanged,
@@ -77,6 +77,183 @@ void MainWindow::createWorkspace() {
         this,
         [this](const QString& message) {
             statusBar()->showMessage(message);
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::warningMessageRequested,
+        this,
+        [this](const QString& title, const QString& message) {
+            QMessageBox::warning(this, title, message);
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::projectDirtyStateUpdateRequested,
+        this,
+        &MainWindow::updateProjectDirtyState);
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::playbackInvalidateRequested,
+        this,
+        [this](bool stop_playback) {
+            if (playback_controller_ != nullptr) {
+                playback_controller_->invalidate(stop_playback);
+            }
+            playback_is_playing_ = false;
+            updatePlaybackControls();
+            updatePlaybackStatus();
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::refreshPlaybackCompositionRequested,
+        this,
+        &MainWindow::refreshPlaybackComposition);
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::renderCompositionFrameRequested,
+        this,
+        [this](qint64 timeline_frame, qint64 clip_frame) {
+            if (playback_controller_ != nullptr) {
+                playback_controller_->renderCompositionFrame(
+                    timeline_frame, clip_frame);
+            }
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::seekActiveClipRequested,
+        this,
+        [this](qint64 clip_frame) {
+            if (playback_controller_ != nullptr) {
+                playback_controller_->seekActiveClip(clip_frame);
+            }
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::playbackAudioParametersRequested,
+        this,
+        &MainWindow::updatePlaybackAudioParameters);
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::playbackCommandRequested,
+        this,
+        &MainWindow::sendPlaybackCommand);
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::monitorVolumeChangedRequested,
+        this,
+        &MainWindow::applyMonitorVolumePercent);
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::razorToolStateChanged,
+        this,
+        [this](bool enabled) {
+            if (razor_tool_action_ != nullptr &&
+                razor_tool_action_->isChecked() != enabled) {
+                const QSignalBlocker blocker(razor_tool_action_);
+                razor_tool_action_->setChecked(enabled);
+            }
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::timelineImageClipEditRequested,
+        this,
+        &MainWindow::editTimelineImageClip);
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::timelineMediaDropRequested,
+        this,
+        &MainWindow::handleMediaDropAt);
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::seekTimelineRequested,
+        this,
+        [this](qint64 global_frame) {
+            const auto result = playback_controller_ != nullptr
+                ? playback_controller_->seekTimeline(global_frame)
+                : playback::PlaybackCommandResult::Unavailable;
+            edit_workspace_->controller()->handleTimelineSeekResult(
+                global_frame, result);
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::clearPreviewRequested,
+        this,
+        [this](const QString& message) {
+            if (preview_widget_ != nullptr) preview_widget_->clearFrame(message);
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::selectMediaBrowserClipRequested,
+        this,
+        [this](timeline::ClipId clip_id) {
+            const auto location = timeline_model_.locateClip(clip_id);
+            if (!location.has_value()) return;
+            const auto& clip = timeline_model_.tracks()[location->track_index]
+                .clips[location->clip_index];
+            populateMediaBrowser(clip.source_path);
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::activateTimelineClipRequested,
+        this,
+        [this](timeline::ClipId clip_id,
+               qint64 clip_frame,
+               bool resume_playback,
+               bool preserve_timeline_playhead) {
+            const auto location = timeline_model_.locateClip(clip_id);
+            if (!location.has_value()) return;
+            activateTimelineClipAt(
+                location->track_index,
+                location->clip_index,
+                clip_frame,
+                resume_playback,
+                preserve_timeline_playhead);
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::showTimelineClipPreviewRequested,
+        this,
+        [this](timeline::ClipId clip_id) {
+            const auto location = timeline_model_.locateClip(clip_id);
+            if (!location.has_value()) return;
+            const auto& clip = timeline_model_.tracks()[location->track_index]
+                .clips[location->clip_index];
+            populateMediaBrowser(clip.source_path);
+            const auto media = std::find_if(
+                media_items_.begin(), media_items_.end(),
+                [&clip](const ImportedMedia& item) {
+                    return normalizedPath(item.metadata.source_path) ==
+                        normalizedPath(clip.source_path);
+                });
+            if (media == media_items_.end()) return;
+            if (media->offline) {
+                preview_widget_->clearFrame(
+                    "Preview area\n\nThe selected media is offline.");
+            } else {
+                preview_widget_->setFrame(media->first_frame);
+            }
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::clearMediaBrowserSelectionRequested,
+        this,
+        [this]() {
+            if (media_list_ == nullptr) return;
+            const QSignalBlocker blocker(media_list_);
+            media_list_->clearSelection();
+            media_list_->setCurrentRow(-1);
+        });
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::timelineSelectionPresentationChanged,
+        this,
+        &MainWindow::synchronizeActiveTimelineSelection);
+    connect(
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::refreshPlaybackUiRequested,
+        this,
+        [this]() {
+            updatePlaybackControls();
+            updatePlaybackStatus();
         });
     connect(
         edit_workspace_->controller(),
@@ -154,13 +331,26 @@ void MainWindow::createWorkspace() {
 
     populateMediaBrowser();
     updateTimelineState();
+    edit_workspace_->createPanels(this);
+    applyMonitorVolumePercent(edit_workspace_->ui().monitor_volume->value());
 
-    auto* edit_inspector = createInspector();
-    auto* edit_timeline = createTimeline();
-    edit_workspace_->setSharedPanels(
-        preview_widget_, edit_inspector, edit_timeline);
+    const auto workspace_buttons = ui::createTimelineEndButtons(this);
+    workspace_buttons_container_ = workspace_buttons.container;
+    edit_workspace_button_ = workspace_buttons.edit;
+    fusion_workspace_button_ = workspace_buttons.fusion;
+    render_workspace_button_ = workspace_buttons.render;
+    connect(edit_workspace_button_, &QPushButton::clicked, this, [this]() {
+        setWorkspacePage(ui::WorkspacePageId::Edit);
+    });
+    connect(fusion_workspace_button_, &QPushButton::clicked, this, [this]() {
+        setWorkspacePage(ui::WorkspacePageId::Fusion);
+    });
+    connect(render_workspace_button_, &QPushButton::clicked, this, [this]() {
+        setWorkspacePage(ui::WorkspacePageId::Render);
+    });
     workspace_host_ = new ui::WorkspaceHost(edit_workspace_, this);
     setCentralWidget(workspace_host_);
+    statusBar()->setVisible(false);
 
     inspector_dock_ = createDock(
         "Inspector",
@@ -205,15 +395,9 @@ void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
         if (timeline_dock_ != nullptr) timeline_dock_->show();
     }
 
-    if (timeline_controls_container_ != nullptr) {
-        timeline_controls_container_->setVisible(
-            page != ui::WorkspacePageId::Render);
-    }
-    if (timeline_footer_ != nullptr) {
-        timeline_footer_->setVisible(page != ui::WorkspacePageId::Render);
-    }
-    if (timeline_widget_ != nullptr) {
-        timeline_widget_->setReadOnly(page == ui::WorkspacePageId::Render);
+    if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+        edit_workspace_->controller()->setTimelineReadOnly(
+            page == ui::WorkspacePageId::Render);
     }
     if (workspace_host_ != nullptr) {
         workspace_host_->setPage(page);
@@ -382,8 +566,8 @@ void MainWindow::createMenus() {
     connect(
         delete_clip_action_,
         &QAction::triggered,
-        this,
-        &MainWindow::deleteActiveTimelineClip);
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::deleteActiveTimelineClip);
     auto* split_clip_action = edit_menu->addAction("Split Clip at Playhead");
     disableDuringProjectLoad(split_clip_action);
     split_clip_action->setShortcut(QKeySequence("Ctrl+K"));
@@ -394,8 +578,8 @@ void MainWindow::createMenus() {
     connect(
         split_clip_action,
         &QAction::triggered,
-        this,
-        &MainWindow::splitActiveClipAtPlayhead);
+        edit_workspace_->controller(),
+        &ui::EditWorkspaceController::splitActiveClipAtPlayhead);
     edit_menu->addSeparator();
     add_video_track_action_ = edit_menu->addAction("Add Video Track");
     disableDuringProjectLoad(add_video_track_action_);
@@ -426,14 +610,9 @@ void MainWindow::createMenus() {
     razor_tool_action->setCheckable(true);
     razor_tool_action_ = razor_tool_action;
     connect(razor_tool_action_, &QAction::toggled, this, [this](bool enabled) {
-        if (razor_button_ != nullptr && razor_button_->isChecked() != enabled) {
-            razor_button_->setChecked(enabled);
+        if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+            edit_workspace_->controller()->setRazorMode(enabled);
         }
-        if (selection_button_ != nullptr &&
-            selection_button_->isChecked() == enabled) {
-            selection_button_->setChecked(!enabled);
-        }
-        if (timeline_widget_ != nullptr) timeline_widget_->setRazorMode(enabled);
     });
     edit_menu->addSeparator();
     require_alt_to_move_action_ = edit_menu->addAction("Require Alt to Move Clips");
@@ -442,13 +621,13 @@ void MainWindow::createMenus() {
     const bool require_alt_to_move = settings.value(
         "timeline/require_alt_to_move", false).toBool();
     require_alt_to_move_action_->setChecked(require_alt_to_move);
-    if (timeline_widget_ != nullptr) {
-        timeline_widget_->setMoveRequiresAlt(require_alt_to_move);
+    if (editUi().timeline != nullptr) {
+        editUi().timeline->setMoveRequiresAlt(require_alt_to_move);
     }
     connect(require_alt_to_move_action_, &QAction::toggled, this, [this](bool enabled) {
         QSettings settings;
         settings.setValue("timeline/require_alt_to_move", enabled);
-        if (timeline_widget_ != nullptr) timeline_widget_->setMoveRequiresAlt(enabled);
+        if (editUi().timeline != nullptr) editUi().timeline->setMoveRequiresAlt(enabled);
         statusBar()->showMessage(enabled
             ? "Alt is required to move timeline clips."
             : "Timeline clips can be moved by dragging.");
@@ -466,11 +645,16 @@ void MainWindow::createMenus() {
         move_playhead_on_clip_selection_action_,
         &QAction::toggled,
         this,
-        [](bool enabled) {
+        [this](bool enabled) {
             QSettings settings;
             settings.setValue(
                 "timeline/move_playhead_on_clip_selection", enabled);
+            if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+                edit_workspace_->controller()->setMovePlayheadOnClipSelection(enabled);
+            }
         });
+    edit_workspace_->controller()->setMovePlayheadOnClipSelection(
+        move_playhead_on_clip_selection_action_->isChecked());
 
     auto* view_menu = menuBar()->addMenu("&View");
     auto* media_pool_menu = view_menu->addMenu("Media Pool");
@@ -628,7 +812,7 @@ void MainWindow::createMenus() {
         QStringLiteral("playback.play_pause"),
         QStringLiteral("Play or Pause"), play_action);
     connect(play_action, &QAction::triggered, this, [this]() {
-        sendPlaybackCommand(playback_is_playing_ ? playback::PlaybackCommand::Pause : playback::PlaybackCommand::Play);
+        edit_workspace_->controller()->togglePlayback();
     });
     addAction(play_action);
 
@@ -639,7 +823,8 @@ void MainWindow::createMenus() {
         QStringLiteral("playback.previous_frame"),
         QStringLiteral("Previous Frame"), previous_frame_action);
     connect(previous_frame_action, &QAction::triggered, this, [this]() {
-        sendPlaybackCommand(playback::PlaybackCommand::StepBackward);
+        edit_workspace_->controller()->requestPlaybackCommand(
+            playback::PlaybackCommand::StepBackward);
     });
     addAction(previous_frame_action);
 
@@ -650,7 +835,8 @@ void MainWindow::createMenus() {
         QStringLiteral("playback.next_frame"),
         QStringLiteral("Next Frame"), next_frame_action);
     connect(next_frame_action, &QAction::triggered, this, [this]() {
-        sendPlaybackCommand(playback::PlaybackCommand::StepForward);
+        edit_workspace_->controller()->requestPlaybackCommand(
+            playback::PlaybackCommand::StepForward);
     });
     addAction(next_frame_action);
 
@@ -662,7 +848,7 @@ void MainWindow::createMenus() {
         QStringLiteral("timeline.nudge_left"),
         QStringLiteral("Nudge Clip Left"), move_left_action);
     connect(move_left_action, &QAction::triggered, this, [this]() {
-        moveActiveTimelineClip(-1);
+        edit_workspace_->controller()->moveActiveTimelineClip(-1);
     });
     addAction(move_left_action);
 
@@ -674,7 +860,7 @@ void MainWindow::createMenus() {
         QStringLiteral("timeline.nudge_right"),
         QStringLiteral("Nudge Clip Right"), move_right_action);
     connect(move_right_action, &QAction::triggered, this, [this]() {
-        moveActiveTimelineClip(1);
+        edit_workspace_->controller()->moveActiveTimelineClip(1);
     });
     addAction(move_right_action);
 

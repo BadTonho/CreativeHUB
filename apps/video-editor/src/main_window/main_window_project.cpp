@@ -75,17 +75,17 @@ QString autosaveSnapshotDateText(
 
 project::ProjectDocument MainWindow::currentProjectDocument() const {
     const application::TimelinePresentationState presentation{
-        timeline_widget_ != nullptr ? timeline_widget_->zoomFactor() : 1.0,
-        timeline_widget_ != nullptr
-            ? timeline_widget_->trackRowHeight()
+        editUi().timeline != nullptr ? editUi().timeline->zoomFactor() : 1.0,
+        editUi().timeline != nullptr
+            ? editUi().timeline->trackRowHeight()
             : timeline::kDefaultTrackRowHeight};
     return project_controller_.document(presentation);
 }
 
 void MainWindow::autosaveProject() {
     const application::TimelinePresentationState presentation{
-        timeline_widget_ != nullptr ? timeline_widget_->zoomFactor() : 1.0,
-        timeline_widget_ != nullptr ? timeline_widget_->trackRowHeight()
+        editUi().timeline != nullptr ? editUi().timeline->zoomFactor() : 1.0,
+        editUi().timeline != nullptr ? editUi().timeline->trackRowHeight()
                                    : timeline::kDefaultTrackRowHeight};
     const auto result = project_controller_.autosave(
         settings::projectAutosaveEnabled(),
@@ -239,8 +239,8 @@ void MainWindow::openAutosaveFolder(const QString& folder_path) {
 
 void MainWindow::updateProjectDirtyState() {
     const application::TimelinePresentationState presentation{
-        timeline_widget_ != nullptr ? timeline_widget_->zoomFactor() : 1.0,
-        timeline_widget_ != nullptr ? timeline_widget_->trackRowHeight()
+        editUi().timeline != nullptr ? editUi().timeline->zoomFactor() : 1.0,
+        editUi().timeline != nullptr ? editUi().timeline->trackRowHeight()
                                    : timeline::kDefaultTrackRowHeight};
     static_cast<void>(project_controller_.updateDirtyState(presentation));
 
@@ -255,8 +255,8 @@ bool MainWindow::saveProjectTo(
     const std::filesystem::path& project_path,
     const char* operation) {
     const application::TimelinePresentationState presentation{
-        timeline_widget_ != nullptr ? timeline_widget_->zoomFactor() : 1.0,
-        timeline_widget_ != nullptr ? timeline_widget_->trackRowHeight()
+        editUi().timeline != nullptr ? editUi().timeline->zoomFactor() : 1.0,
+        editUi().timeline != nullptr ? editUi().timeline->trackRowHeight()
                                    : timeline::kDefaultTrackRowHeight};
     const auto result = project_controller_.saveTo(project_path, presentation);
     if (!result.succeeded()) {
@@ -359,8 +359,6 @@ void MainWindow::clearProjectState() {
     } else {
         timeline_command_service_.clearHistory();
     }
-    pending_audio_edit_batch_id_.reset();
-    pending_transform_edit_batch_id_.reset();
     if (playback_controller_ != nullptr) {
         playback_controller_->invalidate(true);
     }
@@ -370,12 +368,12 @@ void MainWindow::clearProjectState() {
     ++project_generation_;
     clearActiveTimelineSelection();
     playback_frame_index_ = 0;
-    if (timeline_widget_ != nullptr) {
-        timeline_widget_->setZoomFactor(1.0);
-        timeline_widget_->setTrackRowHeight(timeline::kDefaultTrackRowHeight);
+    if (editUi().timeline != nullptr) {
+        editUi().timeline->setZoomFactor(1.0);
+        editUi().timeline->setTrackRowHeight(timeline::kDefaultTrackRowHeight);
     }
-    if (timeline_scroll_ != nullptr) {
-        timeline_scroll_->horizontalScrollBar()->setValue(0);
+    if (editUi().timeline_scroll != nullptr) {
+        editUi().timeline_scroll->horizontalScrollBar()->setValue(0);
     }
 
     {
@@ -676,8 +674,6 @@ void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
     } else {
         timeline_command_service_.clearHistory();
     }
-    pending_audio_edit_batch_id_.reset();
-    pending_transform_edit_batch_id_.reset();
     if (playback_controller_ != nullptr) {
         playback_controller_->invalidate(true);
     }
@@ -692,12 +688,12 @@ void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
     ++project_generation_;
     clearActiveTimelineSelection();
     playback_frame_index_ = 0;
-    if (timeline_widget_ != nullptr) {
-        timeline_widget_->setZoomFactor(loaded_document.timeline_zoom);
-        timeline_widget_->setTrackRowHeight(loaded_document.timeline_row_height);
+    if (editUi().timeline != nullptr) {
+        editUi().timeline->setZoomFactor(loaded_document.timeline_zoom);
+        editUi().timeline->setTrackRowHeight(loaded_document.timeline_row_height);
     }
-    if (timeline_scroll_ != nullptr) {
-        timeline_scroll_->horizontalScrollBar()->setValue(0);
+    if (editUi().timeline_scroll != nullptr) {
+        editUi().timeline_scroll->horizontalScrollBar()->setValue(0);
     }
 
     populateMediaBrowser();

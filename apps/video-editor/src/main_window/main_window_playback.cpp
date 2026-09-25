@@ -34,7 +34,6 @@
 #include <QScrollArea>
 #include <QSlider>
 #include <QStatusBar>
-#include <QStyle>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -489,8 +488,8 @@ void MainWindow::initializePlayback() {
         [this](const playback::PlaybackControllerEvent& event) {
             handlePlaybackEvent(event);
         });
-    if (monitor_volume_slider_ != nullptr) {
-        applyMonitorVolumePercent(monitor_volume_slider_->value());
+    if (editUi().monitor_volume != nullptr) {
+        applyMonitorVolumePercent(editUi().monitor_volume->value());
     }
 }
 
@@ -604,28 +603,23 @@ void MainWindow::sendPlaybackCommand(playback::PlaybackCommand command) {
 }
 
 void MainWindow::updatePlaybackControls() {
-    const bool has_media = canPlaybackTimelineAtPlayhead() &&
-        !playback_activation_loading_;
-    if (previous_frame_button_ != nullptr) previous_frame_button_->setEnabled(has_media);
-    if (play_pause_button_ != nullptr) play_pause_button_->setEnabled(has_media);
-    if (next_frame_button_ != nullptr) next_frame_button_->setEnabled(has_media);
+    if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+        edit_workspace_->controller()->setPlaybackPresentation(
+            playback_is_playing_,
+            playback_activation_loading_,
+            playback_controller_ != nullptr && playback_controller_->available());
+    }
     if (delete_clip_action_ != nullptr) {
         delete_clip_action_->setEnabled(
             canPlaybackSelectedMedia() && !playback_activation_loading_);
     }
-    if (play_pause_button_ != nullptr) {
-        play_pause_button_->setIcon(style()->standardIcon(
-            playback_is_playing_
-                ? QStyle::SP_MediaPause
-                : QStyle::SP_MediaPlay));
-    }
 }
 
 void MainWindow::updatePlaybackStatus() {
-    if (playback_status_label_ == nullptr) return;
+    if (editUi().playback_status == nullptr) return;
 
     if (playback_activation_loading_) {
-        playback_status_label_->setText("Loading timeline clip...");
+        editUi().playback_status->setText("Loading timeline clip...");
         return;
     }
 
@@ -640,19 +634,19 @@ void MainWindow::updatePlaybackStatus() {
             const auto& clip = timeline_model_.tracks()[*active_timeline_track_index_cache_]
                 .clips[*active_timeline_clip_index_cache_];
             const QString state = playback_is_playing_ ? "Playing" : "Paused";
-            playback_status_label_->setText(
+            editUi().playback_status->setText(
                 QString("%1 - Frame %2 / %3")
                     .arg(state)
                     .arg(playback_frame_index_ + 1)
                     .arg(clip.timeline_duration_frames));
             return;
         }
-        playback_status_label_->setText("No media selected.");
+        editUi().playback_status->setText("No media selected.");
         return;
     }
 
     if (!canPreviewSelectedMedia()) {
-        playback_status_label_->setText("Select the timeline media to play.");
+        editUi().playback_status->setText("Select the timeline media to play.");
         return;
     }
 
@@ -671,7 +665,7 @@ void MainWindow::updatePlaybackStatus() {
                 .timeline_duration_frames);
     }
     const QString state = playback_is_playing_ ? "Playing" : "Paused";
-    playback_status_label_->setText(
+    editUi().playback_status->setText(
         QString("%1 - Frame %2 / %3")
             .arg(state)
             .arg(playback_frame_index_ + 1)
@@ -695,8 +689,8 @@ void MainWindow::handlePlaybackEvent(
         } else if constexpr (std::is_same_v<Event, playback::PlaybackAudioWarningEvent>) {
             statusBar()->showMessage(
                 "Audio unavailable; continuing with video playback.");
-            if (playback_status_label_ != nullptr) {
-                playback_status_label_->setText(
+            if (editUi().playback_status != nullptr) {
+                editUi().playback_status->setText(
                     "Audio unavailable; video fallback is active.");
             }
         }
@@ -748,13 +742,11 @@ void MainWindow::handlePlaybackFrame(
         metrics,
         rendering::PreviewTiming::UiCallback);
     metrics.recordReceivedFrame();
-    playback_frame_index_ = event.frame_index;
     preview_widget_->setFrame(event.frame);
 
-    if (timeline_widget_ != nullptr && canPlaybackSelectedMedia()) {
-        timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());
+    if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+        edit_workspace_->controller()->presentPlaybackFrame(event.frame_index);
     }
-    updateInspector();
     updatePlaybackStatus();
 }
 
@@ -768,15 +760,15 @@ void MainWindow::handlePlaybackFinished(bool during_playback, bool gap) {
     playback_is_playing_ = false;
     updatePlaybackControls();
     if (gap) {
-        if (playback_status_label_ != nullptr) {
-            playback_status_label_->setText("Gap in timeline.");
+        if (editUi().playback_status != nullptr) {
+            editUi().playback_status->setText("Gap in timeline.");
         }
         preview_widget_->clearFrame("Gap in timeline.");
         statusBar()->showMessage("Gap in timeline.");
         return;
     }
-    if (playback_status_label_ != nullptr) {
-        playback_status_label_->setText(
+    if (editUi().playback_status != nullptr) {
+        editUi().playback_status->setText(
             during_playback ? "End of timeline." : "End of media.");
     }
 }
@@ -809,59 +801,11 @@ void MainWindow::handlePlaybackError(const playback::PlaybackErrorEvent& event) 
     playback_is_playing_ = false;
     updateTimelineState();
     updatePlaybackControls();
-    if (playback_status_label_ != nullptr) {
-        playback_status_label_->setText("Playback error.");
+    if (editUi().playback_status != nullptr) {
+        editUi().playback_status->setText("Playback error.");
     }
-    if (timeline_widget_ != nullptr && timeline_model_.hasClip()) {
-        timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());
+    if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+        edit_workspace_->controller()->refreshTimelinePresentation();
     }
     QMessageBox::warning(this, "Playback error", event.message);
-}
-
-void MainWindow::handleTimelineSeekStarted() {
-    if (playback_controller_ == nullptr || !playback_controller_->available() ||
-        playback_activation_loading_) {
-        return;
-    }
-    playback_is_playing_ = false;
-    updatePlaybackControls();
-    updatePlaybackStatus();
-    sendPlaybackCommand(playback::PlaybackCommand::Pause);
-}
-
-void MainWindow::handleTimelineSeek(qint64 global_frame) {
-    if (playback_controller_ == nullptr || !playback_controller_->available() ||
-        playback_activation_loading_) {
-        return;
-    }
-    const auto result = playback_controller_->seekTimeline(global_frame);
-    if (result == playback::PlaybackCommandResult::Gap) {
-        const auto total = timeline_model_.totalDurationFrames();
-        if (total > 0 && timeline_widget_ != nullptr) {
-            timeline_widget_->setPlayheadFrame(std::clamp<std::int64_t>(
-                global_frame, 0, total - 1));
-        }
-        updatePlaybackControls();
-        updatePlaybackStatus();
-        preview_widget_->clearFrame("Gap in timeline.");
-        statusBar()->showMessage("Gap in timeline.");
-        return;
-    }
-    if (result == playback::PlaybackCommandResult::Rejected) {
-        statusBar()->showMessage("The selected timeline media is unavailable.");
-        return;
-    }
-    if (result == playback::PlaybackCommandResult::NoClip ||
-        result == playback::PlaybackCommandResult::Unavailable) {
-        return;
-    }
-    const auto total = timeline_model_.totalDurationFrames();
-    if (total > 0 && timeline_widget_ != nullptr) {
-        timeline_widget_->setPlayheadFrame(std::clamp<std::int64_t>(
-            global_frame, 0, total - 1));
-    }
-    playback_is_playing_ = false;
-    updateTimelineState();
-    updatePlaybackControls();
-    updatePlaybackStatus();
 }

@@ -91,8 +91,6 @@ private:
 
     using ImportedMedia = application::ImportedMedia;
     using ActiveTransition = timeline::TransitionSelection;
-    struct TimelineControls;
-
     void createMenus();
     void createWorkspace();
     void setWorkspacePage(ui::WorkspacePageId page);
@@ -111,12 +109,6 @@ private:
     QWidget* createEffectsToolbox();
     QWidget* createEffectsPanel();
     QWidget* createEffectsFavorites();
-    QWidget* createInspector();
-    QWidget* createTimeline();
-    TimelineControls createTimelineControls(QWidget* container, QVBoxLayout* layout);
-    void createTimelineViewport(QWidget* container, QVBoxLayout* layout);
-    void createTimelineFooter(QWidget* container, QVBoxLayout* layout);
-    void connectTimelineSignals(const TimelineControls& controls);
     void initializePlayback();
     void shutdownPlayback();
     void configurePreviewPerformanceMetrics(bool enabled);
@@ -160,11 +152,6 @@ private:
     void moveSelectedMediaToBin();
     void removeSelectedMedia();
     void restoreSelectedMedia();
-    void addTextClipAt(timeline::TrackId track_id, qint64 timeline_frame);
-    void handleEffectDropAt(
-        const QString& effect_id,
-        timeline::TrackId track_id,
-        qint64 timeline_frame);
     [[nodiscard]] std::optional<std::size_t> selectedMediaIndex() const noexcept;
     [[nodiscard]] std::string selectedBinPath() const;
     void newProject();
@@ -215,73 +202,18 @@ private:
         std::optional<timeline::ClipId> clip_id = std::nullopt);
     void clearProjectState();
     void applyLoadedProject(application::PreparedProject prepared);
-    void addSelectedMediaToTimeline();
-    void handleMediaDrop(const QString& source_path);
     void handleMediaDropAt(
         const QString& source_path,
         timeline::TrackId track_id,
         qint64 timeline_frame);
-    void clearTimeline();
-    void moveActiveTimelineClip(int direction);
-    void deleteActiveTimelineClip();
-    void splitActiveClipAtPlayhead();
-    void handleTimelineClipSelectionChanged(
-        timeline::TrackId track_id,
-        timeline::ClipId clip_id);
-    void handleTimelineClipSelectionCleared();
-    void handleTimelineClipSplit(timeline::ClipId clip_id, qint64 local_frame);
-    void handleTimelineTrimStarted();
-    void handleTimelineClipTrim(
-        timeline::ClipId clip_id,
-        qint64 edge,
-        qint64 boundary_frame,
-        qint64 mode);
-    void handleTimelineTransitionSelected(
-        timeline::TrackId track_id,
-        timeline::ClipId from_clip_id,
-        timeline::ClipId to_clip_id);
-    void handleTimelineTransitionSelectionCleared();
-    void handleTimelineTransitionAddRequested(
-        timeline::TrackId track_id,
-        timeline::ClipId from_clip_id,
-        timeline::ClipId to_clip_id,
-        qint64 kind);
-    void handleTimelineTransitionRemoveRequested(
-        timeline::TrackId track_id,
-        timeline::ClipId from_clip_id,
-        timeline::ClipId to_clip_id);
-    void applyTransitionSettings();
-    void removeSelectedTransition();
-    void synchronizeTimelineSessionSelection();
-    [[nodiscard]] timeline::EditState captureTimelineEditState();
-    void recordTimelineEdit(timeline::EditState state);
     void applyTimelineEditResult(
         const application::TimelineEditResult& result,
         bool stop_playback = true);
-    template <typename Command>
-    [[nodiscard]] application::TimelineEditResult executeTimelineCommand(
-        const Command& command) {
-        synchronizeTimelineSessionSelection();
-        return edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr
-            ? edit_workspace_->controller()->execute(command)
-            : timeline_command_service_.execute(command);
-    }
     void updateHistoryActions();
     void updateTimelineState();
-    void applyTimelineZoom(double factor);
-    void beginAudioEdit();
-    void finishAudioEdit();
-    void applyClipAudioControls();
-    void applyTrackAudioControls();
     void updatePlaybackAudioParameters();
     void applyMonitorVolumePercent(int percent);
     void refreshPlaybackComposition();
-    void updateInspector();
-    void beginTransformEdit();
-    void finishTransformEdit();
-    void applyTransformProperty(int property_index, double value);
-    void toggleTransformKeyframe(int property_index);
-    void applyTextStyle();
     [[nodiscard]] bool hasSelectedMedia() const noexcept;
     [[nodiscard]] std::optional<timeline::ClipLocation>
     selectedTimelineClipLocation() const noexcept;
@@ -292,10 +224,8 @@ private:
     [[nodiscard]] bool selectedMediaMatchesTimeline() const noexcept;
     [[nodiscard]] bool canPreviewSelectedMedia() const noexcept;
     [[nodiscard]] bool canPlaybackSelectedMedia() const noexcept;
-    [[nodiscard]] std::optional<timeline::ClipLocation>
-    timelineClipAtPlayhead() const noexcept;
-    [[nodiscard]] bool canPlaybackTimelineAtPlayhead() const noexcept;
     [[nodiscard]] std::int64_t timelinePlayheadFrame() const noexcept;
+    [[nodiscard]] const ui::EditWorkspaceUi& editUi() const noexcept;
     void sendPlaybackCommand(playback::PlaybackCommand command);
     void updatePlaybackControls();
     void updatePlaybackStatus();
@@ -305,9 +235,6 @@ private:
     void handlePlaybackStateChanged(bool playing);
     void handlePlaybackFinished(bool during_playback, bool gap);
     void handlePlaybackError(const playback::PlaybackErrorEvent& event);
-    void handleTimelineClipSelected(timeline::ClipId clip_id);
-    void handleTimelineSeekStarted();
-    void handleTimelineSeek(qint64 global_frame);
     void activateTimelineClip(
         std::size_t clip_index,
         std::int64_t target_frame,
@@ -336,8 +263,6 @@ private:
     ui::EditWorkspace* edit_workspace_ = nullptr;
     ui::WorkspaceHost* workspace_host_ = nullptr;
     QWidget* workspace_buttons_container_ = nullptr;
-    QWidget* timeline_controls_container_ = nullptr;
-    QWidget* timeline_footer_ = nullptr;
     QPushButton* edit_workspace_button_ = nullptr;
     QPushButton* fusion_workspace_button_ = nullptr;
     QPushButton* render_workspace_button_ = nullptr;
@@ -346,43 +271,11 @@ private:
     EffectsToolboxWidget* effects_toolbox_ = nullptr;
     EffectsFavoritesWidget* effects_favorites_ = nullptr;
     EffectsListWidget* effects_list_ = nullptr;
-    QPushButton* previous_frame_button_ = nullptr;
-    QPushButton* play_pause_button_ = nullptr;
-    QPushButton* next_frame_button_ = nullptr;
-    QPushButton* clear_timeline_button_ = nullptr;
-    QPushButton* selection_button_ = nullptr;
-    QPushButton* razor_button_ = nullptr;
-    QPushButton* snap_button_ = nullptr;
-    QSlider* monitor_volume_slider_ = nullptr;
-    QLabel* monitor_volume_indicator_ = nullptr;
-    QSlider* clip_volume_slider_ = nullptr;
-    QSlider* track_volume_slider_ = nullptr;
-    QCheckBox* clip_mute_check_ = nullptr;
-    QCheckBox* track_mute_check_ = nullptr;
-    QLabel* playback_status_label_ = nullptr;
-    QLabel* timeline_message_label_ = nullptr;
-    SystemMemoryIndicator* system_memory_indicator_ = nullptr;
     QTimer* preview_metrics_timer_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
     QTimer* linked_image_poll_timer_ = nullptr;
     system_monitor::PerformanceSampler performance_sampler_;
     bool media_browser_inline_rename_pending_ = false;
-    std::array<QDoubleSpinBox*, 5> transform_spin_boxes_{};
-    std::array<QSlider*, 5> transform_sliders_{};
-    std::array<QPushButton*, 5> transform_key_buttons_{};
-    QWidget* text_controls_ = nullptr;
-    QPlainTextEdit* text_content_editor_ = nullptr;
-    QFontComboBox* text_font_combo_ = nullptr;
-    QSpinBox* text_font_size_spin_ = nullptr;
-    QComboBox* text_alignment_combo_ = nullptr;
-    QPushButton* text_color_button_ = nullptr;
-    QPushButton* apply_text_button_ = nullptr;
-    QWidget* transition_controls_ = nullptr;
-    QComboBox* transition_type_combo_ = nullptr;
-    QSpinBox* transition_duration_spin_ = nullptr;
-    QPushButton* apply_transition_button_ = nullptr;
-    QPushButton* remove_transition_button_ = nullptr;
-    QTabWidget* inspector_tabs_ = nullptr;
     QAction* new_project_action_ = nullptr;
     QAction* open_project_action_ = nullptr;
     QAction* save_project_action_ = nullptr;
@@ -401,9 +294,6 @@ private:
     QAction* move_track_down_action_ = nullptr;
     QAction* remove_track_action_ = nullptr;
     std::unique_ptr<settings::ShortcutManager> shortcut_manager_;
-    timeline::TimelineWidget* timeline_widget_ = nullptr;
-    timeline::TimelineTrackHeaderOverlay* timeline_header_overlay_ = nullptr;
-    QScrollArea* timeline_scroll_ = nullptr;
     application::EditorSession editor_session_;
     std::unique_ptr<playback::PlaybackController> playback_controller_;
     application::TimelineCommandService timeline_command_service_{editor_session_};
@@ -428,10 +318,6 @@ private:
         editor_session_.projectPath();
     const std::optional<project::ProjectDocument>& saved_project_document_ =
         editor_session_.savedProjectDocument();
-    std::optional<application::TimelineCommandService::EditBatchId>
-        pending_audio_edit_batch_id_;
-    std::optional<application::TimelineCommandService::EditBatchId>
-        pending_transform_edit_batch_id_;
     const bool& project_dirty_ = editor_session_.projectDirtyState();
     std::array<bool, 7> dock_visibility_before_render_{};
     bool has_render_dock_visibility_snapshot_ = false;
@@ -466,5 +352,4 @@ private:
     std::vector<std::pair<QAction*, bool>> project_loading_action_states_;
     std::int64_t& playback_frame_index_ = editor_session_.playheadFrameForUi();
     bool playback_is_playing_ = false;
-    std::array<std::uint8_t, 4> text_color_{255, 255, 255, 255};
 };

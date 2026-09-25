@@ -413,27 +413,30 @@ responsibility-focused translation units under
 `apps/video-editor/src/main_window/`. It owns the project services, docks,
 workspace selectors, menus, and playback-controller lifecycle.
 
-`ui/workspace/pages/edit/EditWorkspace` groups the existing Preview, Inspector,
-and Timeline surfaces for `WorkspaceHost`; it keeps their identities shared
-with Fusion and Render. Its `EditWorkspaceController` holds references to the
-single `EditorSession` and `TimelineCommandService`, delegates edits and
-history operations to that service, and emits typed Qt signals for command
-results, committed edits, status messages, and history availability. It does
-not keep a second project, selection, playhead, or history. Track creation,
-renaming, reordering, removal, clip movement, and Undo/Redo are handled by the
-Edit controller. Other Timeline and Inspector interactions still use shell
-handlers, while their commands use the same controller and shared service. The
-playback engine and project state remain shared with the application shell.
+`ui/workspace/pages/edit/EditWorkspace` builds the Inspector and Timeline
+surfaces and exposes them to `WorkspaceHost`. Edit, Fusion, and Render keep the
+same Preview and Timeline widgets and the same project data. Its
+`EditWorkspaceController` holds references to the single `EditorSession` and
+`TimelineCommandService`; it does not keep a second project, selection,
+playhead, or history. The controller owns Timeline and Inspector interactions,
+including clip selection and editing, media and text insertion, tracks,
+transitions, audio, transforms, keyframes, zoom, playback commands, and seek. It
+delegates edits and history to the command service and emits typed Qt signals
+for requests that cross into the application shell, such as resolving a media
+drop against the Media Browser, selecting media-browser items, and playback
+engine operations. `MainWindow` retains project and media-import services,
+docks, menus, workspace selectors, and the `PlaybackController` lifecycle.
 
-The Timeline construction helpers in `main_window_timeline.cpp` currently
-assemble controls, the scrolling viewport with fixed track headers, and the
-footer. Workspace selectors, vertical scrolling, and footer status signals are
-connected when their respective components are created. The control
-references needed for later connections are temporary and are not stored as
-additional `MainWindow` state.
+`edit_workspace.cpp` assembles the Inspector, Timeline controls, scrolling
+viewport with fixed track headers, and footer. The controller connects these
+controls directly to Edit actions. `MainWindow` handles requests that cross the
+application boundary and accesses Edit widgets through the shared non-owning UI
+handle set for shell-level tasks such as preferences and layout persistence; it
+keeps no additional widget pointers.
 
 The internal `frame_step_navigation` module decides whether a Previous/Next
 Frame command stays within the active clip, activates a clip at the boundary,
-or reports a gap or Timeline limit. It reads Timeline metadata only;
-`MainWindow` retains playback eligibility checks, media activation, status
-messages, and worker communication.
+or reports a gap or Timeline limit. It reads Timeline metadata only. The Edit
+controller determines playback-control eligibility and presents Timeline
+status; `MainWindow` coordinates media activation, application status messages,
+menu actions, and worker communication.

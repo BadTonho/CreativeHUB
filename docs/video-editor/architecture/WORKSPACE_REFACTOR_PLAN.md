@@ -1,6 +1,6 @@
 # Plano de Refatoração das Interfaces de Trabalho
 
-Status: Etapa 1 concluída; implementar as próximas etapas quando solicitado.
+Status: Etapas 1 e 2 concluídas; continuar a próxima etapa quando solicitado.
 
 ## Objetivo
 
@@ -55,10 +55,7 @@ projeto ou da Timeline.
 
 ## Etapas
 
-Status atual: Etapa 2 em andamento. O limite `EditWorkspace`/controller e parte
-das interacoes de Timeline ja foram extraidos. A montagem de Inspector/Timeline
-e os handlers de selecao, drops, transicoes, audio, texto, transformacao, zoom
-e playback/seek ainda precisam ser movidos para `pages/edit/`.
+Status atual: Etapas 1 e 2 concluídas. A montagem e as interações do Edit foram extraídas para `pages/edit/`; as etapas seguintes continuam pendentes e serão implementadas uma por vez, quando solicitadas.
 
 ### 1. Definir o limite dos espaços de trabalho
 
@@ -72,13 +69,12 @@ e playback/seek ainda precisam ser movidos para `pages/edit/`.
 
 ### 2. Extrair o espaço Edit
 
-- Mover a montagem da página e o comportamento de ativação específicos de Edit
-  para `pages/edit/edit_workspace.*`.
-- Manter Preview, Inspector, Timeline, seleção e reprodução atuais
-  compartilhados com o aplicativo.
-- Confirmar que o aplicativo ainda inicia em Edit e preserva o layout atual dos
-  docks.
-
+- **Concluída.** `EditWorkspace` constrói e entrega ao `WorkspaceHost` o Inspector e a Timeline compartilhados; a `MainWindow` deixou de montar esses painéis e de guardar ponteiros duplicados para seus controles.
+- **Concluída.** `EditWorkspaceController` controla seleção, edição e exclusão de clips, split, trim, transições, áudio, texto, transformações, keyframes, zoom, Undo/Redo e seek por meio do `TimelineCommandService` e da única `EditorSession`.
+- **Concluída.** Pedidos que cruzam a fronteira da UI usam sinais Qt tipados para o shell atender o Media Browser e o `PlaybackController`; a janela permanece dona dos docks, dos serviços de projeto e importação e do ciclo de vida do playback.
+- **Concluída.** Edit, Fusion e Render continuam usando o mesmo Preview e a mesma Timeline; Render mantém a Timeline somente leitura e os controles de Edit retornam ao sair desse espaço.
+- **Concluída.** Os testes do controller cobrem seleção, Inspector, seek, comandos de clips, histórico, posições ocupadas, mídia offline, ausência de seleção e integração com o shell. Os testes de integração conferem identidade dos painéis compartilhados e navegação dos três espaços.
+- **Concluída.** Aplicativo e alvos focados de controller, integração da janela, Timeline e troca de página compilados e validados.
 ### 3. Extrair o espaço Fusion
 
 - Mover o título Viewer, o painel Node Editor e o placeholder do Inspector de
