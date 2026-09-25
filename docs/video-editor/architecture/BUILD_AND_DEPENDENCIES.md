@@ -14,6 +14,19 @@ CMake discovers these dependencies through the selected toolchain or an
 externally supplied `CMAKE_PREFIX_PATH`; source files must not contain an
 absolute developer-machine path.
 
+## Planned Qt baseline
+
+The selected target is Qt 6.12.0 for Windows 10 and Windows 11 support. This is
+a planned baseline, not yet the active dependency pin. Update the CMake/vcpkg
+configuration after the stable Qt 6.12.0 release and a compatible package are
+available, then validate the Windows deployment. Qt's current Windows support
+notes identify Qt 6.12 as the last Qt 6 release planned to support Windows 10
+([Qt for Windows](https://doc.qt.io/qt-6/windows.html)).
+
+Linux and macOS remain required product targets. Their distribution and OS
+version baselines, architectures, and release validation remain open until
+the project has suitable build and test environments.
+
 On Windows, the CMake build invokes the Qt deployment tool discovered from the
 imported Qt target, so the executable in the build tree receives its required
 Qt DLLs and platform plugin. CMake installation also generates a self-contained

@@ -11,6 +11,12 @@ later expansion. Update it when implementation, scope, or a decision changes.
 - Continue Main Editor development in C++20 with Qt 6 and FFmpeg. This is the
   current working direction and remains provisional; no final project-wide
   language decision is recorded.
+- Target Qt 6.12 for the Windows 10 and 11 builds. Treat it as a planned
+  baseline until the stable release and compatible package are available; the
+  active build configuration still needs to be updated and validated.
+- Windows 10 and 11 are the current Windows targets. Linux and macOS remain
+  required product targets; their release validation is pending access to
+  suitable build and test environments.
 - Keep modules inside `apps/video-editor/` while the Main Editor is their only
   consumer. Extract a focused shared library only when another application has
   a real use for the same behavior and a stable API can serve both. See the
@@ -39,15 +45,26 @@ release work that follows it.
 The scope below is a working proposal based on the existing application, not a
 final product commitment.
 
+- [x] Set the product direction: build an open creative suite that gives people
+  locally usable tools and reduces reliance on proprietary creative software.
 - [ ] Define the initial target audience and the main editing workflows.
 - [ ] Confirm the Main Editor foundation scope and explicitly list deferred
   workflows.
-- [ ] Define minimum hardware and per-platform release baselines for Windows,
-  macOS, and Linux, plus representative project sizes.
-- [ ] Define supported import and export containers, codecs, frame sizes, and
-  frame rates for the Main Editor foundation.
-- [ ] Decide whether ripple editing, automatic gap management, and direct
-  operating-system file drops are required for the foundation.
+- [ ] Define minimum hardware and representative project sizes.
+- [x] Choose a broad media-compatibility policy: do not impose a fixed
+  application-level format allow-list; seek the broadest practical support
+  from the shipped FFmpeg build and Qt image-format plugins.
+- [x] Choose the default clip-deletion behavior: keep following clips at their
+  positions and leave a gap; provide a separate Ripple Delete / Close Gap
+  command when the user wants following clips to move earlier.
+- [ ] Decide whether direct operating-system file drops are required for the
+  foundation.
+- [x] Set Windows 10 and Windows 11 as Windows targets and Qt 6.12 as the
+  planned Qt baseline. Apply the dependency update when the stable release and
+  compatible package are available.
+- [x] Keep Linux and macOS as required targets; defer their exact distribution,
+  OS-version, and architecture baselines until those platforms can be built and
+  tested.
 - [x] Keep the product name temporary until an explicit identity decision is
   made.
 - [x] Choose the open-source license: GPL-3.0-or-later.
@@ -59,9 +76,8 @@ import and organization; multi-track clip assembly, movement, splitting,
 trimming, and deletion; preview and playback; basic transforms, keyframes,
 text, essential transitions, embedded video audio controls; project save/open,
 Undo/Redo, autosave, and recovery. Add a defined export workflow and complete
-the release gates below. Audience, supported media limits, output formats,
-platform packaging, and any additional timeline requirements remain open
-decisions.
+the release gates below. Audience, supported media limits, export controls,
+platform packaging, and direct operating-system file drops remain open.
 
 Advanced color grading, independent audio tracks and mixing, masks, proxy
 workflows, advanced compositing, and plugin support are candidates for later
@@ -103,24 +119,30 @@ Complete these gates after the foundation decisions in section 1 are
 recorded. A feature counts as complete when its automated regression coverage
 and required manual validation pass.
 
-- [ ] Implement export for the agreed foundation formats. Define the
-  output settings, audio handling, progress and cancellation behavior, error
-  reporting, and a way to verify the produced file.
-- [ ] Implement the timeline additions selected by the foundation decision.
-  Candidate items currently documented as future work are ripple editing,
-  automatic gap management, and direct operating-system file drops. Keep
-  unselected items in the later-work section instead of treating them as
-  release blockers.
+- [ ] Inventory the actual media capabilities of the intended shipped build:
+  FFmpeg demuxers, video and audio decoders, muxers and encoders, plus available
+  Qt image-format plugins. Record capability and license constraints without
+  turning the inventory into a fixed application-level allow-list.
+- [ ] Replace hardcoded still-image extension checks with capability-based
+  detection from the deployed Qt image plugins. Define how multi-frame images
+  retain timing before importing them as animated Timeline clips.
+- [ ] Maximize practical video export compatibility using valid muxer/encoder
+  combinations available in the shipped FFmpeg build. Define output controls,
+  audio handling, progress and cancellation behavior, error reporting, and
+  verification of the produced file.
+- [ ] Add the explicit Ripple Delete / Close Gap command. Ordinary deletion
+  must keep subsequent clips in place and leave the gap.
+- [ ] Decide and, if included, implement direct operating-system file drops.
+  The existing import dialog and drag from the Media Browser remain available.
 - [ ] Validate project save/reopen, autosave, recovery, offline media, and
   failure handling with representative small, medium, and heavy projects.
   Record the project fixtures and acceptance criteria when hardware and media
   limits are defined.
-- [ ] Measure startup time, memory use, and playback/preview behavior on the
-  agreed representative projects. Use the measurements to set release limits
-  and prioritize optimizations.
 - [ ] Build and run automated and manual release workflows on Windows, macOS,
   and Linux. Validate paths, permissions, fonts, color behavior, audio devices,
-  and documented keyboard shortcuts on each supported platform.
+  and documented keyboard shortcuts on each supported platform. Windows 10 and
+  11 can be validated now; Linux and macOS acceptance remains pending access to
+  suitable build and test environments.
 - [ ] Define installation and packaging for each supported platform, including
   required Qt plugins and FFmpeg runtime components.
 - [ ] Record the exact dependency, codec, asset, and license configuration for
@@ -171,6 +193,8 @@ performance measurements, and Main Editor stability as the decision criteria.
   measurements show a need.
 - [ ] Profile representative projects and address measured performance and
   memory bottlenecks.
+- [ ] Establish startup, memory, and playback/preview baselines after minimum
+  hardware and representative project sizes are defined.
 - [ ] Consider per-layer GPU composition or another rendering backend only
   when measured needs justify the added implementation and deployment cost.
 - [ ] Revisit plugin architecture, presets, and templates after stable public
