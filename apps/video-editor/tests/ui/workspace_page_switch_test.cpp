@@ -1,5 +1,6 @@
 #include "ui/timeline/timeline_end_buttons.h"
 #include "ui/workspace/workspace_host.h"
+#include "ui/workspace/workspace_transition_controller.h"
 #include "ui/workspace/pages/fusion/fusion_workspace.h"
 #include "ui/workspace/pages/render/render_workspace.h"
 
@@ -11,6 +12,7 @@
 #include <QStackedWidget>
 #include <QToolBar>
 
+#include <array>
 #include <cstdio>
 #include <stdexcept>
 
@@ -55,28 +57,35 @@ int main(int argc, char* argv[]) {
         lower_dock->setWidget(workspace_host->lowerWorkspacePanel());
         window.addDockWidget(Qt::BottomDockWidgetArea, lower_dock);
 
+        const auto create_dock = [&window](const QString& title) {
+            auto* dock = new QDockWidget(title, &window);
+            dock->setWidget(new QWidget);
+            window.addDockWidget(Qt::LeftDockWidgetArea, dock);
+            return dock;
+        };
+        auto* bins_dock = create_dock("Bins");
+        auto* media_dock = create_dock("Media");
+        auto* toolbox_dock = create_dock("Toolbox");
+        auto* favorites_dock = create_dock("Favorites");
+        auto* effects_dock = create_dock("Effects");
+
         const auto buttons = ui::createTimelineEndButtons(&window);
         auto* toolbar = new QToolBar(&window);
         toolbar->addWidget(buttons.container);
         window.addToolBar(Qt::TopToolBarArea, toolbar);
-        const auto select_page = [workspace_host, lower_dock](
-                                     ui::WorkspacePageId page) {
-            workspace_host->setPage(page);
-            lower_dock->setWindowTitle(
-                page == ui::WorkspacePageId::Fusion ? "Node Editor" : "Timeline");
-        };
-        QObject::connect(buttons.edit, &QPushButton::clicked, workspace_host,
-                         [select_page]() {
-                             select_page(ui::WorkspacePageId::Edit);
-                         });
-        QObject::connect(buttons.fusion, &QPushButton::clicked, workspace_host,
-                         [select_page]() {
-                             select_page(ui::WorkspacePageId::Fusion);
-                         });
-        QObject::connect(buttons.render, &QPushButton::clicked, workspace_host,
-                         [select_page]() {
-                             select_page(ui::WorkspacePageId::Render);
-                         });
+        ui::WorkspaceTransitionController transition_controller(
+            workspace_host,
+            {
+                bins_dock,
+                media_dock,
+                toolbox_dock,
+                favorites_dock,
+                effects_dock,
+                inspector_dock,
+                lower_dock},
+            {buttons.edit, buttons.fusion, buttons.render},
+            &window);
+        transition_controller.setPage(ui::WorkspacePageId::Edit);
 
         window.resize(960, 720);
         window.show();
@@ -127,6 +136,20 @@ int main(int argc, char* argv[]) {
                     viewer_title == fusion_workspace->viewerTitle(),
                 "Fusion must label the existing Preview as Viewer.");
 
+        const std::array<QDockWidget*, 7> workspace_docks{
+            bins_dock,
+            media_dock,
+            toolbox_dock,
+            favorites_dock,
+            effects_dock,
+            inspector_dock,
+            lower_dock};
+        const std::array<bool, 7> visibility_before_render{
+            false, true, false, true, false, true, false};
+        for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
+            workspace_docks[index]->setVisible(visibility_before_render[index]);
+        }
+
         buttons.render->click();
         application.processEvents();
         require(!buttons.edit->isChecked() && !buttons.fusion->isChecked() &&
@@ -149,6 +172,16 @@ int main(int argc, char* argv[]) {
                     workspace_host->renderPage()->findChildren<QWidget*>(
                         QString(), Qt::FindDirectChildrenOnly).isEmpty(),
                 "The Render page must contain no controls or placeholder text.");
+        for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
+            require(workspace_docks[index]->isVisible() == (index == 6),
+                    "Render must show only the Timeline dock.");
+        }
+
+        buttons.render->click();
+        application.processEvents();
+        require(buttons.render->isChecked() &&
+                    workspace_host->currentPage() == ui::WorkspacePageId::Render,
+                "Selecting Render again must keep the current workspace active.");
 
         buttons.fusion->click();
         application.processEvents();
@@ -164,6 +197,11 @@ int main(int argc, char* argv[]) {
                     workspace_host->inspectorPanel()->currentWidget() ==
                         workspace_host->fusionInspectorPage(),
                 "Returning to Fusion must restore its panels.");
+        for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
+            require(workspace_docks[index]->isVisible() ==
+                        visibility_before_render[index],
+                    "Returning from Render must restore each dock's prior visibility.");
+        }
 
         buttons.edit->click();
         application.processEvents();
@@ -181,6 +219,24 @@ int main(int argc, char* argv[]) {
                 "Returning to Edit must restore the normal Inspector.");
         require(workspace_host->previewWidget() == preview && preview->isVisible(),
                 "Returning to Edit must preserve the Preview widget.");
+
+        const std::array<bool, 7> visibility_before_close{
+            true, false, true, false, true, false, true};
+        for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
+            workspace_docks[index]->setVisible(visibility_before_close[index]);
+        }
+        buttons.render->click();
+        application.processEvents();
+        transition_controller.prepareForClose();
+        application.processEvents();
+        require(workspace_host->currentPage() == ui::WorkspacePageId::Edit &&
+                    buttons.edit->isChecked() && !buttons.render->isChecked(),
+                "Preparing to close from Render must return to Edit.");
+        for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
+            require(workspace_docks[index]->isVisible() ==
+                        visibility_before_close[index],
+                    "Preparing to close must restore the previous dock layout.");
+        }
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

@@ -5,7 +5,7 @@
 #include "settings/shortcut_manager.h"
 #include "settings/user_preferences.h"
 #include "rendering/preview_performance_metrics.h"
-#include "ui/workspace/workspace_host.h"
+#include "ui/workspace/workspace_transition_controller.h"
 
 #include <QDateTime>
 #include <QDialog>
@@ -112,9 +112,8 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         return;
     }
 
-    if (workspace_host_ != nullptr &&
-        workspace_host_->currentPage() == ui::WorkspacePageId::Render) {
-        setWorkspacePage(ui::WorkspacePageId::Edit);
+    if (workspace_transition_controller_ != nullptr) {
+        workspace_transition_controller_->prepareForClose();
     }
 
     try {

@@ -211,6 +211,8 @@ add_executable(creative-suite-main-editor-workspace-page-switch-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_host.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_host.h
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_page_id.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_transition_controller.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_transition_controller.h
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/pages/fusion/fusion_workspace.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/pages/fusion/fusion_workspace.h
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/pages/render/render_workspace.cpp

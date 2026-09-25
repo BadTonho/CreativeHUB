@@ -285,8 +285,12 @@ playback, project data, history, or dirty state.
 activates the shared Timeline's read-only presentation through a handler bound
 to `EditWorkspaceController`. The mode hides Timeline controls and its footer;
 leaving Render restores them.
-`WorkspaceHost` remains responsible for selecting that page, while `MainWindow`
-continues to manage dock visibility and the lower dock title at this stage.
+`WorkspaceHost` remains responsible for selecting that page, while
+`WorkspaceTransitionController` coordinates page changes, workspace selectors,
+the lower dock title, and Render's temporary dock visibility snapshot.
+`MainWindow` continues to own the native docks and persist their layout.
+Closing from Render restores the previous dock visibility before the window
+saves its layout.
 
 Render shows an empty central page with no controls or placeholder text. The
 Timeline dock remains visible at the bottom and displays the project tracks,
@@ -419,6 +423,15 @@ junctions and gaps are intentional no-op outcomes and are not logged.
 responsibility-focused translation units under
 `apps/video-editor/src/main_window/`. It owns the project services, docks,
 workspace selectors, menus, and playback-controller lifecycle.
+
+`ui/workspace/WorkspaceTransitionController` receives non-owning references to
+the workspace host, native docks, and workspace selectors. It coordinates
+Edit, Fusion, and Render transitions, including the temporary visibility
+snapshot for Render. `WorkspaceHost` remains the source of the current page
+and selects the central, lower, and Inspector panels; the transition
+controller does not own docks or persist layout. `MainWindow` remains
+responsible for creating the docks, restoring and saving their native layout,
+and returning to Edit before an accepted close from Render.
 
 `ui/workspace/pages/edit/EditWorkspace` builds the Inspector and Timeline
 surfaces and exposes them to `WorkspaceHost`. Edit, Fusion, and Render keep the

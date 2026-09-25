@@ -1,6 +1,6 @@
 # Plano de Refatoração das Interfaces de Trabalho
 
-Status: Etapas 1, 2, 3 e 4 concluídas; continuar a próxima etapa quando solicitado.
+Status: Etapas 1, 2, 3, 4 e 5 concluídas; continuar a próxima etapa quando solicitado.
 
 ## Objetivo
 
@@ -11,22 +11,22 @@ adiciona recursos de edição, composição ou exportação.
 
 ## Situação atual
 
-- `MainWindow` controla a sessão do projeto, os docks compartilhados, os
-  seletores de espaço de trabalho, a persistência do layout e a troca de página.
+- `MainWindow` controla a sessão do projeto, cria os docks compartilhados e
+  persiste o layout nativo.
 - `WorkspaceHost` alterna a página central, o painel inferior e o Inspector
   entre as apresentações de Edit, Fusion e Render.
-- `WorkspacePageId` identifica Edit, Fusion e Render. O host inicia em Edit e
-  mantém o estado atual da página; `MainWindow` continua responsável pelos
-  docks, títulos, seletores e regras de visibilidade de Render.
+- `WorkspacePageId` identifica Edit, Fusion e Render. O host mantém o estado
+  atual da página, e `WorkspaceTransitionController` coordena as transições,
+  os seletores, títulos e visibilidade temporária dos docks.
 - Render usa o mesmo widget Timeline de Edit em modo somente leitura. Não cria
   outra Timeline nem copia os dados do projeto.
 - `FusionWorkspace` monta o título Viewer, o painel Node Editor e o Inspector
   visual do Fusion; o Preview continua compartilhado com Edit.
 - `RenderWorkspace` fornece a página central vazia e ativa o modo somente
   leitura da Timeline compartilhada; `WorkspaceHost` controla sua ativação.
-- `MainWindow` continua controlando a visibilidade temporária dos docks e seus
-  títulos em Render. A visibilidade anterior é restaurada ao sair de Render ou
-  ao fechar o aplicativo.
+- `WorkspaceTransitionController` guarda e restaura a visibilidade temporária
+  dos docks ao sair de Render ou preparar o fechamento. `MainWindow` continua
+  responsável pela propriedade e persistência do layout dos docks.
 
 As etapas seguintes continuam pendentes e devem ser implementadas uma por vez,
 quando solicitadas.
@@ -37,6 +37,7 @@ quando solicitadas.
 apps/video-editor/src/ui/workspace/
   workspace_host.{h,cpp}
   workspace_page_id.h
+  workspace_transition_controller.{h,cpp}
   shared/
     workspace_panels.{h,cpp}       # somente se a montagem dos painéis compartilhados precisar de código próprio
   pages/
@@ -59,7 +60,7 @@ projeto ou da Timeline.
 
 ## Etapas
 
-Status atual: Etapas 1, 2, 3 e 4 concluídas. A montagem e as interações do Edit foram extraídas para `pages/edit/`, a apresentação do Fusion para `pages/fusion/` e a página e ativação somente leitura do Render para `pages/render/`; as etapas seguintes continuam pendentes e serão implementadas uma por vez, quando solicitadas.
+Status atual: Etapas 1, 2, 3, 4 e 5 concluídas. A montagem e as interações do Edit foram extraídas para `pages/edit/`, a apresentação do Fusion para `pages/fusion/`, a página e ativação somente leitura do Render para `pages/render/`, e as transições entre espaços foram centralizadas em `WorkspaceTransitionController`; a etapa seguinte continua pendente e será implementada quando solicitada.
 
 ### 1. Definir o limite dos espaços de trabalho
 
@@ -103,22 +104,23 @@ Status atual: Etapas 1, 2, 3 e 4 concluídas. A montagem e as interações do Ed
 
 ### 5. Centralizar as transições entre espaços
 
-- Mover a ativação de páginas, a seleção de painéis, as cópias temporárias da
-  visibilidade dos docks e os títulos específicos para `WorkspaceHost` ou para
-  um controlador de escopo restrito.
-- Preservar a visibilidade anterior de cada dock ao entrar e sair de Render e
-  ao fechar o aplicativo enquanto Render está ativo.
-- Manter em um único lugar a propriedade dos docks do aplicativo e a
-  persistência do layout.
+- **Concluída.** `WorkspaceTransitionController` coordena chamadas ao host,
+  seletores, títulos dos docks e visibilidade temporária de Render sem assumir
+  a propriedade dos docks nativos.
+- **Concluída.** A visibilidade anterior de cada dock, inclusive uma Timeline
+  oculta, é restaurada ao sair de Render e ao preparar o fechamento aceito.
+- **Concluída.** `MainWindow` continua criando os docks e usando
+  `saveState()`/`restoreState()` para persistir o layout.
+- **Concluída.** Os testes cobrem seleção repetida de Render, visibilidade
+  mista, preparação do fechamento e persistência de reabertura pela janela.
 
-### 6. Simplificar MainWindow e concluir a integração
+### 6. Concluir a validação da integração
 
-- Reduzir `MainWindow::setWorkspacePage` para encaminhar a página selecionada
-  ao host e atualizar os seletores.
-- Atualizar as listas de fontes do Video Editor no CMake e as referências aos
-  caminhos dos arquivos.
-- Atualizar a documentação da interface e dos testes de regressão para refletir
-  os limites finais de responsabilidade.
+- Confirmar que a `MainWindow` permanece responsável pela criação e
+  persistência dos docks e que `setWorkspacePage()` delega as transições ao
+  `WorkspaceTransitionController`.
+- Conferir os caminhos e limites de responsabilidade documentados e registrados
+  no CMake após as extrações.
 - Executar os testes de troca de página, Timeline e integração da janela; depois
   executar a suíte CTest relevante do Video Editor.
 

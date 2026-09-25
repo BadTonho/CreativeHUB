@@ -11,6 +11,7 @@
 #include "ui/media_browser/media_browser_list_widget.h"
 #include "ui/timeline/timeline_end_buttons.h"
 #include "ui/workspace/workspace_host.h"
+#include "ui/workspace/workspace_transition_controller.h"
 #include "ui/workspace/pages/fusion/fusion_workspace.h"
 #include "ui/workspace/pages/render/render_workspace.h"
 
@@ -35,7 +36,6 @@
 #include <QMenuBar>
 #include <QMetaObject>
 #include <QMessageBox>
-#include <QPushButton>
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QSettings>
@@ -352,15 +352,6 @@ void MainWindow::createWorkspace() {
     edit_workspace_button_ = workspace_buttons.edit;
     fusion_workspace_button_ = workspace_buttons.fusion;
     render_workspace_button_ = workspace_buttons.render;
-    connect(edit_workspace_button_, &QPushButton::clicked, this, [this]() {
-        setWorkspacePage(ui::WorkspacePageId::Edit);
-    });
-    connect(fusion_workspace_button_, &QPushButton::clicked, this, [this]() {
-        setWorkspacePage(ui::WorkspacePageId::Fusion);
-    });
-    connect(render_workspace_button_, &QPushButton::clicked, this, [this]() {
-        setWorkspacePage(ui::WorkspacePageId::Render);
-    });
     workspace_host_ = new ui::WorkspaceHost(
         edit_workspace_, fusion_workspace_, render_workspace_, this);
     setCentralWidget(workspace_host_);
@@ -378,6 +369,23 @@ void MainWindow::createWorkspace() {
         workspace_host_->lowerWorkspacePanel());
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
 
+    workspace_transition_controller_ =
+        new ui::WorkspaceTransitionController(
+            workspace_host_,
+            {
+                bins_dock_,
+                media_dock_,
+                toolbox_dock_,
+                favorites_dock_,
+                effects_dock_,
+                inspector_dock_,
+                timeline_dock_},
+            {
+                edit_workspace_button_,
+                fusion_workspace_button_,
+                render_workspace_button_},
+            this);
+
     function_palette_ = new ui::FunctionPalette(this, *shortcut_manager_);
 
     restoreWorkspaceLayout();
@@ -385,63 +393,8 @@ void MainWindow::createWorkspace() {
 }
 
 void MainWindow::setWorkspacePage(ui::WorkspacePageId page) {
-    const auto docks = std::array<QDockWidget*, 7>{
-        bins_dock_, media_dock_, toolbox_dock_, favorites_dock_, effects_dock_,
-        inspector_dock_, timeline_dock_};
-    const bool entering_render =
-        page == ui::WorkspacePageId::Render &&
-        workspace_host_ != nullptr &&
-        workspace_host_->currentPage() != ui::WorkspacePageId::Render;
-    const bool leaving_render =
-        page != ui::WorkspacePageId::Render &&
-        workspace_host_ != nullptr &&
-        workspace_host_->currentPage() == ui::WorkspacePageId::Render;
-
-    if (entering_render) {
-        for (std::size_t index = 0; index < docks.size(); ++index) {
-            dock_visibility_before_render_[index] =
-                docks[index] != nullptr && !docks[index]->isHidden();
-        }
-        has_render_dock_visibility_snapshot_ = true;
-        for (auto* dock : docks) {
-            if (dock != nullptr && dock != timeline_dock_) dock->hide();
-        }
-        if (timeline_dock_ != nullptr) timeline_dock_->show();
-    }
-
-    if (workspace_host_ != nullptr) {
-        workspace_host_->setPage(page);
-    }
-    if (timeline_dock_ != nullptr) {
-        timeline_dock_->setWindowTitle(
-            page == ui::WorkspacePageId::Fusion ? "Node Editor" : "Timeline");
-    }
-
-    if (leaving_render && has_render_dock_visibility_snapshot_) {
-        for (std::size_t index = 0; index < docks.size(); ++index) {
-            if (docks[index] == nullptr) continue;
-            if (dock_visibility_before_render_[index]) {
-                docks[index]->show();
-            } else {
-                docks[index]->hide();
-            }
-        }
-        has_render_dock_visibility_snapshot_ = false;
-        updateMediaPoolActionState();
-        updateEffectsActionState();
-    }
-
-    const QSignalBlocker edit_blocker(edit_workspace_button_);
-    const QSignalBlocker fusion_blocker(fusion_workspace_button_);
-    const QSignalBlocker render_blocker(render_workspace_button_);
-    if (edit_workspace_button_ != nullptr) {
-        edit_workspace_button_->setChecked(page == ui::WorkspacePageId::Edit);
-    }
-    if (fusion_workspace_button_ != nullptr) {
-        fusion_workspace_button_->setChecked(page == ui::WorkspacePageId::Fusion);
-    }
-    if (render_workspace_button_ != nullptr) {
-        render_workspace_button_->setChecked(page == ui::WorkspacePageId::Render);
+    if (workspace_transition_controller_ != nullptr) {
+        workspace_transition_controller_->setPage(page);
     }
 }
 void MainWindow::showSettingsDialog() {

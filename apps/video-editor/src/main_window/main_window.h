@@ -24,7 +24,6 @@
 
 #include <cstdint>
 #include <atomic>
-#include <array>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -66,6 +65,7 @@ class EditWorkspace;
 class FusionWorkspace;
 class RenderWorkspace;
 class WorkspaceHost;
+class WorkspaceTransitionController;
 }
 
 namespace timeline {
@@ -266,6 +266,8 @@ private:
     ui::FusionWorkspace* fusion_workspace_ = nullptr;
     ui::RenderWorkspace* render_workspace_ = nullptr;
     ui::WorkspaceHost* workspace_host_ = nullptr;
+    ui::WorkspaceTransitionController* workspace_transition_controller_ =
+        nullptr;
     QWidget* workspace_buttons_container_ = nullptr;
     QPushButton* edit_workspace_button_ = nullptr;
     QPushButton* fusion_workspace_button_ = nullptr;
@@ -323,8 +325,6 @@ private:
     const std::optional<project::ProjectDocument>& saved_project_document_ =
         editor_session_.savedProjectDocument();
     const bool& project_dirty_ = editor_session_.projectDirtyState();
-    std::array<bool, 7> dock_visibility_before_render_{};
-    bool has_render_dock_visibility_snapshot_ = false;
     bool initial_window_layout_pending_ = false;
     bool playback_activation_loading_ = false;
     QThreadPool media_task_pool_;
