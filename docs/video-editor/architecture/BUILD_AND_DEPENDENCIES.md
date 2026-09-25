@@ -4,7 +4,7 @@ Status: **provisional**.
 
 The root `vcpkg.json` tracks Qt 6 through `qtbase` and `qtmultimedia`, and
 FFmpeg through `ffmpeg`. The Image Editor also uses the `qtimageformats`
-add-on so its WebP and TIFF image I/O plugins can be deployed. The Main Editor
+add-on so its WebP and TIFF image I/O plugins can be deployed. The Video Editor
 uses the FFmpeg `AVFORMAT`, `AVCODEC`,
 `AVUTIL`, `SWSCALE`, and `SWRESAMPLE` components. Qt Multimedia is optional in
 the local CMake configuration so a developer environment without the module

@@ -12,8 +12,8 @@ SystemMemoryIndicator::SystemMemoryIndicator(QWidget* parent)
     setStyleSheet("color: #9aa4b2;");
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     setCursor(Qt::PointingHandCursor);
-    setToolTip("Open detailed Main Editor memory usage.");
-    setAccessibleName("Main Editor memory usage");
+    setToolTip("Open detailed Video Editor memory usage.");
+    setAccessibleName("Video Editor memory usage");
 
     connect(
         &refresh_timer_,

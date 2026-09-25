@@ -16,9 +16,9 @@ The main repository is a single repository. Separation should be handled through
 
 The suite should run on Windows, macOS, and Linux.
 
-### Main Editor
+### Video Editor
 
-An audiovisual editing application combining ideas from Premiere and DaVinci Resolve:
+An audiovisual editing application focused on:
 
 - timeline editing;
 - media organization;
@@ -43,11 +43,11 @@ A separate application for motion design and advanced compositing:
 
 ### Image Editor
 
-The Image Editor is part of the product vision. After the Main Editor
+The Image Editor is part of the product vision. After the Video Editor
 foundation, the Image Editor is the next application stage, ahead of Motion
 Studio. Build and validate its standalone minimum editor first; then add the
-linked-image compatibility workflow with the Main Editor before the first
-editing release milestone. Keep Main Editor stability as a priority and revisit
+linked-image compatibility workflow with the Video Editor before the first
+editing release milestone. Keep Video Editor stability as a priority and revisit
 scope if work would compromise it.
 
 ## 3. Mandatory Principles
@@ -82,7 +82,7 @@ Expected core responsibilities:
 - export;
 - plugin system.
 
-The Main Editor and Motion Studio must share the core without losing their specific responsibilities.
+The Video Editor and Motion Studio must share the core without losing their specific responsibilities.
 
 Do not duplicate media, rendering, or animation engines without a clear technical justification.
 
@@ -233,12 +233,12 @@ Do not commit or push automatically. These actions require explicit user authori
 - The product vision is still being defined.
 - The project does not yet have a final decision between Rust and C++.
 - The target platforms are Windows, macOS, and Linux.
-- The planned applications are the Main Editor, Image Editor, and Motion
+- The planned applications are the Video Editor, Image Editor, and Motion
   Studio.
-- The Main Editor remains first; the Image Editor is the next application
+- The Video Editor remains first; the Image Editor is the next application
   stage, ahead of Motion Studio. Its standalone minimum editor precedes the
   linked-image compatibility prototype and first editing release.
 - The architecture must remain in a single repository.
-- The application sequence after the Main Editor foundation is the standalone
+- The application sequence after the Video Editor foundation is the standalone
   Image Editor minimum, linked-image compatibility, the first editing release,
   and then the Motion Studio foundation.

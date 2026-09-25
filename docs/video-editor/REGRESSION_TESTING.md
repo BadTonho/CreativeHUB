@@ -1,6 +1,6 @@
 # Regression Testing
 
-This document defines the local regression gate for the Main Editor. Every
+This document defines the local regression gate for the Video Editor. Every
 implemented rule should have either an automated test or a documented manual
 validation step before the related change is considered complete.
 
@@ -40,7 +40,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Functions window shortcut | Offscreen Shift+Space registration, WindowShortcut context, empty non-modal floating window, opening and toggling while focused, inside/outside click behavior, close and destruction through Escape/title bar/deactivation, fresh recreation without duplicates, and regular Space playback shortcut preservation |
 | Timeline interaction | Selection without playhead jumps, row-local clip hit testing, gap deselection for Timeline and Media Browser items, no-op drags from empty rows, optional move-to-start selection preference, seek-on-release, configurable clip movement, checked-by-default Magnetic Snap with eight-pixel tolerance, clip-edge and Timeline-boundary snapping, aligned snap guides, enable/disable behavior, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, one-frame fallback metadata, cancellation cleanup, no pre-release model signal, Blade Tool, edge-hover resize cursor and reset behavior, live left/right edge extension previews and trim-on-release, distinct rolling-center and one-sided shared-cut handles while preserving junction selection on click, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, frozen track-header overlay during horizontal scrolling, vertical header alignment during vertical scrolling, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
-| System memory details | Offscreen non-modal dialog, System Memory and Main Editor sections, click-to-open behavior, Working Set, Private Usage, GB/MB formatting, and per-metric `N/A` handling |
+| System memory details | Offscreen non-modal dialog, System Memory and Video Editor sections, click-to-open behavior, Working Set, Private Usage, GB/MB formatting, and per-metric `N/A` handling |
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
 | Settings dialog | Modal shell, General, Autosave, Timeline, and Shortcuts tabs, empty and populated autosave snapshot table, refresh/restore/delete/open-folder requests, Close action, independent component construction, and editable shortcut preferences |
@@ -59,7 +59,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 ## Manual UI validation
 
 Automated tests do not replace visual validation. The following must be checked
-in the running Main Editor after UI or integration changes:
+in the running Video Editor after UI or integration changes:
 
 - application startup and clean shutdown;
 - while a project is being prepared, confirm File, Edit, View, and Help remain
@@ -223,7 +223,7 @@ in the running Main Editor after UI or integration changes:
   Timeline, project dirty state, or Undo/Redo; close and reopen the editor to
   confirm layout version 7 restores the saved arrangement, and use
   `View > Restore Default Layout` to restore the Media Pool default;
-- first launch: confirm the Main Editor opens maximized with Media Pool on the
+- first launch: confirm the Video Editor opens maximized with Media Pool on the
   left, Inspector on the right, Preview in the center, and Timeline across the
   bottom; resize or rearrange the docks, close the editor, and confirm the
   window geometry and dock arrangement are restored without changing project
@@ -319,11 +319,11 @@ in the running Main Editor after UI or integration changes:
   no media paths are added to performance samples;
 - the Timeline footer RAM indicator: confirm it is aligned to the right, uses
   the `RAM: <megabytes> MB` format, refreshes approximately once per
-  second, reports only the Main Editor process, and does not affect playback,
+  second, reports only the Video Editor process, and does not affect playback,
   Timeline state, project dirty state, or Undo/Redo;
 - clicking the Timeline footer RAM indicator: confirm the non-modal `Memory
   Usage` window opens and can remain open during playback and editing; verify
-  System Memory shows total, used, and available values, Main Editor shows
+  System Memory shows total, used, and available values, Video Editor shows
   Working Set and Private Usage, values refresh approximately once per second,
   failed metrics show `N/A`, and closing the window leaves project state
   unchanged;

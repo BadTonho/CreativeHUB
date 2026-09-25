@@ -201,6 +201,7 @@ if(BUILD_TESTING)
 endif()
 
 set_target_properties(creative-suite-main-editor PROPERTIES
+    OUTPUT_NAME creative-suite-video-editor
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )

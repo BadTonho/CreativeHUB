@@ -35,8 +35,8 @@ int main(int argc, char* argv[]) {
                 "Memory details dialog must contain two sections.");
         require(groups.at(0)->title() == "System Memory",
                 "System Memory section is missing.");
-        require(groups.at(1)->title() == "Main Editor",
-                "Main Editor section is missing.");
+        require(groups.at(1)->title() == "Video Editor",
+                "Video Editor section is missing.");
 
         SystemMemoryIndicator indicator;
         indicator.resize(120, 24);

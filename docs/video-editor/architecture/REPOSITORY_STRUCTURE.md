@@ -30,7 +30,7 @@ contain provisional roadmaps only.
 
 ## Module boundaries
 
-The Main Editor and Motion Studio are expected to share core responsibilities
+The Video Editor and Motion Studio are expected to share core responsibilities
 without duplicating media, rendering, or animation engines. A shared library is
 created only when it has a second real consumer and a documented responsibility.
 
@@ -38,9 +38,9 @@ The initial application keeps media, timeline, playback, logging, project
 persistence, and UI code application-local. This avoids premature abstractions
 while the product boundaries are still being validated.
 
-## Main Editor organization
+## Video Editor organization
 
-The Main Editor keeps `src/main_window.h` as the public declaration of the
+The Video Editor keeps `src/main_window.h` as the public declaration of the
 application window and organizes its implementation by responsibility under
 `apps/video-editor/src/main_window/`:
 

@@ -5,7 +5,7 @@ area stored under `apps/motion-editor/`. The folders are placeholders; the
 application is not wired into CMake and no final architecture or technology
 choices have been made.
 
-Motion Studio follows the Main Editor foundation and Image Editor Milestone 3
+Motion Studio follows the Video Editor foundation and Image Editor Milestone 3
 (first editing release). The Image Editor's standalone minimum and linked-image
 compatibility milestones come first. Motion Studio focuses on advanced motion
 design and compositing, while the applications share media, rendering,
@@ -13,7 +13,7 @@ animation, and project services when those boundaries are technically clear.
 
 ## Principles
 
-- Do not delay the Main Editor foundation by developing Motion Studio in
+- Do not delay the Video Editor foundation by developing Motion Studio in
   parallel from the beginning.
 - Start the Motion Studio foundation after Image Editor Milestone 3 reaches
   its documented exit criteria.
@@ -33,8 +33,8 @@ animation, and project services when those boundaries are technically clear.
 - [ ] Define the intended users, primary workflows, and the first Motion Studio
   release boundary.
 - [ ] Define how Motion Studio compositions are opened, referenced, and
-  updated from Main Editor projects.
-- [ ] Map the existing Main Editor document, media, rendering, keyframe,
+  updated from Video Editor projects.
+- [ ] Map the existing Video Editor document, media, rendering, keyframe,
   history, and recovery capabilities to the services Motion Studio needs.
 - [ ] Identify the smallest shared libraries justified by a second real
   consumer; document their APIs and ownership rules.
@@ -42,7 +42,7 @@ animation, and project services when those boundaries are technically clear.
   compositions and cross-application references.
 
 **Exit criteria:** the MVP and application boundary are documented, required
-shared services are identified, the Main Editor foundation is stable, and
+shared services are identified, the Video Editor foundation is stable, and
 Image Editor Milestone 3 has passed its exit criteria.
 
 ### 1. Technical validation
@@ -88,10 +88,10 @@ composition without losing its layer or timing data.
 manual visual checks, including save/reopen, recovery, and heavy-composition
 handling.
 
-### 4. Main Editor integration and release readiness
+### 4. Video Editor integration and release readiness
 
 - [ ] Validate composition handoff and updates between Motion Studio and the
-  Main Editor without unnecessary media duplication.
+  Video Editor without unnecessary media duplication.
 - [ ] Document supported interchange behavior, project compatibility, and
   failure recovery.
 - [ ] Validate installation, project paths, fonts, graphics drivers, and

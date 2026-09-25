@@ -2,7 +2,7 @@
 
 Status: provisional.
 
-The Main Editor currently includes:
+The Video Editor currently includes:
 
 - Qt 6 desktop shell with dockable workspace panels;
 - FFmpeg metadata import and first-frame decoding;

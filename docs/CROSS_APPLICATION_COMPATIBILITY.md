@@ -6,23 +6,23 @@ priorities.
 
 ## Goal
 
-Allow the Main Editor, Motion Studio, and Image Editor to share stable
+Allow the Video Editor, Motion Studio, and Image Editor to share stable
 domain capabilities and continue supported work across applications. Keep
 shared code reuse and document handoff as separate concerns: applications can
 reuse a library without sharing project files, and they can exchange a linked
 document without sharing their entire editing workflow.
 
 The Image Editor standalone minimum was developed first. Its manual and
-packaging checks are the current gate. The Main Editor linked-image
+packaging checks are the current gate. The Video Editor linked-image
 implementation already exists as a bounded prototype, but compatibility
 acceptance follows the standalone exit criteria; the prototype should remain
 stable until that gate passes. The Image Editor's first editing release
 remains ahead of Motion Studio. This is a sequencing direction; technical
 contracts in this proposal remain provisional.
 
-The initial Main Editor to Image Editor handoff is now implemented as a
+The initial Video Editor to Image Editor handoff is now implemented as a
 bounded prototype. A user confirmed the basic linked edit/save workflow and
-that the Main Editor refreshed after the Image Editor saved. The broader
+that the Video Editor refreshed after the Image Editor saved. The broader
 acceptance checks follow the standalone Image Editor gate and remain pending.
 This document remains provisional until the file, conflict, and cross-platform
 workflows have been validated manually.
@@ -36,7 +36,7 @@ adapt its own controls and workflows to shared operations.
 | Capability | Suggested ownership |
 | --- | --- |
 | Layers, transforms, masks, and composition | Shared composition library when a second application has a real use case |
-| Keyframe evaluation and curves | Shared by the Main Editor and Motion Studio; include the Image Editor only if animation becomes an approved use case |
+| Keyframe evaluation and curves | Shared by the Video Editor and Motion Studio; include the Image Editor only if animation becomes an approved use case |
 | Timeline editing and audio workflows | Application-specific, with reusable lower-level services when a real second consumer exists |
 | Painting, selection, and retouching tools | Image Editor |
 | Advanced motion-design workflows | Motion Studio |
@@ -52,7 +52,7 @@ behavior.
 ## First Shared Capability to Validate
 
 Start with a small composition operation: a layer with a source, transform,
-opacity, optional mask, and a defined compositing result. The Main Editor
+opacity, optional mask, and a defined compositing result. The Video Editor
 already has composition-related code, including a backend-neutral composition
 stage and a CPU frame compositor. Use those existing boundaries to prototype a
 stable API before moving code into a shared library.
@@ -70,7 +70,7 @@ can adopt it according to their needs.
 
 ## Extraction Criteria and Build Shape
 
-Keep a capability application-local while the Main Editor is its only
+Keep a capability application-local while the Video Editor is its only
 consumer. Extract it into a focused library under `libs/` when a second
 application has a real use case and the API can serve both without
 application-specific conditions.
@@ -92,12 +92,12 @@ Before extraction, confirm that:
 ## Linked Editing Between Applications
 
 The proposed workflow uses a separately saved, editable document linked from
-the Main Editor. The Main Editor keeps a stable reference to that document and
+the Video Editor. The Video Editor keeps a stable reference to that document and
 uses its current supported output in the timeline. The linked document keeps
 its own native editing model and history. The source media remains available
 and is not silently overwritten by an editor handoff.
 
-The intended experience is for the Main Editor to reflect changes promptly
+The intended experience is for the Video Editor to reflect changes promptly
 while the linked document is being edited. Deliver this in stages: first
 refresh after each successful save, then evaluate unsaved live previews if
 that workflow justifies the added runtime coordination.
@@ -113,7 +113,7 @@ that workflow justifies the added runtime coordination.
   captures the image shown when the variant is first created; its editable
   document and published output remain separate from the shared Media Pool
   link and other clips.
-- Main Editor `.csp` version 10 stores optional shared and clip-specific
+- Video Editor `.csp` version 10 stores optional shared and clip-specific
   references. Versions 1 through 9 load without those references. Resolution
   order is clip variant, shared Media Pool output, then original source.
 - The Image Editor receives `--linked-source`, `--linked-document`, and
@@ -121,7 +121,7 @@ that workflow justifies the added runtime coordination.
   supplied source. Save writes the native document and then atomically replaces
   the published PNG. A per-document lock and SHA-256 baseline prevent a second
   Image Editor instance from replacing a newer saved revision.
-- The Main Editor polls linked output files and decodes changes asynchronously.
+- The Video Editor polls linked output files and decodes changes asynchronously.
   It refreshes the Media Pool thumbnail and every shared-media use, or only the
   matching clip variant. It rejects callbacks from a replaced project and
   invalidates the current composition/preview after a successful decode.
@@ -138,7 +138,7 @@ that workflow justifies the added runtime coordination.
   resource. The composition's duration, frame rate, canvas, and dependency
   behavior must be explicit before it is inserted into the timeline.
 - Saving a supported composition makes its new saved revision available to
-  the Main Editor, which refreshes the clip output and invalidates dependent
+  the Video Editor, which refreshes the clip output and invalidates dependent
   render-cache entries.
 
 These workflows share a handoff contract, but image documents and motion
@@ -147,7 +147,7 @@ and adapters.
 
 ### Update and conflict behavior
 
-For the initial integration, the Main Editor polls output size and modification
+For the initial integration, the Video Editor polls output size and modification
 time and refreshes after a linked document is saved. The Image Editor compares
 the linked document's saved SHA-256 fingerprint and serializes linked writers
 with a lock file. Streaming unsaved preview frames between running applications
@@ -183,7 +183,7 @@ implemented.
 
 Flattened export/import is a simpler fallback for initial interoperability,
 but it loses editable structure and does not provide automatic updates to the
-Main Editor. A linked native document offers a richer workflow at the cost of
+Video Editor. A linked native document offers a richer workflow at the cost of
 requiring explicit version and dependency behavior. Validate both against
 representative projects before choosing the first supported interchange path.
 
@@ -191,7 +191,7 @@ representative projects before choosing the first supported interchange path.
 
 Before making this direction final, prototype and document:
 
-1. opening a linked document from the Main Editor and returning to the host;
+1. opening a linked document from the Video Editor and returning to the host;
 2. saving a new revision and refreshing the affected preview and render cache;
 3. preserving the source asset and detecting missing or moved dependencies;
 4. rejecting or recovering from unsupported versions and stale concurrent
@@ -203,11 +203,11 @@ Before making this direction final, prototype and document:
 ## Suggested Sequence
 
 1. Maintain a capability ownership matrix for the applications.
-2. Specify and validate the composition contract inside the Main Editor.
+2. Specify and validate the composition contract inside the Video Editor.
 3. Build and validate the standalone Image Editor minimum before adding
    cross-application behavior.
 4. After the standalone editor is usable, validate the linked raster handoff
-   with a bounded Main Editor compatibility prototype.
+   with a bounded Video Editor compatibility prototype.
 5. Extract only the proven capabilities used by both applications into
    focused libraries.
 6. Complete and validate the Image Editor's first editing release, then start

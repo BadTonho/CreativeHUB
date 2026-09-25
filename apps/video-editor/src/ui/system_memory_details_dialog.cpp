@@ -37,7 +37,7 @@ SystemMemoryDetailsDialog::SystemMemoryDetailsDialog(QWidget* parent)
     system_layout->addRow("Used", system_used_value_);
     system_layout->addRow("Available", system_available_value_);
 
-    auto* process_group = new QGroupBox("Main Editor", this);
+    auto* process_group = new QGroupBox("Video Editor", this);
     auto* process_layout = new QFormLayout(process_group);
     process_working_set_value_ = createValueLabel(process_group);
     process_private_usage_value_ = createValueLabel(process_group);

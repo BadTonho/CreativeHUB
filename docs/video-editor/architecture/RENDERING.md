@@ -2,7 +2,7 @@
 
 Status: **provisional**.
 
-The Main Editor currently uses Qt OpenGL for preview presentation. This is an
+The Video Editor currently uses Qt OpenGL for preview presentation. This is an
 application-local validation backend, not the final product renderer. The
 preview requests an OpenGL 3.2 Core context through `QOpenGLWidget`, uploads
 the media layer's owned RGBA8 pixels to a linear-filtered texture, and draws a

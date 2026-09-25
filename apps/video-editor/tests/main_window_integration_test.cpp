@@ -171,7 +171,7 @@ public:
                     "Opening the project did not select the first clip by stable identity.");
             require(!window.project_dirty_,
                     "Opening a saved multi-track project incorrectly marked it dirty.");
-            require(window.windowTitle() == QStringLiteral("Main Editor"),
+            require(window.windowTitle() == QStringLiteral("Video Editor"),
                     "Opening a saved multi-track project incorrectly added the dirty marker.");
 
             const auto failed_open_path = directory / "corrupt.csp";

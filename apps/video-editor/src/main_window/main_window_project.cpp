@@ -244,7 +244,7 @@ void MainWindow::updateProjectDirtyState() {
                                    : timeline::kDefaultTrackRowHeight};
     static_cast<void>(project_controller_.updateDirtyState(presentation));
 
-    setWindowTitle(project_dirty_ ? "Main Editor *" : "Main Editor");
+    setWindowTitle(project_dirty_ ? "Video Editor *" : "Video Editor");
     if (save_project_action_ != nullptr) {
         save_project_action_->setEnabled(!project_path_.has_value() || project_dirty_);
     }

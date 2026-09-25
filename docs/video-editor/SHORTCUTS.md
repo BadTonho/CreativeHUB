@@ -1,24 +1,24 @@
 # Keyboard Shortcuts
 
-This document lists the user-facing shortcuts implemented by the Main Editor.
+This document lists the user-facing shortcuts implemented by the Video Editor.
 It must change in the same commit as any shortcut change.
 
 | Shortcut | Action | Context |
 | --- | --- | --- |
-| Space | Play or pause the selected timeline media | Main Editor |
-| Shift + Space | Open or close the empty Functions window | Main Editor |
-| Left Arrow | Previous frame, crossing a clip boundary when applicable | Main Editor |
-| Right Arrow | Next frame, crossing a clip boundary when applicable | Main Editor |
-| Ctrl + Left | Nudge the active clip one frame left when valid | Main Editor |
-| Ctrl + Right | Nudge the active clip one frame right when valid | Main Editor |
-| Delete | Delete the active timeline clip | Main Editor |
-| Ctrl + K | Split the active clip at the playhead | Main Editor |
-| Ctrl + Z | Undo the last successful Timeline edit | Main Editor |
-| Ctrl + Y / Ctrl + Shift + Z | Redo the last undone edit | Main Editor |
-| Ctrl + N | Create a new project | Main Editor |
-| Ctrl + O | Open a project | Main Editor |
-| Ctrl + S | Save the current project or open Save As | Main Editor |
-| Ctrl + Shift + S | Save the current project under a new path | Main Editor |
+| Space | Play or pause the selected timeline media | Video Editor |
+| Shift + Space | Open or close the empty Functions window | Video Editor |
+| Left Arrow | Previous frame, crossing a clip boundary when applicable | Video Editor |
+| Right Arrow | Next frame, crossing a clip boundary when applicable | Video Editor |
+| Ctrl + Left | Nudge the active clip one frame left when valid | Video Editor |
+| Ctrl + Right | Nudge the active clip one frame right when valid | Video Editor |
+| Delete | Delete the active timeline clip | Video Editor |
+| Ctrl + K | Split the active clip at the playhead | Video Editor |
+| Ctrl + Z | Undo the last successful Timeline edit | Video Editor |
+| Ctrl + Y / Ctrl + Shift + Z | Redo the last undone edit | Video Editor |
+| Ctrl + N | Create a new project | Video Editor |
+| Ctrl + O | Open a project | Video Editor |
+| Ctrl + S | Save the current project or open Save As | Video Editor |
+| Ctrl + Shift + S | Save the current project under a new path | Video Editor |
 | Ctrl + Mouse Wheel | Zoom the timeline around the playhead | Timeline |
 | Shift + Mouse Wheel | Adjust the height of all Timeline track rows | Timeline |
 | Drag the time ruler | Scrub the playhead without selecting a clip | Timeline |

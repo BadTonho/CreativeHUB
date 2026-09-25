@@ -483,7 +483,7 @@ void MainWindow::createMenus() {
         QMessageBox::information(
             this,
             "System",
-            QString("Main Editor\n\nVersion: %1\nExecutable: %2")
+            QString("Video Editor\n\nVersion: %1\nExecutable: %2")
                 .arg(version.isEmpty() ? QStringLiteral("Beta 0.1.2") : version,
                      executable_path.isEmpty()
                          ? QStringLiteral("N/A")
@@ -516,12 +516,12 @@ void MainWindow::createMenus() {
         statusBar()->showMessage("Log folder opened.");
     });
     help_menu->addSeparator();
-    auto* about_action = help_menu->addAction("&About Main Editor");
+    auto* about_action = help_menu->addAction("&About Video Editor");
     connect(about_action, &QAction::triggered, this, [this]() {
         QMessageBox::about(
             this,
-            "About Main Editor",
-            "Main Editor application shell\n\n"
+            "About Video Editor",
+            "Video Editor application shell\n\n"
             "This is an early open-source creative suite workspace.");
     });
 

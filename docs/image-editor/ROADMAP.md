@@ -2,14 +2,14 @@
 
 Status: **standalone minimum implemented; standalone acceptance in progress**.
 This roadmap covers the independent application under `apps/image-editor/`.
-The Main Editor handoff implementation already exists as a bounded prototype,
+The Video Editor handoff implementation already exists as a bounded prototype,
 but its acceptance is gated on passing the standalone manual and
 cross-platform packaging checks in Milestone 1. The Image Editor remains ahead
 of Motion Studio in the application sequence.
 
 ## Principles
 
-- Keep the Main Editor's stability work on track while developing the Image
+- Keep the Video Editor's stability work on track while developing the Image
   Editor as a separate executable.
 - Preserve linked source images; store editable document operations in a
   versioned format.
@@ -18,7 +18,7 @@ of Motion Studio in the application sequence.
   effect systems until they are justified by validated workflows.
 - Use Qt image I/O and deploy the plugins required for the documented input
   formats. Track Qt Image Formats and its codec notices for distribution.
-- Keep compatibility with the Main Editor as an independently testable
+- Keep compatibility with the Video Editor as an independently testable
   milestone after the standalone minimum passes its exit criteria. The current
   implementation refreshes host output after a successful save; unsaved live
   previews remain outside its scope.
@@ -69,7 +69,7 @@ raster image without changing its source, saves and reopens `.cimg`, exports
 PNG/JPEG, and recovers an autosave. Required image plugins are present in the
 packaged application. Automated and manual checks pass.
 
-### 2. Main Editor linked-image compatibility
+### 2. Video Editor linked-image compatibility
 
 The linked-image implementation is already present as a bounded prototype.
 Begin this milestone's acceptance only after Milestone 1 exit criteria pass;
@@ -89,12 +89,12 @@ coverage to catch regressions.
 - [x] Cover project open, shared output, clip
   variants, stale project generations, and publication failures.
 - [x] Confirm the basic linked edit/save workflow manually: saving in the
-  Image Editor refreshed the Main Editor (user-confirmed; platform unspecified).
+  Image Editor refreshed the Video Editor (user-confirmed; platform unspecified).
 - [ ] Validate transparent images, repeated Media Pool uses, clip variants,
   save/reopen, large files, and both applications on Windows, macOS, and Linux.
 
 **Exit criteria:** automated and manual checks confirm that saving a linked
-image refreshes every intended Main Editor use without modifying the original
+image refreshes every intended Video Editor use without modifying the original
 or leaving stale previews. Unsaved live preview streaming remains out of scope.
 
 ### 3. First editing release

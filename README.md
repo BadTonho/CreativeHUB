@@ -1,18 +1,16 @@
 # Creative Suite (Working Title)
 
-> **Note on Project Name:** The current project name and repository identifier (`AdobeShoppee`) are temporary placeholders. A permanent identity and branding will be established through an explicit community decision in a future milestone.
+> **Project name:** Temporary. A permanent identity will be decided in a future milestone.
 
-An open-source, lightweight, cross-platform creative suite engineered for professional performance without proprietary lock-in, subscription fees, or unnecessary cloud dependencies.
+An open-source, lightweight, cross-platform creative suite designed for professional work, responsive performance, and local workflows.
 
 ---
 
 ## 1. Project Vision & Proposal
 
-Modern creative workflows are dominated by heavyweight proprietary suites that impose subscription models, heavy telemetry, slow startup times, and opaque project formats. 
+This project aims to deliver a **modular, responsive, and native desktop suite** that prioritizes user freedom, performance, low memory use, and local project control across **Windows, macOS, and Linux**.
 
-This project aims to deliver a **modular, responsive, and native desktop suite** that respects user freedom, prioritizes performance and low memory consumption, and runs natively across **Windows, macOS, and Linux**.
-
-The suite combines the best paradigms of industry-standard tools into a unified, lightweight ecosystem:
+The suite provides focused applications for video, image, and motion workflows, supported by reusable libraries:
 
 ```
 +-------------------------------------------------------------------+
@@ -22,7 +20,7 @@ The suite combines the best paradigms of industry-standard tools into a unified,
 +-------------------+-----------------------+-----------------------+
                     |                       |
            +--------v--------+     +--------v--------+
-           |   Main Editor   |     |  Motion Studio  |
+           |  Video Editor   |     |  Motion Studio  |
            | (Video Editing) |     | (Motion/VFX)    |
            +-----------------+     +-----------------+
                     |
@@ -34,14 +32,14 @@ The suite combines the best paradigms of industry-standard tools into a unified,
 
 ### Planned Applications
 
-1. **Main Editor** *(In Active Development)*:
-   - Audiovisual editing combining the editing fluidity and multi-track simplicity of Premiere with the grading and assembly depth of DaVinci Resolve.
+1. **Video Editor** *(In Active Development)*:
+   - Audiovisual editing with a responsive multi-track workflow for assembling footage, grading color, editing audio, adding text and effects, and exporting finished work.
    - Core capabilities: multi-track timeline editing, cutting, blade splitting, transitions, text overlays/captions, transform keyframes, synchronized audio playback, and export.
 2. **Image Editor** *(Standalone minimum under development)*:
    - Open one raster image, crop and transform it non-destructively, save an editable `.cimg` document, and export PNG or JPEG.
-   - Build the standalone minimum first; linked-image compatibility with the Main Editor follows before the first editing release.
+   - Build the standalone minimum first; linked-image compatibility with the Video Editor follows before the first editing release.
 3. **Motion Studio** *(Planned - Following the Image Editor's first editing release)*:
-   - A dedicated application for motion design, advanced compositing, and visual effects (analogous to After Effects).
+   - A dedicated application for motion design, advanced compositing, and visual effects.
    - Core capabilities: complex animation curves, bezier keyframes, animated vector masks, nested compositions, chained effects, and shape layers.
 
 ---
@@ -58,7 +56,7 @@ The suite combines the best paradigms of industry-standard tools into a unified,
 
 ## 3. Current Implementation Status
 
-Development is currently centered on the **Main Editor** MVP under [`apps/video-editor`](apps/video-editor), built with **C++20**, **Qt 6 Widgets**, and **FFmpeg**:
+Development is currently centered on the **Video Editor** MVP under [`apps/video-editor`](apps/video-editor), built with **C++20**, **Qt 6 Widgets**, and **FFmpeg**:
 
 - [x] **Workspace & Shell**: Dockable panels (Media Browser, Timeline, Preview Player, Inspector) with flexible desktop layouts.
 - [x] **Multi-Track Timeline**:
@@ -99,8 +97,9 @@ Development is currently centered on the **Main Editor** MVP under [`apps/video-
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/BadTonho/AdobeShoppee.git
-   cd AdobeShoppee
+   # Replace the placeholders with the clone URL and folder shown by the repository host.
+   git clone <repository-url>
+   cd <repository-folder>
    ```
 
 2. **Configure with CMake using vcpkg:**
@@ -113,16 +112,16 @@ Development is currently centered on the **Main Editor** MVP under [`apps/video-
    cmake --build build --config Release
    ```
 
-4. **Run the Main Editor:**
+4. **Run the Video Editor:**
    ```bash
    # On Windows:
-   .\build\apps\video-editor\Release\creative-suite-main-editor.exe
+   .\build\apps\video-editor\Release\creative-suite-video-editor.exe
 
    # On Linux:
-   ./build/apps/video-editor/creative-suite-main-editor
+   ./build/apps/video-editor/creative-suite-video-editor
 
    # On macOS:
-   open build/apps/video-editor/creative-suite-main-editor.app
+   open build/apps/video-editor/creative-suite-video-editor.app
    ```
 
 5. **Run the Image Editor:**
@@ -162,7 +161,7 @@ For testing practices, refer to [`docs/video-editor/REGRESSION_TESTING.md`](docs
 
 A complete and continuously updated directory of all user-facing shortcuts is maintained in [`docs/video-editor/SHORTCUTS.md`](docs/video-editor/SHORTCUTS.md).
 
-Common shortcuts in the Main Editor:
+Common shortcuts in the Video Editor:
 | Action | Shortcut |
 | :--- | :--- |
 | **Play / Pause** | `Space` |

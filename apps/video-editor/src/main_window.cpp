@@ -41,7 +41,7 @@ MainWindow::MainWindow(QWidget* parent)
       shortcut_manager_(std::make_unique<settings::ShortcutManager>()) {
     media_task_pool_.setMaxThreadCount(1);
     media_task_pool_.setExpiryTimeout(-1);
-    setWindowTitle("Main Editor");
+    setWindowTitle("Video Editor");
     QSettings settings;
     const auto saved_geometry = settings.value(
         "workspace/window_geometry").toByteArray();

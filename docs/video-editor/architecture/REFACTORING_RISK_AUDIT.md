@@ -2,7 +2,7 @@
 
 Status: **provisório**.
 
-Esta auditoria descreve os riscos atuais de refatoração no Main Editor e
+Esta auditoria descreve os riscos atuais de refatoração no Video Editor e
 define um caminho mais seguro para separar responsabilidades. Ela foi baseada
 no estado do repositório analisado em 2026-09-23.
 

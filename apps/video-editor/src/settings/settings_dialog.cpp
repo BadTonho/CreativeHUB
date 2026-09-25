@@ -65,7 +65,7 @@ QWidget* SettingsDialog::createGeneralPage() {
     metrics_check->setChecked(settings::previewPerformanceMetricsEnabled());
 
     auto* description = new QLabel(
-        "When enabled, the Main Editor records aggregated decoding, composition, UI, and GPU timing data. "
+        "When enabled, the Video Editor records aggregated decoding, composition, UI, and GPU timing data. "
         "This preference is global and does not modify projects.",
         page);
     description->setWordWrap(true);

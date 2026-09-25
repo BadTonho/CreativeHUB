@@ -2,7 +2,7 @@
 
 Status: provisional.
 
-Qt 6 Widgets owns the Main Editor window, menus, actions, dialogs, dock
+Qt 6 Widgets owns the Video Editor window, menus, actions, dialogs, dock
 layout, focus, and user input. Qt-specific types stay inside the application
 UI and rendering layers. Future shared interfaces use standard C++ types and
 do not expose QObject, QString, Qt containers, or Qt signals.
@@ -69,7 +69,7 @@ does not affect project state. The default layout shows Media Pool and keeps
 the Effects docks hidden until activated. The native separators are draggable;
 the minimum widths are 20 px for `Toolbox` and `Favorites`, and 30 px for
 `Effects`. The selected dock sizes are part of the global layout state and are
-restored with the workspace. On first launch, the Main Editor opens maximized
+restored with the workspace. On first launch, the Video Editor opens maximized
 with Media Pool on the left, Inspector on the right, Preview in the center,
 and Timeline across the bottom. The window geometry and maximized state are
 then restored globally without affecting project state.
@@ -127,10 +127,10 @@ and Cancel when the project is dirty.
 
 ## User settings
 
-The Main Editor provides a `Settings` action in the main menu bar immediately
+The Video Editor provides a `Settings` action in the main menu bar immediately
 to the left of `Help`. It opens a modal settings dialog with `General`,
 `Timeline`, and `Shortcuts` tabs. The `Shortcuts` tab exposes every current
-Main Editor keyboard action, applies valid changes immediately, permits empty
+Video Editor keyboard action, applies valid changes immediately, permits empty
 assignments, rejects duplicate combinations, and provides individual and
 global reset actions. The dialog opens at a larger 960x720 layout so the
 shortcut list is easier to review. Shortcut values are global user preferences
@@ -163,7 +163,7 @@ project data, project dirty state, undo/redo history, or the `.csp` format.
 actions, and only creates and opens the dialog.
 
 `Shift + Space` opens and closes the non-modal floating `Functions` window.
-The window is an empty 420x320 shell centered over the Main Editor. A click
+The window is an empty 420x320 shell centered over the Video Editor. A click
 outside it, loss of window activation, Escape, the title-bar close button, or
 Shift + Space closes and destroys it; the next shortcut press creates a fresh
 window. Outside clicks continue to the clicked control. The shortcut uses
@@ -225,15 +225,15 @@ visible Timeline range when the nearest point is within approximately eight
 visual pixels. A light guide shows the contact frame. The button state lasts
 for the editor session, is not project data, and snapping does not apply to
 effect drops.
-The same footer shows the Main Editor process working-set memory at the right
+The same footer shows the Video Editor process working-set memory at the right
 in the form `RAM: <megabytes> MB`, refreshed every second. Windows reads
 the value through `GetProcessMemoryInfo`; platforms without an implementation,
 or a failed query, display `RAM: N/A`. This indicator is display-only and
 does not affect playback, Timeline data, project dirty state, Undo/Redo, or
 `.csp` data.
 Clicking the indicator opens a non-modal `Memory Usage` window with separate
-System Memory and Main Editor sections. The system section shows total, used,
-and available memory in GB with the exact MB value. The Main Editor section
+System Memory and Video Editor sections. The system section shows total, used,
+and available memory in GB with the exact MB value. The Video Editor section
 shows Working Set and Private Usage. The window refreshes every second and is
 organized so future CPU and GPU sections can be added without changing the
 Timeline footer.

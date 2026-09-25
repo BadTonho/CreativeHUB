@@ -51,12 +51,12 @@ int main(int argc, char* argv[]) {
         logging::Level::Info,
         "application",
         "startup",
-        "Main Editor started.",
+        "Video Editor started.",
         {{"version", "Beta 0.1.2"}, {"log_path", pathToUtf8(logger.log_path())}});
 
     try {
         QApplication application(argc, argv);
-        QApplication::setApplicationName("Main Editor");
+        QApplication::setApplicationName("Video Editor");
         QApplication::setApplicationVersion("Beta 0.1.2");
 
         MainWindow window;
@@ -67,7 +67,7 @@ int main(int argc, char* argv[]) {
             logging::Level::Info,
             "application",
             "shutdown",
-            "Main Editor stopped.",
+            "Video Editor stopped.",
             {{"exit_code", std::to_string(exit_code)}});
         return exit_code;
     } catch (const std::exception& error) {
@@ -78,7 +78,7 @@ int main(int argc, char* argv[]) {
             logging::Level::Fatal,
             "application",
             "main",
-            "Main Editor failed because of an unknown exception.");
+            "Video Editor failed because of an unknown exception.");
         return 1;
     }
 }

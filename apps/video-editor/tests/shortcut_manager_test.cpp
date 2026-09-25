@@ -127,7 +127,7 @@ void verifyFunctionPalette(QSettings& settings) {
             "Opening Functions must activate its window.");
     require((palette.dialog()->frameGeometry().center() -
                 main_window.frameGeometry().center()).manhattanLength() <= 8,
-            "Functions window must open centered over the Main Editor.");
+            "Functions window must open centered over the Video Editor.");
     require(playback_triggers == 0,
             "Shift+Space must not trigger the regular Space action.");
     QPointer<QDialog> first_dialog = palette.dialog();
@@ -154,7 +154,7 @@ void verifyFunctionPalette(QSettings& settings) {
     require(first_dialog.isNull() && palette.dialog() == nullptr,
             "Clicking outside Functions must close and destroy the window.");
     require(outside_button_clicks == 1,
-            "The outside click must still reach the clicked Main Editor control.");
+            "The outside click must still reach the clicked Video Editor control.");
 
     sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
     require(palette.dialog() != nullptr && palette.dialog()->isVisible(),

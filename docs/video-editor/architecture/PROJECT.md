@@ -22,14 +22,14 @@ and is never replaced by a linked output path. Missing variant outputs fall
 back to the shared media image and produce an actionable warning.
 
 The Image Editor writes its native `.cimg` document before atomically
-publishing a PNG. The Main Editor polls linked output files and decodes changed
+publishing a PNG. The Video Editor polls linked output files and decodes changed
 images on its media task pool. A project generation check discards results
 after a project replacement. A changed shared output updates the Media Pool
 thumbnail and every clip using that source; a variant updates only its clip.
 The affected composition and preview are refreshed after a successful decode.
 The initial handoff updates after save; unsaved edits are not streamed.
 
-The Main Editor stores editable content in a versioned .csp file. The document
+The Video Editor stores editable content in a versioned .csp file. The document
 model is Qt-independent and contains imported media, bins, ordered video tracks,
 and timeline clips. It does not contain selection, playhead, dock geometry,
 Undo/Redo history, decoded frames, FFmpeg sessions, or Qt resources.

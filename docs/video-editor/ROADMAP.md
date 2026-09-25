@@ -1,14 +1,14 @@
-# Main Editor Roadmap
+# Video Editor Roadmap
 
-This roadmap tracks the Main Editor through its foundation exit gate. It
+This roadmap tracks the Video Editor through its foundation exit gate. It
 separates implemented capabilities, release gates, open product decisions, and
 later expansion. Update it when implementation, scope, or a decision changes.
 
 ## Current direction
 
-- The Main Editor remains the first application and its stability remains a
+- The Video Editor remains the first application and its stability remains a
   priority.
-- Continue Main Editor development in C++20 with Qt 6 and FFmpeg. This is the
+- Continue Video Editor development in C++20 with Qt 6 and FFmpeg. This is the
   current working direction and remains provisional; no final project-wide
   language decision is recorded.
 - Target Qt 6.12 for the Windows 10 and 11 builds. Treat it as a planned
@@ -17,7 +17,7 @@ later expansion. Update it when implementation, scope, or a decision changes.
 - Windows 10 and 11 are the current Windows targets. Linux and macOS remain
   required product targets; their release validation is pending access to
   suitable build and test environments.
-- Keep modules inside `apps/video-editor/` while the Main Editor is their only
+- Keep modules inside `apps/video-editor/` while the Video Editor is their only
   consumer. Extract a focused shared library only when another application has
   a real use for the same behavior and a stable API can serve both. See the
   [cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
@@ -25,7 +25,7 @@ later expansion. Update it when implementation, scope, or a decision changes.
   frame. Keep this implementation until profiling or a concrete
   second backend justifies a broader renderer abstraction. See the
   [rendering boundary](architecture/RENDERING.md).
-- The Image Editor follows the Main Editor foundation. Its standalone
+- The Image Editor follows the Video Editor foundation. Its standalone
   acceptance gate comes before acceptance of the linked-image workflow; its
   first editing release comes before Motion Studio. Track those milestones in
   the [Image Editor roadmap](../image-editor/ROADMAP.md) and
@@ -40,7 +40,7 @@ later expansion. Update it when implementation, scope, or a decision changes.
 
 ## 1. Product decisions
 
-These decisions set the boundaries for the Main Editor foundation and the
+These decisions set the boundaries for the Video Editor foundation and the
 release work that follows it.
 The scope below is a working proposal based on the existing application, not a
 final product commitment.
@@ -48,7 +48,7 @@ final product commitment.
 - [x] Set the product direction: build an open creative suite that gives people
   locally usable tools and reduces reliance on proprietary creative software.
 - [ ] Define the initial target audience and the main editing workflows.
-- [ ] Confirm the Main Editor foundation scope and explicitly list deferred
+- [ ] Confirm the Video Editor foundation scope and explicitly list deferred
   workflows.
 - [ ] Define minimum hardware and representative project sizes.
 - [x] Choose a broad media-compatibility policy: do not impose a fixed
@@ -71,7 +71,7 @@ final product commitment.
 
 ### Working foundation proposal
 
-Use the current Main Editor foundation as the starting point: local media
+Use the current Video Editor foundation as the starting point: local media
 import and organization; multi-track clip assembly, movement, splitting,
 trimming, and deletion; preview and playback; basic transforms, keyframes,
 text, essential transitions, embedded video audio controls; project save/open,
@@ -86,7 +86,7 @@ foundation scope.
 
 ## 2. Implemented foundation
 
-The following capabilities are already present in the Main Editor. This list
+The following capabilities are already present in the Video Editor. This list
 records the current baseline; it is not a sequence of new implementation
 tasks.
 
@@ -113,7 +113,7 @@ The detailed implemented scope and deferred behaviors are recorded in
 [Current Scope and Non-goals](architecture/SCOPE.md). The active `.csp` schema
 and migrations are recorded in [Project Document and Persistence](architecture/PROJECT.md).
 
-## 3. Main Editor foundation completion gates
+## 3. Video Editor foundation completion gates
 
 Complete these gates after the foundation decisions in section 1 are
 recorded. A feature counts as complete when its automated regression coverage
@@ -148,7 +148,7 @@ and required manual validation pass.
 - [ ] Record the exact dependency, codec, asset, and license configuration for
   distributed builds and the associated source/relinking obligations.
 
-**Main Editor foundation exit criteria:** the agreed foundation workflows,
+**Video Editor foundation exit criteria:** the agreed foundation workflows,
 including export, pass automated regression coverage and manual validation;
 projects save and recover under the defined workload; supported platform
 builds and packages pass their release checks; dependency and licensing
@@ -156,7 +156,7 @@ records are complete.
 
 ## 4. Image Editor integration and application sequence
 
-The Main Editor already contains the initial linked-image implementation.
+The Video Editor already contains the initial linked-image implementation.
 Its broader acceptance is tracked in the Image Editor roadmap and is gated by
 the standalone Image Editor acceptance criteria.
 
@@ -178,10 +178,10 @@ The existing handoff prototype and its full contract are documented in the
 [cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
 Unsaved live preview streaming remains outside the current handoff scope.
 
-## 5. Later Main Editor expansion
+## 5. Later Video Editor expansion
 
-Prioritize these workflows after the Main Editor foundation using user needs,
-performance measurements, and Main Editor stability as the decision criteria.
+Prioritize these workflows after the Video Editor foundation using user needs,
+performance measurements, and Video Editor stability as the decision criteria.
 
 - [ ] Improve media organization, synchronization, relinking, and asset
   management.

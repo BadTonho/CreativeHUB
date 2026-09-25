@@ -61,7 +61,7 @@ copy of the image currently shown for that clip. This keeps later shared-media
 changes from altering the variant's base. The playback composition gives a
 decoded clip variant precedence over the Media Pool frame.
 
-The Main Editor polls linked output timestamps and sizes, then probes and
+The Video Editor polls linked output timestamps and sizes, then probes and
 decodes on its bounded media task pool. Queued results carry the project
 generation and stable link identity; stale generations and removed targets
 cannot update the current preview. Shared output refreshes all clips using the

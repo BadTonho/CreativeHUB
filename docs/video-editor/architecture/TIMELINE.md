@@ -192,7 +192,7 @@ occurrences independently.
 ## Playback
 
 The worker owns one FFmpeg video session and, when available, one embedded
-audio session at a time. The Main Editor chooses the highest-priority visible
+audio session at a time. The Video Editor chooses the highest-priority visible
 clip at the current playhead and changes both sessions when crossing a clip
 boundary. Composition playback may advance directly from the worker's
 composition frame range when the active timeline clip is text, so it does not
@@ -265,7 +265,7 @@ visual result or the Timeline model.
 Every clip and track also stores linear audio gain (`0.0` to `2.0`) and a mute
 flag. The effective gain is the product of clip and track gain. These
 parameters are Timeline edits and are restored by history, but decoded PCM is
-never stored in a snapshot. The Main Editor exposes these existing parameters
+never stored in a snapshot. The Video Editor exposes these existing parameters
 in the Inspector's Audio tab; moving the controls does not change their model,
 history, persistence, or playback semantics.
 

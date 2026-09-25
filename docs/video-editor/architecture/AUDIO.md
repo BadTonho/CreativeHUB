@@ -2,7 +2,7 @@
 
 Status: provisional.
 
-The Main Editor supports the embedded audio stream of an imported video. Audio
+The Video Editor supports the embedded audio stream of an imported video. Audio
 is decoded and resampled in the application-local media layer with FFmpeg and
 `libswresample`. It is not an independent audio-only source or an independent
 audio track.

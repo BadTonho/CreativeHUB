@@ -2,7 +2,7 @@
 
 Status: **provisional**.
 
-The Main Editor keeps an application-local, Qt-independent media library. Each
+The Video Editor keeps an application-local, Qt-independent media library. Each
 entry contains a canonical source path, a project-owned display name, a
 hierarchical bin path, a media kind, and an online/offline state. The default
 bin is
@@ -42,7 +42,7 @@ technical-details panel is intentionally not part of the Browser layout.
 
 `Bins` and `Media` are independent `QDockWidget` panels. They can be moved,
 resized, floated, closed, re-docked, tabified, or split side by side through
-the native Main Editor workspace. The default layout places `Bins` above
+the native Video Editor workspace. The default layout places `Bins` above
 `Media` on the left. The Effects group uses the same left workspace area when
 activated: `Toolbox` is placed above the empty `Favorites` dock, with `Effects`
 beside that column, and the Media Pool pair is hidden. The separators between

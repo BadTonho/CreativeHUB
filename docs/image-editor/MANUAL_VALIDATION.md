@@ -118,13 +118,13 @@ Repeat the standalone workflow on Windows, macOS, and Linux. Verify that the
 packaged runtime has the Qt platform plugin and the required image format
 plugins, and inspect the distribution's Qt and codec license notices.
 
-## Main Editor linked-image compatibility
+## Video Editor linked-image compatibility
 
 Use disposable source files and a test `.csp` project. The standalone minimum
 remains marked incomplete until this document's standalone and platform checks
 are completed.
 
-1. Configure the Main Editor's Image Editor executable in Settings, or place
+1. Configure the Video Editor's Image Editor executable in Settings, or place
    the two Release executables in their normal sibling build/install folders.
    If no executable is found, use **Locate Image Editor** and confirm the
    selected path is remembered.
@@ -134,7 +134,7 @@ are completed.
    `<source>.image-editor/`, and compare the source file bytes to verify it was
    not changed. Close and reopen the action; confirm it reuses the same
    document.
-3. Paint or erase in the Image Editor. Before saving, confirm the Main Editor's
+3. Paint or erase in the Image Editor. Before saving, confirm the Video Editor's
    Media Pool thumbnail, timeline clips, and preview do not change. Save the
    linked document and confirm the PNG output is published, transparency is
    preserved, the Media Pool thumbnail updates, and all clips using that media
@@ -153,7 +153,7 @@ are completed.
 6. While a linked document is open in two Image Editor windows, save in one and
    then attempt to save stale edits in the other. Confirm the stale save is
    rejected and the newer `.cimg` and published PNG remain intact. Replace the
-   active Main Editor project while a linked PNG refresh is in flight and
+   active Video Editor project while a linked PNG refresh is in flight and
    confirm the old result does not change the new project's selection or
    preview.
 7. Try a missing Image Editor executable, a read-only sidecar directory, a
@@ -171,8 +171,8 @@ automated document, operation, export, recovery, and UI-boundary tests.
 
 ### Recorded smoke test
 
-- [x] User-confirmed basic handoff: open a linked image from the Main Editor,
-  edit and save it in the Image Editor, and confirm the Main Editor refreshes
+- [x] User-confirmed basic handoff: open a linked image from the Video Editor,
+  edit and save it in the Image Editor, and confirm the Video Editor refreshes
   after the save.
 - [ ] The remaining linked-image scenarios above still need manual validation.
   The platform and test-image details for the confirmed smoke test were not
