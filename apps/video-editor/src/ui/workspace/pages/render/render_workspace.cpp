@@ -3,8 +3,10 @@
 #include "ui/workspace/pages/render/render_job.h"
 #include "ui/workspace/pages/render/render_queue_model.h"
 
+#include <QAbstractSpinBox>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDoubleSpinBox>
 #include <QDir>
 #include <QEvent>
@@ -31,6 +33,7 @@
 #include <QVariant>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QWheelEvent>
 
 #include <algorithm>
 #include <cmath>
@@ -148,6 +151,49 @@ bool RenderWorkspace::eventFilter(QObject* watched, QEvent* event) {
     if (watched == central_page_ && event->type() == QEvent::Resize) {
         updateResponsiveLayout();
     }
+
+    if (event->type() == QEvent::Wheel && settings_scroll_area_ != nullptr) {
+        const std::array<QWidget*, 5> combo_controls{
+            container_combo_, video_encoder_combo_, audio_encoder_combo_,
+            resolution_combo_, quality_preset_combo_};
+        bool is_settings_control = std::find(
+            combo_controls.begin(), combo_controls.end(), watched) !=
+            combo_controls.end();
+
+        const std::array<QAbstractSpinBox*, 5> spin_controls{
+            custom_width_, custom_height_, frame_rate_spin_,
+            video_bitrate_spin_, audio_bitrate_spin_};
+        auto* watched_widget = qobject_cast<QWidget*>(watched);
+        for (auto* spin_control : spin_controls) {
+            if (spin_control != nullptr &&
+                (watched == spin_control ||
+                 (watched_widget != nullptr &&
+                  spin_control->isAncestorOf(watched_widget)))) {
+                is_settings_control = true;
+                break;
+            }
+        }
+
+        if (is_settings_control) {
+            const auto* wheel_event = static_cast<const QWheelEvent*>(event);
+            auto* viewport = settings_scroll_area_->viewport();
+            const QPointF viewport_position = viewport->mapFromGlobal(
+                wheel_event->globalPosition().toPoint());
+            QWheelEvent forwarded_event(
+                viewport_position,
+                wheel_event->globalPosition(),
+                wheel_event->pixelDelta(),
+                wheel_event->angleDelta(),
+                wheel_event->buttons(),
+                wheel_event->modifiers(),
+                wheel_event->phase(),
+                wheel_event->inverted(),
+                wheel_event->source());
+            QCoreApplication::sendEvent(viewport, &forwarded_event);
+            return true;
+        }
+    }
+
     return QObject::eventFilter(watched, event);
 }
 
@@ -192,15 +238,15 @@ void RenderWorkspace::createSettingsPanel() {
     heading->setFont(heading_font);
     panel_layout->addWidget(heading);
 
-    auto* scroll_area = new QScrollArea(settings_panel_);
-    scroll_area->setObjectName("renderSettingsScrollArea");
-    scroll_area->setWidgetResizable(true);
-    scroll_area->setFrameShape(QFrame::NoFrame);
-    scroll_area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scroll_area->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    panel_layout->addWidget(scroll_area, 1);
+    settings_scroll_area_ = new QScrollArea(settings_panel_);
+    settings_scroll_area_->setObjectName("renderSettingsScrollArea");
+    settings_scroll_area_->setWidgetResizable(true);
+    settings_scroll_area_->setFrameShape(QFrame::NoFrame);
+    settings_scroll_area_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    settings_scroll_area_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    panel_layout->addWidget(settings_scroll_area_, 1);
 
-    auto* content = new QWidget(scroll_area);
+    auto* content = new QWidget(settings_scroll_area_);
     content->setMinimumWidth(0);
     content->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* content_layout = new QVBoxLayout(content);
@@ -351,10 +397,33 @@ void RenderWorkspace::createSettingsPanel() {
     content_layout->addWidget(audio_group);
     content_layout->addStretch(1);
 
-    scroll_area->setWidget(content);
+    settings_scroll_area_->setWidget(content);
+
+    add_job_button_ = new QPushButton(QStringLiteral("Add to Queue"), settings_panel_);
+    add_job_button_->setObjectName("renderAddToQueueButton");
+    add_job_button_->setAccessibleName(QStringLiteral("Add render job to queue"));
+    panel_layout->addWidget(add_job_button_);
+
+    const std::array<QWidget*, 5> combo_controls{
+        container_combo_, video_encoder_combo_, audio_encoder_combo_,
+        resolution_combo_, quality_preset_combo_};
+    for (auto* control : combo_controls) {
+        control->installEventFilter(this);
+    }
+    const std::array<QAbstractSpinBox*, 5> spin_controls{
+        custom_width_, custom_height_, frame_rate_spin_,
+        video_bitrate_spin_, audio_bitrate_spin_};
+    for (auto* control : spin_controls) {
+        control->installEventFilter(this);
+        for (auto* child : control->findChildren<QWidget*>()) {
+            child->installEventFilter(this);
+        }
+    }
 
     connect(browse_button, &QPushButton::clicked,
             this, [this] { browseOutputPath(); });
+    connect(add_job_button_, &QPushButton::clicked,
+            this, [this] { addCurrentJob(); });
     connect(output_path_, &QLineEdit::textChanged,
             this, [this] { updateAddAction(); });
     connect(container_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
@@ -432,7 +501,7 @@ void RenderWorkspace::createQueuePanel() {
     layout->addWidget(heading);
 
     empty_queue_label_ = new QLabel(
-        QStringLiteral("No jobs in the queue. Configure an output and add it from the left."),
+        QStringLiteral("No jobs in the queue. Configure an output in Render Settings and add it to the queue."),
         queue_panel_);
     empty_queue_label_->setObjectName("renderQueueEmptyLabel");
     empty_queue_label_->setWordWrap(true);
@@ -445,11 +514,6 @@ void RenderWorkspace::createQueuePanel() {
     queue_view_->setSelectionMode(QAbstractItemView::SingleSelection);
     queue_view_->setUniformItemSizes(false);
     layout->addWidget(queue_view_, 1);
-
-    add_job_button_ = new QPushButton(QStringLiteral("Add to Queue"), queue_panel_);
-    add_job_button_->setObjectName("renderAddToQueueButton");
-    add_job_button_->setAccessibleName(QStringLiteral("Add render job to queue"));
-    layout->addWidget(add_job_button_);
 
     auto* queue_actions = new QWidget(queue_panel_);
     auto* action_layout = new QHBoxLayout(queue_actions);
@@ -466,8 +530,6 @@ void RenderWorkspace::createQueuePanel() {
     action_layout->addWidget(move_job_down_button_);
     layout->addWidget(queue_actions);
 
-    connect(add_job_button_, &QPushButton::clicked,
-            this, [this] { addCurrentJob(); });
     connect(remove_job_button_, &QPushButton::clicked, this, [this] {
         const int row = queue_view_->currentIndex().row();
         if (queue_model_->removeJobAt(row)) {

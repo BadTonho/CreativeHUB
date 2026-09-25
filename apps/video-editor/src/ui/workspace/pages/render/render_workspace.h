@@ -82,6 +82,7 @@ private:
     QWidget* preview_widget_ = nullptr;
     QWidget* queue_panel_ = nullptr;
     QScrollArea* page_scroll_area_ = nullptr;
+    QScrollArea* settings_scroll_area_ = nullptr;
     QSplitter* splitter_ = nullptr;
     QLineEdit* output_path_ = nullptr;
     QLabel* capability_warning_ = nullptr;

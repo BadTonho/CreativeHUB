@@ -19,6 +19,7 @@
 #include <QSplitter>
 #include <QSpinBox>
 #include <QToolBar>
+#include <QWheelEvent>
 
 #include <array>
 #include <cmath>
@@ -30,6 +31,20 @@ namespace {
 
 void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
+}
+
+void sendWheel(QWidget* target, int angle_delta_y) {
+    const QPoint position = target->rect().center();
+    QWheelEvent event(
+        QPointF(position),
+        QPointF(target->mapToGlobal(position)),
+        QPoint(),
+        QPoint(0, angle_delta_y),
+        Qt::NoButton,
+        Qt::NoModifier,
+        Qt::NoScrollPhase,
+        false);
+    QApplication::sendEvent(target, &event);
 }
 
 }  // namespace
@@ -263,11 +278,39 @@ int main(int argc, char* argv[]) {
         require(browse_output->isVisible() &&
                     settings_scroll->viewport()->rect().contains(browse_rect),
                 "Compact Settings must keep the Browse button inside its viewport.");
+        require(add_to_queue->parentWidget() == render_workspace->settingsPanel() &&
+                    add_to_queue->isVisible() &&
+                    add_to_queue->geometry().top() > settings_scroll->geometry().bottom() &&
+                    render_workspace->centralPage()->findChildren<QPushButton*>(
+                        "renderAddToQueueButton").size() == 1,
+                "Add to Queue must be the single fixed footer button in Render Settings.");
         require(encoder_rect.left() >= 0 &&
                     encoder_rect.right() < settings_scroll->viewport()->width() &&
                     video_encoder_combo->width() > 0 &&
                     video_encoder_combo->toolTip() == video_encoder_combo->currentText(),
                 "Compact Settings must keep codec controls inside its viewport.");
+
+        auto* settings_scrollbar = settings_scroll->verticalScrollBar();
+        const int container_selection_before_wheel = container_combo->currentIndex();
+        settings_scrollbar->setValue(0);
+        sendWheel(container_combo, -120);
+        require(container_combo->currentIndex() == container_selection_before_wheel &&
+                    settings_scrollbar->value() > 0,
+                "Wheeling over a closed selector must scroll Settings without changing it.");
+
+        settings_scrollbar->setValue(0);
+        settings_scroll->ensureWidgetVisible(frame_rate_spin);
+        const int frame_rate_scroll_before_wheel = settings_scrollbar->value();
+        const double frame_rate_before_wheel = frame_rate_spin->value();
+        sendWheel(frame_rate_spin, -120);
+        require(frame_rate_spin->value() == frame_rate_before_wheel &&
+                    settings_scrollbar->value() > frame_rate_scroll_before_wheel,
+                "Wheeling over a numeric field must scroll Settings without changing it.");
+
+        settings_scrollbar->setValue(settings_scrollbar->maximum());
+        require(add_to_queue->isVisible(),
+                "The Add to Queue footer must stay visible while Settings are scrolled.");
+        settings_scrollbar->setValue(0);
 
         window.resize(1400, 720);
         application.processEvents();

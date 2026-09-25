@@ -302,7 +302,10 @@ central workspace page when leaving Render. At central-page widths below
 1100 px, the three panels switch to a vertically scrollable Settings, Preview,
 and queue layout. Settings controls shrink to the available width; long codec
 names remain available in the selector and its tooltip instead of forcing
-horizontal scrolling. Settings include the output file,
+horizontal scrolling. The **Add to Queue** action stays in a fixed footer below
+the Settings scroll area. Scrolling over a closed selector or numeric field
+scrolls Settings without changing that control; values remain editable through
+direct selection, keyboard input, or text entry. Settings include the output file,
 container, compatible video/audio encoders, resolution, frame rate, quality
 profile, and editable bitrate suggestions. Containers and encoders are
 discovered from the active FFmpeg runtime; only containers with a compatible
