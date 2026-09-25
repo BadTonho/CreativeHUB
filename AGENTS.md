@@ -158,6 +158,14 @@ Pay special attention to:
   coverage in the same change. Use automated tests whenever the behavior is
   deterministic; for visual or full-application interactions, add a
   documented manual validation step and keep the automated boundary tests.
+- When a change can affect interoperability between applications—such as shared
+  project or document formats, media paths or identities, published assets,
+  shared-core APIs, launch arguments, or handoff and refresh workflows—add
+  regression coverage at that boundary and verify the affected producer and
+  consumer applications. Test persisted-format or protocol compatibility with
+  older supported versions when applicable. For end-to-end behavior that
+  cannot be automated, document a manual cross-application validation step.
+  Changes isolated to one application do not require rebuilding unrelated apps.
 - A feature is not considered complete until its tests pass and its relevant
   regression coverage is updated.
 - Use static analysis, sanitizers, fuzzing, and profiling when appropriate for the chosen technology.
