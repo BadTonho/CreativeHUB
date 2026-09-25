@@ -9,6 +9,7 @@ struct TimelineEndButtons {
     QWidget* container = nullptr;
     QPushButton* edit = nullptr;
     QPushButton* fusion = nullptr;
+    QPushButton* render = nullptr;
 };
 
 [[nodiscard]] TimelineEndButtons createTimelineEndButtons(QWidget* parent);

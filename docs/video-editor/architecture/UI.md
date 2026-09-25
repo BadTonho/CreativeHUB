@@ -267,8 +267,8 @@ limited to the current paint region so long timelines remain responsive.
 Zoom affects only horizontal timeline presentation and is persisted per project
 without creating a clip-edit history entry.
 At the far right of the top workspace toolbar, after `Media Pool` and `Effects`,
-the `Edit` selector and a blank Fusion selector are shown in that order. The
-blank selector has no visible text or icon; its tooltip and accessible name
+the `Edit`, blank Fusion, and `Render` selectors are shown in that order. The
+Fusion selector has no visible text or icon; its tooltip and accessible name
 identify it as `Fusion`. The active page is highlighted, and the application
 always opens on Edit without saving the selected page as project or workspace
 state.
@@ -280,6 +280,14 @@ Editor. The Inspector shows a Fusion placeholder. The Node Editor and Fusion
 Inspector have no composition operations. Switching pages changes only the
 visible workspace panels; it does not change the selected clip, playhead,
 playback, project data, history, or dirty state.
+
+Render shows an empty central page with no controls or placeholder text. It
+hides all workspace docks while keeping the top toolbar and workspace
+selectors available. The visibility of each dock is restored when returning
+to Edit or Fusion, including docks that were already hidden before entering
+Render. The Render page does not provide rendering or export operations yet.
+Closing the application from Render preserves the dock layout from before that
+workspace was opened; the next launch still opens on Edit.
 
 Gesture priority is configurable: by default, normal drag moves clips and
 Alt + drag seeks; when the Edit > Require Alt to Move Clips option is enabled,

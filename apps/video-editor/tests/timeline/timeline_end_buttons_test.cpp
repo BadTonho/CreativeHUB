@@ -26,14 +26,17 @@ int main(int argc, char* argv[]) {
         auto* layout = qobject_cast<QHBoxLayout*>(buttons_container->layout());
         require(layout != nullptr,
                 "Timeline end buttons must use a horizontal layout.");
-        require(layout->count() == 2,
-                "Timeline end buttons must contain exactly two buttons.");
+        require(layout->count() == 3,
+                "Timeline end buttons must contain exactly three buttons.");
 
         auto* edit_button = qobject_cast<QPushButton*>(
             layout->itemAt(0)->widget());
         auto* unnamed_button = qobject_cast<QPushButton*>(
             layout->itemAt(1)->widget());
-        require(edit_button != nullptr && unnamed_button != nullptr,
+        auto* render_button = qobject_cast<QPushButton*>(
+            layout->itemAt(2)->widget());
+        require(edit_button != nullptr && unnamed_button != nullptr &&
+                    render_button != nullptr,
                 "Timeline end buttons must be ordered button widgets.");
         require(edit_button->objectName() == "timelineEditButton",
                 "The first timeline end button must be Edit.");
@@ -66,6 +69,20 @@ int main(int argc, char* argv[]) {
         require(unnamed_button->isCheckable() &&
                     !unnamed_button->isChecked(),
                 "The Fusion selector must start inactive.");
+        require(render_button->objectName() == "timelineRenderButton",
+                "The third timeline end button must be Render.");
+        require(render_button == buttons.render,
+                "The third timeline end button must be the Render selector.");
+        require(render_button->text() == "Render",
+                "The Render selector must have a visible label.");
+        require(render_button->size() == QSize(68, 28),
+                "The Render selector must match the labeled Edit button size.");
+        require(render_button->isCheckable() && !render_button->isChecked(),
+                "The Render selector must start inactive.");
+        require(render_button->accessibleName() == "Render workspace",
+                "The Render selector must have an accessible name.");
+        require(!render_button->toolTip().isEmpty(),
+                "The Render selector must explain its action.");
 
         return 0;
     } catch (const std::exception& error) {

@@ -1,6 +1,7 @@
 #include "main_window/main_window.h"
 
 #include "ui/preview/preview_widget.h"
+#include "ui/workspace/workspace_page_view.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
 #include "ui/media_browser/media_browser_list_widget.h"
@@ -14,6 +15,7 @@
 #include <QMenuBar>
 #include <QSaveFile>
 #include <QProgressDialog>
+#include <QPushButton>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
@@ -102,6 +104,46 @@ public:
         settings::setProjectAutosaveEnabled(false);
         settings::setPreviewPerformanceMetricsEnabled(false);
 
+        std::array<bool, 7> dock_visibility_before_close{};
+        {
+            MainWindow render_window;
+            render_window.show();
+            QApplication::processEvents();
+            const std::array<QDockWidget*, 7> docks{
+                render_window.bins_dock_, render_window.media_dock_,
+                render_window.toolbox_dock_, render_window.favorites_dock_,
+                render_window.effects_dock_, render_window.inspector_dock_,
+                render_window.timeline_dock_};
+            for (std::size_t index = 0; index < docks.size(); ++index) {
+                dock_visibility_before_close[index] = docks[index]->isVisible();
+            }
+            render_window.setWorkspacePage(MainWindow::WorkspacePage::Render);
+            for (auto* dock : docks) {
+                require(!dock->isVisible(),
+                        "Render must hide all docks before the close-persistence check.");
+            }
+            require(render_window.close(),
+                    "Closing the editor from Render must be accepted.");
+        }
+        {
+            MainWindow reopened_window;
+            reopened_window.show();
+            QApplication::processEvents();
+            const std::array<QDockWidget*, 7> docks{
+                reopened_window.bins_dock_, reopened_window.media_dock_,
+                reopened_window.toolbox_dock_, reopened_window.favorites_dock_,
+                reopened_window.effects_dock_, reopened_window.inspector_dock_,
+                reopened_window.timeline_dock_};
+            require(reopened_window.edit_workspace_button_->isChecked(),
+                    "The application must reopen in Edit after closing from Render.");
+            for (std::size_t index = 0; index < docks.size(); ++index) {
+                require(docks[index]->isVisible() == dock_visibility_before_close[index],
+                        "Closing from Render must preserve the previous dock layout.");
+            }
+        }
+        QSettings().remove("workspace/dock_layout_state");
+        QSettings().sync();
+
         const auto project_path = directory / "multi-track.csp";
         const auto round_trip_path = directory / "multi-track-round-trip.csp";
         const auto original = makeMultiTrackProject(first_source, second_source);
@@ -110,6 +152,8 @@ public:
 
         {
             MainWindow window;
+            window.show();
+            QApplication::processEvents();
             QEventLoop open_loop;
             QTimer timeout;
             timeout.setSingleShot(true);
@@ -153,6 +197,70 @@ public:
             open_loop.exec();
             require(open_succeeded && !window.project_load_pending_,
                     "The background project open did not finish successfully.");
+
+            const std::array<QDockWidget*, 7> workspace_docks{
+                window.bins_dock_, window.media_dock_, window.toolbox_dock_,
+                window.favorites_dock_, window.effects_dock_,
+                window.inspector_dock_, window.timeline_dock_};
+            const auto dock_visibility = [&workspace_docks]() {
+                std::array<bool, 7> visibility{};
+                for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
+                    visibility[index] = workspace_docks[index]->isVisible();
+                }
+                return visibility;
+            };
+            const auto require_dock_visibility =
+                [&workspace_docks](const std::array<bool, 7>& expected,
+                                   const char* message) {
+                    for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
+                        require(workspace_docks[index]->isVisible() == expected[index],
+                                message);
+                    }
+                };
+            require(window.edit_workspace_button_ != nullptr &&
+                        window.fusion_workspace_button_ != nullptr &&
+                        window.render_workspace_button_ != nullptr &&
+                        window.edit_workspace_button_->isChecked(),
+                    "The MainWindow must start with Edit selected and expose all workspace selectors.");
+            const auto edit_dock_visibility = dock_visibility();
+            window.setWorkspacePage(MainWindow::WorkspacePage::Fusion);
+            window.setWorkspacePage(MainWindow::WorkspacePage::Render);
+            QApplication::processEvents();
+            require(window.render_workspace_button_->isChecked() &&
+                        !window.edit_workspace_button_->isChecked() &&
+                        !window.fusion_workspace_button_->isChecked(),
+                    "The MainWindow must select only Render.");
+            require(window.workspace_page_view_->renderPage()->isVisible() &&
+                        window.preview_widget_->isHidden(),
+                    "Render must show its empty page and hide the Preview.");
+            require(window.render_workspace_button_->isVisible(),
+                    "The Render selector must remain visible when all docks are hidden.");
+            for (auto* dock : workspace_docks) {
+                require(!dock->isVisible(),
+                        "Entering Render must hide every workspace dock.");
+            }
+            window.setWorkspacePage(MainWindow::WorkspacePage::Fusion);
+            QApplication::processEvents();
+            require_dock_visibility(
+                edit_dock_visibility,
+                "Returning to Fusion must restore the dock visibility from before Render.");
+            require(window.workspace_page_view_->previewWidget()->isVisible() &&
+                        window.timeline_dock_->windowTitle() == "Node Editor",
+                    "Returning to Fusion must restore its Preview and Node Editor title.");
+
+            window.media_dock_->hide();
+            window.effects_dock_->show();
+            QApplication::processEvents();
+            const auto mixed_dock_visibility = dock_visibility();
+            window.setWorkspacePage(MainWindow::WorkspacePage::Render);
+            window.setWorkspacePage(MainWindow::WorkspacePage::Edit);
+            QApplication::processEvents();
+            require_dock_visibility(
+                mixed_dock_visibility,
+                "Returning to Edit must restore mixed dock visibility from before Render.");
+            window.restoreDefaultLayout();
+            window.setWorkspacePage(MainWindow::WorkspacePage::Edit);
+            QApplication::processEvents();
 
             require(window.timeline_model_.trackCount() == 2,
                     "Opening the project did not preserve both timeline tracks.");

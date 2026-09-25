@@ -145,22 +145,65 @@ void MainWindow::createWorkspace() {
 }
 
 void MainWindow::setWorkspacePage(WorkspacePage page) {
+    const auto docks = std::array<QDockWidget*, 7>{
+        bins_dock_, media_dock_, toolbox_dock_, favorites_dock_, effects_dock_,
+        inspector_dock_, timeline_dock_};
+    const bool entering_render =
+        page == WorkspacePage::Render && workspace_page_ != WorkspacePage::Render;
+    const bool leaving_render =
+        page != WorkspacePage::Render && workspace_page_ == WorkspacePage::Render;
+
+    if (entering_render) {
+        for (std::size_t index = 0; index < docks.size(); ++index) {
+            dock_visibility_before_render_[index] =
+                docks[index] != nullptr && !docks[index]->isHidden();
+        }
+        has_render_dock_visibility_snapshot_ = true;
+        for (auto* dock : docks) {
+            if (dock != nullptr) dock->hide();
+        }
+    }
+
     workspace_page_ = page;
     if (workspace_page_view_ != nullptr) {
-        workspace_page_view_->setFusionPageActive(page == WorkspacePage::Fusion);
+        if (page == WorkspacePage::Render) {
+            workspace_page_view_->setRenderPageActive(true);
+        } else {
+            workspace_page_view_->setRenderPageActive(false);
+            workspace_page_view_->setFusionPageActive(
+                page == WorkspacePage::Fusion);
+        }
     }
-    if (timeline_dock_ != nullptr) {
+    if (timeline_dock_ != nullptr && page != WorkspacePage::Render) {
         timeline_dock_->setWindowTitle(
             page == WorkspacePage::Fusion ? "Node Editor" : "Timeline");
     }
 
+    if (leaving_render && has_render_dock_visibility_snapshot_) {
+        for (std::size_t index = 0; index < docks.size(); ++index) {
+            if (docks[index] == nullptr) continue;
+            if (dock_visibility_before_render_[index]) {
+                docks[index]->show();
+            } else {
+                docks[index]->hide();
+            }
+        }
+        has_render_dock_visibility_snapshot_ = false;
+        updateMediaPoolActionState();
+        updateEffectsActionState();
+    }
+
     const QSignalBlocker edit_blocker(edit_workspace_button_);
     const QSignalBlocker fusion_blocker(fusion_workspace_button_);
+    const QSignalBlocker render_blocker(render_workspace_button_);
     if (edit_workspace_button_ != nullptr) {
         edit_workspace_button_->setChecked(page == WorkspacePage::Edit);
     }
     if (fusion_workspace_button_ != nullptr) {
         fusion_workspace_button_->setChecked(page == WorkspacePage::Fusion);
+    }
+    if (render_workspace_button_ != nullptr) {
+        render_workspace_button_->setChecked(page == WorkspacePage::Render);
     }
 }
 void MainWindow::showSettingsDialog() {

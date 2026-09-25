@@ -59,12 +59,22 @@ int main(int argc, char* argv[]) {
         QObject::connect(buttons.fusion, &QPushButton::clicked, lower_dock, [lower_dock]() {
             lower_dock->setWindowTitle("Node Editor");
         });
+        QObject::connect(buttons.render, &QPushButton::clicked, page_view, [page_view]() {
+            page_view->setRenderPageActive(true);
+        });
+        QObject::connect(buttons.edit, &QPushButton::clicked, page_view, [page_view]() {
+            page_view->setRenderPageActive(false);
+        });
+        QObject::connect(buttons.fusion, &QPushButton::clicked, page_view, [page_view]() {
+            page_view->setRenderPageActive(false);
+        });
 
         window.resize(960, 720);
         window.show();
         application.processEvents();
 
-        require(buttons.edit->isChecked() && !buttons.fusion->isChecked(),
+        require(buttons.edit->isChecked() && !buttons.fusion->isChecked() &&
+                    !buttons.render->isChecked(),
                 "The workspace must open on Edit.");
         require(page_view->lowerWorkspacePanel()->currentWidget() == timeline,
                 "Edit must show the Timeline in the lower workspace dock.");
@@ -99,9 +109,40 @@ int main(int argc, char* argv[]) {
             "workspaceViewerTitle");
         require(viewer_title != nullptr && viewer_title->isVisible(),
                 "Fusion must label the existing Preview as Viewer.");
+
+        buttons.render->click();
+        application.processEvents();
+        require(!buttons.edit->isChecked() && !buttons.fusion->isChecked() &&
+                    buttons.render->isChecked(),
+                "Selecting Render must select only the Render button.");
+        require(page_view->renderPage() != nullptr &&
+                    page_view->renderPage()->isVisible(),
+                "Render must display its empty workspace page.");
+        require(page_view->previewWidget() == preview && preview->isHidden(),
+                "Render must hide the Preview widget.");
+        require(viewer_title->isHidden(),
+                "Render must hide the Viewer title.");
+        require(page_view->renderPage()->layout() == nullptr &&
+                    page_view->renderPage()->findChildren<QWidget*>(
+                        QString(), Qt::FindDirectChildrenOnly).isEmpty(),
+                "The Render page must contain no controls or placeholder text.");
+
+        buttons.fusion->click();
+        application.processEvents();
+        require(buttons.fusion->isChecked() && !buttons.render->isChecked(),
+                "Returning from Render to Fusion must select Fusion only.");
+        require(page_view->previewWidget() == preview && preview->isVisible(),
+                "Returning to Fusion must restore the shared Preview.");
+        require(page_view->lowerWorkspacePanel()->currentWidget() ==
+                    page_view->nodeEditorPanel() &&
+                    page_view->inspectorPanel()->currentWidget() ==
+                        page_view->fusionInspectorPage(),
+                "Returning to Fusion must restore its panels.");
+
         buttons.edit->click();
         application.processEvents();
-        require(buttons.edit->isChecked() && !buttons.fusion->isChecked(),
+        require(buttons.edit->isChecked() && !buttons.fusion->isChecked() &&
+                    !buttons.render->isChecked(),
                 "Returning to Edit must restore the exclusive button state.");
         require(page_view->lowerWorkspacePanel()->currentWidget() == timeline,
                 "Returning to Edit must restore the Timeline in the lower dock.");

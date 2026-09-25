@@ -29,6 +29,14 @@ TimelineEndButtons createTimelineEndButtons(QWidget* parent) {
     unnamed_button->setCheckable(true);
     unnamed_button->setAutoExclusive(true);
 
+    auto* render_button = new QPushButton("Render", container);
+    render_button->setObjectName("timelineRenderButton");
+    render_button->setFixedSize(68, 28);
+    render_button->setCheckable(true);
+    render_button->setAutoExclusive(true);
+    render_button->setToolTip("Switch to the empty Render workspace");
+    render_button->setAccessibleName("Render workspace");
+
     container->setStyleSheet(
         "QPushButton:checked {"
         " background-color: #1680bd;"
@@ -38,7 +46,8 @@ TimelineEndButtons createTimelineEndButtons(QWidget* parent) {
 
     layout->addWidget(edit_button);
     layout->addWidget(unnamed_button);
-    return {container, edit_button, unnamed_button};
+    layout->addWidget(render_button);
+    return {container, edit_button, unnamed_button, render_button};
 }
 
 }  // namespace ui

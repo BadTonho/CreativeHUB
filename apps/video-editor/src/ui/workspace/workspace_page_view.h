@@ -16,8 +16,10 @@ public:
         QWidget* parent = nullptr);
 
     void setFusionPageActive(bool active);
+    void setRenderPageActive(bool active);
 
     [[nodiscard]] QWidget* previewWidget() const noexcept;
+    [[nodiscard]] QWidget* renderPage() const noexcept;
     [[nodiscard]] QWidget* timelinePanel() const noexcept;
     [[nodiscard]] QWidget* nodeEditorPanel() const noexcept;
     [[nodiscard]] QWidget* editInspectorPage() const noexcept;
@@ -27,11 +29,13 @@ public:
 
 private:
     QWidget* preview_widget_ = nullptr;
+    QWidget* render_page_ = nullptr;
     QWidget* timeline_panel_ = nullptr;
     QWidget* node_editor_panel_ = nullptr;
     QWidget* edit_inspector_ = nullptr;
     QWidget* fusion_inspector_ = nullptr;
     QLabel* viewer_title_ = nullptr;
+    QStackedWidget* central_workspace_pages_ = nullptr;
     QStackedWidget* lower_workspace_panel_ = nullptr;
     QStackedWidget* inspector_panel_ = nullptr;
 };

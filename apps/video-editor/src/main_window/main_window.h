@@ -92,7 +92,8 @@ private:
 
     enum class WorkspacePage {
         Edit,
-        Fusion
+        Fusion,
+        Render
     };
 
     void createMenus();
@@ -347,6 +348,7 @@ private:
     QWidget* workspace_buttons_container_ = nullptr;
     QPushButton* edit_workspace_button_ = nullptr;
     QPushButton* fusion_workspace_button_ = nullptr;
+    QPushButton* render_workspace_button_ = nullptr;
     MediaBrowserListWidget* media_list_ = nullptr;
     MediaBrowserBinTreeWidget* bin_tree_ = nullptr;
     EffectsToolboxWidget* effects_toolbox_ = nullptr;
@@ -440,6 +442,8 @@ private:
         pending_transform_edit_batch_id_;
     const bool& project_dirty_ = editor_session_.projectDirtyState();
     WorkspacePage workspace_page_ = WorkspacePage::Edit;
+    std::array<bool, 7> dock_visibility_before_render_{};
+    bool has_render_dock_visibility_snapshot_ = false;
     bool initial_window_layout_pending_ = false;
     bool playback_activation_loading_ = false;
     QThreadPool media_task_pool_;

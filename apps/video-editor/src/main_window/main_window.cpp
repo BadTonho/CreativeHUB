@@ -111,6 +111,10 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         return;
     }
 
+    if (workspace_page_ == WorkspacePage::Render) {
+        setWorkspacePage(WorkspacePage::Edit);
+    }
+
     try {
         project_controller_.removeCurrentUnsavedSnapshots();
     } catch (const project::ProjectError& error) {

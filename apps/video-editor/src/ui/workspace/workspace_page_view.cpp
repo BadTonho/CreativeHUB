@@ -28,9 +28,16 @@ WorkspacePageView::WorkspacePageView(
         "font-weight: 600; color: #d6dce6; background: #20242b;");
     viewer_title_->hide();
     viewer_layout->addWidget(viewer_title_);
+
+    central_workspace_pages_ = new QStackedWidget(this);
+    central_workspace_pages_->setObjectName("centralWorkspacePages");
     if (preview_widget_ != nullptr) {
-        viewer_layout->addWidget(preview_widget_, 1);
+        central_workspace_pages_->addWidget(preview_widget_);
     }
+    render_page_ = new QWidget(central_workspace_pages_);
+    render_page_->setObjectName("renderWorkspacePage");
+    central_workspace_pages_->addWidget(render_page_);
+    viewer_layout->addWidget(central_workspace_pages_, 1);
 
     lower_workspace_panel_ = new QStackedWidget(this);
     lower_workspace_panel_->setObjectName("lowerWorkspacePages");
@@ -86,14 +93,30 @@ WorkspacePageView::WorkspacePageView(
 
 void WorkspacePageView::setFusionPageActive(bool active) {
     viewer_title_->setVisible(active);
+    if (preview_widget_ != nullptr) {
+        central_workspace_pages_->setCurrentWidget(preview_widget_);
+    }
     lower_workspace_panel_->setCurrentWidget(
         active ? node_editor_panel_ : timeline_panel_);
     inspector_panel_->setCurrentWidget(
         active ? fusion_inspector_ : edit_inspector_);
 }
 
+void WorkspacePageView::setRenderPageActive(bool active) {
+    if (active) {
+        viewer_title_->hide();
+        central_workspace_pages_->setCurrentWidget(render_page_);
+    } else if (preview_widget_ != nullptr) {
+        central_workspace_pages_->setCurrentWidget(preview_widget_);
+    }
+}
+
 QWidget* WorkspacePageView::previewWidget() const noexcept {
     return preview_widget_;
+}
+
+QWidget* WorkspacePageView::renderPage() const noexcept {
+    return render_page_;
 }
 
 QWidget* WorkspacePageView::timelinePanel() const noexcept {

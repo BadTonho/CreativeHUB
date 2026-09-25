@@ -35,8 +35,8 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, rolling and individual edge trims, one-sided media overlap and top-clip priority, video source limits, still-image/text extension, delete, metadata, canonical multi-track snapshots, history, Undo, and Redo |
 | Timeline edge-trim command | Rolling and individual trim outcomes for video, image, and text, edited-clip identity after reordering, local playback frame and preserved global playhead, no-change and invalid requests, and Undo/Redo snapshot compatibility |
 | Timeline edge-trim gesture | Pending transition selection versus valid shared-cut drag, rolling and individual previews, final release boundary, retained preview after an invalid pointer boundary, no-op and invalid requests, legacy trim range, signal order and single commit, and cancellation on track replacement or clearing |
-| Timeline workspace selectors | Edit and blank Fusion button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
-| Workspace page switching | Edit startup state, Edit → Fusion → Edit, exclusive selectors, replacement of the Timeline with the Node Editor in the same lower dock, Inspector visibility, and reuse of the existing Preview as Viewer |
+| Timeline workspace selectors | Edit, blank Fusion, and Render button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
+| Workspace page switching | Edit startup state; Edit → Fusion → Render and return; exclusive selectors; replacement of the Timeline with the Node Editor in the same lower dock; empty Render page; Preview and Inspector visibility; and restoration of each dock's prior visibility |
 | Functions window shortcut | Offscreen Shift+Space registration, WindowShortcut context, empty non-modal floating window, opening and toggling while focused, inside/outside click behavior, close and destruction through Escape/title bar/deactivation, fresh recreation without duplicates, and regular Space playback shortcut preservation |
 | Timeline interaction | Selection without playhead jumps, row-local clip hit testing, gap deselection for Timeline and Media Browser items, no-op drags from empty rows, optional move-to-start selection preference, seek-on-release, configurable clip movement, checked-by-default Magnetic Snap with eight-pixel tolerance, clip-edge and Timeline-boundary snapping, aligned snap guides, enable/disable behavior, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, one-frame fallback metadata, cancellation cleanup, no pre-release model signal, Blade Tool, edge-hover resize cursor and reset behavior, live left/right edge extension previews and trim-on-release, distinct rolling-center and one-sided shared-cut handles while preserving junction selection on click, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, frozen track-header overlay during horizontal scrolling, vertical header alignment during vertical scrolling, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
 | System memory indicator | Deterministic byte-to-MB conversion, rounding, process-memory formatting, zero/invalid handling, and `RAM: N/A` fallback |
@@ -92,8 +92,8 @@ in the running Video Editor after UI or integration changes:
   the mouse Selection Tool icon is checked initially, the Blade Tool is an
   icon-only mutually exclusive mode, and both accessible names and tooltips
   remain available; confirm no Add Text button is shown; confirm the far right
-  of the top workspace toolbar shows the active `Edit` button followed by the
-  blank Fusion button with no text or icon;
+  of the top workspace toolbar shows the active `Edit` button, blank Fusion
+  button with no text or icon, and labeled `Render` button;
 - Timeline construction (F1): confirm the control row, scrolling viewport,
   fixed track headers, and footer retain their layout. Check the saved monitor
   volume at startup, zoom slider and buttons, checked initial Snap state,
@@ -107,12 +107,15 @@ in the running Video Editor after UI or integration changes:
 - Workspace pages: confirm startup selects Edit; click the blank Fusion button
   and confirm the existing Preview is labeled `Viewer`, the bottom dock title
   changes to `Node Editor`, the Timeline is hidden, and the Inspector shows the
-  Fusion placeholder while Bins and Media remain available. Return to Edit and
-  confirm the Timeline dock and normal Inspector return. Resize the bottom
-  dock in both modes. Click both selectors and confirm selection, playhead,
-  playback, Timeline contents, Undo/Redo, and project dirty state remain
-  unchanged; the Node Editor and Fusion Inspector must not provide composition
-  operations;
+  Fusion placeholder while Bins and Media remain available. Select Render and
+  confirm the central page is empty, all docks are hidden, and the top toolbar
+  remains available. Return to Fusion and Edit and confirm the prior dock
+  visibility and the selected page's panels are restored. Close the application
+  from Render and reopen it to confirm it starts in Edit with the previous dock
+  layout. Resize the bottom dock in Edit and Fusion. Click all selectors and
+  confirm selection, playhead, playback, Timeline contents, Undo/Redo, and
+  project dirty state remain unchanged; the Node Editor, Fusion Inspector, and
+  Render page must not provide composition or rendering operations;
 - Functions window: press Shift + Space with focus in the Timeline, Media
   Browser, and Preview, in both Edit and Fusion, and confirm the empty
   floating `Functions` window opens centered over the editor and receives

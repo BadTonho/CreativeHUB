@@ -461,6 +461,7 @@ MainWindow::TimelineControls MainWindow::createTimelineControls(
     workspace_buttons_container_ = workspace_buttons.container;
     edit_workspace_button_ = workspace_buttons.edit;
     fusion_workspace_button_ = workspace_buttons.fusion;
+    render_workspace_button_ = workspace_buttons.render;
     connect(
         edit_workspace_button_,
         &QPushButton::clicked,
@@ -471,6 +472,11 @@ MainWindow::TimelineControls MainWindow::createTimelineControls(
         &QPushButton::clicked,
         this,
         [this]() { setWorkspacePage(WorkspacePage::Fusion); });
+    connect(
+        render_workspace_button_,
+        &QPushButton::clicked,
+        this,
+        [this]() { setWorkspacePage(WorkspacePage::Render); });
     layout->addLayout(controls);
 
     previous_frame_button_->setToolTip("Step one frame backward");
