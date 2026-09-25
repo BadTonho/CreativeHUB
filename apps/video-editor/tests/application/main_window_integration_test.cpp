@@ -3,6 +3,7 @@
 #include "ui/preview/preview_widget.h"
 #include "ui/workspace/workspace_host.h"
 #include "ui/workspace/pages/fusion/fusion_workspace.h"
+#include "ui/workspace/pages/render/render_queue_model.h"
 #include "ui/workspace/pages/render/render_workspace.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
@@ -12,6 +13,7 @@
 #include <QApplication>
 #include <QEventLoop>
 #include <QDockWidget>
+#include <QLineEdit>
 #include <QImage>
 #include <QImageWriter>
 #include <QMenu>
@@ -323,7 +325,29 @@ public:
                     "The MainWindow must select only Render.");
             require(window.workspace_host_->renderPage()->isVisible() &&
                         window.preview_widget_->isHidden(),
-                    "Render must show its empty central page and hide the Preview.");
+                    "Render must show its configuration and queue page and hide the Preview.");
+            auto* render_output_path = window.render_workspace_->centralPage()
+                ->findChild<QLineEdit*>("renderOutputPath");
+            auto* add_render_job = window.render_workspace_->centralPage()
+                ->findChild<QPushButton*>("renderAddToQueueButton");
+            require(window.workspace_host_->renderPage()->findChild<QWidget*>(
+                        "renderSettingsPanel") != nullptr &&
+                        window.workspace_host_->renderPage()->findChild<QWidget*>(
+                            "renderQueuePanel") != nullptr &&
+                        render_output_path != nullptr && add_render_job != nullptr,
+                    "Render must expose settings on the left and its queue on the right.");
+            render_output_path->setText(QString::fromStdString(
+                (directory / "queued-render.mp4").string()));
+            const auto project_before_queue_add = window.currentProjectDocument();
+            require(add_render_job->isEnabled(),
+                    "A valid Render configuration must be addable to the queue.");
+            add_render_job->click();
+            const auto* queued_render_job = window.render_workspace_->queueModel()->jobAt(0);
+            require(window.render_workspace_->queueModel()->jobCount() == 1 &&
+                        queued_render_job != nullptr &&
+                        queued_render_job->project_snapshot == project_before_queue_add &&
+                        !window.project_dirty_,
+                    "Preparing a queued Render job must snapshot the project without marking it dirty.");
             require(window.workspace_host_->currentPage() ==
                             ui::WorkspacePageId::Render &&
                         window.workspace_host_->lowerWorkspacePanel()->currentWidget() ==

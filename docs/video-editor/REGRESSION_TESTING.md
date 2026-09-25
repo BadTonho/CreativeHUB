@@ -36,7 +36,8 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Timeline edge-trim command | Rolling and individual trim outcomes for video, image, and text, edited-clip identity after reordering, local playback frame and preserved global playhead, no-change and invalid requests, and Undo/Redo snapshot compatibility |
 | Timeline edge-trim gesture | Pending transition selection versus valid shared-cut drag, rolling and individual previews, final release boundary, retained preview after an invalid pointer boundary, no-op and invalid requests, legacy trim range, signal order and single commit, and cancellation on track replacement or clearing |
 | Timeline workspace selectors | Edit, blank Fusion, and Render button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
-| Workspace page switching | Edit startup state; FusionWorkspace-provided Viewer title, Node Editor, and Inspector; RenderWorkspace-provided empty central page and read-only activation; controller-coordinated Edit → Fusion → Render transitions; exclusive selectors and lower dock titles; replacement of the Timeline with the Node Editor in the same lower dock; shared Timeline identity; hidden Timeline controls/footer and blocked Timeline input in Render; shared Preview identity; preservation of mixed prior dock visibility across repeated Render selection and exit, including a previously hidden Timeline; prepare-for-close restoration; and MainWindow close/reopen layout persistence |
+| Workspace page switching | Edit startup state; FusionWorkspace-provided Viewer title, Node Editor, and Inspector; Render settings and queue columns; runtime FFmpeg output discovery; project-derived defaults; prepared-job snapshots; controller-coordinated Edit → Fusion → Render transitions; exclusive selectors and lower dock titles; replacement of the Timeline with the Node Editor in the same lower dock; shared Timeline identity; hidden Timeline controls/footer and blocked Timeline input in Render; shared Preview identity; project dirty-state preservation when preparing jobs; preservation of mixed prior dock visibility across repeated Render selection and exit, including a previously hidden Timeline; prepare-for-close restoration; and MainWindow close/reopen layout persistence |
+| Render queue model | Runtime container/encoder compatibility filtering; stable job IDs and prepared state; project-document snapshot isolation; append, remove, and reorder behavior; invalid operation rejection; and a new session starting with an empty queue |
 | Edit workspace controller | Shared-session clip selection and playhead state; typed playback, media-drop, and seek requests; track creation, renaming, reordering, and removal; media and text insertion, clip movement, nudge, split, trim, delete, and clear; Inspector transform and keyframe commands; command-result, committed-edit, and history signals; rejected and no-op edits; occupied positions; offline or unregistered media; Undo/Redo; and unchanged project state for rejected commands |
 | Functions window shortcut | Offscreen Shift+Space registration, WindowShortcut context, empty non-modal floating window, opening and toggling while focused, inside/outside click behavior, close and destruction through Escape/title bar/deactivation, fresh recreation without duplicates, and regular Space playback shortcut preservation |
 | Timeline interaction | Selection without playhead jumps, row-local clip hit testing, gap deselection for Timeline and Media Browser items, no-op drags from empty rows, optional move-to-start selection preference, seek-on-release, configurable clip movement, checked-by-default Magnetic Snap with eight-pixel tolerance, clip-edge and Timeline-boundary snapping, aligned snap guides, enable/disable behavior, semitransparent internal-move ghosts with dimmed source clips, red occupied-destination ghosts, media-drop ghosts using optional duration metadata, one-frame fallback metadata, cancellation cleanup, no pre-release model signal, Blade Tool, edge-hover resize cursor and reset behavior, live left/right edge extension previews and trim-on-release, distinct rolling-center and one-sided shared-cut handles while preserving junction selection on click, smooth upper-ruler playhead scrubbing, global-to-local seek conversion, stable one-hour horizontal scale, long-content expansion, frozen track-header overlay during horizontal scrolling, vertical header alignment during vertical scrolling, timecode ruler, adaptive 1/2/5 frame guides with approximately eight-pixel spacing, discrete timeline zoom through 51,200%, frame-level guides confined to the upper ruler, Ctrl + wheel behavior, Shift + wheel row-height adjustment and clamping, vertical scrolling, coordinate anchoring, and viewport-width updates |
@@ -109,9 +110,18 @@ in the running Video Editor after UI or integration changes:
   and confirm the existing Preview is labeled `Viewer`, the bottom dock title
   changes to `Node Editor`, the Timeline is hidden, and the Inspector shows the
   Fusion placeholder while Bins and Media remain available. Select Render and
-  confirm the central page is empty, the Timeline dock is the only visible
-  workspace dock, its title remains `Timeline`, and its tracks, clips, ruler,
-  and playhead are visible without the control row or footer. Try selecting a
+  confirm the central page has output settings on the left and a wider render
+  queue on the right. Confirm output formats and encoders come from the active
+  FFmpeg build and incompatible codec/container combinations are absent. Check
+  project-size resolution and first-clip FPS defaults (30 fps when no clip
+  provides a rate), custom dimensions, and Low, Standard, High, and Custom
+  bitrate behavior. Add two jobs with different output settings, change the
+  project or form, and confirm the earlier job retains its snapshot. Reorder
+  and remove jobs, confirm preparing a job does not dirty the project, and
+  confirm the queue starts empty in a new application session. No export-start
+  action should be available. The Timeline dock is the only visible workspace
+  dock, its title remains `Timeline`, and its tracks, clips, ruler, and playhead
+  are visible without the control row or footer. Try selecting a
   clip, seeking on the ruler, editing or dragging a clip, dropping media or an
   effect, opening a context menu, and changing zoom or track height; confirm
   none changes the project, playhead, selection, history, dirty state, or
@@ -123,8 +133,8 @@ in the running Video Editor after UI or integration changes:
   reopen it to confirm it starts in Edit with the previous dock layout. Resize
   the bottom dock in Edit and Fusion. Click all selectors and confirm
   selection, playhead, playback, Timeline contents, Undo/Redo, and project
-  dirty state remain unchanged; the Node Editor, Fusion Inspector, and Render
-  page must not provide composition or rendering operations;
+  dirty state remain unchanged; the Node Editor and Fusion Inspector must not
+  provide composition operations, and Render must not start or execute exports;
 - Functions window: press Shift + Space with focus in the Timeline, Media
   Browser, and Preview, in both Edit and Fusion, and confirm the empty
   floating `Functions` window opens centered over the editor and receives

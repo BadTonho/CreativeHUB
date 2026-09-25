@@ -2,19 +2,27 @@
 #include "ui/workspace/workspace_host.h"
 #include "ui/workspace/workspace_transition_controller.h"
 #include "ui/workspace/pages/fusion/fusion_workspace.h"
+#include "ui/workspace/pages/render/render_queue_model.h"
 #include "ui/workspace/pages/render/render_workspace.h"
 
 #include <QApplication>
+#include <QComboBox>
+#include <QDoubleSpinBox>
 #include <QDockWidget>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMainWindow>
 #include <QPushButton>
 #include <QStackedWidget>
+#include <QSplitter>
+#include <QSpinBox>
 #include <QToolBar>
 
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <stdexcept>
+#include <string>
 
 namespace {
 
@@ -37,11 +45,18 @@ int main(int argc, char* argv[]) {
         timeline->setObjectName("timelinePage");
         auto* fusion_workspace = new ui::FusionWorkspace(&window);
         fusion_workspace->createPanels(&window);
+        project::ProjectDocument project_snapshot;
+        project::ProjectTrack project_track;
+        project_track.track_id = 41;
+        project_track.name = "Video 1";
+        project_snapshot.timeline_tracks.push_back(project_track);
         bool timeline_read_only = false;
         auto* render_workspace = new ui::RenderWorkspace(
             [&timeline_read_only](bool active) {
                 timeline_read_only = active;
             },
+            [&project_snapshot] { return project_snapshot; },
+            [] { return 23.976; },
             &window);
         render_workspace->createPanels(&window);
         auto* workspace_host = new ui::WorkspaceHost(
@@ -161,17 +176,85 @@ int main(int argc, char* argv[]) {
                     workspace_host->renderPage() ==
                         render_workspace->centralPage() &&
                     render_workspace->isActive() && timeline_read_only,
-                "Render must display its empty workspace page.");
+                "Render must display its settings and queue page.");
         require(workspace_host->previewWidget() == preview && preview->isHidden(),
                 "Render must hide the Preview widget.");
         require(viewer_title->isHidden(),
                 "Render must hide the Viewer title.");
         require(workspace_host->lowerWorkspacePanel()->currentWidget() == timeline,
                 "Render must keep the shared Timeline page in the lower workspace dock.");
-        require(workspace_host->renderPage()->layout() == nullptr &&
-                    workspace_host->renderPage()->findChildren<QWidget*>(
-                        QString(), Qt::FindDirectChildrenOnly).isEmpty(),
-                "The Render page must contain no controls or placeholder text.");
+        auto* render_splitter = render_workspace->splitter();
+        auto* output_path = workspace_host->renderPage()->findChild<QLineEdit*>(
+            "renderOutputPath");
+        auto* container_combo = workspace_host->renderPage()->findChild<QComboBox*>(
+            "renderContainerCombo");
+        auto* video_encoder_combo = workspace_host->renderPage()->findChild<QComboBox*>(
+            "renderVideoEncoderCombo");
+        auto* frame_rate_spin = workspace_host->renderPage()->findChild<QDoubleSpinBox*>(
+            "renderFrameRate");
+        auto* resolution_combo = workspace_host->renderPage()->findChild<QComboBox*>(
+            "renderResolutionCombo");
+        auto* custom_width = workspace_host->renderPage()->findChild<QSpinBox*>(
+            "renderCustomWidth");
+        auto* custom_height = workspace_host->renderPage()->findChild<QSpinBox*>(
+            "renderCustomHeight");
+        auto* quality_preset = workspace_host->renderPage()->findChild<QComboBox*>(
+            "renderQualityPresetCombo");
+        auto* video_bitrate = workspace_host->renderPage()->findChild<QDoubleSpinBox*>(
+            "renderVideoBitrate");
+        auto* audio_bitrate = workspace_host->renderPage()->findChild<QSpinBox*>(
+            "renderAudioBitrate");
+        auto* add_to_queue = workspace_host->renderPage()->findChild<QPushButton*>(
+            "renderAddToQueueButton");
+        require(render_splitter != nullptr && render_splitter->count() == 2 &&
+                    render_workspace->settingsPanel() != nullptr &&
+                    render_workspace->queuePanel() != nullptr && output_path != nullptr &&
+                    container_combo != nullptr && video_encoder_combo != nullptr &&
+                    frame_rate_spin != nullptr && resolution_combo != nullptr &&
+                    custom_width != nullptr && custom_height != nullptr &&
+                    quality_preset != nullptr && video_bitrate != nullptr &&
+                    audio_bitrate != nullptr && add_to_queue != nullptr,
+                "Render must show its settings and queue columns.");
+        require(frame_rate_spin->value() == 23.976 && container_combo->count() > 0 &&
+                    video_encoder_combo->count() > 0 &&
+                    resolution_combo->currentData().toSize() == QSize(1920, 1080) &&
+                    quality_preset->currentIndex() == 1 &&
+                    std::abs(video_bitrate->value() - 8.0) < 0.11 &&
+                    audio_bitrate->value() == 192,
+                "Render must initialize project-derived FPS and discover encoders at runtime.");
+        require(!add_to_queue->isEnabled(),
+                "Render must require an output path before adding a job.");
+        quality_preset->setCurrentIndex(2);
+        require(std::abs(video_bitrate->value() - 16.0) < 0.11 &&
+                    audio_bitrate->value() == 320,
+                "The High profile must suggest scaled video and audio bitrates.");
+        resolution_combo->setCurrentIndex(resolution_combo->count() - 1);
+        custom_width->setValue(2048);
+        custom_height->setValue(1080);
+        frame_rate_spin->setValue(30.0);
+        quality_preset->setCurrentIndex(1);
+        require(custom_width->isVisible() && custom_height->isVisible() &&
+                    std::abs(video_bitrate->value() - 10.7) < 0.11,
+                "Custom dimensions must be editable and update bitrate suggestions.");
+        video_bitrate->setValue(11.1);
+        require(quality_preset->currentIndex() == 3,
+                "Manually editing a bitrate must select the Custom profile.");
+        resolution_combo->setCurrentIndex(0);
+        frame_rate_spin->setValue(23.976);
+        quality_preset->setCurrentIndex(1);
+        output_path->setText(QStringLiteral("prepared-output.mp4"));
+        require(add_to_queue->isEnabled(),
+                "Render must allow a valid output configuration to enter the queue.");
+        add_to_queue->click();
+        project_snapshot.timeline_tracks.front().name = "Changed after queueing";
+        const auto* prepared_job = render_workspace->queueModel()->jobAt(0);
+        require(render_workspace->queueModel()->jobCount() == 1 &&
+                    prepared_job != nullptr && prepared_job->settings.width == 1920 &&
+                    prepared_job->settings.height == 1080 &&
+                    prepared_job->settings.frame_rate == 23.976 &&
+                    prepared_job->project_snapshot.timeline_tracks.front().name ==
+                        "Video 1",
+                "Adding a Render job must capture its settings and project state.");
         for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
             require(workspace_docks[index]->isVisible() == (index == 6),
                     "Render must show only the Timeline dock.");
@@ -183,6 +266,7 @@ int main(int argc, char* argv[]) {
                     workspace_host->currentPage() == ui::WorkspacePageId::Render,
                 "Selecting Render again must keep the current workspace active.");
 
+        frame_rate_spin->setValue(48.0);
         buttons.fusion->click();
         application.processEvents();
         require(buttons.fusion->isChecked() && !buttons.render->isChecked(),
@@ -227,6 +311,9 @@ int main(int argc, char* argv[]) {
         }
         buttons.render->click();
         application.processEvents();
+        require(frame_rate_spin->value() == 48.0 &&
+                    render_workspace->queueModel()->jobCount() == 1,
+                "Render must preserve edited settings and queued jobs across workspace switches.");
         transition_controller.prepareForClose();
         application.processEvents();
         require(workspace_host->currentPage() == ui::WorkspacePageId::Edit &&

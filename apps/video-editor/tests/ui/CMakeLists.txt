@@ -206,25 +206,10 @@ set_tests_properties(creative-suite-main-editor-preview PROPERTIES
 
 add_executable(creative-suite-main-editor-workspace-page-switch-tests
     workspace_page_switch_test.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/timeline/timeline_end_buttons.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/timeline/timeline_end_buttons.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_host.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_host.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_page_id.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_transition_controller.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/workspace_transition_controller.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/pages/fusion/fusion_workspace.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/pages/fusion/fusion_workspace.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/pages/render/render_workspace.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/ui/workspace/pages/render/render_workspace.h
-)
-
-target_include_directories(creative-suite-main-editor-workspace-page-switch-tests PRIVATE
-    ${VIDEO_EDITOR_SOURCE_DIR}
 )
 
 target_link_libraries(creative-suite-main-editor-workspace-page-switch-tests PRIVATE
-    Qt6::Widgets
+    creative-suite-main-editor-core
 )
 
 target_compile_features(creative-suite-main-editor-workspace-page-switch-tests PRIVATE cxx_std_20)
@@ -234,12 +219,37 @@ if(MSVC)
 else()
     target_compile_options(creative-suite-main-editor-workspace-page-switch-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+copy_ffmpeg_test_runtime(creative-suite-main-editor-workspace-page-switch-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-workspace-page-switch-tests)
 
 add_test(
     NAME creative-suite-main-editor-workspace-page-switch
     COMMAND creative-suite-main-editor-workspace-page-switch-tests
 )
 set_tests_properties(creative-suite-main-editor-workspace-page-switch PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
+preserve_video_editor_test_working_directory()
+add_executable(creative-suite-main-editor-render-queue-tests
+    render_queue_model_test.cpp
+)
+target_link_libraries(creative-suite-main-editor-render-queue-tests PRIVATE
+    creative-suite-main-editor-core
+)
+target_compile_features(creative-suite-main-editor-render-queue-tests PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-render-queue-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-render-queue-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+copy_ffmpeg_test_runtime(creative-suite-main-editor-render-queue-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-render-queue-tests)
+add_test(
+    NAME creative-suite-main-editor-render-queue
+    COMMAND creative-suite-main-editor-render-queue-tests
+)
+set_tests_properties(creative-suite-main-editor-render-queue PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 

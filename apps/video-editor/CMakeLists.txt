@@ -158,6 +158,11 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/ui/workspace/pages/fusion/fusion_workspace.h
     src/ui/workspace/pages/render/render_workspace.cpp
     src/ui/workspace/pages/render/render_workspace.h
+    src/ui/workspace/pages/render/render_job.h
+    src/ui/workspace/pages/render/render_output_capabilities.cpp
+    src/ui/workspace/pages/render/render_output_capabilities.h
+    src/ui/workspace/pages/render/render_queue_model.cpp
+    src/ui/workspace/pages/render/render_queue_model.h
 )
 
 add_library(creative-suite-main-editor-core STATIC

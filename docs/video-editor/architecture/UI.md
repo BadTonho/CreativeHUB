@@ -281,10 +281,12 @@ Inspector have no composition operations. Switching pages changes only the
 visible workspace panels; it does not change the selected clip, playhead,
 playback, project data, history, or dirty state.
 
-`ui/workspace/pages/render/RenderWorkspace` supplies the empty central page and
-activates the shared Timeline's read-only presentation through a handler bound
-to `EditWorkspaceController`. The mode hides Timeline controls and its footer;
-leaving Render restores them.
+`ui/workspace/pages/render/RenderWorkspace` supplies the Render settings and
+queue columns and activates the shared Timeline's read-only presentation
+through a handler bound to `EditWorkspaceController`. Its queue model owns only
+session-scoped prepared jobs; each job contains a copy of the current project
+document and its output settings, while media remains referenced by path.
+Leaving Render restores Timeline controls and its footer.
 `WorkspaceHost` remains responsible for selecting that page, while
 `WorkspaceTransitionController` coordinates page changes, workspace selectors,
 the lower dock title, and Render's temporary dock visibility snapshot.
@@ -292,18 +294,37 @@ the lower dock title, and Render's temporary dock visibility snapshot.
 Closing from Render restores the previous dock visibility before the window
 saves its layout.
 
-Render shows an empty central page with no controls or placeholder text. The
-Timeline dock remains visible at the bottom and displays the project tracks,
-clips, time ruler, and playhead. Its playback, editing, track-management, and
-zoom controls and its footer are hidden. The Timeline canvas is read-only in
+Render divides its central page into a resizable settings column on the left
+and a wider queue column on the right. Settings include the output file,
+container, compatible video/audio encoders, resolution, frame rate, quality
+profile, and editable bitrate suggestions. Containers and encoders are
+discovered from the active FFmpeg runtime; only containers with a compatible
+video encoder and compatible audio/video encoder choices are listed. Available
+choices may differ by platform and FFmpeg build. Resolution starts at the
+project canvas size and also offers common presets and custom dimensions. Frame
+rate starts from the first Timeline clip with a valid rate, or 30 fps when no
+clip provides one. Low, Standard, and High profiles suggest video bitrates
+scaled from 5/10/20 Mbps at 1920×1080 and 30 fps; audio suggestions are
+128/192/320 kbps. These are editable starting values, not a quality guarantee
+across encoders.
+
+Adding a job snapshots the current project document and output settings. Later
+project or form changes do not alter queued jobs; media stays referenced by its
+paths. Users can remove and reorder prepared jobs. The queue exists only for
+the current application session and starts empty after restart. Render does not
+start or execute exports, and preparing a job does not mark the project as
+changed.
+
+The Timeline dock remains visible at the bottom and displays the project
+tracks, clips, time ruler, and playhead. Its playback, editing, track-management,
+and zoom controls and its footer are hidden. The Timeline canvas is read-only in
 Render: pointer input cannot select, seek, edit, drop media or effects, open
 context menus, or change zoom or track height. Its scrollbars remain available
 for navigating the project. The other six workspace docks are hidden. The
 Timeline dock is shown in Render even when it was hidden in the prior
 workspace; returning to Edit or Fusion restores the previous visibility of all
 seven docks. Closing the application from Render restores and saves that prior
-layout, and the next launch still opens on Edit. Render does not provide
-rendering or export operations yet.
+layout, and the next launch still opens on Edit.
 
 Gesture priority is configurable: by default, normal drag moves clips and
 Alt + drag seeks; when the Edit > Require Alt to Move Clips option is enabled,
@@ -459,6 +480,12 @@ visual-only Node Editor panel, and Inspector placeholder, then exposes those
 widgets to `WorkspaceHost`. The shared Preview remains owned by the application
 shell and is reused as the Viewer surface; the Fusion workspace does not create
 or modify project, selection, playhead, playback, or history state.
+
+`ui/workspace/pages/render/RenderWorkspace` builds the output form and
+session-only queue UI. `RenderOutputCapabilities` enumerates the active FFmpeg
+runtime and filters container/encoder combinations before they reach the form.
+`RenderQueueModel` stores immutable project/settings snapshots for prepared
+jobs; it does not encode media or modify project history or dirty state.
 
 The internal `frame_step_navigation` module decides whether a Previous/Next
 Frame command stays within the active clip, activates a clip at the boundary,

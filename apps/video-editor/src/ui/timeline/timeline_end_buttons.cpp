@@ -34,7 +34,7 @@ TimelineEndButtons createTimelineEndButtons(QWidget* parent) {
     render_button->setFixedSize(68, 28);
     render_button->setCheckable(true);
     render_button->setAutoExclusive(true);
-    render_button->setToolTip("Switch to the empty Render workspace");
+    render_button->setToolTip("Switch to the Render workspace");
     render_button->setAccessibleName("Render workspace");
 
     container->setStyleSheet(
