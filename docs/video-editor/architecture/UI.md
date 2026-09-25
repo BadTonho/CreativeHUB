@@ -298,7 +298,11 @@ Render divides its central page into resizable settings, Preview, and queue
 columns from left to right. The same Preview widget used by Edit and Fusion is
 moved into the middle column while Render is active; it continues to display
 the current project frame and follows playback. The Preview is returned to the
-central workspace page when leaving Render. Settings include the output file,
+central workspace page when leaving Render. At central-page widths below
+1100 px, the three panels switch to a vertically scrollable Settings, Preview,
+and queue layout. Settings controls shrink to the available width; long codec
+names remain available in the selector and its tooltip instead of forcing
+horizontal scrolling. Settings include the output file,
 container, compatible video/audio encoders, resolution, frame rate, quality
 profile, and editable bitrate suggestions. Containers and encoders are
 discovered from the active FFmpeg runtime; only containers with a compatible

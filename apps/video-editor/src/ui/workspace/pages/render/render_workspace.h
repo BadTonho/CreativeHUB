@@ -5,16 +5,19 @@
 
 #include <QObject>
 
+#include <array>
 #include <functional>
 #include <vector>
 
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
+class QEvent;
 class QLabel;
 class QLineEdit;
 class QListView;
 class QPushButton;
+class QScrollArea;
 class QSpinBox;
 class QSplitter;
 class QWidget;
@@ -52,6 +55,8 @@ public:
     [[nodiscard]] bool isActive() const noexcept { return active_; }
 
 private:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+    void updateResponsiveLayout();
     void createSettingsPanel();
     void createPreviewPanel();
     void createQueuePanel();
@@ -76,6 +81,7 @@ private:
     QWidget* preview_panel_ = nullptr;
     QWidget* preview_widget_ = nullptr;
     QWidget* queue_panel_ = nullptr;
+    QScrollArea* page_scroll_area_ = nullptr;
     QSplitter* splitter_ = nullptr;
     QLineEdit* output_path_ = nullptr;
     QLabel* capability_warning_ = nullptr;
@@ -100,7 +106,10 @@ private:
     std::vector<RenderContainerOption> containers_;
     int project_width_ = 1920;
     int project_height_ = 1080;
+    std::array<int, 3> horizontal_splitter_sizes_{480, 860, 570};
+    std::array<int, 3> vertical_splitter_sizes_{360, 620, 360};
     bool active_ = false;
+    bool compact_layout_ = false;
     bool frame_rate_user_modified_ = false;
     bool applying_quality_suggestion_ = false;
 };

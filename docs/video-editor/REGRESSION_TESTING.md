@@ -36,7 +36,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Timeline edge-trim command | Rolling and individual trim outcomes for video, image, and text, edited-clip identity after reordering, local playback frame and preserved global playhead, no-change and invalid requests, and Undo/Redo snapshot compatibility |
 | Timeline edge-trim gesture | Pending transition selection versus valid shared-cut drag, rolling and individual previews, final release boundary, retained preview after an invalid pointer boundary, no-op and invalid requests, legacy trim range, signal order and single commit, and cancellation on track replacement or clearing |
 | Timeline workspace selectors | Edit, blank Fusion, and Render button order, visible labels/icons, dimensions, exclusive checked state, tooltips, and accessible names |
-| Workspace page switching | Edit startup state; FusionWorkspace-provided Viewer title, Node Editor, and Inspector; Render settings, shared Preview, and queue columns; runtime FFmpeg output discovery; project-derived defaults; prepared-job snapshots; controller-coordinated Edit → Fusion → Render transitions; exclusive selectors and lower dock titles; replacement of the Timeline with the Node Editor in the same lower dock; shared Timeline identity; Preview transfer into the middle Render column and restoration to the Edit/Fusion central stack; hidden Timeline controls/footer and blocked Timeline input in Render; project dirty-state preservation when preparing jobs; preservation of mixed prior dock visibility across repeated Render selection and exit, including a previously hidden Timeline; prepare-for-close restoration; and MainWindow close/reopen layout persistence |
+| Workspace page switching | Edit startup state; FusionWorkspace-provided Viewer title, Node Editor, and Inspector; Render settings, shared Preview, and queue columns; responsive horizontal/vertical layout switching at 1100 px; constrained Settings fields with accessible Browse action and no horizontal scrolling; runtime FFmpeg output discovery; project-derived defaults; prepared-job snapshots; controller-coordinated Edit → Fusion → Render transitions; exclusive selectors and lower dock titles; replacement of the Timeline with the Node Editor in the same lower dock; shared Timeline identity; Preview transfer into the middle Render column and restoration to the Edit/Fusion central stack; hidden Timeline controls/footer and blocked Timeline input in Render; project dirty-state preservation when preparing jobs; preservation of mixed prior dock visibility across repeated Render selection and exit, including a previously hidden Timeline; prepare-for-close restoration; and MainWindow close/reopen layout persistence |
 | Render queue model | Runtime container/encoder compatibility filtering; stable job IDs and prepared state; project-document snapshot isolation; append, remove, and reorder behavior; invalid operation rejection; and a new session starting with an empty queue |
 | Edit workspace controller | Shared-session clip selection and playhead state; typed playback, media-drop, and seek requests; track creation, renaming, reordering, and removal; media and text insertion, clip movement, nudge, split, trim, delete, and clear; Inspector transform and keyframe commands; command-result, committed-edit, and history signals; rejected and no-op edits; occupied positions; offline or unregistered media; Undo/Redo; and unchanged project state for rejected commands |
 | Functions window shortcut | Offscreen Shift+Space registration, WindowShortcut context, empty non-modal floating window, opening and toggling while focused, inside/outside click behavior, close and destruction through Escape/title bar/deactivation, fresh recreation without duplicates, and regular Space playback shortcut preservation |
@@ -112,8 +112,14 @@ in the running Video Editor after UI or integration changes:
   Fusion placeholder while Bins and Media remain available. Select Render and
   confirm the central page has output settings on the left, the same live
   project Preview in the middle, and the render queue on the right. Confirm the
-  Preview follows the current playhead and playback. Resize the three columns
-  and verify the Preview starts wider than Settings and Queue. Confirm output
+  Preview follows the current playhead and playback. At central widths of at
+  least 1100 px, resize the three columns and verify the Preview starts wider
+  than Settings and Queue. Shrink the window below 1100 px and confirm Settings,
+  Preview, and Queue stack vertically in that order. Verify Settings controls
+  fit without horizontal scrolling and the Browse button remains visible; long
+  codec names should be available from the selector and its tooltip. Widen the
+  window again and confirm the horizontal layout returns without losing queue
+  jobs or settings. Confirm output
   formats and encoders come from the active
   FFmpeg build and incompatible codec/container combinations are absent. Check
   project-size resolution and first-clip FPS defaults (30 fps when no clip

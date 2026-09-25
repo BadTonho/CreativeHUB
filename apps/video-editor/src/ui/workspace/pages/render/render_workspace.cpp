@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QDir>
+#include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFont>
@@ -20,8 +21,10 @@
 #include <QListView>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSignalBlocker>
 #include <QSize>
+#include <QSizePolicy>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStringList>
@@ -35,6 +38,19 @@
 
 namespace ui {
 namespace {
+
+constexpr int kCompactRenderLayoutWidth = 1100;
+
+void configureCompactCombo(QComboBox* combo) {
+    combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    combo->setMinimumContentsLength(14);
+    combo->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
+    QObject::connect(
+        combo,
+        &QComboBox::currentTextChanged,
+        combo,
+        [combo](const QString& text) { combo->setToolTip(text); });
+}
 
 QString extensionFilter(const RenderContainerOption& container) {
     QStringList patterns;
@@ -89,13 +105,23 @@ void RenderWorkspace::createPanels(QWidget* parent) {
 
     central_page_ = new QWidget(parent);
     central_page_->setObjectName("renderWorkspacePage");
-    auto* page_layout = new QHBoxLayout(central_page_);
+    auto* page_layout = new QVBoxLayout(central_page_);
     page_layout->setContentsMargins(8, 8, 8, 8);
 
-    splitter_ = new QSplitter(Qt::Horizontal, central_page_);
+    page_scroll_area_ = new QScrollArea(central_page_);
+    page_scroll_area_->setObjectName("renderWorkspaceScrollArea");
+    page_scroll_area_->setWidgetResizable(true);
+    page_scroll_area_->setFrameShape(QFrame::NoFrame);
+    page_scroll_area_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    page_scroll_area_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    page_layout->addWidget(page_scroll_area_);
+
+    splitter_ = new QSplitter(Qt::Horizontal, page_scroll_area_);
     splitter_->setObjectName("renderWorkspaceSplitter");
     splitter_->setChildrenCollapsible(false);
-    page_layout->addWidget(splitter_);
+    splitter_->setMinimumWidth(0);
+    page_scroll_area_->setWidget(splitter_);
+    central_page_->installEventFilter(this);
 
     queue_model_ = new RenderQueueModel(this);
     createSettingsPanel();
@@ -108,12 +134,49 @@ void RenderWorkspace::createPanels(QWidget* parent) {
     splitter_->setStretchFactor(1, 9);
     splitter_->setStretchFactor(2, 6);
     splitter_->setSizes({480, 860, 570});
+    settings_panel_->setMinimumWidth(0);
+    queue_panel_->setMinimumWidth(0);
 
     populateContainerOptions();
     updateResolutionFields();
     updateDefaultFrameRate();
     updateQualitySuggestions();
     updateAddAction();
+}
+
+bool RenderWorkspace::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == central_page_ && event->type() == QEvent::Resize) {
+        updateResponsiveLayout();
+    }
+    return QObject::eventFilter(watched, event);
+}
+
+void RenderWorkspace::updateResponsiveLayout() {
+    if (central_page_ == nullptr || splitter_ == nullptr) return;
+
+    const bool use_compact_layout =
+        central_page_->width() < kCompactRenderLayoutWidth;
+    if (use_compact_layout == compact_layout_) return;
+
+    const auto current_sizes = splitter_->sizes();
+    if (current_sizes.size() == 3 &&
+        (current_sizes[0] > 0 || current_sizes[1] > 0 || current_sizes[2] > 0)) {
+        auto& saved_sizes = compact_layout_
+            ? vertical_splitter_sizes_
+            : horizontal_splitter_sizes_;
+        for (std::size_t index = 0; index < saved_sizes.size(); ++index) {
+            saved_sizes[index] = current_sizes[static_cast<qsizetype>(index)];
+        }
+    }
+
+    compact_layout_ = use_compact_layout;
+    splitter_->setOrientation(
+        compact_layout_ ? Qt::Vertical : Qt::Horizontal);
+    const auto& restored_sizes = compact_layout_
+        ? vertical_splitter_sizes_
+        : horizontal_splitter_sizes_;
+    splitter_->setSizes({
+        restored_sizes[0], restored_sizes[1], restored_sizes[2]});
 }
 
 void RenderWorkspace::createSettingsPanel() {
@@ -133,21 +196,32 @@ void RenderWorkspace::createSettingsPanel() {
     scroll_area->setObjectName("renderSettingsScrollArea");
     scroll_area->setWidgetResizable(true);
     scroll_area->setFrameShape(QFrame::NoFrame);
+    scroll_area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scroll_area->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     panel_layout->addWidget(scroll_area, 1);
 
     auto* content = new QWidget(scroll_area);
+    content->setMinimumWidth(0);
+    content->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     auto* content_layout = new QVBoxLayout(content);
     content_layout->setContentsMargins(0, 0, 8, 0);
 
     auto* output_group = new QGroupBox(QStringLiteral("Output"), content);
     output_group->setObjectName("renderOutputSettingsGroup");
+    output_group->setMinimumWidth(0);
+    output_group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* output_form = new QFormLayout(output_group);
+    output_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
 
     auto* output_path_row = new QWidget(output_group);
+    output_path_row->setMinimumWidth(0);
+    output_path_row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* output_path_layout = new QHBoxLayout(output_path_row);
     output_path_layout->setContentsMargins(0, 0, 0, 0);
     output_path_ = new QLineEdit(output_path_row);
     output_path_->setObjectName("renderOutputPath");
+    output_path_->setMinimumWidth(0);
+    output_path_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     output_path_->setPlaceholderText(QStringLiteral("Choose an output file"));
     output_path_->setAccessibleName(QStringLiteral("Render output file"));
     auto* browse_button = new QPushButton(QStringLiteral("Browse…"), output_path_row);
@@ -160,6 +234,7 @@ void RenderWorkspace::createSettingsPanel() {
     container_combo_ = new QComboBox(output_group);
     container_combo_->setObjectName("renderContainerCombo");
     container_combo_->setAccessibleName(QStringLiteral("Output container"));
+    configureCompactCombo(container_combo_);
     output_form->addRow(QStringLiteral("Container"), container_combo_);
     capability_warning_ = new QLabel(output_group);
     capability_warning_->setObjectName("renderCapabilitiesWarning");
@@ -172,16 +247,21 @@ void RenderWorkspace::createSettingsPanel() {
 
     auto* video_group = new QGroupBox(QStringLiteral("Video"), content);
     video_group->setObjectName("renderVideoSettingsGroup");
+    video_group->setMinimumWidth(0);
+    video_group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* video_form = new QFormLayout(video_group);
+    video_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
 
     video_encoder_combo_ = new QComboBox(video_group);
     video_encoder_combo_->setObjectName("renderVideoEncoderCombo");
     video_encoder_combo_->setAccessibleName(QStringLiteral("Video encoder"));
+    configureCompactCombo(video_encoder_combo_);
     video_form->addRow(QStringLiteral("Encoder"), video_encoder_combo_);
 
     resolution_combo_ = new QComboBox(video_group);
     resolution_combo_->setObjectName("renderResolutionCombo");
     resolution_combo_->setAccessibleName(QStringLiteral("Output resolution"));
+    configureCompactCombo(resolution_combo_);
     resolution_combo_->addItem(
         QStringLiteral("Project (%1 × %2)").arg(project_width_).arg(project_height_),
         QSize(project_width_, project_height_));
@@ -223,6 +303,7 @@ void RenderWorkspace::createSettingsPanel() {
 
     quality_preset_combo_ = new QComboBox(video_group);
     quality_preset_combo_->setObjectName("renderQualityPresetCombo");
+    configureCompactCombo(quality_preset_combo_);
     quality_preset_combo_->addItem(QStringLiteral("Low"),
                                    static_cast<int>(RenderQualityPreset::Low));
     quality_preset_combo_->addItem(QStringLiteral("Standard"),
@@ -245,6 +326,8 @@ void RenderWorkspace::createSettingsPanel() {
 
     auto* audio_group = new QGroupBox(QStringLiteral("Audio"), content);
     audio_group->setObjectName("renderAudioSettingsGroup");
+    audio_group->setMinimumWidth(0);
+    audio_group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* audio_layout = new QVBoxLayout(audio_group);
     export_audio_check_ = new QCheckBox(QStringLiteral("Export audio"), audio_group);
     export_audio_check_->setObjectName("renderExportAudioCheck");
@@ -252,9 +335,11 @@ void RenderWorkspace::createSettingsPanel() {
     auto* audio_form_widget = new QWidget(audio_group);
     auto* audio_form = new QFormLayout(audio_form_widget);
     audio_form->setContentsMargins(0, 0, 0, 0);
+    audio_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     audio_encoder_combo_ = new QComboBox(audio_form_widget);
     audio_encoder_combo_->setObjectName("renderAudioEncoderCombo");
     audio_encoder_combo_->setAccessibleName(QStringLiteral("Audio encoder"));
+    configureCompactCombo(audio_encoder_combo_);
     audio_form->addRow(QStringLiteral("Encoder"), audio_encoder_combo_);
     audio_bitrate_spin_ = new QSpinBox(audio_form_widget);
     audio_bitrate_spin_->setObjectName("renderAudioBitrate");

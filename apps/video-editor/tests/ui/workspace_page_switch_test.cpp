@@ -13,6 +13,8 @@
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QStackedWidget>
 #include <QSplitter>
 #include <QSpinBox>
@@ -39,6 +41,7 @@ int main(int argc, char* argv[]) {
         QMainWindow window;
         auto* preview = new QWidget;
         preview->setObjectName("sharedPreview");
+        preview->setMinimumSize(320, 180);
         auto* edit_inspector = new QWidget;
         edit_inspector->setObjectName("editInspectorPage");
         auto* timeline = new QWidget;
@@ -102,7 +105,7 @@ int main(int argc, char* argv[]) {
             &window);
         transition_controller.setPage(ui::WorkspacePageId::Edit);
 
-        window.resize(960, 720);
+        window.resize(1400, 720);
         window.show();
         application.processEvents();
 
@@ -185,8 +188,14 @@ int main(int argc, char* argv[]) {
         require(workspace_host->lowerWorkspacePanel()->currentWidget() == timeline,
                 "Render must keep the shared Timeline page in the lower workspace dock.");
         auto* render_splitter = render_workspace->splitter();
+        auto* render_page_scroll = workspace_host->renderPage()->findChild<QScrollArea*>(
+            "renderWorkspaceScrollArea");
+        auto* settings_scroll = workspace_host->renderPage()->findChild<QScrollArea*>(
+            "renderSettingsScrollArea");
         auto* output_path = workspace_host->renderPage()->findChild<QLineEdit*>(
             "renderOutputPath");
+        auto* browse_output = workspace_host->renderPage()->findChild<QPushButton*>(
+            "renderBrowseOutputButton");
         auto* container_combo = workspace_host->renderPage()->findChild<QComboBox*>(
             "renderContainerCombo");
         auto* video_encoder_combo = workspace_host->renderPage()->findChild<QComboBox*>(
@@ -216,6 +225,8 @@ int main(int argc, char* argv[]) {
                     render_splitter->widget(2) == render_workspace->queuePanel() &&
                     render_workspace->previewPanel()->findChild<QWidget*>(
                         "sharedPreview") == preview && output_path != nullptr &&
+                    render_page_scroll != nullptr && settings_scroll != nullptr &&
+                    browse_output != nullptr &&
                     container_combo != nullptr && video_encoder_combo != nullptr &&
                     frame_rate_spin != nullptr && resolution_combo != nullptr &&
                     custom_width != nullptr && custom_height != nullptr &&
@@ -225,8 +236,49 @@ int main(int argc, char* argv[]) {
         const auto initial_column_sizes = render_splitter->sizes();
         require(initial_column_sizes.size() == 3 &&
                     initial_column_sizes[1] > initial_column_sizes[0] &&
-                    initial_column_sizes[1] > initial_column_sizes[2],
+                    initial_column_sizes[1] > initial_column_sizes[2] &&
+                    render_splitter->orientation() == Qt::Horizontal,
                 "Render must initially give the Preview the widest column.");
+
+        window.resize(520, 420);
+        application.processEvents();
+        const auto browse_position = browse_output->mapTo(
+            settings_scroll->viewport(), QPoint(0, 0));
+        const QRect browse_rect(browse_position, browse_output->size());
+        const auto encoder_position = video_encoder_combo->mapTo(
+            settings_scroll->viewport(), QPoint(0, 0));
+        const QRect encoder_rect(encoder_position, video_encoder_combo->size());
+        require(render_splitter->orientation() == Qt::Vertical &&
+                    render_splitter->widget(0) == render_workspace->settingsPanel() &&
+                    render_splitter->widget(1) == render_workspace->previewPanel() &&
+                    render_splitter->widget(2) == render_workspace->queuePanel(),
+                "A narrow Render page must stack Settings, Preview, and Queue.");
+        require(render_page_scroll->horizontalScrollBar()->maximum() == 0 &&
+                    settings_scroll->horizontalScrollBar()->maximum() == 0 &&
+                    render_page_scroll->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded &&
+                    render_page_scroll->verticalScrollBar()->maximum() > 0 &&
+                    render_workspace->previewWidget() == preview &&
+                    render_workspace->queueModel()->jobCount() == 0,
+                "A compact Render page must retain vertical access and its existing state.");
+        require(browse_output->isVisible() &&
+                    settings_scroll->viewport()->rect().contains(browse_rect),
+                "Compact Settings must keep the Browse button inside its viewport.");
+        require(encoder_rect.left() >= 0 &&
+                    encoder_rect.right() < settings_scroll->viewport()->width() &&
+                    video_encoder_combo->width() > 0 &&
+                    video_encoder_combo->toolTip() == video_encoder_combo->currentText(),
+                "Compact Settings must keep codec controls inside its viewport.");
+
+        window.resize(1400, 720);
+        application.processEvents();
+        const auto restored_column_sizes = render_splitter->sizes();
+        require(render_splitter->orientation() == Qt::Horizontal &&
+                    restored_column_sizes.size() == 3 &&
+                    restored_column_sizes[1] > restored_column_sizes[0] &&
+                    restored_column_sizes[1] > restored_column_sizes[2] &&
+                    render_workspace->previewWidget() == preview && preview->isVisible() &&
+                    render_workspace->queueModel()->jobCount() == 0,
+                "Widening Render must restore the three columns without losing state.");
         require(frame_rate_spin->value() == 23.976 && container_combo->count() > 0 &&
                     video_encoder_combo->count() > 0 &&
                     resolution_combo->currentData().toSize() == QSize(1920, 1080) &&
@@ -267,6 +319,29 @@ int main(int argc, char* argv[]) {
                     prepared_job->project_snapshot.timeline_tracks.front().name ==
                         "Video 1",
                 "Adding a Render job must capture its settings and project state.");
+        frame_rate_spin->setValue(48.0);
+        window.resize(520, 420);
+        application.processEvents();
+        require(render_splitter->orientation() == Qt::Vertical &&
+                    frame_rate_spin->value() == 48.0 &&
+                    render_workspace->queueModel()->jobCount() == 1 &&
+                    prepared_job->settings.frame_rate == 23.976 &&
+                    prepared_job->project_snapshot.timeline_tracks.front().name ==
+                        "Video 1",
+                "Narrowing Render must preserve edited settings and the queued snapshot.");
+        window.resize(1400, 720);
+        application.processEvents();
+        const auto job_restored_column_sizes = render_splitter->sizes();
+        require(render_splitter->orientation() == Qt::Horizontal &&
+                    job_restored_column_sizes.size() == 3 &&
+                    job_restored_column_sizes[1] > job_restored_column_sizes[0] &&
+                    job_restored_column_sizes[1] > job_restored_column_sizes[2] &&
+                    frame_rate_spin->value() == 48.0 &&
+                    render_workspace->queueModel()->jobCount() == 1 &&
+                    prepared_job->settings.frame_rate == 23.976 &&
+                    prepared_job->project_snapshot.timeline_tracks.front().name ==
+                        "Video 1",
+                "Widening Render must restore its columns and retain settings and jobs.");
         for (std::size_t index = 0; index < workspace_docks.size(); ++index) {
             require(workspace_docks[index]->isVisible() == (index == 6),
                     "Render must show only the Timeline dock.");
@@ -278,7 +353,6 @@ int main(int argc, char* argv[]) {
                     workspace_host->currentPage() == ui::WorkspacePageId::Render,
                 "Selecting Render again must keep the current workspace active.");
 
-        frame_rate_spin->setValue(48.0);
         buttons.fusion->click();
         application.processEvents();
         require(buttons.fusion->isChecked() && !buttons.render->isChecked(),
