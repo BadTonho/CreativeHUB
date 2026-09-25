@@ -1,6 +1,6 @@
 # Plano de Refatoração das Interfaces de Trabalho
 
-Status: Etapas 1, 2, 3, 4 e 5 concluídas; continuar a próxima etapa quando solicitado.
+Status: Etapas 1, 2, 3, 4, 5 e 6 concluídas; plano encerrado.
 
 ## Objetivo
 
@@ -28,8 +28,8 @@ adiciona recursos de edição, composição ou exportação.
   dos docks ao sair de Render ou preparar o fechamento. `MainWindow` continua
   responsável pela propriedade e persistência do layout dos docks.
 
-As etapas seguintes continuam pendentes e devem ser implementadas uma por vez,
-quando solicitadas.
+Este plano temporário foi concluído e permanece no repositório para consulta até
+que o usuário decida removê-lo.
 
 ## Estrutura de arquivos proposta
 
@@ -60,7 +60,7 @@ projeto ou da Timeline.
 
 ## Etapas
 
-Status atual: Etapas 1, 2, 3, 4 e 5 concluídas. A montagem e as interações do Edit foram extraídas para `pages/edit/`, a apresentação do Fusion para `pages/fusion/`, a página e ativação somente leitura do Render para `pages/render/`, e as transições entre espaços foram centralizadas em `WorkspaceTransitionController`; a etapa seguinte continua pendente e será implementada quando solicitada.
+Status atual: Etapas 1, 2, 3, 4, 5 e 6 concluídas. A montagem e as interações do Edit foram extraídas para `pages/edit/`, a apresentação do Fusion para `pages/fusion/`, a página e ativação somente leitura do Render para `pages/render/`, as transições entre espaços foram centralizadas em `WorkspaceTransitionController`, e a integração final foi validada.
 
 ### 1. Definir o limite dos espaços de trabalho
 
@@ -116,13 +116,14 @@ Status atual: Etapas 1, 2, 3, 4 e 5 concluídas. A montagem e as interações do
 
 ### 6. Concluir a validação da integração
 
-- Confirmar que a `MainWindow` permanece responsável pela criação e
-  persistência dos docks e que `setWorkspacePage()` delega as transições ao
-  `WorkspaceTransitionController`.
-- Conferir os caminhos e limites de responsabilidade documentados e registrados
-  no CMake após as extrações.
-- Executar os testes de troca de página, Timeline e integração da janela; depois
-  executar a suíte CTest relevante do Video Editor.
+- **Concluída.** Confirmado que a `MainWindow` cria e persiste os docks e que
+  `setWorkspacePage()` delega as transições ao `WorkspaceTransitionController`.
+- **Concluída.** Conferidos os caminhos do CMake e os limites descritos na
+  documentação de interface e regressão.
+- **Concluída.** Video Editor compilado em Release e suíte CTest executada com
+  38 de 38 testes aprovados.
+- **Concluída.** `git diff --check` passou, e a validação não deixou arquivos
+  rastreados ou não rastreados adicionais.
 
 ## Critérios de conclusão
 
