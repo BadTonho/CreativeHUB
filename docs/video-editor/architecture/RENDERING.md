@@ -106,11 +106,13 @@ non-transparent source spans and avoids work on transparent pixels. Both this
 path and the axis-aligned path use a specialized blend over the compositor's
 opaque output. It skips destination-alpha work and channel division when the
 resulting alpha is exactly opaque, retaining the general blend as a fallback
-for other floating-point results. Pixel-by-pixel tests compare both paths with
-the scalar reference. Rotated or unsupported layers retain the general
-transform, rotation, opacity, and alpha path. The result is still one final
-RGBA frame sent to OpenGL; per-layer texture blending is deliberately deferred
-to a later milestone.
+for other floating-point results. When layer opacity is 1 and a sampled source
+pixel has alpha 255, both paths copy its RGBA bytes directly instead of
+converting channels or invoking the blend. Pixel-by-pixel tests compare these
+paths with the scalar reference, including transformed opaque layers. Rotated
+or unsupported layers retain the general transform, rotation, opacity, and
+alpha path. The result is still one final RGBA frame sent to OpenGL; per-layer
+texture blending is deliberately deferred to a later milestone.
 
 Other valid layers without rotation use an axis-aligned path. It computes the
 visible rectangular bounds and horizontal/vertical nearest-neighbor source

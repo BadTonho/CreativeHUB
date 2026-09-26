@@ -358,6 +358,40 @@ int main() {
                         alpha_sweep_reference.rgba_pixels,
                 "Opaque-destination blending changed pixels across alpha values and layers.");
 
+        auto opaque_transformed = patternedFrame(5, 3);
+        for (std::size_t index = 3; index < opaque_transformed.rgba_pixels.size(); index += 4) {
+            opaque_transformed.rgba_pixels[index] = 255;
+        }
+        auto opaque_transform = identity;
+        opaque_transform.position_x = 0.18;
+        opaque_transform.position_y = 0.65;
+        opaque_transform.scale = 0.9;
+        const std::vector<rendering::CompositionLayer> opaque_axis_layers{
+            {&opaque_transformed, opaque_transform}};
+        const auto opaque_axis_composed = rendering::FrameCompositor::compose(
+            11, 7, opaque_axis_layers);
+        const auto opaque_axis_reference = referenceGeneralComposition(
+            11, 7, opaque_axis_layers);
+        require(opaque_axis_composed.has_value() &&
+                    opaque_axis_composed->rgba_pixels ==
+                        opaque_axis_reference.rgba_pixels,
+                "The opaque pixel-copy path changed transformed or clipped pixels.");
+
+        const auto opaque_coverage =
+            rendering::FrameCompositor::buildAlphaCoverage(opaque_transformed);
+        const std::vector<rendering::CompositionLayer> opaque_coverage_layers{{
+            &opaque_transformed,
+            opaque_transform,
+            opaque_coverage}};
+        const auto opaque_coverage_composed = rendering::FrameCompositor::compose(
+            11, 7, opaque_coverage_layers);
+        const auto opaque_coverage_reference = referenceGeneralComposition(
+            11, 7, opaque_coverage_layers);
+        require(opaque_coverage_composed.has_value() &&
+                    opaque_coverage_composed->rgba_pixels ==
+                        opaque_coverage_reference.rgba_pixels,
+                "The opaque alpha-coverage pixel-copy path changed pixels.");
+
         const auto empty_output = rendering::FrameCompositor::compose(3, 2, {});
         require(empty_output.has_value(), "The empty output buffer was not created.");
         for (std::size_t index = 0; index < empty_output->rgba_pixels.size(); index += 4) {

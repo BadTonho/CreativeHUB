@@ -195,6 +195,7 @@ void composeAlphaCoverageLayer(
         }
         return;
     }
+    const bool copy_opaque_source_pixels = layer.transform.opacity == 1.0;
 
     const double fit = std::min(
         static_cast<double>(output.width) / frame.width,
@@ -275,15 +276,19 @@ void composeAlphaCoverageLayer(
                     static_cast<std::size_t>(destination_x - horizontal->begin)];
                 const auto* source_pixel = source_row +
                     static_cast<std::size_t>(source_x) * 4;
+                auto* destination = output.rgba_pixels.data() +
+                    static_cast<std::size_t>(destination_y) * output.stride +
+                    static_cast<std::size_t>(destination_x) * 4;
+                if (copy_opaque_source_pixels && source_pixel[3] == 255) {
+                    std::memcpy(destination, source_pixel, 4);
+                    continue;
+                }
                 auto color = Color{
                     source_pixel[0] / 255.0,
                     source_pixel[1] / 255.0,
                     source_pixel[2] / 255.0,
                     source_pixel[3] / 255.0};
                 color.alpha *= layer.transform.opacity;
-                auto* destination = output.rgba_pixels.data() +
-                    static_cast<std::size_t>(destination_y) * output.stride +
-                    static_cast<std::size_t>(destination_x) * 4;
                 blendOverOpaqueDestination(destination, color);
             }
         }
@@ -300,6 +305,7 @@ void composeAxisAlignedLayer(
     using Clock = std::chrono::steady_clock;
     const auto setup_started = timings != nullptr ? Clock::now() : Clock::time_point{};
     const auto& frame = *layer.frame;
+    const bool copy_opaque_source_pixels = layer.transform.opacity == 1.0;
     const double fit = std::min(
         static_cast<double>(output.width) / frame.width,
         static_cast<double>(output.height) / frame.height);
@@ -362,6 +368,11 @@ void composeAxisAlignedLayer(
         for (const auto source_x : source_x_lookup) {
             const auto* source_pixel = source_row +
                 static_cast<std::size_t>(source_x) * 4;
+            if (copy_opaque_source_pixels && source_pixel[3] == 255) {
+                std::memcpy(destination, source_pixel, 4);
+                destination += 4;
+                continue;
+            }
             auto color = Color{
                 source_pixel[0] / 255.0,
                 source_pixel[1] / 255.0,
