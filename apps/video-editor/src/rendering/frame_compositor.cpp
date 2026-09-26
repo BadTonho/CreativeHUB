@@ -196,10 +196,7 @@ bool isOpaqueFrame(
     return true;
 }
 
-struct PixelRange {
-    int begin = 0;
-    int end = -1;
-};
+using PixelRange = PreparedPixelRange;
 
 std::optional<PixelRange> axisAlignedPixelRange(
     double center,
@@ -242,6 +239,88 @@ std::uint64_t elapsedNanoseconds(
     return elapsed <= 0 ? 0U : static_cast<std::uint64_t>(elapsed);
 }
 
+void populatePreparedAlphaCoverageGeometry(
+    int canvas_width,
+    int canvas_height,
+    const CompositionLayer& layer,
+    PreparedAlphaCoverageGeometry& geometry) {
+    const auto& frame = *layer.frame;
+    const auto& coverage = *layer.alpha_coverage;
+    geometry.source_width = frame.width;
+    geometry.source_height = frame.height;
+    geometry.source_stride = frame.stride;
+    geometry.canvas_width = canvas_width;
+    geometry.canvas_height = canvas_height;
+    geometry.position_x = layer.transform.position_x;
+    geometry.position_y = layer.transform.position_y;
+    geometry.scale = layer.transform.scale;
+    geometry.alpha_coverage = layer.alpha_coverage;
+    geometry.horizontal_begin = 0;
+    geometry.vertical_begin = 0;
+    geometry.vertical_end = -1;
+    geometry.has_visible_pixels = false;
+    geometry.source_x_lookup.clear();
+    geometry.source_y_lookup.clear();
+    geometry.mapped_rows.clear();
+
+    const double fit = std::min(
+        static_cast<double>(canvas_width) / frame.width,
+        static_cast<double>(canvas_height) / frame.height);
+    const double displayed_width = frame.width * fit * layer.transform.scale;
+    const double displayed_height = frame.height * fit * layer.transform.scale;
+    if (displayed_width <= 0.0 || displayed_height <= 0.0) return;
+
+    const double center_x = layer.transform.position_x * canvas_width;
+    const double center_y = layer.transform.position_y * canvas_height;
+    const auto horizontal = axisAlignedPixelRange(
+        center_x, displayed_width, canvas_width);
+    const auto vertical = axisAlignedPixelRange(
+        center_y, displayed_height, canvas_height);
+    if (!horizontal.has_value() || !vertical.has_value()) return;
+
+    geometry.horizontal_begin = horizontal->begin;
+    geometry.vertical_begin = vertical->begin;
+    geometry.vertical_end = vertical->end;
+    geometry.source_x_lookup = buildSourceLookup(
+        horizontal->begin,
+        horizontal->end,
+        center_x,
+        displayed_width,
+        frame.width);
+    geometry.source_y_lookup = buildSourceLookup(
+        vertical->begin,
+        vertical->end,
+        center_y,
+        displayed_height,
+        frame.height);
+    if (geometry.source_x_lookup.empty() || geometry.source_y_lookup.empty()) {
+        return;
+    }
+
+    geometry.mapped_rows.resize(coverage.rows.size());
+    bool has_mapped_pixels = false;
+    for (std::size_t source_y = 0; source_y < coverage.rows.size(); ++source_y) {
+        for (const auto& span : coverage.rows[source_y]) {
+            const auto first = std::lower_bound(
+                geometry.source_x_lookup.begin(),
+                geometry.source_x_lookup.end(),
+                span.begin);
+            const auto last = std::lower_bound(
+                geometry.source_x_lookup.begin(),
+                geometry.source_x_lookup.end(),
+                span.end);
+            if (first == last) continue;
+            geometry.mapped_rows[source_y].push_back(PixelRange{
+                horizontal->begin + static_cast<int>(
+                    first - geometry.source_x_lookup.begin()),
+                horizontal->begin + static_cast<int>(
+                    last - geometry.source_x_lookup.begin()) - 1});
+            has_mapped_pixels = true;
+        }
+    }
+    geometry.has_visible_pixels = has_mapped_pixels;
+}
+
 void composeAlphaCoverageLayer(
     media::VideoFrame& output,
     const CompositionLayer& layer,
@@ -259,88 +338,47 @@ void composeAlphaCoverageLayer(
     const bool copy_opaque_source_pixels = layer.transform.opacity == 1.0;
     OpaqueSourceBlendLookup opaque_source_blend_lookup(timings);
 
-    const double fit = std::min(
-        static_cast<double>(output.width) / frame.width,
-        static_cast<double>(output.height) / frame.height);
-    const double displayed_width = frame.width * fit * layer.transform.scale;
-    const double displayed_height = frame.height * fit * layer.transform.scale;
-    if (displayed_width <= 0.0 || displayed_height <= 0.0) {
-        if (timings != nullptr) {
-            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
-        }
-        return;
-    }
-
-    const double center_x = layer.transform.position_x * output.width;
-    const double center_y = layer.transform.position_y * output.height;
-    const auto horizontal = axisAlignedPixelRange(
-        center_x, displayed_width, output.width);
-    const auto vertical = axisAlignedPixelRange(
-        center_y, displayed_height, output.height);
-    if (!horizontal.has_value() || !vertical.has_value()) {
-        if (timings != nullptr) {
-            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
-        }
-        return;
-    }
-
-    const auto source_x_lookup = buildSourceLookup(
-        horizontal->begin,
-        horizontal->end,
-        center_x,
-        displayed_width,
-        frame.width);
-    const auto source_y_lookup = buildSourceLookup(
-        vertical->begin,
-        vertical->end,
-        center_y,
-        displayed_height,
-        frame.height);
-    if (source_x_lookup.empty() || source_y_lookup.empty()) {
-        if (timings != nullptr) {
-            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
-        }
-        return;
-    }
-
-    std::vector<std::vector<PixelRange>> mapped_rows(coverage.rows.size());
-    for (std::size_t source_y = 0; source_y < coverage.rows.size(); ++source_y) {
-        for (const auto& span : coverage.rows[source_y]) {
-            const auto first = std::lower_bound(
-                source_x_lookup.begin(), source_x_lookup.end(), span.begin);
-            const auto last = std::lower_bound(
-                source_x_lookup.begin(), source_x_lookup.end(), span.end);
-            if (first == last) continue;
-            mapped_rows[source_y].push_back(PixelRange{
-                horizontal->begin + static_cast<int>(first - source_x_lookup.begin()),
-                horizontal->begin + static_cast<int>(last - source_x_lookup.begin()) - 1});
-        }
+    const PreparedAlphaCoverageGeometry* geometry = nullptr;
+    PreparedAlphaCoverageGeometry unprepared_geometry;
+    if (layer.prepared_alpha_geometry != nullptr &&
+        layer.prepared_alpha_geometry->matches(
+            output.width, output.height, layer)) {
+        geometry = layer.prepared_alpha_geometry.get();
+        if (timings != nullptr) timings->prepared_alpha_geometry_used = true;
+    } else {
+        populatePreparedAlphaCoverageGeometry(
+            output.width, output.height, layer, unprepared_geometry);
+        geometry = &unprepared_geometry;
     }
 
     if (timings != nullptr) {
         timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
     }
+    if (geometry == nullptr || !geometry->has_visible_pixels) return;
     const auto raster_started = timings != nullptr ? Clock::now() : Clock::time_point{};
 
-    for (int block_begin = vertical->begin;;) {
+    for (int block_begin = geometry->vertical_begin;;) {
         const int block_end = block_begin +
-            std::min(15, vertical->end - block_begin);
+            std::min(15, geometry->vertical_end - block_begin);
         const auto block_started = timings != nullptr ? Clock::now() : Clock::time_point{};
         std::uint64_t block_lookup_pixel_count = 0;
         for (int destination_y = block_begin;
              destination_y <= block_end;
              ++destination_y) {
-            const auto source_y = source_y_lookup[
-                static_cast<std::size_t>(destination_y - vertical->begin)];
-            if (source_y < 0 || source_y >= static_cast<int>(mapped_rows.size())) continue;
+            const auto source_y = geometry->source_y_lookup[
+                static_cast<std::size_t>(destination_y - geometry->vertical_begin)];
+            if (source_y < 0 ||
+                source_y >= static_cast<int>(geometry->mapped_rows.size())) continue;
             const auto* source_row = frame.rgba_pixels.data() +
                 static_cast<std::size_t>(source_y) * frame.stride;
-            for (const auto& range : mapped_rows[static_cast<std::size_t>(source_y)]) {
+            for (const auto& range :
+                 geometry->mapped_rows[static_cast<std::size_t>(source_y)]) {
                 for (int destination_x = range.begin;
                      destination_x <= range.end;
                      ++destination_x) {
-                    const auto source_x = source_x_lookup[
-                        static_cast<std::size_t>(destination_x - horizontal->begin)];
+                    const auto source_x = geometry->source_x_lookup[
+                        static_cast<std::size_t>(
+                            destination_x - geometry->horizontal_begin)];
                     const auto* source_pixel = source_row +
                         static_cast<std::size_t>(source_x) * 4;
                     auto* destination = output.rgba_pixels.data() +
@@ -370,7 +408,7 @@ void composeAlphaCoverageLayer(
                 elapsedNanoseconds(block_started);
             ++timings->blend_lookup_active_block_count;
         }
-        if (block_end == vertical->end) break;
+        if (block_end == geometry->vertical_end) break;
         block_begin = block_end + 1;
     }
     if (timings != nullptr) {
@@ -490,6 +528,25 @@ void composeAxisAlignedLayer(
 
 } // namespace
 
+bool PreparedAlphaCoverageGeometry::matches(
+    int target_canvas_width,
+    int target_canvas_height,
+    const CompositionLayer& layer) const noexcept {
+    if (layer.frame == nullptr || layer.alpha_coverage == nullptr) return false;
+    const auto& frame = *layer.frame;
+    const auto& transform = layer.transform;
+    return canvas_width == target_canvas_width &&
+        canvas_height == target_canvas_height &&
+        source_width == frame.width &&
+        source_height == frame.height &&
+        source_stride == frame.stride &&
+        alpha_coverage.get() == layer.alpha_coverage.get() &&
+        transform.rotation_degrees == 0.0 &&
+        position_x == transform.position_x &&
+        position_y == transform.position_y &&
+        scale == transform.scale;
+}
+
 AlphaCoveragePtr FrameCompositor::buildAlphaCoverage(
     const media::VideoFrame& frame) {
     if (frame.width <= 0 || frame.height <= 0 ||
@@ -536,6 +593,26 @@ bool FrameCompositor::canUseAlphaCoverageFastPath(
         layer.alpha_coverage->height == layer.frame->height &&
         layer.alpha_coverage->rows.size() ==
             static_cast<std::size_t>(layer.frame->height);
+}
+
+PreparedAlphaCoverageGeometryPtr FrameCompositor::prepareAlphaCoverageGeometry(
+    int canvas_width,
+    int canvas_height,
+    const CompositionLayer& layer,
+    const PreparedAlphaCoverageGeometryPtr& previous) {
+    if (canvas_width <= 0 || canvas_height <= 0 ||
+        !canUseAlphaCoverageFastPath(layer) || layer.alpha_coverage->rows.empty()) {
+        return {};
+    }
+    if (previous != nullptr &&
+        previous->matches(canvas_width, canvas_height, layer)) {
+        return previous;
+    }
+
+    auto prepared = std::make_shared<PreparedAlphaCoverageGeometry>();
+    populatePreparedAlphaCoverageGeometry(
+        canvas_width, canvas_height, layer, *prepared);
+    return prepared;
 }
 
 std::optional<media::VideoFrame> FrameCompositor::compose(

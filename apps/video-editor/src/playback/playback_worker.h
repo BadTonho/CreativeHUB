@@ -161,6 +161,7 @@ private:
             rendering::SlowFrameDecodePath::None;
         std::uint64_t decode_nanoseconds = 0;
         media::ForwardDecodeDiagnostics forward_decode;
+        std::size_t composition_session_index = 0;
     };
 
     bool ensureSessionAtCurrentFrame();
@@ -174,7 +175,7 @@ private:
         const media::VideoPlaybackSession::CancellationPredicate& should_cancel);
     [[nodiscard]] std::optional<media::VideoFrame> composeCompositionLayers(
         const std::vector<DecodedCompositionLayer>& layers,
-        rendering::FrameCompositionTimings* timings = nullptr) const;
+        rendering::FrameCompositionTimings* timings = nullptr);
     void clearCompositionCache() noexcept;
     void reportFailure(
         const media::MediaError& error,
@@ -248,6 +249,7 @@ private:
         VideoFramePtr static_frame;
         std::shared_ptr<const media::VideoFrame> cached_text_frame;
         rendering::AlphaCoveragePtr cached_text_alpha_coverage;
+        rendering::PreparedAlphaCoverageGeometryPtr cached_text_geometry;
     };
     QVector<CompositionLayerSpec> composition_specs_;
     QVector<CompositionTransitionSpec> composition_transitions_;

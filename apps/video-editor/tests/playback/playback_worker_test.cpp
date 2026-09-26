@@ -1165,6 +1165,52 @@ void validateCompositionCaching() {
             "The new composition did not rebuild the text composition fast path state.");
 }
 
+void validateAnimatedTextGeometry() {
+    playback::PlaybackWorker worker;
+    std::vector<playback::VideoFramePtr> frames;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&frames](playback::VideoFramePtr frame, qint64, quint64, quint64) {
+            frames.push_back(std::move(frame));
+        });
+
+    playback::CompositionLayerSpec text_layer;
+    text_layer.frame_rate = 30.0;
+    text_layer.timeline_start_frame = 0;
+    text_layer.source_start_frame = 0;
+    text_layer.segment_frame_count = 3;
+    text_layer.track_index = 0;
+    text_layer.clip_index = 0;
+    text_layer.kind = timeline::ClipKind::Text;
+    text_layer.transform.scale = 0.12;
+    text_layer.text.content = "Animated title";
+    text_layer.text.font_size_pixels = 40.0;
+    require(timeline::setKeyframe(
+                text_layer.keyframes,
+                timeline::TransformProperty::PositionX,
+                0,
+                0.25) &&
+                timeline::setKeyframe(
+                    text_layer.keyframes,
+                    timeline::TransformProperty::PositionX,
+                    2,
+                    0.75),
+            "Animated text geometry keyframes were not created.");
+
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{text_layer},
+        {},
+        302);
+    worker.renderCompositionFrame(0, 0, 302);
+    worker.renderCompositionFrame(2, 2, 302);
+
+    require(frames.size() == 2 && frames[0] != nullptr && frames[1] != nullptr &&
+                frames[0]->rgba_pixels != frames[1]->rgba_pixels,
+            "Animated text geometry did not update its composed Preview position.");
+}
+
 void validateCompositionPreviewQuality() {
     playback::PlaybackWorker worker;
     std::vector<std::pair<int, int>> emitted_dimensions;
@@ -1189,9 +1235,17 @@ void validateCompositionPreviewQuality() {
     layer.clip_index = 0;
     layer.still_frame = still;
     layer.transform.scale = 0.0001;
+    playback::CompositionLayerSpec text_layer;
+    text_layer.kind = timeline::ClipKind::Text;
+    text_layer.segment_frame_count = 1;
+    text_layer.track_index = 1;
+    text_layer.clip_index = 0;
+    text_layer.transform.scale = 0.1;
+    text_layer.text.content = "Quality change";
+    text_layer.text.font_size_pixels = 32.0;
 
     worker.setActiveCompositionClip(0, 0);
-    worker.setComposition({layer}, {}, 71);
+    worker.setComposition({layer, text_layer}, {}, 71);
     worker.renderCompositionFrame(0, 0, 71);
     worker.setPreviewQuality(playback::PreviewQuality::Half);
     worker.renderCompositionFrame(0, 0, 71);
@@ -1441,6 +1495,7 @@ int main(int argc, char* argv[]) {
         validateCompositionPacing(application);
         validateNormalCompositionPacing(application);
         validateCompositionCaching();
+        validateAnimatedTextGeometry();
         validateStaticImageComposition();
         if (argc == 2) {
             validateReference(application, std::filesystem::path(argv[1]));

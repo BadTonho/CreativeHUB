@@ -23,6 +23,14 @@ namespace {
 constexpr double default_frame_rate = 30.0;
 constexpr qint64 no_pending_seek = std::numeric_limits<qint64>::min();
 
+bool hasAnimatedTextGeometry(
+    const timeline::TransformKeyframes& keyframes) noexcept {
+    return !keyframes.position_x.empty() ||
+        !keyframes.position_y.empty() ||
+        !keyframes.scale.empty() ||
+        !keyframes.rotation.empty();
+}
+
 std::string pathToUtf8(const std::filesystem::path& path) {
     const auto value = path.u8string();
     return std::string(reinterpret_cast<const char*>(value.data()), value.size());
@@ -1583,33 +1591,16 @@ PlaybackWorker::decodeCompositionLayers(
             layer_decode_nanoseconds <= 0
                 ? 0U
                 : static_cast<std::uint64_t>(layer_decode_nanoseconds),
-            forward_decode_diagnostics});
+            forward_decode_diagnostics,
+            request.session_index});
     }
     return layers;
 }
 
 std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     const std::vector<DecodedCompositionLayer>& decoded_layers,
-    rendering::FrameCompositionTimings* timings) const {
+    rendering::FrameCompositionTimings* timings) {
     const auto adapter_started = timings != nullptr ? Clock::now() : Clock::time_point{};
-    std::vector<rendering::CompositionLayer> layers;
-    layers.reserve(decoded_layers.size());
-    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
-    for (const auto& decoded : decoded_layers) {
-        rendering::CompositionLayer layer{
-            decoded.frame.get(),
-            decoded.transform,
-            decoded.alpha_coverage};
-        if (decoded.frame != nullptr &&
-            rendering::FrameCompositor::canUseAlphaCoverageFastPath(layer)) {
-            metrics.recordTextCompositionFastPathHit();
-        }
-        layers.push_back(std::move(layer));
-    }
-    const auto adapter_elapsed = timings != nullptr
-        ? std::chrono::duration_cast<std::chrono::nanoseconds>(
-            Clock::now() - adapter_started).count()
-        : 0;
     int width = 1920;
     int height = 1080;
     switch (preview_quality_) {
@@ -1624,6 +1615,40 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     case PreviewQuality::Full:
         break;
     }
+
+    std::vector<rendering::CompositionLayer> layers;
+    layers.reserve(decoded_layers.size());
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    for (const auto& decoded : decoded_layers) {
+        rendering::CompositionLayer layer{
+            decoded.frame.get(),
+            decoded.transform,
+            decoded.alpha_coverage};
+        if (decoded.kind == timeline::ClipKind::Text &&
+            decoded.composition_session_index < composition_sessions_.size()) {
+            auto& composition =
+                composition_sessions_[decoded.composition_session_index];
+            if (!hasAnimatedTextGeometry(composition.spec.keyframes)) {
+                composition.cached_text_geometry =
+                    rendering::FrameCompositor::prepareAlphaCoverageGeometry(
+                        width,
+                        height,
+                        layer,
+                        composition.cached_text_geometry);
+                layer.prepared_alpha_geometry = composition.cached_text_geometry;
+            }
+        }
+        if (decoded.frame != nullptr &&
+            rendering::FrameCompositor::canUseAlphaCoverageFastPath(layer)) {
+            metrics.recordTextCompositionFastPathHit();
+        }
+        layers.push_back(std::move(layer));
+    }
+    const auto adapter_elapsed = timings != nullptr
+        ? std::chrono::duration_cast<std::chrono::nanoseconds>(
+            Clock::now() - adapter_started).count()
+        : 0;
+
     auto composed = rendering::FrameCompositor::compose(
         width,
         height,

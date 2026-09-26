@@ -24,6 +24,40 @@ struct AlphaCoverage {
 
 using AlphaCoveragePtr = std::shared_ptr<const AlphaCoverage>;
 
+struct PreparedPixelRange {
+    int begin = 0;
+    int end = -1;
+};
+
+// Reusable source sampling and alpha-span mapping for a fixed, unrotated layer
+// geometry. Pixel data and opacity remain live inputs during composition.
+struct PreparedAlphaCoverageGeometry {
+    int source_width = 0;
+    int source_height = 0;
+    int source_stride = 0;
+    int canvas_width = 0;
+    int canvas_height = 0;
+    double position_x = 0.0;
+    double position_y = 0.0;
+    double scale = 0.0;
+    AlphaCoveragePtr alpha_coverage;
+    int horizontal_begin = 0;
+    int vertical_begin = 0;
+    int vertical_end = -1;
+    bool has_visible_pixels = false;
+    std::vector<int> source_x_lookup;
+    std::vector<int> source_y_lookup;
+    std::vector<std::vector<PreparedPixelRange>> mapped_rows;
+
+    [[nodiscard]] bool matches(
+        int target_canvas_width,
+        int target_canvas_height,
+        const struct CompositionLayer& layer) const noexcept;
+};
+
+using PreparedAlphaCoverageGeometryPtr =
+    std::shared_ptr<const PreparedAlphaCoverageGeometry>;
+
 enum class CompositionRasterPath : std::uint8_t {
     Unprocessed,
     FullFrameCopy,
@@ -49,6 +83,7 @@ struct CompositionLayer {
     const media::VideoFrame* frame = nullptr;
     timeline::Transform2D transform;
     AlphaCoveragePtr alpha_coverage;
+    PreparedAlphaCoverageGeometryPtr prepared_alpha_geometry;
 };
 
 struct CompositionLayerTimings {
@@ -60,6 +95,7 @@ struct CompositionLayerTimings {
     std::uint64_t blend_lookup_active_block_nanoseconds = 0;
     std::uint64_t blend_lookup_pixel_count = 0;
     std::uint64_t blend_lookup_active_block_count = 0;
+    bool prepared_alpha_geometry_used = false;
     CompositionRasterPath raster_path = CompositionRasterPath::Unprocessed;
     FullFrameCopyEligibility full_frame_copy_eligibility;
 };
@@ -80,6 +116,13 @@ public:
 
     [[nodiscard]] static bool canUseAlphaCoverageFastPath(
         const CompositionLayer& layer) noexcept;
+
+    [[nodiscard]] static PreparedAlphaCoverageGeometryPtr
+        prepareAlphaCoverageGeometry(
+            int canvas_width,
+            int canvas_height,
+            const CompositionLayer& layer,
+            const PreparedAlphaCoverageGeometryPtr& previous = {});
 
     [[nodiscard]] static std::optional<media::VideoFrame> compose(
         int width,

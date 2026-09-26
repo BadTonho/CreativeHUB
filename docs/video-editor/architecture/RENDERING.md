@@ -127,6 +127,16 @@ layers retain the general inverse-transform loop. The output buffer is
 zero-initialized when allocated, and the background pass only sets its alpha
 bytes to opaque; it does not clear the RGB bytes a second time.
 
+For unrotated text layers in Timeline Preview, `PlaybackWorker` keeps one
+prepared alpha-coverage geometry per text composition session. It reuses the
+source sampling maps and visible destination spans while the text frame,
+canvas dimensions, position, and scale stay compatible. Opacity remains a
+per-frame input to the unchanged blend, so opacity keyframes do not invalidate
+the geometry. Position, scale, or rotation keyframes use the existing
+compositor path instead. A Preview-quality change or a replacement composition
+causes the prepared geometry to be rebuilt. Offline export does not use this
+Preview-only cache.
+
 ## Preview performance diagnostics
 
 Preview performance metrics are enabled by default while the Preview is under

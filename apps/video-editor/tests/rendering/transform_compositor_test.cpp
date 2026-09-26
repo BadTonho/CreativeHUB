@@ -701,10 +701,125 @@ int main() {
         require(alpha_timings.layers.size() == 1 &&
                     alpha_timings.layers[0].setup_nanoseconds > 0 &&
                     alpha_timings.layers[0].raster_blend_nanoseconds > 0 &&
+                    !alpha_timings.layers[0].prepared_alpha_geometry_used &&
                     alpha_timings.layers[0].raster_path ==
                         rendering::CompositionRasterPath::AlphaCoverage &&
                     alpha_timings.layers[0].fast_path_copy_nanoseconds == 0,
                 "The compositor did not isolate alpha-coverage setup and raster timings.");
+
+        auto prepared_background = patternedFrame(17, 13);
+        for (std::size_t offset = 3;
+             offset < prepared_background.rgba_pixels.size();
+             offset += 4) {
+            prepared_background.rgba_pixels[offset] = 255;
+        }
+        auto prepared_text_transform = text_transform;
+        prepared_text_transform.position_x = 0.4;
+        prepared_text_transform.position_y = 0.6;
+        prepared_text_transform.scale = 0.75;
+        auto prepared_text_layer = rendering::CompositionLayer{
+            &sparse, prepared_text_transform, coverage};
+        auto prepared_text_geometry =
+            rendering::FrameCompositor::prepareAlphaCoverageGeometry(
+                17, 13, prepared_text_layer);
+        require(prepared_text_geometry != nullptr,
+                "Static alpha coverage geometry was not prepared.");
+
+        for (const double opacity : {0.73, 1.0, 0.31}) {
+            prepared_text_transform.opacity = opacity;
+            prepared_text_layer.transform = prepared_text_transform;
+            const auto reused_geometry =
+                rendering::FrameCompositor::prepareAlphaCoverageGeometry(
+                    17,
+                    13,
+                    prepared_text_layer,
+                    prepared_text_geometry);
+            require(reused_geometry == prepared_text_geometry,
+                    "Changing opacity unnecessarily rebuilt static text geometry.");
+            prepared_text_layer.prepared_alpha_geometry = reused_geometry;
+            const std::vector<rendering::CompositionLayer> prepared_layers{
+                {&prepared_background, identity},
+                prepared_text_layer};
+            rendering::FrameCompositionTimings prepared_timings;
+            const auto prepared_output = rendering::FrameCompositor::compose(
+                17, 13, prepared_layers, &prepared_timings);
+            const auto prepared_reference = referenceGeneralComposition(
+                17, 13, prepared_layers);
+            require(prepared_output.has_value() &&
+                        prepared_output->rgba_pixels ==
+                            prepared_reference.rgba_pixels &&
+                        prepared_timings.layers.size() == 2 &&
+                        prepared_timings.layers[1]
+                            .prepared_alpha_geometry_used,
+                    "Prepared alpha geometry changed pixels or was not reused.");
+        }
+
+        auto moved_text_transform = prepared_text_transform;
+        moved_text_transform.position_x = 1.12;
+        auto moved_text_layer = rendering::CompositionLayer{
+            &sparse, moved_text_transform, coverage};
+        const auto moved_geometry =
+            rendering::FrameCompositor::prepareAlphaCoverageGeometry(
+                17, 13, moved_text_layer, prepared_text_geometry);
+        require(moved_geometry != nullptr &&
+                    moved_geometry != prepared_text_geometry,
+                "Changing static text position did not replace prepared geometry.");
+        moved_text_layer.prepared_alpha_geometry = moved_geometry;
+        const std::vector<rendering::CompositionLayer> moved_layers{
+            {&prepared_background, identity}, moved_text_layer};
+        const auto moved_output = rendering::FrameCompositor::compose(
+            17, 13, moved_layers);
+        const auto moved_reference = referenceGeneralComposition(
+            17, 13, moved_layers);
+        require(moved_output.has_value() &&
+                    moved_output->rgba_pixels == moved_reference.rgba_pixels,
+                "Prepared geometry changed pixels for a partially clipped text layer.");
+
+        auto scaled_text_transform = prepared_text_transform;
+        scaled_text_transform.scale = 1.35;
+        auto scaled_text_layer = rendering::CompositionLayer{
+            &sparse, scaled_text_transform, coverage};
+        const auto scaled_geometry =
+            rendering::FrameCompositor::prepareAlphaCoverageGeometry(
+                17, 13, scaled_text_layer, prepared_text_geometry);
+        require(scaled_geometry != nullptr &&
+                    scaled_geometry != prepared_text_geometry,
+                "Changing static text scale did not replace prepared geometry.");
+        scaled_text_layer.prepared_alpha_geometry = scaled_geometry;
+        const std::vector<rendering::CompositionLayer> scaled_layers{
+            {&prepared_background, identity}, scaled_text_layer};
+        const auto scaled_output = rendering::FrameCompositor::compose(
+            17, 13, scaled_layers);
+        const auto scaled_reference = referenceGeneralComposition(
+            17, 13, scaled_layers);
+        require(scaled_output.has_value() &&
+                    scaled_output->rgba_pixels == scaled_reference.rgba_pixels,
+                "Prepared geometry changed pixels after scaling the text layer.");
+
+        const auto resized_geometry =
+            rendering::FrameCompositor::prepareAlphaCoverageGeometry(
+                19, 13, prepared_text_layer, prepared_text_geometry);
+        require(resized_geometry != nullptr &&
+                    resized_geometry != prepared_text_geometry &&
+                    resized_geometry->canvas_width == 19,
+                "Changing the Preview canvas size did not replace prepared geometry.");
+
+        auto stale_geometry_layer = prepared_text_layer;
+        stale_geometry_layer.transform.position_x = 0.2;
+        stale_geometry_layer.prepared_alpha_geometry = prepared_text_geometry;
+        rendering::FrameCompositionTimings stale_geometry_timings;
+        const std::vector<rendering::CompositionLayer> stale_geometry_layers{
+            {&prepared_background, identity}, stale_geometry_layer};
+        const auto stale_geometry_output = rendering::FrameCompositor::compose(
+            17, 13, stale_geometry_layers, &stale_geometry_timings);
+        const auto stale_geometry_reference = referenceGeneralComposition(
+            17, 13, stale_geometry_layers);
+        require(stale_geometry_output.has_value() &&
+                    stale_geometry_output->rgba_pixels ==
+                        stale_geometry_reference.rgba_pixels &&
+                    !stale_geometry_timings.layers[1]
+                        .prepared_alpha_geometry_used,
+                "Stale prepared geometry was used after the transform changed.");
 
         auto opaque_lookup_frame = patternedFrame(32, 32);
         for (std::size_t offset = 3; offset < opaque_lookup_frame.rgba_pixels.size();
