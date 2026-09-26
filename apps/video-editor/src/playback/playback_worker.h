@@ -94,6 +94,7 @@ public slots:
         QVector<CompositionTransitionSpec> transitions,
         quint64 generation);
     virtual void setActiveCompositionClip(qint64 track_index, qint64 clip_index);
+    virtual void cancelActivation(quint64 generation);
     virtual void renderCompositionFrame(
         qint64 global_frame,
         qint64 frame_index,

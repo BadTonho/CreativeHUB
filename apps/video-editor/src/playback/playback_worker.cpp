@@ -179,18 +179,26 @@ void PlaybackWorker::setMedia(
     disableAudioOutput();
     audio_session_.reset();
     session_.reset();
-    composition_sessions_.clear();
-    composition_specs_.clear();
-    composition_transitions_.clear();
-    composition_enabled_ = false;
-    primary_timeline_start_frame_ = 0;
     clearCompositionCache();
 
     try {
         if (source_start_frame_ < 0 || segment_frame_count_ < 0) {
             throw media::MediaError("The playback segment range is invalid.");
         }
-        session_ = openVideoPlaybackSession(source_path_);
+        const bool has_prepared_composition_source = composition_enabled_ &&
+            std::any_of(
+                composition_sessions_.begin(), composition_sessions_.end(),
+                [this, track_index, clip_index](const CompositionSession& entry) {
+                    return entry.spec.kind == timeline::ClipKind::Video &&
+                        entry.spec.track_index == track_index &&
+                        entry.spec.clip_index == clip_index &&
+                        !entry.spec.source_path.isEmpty() &&
+                        QFileInfo(entry.spec.source_path).filesystemFilePath() ==
+                            source_path_ && entry.session != nullptr;
+                });
+        if (!has_prepared_composition_source) {
+            session_ = openVideoPlaybackSession(source_path_);
+        }
         {
             rendering::PreviewPerformanceScope timing(
                 metrics,
@@ -432,6 +440,11 @@ void PlaybackWorker::setComposition(
                 audio_enabled_ = false;
                 audio_session_.reset();
                 disableAudioOutput();
+            } else if (composition_enabled_) {
+                // The active video is decoded from its prepared composition
+                // session. Keep the separate session only as a fallback when
+                // composition is unavailable.
+                session_.reset();
             }
             segment_frame_count_ = primary_clip_duration;
             current_frame_index_ = 0;
@@ -464,6 +477,40 @@ void PlaybackWorker::setActiveCompositionClip(
     qint64 clip_index) {
     track_index_ = track_index;
     clip_index_ = clip_index;
+    const auto active = std::find_if(
+        composition_specs_.cbegin(), composition_specs_.cend(),
+        [track_index, clip_index](const CompositionLayerSpec& spec) {
+            return spec.track_index == track_index &&
+                spec.clip_index == clip_index;
+        });
+    if (active == composition_specs_.cend()) return;
+
+    primary_timeline_start_frame_ = active->timeline_start_frame;
+    segment_frame_count_ = active->segment_frame_count;
+    current_frame_index_ = std::clamp<std::int64_t>(
+        current_frame_index_, 0,
+        std::max<std::int64_t>(0, segment_frame_count_ - 1));
+    if (std::isfinite(active->frame_rate) && active->frame_rate > 0.0) {
+        frame_rate_ = active->frame_rate;
+        rendering::PreviewPerformanceMetrics::instance().setTargetFrameRate(frame_rate_);
+    }
+
+    if (active->kind == timeline::ClipKind::Text ||
+        active->kind == timeline::ClipKind::Image) {
+        source_path_.clear();
+        session_.reset();
+        audio_session_.reset();
+        disableAudioOutput();
+    }
+}
+
+void PlaybackWorker::cancelActivation(quint64 generation) {
+    if (generation < generation_) return;
+    generation_ = generation;
+    pending_seek_frame_.store(no_pending_seek, std::memory_order_relaxed);
+    pending_seek_generation_.store(generation, std::memory_order_relaxed);
+    pending_seek_sequence_.fetch_add(1, std::memory_order_release);
+    stop();
 }
 
 void PlaybackWorker::renderCompositionFrame(

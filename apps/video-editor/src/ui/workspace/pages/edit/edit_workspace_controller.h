@@ -81,6 +81,7 @@ public:
     void requestPlaybackCommand(playback::PlaybackCommand command);
     void togglePlayback();
     void presentPlaybackFrame(qint64 clip_frame);
+    void presentPlaybackPosition(qint64 timeline_frame, qint64 clip_frame);
     void refreshTimelinePresentation();
     void refreshInspectorPresentation();
     void setTimelineReadOnly(bool read_only);

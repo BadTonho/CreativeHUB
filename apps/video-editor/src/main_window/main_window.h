@@ -233,6 +233,7 @@ private:
     void updatePlaybackStatus();
     void handlePlaybackEvent(const playback::PlaybackControllerEvent& event);
     void handlePlaybackFrame(const playback::PlaybackFrameEvent& event);
+    void handlePlaybackPosition(const playback::PlaybackPositionEvent& event);
     void handlePlaybackActivation(const playback::PlaybackActivationEvent& event);
     void handlePlaybackStateChanged(bool playing);
     void handlePlaybackFinished(bool during_playback, bool gap);

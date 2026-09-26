@@ -675,6 +675,16 @@ void EditWorkspaceController::presentPlaybackFrame(qint64 clip_frame) {
     updateInspector();
 }
 
+void EditWorkspaceController::presentPlaybackPosition(
+    qint64 timeline_frame,
+    qint64 clip_frame) {
+    playback_frame_index_ = std::max<qint64>(0, clip_frame);
+    if (timeline_widget_ != nullptr) {
+        timeline_widget_->setPlayheadFrame(std::max<qint64>(0, timeline_frame));
+    }
+    updateInspector();
+}
+
 void EditWorkspaceController::refreshTimelinePresentation() {
     updateTimelineState();
 }

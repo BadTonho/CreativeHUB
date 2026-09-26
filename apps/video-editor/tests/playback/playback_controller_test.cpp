@@ -45,6 +45,8 @@ struct FakeWorkerState {
     std::atomic<quint64> composition_request_generation{0};
     std::atomic<quint64> render_request_generation{0};
     std::atomic<quint64> seek_request_generation{0};
+    std::atomic<qint64> last_seek_frame{-1};
+    std::atomic<int> media_open_delay_ms{0};
 };
 
 class FakePlaybackWorker final : public playback::PlaybackWorker {
@@ -64,6 +66,9 @@ public:
         qint64,
         qint64,
         quint64 generation) override {
+        const auto delay = state_->media_open_delay_ms.exchange(
+            0, std::memory_order_acq_rel);
+        if (delay > 0) std::this_thread::sleep_for(std::chrono::milliseconds(delay));
         state_->media_request_generation.store(generation, std::memory_order_release);
         generation_.store(generation, std::memory_order_release);
         if (fail_next_media_.exchange(false, std::memory_order_acq_rel)) {
@@ -116,6 +121,7 @@ public:
 
     void requestSeek(qint64 frame, quint64 generation) override {
         state_->seek_request_generation.store(generation, std::memory_order_release);
+        state_->last_seek_frame.store(frame, std::memory_order_release);
         QMetaObject::invokeMethod(
             this,
             [this, frame, generation]() {
@@ -218,6 +224,287 @@ media::MediaItem makeMedia(const std::filesystem::path& path) {
     return {metadata, std::move(first_frame), metadata.display_name, "Unsorted", false};
 }
 
+media::MediaItem makeLongMedia(
+    const std::filesystem::path& path,
+    double frame_rate,
+    std::int64_t frame_count) {
+    auto item = makeMedia(path);
+    item.metadata.frame_rate = frame_rate;
+    item.metadata.frame_count = frame_count;
+    item.metadata.duration_seconds = static_cast<double>(frame_count) / frame_rate;
+    return item;
+}
+
+void runContinuousClockTests() {
+    application::EditorSession session;
+    application::MediaController media_controller(session);
+    const auto first_source = std::filesystem::temp_directory_path() /
+        "playback-clock-first.mkv";
+    const auto trimmed_source = std::filesystem::temp_directory_path() /
+        "playback-clock-trimmed.mkv";
+    const auto first_media = makeLongMedia(first_source, 25.0, 600);
+    const auto trimmed_media = makeLongMedia(trimmed_source, 60.0, 900);
+    require(media_controller.commitImported(first_media).changed(),
+            "Could not seed the first long playback item.");
+    require(media_controller.commitImported(trimmed_media).changed(),
+            "Could not seed the trimmed playback item.");
+
+    auto& model = session.legacyTimelineForUi();
+    require(model.addTrack("Video 1") == timeline::AddTrackResult::Added,
+            "Could not seed the continuous playback track.");
+    require(model.addClip(0, first_media.metadata, 0) == timeline::AddClipResult::Added,
+            "Could not seed the first continuous playback clip.");
+    require(model.addClip(0, trimmed_media.metadata, 600) == timeline::AddClipResult::Added,
+            "Could not seed the second continuous playback clip.");
+    require(model.trimClip(0, 1, 12, 300) == timeline::TrimClipResult::Trimmed,
+            "Could not seed a clip with a nonzero source in-point.");
+
+    auto fake_state = std::make_shared<FakeWorkerState>();
+    playback::PlaybackController controller(
+        session,
+        nullptr,
+        [fake_state]() { return new FakePlaybackWorker(fake_state); });
+    std::vector<playback::PlaybackControllerEvent> events;
+    controller.setEventHandler([&](const auto& event) { events.push_back(event); });
+    require(controller.activateClip(1, 599, false) ==
+                playback::PlaybackCommandResult::Pending,
+            "Could not activate the first clip near its cut.");
+    require(waitUntil([&]() {
+        return std::any_of(events.begin(), events.end(), [](const auto& event) {
+            const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+            return activation != nullptr && activation->clip_id == 1 &&
+                activation->phase == playback::PlaybackActivationPhase::Committed;
+        });
+    }), "The first clip did not finish its initial activation.");
+    require(controller.seekTimeline(599) == playback::PlaybackCommandResult::Applied,
+            "Could not position the playhead immediately before the cut.");
+    require(waitUntil([&]() {
+        return fake_state->last_seek_frame.load(std::memory_order_acquire) == 599;
+    }), "The first clip seek did not reach the playback worker.");
+    require(waitUntil([&]() {
+        return session.playheadFrame() == 599;
+    }), "The first clip seek did not update the local playhead.");
+
+    fake_state->media_open_delay_ms.store(180, std::memory_order_release);
+    require(controller.play() == playback::PlaybackCommandResult::Applied,
+            "Playback did not start before the clip boundary.");
+    require(waitUntil([&]() {
+        return session.selection().active_clip_id == 2 && controller.isPlaying();
+    }), "The global playback clock did not remain active while opening the next clip.");
+    require(waitUntil([&]() {
+        const auto& preserved = session.preservedPlayheadFrameForUi();
+        return preserved.has_value() && *preserved >= 603;
+    }, 1000), "The timeline playhead stopped while the next clip was opening.");
+    require(controller.isPlaying(),
+            "Playback stopped while the next clip was opening.");
+
+    require(waitUntil([&]() {
+        return std::any_of(events.begin(), events.end(), [](const auto& event) {
+            const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+            return activation != nullptr && activation->clip_id == 2 &&
+                activation->phase == playback::PlaybackActivationPhase::Committed;
+        });
+    }), "The trimmed next clip did not commit after seeking to its current position.");
+    require(waitUntil([&]() {
+        return fake_state->last_seek_frame.load(std::memory_order_acquire) >= 3;
+    }), "The activation seek did not account for the moving timeline clock.");
+    require(controller.isPlaying(),
+            "Playback was not resumed after the trimmed clip's first current frame.");
+    require(session.preservedPlayheadFrameForUi().has_value() &&
+                *session.preservedPlayheadFrameForUi() <= 608,
+            "The Timeline clock switched to the second clip's different frame rate.");
+    require(!session.projectDirty(),
+            "Continuous playback unexpectedly marked the project as changed.");
+
+    require(controller.execute(playback::PlaybackCommand::Pause) ==
+                playback::PlaybackCommandResult::Applied,
+            "The continuous playback fixture did not pause cleanly.");
+    require(!controller.isPlaying(), "Pause left the global playback clock running.");
+    controller.shutdown();
+}
+
+void runPendingActivationCancellationTests() {
+    application::EditorSession session;
+    application::MediaController media_controller(session);
+    const auto first_source = std::filesystem::temp_directory_path() /
+        "playback-cancel-first.mkv";
+    const auto second_source = std::filesystem::temp_directory_path() /
+        "playback-cancel-second.mkv";
+    const auto first_media = makeMedia(first_source);
+    const auto second_media = makeMedia(second_source);
+    require(media_controller.commitImported(first_media).changed() &&
+                media_controller.commitImported(second_media).changed(),
+            "Could not seed the cancellation fixture media.");
+    auto& model = session.legacyTimelineForUi();
+    require(model.addTrack("Video 1") == timeline::AddTrackResult::Added &&
+                model.addClip(0, first_media.metadata, 0) == timeline::AddClipResult::Added &&
+                model.addClip(0, second_media.metadata, 3) == timeline::AddClipResult::Added,
+            "Could not seed the cancellation fixture timeline.");
+
+    auto fake_state = std::make_shared<FakeWorkerState>();
+    playback::PlaybackController controller(
+        session,
+        nullptr,
+        [fake_state]() { return new FakePlaybackWorker(fake_state); });
+    std::vector<playback::PlaybackControllerEvent> events;
+    controller.setEventHandler([&](const auto& event) { events.push_back(event); });
+    require(controller.activateClip(1, 2, false) ==
+                playback::PlaybackCommandResult::Pending,
+            "Could not activate the cancellation fixture's first clip.");
+    require(waitUntil([&]() {
+        return std::any_of(events.begin(), events.end(), [](const auto& event) {
+            const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+            return activation != nullptr && activation->clip_id == 1 &&
+                activation->phase == playback::PlaybackActivationPhase::Committed;
+        });
+    }), "The cancellation fixture's first clip did not activate.");
+
+    fake_state->media_open_delay_ms.store(220, std::memory_order_release);
+    require(controller.play() == playback::PlaybackCommandResult::Applied,
+            "Playback did not start in the cancellation fixture.");
+    require(waitUntil([&]() {
+        return session.selection().active_clip_id == 2 && controller.isPlaying();
+    }), "Playback did not reach the delayed second clip.");
+    controller.stop();
+    require(!controller.isPlaying(), "Stop left the Timeline clock running.");
+    QEventLoop settle_loop;
+    QTimer::singleShot(260, &settle_loop, &QEventLoop::quit);
+    settle_loop.exec();
+    require(!controller.isPlaying() &&
+                std::none_of(events.begin(), events.end(), [](const auto& event) {
+                    const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+                    return activation != nullptr && activation->clip_id == 2 &&
+                        activation->phase == playback::PlaybackActivationPhase::Committed;
+                }),
+            "A canceled activation resumed playback or committed a stale frame.");
+
+    require(controller.play() == playback::PlaybackCommandResult::Pending,
+            "Play did not retry the canceled clip activation.");
+    require(waitUntil([&]() {
+        return std::any_of(events.begin(), events.end(), [](const auto& event) {
+            const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+            return activation != nullptr && activation->clip_id == 2 &&
+                activation->phase == playback::PlaybackActivationPhase::Committed;
+        });
+    }), "The canceled clip did not activate on retry.");
+    require(controller.isPlaying(), "The retried clip did not resume playback.");
+    controller.pause();
+
+    const auto first_commits_before_return = std::count_if(
+        events.begin(), events.end(), [](const auto& event) {
+            const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+            return activation != nullptr && activation->clip_id == 1 &&
+                activation->phase == playback::PlaybackActivationPhase::Committed;
+        });
+    const auto return_to_first = controller.seekTimeline(0);
+    require(return_to_first == playback::PlaybackCommandResult::Pending,
+            "Seeking back to the first clip did not activate its media.");
+    require(waitUntil([&]() {
+        return session.selection().active_clip_id == 1 &&
+            std::count_if(events.begin(), events.end(), [](const auto& event) {
+                const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+                return activation != nullptr && activation->clip_id == 1 &&
+                    activation->phase == playback::PlaybackActivationPhase::Committed;
+            }) > first_commits_before_return;
+    }), "The first clip did not activate after the seek.");
+    fake_state->media_open_delay_ms.store(220, std::memory_order_release);
+    require(controller.play() == playback::PlaybackCommandResult::Applied,
+            "Playback did not restart from the seeked first clip.");
+    require(waitUntil([&]() {
+        return session.selection().active_clip_id == 2 && controller.isPlaying();
+    }), "Playback did not reach the delayed clip before the seek-cancellation check.");
+    const auto clip_two_commits_before_seek = std::count_if(
+        events.begin(), events.end(), [](const auto& event) {
+            const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+            return activation != nullptr && activation->clip_id == 2 &&
+                activation->phase == playback::PlaybackActivationPhase::Committed;
+        });
+    const auto first_commits_before_seek = std::count_if(
+        events.begin(), events.end(), [](const auto& event) {
+            const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+            return activation != nullptr && activation->clip_id == 1 &&
+                activation->phase == playback::PlaybackActivationPhase::Committed;
+        });
+    require(controller.seekTimeline(0) == playback::PlaybackCommandResult::Pending,
+            "Seeking during activation did not switch back to the requested clip.");
+    require(waitUntil([&]() {
+        return session.selection().active_clip_id == 1 &&
+            std::count_if(events.begin(), events.end(), [](const auto& event) {
+                const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+                return activation != nullptr && activation->clip_id == 1 &&
+                    activation->phase == playback::PlaybackActivationPhase::Committed;
+            }) > first_commits_before_seek;
+    }), "The seek during activation did not complete on the requested clip.");
+    require(!controller.isPlaying() &&
+                std::count_if(events.begin(), events.end(), [](const auto& event) {
+                    const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+                    return activation != nullptr && activation->clip_id == 2 &&
+                        activation->phase == playback::PlaybackActivationPhase::Committed;
+                }) == clip_two_commits_before_seek,
+            "Seeking during activation allowed the canceled clip to resume or commit a stale frame.");
+    controller.shutdown();
+}
+
+void runGapAndEndClockTests() {
+    const auto verify_finish = [](std::int64_t second_clip_start, bool expect_gap) {
+        application::EditorSession session;
+        application::MediaController media_controller(session);
+        const auto source = std::filesystem::temp_directory_path() /
+            (expect_gap ? "playback-clock-gap.mkv" : "playback-clock-end.mkv");
+        const auto media = makeMedia(source);
+        require(media_controller.commitImported(media).changed(),
+                "Could not seed a Timeline finish fixture.");
+        auto& model = session.legacyTimelineForUi();
+        require(model.addTrack("Video 1") == timeline::AddTrackResult::Added &&
+                    model.addClip(0, media.metadata, 0) == timeline::AddClipResult::Added,
+                "Could not seed the first Timeline finish clip.");
+        if (expect_gap) {
+            const auto later_source = std::filesystem::temp_directory_path() /
+                "playback-clock-gap-later.mkv";
+            const auto later_media = makeMedia(later_source);
+            require(media_controller.commitImported(later_media).changed() &&
+                        model.addClip(0, later_media.metadata, second_clip_start) ==
+                            timeline::AddClipResult::Added,
+                    "Could not seed the clip after the Timeline gap.");
+        }
+
+        auto fake_state = std::make_shared<FakeWorkerState>();
+        playback::PlaybackController controller(
+            session,
+            nullptr,
+            [fake_state]() { return new FakePlaybackWorker(fake_state); });
+        std::vector<playback::PlaybackControllerEvent> events;
+        controller.setEventHandler([&](const auto& event) { events.push_back(event); });
+        require(controller.activateClip(1, 1, false) ==
+                    playback::PlaybackCommandResult::Pending,
+                "Could not activate a Timeline finish fixture.");
+        require(waitUntil([&]() {
+            return std::any_of(events.begin(), events.end(), [](const auto& event) {
+                const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+                return activation != nullptr && activation->clip_id == 1 &&
+                    activation->phase == playback::PlaybackActivationPhase::Committed;
+            });
+        }), "A Timeline finish fixture did not activate.");
+        require(controller.play() == playback::PlaybackCommandResult::Applied,
+                "The Timeline finish fixture did not start.");
+        require(waitUntil([&]() {
+            return std::any_of(events.begin(), events.end(), [expect_gap](const auto& event) {
+                const auto* finished = std::get_if<playback::PlaybackFinishedEvent>(&event);
+                return finished != nullptr && finished->during_playback &&
+                    finished->gap == expect_gap;
+            });
+        }), expect_gap
+            ? "Playback did not stop at the Timeline gap."
+            : "Playback did not stop at the end of the Timeline.");
+        require(!controller.isPlaying(),
+                "The Timeline clock remained active after reaching a gap or the end.");
+        controller.shutdown();
+    };
+
+    verify_finish(5, true);
+    verify_finish(0, false);
+}
+
 void runControllerTests() {
     application::EditorSession session;
     application::MediaController media_controller(session);
@@ -283,10 +570,10 @@ void runControllerTests() {
             "Playback activation left the selected clip detached from its stable track ID.");
     const auto second_activation_generation = fake_worker->currentGeneration();
     require(fake_state->media_request_generation.load(std::memory_order_acquire) ==
-                second_activation_generation &&
-                fake_state->composition_request_generation.load(std::memory_order_acquire) ==
-                    second_activation_generation,
-            "A playback worker request lost its activation generation.");
+                second_activation_generation,
+            "The media worker request lost its activation generation.");
+    require(fake_state->composition_request_generation.load(std::memory_order_acquire) != 0,
+            "The reusable composition snapshot was not installed in the worker.");
     controller.renderCompositionFrame(5, 0);
     require(waitUntil([&]() {
         return fake_state->render_request_generation.load(std::memory_order_acquire) ==
@@ -329,7 +616,9 @@ void runControllerTests() {
         events.begin(), events.end(), [](const auto& event) {
             return std::holds_alternative<playback::PlaybackFrameEvent>(event);
         });
-    require(controller.seekTimeline(3) == playback::PlaybackCommandResult::Applied,
+    const auto seek_result = controller.seekTimeline(3);
+    require(seek_result == playback::PlaybackCommandResult::Applied ||
+                seek_result == playback::PlaybackCommandResult::Pending,
             "Seeking within the active clip was rejected.");
     require(waitUntil([&]() {
         return std::count_if(events.begin(), events.end(), [](const auto& event) {
@@ -458,6 +747,9 @@ int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
     try {
         runControllerTests();
+        runContinuousClockTests();
+        runPendingActivationCancellationTests();
+        runGapAndEndClockTests();
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

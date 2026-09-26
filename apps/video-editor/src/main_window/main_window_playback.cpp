@@ -680,6 +680,8 @@ void MainWindow::handlePlaybackEvent(
             handlePlaybackActivation(value);
         } else if constexpr (std::is_same_v<Event, playback::PlaybackFrameEvent>) {
             handlePlaybackFrame(value);
+        } else if constexpr (std::is_same_v<Event, playback::PlaybackPositionEvent>) {
+            handlePlaybackPosition(value);
         } else if constexpr (std::is_same_v<Event, playback::PlaybackStateEvent>) {
             handlePlaybackStateChanged(value.playing);
         } else if constexpr (std::is_same_v<Event, playback::PlaybackFinishedEvent>) {
@@ -702,7 +704,8 @@ void MainWindow::handlePlaybackActivation(
     switch (event.phase) {
     case playback::PlaybackActivationPhase::Pending:
         playback_activation_loading_ = true;
-        playback_is_playing_ = false;
+        playback_is_playing_ = playback_controller_ != nullptr &&
+            playback_controller_->isPlaying();
         if (const auto location = timeline_model_.locateClip(event.clip_id);
             location.has_value()) {
             setActiveTimelineSelection(*location);
@@ -725,7 +728,8 @@ void MainWindow::handlePlaybackActivation(
         if (event.clear_selection && active_timeline_clip_id_ == event.clip_id) {
             clearActiveTimelineSelection();
         }
-        playback_is_playing_ = false;
+        playback_is_playing_ = playback_controller_ != nullptr &&
+            playback_controller_->isPlaying();
         updateTimelineState();
         updatePlaybackControls();
         updatePlaybackStatus();
@@ -744,8 +748,19 @@ void MainWindow::handlePlaybackFrame(
     metrics.recordReceivedFrame();
     preview_widget_->setFrame(event.frame);
 
-    if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+    if ((playback_controller_ == nullptr || !playback_controller_->isPlaying()) &&
+        edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
         edit_workspace_->controller()->presentPlaybackFrame(event.frame_index);
+    }
+    updatePlaybackStatus();
+}
+
+void MainWindow::handlePlaybackPosition(
+    const playback::PlaybackPositionEvent& event) {
+    if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
+        edit_workspace_->controller()->presentPlaybackPosition(
+            static_cast<qint64>(event.timeline_frame),
+            static_cast<qint64>(event.clip_frame));
     }
     updatePlaybackStatus();
 }

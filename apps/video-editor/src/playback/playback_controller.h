@@ -7,8 +7,10 @@
 #include <QThread>
 #include <QObject>
 #include <QString>
+#include <QTimer>
 #include <QtGlobal>
 
+#include <chrono>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
@@ -49,6 +51,12 @@ struct PlaybackFrameEvent {
     timeline::ClipId clip_id = 0;
 };
 
+struct PlaybackPositionEvent {
+    std::int64_t timeline_frame = 0;
+    std::int64_t clip_frame = 0;
+    timeline::ClipId clip_id = 0;
+};
+
 struct PlaybackStateEvent {
     bool playing = false;
 };
@@ -77,6 +85,7 @@ struct PlaybackAudioWarningEvent {
 using PlaybackControllerEvent = std::variant<
     PlaybackActivationEvent,
     PlaybackFrameEvent,
+    PlaybackPositionEvent,
     PlaybackStateEvent,
     PlaybackFinishedEvent,
     PlaybackErrorEvent,
@@ -155,9 +164,18 @@ private:
         qint64 frame_index,
         quint64 generation);
     void drainFrameMailbox();
+    void updateTimelineClock();
+    void startTimelineClock(std::int64_t timeline_frame);
+    void stopTimelineClock();
+    void publishTimelinePosition(
+        std::int64_t timeline_frame,
+        const timeline::ClipLocation& location);
+    [[nodiscard]] double timelineFrameRate() const noexcept;
+    [[nodiscard]] std::int64_t timelineClockFrame() const noexcept;
     void emitEvent(PlaybackControllerEvent event);
     void setGeneration(quint64 generation) noexcept;
     void discardPendingActivation(bool clear_selection);
+    void cancelPendingActivation();
     [[nodiscard]] bool validatePendingActivation() const;
     [[nodiscard]] std::optional<timeline::ClipLocation> activeClipLocation() const noexcept;
     [[nodiscard]] std::int64_t timelineFrame() const noexcept;
@@ -171,6 +189,16 @@ private:
     PlaybackFrameMailbox frame_mailbox_;
     EventHandler event_handler_;
     std::optional<PendingActivation> pending_activation_;
+    QTimer timeline_clock_timer_;
+    using Clock = std::chrono::steady_clock;
+    Clock::time_point timeline_clock_started_at_{};
+    std::int64_t timeline_clock_origin_frame_ = 0;
+    std::int64_t last_timeline_clock_frame_ = 0;
+    double timeline_clock_frame_rate_ = 30.0;
+    bool timeline_clock_active_ = false;
+    bool composition_ready_ = false;
+    std::optional<timeline::ClipId> ready_clip_id_;
+    std::atomic<quint64> composition_revision_{0};
     quint64 generation_ = 0;
     std::atomic<quint64> published_generation_{0};
     std::atomic_bool shutting_down_{false};

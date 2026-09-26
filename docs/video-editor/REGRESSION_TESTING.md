@@ -29,7 +29,8 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Structured logging | File creation, required fields, escaping, rotation, retention limit |
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions, PNG/JPEG/BMP/WebP/TIFF still-image probing, RGBA transparency, 150-frame defaults, and animated-GIF rejection |
 | Playback session | Sequential frames, forward catch-up without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
-| Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, final composition-cache reuse and invalidation, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
+| Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, composition decoder-session reuse across media activation, final composition-cache reuse and invalidation, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
+| Playback controller | Monotonic Timeline clock using the first valid clip rate or 30 fps; continuous playhead during delayed media activation; trimmed source in-point seek; current-position seek before playback resumes; stale-frame rejection; pending activation cancellation on Pause, Stop, and seek; and clean project dirty state |
 | Playback transition plan | Cross Dissolve held outgoing frame and incoming blend at its first, middle, and final frames; Fade to Black on both sides of the cut; one-frame durations; inactive and invalid transitions; unaffected layers on other tracks |
 | Frame-step navigation | Worker steps within a clip; forward/backward activation at contiguous junctions, one-frame clips, gaps and Timeline limits, media overlaps and cross-track priority, transitions, and missing or invalid active clip locations |
 | Timeline model | Tracks, ordering, gaps, overlap rules, movement, split, rolling and individual edge trims, one-sided media overlap and top-clip priority, video source limits, still-image/text extension, delete, metadata, canonical multi-track snapshots, history, Undo, and Redo |
@@ -107,6 +108,13 @@ in the running Video Editor after UI or integration changes:
   history should change only when the corresponding edit requires it. The
   existing widget, workspace selector, and Timeline end-button tests cover
   those components, but do not instantiate the application `MainWindow`;
+- Playback across clip boundaries: play adjacent clips with different source
+  in-points and confirm the Timeline playhead advances continuously while each
+  next clip opens. Confirm the preview switches to the current Timeline position
+  instead of restarting at source frame zero; if opening takes longer than one
+  frame, older preview frames may be skipped. Pause, Stop, seek, and edit during
+  a pending activation and confirm stale frames do not reappear and the project
+  dirty state changes only for the actual edit;
 - Workspace pages: confirm startup selects Edit; click the blank Fusion button
   and confirm the existing Preview is labeled `Viewer`, the bottom dock title
   changes to `Node Editor`, the Timeline is hidden, and the Inspector shows the

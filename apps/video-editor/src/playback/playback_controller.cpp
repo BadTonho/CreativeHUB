@@ -33,7 +33,8 @@ PlaybackController::PlaybackController(
     WorkerFactory worker_factory)
     : QObject(parent),
       session_(session),
-      worker_factory_(std::move(worker_factory)) {
+      worker_factory_(std::move(worker_factory)),
+      timeline_clock_timer_(this) {
     qRegisterMetaType<VideoFramePtr>();
     qRegisterMetaType<CompositionLayerSpec>();
     qRegisterMetaType<QVector<CompositionLayerSpec>>();
@@ -42,6 +43,13 @@ PlaybackController::PlaybackController(
 
     worker_ = worker_factory_ ? worker_factory_() : new PlaybackWorker;
     if (worker_ == nullptr) return;
+    timeline_clock_timer_.setTimerType(Qt::PreciseTimer);
+    timeline_clock_timer_.setInterval(16);
+    QObject::connect(
+        &timeline_clock_timer_,
+        &QTimer::timeout,
+        this,
+        &PlaybackController::updateTimelineClock);
     worker_->moveToThread(&worker_thread_);
 
     QObject::connect(
@@ -115,6 +123,7 @@ void PlaybackController::setEventHandler(EventHandler handler) {
 
 void PlaybackController::shutdown() noexcept {
     if (shutting_down_.exchange(true, std::memory_order_acq_rel)) return;
+    stopTimelineClock();
     pending_activation_.reset();
     playing_ = false;
     frame_mailbox_.clearPending();
@@ -154,7 +163,13 @@ void PlaybackController::queueWorker(
     auto* worker = worker_;
     QMetaObject::invokeMethod(
         worker,
-        [worker, operation = std::move(operation)]() mutable {
+        [this, worker, request_generation,
+         operation = std::move(operation)]() mutable {
+            if (request_generation.has_value() &&
+                published_generation_.load(std::memory_order_acquire) !=
+                    *request_generation) {
+                return;
+            }
             if (worker != nullptr) operation(*worker);
         },
         Qt::QueuedConnection);
@@ -171,6 +186,12 @@ void PlaybackController::requestSeekForGeneration(
 
 void PlaybackController::refreshComposition() {
     if (!available()) return;
+    composition_ready_ = true;
+    auto revision = composition_revision_.fetch_add(1, std::memory_order_acq_rel) + 1;
+    if (revision == 0) {
+        composition_revision_.store(1, std::memory_order_release);
+        revision = 1;
+    }
 
     QVector<CompositionLayerSpec> layers;
     QVector<CompositionTransitionSpec> transitions;
@@ -252,12 +273,15 @@ void PlaybackController::refreshComposition() {
             active_clip = static_cast<qint64>(location->clip_index);
         }
     }
-    queueWorker([active_track, active_clip, layers = std::move(layers),
-                 transitions = std::move(transitions), generation = generation_]
+    queueWorker([this, revision, active_track, active_clip,
+                 layers = std::move(layers),
+                 transitions = std::move(transitions)]
                 (PlaybackWorker& worker) mutable {
+        if (composition_revision_.load(std::memory_order_acquire) != revision) return;
+        const auto generation = published_generation_.load(std::memory_order_acquire);
         worker.setActiveCompositionClip(active_track, active_clip);
         worker.setComposition(std::move(layers), std::move(transitions), generation);
-    }, generation_);
+    });
 }
 
 void PlaybackController::setMonitorVolume(double gain) {
@@ -293,10 +317,21 @@ void PlaybackController::discardPendingActivation(bool clear_selection) {
         selection.active_track_id.reset();
         session_.assertInvariants();
     }
-    playing_ = false;
+    playing_ = timeline_clock_active_;
     emitEvent(PlaybackActivationEvent{
         clip_id, PlaybackActivationPhase::Discarded, 0, false, preserve,
         clear_selection});
+}
+
+void PlaybackController::cancelPendingActivation() {
+    if (!pending_activation_.has_value()) return;
+    if (generation_ == std::numeric_limits<quint64>::max()) setGeneration(1);
+    else setGeneration(generation_ + 1);
+    discardPendingActivation(false);
+    const auto generation = generation_;
+    queueWorker([generation](PlaybackWorker& worker) {
+        worker.cancelActivation(generation);
+    });
 }
 
 bool PlaybackController::validatePendingActivation() const {
@@ -313,6 +348,8 @@ bool PlaybackController::validatePendingActivation() const {
 }
 
 void PlaybackController::invalidate(bool stop_worker) {
+    stopTimelineClock();
+    composition_revision_.fetch_add(1, std::memory_order_acq_rel);
     if (generation_ == std::numeric_limits<quint64>::max()) {
         setGeneration(1);
     } else {
@@ -320,29 +357,51 @@ void PlaybackController::invalidate(bool stop_worker) {
     }
     discardPendingActivation(false);
     playing_ = false;
+    composition_ready_ = false;
+    ready_clip_id_.reset();
     if (stop_worker) stop();
     else pause();
 }
 
 void PlaybackController::pause() {
     if (!available()) return;
+    if (timeline_clock_active_) updateTimelineClock();
+    cancelPendingActivation();
+    stopTimelineClock();
+    playing_ = false;
     queueWorker([](PlaybackWorker& worker) { worker.pause(); });
 }
 
 void PlaybackController::stop() {
     if (!available()) return;
+    if (timeline_clock_active_) updateTimelineClock();
+    cancelPendingActivation();
+    stopTimelineClock();
+    playing_ = false;
     queueWorker([](PlaybackWorker& worker) { worker.stop(); });
 }
 
 void PlaybackController::seekActiveClip(std::int64_t local_frame) {
+    if (!available()) return;
+    if (timeline_clock_active_) updateTimelineClock();
+    stopTimelineClock();
     const auto location = activeClipLocation();
-    if (!location.has_value() || !available()) return;
+    if (!location.has_value()) return;
     const auto& clip = session_.timeline().tracks()[location->track_index]
         .clips[location->clip_index];
     const auto clamped = std::clamp<std::int64_t>(
         local_frame, 0, std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
-    refreshComposition();
+    if (pending_activation_.has_value()) {
+        const auto clip_id = clip.clip_id;
+        cancelPendingActivation();
+        (void)activateClip(clip_id, clamped, false);
+        return;
+    }
+    cancelPendingActivation();
     session_.setPlayheadFrame(clamped);
+    const auto global_frame = clip.timeline_start_frame + clamped;
+    session_.preservedPlayheadFrameForUi() = global_frame;
+    emitEvent(PlaybackPositionEvent{global_frame, clamped, clip.clip_id});
     requestSeekForGeneration(static_cast<qint64>(clamped), generation_);
 }
 
@@ -350,7 +409,7 @@ void PlaybackController::renderCompositionFrame(
     std::int64_t global_frame,
     std::int64_t local_frame) {
     if (!available()) return;
-    refreshComposition();
+    if (!composition_ready_) refreshComposition();
     const auto generation = generation_;
     queueWorker([global_frame, local_frame, generation](PlaybackWorker& worker) {
         worker.renderCompositionFrame(
@@ -392,17 +451,35 @@ PlaybackCommandResult PlaybackController::activateClip(
     selection.active_track_id = track.track_id;
     selection.active_clip_id = clip.clip_id;
     session_.assertInvariants();
+    ready_clip_id_.reset();
     if (!preserve_timeline_playhead) {
         session_.preservedPlayheadFrameForUi().reset();
     }
-    playing_ = false;
+    session_.setPlayheadFrame(local_frame);
+    if (resume_playback && !timeline_clock_active_) {
+        startTimelineClock(clip.timeline_start_frame + local_frame);
+    }
+    if (timeline_clock_active_) {
+        publishTimelinePosition(
+            clip.timeline_start_frame + local_frame, *location);
+    }
+    playing_ = timeline_clock_active_ || resume_playback;
 
     if (clip.kind == timeline::ClipKind::Text || clip.kind == timeline::ClipKind::Image) {
-        session_.setPlayheadFrame(local_frame);
-        refreshComposition();
+        if (composition_ready_) {
+            const auto worker_track_index = static_cast<qint64>(location->track_index);
+            const auto worker_clip_index = static_cast<qint64>(location->clip_index);
+            const auto generation = generation_;
+            queueWorker([worker_track_index, worker_clip_index](PlaybackWorker& worker) {
+                worker.setActiveCompositionClip(worker_track_index, worker_clip_index);
+            }, generation);
+        } else {
+            refreshComposition();
+        }
         emitEvent(PlaybackActivationEvent{
             clip_id, PlaybackActivationPhase::Committed, local_frame, false,
             preserve_timeline_playhead});
+        ready_clip_id_ = clip_id;
         renderCompositionFrame(timelineFrame(), local_frame);
         if (resume_playback) queueWorker([](PlaybackWorker& worker) { worker.play(); });
         return PlaybackCommandResult::Applied;
@@ -442,7 +519,13 @@ PlaybackCommandResult PlaybackController::activateClip(
             track_gain, track_muted, clip_gain, clip_muted,
             track_index, clip_index, generation);
     }, generation);
-    refreshComposition();
+    if (composition_ready_) {
+        queueWorker([track_index, clip_index](PlaybackWorker& worker) {
+            worker.setActiveCompositionClip(track_index, clip_index);
+        }, generation);
+    } else {
+        refreshComposition();
+    }
     return PlaybackCommandResult::Pending;
 }
 
@@ -499,10 +582,18 @@ PlaybackCommandResult PlaybackController::play() {
     const bool same_clip = active.has_value() &&
         session_.timeline().tracks()[active->track_index].clips[active->clip_index].clip_id ==
             clip.clip_id;
-    if (!same_clip) {
+    const bool ready = same_clip &&
+        (ready_clip_id_ == clip.clip_id ||
+         clip.kind == timeline::ClipKind::Text ||
+         clip.kind == timeline::ClipKind::Image);
+    if (!ready) {
         const auto local = target_frame - clip.timeline_start_frame;
         return activateClip(clip.clip_id, local, true, true);
     }
+    startTimelineClock(target_frame);
+    publishTimelinePosition(target_frame, *destination);
+    playing_ = true;
+    emitEvent(PlaybackStateEvent{true});
     queueWorker([](PlaybackWorker& worker) { worker.play(); });
     return PlaybackCommandResult::Applied;
 }
@@ -513,7 +604,6 @@ PlaybackCommandResult PlaybackController::execute(PlaybackCommand command) {
         return play();
     case PlaybackCommand::Pause:
         if (!available()) return PlaybackCommandResult::Unavailable;
-        if (pending_activation_.has_value()) return PlaybackCommandResult::Pending;
         pause();
         return PlaybackCommandResult::Applied;
     case PlaybackCommand::StepForward:
@@ -526,7 +616,10 @@ PlaybackCommandResult PlaybackController::execute(PlaybackCommand command) {
 
 PlaybackCommandResult PlaybackController::step(PlaybackStepDirection direction) {
     if (!available()) return PlaybackCommandResult::Unavailable;
-    if (pending_activation_.has_value()) return PlaybackCommandResult::Pending;
+    if (timeline_clock_active_) updateTimelineClock();
+    stopTimelineClock();
+    cancelPendingActivation();
+    playing_ = false;
     const auto active = activeClipLocation();
     if (!active.has_value()) return PlaybackCommandResult::NoClip;
     const auto& clip = session_.timeline().tracks()[active->track_index]
@@ -541,6 +634,9 @@ PlaybackCommandResult PlaybackController::step(PlaybackStepDirection direction) 
             : detail::FrameStepDirection::Backward);
     switch (decision.action) {
     case detail::FrameStepAction::StepWorker:
+        if (ready_clip_id_ != clip.clip_id) {
+            return activateClip(clip.clip_id, decision.local_frame, false);
+        }
         queueWorker([direction](PlaybackWorker& worker) {
             if (direction == PlaybackStepDirection::Forward) worker.stepForward();
             else worker.stepBackward();
@@ -565,7 +661,9 @@ PlaybackCommandResult PlaybackController::step(PlaybackStepDirection direction) 
 
 PlaybackCommandResult PlaybackController::seekTimeline(std::int64_t global_frame) {
     if (!available()) return PlaybackCommandResult::Unavailable;
-    if (pending_activation_.has_value()) return PlaybackCommandResult::Pending;
+    if (timeline_clock_active_) updateTimelineClock();
+    stopTimelineClock();
+    cancelPendingActivation();
     const auto total = session_.timeline().totalDurationFrames();
     if (total <= 0) return PlaybackCommandResult::NoClip;
     const auto target = std::clamp<std::int64_t>(global_frame, 0, total - 1);
@@ -586,13 +684,13 @@ PlaybackCommandResult PlaybackController::seekTimeline(std::int64_t global_frame
     const bool same_clip = active.has_value() &&
         session_.timeline().tracks()[active->track_index].clips[active->clip_index].clip_id ==
             clip.clip_id;
-    if (!same_clip || clip.kind == timeline::ClipKind::Text ||
+    if (!same_clip || ready_clip_id_ != clip.clip_id ||
+        clip.kind == timeline::ClipKind::Text ||
         clip.kind == timeline::ClipKind::Image) {
         return activateClip(clip.clip_id, local, false);
     }
     if (!clipCanPlay(clip)) return PlaybackCommandResult::Rejected;
     session_.setPlayheadFrame(local);
-    refreshComposition();
     requestSeekForGeneration(static_cast<qint64>(local), generation_);
     return PlaybackCommandResult::Applied;
 }
@@ -604,26 +702,13 @@ void PlaybackController::handleWorkerMediaReady(quint64 generation) {
         discardPendingActivation(true);
         return;
     }
-    const auto pending = *pending_activation_;
-    if (pending.target_frame > 0 || pending.source_start_frame > 0) {
-        if (worker_ != nullptr) {
-            requestSeekForGeneration(static_cast<qint64>(pending.target_frame), generation);
-        }
-        return;
-    }
-    pending_activation_.reset();
-    session_.setPlayheadFrame(0);
-    emitEvent(PlaybackActivationEvent{
-        pending.clip_id, PlaybackActivationPhase::Committed, 0, true,
-        pending.preserve_timeline_playhead});
-    requestSeekForGeneration(0, generation);
-    if (pending.resume_playback) {
-        queueWorker([](PlaybackWorker& worker) { worker.play(); });
-    }
+    requestSeekForGeneration(
+        static_cast<qint64>(pending_activation_->target_frame), generation);
 }
 
 void PlaybackController::handleWorkerStateChanged(bool playing, quint64 generation) {
     if (generation != generation_) return;
+    if (timeline_clock_active_ && !playing) return;
     playing_ = playing;
     emitEvent(PlaybackStateEvent{playing});
 }
@@ -632,6 +717,11 @@ void PlaybackController::handleWorkerFinished(
     quint64 generation,
     bool during_playback) {
     if (generation != generation_) return;
+    if (during_playback && timeline_clock_active_) {
+        updateTimelineClock();
+        return;
+    }
+    if (during_playback && !playing_) return;
     playing_ = false;
     bool gap = false;
     if (during_playback) {
@@ -661,6 +751,9 @@ void PlaybackController::handleWorkerError(
     qint64 error_code,
     quint64 generation) {
     if (generation != generation_) return;
+    stopTimelineClock();
+    ready_clip_id_.reset();
+    composition_ready_ = false;
     PlaybackErrorEvent event;
     event.message = message;
     event.error_code = error_code;
@@ -716,26 +809,70 @@ void PlaybackController::drainFrameMailbox() {
     const auto packet = frame_mailbox_.take();
     if (packet.has_value() && packet->generation == generation_ &&
         packet->frame != nullptr) {
+        bool present_packet = true;
         if (pending_activation_.has_value() &&
             pending_activation_->generation == packet->generation) {
             if (!validatePendingActivation()) {
                 discardPendingActivation(true);
             } else {
-                const auto pending = *pending_activation_;
-                pending_activation_.reset();
-                session_.setPlayheadFrame(packet->frame_index);
-                emitEvent(PlaybackActivationEvent{
-                    pending.clip_id, PlaybackActivationPhase::Committed,
-                    packet->frame_index, false,
-                    pending.preserve_timeline_playhead});
+                if (timeline_clock_active_ &&
+                    pending_activation_->resume_playback &&
+                    ((packet->frame_index < pending_activation_->target_frame &&
+                      pending_activation_->target_frame - packet->frame_index > 1) ||
+                     (packet->frame_index > pending_activation_->target_frame &&
+                      packet->frame_index - pending_activation_->target_frame > 1))) {
+                    requestSeekForGeneration(
+                        static_cast<qint64>(pending_activation_->target_frame),
+                        packet->generation);
+                    present_packet = false;
+                }
+                if (present_packet) {
+                    const auto pending = *pending_activation_;
+                    pending_activation_.reset();
+                    ready_clip_id_ = pending.clip_id;
+                    session_.setPlayheadFrame(packet->frame_index);
+                    emitEvent(PlaybackActivationEvent{
+                        pending.clip_id, PlaybackActivationPhase::Committed,
+                        packet->frame_index, false,
+                        pending.preserve_timeline_playhead});
+                    if (pending.resume_playback && timeline_clock_active_) {
+                        playing_ = true;
+                        queueWorker([](PlaybackWorker& worker) { worker.play(); },
+                                    packet->generation);
+                    }
+                }
             }
         } else {
-            session_.preservedPlayheadFrameForUi().reset();
-            session_.setPlayheadFrame(packet->frame_index);
+            const auto active = activeClipLocation();
+            if (timeline_clock_active_ && active.has_value()) {
+                const auto& clip = session_.timeline().tracks()[active->track_index]
+                    .clips[active->clip_index];
+                const auto expected_global = timelineClockFrame();
+                const auto expected_local = expected_global - clip.timeline_start_frame;
+                if (packet->frame_index < expected_local &&
+                    expected_local - packet->frame_index > 1) {
+                    present_packet = false;
+                }
+            } else {
+                session_.preservedPlayheadFrameForUi().reset();
+                session_.setPlayheadFrame(packet->frame_index);
+                if (const auto location = activeClipLocation(); location.has_value()) {
+                    const auto& clip = session_.timeline().tracks()[location->track_index]
+                        .clips[location->clip_index];
+                    const auto local_frame = std::clamp<std::int64_t>(
+                        packet->frame_index,
+                        0,
+                        std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
+                    emitEvent(PlaybackPositionEvent{
+                        clip.timeline_start_frame + local_frame,
+                        local_frame,
+                        clip.clip_id});
+                }
+            }
         }
 
         const auto active_after = activeClipLocation();
-        if (active_after.has_value()) {
+        if (present_packet && active_after.has_value()) {
             const auto& clip = session_.timeline().tracks()[active_after->track_index]
                 .clips[active_after->clip_index];
             emitEvent(PlaybackFrameEvent{
@@ -743,25 +880,6 @@ void PlaybackController::drainFrameMailbox() {
                 packet->frame_index,
                 clip.clip_id});
 
-            if (playing_ && clip.kind != timeline::ClipKind::Text &&
-                clip.kind != timeline::ClipKind::Image) {
-                const auto global_frame = clip.timeline_start_frame +
-                    std::clamp<std::int64_t>(
-                        packet->frame_index, 0,
-                        std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
-                const auto visible = session_.timeline().topClipAt(global_frame);
-                if (visible.has_value()) {
-                    const auto& visible_clip = session_.timeline().tracks()[visible->track_index]
-                        .clips[visible->clip_index];
-                    if (visible_clip.clip_id != clip.clip_id &&
-                        timeline::isMediaClipKind(visible_clip.kind)) {
-                        const auto local = global_frame - visible_clip.timeline_start_frame;
-                        if (local >= 0 && local < visible_clip.timeline_duration_frames) {
-                            (void)activateClip(visible_clip.clip_id, local, true, true);
-                        }
-                    }
-                }
-            }
         }
     }
     if (frame_mailbox_.finishDispatch()) {
@@ -770,6 +888,151 @@ void PlaybackController::drainFrameMailbox() {
             [this]() { drainFrameMailbox(); },
             Qt::QueuedConnection);
     }
+}
+
+void PlaybackController::updateTimelineClock() {
+    if (!timeline_clock_active_) return;
+    const auto total = session_.timeline().totalDurationFrames();
+    if (total <= 0) {
+        stopTimelineClock();
+        playing_ = false;
+        queueWorker([](PlaybackWorker& worker) { worker.pause(); });
+        emitEvent(PlaybackFinishedEvent{true, false});
+        emitEvent(PlaybackStateEvent{false});
+        return;
+    }
+
+    const auto raw_frame = timelineClockFrame();
+    const bool reached_end = raw_frame >= total;
+    const auto frame = std::clamp<std::int64_t>(raw_frame, 0, total - 1);
+    const auto destination = session_.timeline().topClipAt(frame);
+    if (!destination.has_value()) {
+        session_.preservedPlayheadFrameForUi() = frame;
+        if (frame != last_timeline_clock_frame_) {
+            last_timeline_clock_frame_ = frame;
+            emitEvent(PlaybackPositionEvent{frame, session_.playheadFrame(), 0});
+        }
+        const bool gap = hasFutureClip(frame);
+        stopTimelineClock();
+        playing_ = false;
+        queueWorker([](PlaybackWorker& worker) { worker.pause(); });
+        emitEvent(PlaybackFinishedEvent{true, gap});
+        emitEvent(PlaybackStateEvent{false});
+        return;
+    }
+
+    const auto& clip = session_.timeline().tracks()[destination->track_index]
+        .clips[destination->clip_index];
+    const auto local_frame = std::clamp<std::int64_t>(
+        frame - clip.timeline_start_frame,
+        0,
+        std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
+    publishTimelinePosition(frame, *destination);
+
+    const bool destination_is_pending = pending_activation_.has_value() &&
+        pending_activation_->clip_id == clip.clip_id;
+    if (destination_is_pending) {
+        pending_activation_->target_frame = local_frame;
+    } else if (!activeClipLocation().has_value() ||
+        session_.selection().active_clip_id != clip.clip_id) {
+        const auto result = activateClip(
+            clip.clip_id, local_frame, !reached_end, true);
+        if (result == PlaybackCommandResult::Rejected ||
+            result == PlaybackCommandResult::Unavailable) {
+            stopTimelineClock();
+            playing_ = false;
+            queueWorker([](PlaybackWorker& worker) { worker.pause(); });
+            emitEvent(PlaybackFinishedEvent{true, hasFutureClip(frame)});
+            emitEvent(PlaybackStateEvent{false});
+            return;
+        }
+    } else {
+        session_.setPlayheadFrame(local_frame);
+    }
+
+    if (reached_end) {
+        if (pending_activation_.has_value()) {
+            pending_activation_->resume_playback = false;
+        }
+        stopTimelineClock();
+        playing_ = false;
+        queueWorker([](PlaybackWorker& worker) { worker.pause(); });
+        emitEvent(PlaybackFinishedEvent{true, false});
+        emitEvent(PlaybackStateEvent{false});
+    }
+}
+
+void PlaybackController::startTimelineClock(std::int64_t timeline_frame) {
+    if (timeline_clock_active_) return;
+    timeline_clock_origin_frame_ = std::max<std::int64_t>(0, timeline_frame);
+    last_timeline_clock_frame_ = timeline_clock_origin_frame_ - 1;
+    timeline_clock_frame_rate_ = timelineFrameRate();
+    timeline_clock_started_at_ = Clock::now();
+    timeline_clock_active_ = true;
+    playing_ = true;
+    timeline_clock_timer_.start();
+    emitEvent(PlaybackStateEvent{true});
+}
+
+void PlaybackController::stopTimelineClock() {
+    timeline_clock_active_ = false;
+    timeline_clock_timer_.stop();
+}
+
+void PlaybackController::publishTimelinePosition(
+    std::int64_t timeline_frame,
+    const timeline::ClipLocation& location) {
+    if (location.track_index >= session_.timeline().trackCount() ||
+        location.clip_index >= session_.timeline().clipCount(location.track_index)) {
+        return;
+    }
+    const auto& clip = session_.timeline().tracks()[location.track_index]
+        .clips[location.clip_index];
+    const auto local_frame = std::clamp<std::int64_t>(
+        timeline_frame - clip.timeline_start_frame,
+        0,
+        std::max<std::int64_t>(0, clip.timeline_duration_frames - 1));
+    session_.preservedPlayheadFrameForUi() = timeline_frame;
+    session_.setPlayheadFrame(local_frame);
+    if (timeline_frame == last_timeline_clock_frame_) return;
+    last_timeline_clock_frame_ = timeline_frame;
+    emitEvent(PlaybackPositionEvent{
+        timeline_frame, local_frame, clip.clip_id});
+}
+
+double PlaybackController::timelineFrameRate() const noexcept {
+    for (const auto& track : session_.timeline().tracks()) {
+        for (const auto& clip : track.clips) {
+            if (clip.frame_rate.has_value() &&
+                std::isfinite(*clip.frame_rate) && *clip.frame_rate > 0.0) {
+                return *clip.frame_rate;
+            }
+        }
+    }
+    return 30.0;
+}
+
+std::int64_t PlaybackController::timelineClockFrame() const noexcept {
+    if (!timeline_clock_active_ || timeline_clock_frame_rate_ <= 0.0) {
+        return last_timeline_clock_frame_;
+    }
+    const auto elapsed = std::chrono::duration<double>(
+        Clock::now() - timeline_clock_started_at_).count();
+    const auto frame_offset = static_cast<long double>(elapsed) *
+        static_cast<long double>(timeline_clock_frame_rate_);
+    if (!std::isfinite(frame_offset) ||
+        frame_offset >= static_cast<long double>(
+            std::numeric_limits<std::int64_t>::max())) {
+        return std::numeric_limits<std::int64_t>::max();
+    }
+    const auto offset = static_cast<std::int64_t>(
+        std::max<long double>(0.0L, std::floor(frame_offset)));
+    if (offset > std::numeric_limits<std::int64_t>::max() -
+            timeline_clock_origin_frame_) {
+        return std::numeric_limits<std::int64_t>::max();
+    }
+    return std::max(
+        last_timeline_clock_frame_, timeline_clock_origin_frame_ + offset);
 }
 
 void PlaybackController::emitEvent(PlaybackControllerEvent event) {

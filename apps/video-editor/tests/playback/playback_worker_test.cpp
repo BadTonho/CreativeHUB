@@ -659,6 +659,66 @@ void validateCompositionPlayback(
             "Composition playback start-to-presentation timing was not recorded.");
 }
 
+void validateCompositionReuseAcrossMediaActivation(
+    QCoreApplication& application,
+    const std::filesystem::path& path) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
+
+    playback::PlaybackWorker worker;
+    bool received_frame = false;
+    bool playback_error = false;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&received_frame](playback::VideoFramePtr frame, qint64, quint64) {
+            received_frame = frame != nullptr;
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&application, &playback_error](const QString&, qint64, quint64) {
+            playback_error = true;
+            application.quit();
+        });
+
+    playback::CompositionLayerSpec layer;
+    layer.source_path = toQString(path);
+    layer.frame_rate = 30.0;
+    layer.timeline_start_frame = 0;
+    layer.source_start_frame = 0;
+    layer.segment_frame_count = 30;
+    layer.track_index = 0;
+    layer.clip_index = 0;
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition(
+        QVector<playback::CompositionLayerSpec>{layer},
+        {},
+        810);
+    worker.setMedia(
+        toQString(path), 30.0, 0, 30, 1.0, false, 1.0, false, 0, 0, 811);
+    worker.requestSeek(0, 811);
+
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(
+        &timeout,
+        &QTimer::timeout,
+        &application,
+        &QCoreApplication::quit);
+    timeout.start(5000);
+    application.exec();
+
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    metrics.setEnabled(false);
+    require(!playback_error && received_frame,
+            "Media activation discarded a ready composition decoder session.");
+    require(snapshot.composition_setup.count == 1 && snapshot.media_open.count == 1 &&
+                snapshot.composed_frames > 0,
+            "Media activation reopened or disabled the prepared composition session.");
+}
+
 void validateCompositionSeekMetrics(
     QCoreApplication& application,
     const std::filesystem::path& path) {
@@ -1170,6 +1230,8 @@ int main(int argc, char* argv[]) {
             validateSegmentRange(application, std::filesystem::path(argv[1]));
             validateCompositionTransitions(std::filesystem::path(argv[1]));
             validateCompositionPlayback(application, std::filesystem::path(argv[1]));
+            validateCompositionReuseAcrossMediaActivation(
+                application, std::filesystem::path(argv[1]));
             validateCompositionSeekMetrics(application, std::filesystem::path(argv[1]));
             validateCompositionDecodeCatchup(application, std::filesystem::path(argv[1]));
             validateDirectDecodeCatchup(application, std::filesystem::path(argv[1]));
