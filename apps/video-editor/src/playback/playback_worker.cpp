@@ -359,6 +359,18 @@ void PlaybackWorker::setMonitorVolume(double gain) {
     }
 }
 
+void PlaybackWorker::setPreviewQuality(PreviewQuality quality) {
+    if (quality != PreviewQuality::Full &&
+        quality != PreviewQuality::Half &&
+        quality != PreviewQuality::Quarter) {
+        quality = PreviewQuality::Full;
+    }
+    if (preview_quality_ == quality) return;
+
+    preview_quality_ = quality;
+    clearCompositionCache();
+}
+
 void PlaybackWorker::setComposition(
     QVector<CompositionLayerSpec> layers,
     QVector<CompositionTransitionSpec> transitions,
@@ -1332,7 +1344,21 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
         }
         layers.push_back(std::move(layer));
     }
-    return rendering::FrameCompositor::compose(1920, 1080, layers);
+    int width = 1920;
+    int height = 1080;
+    switch (preview_quality_) {
+    case PreviewQuality::Half:
+        width /= 2;
+        height /= 2;
+        break;
+    case PreviewQuality::Quarter:
+        width /= 4;
+        height /= 4;
+        break;
+    case PreviewQuality::Full:
+        break;
+    }
+    return rendering::FrameCompositor::compose(width, height, layers);
 }
 
 void PlaybackWorker::reportFailure(

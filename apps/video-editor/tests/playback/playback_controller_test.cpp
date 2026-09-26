@@ -44,6 +44,8 @@ struct FakeWorkerState {
     std::atomic<quint64> media_request_generation{0};
     std::atomic<quint64> composition_request_generation{0};
     std::atomic<quint64> render_request_generation{0};
+    std::atomic<int> render_request_count{0};
+    std::atomic<int> preview_quality_value{-1};
     std::atomic<quint64> seek_request_generation{0};
     std::atomic<qint64> last_seek_frame{-1};
     std::atomic<int> media_open_delay_ms{0};
@@ -96,6 +98,10 @@ public:
 
     void setAudioParameters(double, bool, double, bool) override {}
     void setMonitorVolume(double) override {}
+    void setPreviewQuality(playback::PreviewQuality quality) override {
+        state_->preview_quality_value.store(
+            static_cast<int>(quality), std::memory_order_release);
+    }
     void setComposition(
         QVector<playback::CompositionLayerSpec>,
         QVector<playback::CompositionTransitionSpec>,
@@ -107,6 +113,7 @@ public:
 
     void renderCompositionFrame(qint64, qint64 frame, quint64 generation) override {
         state_->render_request_generation.store(generation, std::memory_order_release);
+        state_->render_request_count.fetch_add(1, std::memory_order_acq_rel);
         generation_.store(generation, std::memory_order_release);
         emit frameReady(makeFrame(static_cast<int>(frame)), frame, generation);
     }
@@ -579,6 +586,20 @@ void runControllerTests() {
         return fake_state->render_request_generation.load(std::memory_order_acquire) ==
             second_activation_generation;
     }), "A composition render request did not retain its captured generation.");
+    const auto dirty_before_quality_change = session.projectDirty();
+    const auto playhead_before_quality_change = session.playheadFrame();
+    const auto render_requests_before_quality_change =
+        fake_state->render_request_count.load(std::memory_order_acquire);
+    controller.setPreviewQuality(playback::PreviewQuality::Half);
+    require(waitUntil([&]() {
+        return fake_state->preview_quality_value.load(std::memory_order_acquire) ==
+                static_cast<int>(playback::PreviewQuality::Half) &&
+            fake_state->render_request_count.load(std::memory_order_acquire) >
+                render_requests_before_quality_change;
+    }), "Changing preview quality while paused did not forward the setting and redraw the current frame.");
+    require(session.projectDirty() == dirty_before_quality_change &&
+                session.playheadFrame() == playhead_before_quality_change,
+            "Changing preview quality modified the project or playhead.");
     require(std::none_of(events.begin(), events.end(), [](const auto& event) {
         const auto* frame = std::get_if<playback::PlaybackFrameEvent>(&event);
         return frame != nullptr && frame->clip_id == 1;
@@ -594,6 +615,15 @@ void runControllerTests() {
             "Play was not forwarded through the controller.");
     require(waitUntil([&]() { return controller.isPlaying(); }),
             "The controller did not apply the worker playing state.");
+    const auto dirty_during_playback_quality_change = session.projectDirty();
+    controller.setPreviewQuality(playback::PreviewQuality::Quarter);
+    require(waitUntil([&]() {
+        return fake_state->preview_quality_value.load(std::memory_order_acquire) ==
+            static_cast<int>(playback::PreviewQuality::Quarter);
+    }), "Changing preview quality during playback did not reach the worker.");
+    require(controller.isPlaying() &&
+                session.projectDirty() == dirty_during_playback_quality_change,
+            "Changing preview quality interrupted playback or dirtied the project.");
     const auto play_generation = fake_worker->currentGeneration();
     const auto frames_before_invalidation = std::count_if(
         events.begin(), events.end(), [](const auto& event) {

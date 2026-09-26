@@ -484,6 +484,7 @@ void MainWindow::flushPreviewPerformanceMetrics() {
 void MainWindow::initializePlayback() {
     playback_controller_ = std::make_unique<playback::PlaybackController>(
         editor_session_);
+    playback_controller_->setPreviewQuality(playback_preview_quality_);
     playback_controller_->setEventHandler(
         [this](const playback::PlaybackControllerEvent& event) {
             handlePlaybackEvent(event);

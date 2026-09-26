@@ -13,9 +13,16 @@ The Video Editor window declaration and implementation live together under
 `apps/video-editor/src/main_window/`.
 
 The preview uses provisional Qt OpenGL with a CPU fallback. View > Grayscale
-Preview is optional and off by default. GPU failures preserve the current
-frame, switch to CPU rendering, show a short status message, and write a
-detailed rendering log.
+Preview is optional and off by default. `View > Playback Preview Quality`
+offers exclusive Full (1920×1080), Half (960×540), and Quarter (480×270)
+composition sizes. Full is the default; the global selection is saved in
+`QSettings` as `preview/playback_quality` and does not change project data.
+The choice applies only to Timeline composition playback. It does not affect
+the Media Browser's isolated source preview or offline export, which continues
+to use its configured output dimensions. A quality change takes effect during
+playback without stopping it and recomposes the current Timeline frame while
+paused. GPU failures preserve the current frame, switch to CPU rendering, show
+a short status message, and write a detailed rendering log.
 
 ## Media Browser and projects
 

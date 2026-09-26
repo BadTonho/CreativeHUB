@@ -11,6 +11,7 @@
 #include "ui/media_browser/media_browser_list_widget.h"
 
 #include <QApplication>
+#include <QAction>
 #include <QEventLoop>
 #include <QDockWidget>
 #include <QLineEdit>
@@ -115,6 +116,26 @@ public:
             MainWindow render_window;
             render_window.show();
             QApplication::processEvents();
+            auto* full_quality = render_window.findChild<QAction*>(
+                "playbackPreviewQualityFull");
+            auto* half_quality = render_window.findChild<QAction*>(
+                "playbackPreviewQualityHalf");
+            auto* quarter_quality = render_window.findChild<QAction*>(
+                "playbackPreviewQualityQuarter");
+            require(full_quality != nullptr && half_quality != nullptr &&
+                        quarter_quality != nullptr && full_quality->isChecked() &&
+                        !half_quality->isChecked() && !quarter_quality->isChecked(),
+                    "Playback Preview Quality must offer three exclusive options and default to Full.");
+            const bool dirty_before_quality_change = render_window.project_dirty_;
+            quarter_quality->trigger();
+            QApplication::processEvents();
+            require(render_window.playback_preview_quality_ ==
+                        playback::PreviewQuality::Quarter &&
+                        quarter_quality->isChecked() && !full_quality->isChecked() &&
+                        QSettings().value("preview/playback_quality").toInt() == 2,
+                    "Selecting Quarter must persist and check the selected Playback Preview Quality.");
+            require(render_window.project_dirty_ == dirty_before_quality_change,
+                    "Changing Playback Preview Quality must not dirty the project.");
             const std::array<QDockWidget*, 7> docks{
                 render_window.bins_dock_, render_window.media_dock_,
                 render_window.toolbox_dock_, render_window.favorites_dock_,
@@ -145,6 +166,20 @@ public:
                 reopened_window.timeline_dock_};
             require(reopened_window.edit_workspace_button_->isChecked(),
                     "The application must reopen in Edit after closing from Render.");
+            auto* reopened_quarter_quality = reopened_window.findChild<QAction*>(
+                "playbackPreviewQualityQuarter");
+            auto* reopened_full_quality = reopened_window.findChild<QAction*>(
+                "playbackPreviewQualityFull");
+            require(reopened_window.playback_preview_quality_ ==
+                        playback::PreviewQuality::Quarter &&
+                        reopened_quarter_quality != nullptr &&
+                        reopened_quarter_quality->isChecked() &&
+                        reopened_full_quality != nullptr,
+                    "Playback Preview Quality must persist across application restarts.");
+            reopened_full_quality->trigger();
+            QApplication::processEvents();
+            require(QSettings().value("preview/playback_quality").toInt() == 0,
+                    "The Full Playback Preview Quality selection was not persisted.");
             for (std::size_t index = 0; index < docks.size(); ++index) {
                 require(docks[index]->isVisible() == dock_visibility_before_close[index],
                         "Closing from Render must preserve the previous dock layout.");

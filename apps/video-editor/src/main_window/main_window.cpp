@@ -44,6 +44,13 @@ MainWindow::MainWindow(QWidget* parent)
     media_task_pool_.setExpiryTimeout(-1);
     setWindowTitle("Video Editor");
     QSettings settings;
+    const auto saved_preview_quality = settings.value(
+        "preview/playback_quality", 0).toInt();
+    playback_preview_quality_ = saved_preview_quality == 1
+        ? playback::PreviewQuality::Half
+        : saved_preview_quality == 2
+            ? playback::PreviewQuality::Quarter
+            : playback::PreviewQuality::Full;
     const auto saved_geometry = settings.value(
         "workspace/window_geometry").toByteArray();
     const bool restored_geometry = !saved_geometry.isEmpty() &&

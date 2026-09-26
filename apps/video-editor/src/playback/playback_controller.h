@@ -112,6 +112,7 @@ public:
     [[nodiscard]] bool isPlaying() const noexcept;
 
     void refreshComposition();
+    void setPreviewQuality(PreviewQuality quality);
     void setMonitorVolume(double gain);
     void setAudioParametersForActiveClip();
     void invalidate(bool stop_worker);
@@ -197,6 +198,7 @@ private:
     double timeline_clock_frame_rate_ = 30.0;
     bool timeline_clock_active_ = false;
     bool composition_ready_ = false;
+    PreviewQuality preview_quality_ = PreviewQuality::Full;
     std::optional<timeline::ClipId> ready_clip_id_;
     std::atomic<quint64> composition_revision_{0};
     quint64 generation_ = 0;

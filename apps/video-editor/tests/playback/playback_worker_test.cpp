@@ -1036,6 +1036,46 @@ void validateCompositionCaching() {
             "The new composition did not rebuild the text composition fast path state.");
 }
 
+void validateCompositionPreviewQuality() {
+    playback::PlaybackWorker worker;
+    std::vector<std::pair<int, int>> emitted_dimensions;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&emitted_dimensions](playback::VideoFramePtr frame, qint64, quint64) {
+            if (frame != nullptr) {
+                emitted_dimensions.emplace_back(frame->width, frame->height);
+            }
+        });
+
+    auto still = std::make_shared<media::VideoFrame>();
+    still->width = 1;
+    still->height = 1;
+    still->stride = 4;
+    still->rgba_pixels = {40, 80, 120, 255};
+    playback::CompositionLayerSpec layer;
+    layer.kind = timeline::ClipKind::Image;
+    layer.segment_frame_count = 1;
+    layer.track_index = 0;
+    layer.clip_index = 0;
+    layer.still_frame = still;
+    layer.transform.scale = 0.0001;
+
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition({layer}, {}, 71);
+    worker.renderCompositionFrame(0, 0, 71);
+    worker.setPreviewQuality(playback::PreviewQuality::Half);
+    worker.renderCompositionFrame(0, 0, 71);
+    worker.setPreviewQuality(playback::PreviewQuality::Quarter);
+    worker.renderCompositionFrame(0, 0, 71);
+    worker.setPreviewQuality(playback::PreviewQuality::Full);
+    worker.renderCompositionFrame(0, 0, 71);
+
+    require(emitted_dimensions == std::vector<std::pair<int, int>>{
+                {1920, 1080}, {960, 540}, {480, 270}, {1920, 1080}},
+            "Changing Playback Preview Quality did not recompute the current frame at the selected dimensions.");
+}
+
 void validateStaticImageComposition() {
     playback::PlaybackWorker worker;
     std::vector<playback::VideoFramePtr> frames;
@@ -1261,6 +1301,7 @@ int main(int argc, char* argv[]) {
         validateMissingMedia(application);
         validateSeekWithoutMedia(application);
         validatePlaybackFrameMailbox();
+        validateCompositionPreviewQuality();
         validateCompositionPacing(application);
         validateNormalCompositionPacing(application);
         validateCompositionCaching();

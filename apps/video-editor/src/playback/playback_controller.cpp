@@ -273,15 +273,41 @@ void PlaybackController::refreshComposition() {
             active_clip = static_cast<qint64>(location->clip_index);
         }
     }
-    queueWorker([this, revision, active_track, active_clip,
+    const auto preview_quality = preview_quality_;
+    queueWorker([this, revision, active_track, active_clip, preview_quality,
                  layers = std::move(layers),
                  transitions = std::move(transitions)]
                 (PlaybackWorker& worker) mutable {
         if (composition_revision_.load(std::memory_order_acquire) != revision) return;
         const auto generation = published_generation_.load(std::memory_order_acquire);
+        worker.setPreviewQuality(preview_quality);
         worker.setActiveCompositionClip(active_track, active_clip);
         worker.setComposition(std::move(layers), std::move(transitions), generation);
     });
+}
+
+void PlaybackController::setPreviewQuality(PreviewQuality quality) {
+    if (quality != PreviewQuality::Full &&
+        quality != PreviewQuality::Half &&
+        quality != PreviewQuality::Quarter) {
+        quality = PreviewQuality::Full;
+    }
+    if (preview_quality_ == quality) return;
+
+    preview_quality_ = quality;
+    queueWorker([quality](PlaybackWorker& worker) {
+        worker.setPreviewQuality(quality);
+    });
+
+    if (playing_ || pending_activation_.has_value()) return;
+    const auto global_frame = timelineFrame();
+    const auto destination = session_.timeline().topClipAt(global_frame);
+    if (!destination.has_value()) return;
+    const auto& clip = session_.timeline().tracks()[destination->track_index]
+        .clips[destination->clip_index];
+    renderCompositionFrame(
+        global_frame,
+        global_frame - clip.timeline_start_frame);
 }
 
 void PlaybackController::setMonitorVolume(double gain) {

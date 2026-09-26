@@ -85,6 +85,17 @@ composed payload, keyed by composition generation and global frame, so a
 repeated request can be emitted without decoding or blending again. Both
 caches are cleared when the media or composition generation changes.
 
+Timeline composition playback can use Full (1920×1080), Half (960×540), or
+Quarter (480×270) output through `View > Playback Preview Quality`. The global
+`QSettings` value `preview/playback_quality` defaults to Full. The playback
+worker applies a quality change on its next queued operation; playback remains
+active, while a paused Timeline recomposes its current frame. Changing the
+quality clears only the cached final composed frame, leaving decoded media
+frames, prepared decoder sessions, and cached text rasters available. The
+selected size affects only Timeline composition payloads; isolated media
+preview is unchanged, and `OfflineExportRenderer` continues to use the job's
+configured output dimensions.
+
 The CPU compositor has a fast path for an opaque, full-canvas layer with the
 identity transform. Cached text layers also retain immutable per-row alpha
 coverage. When a text layer has no rotation, the compositor maps only the

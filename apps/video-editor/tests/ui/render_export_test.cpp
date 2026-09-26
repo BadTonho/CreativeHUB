@@ -607,6 +607,31 @@ void validateEmbeddedAudioMixing(
             "A muted audio track still contributed samples to the export.");
 }
 
+void validateConfiguredFullResolutionExport(
+    const OutputChoice& output,
+    const std::filesystem::path& image_path,
+    const std::filesystem::path& root) {
+    const auto extension = output.container.extensions.empty()
+        ? std::string("mkv")
+        : output.container.extensions.substr(0, output.container.extensions.find(','));
+    auto job = makeImageJob(
+        output, image_path, root / ("full-resolution." + extension), 104, 1);
+    job.settings.width = 1920;
+    job.settings.height = 1080;
+    job.settings.export_audio = false;
+    job.project_snapshot.canvas_width = 1920;
+    job.project_snapshot.canvas_height = 1080;
+
+    std::atomic_bool canceled{false};
+    rendering::OfflineExportRenderer::render(job, canceled);
+    auto decoder = media::VideoPlaybackSession::open(
+        pathFromQString(job.settings.output_path));
+    const auto first_frame = decoder->decode_next_frame();
+    require(first_frame.has_value() && *first_frame != nullptr &&
+                (*first_frame)->width == 1920 && (*first_frame)->height == 1080,
+            "Playback Preview Quality must not reduce the configured offline export resolution.");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -630,6 +655,7 @@ int main(int argc, char* argv[]) {
         validateGapsTextAndKeyframes(output, image_path, green_image_path, root);
         validateQueueContinuesAfterFailure(output, image_path, green_image_path, root);
         validateQueueCancellationStopsLaterJobs(output, image_path, root);
+        validateConfiguredFullResolutionExport(output, image_path, root);
         validateEmbeddedAudioMixing(output, root);
         return 0;
     } catch (const std::exception& error) {

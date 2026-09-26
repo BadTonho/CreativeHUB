@@ -16,6 +16,7 @@
 #include "ui/workspace/pages/render/render_workspace.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QCoreApplication>
@@ -647,6 +648,43 @@ void MainWindow::createMenus() {
     connect(grayscale_action, &QAction::toggled, this, [this](bool enabled) {
         if (preview_widget_ != nullptr) preview_widget_->setGrayscaleEnabled(enabled);
     });
+    auto* playback_quality_menu = view_menu->addMenu("Playback Preview Quality");
+    playback_quality_menu->setObjectName("playbackPreviewQualityMenu");
+    auto* playback_quality_group = new QActionGroup(playback_quality_menu);
+    playback_quality_group->setExclusive(true);
+    const auto add_playback_quality_action =
+        [this, playback_quality_menu, playback_quality_group](
+            const QString& label,
+            const QString& object_name,
+            playback::PreviewQuality quality) {
+            auto* action = playback_quality_menu->addAction(label);
+            action->setObjectName(object_name);
+            action->setCheckable(true);
+            action->setChecked(playback_preview_quality_ == quality);
+            playback_quality_group->addAction(action);
+            connect(action, &QAction::triggered, this, [this, quality]() {
+                playback_preview_quality_ = quality;
+                QSettings settings;
+                settings.setValue(
+                    "preview/playback_quality",
+                    static_cast<int>(quality));
+                if (playback_controller_ != nullptr) {
+                    playback_controller_->setPreviewQuality(quality);
+                }
+            });
+        };
+    add_playback_quality_action(
+        "Full (1920 × 1080)",
+        "playbackPreviewQualityFull",
+        playback::PreviewQuality::Full);
+    add_playback_quality_action(
+        "Half (960 × 540)",
+        "playbackPreviewQualityHalf",
+        playback::PreviewQuality::Half);
+    add_playback_quality_action(
+        "Quarter (480 × 270)",
+        "playbackPreviewQualityQuarter",
+        playback::PreviewQuality::Quarter);
     view_menu->addSeparator();
     auto* restore_layout_action = view_menu->addAction("Restore &Default Layout");
     connect(restore_layout_action, &QAction::triggered, this, &MainWindow::restoreDefaultLayout);

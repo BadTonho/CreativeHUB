@@ -32,6 +32,12 @@ namespace playback {
 
 using VideoFramePtr = media::VideoFramePtr;
 
+enum class PreviewQuality {
+    Full,
+    Half,
+    Quarter,
+};
+
 struct CompositionLayerSpec {
     QString source_path;
     double frame_rate = 30.0;
@@ -89,6 +95,7 @@ public slots:
         double clip_audio_gain,
         bool clip_audio_muted);
     virtual void setMonitorVolume(double gain);
+    virtual void setPreviewQuality(PreviewQuality quality);
     virtual void setComposition(
         QVector<CompositionLayerSpec> layers,
         QVector<CompositionTransitionSpec> transitions,
@@ -187,6 +194,7 @@ private:
     quint64 generation_ = 0;
     bool playing_ = false;
     bool diagnostics_logged_ = false;
+    PreviewQuality preview_quality_ = PreviewQuality::Full;
     using Clock = std::chrono::steady_clock;
     detail::PlaybackDeadlineScheduler playback_scheduler_;
     detail::AudioPacingPolicy audio_pacing_policy_;

@@ -303,6 +303,8 @@ private:
     std::unique_ptr<settings::ShortcutManager> shortcut_manager_;
     application::EditorSession editor_session_;
     std::unique_ptr<playback::PlaybackController> playback_controller_;
+    playback::PreviewQuality playback_preview_quality_ =
+        playback::PreviewQuality::Full;
     application::TimelineCommandService timeline_command_service_{editor_session_};
     application::MediaController media_controller_{editor_session_};
     application::ProjectController project_controller_{editor_session_};
