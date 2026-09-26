@@ -73,32 +73,80 @@ OpenGLPreviewSurface::OpenGLPreviewSurface(QWidget* parent)
     setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
     setAutoFillBackground(false);
     setStyleSheet("background-color: #1c2028;");
+    connect(this, &QOpenGLWidget::frameSwapped, this, [this]() {
+        if (drawn_delivery_trace_id_ == 0 ||
+            drawn_delivery_trace_id_ == last_swapped_delivery_trace_id_) {
+            return;
+        }
+        PreviewPerformanceMetrics::instance().recordFrameDeliveryStage(
+            drawn_delivery_trace_id_,
+            PreviewFrameDeliveryStage::QtFrameSwapped);
+        last_swapped_delivery_trace_id_ = drawn_delivery_trace_id_;
+    });
 }
 
 OpenGLPreviewSurface::~OpenGLPreviewSurface() {
     releaseResources();
 }
 
-void OpenGLPreviewSurface::setFrame(media::VideoFramePtr frame) {
+void OpenGLPreviewSurface::setFrame(
+    media::VideoFramePtr frame,
+    quint64 delivery_trace_id) {
     if (gpu_failed_) return;
 
     if (frame == nullptr || !hasValidFrame(*frame)) {
+        auto& metrics = PreviewPerformanceMetrics::instance();
+        metrics.recordFrameDeliveryDrop(
+            delivery_trace_id,
+            PreviewFrameDeliveryDropReason::InvalidFrame);
+        if (pending_frame_valid_) {
+            metrics.recordFrameDeliveryDrop(
+                pending_delivery_trace_id_,
+                PreviewFrameDeliveryDropReason::PreviewOverwritten);
+        }
+        if (drawn_delivery_trace_id_ != last_swapped_delivery_trace_id_) {
+            metrics.recordFrameDeliveryDrop(
+                drawn_delivery_trace_id_,
+                PreviewFrameDeliveryDropReason::PreviewOverwritten);
+        }
         pending_frame_.reset();
         pending_frame_valid_ = false;
+        pending_delivery_trace_id_ = 0;
         frame_available_ = false;
         update();
         return;
     }
 
     auto& metrics = PreviewPerformanceMetrics::instance();
-    if (pending_frame_valid_) metrics.recordOverwrittenFrame();
+    if (pending_frame_valid_) {
+        metrics.recordOverwrittenFrame();
+        metrics.recordFrameDeliveryDrop(
+            pending_delivery_trace_id_,
+            PreviewFrameDeliveryDropReason::PreviewOverwritten);
+    }
+    if (drawn_delivery_trace_id_ != last_swapped_delivery_trace_id_) {
+        metrics.recordFrameDeliveryDrop(
+            drawn_delivery_trace_id_,
+            PreviewFrameDeliveryDropReason::PreviewOverwritten);
+    }
     pending_frame_ = std::move(frame);
+    pending_delivery_trace_id_ = delivery_trace_id;
     pending_frame_valid_ = true;
     update();
 }
 
 void OpenGLPreviewSurface::clearFrame() {
+    auto& metrics = PreviewPerformanceMetrics::instance();
+    metrics.recordFrameDeliveryDrop(
+        pending_delivery_trace_id_,
+        PreviewFrameDeliveryDropReason::PreviewOverwritten);
+    if (drawn_delivery_trace_id_ != last_swapped_delivery_trace_id_) {
+        metrics.recordFrameDeliveryDrop(
+            drawn_delivery_trace_id_,
+            PreviewFrameDeliveryDropReason::PreviewOverwritten);
+    }
     pending_frame_.reset();
+    pending_delivery_trace_id_ = 0;
     pending_frame_valid_ = false;
     frame_available_ = false;
     update();
@@ -181,6 +229,10 @@ void OpenGLPreviewSurface::paintGL() {
     functions_->glBindTexture(GL_TEXTURE_2D, 0);
     shader_program_->release();
     metrics.recordGpuPresentedFrame();
+    drawn_delivery_trace_id_ = uploaded_delivery_trace_id_;
+    metrics.recordFrameDeliveryStage(
+        drawn_delivery_trace_id_,
+        PreviewFrameDeliveryStage::GpuDrawn);
 
     const auto error = functions_->glGetError();
     if (error != GL_NO_ERROR) {
@@ -212,6 +264,7 @@ bool OpenGLPreviewSurface::uploadPendingFrame() {
     const auto& frame = *pending_frame_;
     if (!hasValidFrame(frame)) {
         pending_frame_.reset();
+        pending_delivery_trace_id_ = 0;
         pending_frame_valid_ = false;
         frame_available_ = false;
         return true;
@@ -279,8 +332,13 @@ bool OpenGLPreviewSurface::uploadPendingFrame() {
     }
 
     pending_frame_.reset();
+    uploaded_delivery_trace_id_ = pending_delivery_trace_id_;
+    pending_delivery_trace_id_ = 0;
     pending_frame_valid_ = false;
     frame_available_ = true;
+    metrics.recordFrameDeliveryStage(
+        uploaded_delivery_trace_id_,
+        PreviewFrameDeliveryStage::GpuUploaded);
     return true;
 }
 
@@ -359,7 +417,14 @@ void OpenGLPreviewSurface::updateVertexBuffer() {
 
 void OpenGLPreviewSurface::failGpu(const QString& message, unsigned int error_code) {
     if (gpu_failed_) return;
-    PreviewPerformanceMetrics::instance().recordGpuFailure();
+    auto& metrics = PreviewPerformanceMetrics::instance();
+    metrics.recordGpuFailure();
+    metrics.recordFrameDeliveryDrop(
+        pending_delivery_trace_id_ != 0
+            ? pending_delivery_trace_id_
+            : uploaded_delivery_trace_id_,
+        PreviewFrameDeliveryDropReason::GpuFailure);
+    pending_delivery_trace_id_ = 0;
     gpu_failed_ = true;
     initialized_ = false;
     emit gpuFailure(message, static_cast<qint64>(error_code));

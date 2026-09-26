@@ -42,6 +42,7 @@
 #include <QTreeWidgetItem>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <functional>
@@ -342,12 +343,138 @@ const char* slowFrameDecodePathName(
     return "unknown";
 }
 
+const char* deliveryStageName(
+    rendering::PreviewFrameDeliveryStage stage) noexcept {
+    using Stage = rendering::PreviewFrameDeliveryStage;
+    switch (stage) {
+    case Stage::WorkerEmitted: return "worker_emitted";
+    case Stage::MailboxPublished: return "mailbox_published";
+    case Stage::ControllerDelivered: return "controller_delivered";
+    case Stage::WindowReceived: return "window_received";
+    case Stage::PreviewSubmitted: return "preview_submitted";
+    case Stage::GpuUploaded: return "gpu_uploaded";
+    case Stage::GpuDrawn: return "gpu_drawn";
+    case Stage::QtFrameSwapped: return "qt_frame_swapped";
+    case Stage::CpuPainted: return "cpu_painted";
+    case Stage::Count: break;
+    }
+    return "unknown";
+}
+
+const char* deliveryDropReasonName(
+    rendering::PreviewFrameDeliveryDropReason reason) noexcept {
+    using Reason = rendering::PreviewFrameDeliveryDropReason;
+    switch (reason) {
+    case Reason::None: return "none";
+    case Reason::MailboxCoalesced: return "mailbox_coalesced";
+    case Reason::StaleGeneration: return "stale_generation";
+    case Reason::TimelineBehind: return "timeline_behind";
+    case Reason::PreviewOverwritten: return "preview_overwritten";
+    case Reason::InvalidFrame: return "invalid_frame";
+    case Reason::NoActiveClip: return "no_active_clip";
+    case Reason::GpuFailure: return "gpu_failure";
+    case Reason::Shutdown: return "shutdown";
+    case Reason::Count: break;
+    }
+    return "unknown";
+}
+
+void appendFrameDeliveryContext(
+    logging::Context& context,
+    const rendering::PreviewFrameDeliverySnapshot& snapshot) {
+    context.emplace_back("diagnostic_schema_version", "1");
+    context.emplace_back("thread_role", "ui_logger");
+    context.emplace_back("sample_origin_thread_role", "playback_worker");
+    context.emplace_back("trace_capacity", "512");
+    context.emplace_back("trace_evictions", std::to_string(snapshot.trace_evictions));
+    context.emplace_back(
+        "unknown_trace_updates", std::to_string(snapshot.unknown_trace_updates));
+    context.emplace_back(
+        "incomplete_trace_count",
+        std::to_string(snapshot.incomplete_trace_count));
+
+    constexpr std::array stage_names{
+        "worker_emitted", "mailbox_published", "controller_delivered",
+        "window_received", "preview_submitted", "gpu_uploaded", "gpu_drawn",
+        "qt_frame_swapped", "cpu_painted"};
+    for (std::size_t index = 0; index < stage_names.size(); ++index) {
+        context.emplace_back(
+            std::string(stage_names[index]) + "_count",
+            std::to_string(snapshot.stage_counts[index]));
+    }
+
+    constexpr std::array drop_names{
+        "none", "mailbox_coalesced", "stale_generation", "timeline_behind",
+        "preview_overwritten", "invalid_frame", "no_active_clip", "gpu_failure",
+        "shutdown"};
+    for (std::size_t index = 1; index < drop_names.size(); ++index) {
+        context.emplace_back(
+            std::string("drop_") + drop_names[index] + "_count",
+            std::to_string(snapshot.drop_counts[index]));
+    }
+
+    constexpr std::array timing_names{
+        "worker_to_mailbox", "mailbox_wait", "controller_to_window",
+        "window_to_preview", "preview_to_gpu_upload", "gpu_upload_to_draw",
+        "draw_to_qt_swap", "preview_to_cpu_paint", "worker_to_qt_swap",
+        "worker_to_cpu_paint"};
+    for (std::size_t index = 0; index < timing_names.size(); ++index) {
+        appendTimingContext(context, timing_names[index], snapshot.timings[index]);
+    }
+
+    const auto milliseconds = [](std::uint64_t nanoseconds) {
+        return std::to_string(static_cast<double>(nanoseconds) / 1'000'000.0);
+    };
+    context.emplace_back("sample_count", std::to_string(snapshot.sample_count));
+    for (std::size_t index = 0; index < snapshot.sample_count; ++index) {
+        const auto prefix = "sample_" + std::to_string(index) + "_";
+        const auto& sample = snapshot.samples[index];
+        context.emplace_back(prefix + "trace_id", std::to_string(sample.trace_id));
+        context.emplace_back(
+            prefix + "playback_generation",
+            std::to_string(sample.playback_generation));
+        context.emplace_back(
+            prefix + "timeline_frame", std::to_string(sample.timeline_frame));
+        context.emplace_back(
+            prefix + "last_stage", deliveryStageName(sample.last_stage));
+        context.emplace_back(
+            prefix + "drop_reason", deliveryDropReasonName(sample.drop_reason));
+        context.emplace_back(
+            prefix + "completion_status",
+            sample.drop_reason != rendering::PreviewFrameDeliveryDropReason::None
+                ? "dropped"
+                : (sample.complete ? "completed" : "incomplete"));
+        context.emplace_back(prefix + "age_ms", milliseconds(sample.age_nanoseconds));
+        context.emplace_back(
+            prefix + "end_to_end_ms",
+            milliseconds(sample.end_to_end_nanoseconds));
+    }
+}
+
+bool hasFrameDeliveryActivity(
+    const rendering::PreviewFrameDeliverySnapshot& snapshot) noexcept {
+    if (snapshot.trace_evictions > 0 || snapshot.unknown_trace_updates > 0 ||
+        snapshot.incomplete_trace_count > 0 || snapshot.sample_count > 0) {
+        return true;
+    }
+    for (const auto count : snapshot.stage_counts) {
+        if (count > 0) return true;
+    }
+    for (const auto count : snapshot.drop_counts) {
+        if (count > 0) return true;
+    }
+    for (const auto& timing : snapshot.timings) {
+        if (timing.count > 0) return true;
+    }
+    return false;
+}
+
 void appendSlowFrameContext(
     logging::Context& context,
     const rendering::PreviewPerformanceSnapshot& snapshot) {
     if (!snapshot.worst_slow_frame.has_value()) return;
     const auto& frame = *snapshot.worst_slow_frame;
-    context.emplace_back("diagnostic_schema_version", "1");
+    context.emplace_back("diagnostic_schema_version", "2");
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back("sample_origin_thread_role", "playback_worker");
     context.emplace_back(
@@ -373,6 +500,24 @@ void appendSlowFrameContext(
         "composition_ms", milliseconds(frame.composition_nanoseconds));
     context.emplace_back("payload_ms", milliseconds(frame.payload_nanoseconds));
     context.emplace_back(
+        "composition_adapter_ms",
+        milliseconds(frame.composition_adapter_nanoseconds));
+    context.emplace_back(
+        "output_buffer_create_ms",
+        milliseconds(frame.output_buffer_create_nanoseconds));
+    context.emplace_back(
+        "output_background_fill_ms",
+        milliseconds(frame.output_background_fill_nanoseconds));
+    context.emplace_back(
+        "composition_layer_setup_ms",
+        milliseconds(frame.composition_layer_setup_nanoseconds));
+    context.emplace_back(
+        "composition_raster_blend_ms",
+        milliseconds(frame.composition_raster_blend_nanoseconds));
+    context.emplace_back(
+        "composition_fast_path_copy_ms",
+        milliseconds(frame.composition_fast_path_copy_nanoseconds));
+    context.emplace_back(
         "active_layer_count", std::to_string(frame.active_layer_count));
     context.emplace_back(
         "slow_layer_count", std::to_string(frame.slow_layer_count));
@@ -396,6 +541,15 @@ void appendSlowFrameContext(
         context.emplace_back(
             prefix + "composition_ms",
             milliseconds(layer.composition_nanoseconds));
+        context.emplace_back(
+            prefix + "composition_setup_ms",
+            milliseconds(layer.composition_setup_nanoseconds));
+        context.emplace_back(
+            prefix + "raster_blend_ms",
+            milliseconds(layer.raster_blend_nanoseconds));
+        context.emplace_back(
+            prefix + "fast_path_copy_ms",
+            milliseconds(layer.fast_path_copy_nanoseconds));
     }
 }
 
@@ -432,6 +586,7 @@ void MainWindow::flushPreviewPerformanceMetrics() {
     if (!metrics.isEnabled()) return;
 
     const auto snapshot = metrics.takeSnapshotAndReset();
+    const bool has_delivery_activity = hasFrameDeliveryActivity(snapshot.frame_delivery);
     if (snapshot.playback_ticks == 0 && snapshot.emitted_frames == 0 &&
         snapshot.received_frames == 0 && snapshot.submitted_frames == 0 &&
         snapshot.playback_active_nanoseconds == 0 &&
@@ -450,7 +605,7 @@ void MainWindow::flushPreviewPerformanceMetrics() {
         snapshot.playback_start_to_presentation.count == 0 &&
         snapshot.seek_to_presentation.count == 0 &&
         snapshot.audio_clock_drift_samples == 0 &&
-        snapshot.slow_frame_count == 0) {
+        snapshot.slow_frame_count == 0 && !has_delivery_activity) {
         return;
     }
 
@@ -571,6 +726,19 @@ void MainWindow::flushPreviewPerformanceMetrics() {
             "slow_frame",
             "Playback composition exceeded its frame budget.",
             slow_frame_context);
+    }
+    if (has_delivery_activity) {
+        logging::Context delivery_context;
+        appendFrameDeliveryContext(delivery_context, snapshot.frame_delivery);
+        delivery_context.emplace_back(
+            "playback_worker_thread_id",
+            std::to_string(snapshot.playback_worker_thread_id));
+        logging::Logger::instance().log(
+            logging::Level::Info,
+            "playback",
+            "frame_delivery",
+            "Playback frame delivery sample.",
+            delivery_context);
     }
 }
 
@@ -840,7 +1008,10 @@ void MainWindow::handlePlaybackFrame(
         metrics,
         rendering::PreviewTiming::UiCallback);
     metrics.recordReceivedFrame();
-    preview_widget_->setFrame(event.frame);
+    metrics.recordFrameDeliveryStage(
+        event.delivery_trace_id,
+        rendering::PreviewFrameDeliveryStage::WindowReceived);
+    preview_widget_->setFrame(event.frame, event.delivery_trace_id);
 
     if ((playback_controller_ == nullptr || !playback_controller_->isPlaying()) &&
         edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {

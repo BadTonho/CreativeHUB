@@ -6,9 +6,9 @@
 #include <QString>
 #include <QWidget>
 
-class QLabel;
 class QResizeEvent;
 class QStackedLayout;
+class PreviewCpuSurface;
 
 namespace rendering {
 class OpenGLPreviewSurface;
@@ -21,7 +21,7 @@ public:
     explicit PreviewWidget(QWidget* parent = nullptr);
 
     void setFrame(const media::VideoFrame& frame);
-    void setFrame(media::VideoFramePtr frame);
+    void setFrame(media::VideoFramePtr frame, quint64 delivery_trace_id = 0);
     void clearFrame(const QString& message);
     void setGrayscaleEnabled(bool enabled);
     [[nodiscard]] bool isGrayscaleEnabled() const noexcept;
@@ -39,7 +39,7 @@ private:
 
     QStackedLayout* stack_ = nullptr;
     rendering::OpenGLPreviewSurface* gpu_surface_ = nullptr;
-    QLabel* cpu_surface_ = nullptr;
+    PreviewCpuSurface* cpu_surface_ = nullptr;
     media::VideoFramePtr current_frame_;
     QImage frame_image_;
     QString empty_message_;

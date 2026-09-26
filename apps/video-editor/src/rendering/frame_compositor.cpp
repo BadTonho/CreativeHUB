@@ -133,19 +133,39 @@ std::vector<int> buildSourceLookup(
     return lookup;
 }
 
+std::uint64_t elapsedNanoseconds(
+    std::chrono::steady_clock::time_point started) noexcept {
+    const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - started).count();
+    return elapsed <= 0 ? 0U : static_cast<std::uint64_t>(elapsed);
+}
+
 void composeAlphaCoverageLayer(
     media::VideoFrame& output,
-    const CompositionLayer& layer) {
+    const CompositionLayer& layer,
+    CompositionLayerTimings* timings) {
+    using Clock = std::chrono::steady_clock;
+    const auto setup_started = timings != nullptr ? Clock::now() : Clock::time_point{};
     const auto& frame = *layer.frame;
     const auto& coverage = *layer.alpha_coverage;
-    if (layer.transform.opacity <= 0.0 || coverage.rows.empty()) return;
+    if (layer.transform.opacity <= 0.0 || coverage.rows.empty()) {
+        if (timings != nullptr) {
+            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+        }
+        return;
+    }
 
     const double fit = std::min(
         static_cast<double>(output.width) / frame.width,
         static_cast<double>(output.height) / frame.height);
     const double displayed_width = frame.width * fit * layer.transform.scale;
     const double displayed_height = frame.height * fit * layer.transform.scale;
-    if (displayed_width <= 0.0 || displayed_height <= 0.0) return;
+    if (displayed_width <= 0.0 || displayed_height <= 0.0) {
+        if (timings != nullptr) {
+            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+        }
+        return;
+    }
 
     const double center_x = layer.transform.position_x * output.width;
     const double center_y = layer.transform.position_y * output.height;
@@ -153,7 +173,12 @@ void composeAlphaCoverageLayer(
         center_x, displayed_width, output.width);
     const auto vertical = axisAlignedPixelRange(
         center_y, displayed_height, output.height);
-    if (!horizontal.has_value() || !vertical.has_value()) return;
+    if (!horizontal.has_value() || !vertical.has_value()) {
+        if (timings != nullptr) {
+            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+        }
+        return;
+    }
 
     const auto source_x_lookup = buildSourceLookup(
         horizontal->begin,
@@ -167,7 +192,12 @@ void composeAlphaCoverageLayer(
         center_y,
         displayed_height,
         frame.height);
-    if (source_x_lookup.empty() || source_y_lookup.empty()) return;
+    if (source_x_lookup.empty() || source_y_lookup.empty()) {
+        if (timings != nullptr) {
+            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+        }
+        return;
+    }
 
     std::vector<std::vector<PixelRange>> mapped_rows(coverage.rows.size());
     for (std::size_t source_y = 0; source_y < coverage.rows.size(); ++source_y) {
@@ -182,6 +212,11 @@ void composeAlphaCoverageLayer(
                 horizontal->begin + static_cast<int>(last - source_x_lookup.begin()) - 1});
         }
     }
+
+    if (timings != nullptr) {
+        timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+    }
+    const auto raster_started = timings != nullptr ? Clock::now() : Clock::time_point{};
 
     for (int destination_y = vertical->begin;
          destination_y <= vertical->end;
@@ -211,6 +246,9 @@ void composeAlphaCoverageLayer(
                 blend(destination, color);
             }
         }
+    }
+    if (timings != nullptr) {
+        timings->raster_blend_nanoseconds += elapsedNanoseconds(raster_started);
     }
 }
 
@@ -268,7 +306,7 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
     int width,
     int height,
     const std::vector<CompositionLayer>& layers,
-    std::vector<std::uint64_t>* layer_elapsed_nanoseconds) {
+    FrameCompositionTimings* timings) {
     if (width <= 0 || height <= 0) return std::nullopt;
     if (static_cast<std::size_t>(width) >
             std::numeric_limits<std::size_t>::max() / static_cast<std::size_t>(height) / 4) {
@@ -279,28 +317,43 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
     output.width = width;
     output.height = height;
     output.stride = width * 4;
+    using Clock = std::chrono::steady_clock;
+    if (timings != nullptr) {
+        timings->layer_list_setup_nanoseconds = 0;
+        timings->output_buffer_create_nanoseconds = 0;
+        timings->output_background_fill_nanoseconds = 0;
+        timings->layers.resize(layers.size());
+        std::fill(
+            timings->layers.begin(),
+            timings->layers.end(),
+            CompositionLayerTimings{});
+    }
+    const auto output_create_started = timings != nullptr ? Clock::now() : Clock::time_point{};
     output.rgba_pixels.assign(
         static_cast<std::size_t>(output.stride) * output.height, 0);
+    if (timings != nullptr) {
+        timings->output_buffer_create_nanoseconds =
+            elapsedNanoseconds(output_create_started);
+    }
+    const auto background_fill_started = timings != nullptr ? Clock::now() : Clock::time_point{};
     for (auto& pixel : output.rgba_pixels) pixel = 0;
     for (std::size_t index = 3; index < output.rgba_pixels.size(); index += 4) {
         output.rgba_pixels[index] = 255;
     }
-
-    using Clock = std::chrono::steady_clock;
-    if (layer_elapsed_nanoseconds != nullptr) {
-        layer_elapsed_nanoseconds->assign(layers.size(), 0);
+    if (timings != nullptr) {
+        timings->output_background_fill_nanoseconds =
+            elapsedNanoseconds(background_fill_started);
     }
     for (std::size_t layer_index = 0; layer_index < layers.size(); ++layer_index) {
-        const auto layer_started = layer_elapsed_nanoseconds != nullptr
+        auto* layer_timings = timings != nullptr
+            ? &timings->layers[layer_index]
+            : nullptr;
+        const auto layer_started = layer_timings != nullptr
             ? Clock::now()
             : Clock::time_point{};
         const auto record_layer_elapsed = [&]() {
-            if (layer_elapsed_nanoseconds == nullptr) return;
-            const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                Clock::now() - layer_started).count();
-            (*layer_elapsed_nanoseconds)[layer_index] = elapsed <= 0
-                ? 0U
-                : static_cast<std::uint64_t>(elapsed);
+            if (layer_timings == nullptr) return;
+            layer_timings->setup_nanoseconds += elapsedNanoseconds(layer_started);
         };
         const auto& layer = layers[layer_index];
         if (layer.frame == nullptr || !timeline::validTransform(layer.transform) ||
@@ -310,16 +363,23 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
         }
         if (isFullFrameIdentity(*layer.frame, width, height, layer.transform) &&
             isOpaqueFrame(*layer.frame)) {
+            record_layer_elapsed();
+            const auto copy_started = layer_timings != nullptr
+                ? Clock::now()
+                : Clock::time_point{};
             std::memcpy(
                 output.rgba_pixels.data(),
                 layer.frame->rgba_pixels.data(),
                 output.rgba_pixels.size());
-            record_layer_elapsed();
+            if (layer_timings != nullptr) {
+                layer_timings->fast_path_copy_nanoseconds =
+                    elapsedNanoseconds(copy_started);
+            }
             continue;
         }
         if (canUseAlphaCoverageFastPath(layer)) {
-            composeAlphaCoverageLayer(output, layer);
             record_layer_elapsed();
+            composeAlphaCoverageLayer(output, layer, layer_timings);
             continue;
         }
         const double fit = std::min(
@@ -341,6 +401,10 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
         const auto right = std::min(width - 1, static_cast<int>(std::ceil(center_x + radius + 1.0)));
         const auto top = std::max(0, static_cast<int>(std::floor(center_y - radius - 1.0)));
         const auto bottom = std::min(height - 1, static_cast<int>(std::ceil(center_y + radius + 1.0)));
+        record_layer_elapsed();
+        const auto raster_started = layer_timings != nullptr
+            ? Clock::now()
+            : Clock::time_point{};
         for (int y = top; y <= bottom; ++y) {
             for (int x = left; x <= right; ++x) {
                 const double dx = x + 0.5 - center_x;
@@ -363,7 +427,10 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
                 blend(destination, color);
             }
         }
-        record_layer_elapsed();
+        if (layer_timings != nullptr) {
+            layer_timings->raster_blend_nanoseconds =
+                elapsedNanoseconds(raster_started);
+        }
     }
     return output;
 }

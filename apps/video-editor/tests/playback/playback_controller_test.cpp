@@ -1,6 +1,7 @@
 #include "application/editor_session.h"
 #include "application/media_controller.h"
 #include "playback/playback_controller.h"
+#include "rendering/preview_performance_metrics.h"
 
 #include <QCoreApplication>
 #include <QEventLoop>
@@ -51,6 +52,7 @@ struct FakeWorkerState {
     std::atomic<quint64> seek_request_generation{0};
     std::atomic<qint64> last_seek_frame{-1};
     std::atomic<int> media_open_delay_ms{0};
+    std::atomic_bool emit_traced_frame{false};
     std::mutex composition_mutex;
     std::vector<std::pair<timeline::TrackId, timeline::ClipId>> composition_clip_ids;
 };
@@ -82,7 +84,11 @@ public:
             return;
         }
         emit mediaReady(generation);
-        emit frameReady(makeFrame(0), 0, generation);
+        const auto trace_id = state_->emit_traced_frame.load(std::memory_order_acquire)
+            ? rendering::PreviewPerformanceMetrics::instance().createFrameDeliveryTrace(
+                generation, 0)
+            : 0U;
+        emit frameReady(makeFrame(0), 0, generation, trace_id);
     }
 
     void play() override {
@@ -128,15 +134,15 @@ public:
         state_->render_request_generation.store(generation, std::memory_order_release);
         state_->render_request_count.fetch_add(1, std::memory_order_acq_rel);
         generation_.store(generation, std::memory_order_release);
-        emit frameReady(makeFrame(static_cast<int>(frame)), frame, generation);
+        emit frameReady(makeFrame(static_cast<int>(frame)), frame, generation, 0);
     }
 
     void stepForward() override {
-        emit frameReady(makeFrame(1), 1, generation_.load(std::memory_order_acquire));
+        emit frameReady(makeFrame(1), 1, generation_.load(std::memory_order_acquire), 0);
     }
 
     void stepBackward() override {
-        emit frameReady(makeFrame(0), 0, generation_.load(std::memory_order_acquire));
+        emit frameReady(makeFrame(0), 0, generation_.load(std::memory_order_acquire), 0);
     }
 
     void requestSeek(qint64 frame, quint64 generation) override {
@@ -146,7 +152,7 @@ public:
             this,
             [this, frame, generation]() {
                 generation_.store(generation, std::memory_order_release);
-                emit frameReady(makeFrame(static_cast<int>(frame)), frame, generation);
+                emit frameReady(makeFrame(static_cast<int>(frame)), frame, generation, 0);
             },
             Qt::QueuedConnection);
     }
@@ -155,7 +161,7 @@ public:
         QMetaObject::invokeMethod(
             this,
             [this, frame, generation]() {
-                emit frameReady(makeFrame(static_cast<int>(frame)), frame, generation);
+                emit frameReady(makeFrame(static_cast<int>(frame)), frame, generation, 0);
             },
             Qt::QueuedConnection);
     }
@@ -169,7 +175,7 @@ public:
             this,
             [this, first, last, generation, finished = std::move(finished)]() {
                 for (auto frame = first; frame <= last; ++frame) {
-                    emit frameReady(makeFrame(static_cast<int>(frame)), frame, generation);
+                    emit frameReady(makeFrame(static_cast<int>(frame)), frame, generation, 0);
                 }
                 finished->store(true, std::memory_order_release);
             },
@@ -526,6 +532,9 @@ void runGapAndEndClockTests() {
 }
 
 void runControllerTests() {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
     application::EditorSession session;
     application::MediaController media_controller(session);
     const auto source_one = std::filesystem::temp_directory_path() / "playback-one.mkv";
@@ -550,6 +559,7 @@ void runControllerTests() {
             "Could not seed a clip whose media is absent from the library.");
 
     auto fake_state = std::make_shared<FakeWorkerState>();
+    fake_state->emit_traced_frame.store(true, std::memory_order_release);
     FakePlaybackWorker* fake_worker = nullptr;
     playback::PlaybackController controller(
         session,
@@ -583,6 +593,13 @@ void runControllerTests() {
                     activation->phase == playback::PlaybackActivationPhase::Committed;
             });
     }), "The second activation did not complete.");
+    require(waitUntil([&]() {
+        return std::any_of(events.begin(), events.end(), [](const auto& event) {
+            const auto* frame = std::get_if<playback::PlaybackFrameEvent>(&event);
+            return frame != nullptr && frame->clip_id == 2 &&
+                frame->delivery_trace_id != 0;
+        });
+    }), "The controller did not preserve the worker frame trace ID.");
 
     require(session.selection().active_clip_id == 2,
             "A stale activation replaced the current stable clip identity.");
@@ -791,7 +808,32 @@ void runControllerTests() {
                 !session.selection().active_track_id.has_value(),
             "A failed activation left stale stable selection in the session.");
 
+    std::uint64_t controller_trace_id = 0;
+    for (const auto& event : events) {
+        const auto* frame = std::get_if<playback::PlaybackFrameEvent>(&event);
+        if (frame != nullptr && frame->clip_id == 2 && frame->delivery_trace_id != 0) {
+            controller_trace_id = frame->delivery_trace_id;
+            break;
+        }
+    }
+    const auto delivery_snapshot = metrics.takeSnapshotAndReset().frame_delivery;
+    bool controller_trace_found = false;
+    for (std::size_t index = 0; index < delivery_snapshot.sample_count; ++index) {
+        const auto& sample = delivery_snapshot.samples[index];
+        controller_trace_found = controller_trace_found ||
+            (sample.trace_id == controller_trace_id &&
+             sample.last_stage ==
+                 rendering::PreviewFrameDeliveryStage::ControllerDelivered);
+    }
+    require(controller_trace_id != 0 && controller_trace_found &&
+                delivery_snapshot.stage_counts[static_cast<std::size_t>(
+                    rendering::PreviewFrameDeliveryStage::MailboxPublished)] > 0 &&
+                delivery_snapshot.stage_counts[static_cast<std::size_t>(
+                    rendering::PreviewFrameDeliveryStage::ControllerDelivered)] > 0,
+            "The worker trace ID did not correlate through the mailbox to controller delivery.");
+
     controller.shutdown();
+    metrics.setEnabled(false);
     require(!controller.available(), "Shutdown left the playback worker available.");
     require(fake_state->stop_calls.load() > 0,
             "Shutdown did not stop the playback worker before joining its thread.");

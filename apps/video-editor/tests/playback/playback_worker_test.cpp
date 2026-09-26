@@ -153,6 +153,7 @@ void validateReference(QCoreApplication& application, const std::filesystem::pat
         [&frame_count, &last_frame_index](
             playback::VideoFramePtr frame,
             qint64 frame_index,
+            quint64,
             quint64) {
             require(frame != nullptr, "Worker emitted an empty frame payload.");
             ++frame_count;
@@ -216,7 +217,7 @@ void validateSeekCoalescing(QCoreApplication& application, const std::filesystem
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&received_frames](playback::VideoFramePtr frame, qint64 frame_index, quint64) {
+        [&received_frames](playback::VideoFramePtr frame, qint64 frame_index, quint64, quint64) {
             require(frame != nullptr, "Coalesced seek emitted an empty frame payload.");
             received_frames.push_back(frame_index);
         });
@@ -262,7 +263,7 @@ void validateSegmentRange(
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&received_frames](playback::VideoFramePtr frame, qint64 frame_index, quint64) {
+        [&received_frames](playback::VideoFramePtr frame, qint64 frame_index, quint64, quint64) {
             require(frame != nullptr, "A segment seek emitted an empty frame payload.");
             received_frames.push_back(frame_index);
         });
@@ -493,7 +494,7 @@ void validateCompositionTransitions(
         QObject::connect(
             &worker,
             &playback::PlaybackWorker::frameReady,
-            [&captured](playback::VideoFramePtr frame, qint64, quint64) {
+            [&captured](playback::VideoFramePtr frame, qint64, quint64, quint64) {
                 if (frame != nullptr) captured = *frame;
             });
         QObject::connect(
@@ -592,6 +593,7 @@ void validateCompositionPlayback(
         [&frame_count, &empty_frame, &metrics](
             playback::VideoFramePtr frame,
             qint64,
+            quint64,
             quint64) {
             if (frame == nullptr) {
                 empty_frame = true;
@@ -676,7 +678,7 @@ void validateCompositionReuseAcrossMediaActivation(
         &worker,
         &playback::PlaybackWorker::frameReady,
         [&worker, &received_frame, &received_frame_count,
-         &start_playback_after_seek](playback::VideoFramePtr frame, qint64, quint64) {
+         &start_playback_after_seek](playback::VideoFramePtr frame, qint64, quint64, quint64) {
             if (frame != nullptr) {
                 received_frame = true;
                 ++received_frame_count;
@@ -773,7 +775,7 @@ void validateCompositionSeekMetrics(
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&received_frame, &metrics](playback::VideoFramePtr frame, qint64, quint64) {
+        [&received_frame, &metrics](playback::VideoFramePtr frame, qint64, quint64, quint64) {
             require(frame != nullptr, "Composition seek emitted an empty frame.");
             received_frame = true;
             metrics.recordCpuPresentedFrame();
@@ -836,7 +838,7 @@ void validateDirectDecodeCatchup(
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&frame_indices](playback::VideoFramePtr frame, qint64 frame_index, quint64) {
+        [&frame_indices](playback::VideoFramePtr frame, qint64 frame_index, quint64, quint64) {
             require(frame != nullptr, "Direct catch-up emitted an empty frame.");
             frame_indices.push_back(frame_index);
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -901,7 +903,7 @@ void validateCompositionDecodeCatchup(
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&frame_indices](playback::VideoFramePtr frame, qint64 frame_index, quint64) {
+        [&frame_indices](playback::VideoFramePtr frame, qint64 frame_index, quint64, quint64) {
             require(frame != nullptr, "Composition catch-up emitted an empty frame.");
             frame_indices.push_back(frame_index);
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -978,7 +980,7 @@ void validateCompositionCaching() {
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&frames](playback::VideoFramePtr frame, qint64, quint64) {
+        [&frames](playback::VideoFramePtr frame, qint64, quint64, quint64) {
             frames.push_back(std::move(frame));
         });
 
@@ -1042,7 +1044,7 @@ void validateCompositionPreviewQuality() {
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&emitted_dimensions](playback::VideoFramePtr frame, qint64, quint64) {
+        [&emitted_dimensions](playback::VideoFramePtr frame, qint64, quint64, quint64) {
             if (frame != nullptr) {
                 emitted_dimensions.emplace_back(frame->width, frame->height);
             }
@@ -1082,7 +1084,7 @@ void validateStaticImageComposition() {
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&frames](playback::VideoFramePtr frame, qint64, quint64) {
+        [&frames](playback::VideoFramePtr frame, qint64, quint64, quint64) {
             frames.push_back(std::move(frame));
         });
 
@@ -1120,23 +1122,29 @@ void validatePlaybackFrameMailbox() {
         1, 1, 4, std::vector<std::uint8_t>{5, 6, 7, 8}});
 
     require(
-        !mailbox.publish(playback::PlaybackFramePacket{first, 1, 10}),
+        !mailbox.publish(playback::PlaybackFramePacket{first, 1, 10, 101}).has_value(),
         "The first mailbox packet was incorrectly reported as replaced.");
     require(mailbox.acquireDispatch(),
             "The mailbox did not reserve its first UI dispatch.");
     require(
-        mailbox.publish(playback::PlaybackFramePacket{second, 2, 11}),
+        mailbox.publish(playback::PlaybackFramePacket{second, 2, 11, 102}).has_value(),
         "The mailbox did not replace an older pending packet.");
 
     const auto packet = mailbox.take();
     require(packet.has_value() && packet->frame == second &&
-                packet->frame_index == 2 && packet->generation == 11,
+                packet->frame_index == 2 && packet->generation == 11 &&
+                packet->delivery_trace_id == 102,
             "The mailbox did not retain the newest shared frame packet.");
     require(!mailbox.finishDispatch(),
             "The mailbox kept a dispatch scheduled after draining its packet.");
     require(mailbox.acquireDispatch(),
             "The mailbox could not reserve a subsequent dispatch.");
-    mailbox.clearPending();
+    require(!mailbox.publish(playback::PlaybackFramePacket{second, 3, 12, 103})
+                 .has_value(),
+            "The mailbox unexpectedly replaced a packet before clear.");
+    const auto cleared = mailbox.clearPending();
+    require(cleared.has_value() && cleared->delivery_trace_id == 103,
+            "Clearing the mailbox did not return the discarded trace packet.");
     require(!mailbox.finishDispatch(),
             "Clearing the mailbox did not remove the pending packet.");
 }
@@ -1154,7 +1162,7 @@ void validateCompositionPacing(QCoreApplication& application) {
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&frame_indices](playback::VideoFramePtr frame, qint64 frame_index, quint64) {
+        [&frame_indices](playback::VideoFramePtr frame, qint64 frame_index, quint64, quint64) {
             require(frame != nullptr, "Pacing emitted an empty composition frame.");
             frame_indices.push_back(frame_index);
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -1229,7 +1237,7 @@ void validateNormalCompositionPacing(QCoreApplication& application) {
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&frame_indices](playback::VideoFramePtr frame, qint64 frame_index, quint64) {
+        [&frame_indices](playback::VideoFramePtr frame, qint64 frame_index, quint64, quint64) {
             require(frame != nullptr, "Normal composition emitted an empty frame.");
             frame_indices.push_back(frame_index);
         });

@@ -49,6 +49,7 @@ struct PlaybackFrameEvent {
     VideoFramePtr frame;
     std::int64_t frame_index = 0;
     timeline::ClipId clip_id = 0;
+    std::uint64_t delivery_trace_id = 0;
 };
 
 struct PlaybackPositionEvent {
@@ -163,7 +164,8 @@ private:
     void queueFrame(
         VideoFramePtr frame,
         qint64 frame_index,
-        quint64 generation);
+        quint64 generation,
+        quint64 delivery_trace_id);
     void drainFrameMailbox();
     void updateTimelineClock();
     void startTimelineClock(std::int64_t timeline_frame);

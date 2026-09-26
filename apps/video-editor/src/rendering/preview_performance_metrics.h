@@ -73,6 +73,9 @@ struct SlowFrameLayerSample {
     SlowFrameDecodePath decode_path = SlowFrameDecodePath::None;
     std::uint64_t decode_nanoseconds = 0;
     std::uint64_t composition_nanoseconds = 0;
+    std::uint64_t composition_setup_nanoseconds = 0;
+    std::uint64_t raster_blend_nanoseconds = 0;
+    std::uint64_t fast_path_copy_nanoseconds = 0;
 
     [[nodiscard]] std::uint64_t totalNanoseconds() const noexcept {
         return decode_nanoseconds + composition_nanoseconds;
@@ -88,9 +91,81 @@ struct SlowFrameSample {
     std::uint64_t decode_nanoseconds = 0;
     std::uint64_t composition_nanoseconds = 0;
     std::uint64_t payload_nanoseconds = 0;
+    std::uint64_t composition_adapter_nanoseconds = 0;
+    std::uint64_t output_buffer_create_nanoseconds = 0;
+    std::uint64_t output_background_fill_nanoseconds = 0;
+    std::uint64_t composition_layer_setup_nanoseconds = 0;
+    std::uint64_t composition_raster_blend_nanoseconds = 0;
+    std::uint64_t composition_fast_path_copy_nanoseconds = 0;
     std::uint64_t active_layer_count = 0;
     std::uint8_t slow_layer_count = 0;
     std::array<SlowFrameLayerSample, 4> slow_layers{};
+};
+
+enum class PreviewFrameDeliveryStage : std::uint8_t {
+    WorkerEmitted,
+    MailboxPublished,
+    ControllerDelivered,
+    WindowReceived,
+    PreviewSubmitted,
+    GpuUploaded,
+    GpuDrawn,
+    QtFrameSwapped,
+    CpuPainted,
+    Count,
+};
+
+enum class PreviewFrameDeliveryDropReason : std::uint8_t {
+    None,
+    MailboxCoalesced,
+    StaleGeneration,
+    TimelineBehind,
+    PreviewOverwritten,
+    InvalidFrame,
+    NoActiveClip,
+    GpuFailure,
+    Shutdown,
+    Count,
+};
+
+enum class PreviewFrameDeliveryTiming : std::uint8_t {
+    WorkerToMailbox,
+    MailboxWait,
+    ControllerToWindow,
+    WindowToPreview,
+    PreviewToGpuUpload,
+    GpuUploadToDraw,
+    DrawToQtSwap,
+    PreviewToCpuPaint,
+    WorkerToQtSwap,
+    WorkerToCpuPaint,
+    Count,
+};
+
+struct PreviewFrameDeliverySample {
+    std::uint64_t trace_id = 0;
+    std::uint64_t playback_generation = 0;
+    std::int64_t timeline_frame = -1;
+    PreviewFrameDeliveryStage last_stage = PreviewFrameDeliveryStage::WorkerEmitted;
+    PreviewFrameDeliveryDropReason drop_reason = PreviewFrameDeliveryDropReason::None;
+    bool complete = false;
+    std::uint64_t age_nanoseconds = 0;
+    std::uint64_t end_to_end_nanoseconds = 0;
+};
+
+struct PreviewFrameDeliverySnapshot {
+    static constexpr std::size_t kSampleLimit = 4;
+    std::array<std::uint64_t,
+        static_cast<std::size_t>(PreviewFrameDeliveryStage::Count)> stage_counts{};
+    std::array<std::uint64_t,
+        static_cast<std::size_t>(PreviewFrameDeliveryDropReason::Count)> drop_counts{};
+    std::array<PreviewTimingSnapshot,
+        static_cast<std::size_t>(PreviewFrameDeliveryTiming::Count)> timings{};
+    std::array<PreviewFrameDeliverySample, kSampleLimit> samples{};
+    std::uint64_t sample_count = 0;
+    std::uint64_t incomplete_trace_count = 0;
+    std::uint64_t trace_evictions = 0;
+    std::uint64_t unknown_trace_updates = 0;
 };
 
 void addSlowFrameLayer(
@@ -167,6 +242,7 @@ struct PreviewPerformanceSnapshot {
     PreviewTimingSnapshot seek_to_presentation;
     std::uint64_t slow_frame_count = 0;
     std::optional<SlowFrameSample> worst_slow_frame;
+    PreviewFrameDeliverySnapshot frame_delivery;
 };
 
 class PreviewPerformanceMetrics final {
@@ -181,6 +257,15 @@ public:
         PreviewTiming timing,
         std::chrono::nanoseconds elapsed) noexcept;
     void recordSlowFrame(const SlowFrameSample& sample) noexcept;
+    [[nodiscard]] std::uint64_t createFrameDeliveryTrace(
+        std::uint64_t playback_generation,
+        std::int64_t timeline_frame) noexcept;
+    void recordFrameDeliveryStage(
+        std::uint64_t trace_id,
+        PreviewFrameDeliveryStage stage) noexcept;
+    void recordFrameDeliveryDrop(
+        std::uint64_t trace_id,
+        PreviewFrameDeliveryDropReason reason) noexcept;
     void recordDecodedFrame() noexcept;
     void recordDecodeDiscardedFrame() noexcept;
     void recordStaleFrameDiscarded() noexcept;
@@ -227,6 +312,21 @@ public:
 
 private:
     static constexpr std::size_t kTimingHistogramBucketCount = 64;
+    static constexpr std::size_t kFrameDeliveryTraceCapacity = 512;
+
+    struct FrameDeliveryTraceRecord {
+        std::uint64_t trace_id = 0;
+        std::uint64_t playback_generation = 0;
+        std::int64_t timeline_frame = -1;
+        std::array<std::uint64_t,
+            static_cast<std::size_t>(PreviewFrameDeliveryStage::Count)> stage_nanoseconds{};
+        PreviewFrameDeliveryStage last_stage =
+            PreviewFrameDeliveryStage::WorkerEmitted;
+        PreviewFrameDeliveryDropReason drop_reason =
+            PreviewFrameDeliveryDropReason::None;
+        bool active = false;
+        bool interval_dirty = true;
+    };
 
     struct TimingStorage {
         std::atomic<std::uint64_t> count{0};
@@ -238,6 +338,7 @@ private:
 
     [[nodiscard]] static PreviewTimingSnapshot takeTimingSnapshot(
         TimingStorage& storage) noexcept;
+    [[nodiscard]] PreviewFrameDeliverySnapshot takeFrameDeliverySnapshotAndReset() noexcept;
 
     std::atomic_bool enabled_{false};
     std::atomic<std::uint64_t> enabled_started_nanoseconds_{0};
@@ -317,6 +418,18 @@ private:
     std::mutex slow_frames_mutex_;
     std::uint64_t slow_frame_count_ = 0;
     std::optional<SlowFrameSample> worst_slow_frame_;
+    std::mutex frame_delivery_mutex_;
+    std::uint64_t next_frame_delivery_trace_id_ = 0;
+    std::array<FrameDeliveryTraceRecord, kFrameDeliveryTraceCapacity>
+        frame_delivery_traces_{};
+    std::array<std::uint64_t,
+        static_cast<std::size_t>(PreviewFrameDeliveryStage::Count)> frame_delivery_stage_counts_{};
+    std::array<std::uint64_t,
+        static_cast<std::size_t>(PreviewFrameDeliveryDropReason::Count)> frame_delivery_drop_counts_{};
+    std::uint64_t frame_delivery_trace_evictions_ = 0;
+    std::uint64_t frame_delivery_unknown_updates_ = 0;
+    std::array<TimingStorage,
+        static_cast<std::size_t>(PreviewFrameDeliveryTiming::Count)> frame_delivery_timings_{};
 };
 
 class PreviewPerformanceScope final {

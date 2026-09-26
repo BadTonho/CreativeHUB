@@ -67,8 +67,9 @@ PlaybackController::PlaybackController(
         worker_,
         &PlaybackWorker::frameReady,
         this,
-        [this](VideoFramePtr frame, qint64 index, quint64 generation) {
-            queueFrame(std::move(frame), index, generation);
+        [this](VideoFramePtr frame, qint64 index, quint64 generation,
+               quint64 delivery_trace_id) {
+            queueFrame(std::move(frame), index, generation, delivery_trace_id);
         },
         Qt::DirectConnection);
     QObject::connect(
@@ -126,7 +127,11 @@ void PlaybackController::shutdown() noexcept {
     stopTimelineClock();
     pending_activation_.reset();
     playing_ = false;
-    frame_mailbox_.clearPending();
+    if (const auto discarded = frame_mailbox_.clearPending(); discarded.has_value()) {
+        rendering::PreviewPerformanceMetrics::instance().recordFrameDeliveryDrop(
+            discarded->delivery_trace_id,
+            rendering::PreviewFrameDeliveryDropReason::Shutdown);
+    }
     if (worker_ == nullptr) return;
 
     if (worker_thread_.isRunning()) {
@@ -816,15 +821,38 @@ void PlaybackController::handleWorkerAudioWarning(
 void PlaybackController::queueFrame(
     VideoFramePtr frame,
     qint64 frame_index,
-    quint64 generation) {
-    if (frame == nullptr || shutting_down_.load(std::memory_order_acquire)) return;
-    if (generation != published_generation_.load(std::memory_order_acquire)) {
-        rendering::PreviewPerformanceMetrics::instance().recordStaleFrameDiscarded();
+    quint64 generation,
+    quint64 delivery_trace_id) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    if (frame == nullptr) {
+        metrics.recordFrameDeliveryDrop(
+            delivery_trace_id,
+            rendering::PreviewFrameDeliveryDropReason::InvalidFrame);
         return;
     }
-    if (frame_mailbox_.publish(PlaybackFramePacket{
-            std::move(frame), frame_index, generation})) {
-        rendering::PreviewPerformanceMetrics::instance().recordPacingCoalescedFrame();
+    if (shutting_down_.load(std::memory_order_acquire)) {
+        metrics.recordFrameDeliveryDrop(
+            delivery_trace_id,
+            rendering::PreviewFrameDeliveryDropReason::Shutdown);
+        return;
+    }
+    if (generation != published_generation_.load(std::memory_order_acquire)) {
+        metrics.recordStaleFrameDiscarded();
+        metrics.recordFrameDeliveryDrop(
+            delivery_trace_id,
+            rendering::PreviewFrameDeliveryDropReason::StaleGeneration);
+        return;
+    }
+    const auto replaced = frame_mailbox_.publish(PlaybackFramePacket{
+        std::move(frame), frame_index, generation, delivery_trace_id});
+    metrics.recordFrameDeliveryStage(
+        delivery_trace_id,
+        rendering::PreviewFrameDeliveryStage::MailboxPublished);
+    if (replaced.has_value()) {
+        metrics.recordPacingCoalescedFrame();
+        metrics.recordFrameDeliveryDrop(
+            replaced->delivery_trace_id,
+            rendering::PreviewFrameDeliveryDropReason::MailboxCoalesced);
     }
     if (!frame_mailbox_.acquireDispatch()) return;
     QMetaObject::invokeMethod(
@@ -835,8 +863,17 @@ void PlaybackController::queueFrame(
 
 void PlaybackController::drainFrameMailbox() {
     const auto packet = frame_mailbox_.take();
-    if (packet.has_value() && packet->generation == generation_ &&
-        packet->frame != nullptr) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    if (packet.has_value() && packet->generation != generation_) {
+        metrics.recordFrameDeliveryDrop(
+            packet->delivery_trace_id,
+            rendering::PreviewFrameDeliveryDropReason::StaleGeneration);
+        metrics.recordStaleFrameDiscarded();
+    } else if (packet.has_value() && packet->frame == nullptr) {
+        metrics.recordFrameDeliveryDrop(
+            packet->delivery_trace_id,
+            rendering::PreviewFrameDeliveryDropReason::InvalidFrame);
+    } else if (packet.has_value()) {
         bool present_packet = true;
         if (pending_activation_.has_value() &&
             pending_activation_->generation == packet->generation) {
@@ -852,6 +889,9 @@ void PlaybackController::drainFrameMailbox() {
                     requestSeekForGeneration(
                         static_cast<qint64>(pending_activation_->target_frame),
                         packet->generation);
+                    metrics.recordFrameDeliveryDrop(
+                        packet->delivery_trace_id,
+                        rendering::PreviewFrameDeliveryDropReason::TimelineBehind);
                     present_packet = false;
                 }
                 if (present_packet) {
@@ -879,6 +919,9 @@ void PlaybackController::drainFrameMailbox() {
                 const auto expected_local = expected_global - clip.timeline_start_frame;
                 if (packet->frame_index < expected_local &&
                     expected_local - packet->frame_index > 1) {
+                    metrics.recordFrameDeliveryDrop(
+                        packet->delivery_trace_id,
+                        rendering::PreviewFrameDeliveryDropReason::TimelineBehind);
                     present_packet = false;
                 }
             } else {
@@ -903,10 +946,18 @@ void PlaybackController::drainFrameMailbox() {
         if (present_packet && active_after.has_value()) {
             const auto& clip = session_.timeline().tracks()[active_after->track_index]
                 .clips[active_after->clip_index];
+            metrics.recordFrameDeliveryStage(
+                packet->delivery_trace_id,
+                rendering::PreviewFrameDeliveryStage::ControllerDelivered);
             emitEvent(PlaybackFrameEvent{
                 packet->frame,
                 packet->frame_index,
-                clip.clip_id});
+                clip.clip_id,
+                packet->delivery_trace_id});
+        } else if (present_packet) {
+            metrics.recordFrameDeliveryDrop(
+                packet->delivery_trace_id,
+                rendering::PreviewFrameDeliveryDropReason::NoActiveClip);
 
         }
     }

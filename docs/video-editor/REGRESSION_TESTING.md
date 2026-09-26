@@ -48,7 +48,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
 | Settings dialog | Modal shell, General, Autosave, Timeline, and Shortcuts tabs, empty and populated autosave snapshot table, refresh/restore/delete/open-folder requests, Close action, independent component construction, and editable shortcut preferences |
-| Preview performance metrics | Deterministic counter/timing aggregation, bounded p95/p99 timing histograms, decoded/stale-frame counters, playback delivery-rate derivation, failure counters, cache state, workload context, process-resource sampling, reset behavior, disabled behavior, Settings persistence and signal propagation, and offscreen Preview submission instrumentation |
+| Preview performance metrics | Deterministic counter/timing aggregation, bounded p95/p99 timing histograms, decoded/stale-frame counters, playback delivery-rate derivation, failure counters, cache state, workload context, process-resource sampling, reset behavior, disabled behavior, Settings persistence and signal propagation, compositor setup/raster/fast-copy timings, bounded delivery trace IDs through worker/mailbox/controller/Preview, coalesced/dropped/incomplete classification, and offscreen CPU paint instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON v9, persisted stable track/clip IDs, canonical multi-track video/image/text kind round-trip, media overlap round-trip with text-over-text rejection, timeline zoom and row-height persistence, version 1-8 migration with legacy flat clips converted to `timeline_tracks`, duplicate/zero ID rejection, invalid input, offline media, transactional open |
 | MainWindow integration | Offscreen multi-track project open, preservation of tracks, clips, and stable IDs, clean dirty state immediately after opening, selection initialized by ID, equality using only the canonical loaded document, save/reopen round-trip, stale pending activation rejection, EditWorkspace-built Inspector and Timeline plus FusionWorkspace-built panels shared with WorkspaceHost, one shared Preview/Timeline/EditorSession, unchanged selection/playhead/playback/history/dirty state across workspace changes, workspace-only layout behavior, and controlled MainWindow construction and shutdown |
@@ -361,14 +361,24 @@ in the running Video Editor after UI or integration changes:
 - with Preview metrics enabled, play a layered Timeline for 15 seconds at Full
   quality, then repeat the same section once to warm decoder and text caches;
   confirm one `playback/slow_frame` event at most per metrics interval, only
-  when frames exceed the target-FPS budget. Check that it reports the interval
+  when frames exceed the target-FPS budget. Check that schema `2` reports the interval
   slow-frame count, the worst timeline frame, total processing/decode/
-  composition/payload times, and no more than four costly layers with IDs,
-  indices, source frames, kinds, decode paths, and per-layer timings. Compare
-  these worker timings with aggregate UI/GPU timings to distinguish decode,
-  composition, and presentation delays. Confirm no paths or frame contents are
-  logged, the existing `preview/performance_metrics` schema remains `4`, and
-  the project dirty state and playback output are unchanged;
+  composition/payload times, compositor list/output initialization and layer
+  setup/raster/blend/copy buckets, and no more than four costly layers with
+  IDs, indices, source frames, kinds, decode paths, and per-layer timings.
+  Compare these worker timings with aggregate UI/GPU timings to distinguish
+  decode, composition, and presentation delays. Confirm no paths or frame
+  contents are logged, the existing `preview/performance_metrics` schema
+  remains `4`, and the project dirty state and playback output are unchanged;
+- with Preview metrics enabled, verify one `playback/frame_delivery` event at
+  most per metrics interval. Correlate the same trace ID from worker emission
+  through mailbox, controller, window callback, Preview submission, and either
+  GPU upload/draw/Qt `frameSwapped` or CPU paint. Confirm coalesced, stale,
+  overwritten, invalid, failed, shutdown, and incomplete frames are distinguishable;
+  incomplete samples identify their last stage, and completed/dropped traces
+  are retired after aggregation. Verify that `frameSwapped` is treated as a Qt
+  milestone rather than physical monitor scanout, storage is capped at 512
+  traces and four examples per event, and no media paths or pixels are logged;
 - with Preview metrics enabled, activate a media item and perform seeks in a
   composition with text and video layers; confirm `activation_events`,
   `playback_start_events`, `seek_requests`, and `seek_operations` distinguish
@@ -463,6 +473,9 @@ in the running Video Editor after UI or integration changes:
 - confirm that Ctrl + scroll still changes only horizontal zoom and normal
   scrolling still moves the scroll area;
 - GPU preview, CPU fallback, grayscale, aspect-ratio preservation, and logs;
+  with metrics enabled, confirm CPU paint and Qt frame-swap markers appear only
+  on their respective Preview backends and disabling the preference leaves no
+  retained delivery traces;
 - GPU playback frame handoff: with metrics enabled, confirm normal GPU playback
   does not repeatedly update the hidden CPU surface, Preview submission does
   not retain stale frames after clear, and the shared frame handoff preserves

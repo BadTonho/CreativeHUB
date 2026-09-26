@@ -5,6 +5,7 @@
 
 #include <QImage>
 #include <QLabel>
+#include <QPaintEvent>
 #include <QPixmap>
 #include <QResizeEvent>
 #include <QStackedLayout>
@@ -14,6 +15,33 @@
 #include <cstdint>
 #include <utility>
 
+class PreviewCpuSurface final : public QLabel {
+public:
+    using QLabel::QLabel;
+
+    void setDeliveryTraceId(quint64 trace_id) noexcept {
+        if (delivery_trace_id_ != 0 && delivery_trace_id_ != trace_id) {
+            rendering::PreviewPerformanceMetrics::instance().recordFrameDeliveryDrop(
+                delivery_trace_id_,
+                rendering::PreviewFrameDeliveryDropReason::PreviewOverwritten);
+        }
+        delivery_trace_id_ = trace_id;
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override {
+        QLabel::paintEvent(event);
+        if (delivery_trace_id_ == 0) return;
+        rendering::PreviewPerformanceMetrics::instance().recordFrameDeliveryStage(
+            delivery_trace_id_,
+            rendering::PreviewFrameDeliveryStage::CpuPainted);
+        delivery_trace_id_ = 0;
+    }
+
+private:
+    quint64 delivery_trace_id_ = 0;
+};
+
 PreviewWidget::PreviewWidget(QWidget* parent)
     : QWidget(parent) {
     setMinimumSize(320, 180);
@@ -22,7 +50,7 @@ PreviewWidget::PreviewWidget(QWidget* parent)
     stack_ = new QStackedLayout(this);
     stack_->setContentsMargins(0, 0, 0, 0);
 
-    cpu_surface_ = new QLabel(this);
+    cpu_surface_ = new PreviewCpuSurface(this);
     cpu_surface_->setAlignment(Qt::AlignCenter);
     cpu_surface_->setMinimumSize(320, 180);
     cpu_surface_->setStyleSheet(
@@ -48,9 +76,14 @@ void PreviewWidget::setFrame(const media::VideoFrame& frame) {
     setFrame(std::make_shared<const media::VideoFrame>(frame));
 }
 
-void PreviewWidget::setFrame(media::VideoFramePtr frame) {
+void PreviewWidget::setFrame(
+    media::VideoFramePtr frame,
+    quint64 delivery_trace_id) {
     if (frame == nullptr || frame->width <= 0 || frame->height <= 0 ||
         frame->stride < frame->width * 4) {
+        rendering::PreviewPerformanceMetrics::instance().recordFrameDeliveryDrop(
+            delivery_trace_id,
+            rendering::PreviewFrameDeliveryDropReason::InvalidFrame);
         clearFrame("Preview frame is unavailable.");
         return;
     }
@@ -58,6 +91,9 @@ void PreviewWidget::setFrame(media::VideoFramePtr frame) {
     const auto expected_size = static_cast<std::size_t>(frame->stride) *
         static_cast<std::size_t>(frame->height);
     if (frame->rgba_pixels.size() < expected_size) {
+        rendering::PreviewPerformanceMetrics::instance().recordFrameDeliveryDrop(
+            delivery_trace_id,
+            rendering::PreviewFrameDeliveryDropReason::InvalidFrame);
         clearFrame("Preview frame is unavailable.");
         return;
     }
@@ -67,14 +103,19 @@ void PreviewWidget::setFrame(media::VideoFramePtr frame) {
         metrics,
         rendering::PreviewTiming::PreviewSubmit);
     metrics.recordSubmittedFrame(frame->width, frame->height);
+    metrics.recordFrameDeliveryStage(
+        delivery_trace_id,
+        rendering::PreviewFrameDeliveryStage::PreviewSubmitted);
     current_frame_ = std::move(frame);
 
     if (gpu_surface_ != nullptr && gpu_enabled_) {
+        cpu_surface_->setDeliveryTraceId(0);
         frame_image_ = {};
-        gpu_surface_->setFrame(current_frame_);
+        gpu_surface_->setFrame(current_frame_, delivery_trace_id);
         return;
     }
 
+    cpu_surface_->setDeliveryTraceId(delivery_trace_id);
     frame_image_ = {};
     ensureCpuImage();
     updateCpuPixmap();
@@ -86,6 +127,7 @@ void PreviewWidget::clearFrame(const QString& message) {
     frame_image_ = {};
     empty_message_ = message;
     if (cpu_surface_ != nullptr) {
+        cpu_surface_->setDeliveryTraceId(0);
         cpu_surface_->setPixmap({});
         cpu_surface_->setText(empty_message_);
     }

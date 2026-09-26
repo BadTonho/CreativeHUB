@@ -148,16 +148,22 @@ int main() {
         const std::vector<rendering::CompositionLayer> layers{
             {&bottom, identity},
             {&top, identity}};
-        std::vector<std::uint64_t> layer_elapsed_nanoseconds;
+        rendering::FrameCompositionTimings composition_timings;
         const auto composed = rendering::FrameCompositor::compose(
-            4,
-            4,
+            512,
+            512,
             layers,
-            &layer_elapsed_nanoseconds);
-        require(composed.has_value() && composed->width == 4 && composed->height == 4,
+            &composition_timings);
+        require(composed.has_value() && composed->width == 512 && composed->height == 512,
                 "The compositor did not create the expected canvas.");
-        require(layer_elapsed_nanoseconds.size() == layers.size(),
-                "The compositor did not report one timing for each Preview layer.");
+        require(composition_timings.layers.size() == layers.size() &&
+                    composition_timings.output_buffer_create_nanoseconds > 0 &&
+                    composition_timings.output_background_fill_nanoseconds > 0 &&
+                    composition_timings.layers[0].setup_nanoseconds +
+                        composition_timings.layers[0].raster_blend_nanoseconds > 0 &&
+                    composition_timings.layers[1].setup_nanoseconds +
+                        composition_timings.layers[1].raster_blend_nanoseconds > 0,
+                "The compositor did not report output and general raster timings.");
         require(composed->rgba_pixels[0] > 100 && composed->rgba_pixels[1] > 100,
                 "The compositor did not blend alpha layers.");
 
@@ -168,6 +174,31 @@ int main() {
             std::vector<rendering::CompositionLayer>{{&opaque_full, identity}});
         require(direct.has_value() && direct->rgba_pixels == opaque_full.rgba_pixels,
                 "The opaque identity composition changed the source pixels.");
+
+        media::VideoFrame large_opaque;
+        large_opaque.width = 512;
+        large_opaque.height = 512;
+        large_opaque.stride = large_opaque.width * 4;
+        large_opaque.rgba_pixels.resize(
+            static_cast<std::size_t>(large_opaque.stride) * large_opaque.height);
+        for (std::size_t index = 0; index < large_opaque.rgba_pixels.size(); index += 4) {
+            large_opaque.rgba_pixels[index] = 31;
+            large_opaque.rgba_pixels[index + 1] = 63;
+            large_opaque.rgba_pixels[index + 2] = 127;
+            large_opaque.rgba_pixels[index + 3] = 255;
+        }
+        rendering::FrameCompositionTimings copy_timings;
+        const auto copied = rendering::FrameCompositor::compose(
+            large_opaque.width,
+            large_opaque.height,
+            std::vector<rendering::CompositionLayer>{{&large_opaque, identity}},
+            &copy_timings);
+        require(copied.has_value() && copied->rgba_pixels == large_opaque.rgba_pixels,
+                "The compositor changed pixels in the opaque copy path.");
+        require(copy_timings.layers.size() == 1 &&
+                    copy_timings.layers[0].fast_path_copy_nanoseconds > 0 &&
+                    copy_timings.layers[0].raster_blend_nanoseconds == 0,
+                "The compositor did not isolate the opaque fast-path copy timing.");
 
         auto near_identity = identity;
         near_identity.position_x = 0.500001;
@@ -211,20 +242,27 @@ int main() {
         require(rendering::FrameCompositor::canUseAlphaCoverageFastPath(
                     rendering::CompositionLayer{&sparse, text_transform, coverage}),
                 "The unrotated alpha coverage layer was not eligible for the fast path.");
+        rendering::FrameCompositionTimings alpha_timings;
         const auto optimized = rendering::FrameCompositor::compose(
-            32,
-            24,
+            512,
+            512,
             std::vector<rendering::CompositionLayer>{{
                 &sparse,
                 text_transform,
-                coverage}});
+                coverage}},
+            &alpha_timings);
         const auto general = rendering::FrameCompositor::compose(
-            32,
-            24,
+            512,
+            512,
             std::vector<rendering::CompositionLayer>{{&sparse, text_transform}});
         require(optimized.has_value() && general.has_value() &&
                     optimized->rgba_pixels == general->rgba_pixels,
                 "The alpha coverage fast path changed composed pixels.");
+        require(alpha_timings.layers.size() == 1 &&
+                    alpha_timings.layers[0].setup_nanoseconds > 0 &&
+                    alpha_timings.layers[0].raster_blend_nanoseconds > 0 &&
+                    alpha_timings.layers[0].fast_path_copy_nanoseconds == 0,
+                "The compositor did not isolate alpha-coverage setup and raster timings.");
 
         auto rotated = text_transform;
         rotated.rotation_degrees = 15.0;
@@ -232,15 +270,15 @@ int main() {
                     rendering::CompositionLayer{&sparse, rotated, coverage}),
                 "A rotated alpha coverage layer incorrectly used the fast path.");
         const auto rotated_with_coverage = rendering::FrameCompositor::compose(
-            32,
-            24,
+            512,
+            512,
             std::vector<rendering::CompositionLayer>{{
                 &sparse,
                 rotated,
                 coverage}});
         const auto rotated_general = rendering::FrameCompositor::compose(
-            32,
-            24,
+            512,
+            512,
             std::vector<rendering::CompositionLayer>{{&sparse, rotated}});
         require(rotated_with_coverage.has_value() && rotated_general.has_value() &&
                     rotated_with_coverage->rgba_pixels == rotated_general->rgba_pixels,
@@ -253,13 +291,13 @@ int main() {
             static_cast<std::uint8_t>(0));
         const auto empty_coverage = rendering::FrameCompositor::buildAlphaCoverage(empty);
         const auto empty_composed = rendering::FrameCompositor::compose(
-            32,
-            24,
+            512,
+            512,
             std::vector<rendering::CompositionLayer>{{
                 &empty,
                 text_transform,
                 empty_coverage}});
-        const auto empty_general = rendering::FrameCompositor::compose(32, 24, {});
+        const auto empty_general = rendering::FrameCompositor::compose(512, 512, {});
         require(empty_composed.has_value() && empty_general.has_value() &&
                     empty_composed->rgba_pixels == empty_general->rgba_pixels,
                 "Empty alpha coverage changed the destination.");

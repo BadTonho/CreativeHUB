@@ -542,10 +542,14 @@ void PlaybackWorker::renderCompositionFrame(
         if (cached_composition_frame_ != nullptr &&
             cached_composition_generation_ == generation &&
             cached_composition_global_frame_ == global_frame) {
+            const auto trace_id = playing_
+                ? metrics.createFrameDeliveryTrace(generation_, global_frame)
+                : 0U;
             metrics.recordCompositionCacheHit();
             metrics.recordComposedFrame();
             metrics.recordEmittedFrame();
-            emit frameReady(cached_composition_frame_, frame_index, generation_);
+            emit frameReady(
+                cached_composition_frame_, frame_index, generation_, trace_id);
             return;
         }
 
@@ -574,7 +578,7 @@ void PlaybackWorker::renderCompositionFrame(
         }
 
         std::optional<media::VideoFrame> composed;
-        std::vector<std::uint64_t> layer_composition_nanoseconds;
+        auto& composition_timings = composition_timings_scratch_;
         const auto composition_started = collect_slow_frame
             ? Clock::now()
             : Clock::time_point{};
@@ -584,7 +588,7 @@ void PlaybackWorker::renderCompositionFrame(
                 rendering::PreviewTiming::Composition);
             composed = composeCompositionLayers(
                 *decoded_layers,
-                collect_slow_frame ? &layer_composition_nanoseconds : nullptr);
+                collect_slow_frame ? &composition_timings : nullptr);
         }
         const auto composition_elapsed = collect_slow_frame
             ? std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -629,6 +633,12 @@ void PlaybackWorker::renderCompositionFrame(
                 std::max<std::int64_t>(0, composition_elapsed.count()));
             sample.payload_nanoseconds = static_cast<std::uint64_t>(
                 std::max<std::int64_t>(0, payload_elapsed.count()));
+            sample.composition_adapter_nanoseconds =
+                composition_timings.layer_list_setup_nanoseconds;
+            sample.output_buffer_create_nanoseconds =
+                composition_timings.output_buffer_create_nanoseconds;
+            sample.output_background_fill_nanoseconds =
+                composition_timings.output_background_fill_nanoseconds;
             sample.active_layer_count = decoded_layers->size();
 
             for (std::size_t index = 0; index < decoded_layers->size(); ++index) {
@@ -652,9 +662,24 @@ void PlaybackWorker::renderCompositionFrame(
                 }
                 layer.decode_path = decoded.decode_path;
                 layer.decode_nanoseconds = decoded.decode_nanoseconds;
-                if (index < layer_composition_nanoseconds.size()) {
+                if (index < composition_timings.layers.size()) {
+                    const auto& layer_timing = composition_timings.layers[index];
+                    layer.composition_setup_nanoseconds =
+                        layer_timing.setup_nanoseconds;
+                    layer.raster_blend_nanoseconds =
+                        layer_timing.raster_blend_nanoseconds;
+                    layer.fast_path_copy_nanoseconds =
+                        layer_timing.fast_path_copy_nanoseconds;
                     layer.composition_nanoseconds =
-                        layer_composition_nanoseconds[index];
+                        layer.composition_setup_nanoseconds +
+                        layer.raster_blend_nanoseconds +
+                        layer.fast_path_copy_nanoseconds;
+                    sample.composition_layer_setup_nanoseconds +=
+                        layer.composition_setup_nanoseconds;
+                    sample.composition_raster_blend_nanoseconds +=
+                        layer.raster_blend_nanoseconds;
+                    sample.composition_fast_path_copy_nanoseconds +=
+                        layer.fast_path_copy_nanoseconds;
                 }
 
                 rendering::addSlowFrameLayer(sample, layer);
@@ -667,7 +692,10 @@ void PlaybackWorker::renderCompositionFrame(
         cached_composition_frame_ = payload;
         metrics.recordComposedFrame();
         metrics.recordEmittedFrame();
-        emit frameReady(std::move(payload), frame_index, generation_);
+        const auto trace_id = playing_
+            ? metrics.createFrameDeliveryTrace(generation_, global_frame)
+            : 0U;
+        emit frameReady(std::move(payload), frame_index, generation_, trace_id);
     } catch (const media::MediaError& error) {
         reportFailure(error, "compose", frame_index);
     } catch (const std::exception& error) {
@@ -1255,7 +1283,12 @@ void PlaybackWorker::emitFrame(std::optional<media::VideoFramePtr> frame) {
     }
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     metrics.recordEmittedFrame();
-    emit frameReady(std::move(*frame), current_frame_index_, generation_);
+    const auto trace_id = playing_
+        ? metrics.createFrameDeliveryTrace(
+            generation_, primary_timeline_start_frame_ + current_frame_index_)
+        : 0U;
+    emit frameReady(
+        std::move(*frame), current_frame_index_, generation_, trace_id);
 }
 
 void PlaybackWorker::emitComposedFrame() {
@@ -1441,21 +1474,26 @@ PlaybackWorker::decodeCompositionLayers(
 
 std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     const std::vector<DecodedCompositionLayer>& decoded_layers,
-    std::vector<std::uint64_t>* layer_elapsed_nanoseconds) const {
+    rendering::FrameCompositionTimings* timings) const {
+    const auto adapter_started = timings != nullptr ? Clock::now() : Clock::time_point{};
     std::vector<rendering::CompositionLayer> layers;
     layers.reserve(decoded_layers.size());
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     for (const auto& decoded : decoded_layers) {
-        if (decoded.frame == nullptr) continue;
         rendering::CompositionLayer layer{
             decoded.frame.get(),
             decoded.transform,
             decoded.alpha_coverage};
-        if (rendering::FrameCompositor::canUseAlphaCoverageFastPath(layer)) {
+        if (decoded.frame != nullptr &&
+            rendering::FrameCompositor::canUseAlphaCoverageFastPath(layer)) {
             metrics.recordTextCompositionFastPathHit();
         }
         layers.push_back(std::move(layer));
     }
+    const auto adapter_elapsed = timings != nullptr
+        ? std::chrono::duration_cast<std::chrono::nanoseconds>(
+            Clock::now() - adapter_started).count()
+        : 0;
     int width = 1920;
     int height = 1080;
     switch (preview_quality_) {
@@ -1470,11 +1508,17 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     case PreviewQuality::Full:
         break;
     }
-    return rendering::FrameCompositor::compose(
+    auto composed = rendering::FrameCompositor::compose(
         width,
         height,
         layers,
-        layer_elapsed_nanoseconds);
+        timings);
+    if (timings != nullptr) {
+        timings->layer_list_setup_nanoseconds = adapter_elapsed <= 0
+            ? 0U
+            : static_cast<std::uint64_t>(adapter_elapsed);
+    }
+    return composed;
 }
 
 void PlaybackWorker::reportFailure(

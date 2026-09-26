@@ -183,6 +183,17 @@ void PreviewPerformanceMetrics::setEnabled(bool enabled) noexcept {
             slow_frame_count_ = 0;
             worst_slow_frame_.reset();
         }
+        {
+            std::lock_guard lock(frame_delivery_mutex_);
+            frame_delivery_traces_.fill({});
+            frame_delivery_stage_counts_.fill(0);
+            frame_delivery_drop_counts_.fill(0);
+            frame_delivery_trace_evictions_ = 0;
+            frame_delivery_unknown_updates_ = 0;
+        }
+        for (auto& timing : frame_delivery_timings_) {
+            static_cast<void>(takeTimingSnapshot(timing));
+        }
     }
     if (enabled) {
         enabled_started_nanoseconds_.store(
@@ -206,6 +217,12 @@ bool PreviewPerformanceMetrics::isEnabled() const noexcept {
 
 void PreviewPerformanceMetrics::reset() noexcept {
     static_cast<void>(takeSnapshotAndReset());
+    std::lock_guard lock(frame_delivery_mutex_);
+    frame_delivery_traces_.fill({});
+    frame_delivery_stage_counts_.fill(0);
+    frame_delivery_drop_counts_.fill(0);
+    frame_delivery_trace_evictions_ = 0;
+    frame_delivery_unknown_updates_ = 0;
 }
 
 void PreviewPerformanceMetrics::recordTiming(
@@ -268,6 +285,240 @@ void PreviewPerformanceMetrics::recordSlowFrame(
             worst_slow_frame_->processing_nanoseconds) {
         worst_slow_frame_ = sample;
     }
+}
+
+std::uint64_t PreviewPerformanceMetrics::createFrameDeliveryTrace(
+    std::uint64_t playback_generation,
+    std::int64_t timeline_frame) noexcept {
+    if (!isEnabled()) return 0;
+
+    const auto now = nowNanoseconds();
+    std::lock_guard lock(frame_delivery_mutex_);
+    if (!isEnabled() ||
+        next_frame_delivery_trace_id_ == std::numeric_limits<std::uint64_t>::max()) {
+        return 0;
+    }
+    const auto trace_id = ++next_frame_delivery_trace_id_;
+    auto& record = frame_delivery_traces_[
+        static_cast<std::size_t>(trace_id % kFrameDeliveryTraceCapacity)];
+    if (record.active) ++frame_delivery_trace_evictions_;
+    record = {};
+    record.trace_id = trace_id;
+    record.playback_generation = playback_generation;
+    record.timeline_frame = timeline_frame;
+    record.active = true;
+    record.stage_nanoseconds[static_cast<std::size_t>(
+        PreviewFrameDeliveryStage::WorkerEmitted)] = now;
+    record.last_stage = PreviewFrameDeliveryStage::WorkerEmitted;
+    ++frame_delivery_stage_counts_[static_cast<std::size_t>(
+        PreviewFrameDeliveryStage::WorkerEmitted)];
+    return trace_id;
+}
+
+void PreviewPerformanceMetrics::recordFrameDeliveryStage(
+    std::uint64_t trace_id,
+    PreviewFrameDeliveryStage stage) noexcept {
+    if (!isEnabled() || trace_id == 0 ||
+        stage >= PreviewFrameDeliveryStage::Count) {
+        return;
+    }
+
+    const auto now = nowNanoseconds();
+    std::lock_guard lock(frame_delivery_mutex_);
+    if (!isEnabled()) return;
+    auto& record = frame_delivery_traces_[
+        static_cast<std::size_t>(trace_id % kFrameDeliveryTraceCapacity)];
+    if (!record.active || record.trace_id != trace_id) {
+        ++frame_delivery_unknown_updates_;
+        return;
+    }
+
+    const auto qt_swapped = record.stage_nanoseconds[static_cast<std::size_t>(
+        PreviewFrameDeliveryStage::QtFrameSwapped)];
+    const auto cpu_painted = record.stage_nanoseconds[static_cast<std::size_t>(
+        PreviewFrameDeliveryStage::CpuPainted)];
+    if (record.drop_reason != PreviewFrameDeliveryDropReason::None ||
+        qt_swapped != 0 || cpu_painted != 0) {
+        return;
+    }
+    const auto stage_index = static_cast<std::size_t>(stage);
+    if (record.stage_nanoseconds[stage_index] != 0) return;
+    record.stage_nanoseconds[stage_index] = now;
+    record.last_stage = stage;
+    record.interval_dirty = true;
+    ++frame_delivery_stage_counts_[stage_index];
+
+    const auto record_hop = [this, &record, now](
+        PreviewFrameDeliveryStage from,
+        PreviewFrameDeliveryTiming timing) {
+        const auto started = record.stage_nanoseconds[static_cast<std::size_t>(from)];
+        if (started == 0 || now < started) return;
+        auto& storage = frame_delivery_timings_[static_cast<std::size_t>(timing)];
+        const auto elapsed = now - started;
+        storage.count.fetch_add(1, std::memory_order_relaxed);
+        storage.total_nanoseconds.fetch_add(elapsed, std::memory_order_relaxed);
+        updateMaximum(storage.maximum_nanoseconds, elapsed);
+        storage.histogram[histogramBucket(elapsed, storage.histogram.size())]
+            .fetch_add(1, std::memory_order_relaxed);
+    };
+
+    switch (stage) {
+    case PreviewFrameDeliveryStage::MailboxPublished:
+        record_hop(PreviewFrameDeliveryStage::WorkerEmitted,
+                   PreviewFrameDeliveryTiming::WorkerToMailbox);
+        break;
+    case PreviewFrameDeliveryStage::ControllerDelivered:
+        record_hop(PreviewFrameDeliveryStage::MailboxPublished,
+                   PreviewFrameDeliveryTiming::MailboxWait);
+        break;
+    case PreviewFrameDeliveryStage::WindowReceived:
+        record_hop(PreviewFrameDeliveryStage::ControllerDelivered,
+                   PreviewFrameDeliveryTiming::ControllerToWindow);
+        break;
+    case PreviewFrameDeliveryStage::PreviewSubmitted:
+        record_hop(PreviewFrameDeliveryStage::WindowReceived,
+                   PreviewFrameDeliveryTiming::WindowToPreview);
+        break;
+    case PreviewFrameDeliveryStage::GpuUploaded:
+        record_hop(PreviewFrameDeliveryStage::PreviewSubmitted,
+                   PreviewFrameDeliveryTiming::PreviewToGpuUpload);
+        break;
+    case PreviewFrameDeliveryStage::GpuDrawn:
+        record_hop(PreviewFrameDeliveryStage::GpuUploaded,
+                   PreviewFrameDeliveryTiming::GpuUploadToDraw);
+        break;
+    case PreviewFrameDeliveryStage::QtFrameSwapped:
+        record_hop(PreviewFrameDeliveryStage::GpuDrawn,
+                   PreviewFrameDeliveryTiming::DrawToQtSwap);
+        record_hop(PreviewFrameDeliveryStage::WorkerEmitted,
+                   PreviewFrameDeliveryTiming::WorkerToQtSwap);
+        break;
+    case PreviewFrameDeliveryStage::CpuPainted:
+        record_hop(PreviewFrameDeliveryStage::PreviewSubmitted,
+                   PreviewFrameDeliveryTiming::PreviewToCpuPaint);
+        record_hop(PreviewFrameDeliveryStage::WorkerEmitted,
+                   PreviewFrameDeliveryTiming::WorkerToCpuPaint);
+        break;
+    case PreviewFrameDeliveryStage::WorkerEmitted:
+    case PreviewFrameDeliveryStage::Count:
+        break;
+    }
+}
+
+void PreviewPerformanceMetrics::recordFrameDeliveryDrop(
+    std::uint64_t trace_id,
+    PreviewFrameDeliveryDropReason reason) noexcept {
+    if (!isEnabled() || trace_id == 0 ||
+        reason == PreviewFrameDeliveryDropReason::None ||
+        reason >= PreviewFrameDeliveryDropReason::Count) {
+        return;
+    }
+
+    std::lock_guard lock(frame_delivery_mutex_);
+    if (!isEnabled()) return;
+    auto& record = frame_delivery_traces_[
+        static_cast<std::size_t>(trace_id % kFrameDeliveryTraceCapacity)];
+    if (!record.active || record.trace_id != trace_id) {
+        ++frame_delivery_unknown_updates_;
+        return;
+    }
+    const auto qt_swapped = record.stage_nanoseconds[static_cast<std::size_t>(
+        PreviewFrameDeliveryStage::QtFrameSwapped)];
+    const auto cpu_painted = record.stage_nanoseconds[static_cast<std::size_t>(
+        PreviewFrameDeliveryStage::CpuPainted)];
+    if (record.drop_reason != PreviewFrameDeliveryDropReason::None ||
+        qt_swapped != 0 || cpu_painted != 0) {
+        return;
+    }
+    record.drop_reason = reason;
+    record.interval_dirty = true;
+    ++frame_delivery_drop_counts_[static_cast<std::size_t>(reason)];
+}
+
+PreviewFrameDeliverySnapshot
+PreviewPerformanceMetrics::takeFrameDeliverySnapshotAndReset() noexcept {
+    PreviewFrameDeliverySnapshot snapshot;
+    const auto now = nowNanoseconds();
+    std::lock_guard lock(frame_delivery_mutex_);
+    snapshot.stage_counts = frame_delivery_stage_counts_;
+    frame_delivery_stage_counts_.fill(0);
+    snapshot.drop_counts = frame_delivery_drop_counts_;
+    frame_delivery_drop_counts_.fill(0);
+    snapshot.trace_evictions = std::exchange(frame_delivery_trace_evictions_, 0);
+    snapshot.unknown_trace_updates = std::exchange(frame_delivery_unknown_updates_, 0);
+    for (std::size_t index = 0; index < snapshot.timings.size(); ++index) {
+        snapshot.timings[index] = takeTimingSnapshot(frame_delivery_timings_[index]);
+    }
+
+    std::array<PreviewFrameDeliverySample,
+        PreviewFrameDeliverySnapshot::kSampleLimit> best{};
+    std::array<std::uint64_t,
+        PreviewFrameDeliverySnapshot::kSampleLimit> scores{};
+    std::array<std::uint64_t, kFrameDeliveryTraceCapacity> terminal_traces{};
+    std::size_t terminal_trace_count = 0;
+    for (auto& record : frame_delivery_traces_) {
+        if (!record.active) continue;
+        if (!record.interval_dirty) continue;
+        const auto trace_id = record.trace_id;
+        const auto worker_emitted = record.stage_nanoseconds[static_cast<std::size_t>(
+            PreviewFrameDeliveryStage::WorkerEmitted)];
+        if (worker_emitted == 0) continue;
+        const auto qt_swapped = record.stage_nanoseconds[static_cast<std::size_t>(
+            PreviewFrameDeliveryStage::QtFrameSwapped)];
+        const auto cpu_painted = record.stage_nanoseconds[static_cast<std::size_t>(
+            PreviewFrameDeliveryStage::CpuPainted)];
+        const auto terminal_time = qt_swapped != 0 ? qt_swapped : cpu_painted;
+        const bool complete = terminal_time != 0;
+        const bool dropped = record.drop_reason != PreviewFrameDeliveryDropReason::None;
+        if (!complete && !dropped) ++snapshot.incomplete_trace_count;
+        if (complete || dropped) {
+            terminal_traces[terminal_trace_count++] = trace_id;
+        }
+
+        PreviewFrameDeliverySample sample;
+        sample.trace_id = trace_id;
+        sample.playback_generation = record.playback_generation;
+        sample.timeline_frame = record.timeline_frame;
+        sample.last_stage = record.last_stage;
+        sample.drop_reason = record.drop_reason;
+        sample.complete = complete;
+        sample.age_nanoseconds = now >= worker_emitted ? now - worker_emitted : 0;
+        sample.end_to_end_nanoseconds = complete && terminal_time >= worker_emitted
+            ? terminal_time - worker_emitted
+            : 0;
+        const auto score = complete
+            ? sample.end_to_end_nanoseconds
+            : sample.age_nanoseconds;
+        record.interval_dirty = !complete && !dropped;
+
+        std::size_t insert = best.size();
+        for (std::size_t index = 0; index < best.size(); ++index) {
+            if (score > scores[index]) {
+                insert = index;
+                break;
+            }
+        }
+        if (insert == best.size()) continue;
+        for (std::size_t index = best.size() - 1; index > insert; --index) {
+            best[index] = best[index - 1];
+            scores[index] = scores[index - 1];
+        }
+        best[insert] = sample;
+        scores[insert] = score;
+    }
+
+    for (std::size_t index = 0; index < terminal_trace_count; ++index) {
+        const auto trace_id = terminal_traces[index];
+        auto& record = frame_delivery_traces_[
+            static_cast<std::size_t>(trace_id % kFrameDeliveryTraceCapacity)];
+        if (record.active && record.trace_id == trace_id) record.active = false;
+    }
+
+    for (std::size_t index = 0; index < best.size(); ++index) {
+        if (best[index].trace_id == 0) continue;
+        snapshot.samples[snapshot.sample_count++] = best[index];
+    }
+    return snapshot;
 }
 
 void PreviewPerformanceMetrics::recordDecodedFrame() noexcept {
@@ -635,6 +886,7 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
         slow_frame_count_ = 0;
         worst_slow_frame_.reset();
     }
+    snapshot.frame_delivery = takeFrameDeliverySnapshotAndReset();
     return snapshot;
 }
 

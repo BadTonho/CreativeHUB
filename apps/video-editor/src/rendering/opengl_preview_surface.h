@@ -22,7 +22,7 @@ public:
     explicit OpenGLPreviewSurface(QWidget* parent = nullptr);
     ~OpenGLPreviewSurface() override;
 
-    void setFrame(media::VideoFramePtr frame);
+    void setFrame(media::VideoFramePtr frame, quint64 delivery_trace_id = 0);
     void clearFrame();
     void setGrayscaleEnabled(bool enabled);
 
@@ -51,6 +51,10 @@ private:
     int video_width_ = 0;
     int video_height_ = 0;
     media::VideoFramePtr pending_frame_;
+    quint64 pending_delivery_trace_id_ = 0;
+    quint64 uploaded_delivery_trace_id_ = 0;
+    quint64 drawn_delivery_trace_id_ = 0;
+    quint64 last_swapped_delivery_trace_id_ = 0;
     std::vector<std::uint8_t> packed_pixels_;
     bool pending_frame_valid_ = false;
     bool frame_available_ = false;

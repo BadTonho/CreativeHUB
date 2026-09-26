@@ -4,9 +4,10 @@
 
 namespace playback {
 
-bool PlaybackFrameMailbox::publish(PlaybackFramePacket packet) {
+std::optional<PlaybackFramePacket> PlaybackFrameMailbox::publish(
+    PlaybackFramePacket packet) {
     std::lock_guard lock(mutex_);
-    const bool replaced = pending_packet_.has_value();
+    auto replaced = std::move(pending_packet_);
     pending_packet_ = std::move(packet);
     return replaced;
 }
@@ -34,9 +35,11 @@ bool PlaybackFrameMailbox::finishDispatch() {
     return false;
 }
 
-void PlaybackFrameMailbox::clearPending() {
+std::optional<PlaybackFramePacket> PlaybackFrameMailbox::clearPending() {
     std::lock_guard lock(mutex_);
+    auto pending = std::move(pending_packet_);
     pending_packet_.reset();
+    return pending;
 }
 
 } // namespace playback

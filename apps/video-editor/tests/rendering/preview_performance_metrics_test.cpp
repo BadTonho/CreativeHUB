@@ -40,6 +40,10 @@ int main() {
         metrics.recordTiming(
             rendering::PreviewTiming::TextRasterization,
             std::chrono::milliseconds(6));
+        const auto disabled_trace = metrics.createFrameDeliveryTrace(1, 1);
+        metrics.recordFrameDeliveryStage(
+            disabled_trace,
+            rendering::PreviewFrameDeliveryStage::MailboxPublished);
         rendering::SlowFrameSample disabled_slow_frame;
         disabled_slow_frame.processing_nanoseconds = 40'000'000;
         disabled_slow_frame.frame_budget_nanoseconds = 33'000'000;
@@ -63,7 +67,9 @@ int main() {
                     disabled.pacing_audio_catchup_frames == 0 &&
                     disabled.pacing_deadline_catchup_frames == 0 &&
                     disabled.slow_frame_count == 0 &&
-                    !disabled.worst_slow_frame.has_value(),
+                    !disabled.worst_slow_frame.has_value() &&
+                    disabled.frame_delivery.sample_count == 0 &&
+                    disabled.frame_delivery.incomplete_trace_count == 0,
                 "Disabled metrics recorded decoded-frame data.");
         require(disabled.decode.count == 0,
                 "Disabled metrics recorded timing data.");
@@ -421,7 +427,9 @@ int main() {
                     reset.playback_start_to_presentation.count == 0 &&
                     reset.seek_to_presentation.count == 0 &&
                     reset.slow_frame_count == 0 &&
-                    !reset.worst_slow_frame.has_value(),
+                    !reset.worst_slow_frame.has_value() &&
+                    reset.frame_delivery.sample_count == 0 &&
+                    reset.frame_delivery.incomplete_trace_count == 0,
                 "Taking a snapshot did not reset the metrics.");
 
         constexpr std::size_t slow_samples_per_thread = 250;
@@ -463,6 +471,165 @@ int main() {
                     slow_producer_count * slow_samples_per_thread &&
                     saw_concurrent_worst_sample,
                 "Concurrent slow-frame aggregation lost samples.");
+
+        metrics.reset();
+        const auto complete_trace = metrics.createFrameDeliveryTrace(12, 240);
+        metrics.recordFrameDeliveryStage(
+            complete_trace,
+            rendering::PreviewFrameDeliveryStage::MailboxPublished);
+        metrics.recordFrameDeliveryStage(
+            complete_trace,
+            rendering::PreviewFrameDeliveryStage::ControllerDelivered);
+        metrics.recordFrameDeliveryStage(
+            complete_trace,
+            rendering::PreviewFrameDeliveryStage::WindowReceived);
+        metrics.recordFrameDeliveryStage(
+            complete_trace,
+            rendering::PreviewFrameDeliveryStage::PreviewSubmitted);
+        metrics.recordFrameDeliveryStage(
+            complete_trace,
+            rendering::PreviewFrameDeliveryStage::GpuUploaded);
+        metrics.recordFrameDeliveryStage(
+            complete_trace,
+            rendering::PreviewFrameDeliveryStage::GpuDrawn);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        metrics.recordFrameDeliveryStage(
+            complete_trace,
+            rendering::PreviewFrameDeliveryStage::QtFrameSwapped);
+
+        const auto coalesced_trace = metrics.createFrameDeliveryTrace(12, 241);
+        metrics.recordFrameDeliveryStage(
+            coalesced_trace,
+            rendering::PreviewFrameDeliveryStage::MailboxPublished);
+        metrics.recordFrameDeliveryDrop(
+            coalesced_trace,
+            rendering::PreviewFrameDeliveryDropReason::MailboxCoalesced);
+        const auto incomplete_trace = metrics.createFrameDeliveryTrace(12, 242);
+        metrics.recordFrameDeliveryStage(
+            incomplete_trace,
+            rendering::PreviewFrameDeliveryStage::MailboxPublished);
+        const auto stale_trace = metrics.createFrameDeliveryTrace(12, 243);
+        metrics.recordFrameDeliveryDrop(
+            stale_trace,
+            rendering::PreviewFrameDeliveryDropReason::StaleGeneration);
+        const auto delivery = metrics.takeSnapshotAndReset().frame_delivery;
+        const auto find_delivery_sample = [&](std::uint64_t trace_id) {
+            for (std::size_t index = 0; index < delivery.sample_count; ++index) {
+                if (delivery.samples[index].trace_id == trace_id) {
+                    return &delivery.samples[index];
+                }
+            }
+            return static_cast<const rendering::PreviewFrameDeliverySample*>(nullptr);
+        };
+        const auto* complete_sample = find_delivery_sample(complete_trace);
+        const auto* coalesced_sample = find_delivery_sample(coalesced_trace);
+        const auto* incomplete_sample = find_delivery_sample(incomplete_trace);
+        const auto* stale_sample = find_delivery_sample(stale_trace);
+        require(complete_trace != 0 && complete_sample != nullptr &&
+                    complete_sample->last_stage ==
+                        rendering::PreviewFrameDeliveryStage::QtFrameSwapped &&
+                    complete_sample->drop_reason ==
+                        rendering::PreviewFrameDeliveryDropReason::None &&
+                    complete_sample->complete &&
+                    complete_sample->end_to_end_nanoseconds > 0 &&
+                    coalesced_sample != nullptr &&
+                    coalesced_sample->drop_reason ==
+                        rendering::PreviewFrameDeliveryDropReason::MailboxCoalesced &&
+                    !coalesced_sample->complete &&
+                    incomplete_sample != nullptr &&
+                    !incomplete_sample->complete &&
+                    incomplete_sample->last_stage ==
+                        rendering::PreviewFrameDeliveryStage::MailboxPublished &&
+                    stale_sample != nullptr &&
+                    stale_sample->drop_reason ==
+                        rendering::PreviewFrameDeliveryDropReason::StaleGeneration &&
+                    delivery.incomplete_trace_count == 1 &&
+                    delivery.drop_counts[static_cast<std::size_t>(
+                        rendering::PreviewFrameDeliveryDropReason::MailboxCoalesced)] == 1 &&
+                    delivery.drop_counts[static_cast<std::size_t>(
+                        rendering::PreviewFrameDeliveryDropReason::StaleGeneration)] == 1 &&
+                    delivery.stage_counts[static_cast<std::size_t>(
+                        rendering::PreviewFrameDeliveryStage::QtFrameSwapped)] == 1 &&
+                    delivery.timings[static_cast<std::size_t>(
+                        rendering::PreviewFrameDeliveryTiming::WorkerToQtSwap)].count == 1,
+                "Frame delivery did not correlate terminal, dropped, and incomplete stages.");
+
+        metrics.reset();
+        std::uint64_t oldest_trace = 0;
+        for (std::size_t index = 0;
+             index < rendering::PreviewFrameDeliverySnapshot::kSampleLimit + 509;
+             ++index) {
+            const auto trace_id = metrics.createFrameDeliveryTrace(15, index);
+            if (index == 0) oldest_trace = trace_id;
+        }
+        metrics.recordFrameDeliveryStage(
+            oldest_trace,
+            rendering::PreviewFrameDeliveryStage::MailboxPublished);
+        const auto bounded = metrics.takeSnapshotAndReset().frame_delivery;
+        require(bounded.trace_evictions == 1 &&
+                    bounded.unknown_trace_updates == 1 &&
+                    bounded.incomplete_trace_count == 512 &&
+                    bounded.sample_count == rendering::PreviewFrameDeliverySnapshot::kSampleLimit,
+                "Frame delivery traces exceeded their bounded registry or sample limit.");
+
+        metrics.reset();
+        constexpr std::size_t delivery_traces_per_thread = 50;
+        constexpr std::size_t delivery_producer_count = 4;
+        constexpr std::size_t expected_delivery_traces =
+            delivery_traces_per_thread * delivery_producer_count;
+        std::vector<std::thread> delivery_producers;
+        std::atomic_size_t completed_delivery_producers{0};
+        std::uint64_t observed_worker_stages = 0;
+        std::uint64_t observed_cpu_paint_stages = 0;
+        std::uint64_t observed_unknown_updates = 0;
+        const auto collect_delivery_counts = [&](
+            const rendering::PreviewFrameDeliverySnapshot& partial) {
+            observed_worker_stages += partial.stage_counts[static_cast<std::size_t>(
+                rendering::PreviewFrameDeliveryStage::WorkerEmitted)];
+            observed_cpu_paint_stages += partial.stage_counts[static_cast<std::size_t>(
+                rendering::PreviewFrameDeliveryStage::CpuPainted)];
+            observed_unknown_updates += partial.unknown_trace_updates;
+        };
+        for (std::size_t producer = 0;
+             producer < delivery_producer_count;
+             ++producer) {
+            delivery_producers.emplace_back([&metrics, &completed_delivery_producers, producer]() {
+                for (std::size_t index = 0;
+                     index < delivery_traces_per_thread;
+                     ++index) {
+                    const auto trace_id = metrics.createFrameDeliveryTrace(
+                        producer + 1,
+                        static_cast<std::int64_t>(index));
+                    metrics.recordFrameDeliveryStage(
+                        trace_id,
+                        rendering::PreviewFrameDeliveryStage::MailboxPublished);
+                    metrics.recordFrameDeliveryStage(
+                        trace_id,
+                        rendering::PreviewFrameDeliveryStage::ControllerDelivered);
+                    metrics.recordFrameDeliveryStage(
+                        trace_id,
+                        rendering::PreviewFrameDeliveryStage::WindowReceived);
+                    metrics.recordFrameDeliveryStage(
+                        trace_id,
+                        rendering::PreviewFrameDeliveryStage::PreviewSubmitted);
+                    metrics.recordFrameDeliveryStage(
+                        trace_id,
+                        rendering::PreviewFrameDeliveryStage::CpuPainted);
+                }
+                completed_delivery_producers.fetch_add(1, std::memory_order_release);
+            });
+        }
+        while (completed_delivery_producers.load(std::memory_order_acquire) <
+               delivery_producer_count) {
+            collect_delivery_counts(metrics.takeSnapshotAndReset().frame_delivery);
+            std::this_thread::yield();
+        }
+        for (auto& producer : delivery_producers) producer.join();
+        collect_delivery_counts(metrics.takeSnapshotAndReset().frame_delivery);
+        require(observed_worker_stages == expected_delivery_traces &&
+                    observed_cpu_paint_stages == expected_delivery_traces &&
+                    observed_unknown_updates == 0,
+                "Concurrent frame delivery tracing lost correlated stages.");
         metrics.setEnabled(false);
         const auto disabled_after_audio = metrics.takeSnapshotAndReset();
         require(

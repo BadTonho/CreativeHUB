@@ -13,14 +13,16 @@ struct PlaybackFramePacket {
     media::VideoFramePtr frame;
     qint64 frame_index = 0;
     quint64 generation = 0;
+    quint64 delivery_trace_id = 0;
 };
 
 // A one-slot, latest-frame mailbox used between the playback thread and the UI.
 // The mailbox never copies frame pixels; only the shared pointer is replaced.
 class PlaybackFrameMailbox final {
 public:
-    // Returns true when an older pending packet was replaced.
-    bool publish(PlaybackFramePacket packet);
+    // Returns the pending packet when it was replaced by the newer one.
+    [[nodiscard]] std::optional<PlaybackFramePacket> publish(
+        PlaybackFramePacket packet);
 
     [[nodiscard]] std::optional<PlaybackFramePacket> take();
 
@@ -31,7 +33,8 @@ public:
     // when the caller must enqueue another UI drain callback.
     bool finishDispatch();
 
-    void clearPending();
+    // Returns the packet discarded while clearing the mailbox, if any.
+    [[nodiscard]] std::optional<PlaybackFramePacket> clearPending();
 
 private:
     std::mutex mutex_;

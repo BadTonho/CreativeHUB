@@ -30,6 +30,19 @@ struct CompositionLayer {
     AlphaCoveragePtr alpha_coverage;
 };
 
+struct CompositionLayerTimings {
+    std::uint64_t setup_nanoseconds = 0;
+    std::uint64_t raster_blend_nanoseconds = 0;
+    std::uint64_t fast_path_copy_nanoseconds = 0;
+};
+
+struct FrameCompositionTimings {
+    std::uint64_t layer_list_setup_nanoseconds = 0;
+    std::uint64_t output_buffer_create_nanoseconds = 0;
+    std::uint64_t output_background_fill_nanoseconds = 0;
+    std::vector<CompositionLayerTimings> layers;
+};
+
 class FrameCompositor final {
 public:
     [[nodiscard]] static AlphaCoveragePtr buildAlphaCoverage(
@@ -42,7 +55,7 @@ public:
         int width,
         int height,
         const std::vector<CompositionLayer>& layers,
-        std::vector<std::uint64_t>* layer_elapsed_nanoseconds = nullptr);
+        FrameCompositionTimings* timings = nullptr);
 };
 
 } // namespace rendering

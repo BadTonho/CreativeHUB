@@ -48,10 +48,12 @@ int main(int argc, char* argv[]) {
         auto& metrics = rendering::PreviewPerformanceMetrics::instance();
         metrics.setEnabled(true);
         metrics.reset();
-        widget.setFrame(shared_frame);
+        const auto delivery_trace_id = metrics.createFrameDeliveryTrace(7, 23);
+        widget.setFrame(shared_frame, delivery_trace_id);
         shared_frame.reset();
         require(!weak_frame.expired(),
                 "Preview did not retain the submitted frame while displayed.");
+        application.processEvents();
         const auto preview_snapshot = metrics.takeSnapshotAndReset();
         require(preview_snapshot.submitted_frames == 1,
                 "Preview metrics did not record the submitted frame.");
@@ -59,6 +61,28 @@ int main(int argc, char* argv[]) {
                 "Preview metrics did not record the CPU-presented frame.");
         require(preview_snapshot.preview_submit.count == 1,
                 "Preview metrics did not time frame submission.");
+        require(delivery_trace_id != 0 &&
+                    preview_snapshot.frame_delivery.stage_counts[static_cast<std::size_t>(
+                        rendering::PreviewFrameDeliveryStage::PreviewSubmitted)] == 1 &&
+                    preview_snapshot.frame_delivery.stage_counts[static_cast<std::size_t>(
+                        rendering::PreviewFrameDeliveryStage::CpuPainted)] == 1 &&
+                    preview_snapshot.frame_delivery.sample_count == 1 &&
+                    preview_snapshot.frame_delivery.samples[0].trace_id == delivery_trace_id &&
+                    preview_snapshot.frame_delivery.samples[0].last_stage ==
+                        rendering::PreviewFrameDeliveryStage::CpuPainted,
+                "The CPU Preview did not complete the worker frame delivery trace.");
+        const auto cleared_trace_id = metrics.createFrameDeliveryTrace(7, 24);
+        widget.setFrame(
+            std::make_shared<const media::VideoFrame>(makeFrame()),
+            cleared_trace_id);
+        widget.clearFrame("Discard pending paint.");
+        const auto cleared_snapshot = metrics.takeSnapshotAndReset();
+        require(cleared_snapshot.frame_delivery.drop_counts[static_cast<std::size_t>(
+                    rendering::PreviewFrameDeliveryDropReason::PreviewOverwritten)] == 1 &&
+                    cleared_snapshot.frame_delivery.samples[0].trace_id == cleared_trace_id &&
+                    cleared_snapshot.frame_delivery.samples[0].drop_reason ==
+                        rendering::PreviewFrameDeliveryDropReason::PreviewOverwritten,
+                "Clearing the CPU Preview did not mark its pending frame as overwritten.");
         metrics.setEnabled(false);
         widget.clearFrame("Frame released.");
         require(weak_frame.expired(),

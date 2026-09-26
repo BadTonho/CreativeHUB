@@ -114,7 +114,11 @@ public slots:
     virtual void seekToFrame(qint64 frame_index, quint64 generation);
 
 signals:
-    void frameReady(VideoFramePtr frame, qint64 frame_index, quint64 generation);
+    void frameReady(
+        VideoFramePtr frame,
+        qint64 frame_index,
+        quint64 generation,
+        quint64 delivery_trace_id);
     void mediaReady(quint64 generation);
     void playbackStateChanged(bool playing, quint64 generation);
     void playbackFinished(quint64 generation, bool during_playback);
@@ -152,7 +156,7 @@ private:
         const media::VideoPlaybackSession::CancellationPredicate& should_cancel);
     [[nodiscard]] std::optional<media::VideoFrame> composeCompositionLayers(
         const std::vector<DecodedCompositionLayer>& layers,
-        std::vector<std::uint64_t>* layer_elapsed_nanoseconds = nullptr) const;
+        rendering::FrameCompositionTimings* timings = nullptr) const;
     void clearCompositionCache() noexcept;
     void reportFailure(
         const media::MediaError& error,
@@ -225,6 +229,7 @@ private:
     QVector<CompositionLayerSpec> composition_specs_;
     QVector<CompositionTransitionSpec> composition_transitions_;
     std::vector<CompositionSession> composition_sessions_;
+    rendering::FrameCompositionTimings composition_timings_scratch_;
     bool composition_enabled_ = false;
     std::int64_t primary_timeline_start_frame_ = 0;
     quint64 cached_composition_generation_ = 0;
