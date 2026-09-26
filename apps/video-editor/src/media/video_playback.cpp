@@ -453,9 +453,8 @@ std::unique_ptr<VideoPlaybackSession::Impl> VideoPlaybackSession::openImpl(
     return impl;
 }
 
-bool VideoPlaybackSession::decodeNextFrame(
+bool VideoPlaybackSession::decodeRawNextFrame(
     Impl& impl,
-    VideoFramePtr* output_frame,
     ForwardDecodeDiagnostics* diagnostics) {
     if (impl.end_reached) return false;
 
@@ -512,25 +511,6 @@ bool VideoPlaybackSession::decodeNextFrame(
         if (receive_result == 0) {
             ++impl.current_frame_index;
             impl.last_decoded_timestamp = impl.frame->best_effort_timestamp;
-            if (output_frame != nullptr) {
-                VideoFramePtr decoded_frame;
-                {
-                    OptionalDurationAccumulator conversion_duration(
-                        diagnostics != nullptr
-                            ? &diagnostics->target_pixel_conversion_nanoseconds
-                            : nullptr);
-                    decoded_frame = copyRgbaFrame(*impl.frame, impl.scaler, metrics);
-                }
-                if (impl.cache_decoded_frames) {
-                    VideoPlaybackSession::cacheFrame(
-                        impl,
-                        impl.current_frame_index,
-                        decoded_frame);
-                }
-                *output_frame = std::move(decoded_frame);
-            } else {
-                metrics.recordDecodeDiscardedFrame();
-            }
             return true;
         }
         if (receive_result == AVERROR(EAGAIN)) {
@@ -546,6 +526,36 @@ bool VideoPlaybackSession::decodeNextFrame(
         }
         throwFfmpegError(receive_result, "Receiving decoded video frame");
     }
+}
+
+bool VideoPlaybackSession::decodeNextFrame(
+    Impl& impl,
+    VideoFramePtr* output_frame,
+    ForwardDecodeDiagnostics* diagnostics) {
+    if (!decodeRawNextFrame(impl, diagnostics)) return false;
+
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    if (output_frame == nullptr) {
+        metrics.recordDecodeDiscardedFrame();
+        return true;
+    }
+
+    VideoFramePtr decoded_frame;
+    {
+        OptionalDurationAccumulator conversion_duration(
+            diagnostics != nullptr
+                ? &diagnostics->target_pixel_conversion_nanoseconds
+                : nullptr);
+        decoded_frame = copyRgbaFrame(*impl.frame, impl.scaler, metrics);
+    }
+    if (impl.cache_decoded_frames) {
+        VideoPlaybackSession::cacheFrame(
+            impl,
+            impl.current_frame_index,
+            decoded_frame);
+    }
+    *output_frame = std::move(decoded_frame);
+    return true;
 }
 
 bool VideoPlaybackSession::discardNextFrame(
@@ -688,6 +698,11 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_frame_at(
         };
 
         if (!seekToTimestamp(*impl_, frame_index)) {
+            if (!impl_->decoder_position_invalid && !impl_->end_reached &&
+                impl_->current_frame_index >= 0 &&
+                frame_index > impl_->current_frame_index) {
+                return decode_forward_to(frame_index, cancelled);
+            }
             return decodeFromBeginning();
         }
 
@@ -703,8 +718,7 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_frame_at(
                 return std::nullopt;
             }
 
-            VideoFramePtr frame;
-            if (!decodeNextFrame(*impl_, &frame)) {
+            if (!decodeRawNextFrame(*impl_)) {
                 impl_->cache_decoded_frames = true;
                 return std::nullopt;
             }
@@ -719,12 +733,15 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_frame_at(
             }
 
             impl_->current_frame_index = *decoded_index;
-            cacheFrame(*impl_, *decoded_index, frame);
             if (*decoded_index == frame_index) {
+                auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+                auto frame = copyRgbaFrame(*impl_->frame, impl_->scaler, metrics);
+                cacheFrame(*impl_, *decoded_index, frame);
                 impl_->cache_decoded_frames = true;
                 impl_->decoder_position_invalid = false;
                 return frame;
             }
+            rendering::PreviewPerformanceMetrics::instance().recordDecodeDiscardedFrame();
         }
     } catch (const MediaError& error) {
         impl_->cache_decoded_frames = true;

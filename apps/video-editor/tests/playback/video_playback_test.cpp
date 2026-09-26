@@ -2,10 +2,17 @@
 #include "media/video_playback.h"
 #include "rendering/preview_performance_metrics.h"
 
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libavutil/error.h>
+}
+
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -31,6 +38,138 @@ void expectMediaError(const std::filesystem::path& path, const std::string& expe
     }
 
     throw std::runtime_error("Expected VideoPlaybackSession to reject the input.");
+}
+
+struct TestVideoWriter final {
+    AVFormatContext* format = nullptr;
+    AVCodecContext* encoder = nullptr;
+    AVFrame* frame = nullptr;
+    AVPacket* packet = nullptr;
+
+    ~TestVideoWriter() {
+        if (packet != nullptr) av_packet_free(&packet);
+        if (frame != nullptr) av_frame_free(&frame);
+        if (encoder != nullptr) avcodec_free_context(&encoder);
+        if (format != nullptr) {
+            if (format->pb != nullptr &&
+                (format->oformat->flags & AVFMT_NOFILE) == 0) {
+                avio_closep(&format->pb);
+            }
+            avformat_free_context(format);
+        }
+    }
+};
+
+void requireFfmpeg(int result, const char* operation) {
+    if (result >= 0) return;
+    char message[AV_ERROR_MAX_STRING_SIZE]{};
+    av_strerror(result, message, sizeof(message));
+    throw std::runtime_error(std::string(operation) + ": " + message);
+}
+
+std::filesystem::path createInterframeTestVideo(
+    const std::filesystem::path& output_path) {
+    constexpr int width = 64;
+    constexpr int height = 64;
+    constexpr int frame_count = 120;
+    const auto output_utf8 = output_path.u8string();
+    const std::string output_name(
+        reinterpret_cast<const char*>(output_utf8.data()), output_utf8.size());
+
+    TestVideoWriter writer;
+    requireFfmpeg(
+        avformat_alloc_output_context2(
+            &writer.format, nullptr, "matroska", output_name.c_str()),
+        "Creating the interframe test container");
+    require(writer.format != nullptr, "Creating the interframe test container failed.");
+    const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_MPEG4);
+    require(codec != nullptr, "The FFmpeg MPEG-4 encoder is unavailable for test setup.");
+    auto* stream = avformat_new_stream(writer.format, nullptr);
+    require(stream != nullptr, "Creating the interframe test stream failed.");
+
+    writer.encoder = avcodec_alloc_context3(codec);
+    require(writer.encoder != nullptr, "Allocating the interframe test encoder failed.");
+    writer.encoder->codec_type = AVMEDIA_TYPE_VIDEO;
+    writer.encoder->codec_id = AV_CODEC_ID_MPEG4;
+    writer.encoder->width = width;
+    writer.encoder->height = height;
+    writer.encoder->pix_fmt = AV_PIX_FMT_YUV420P;
+    writer.encoder->time_base = AVRational{1, 30};
+    writer.encoder->framerate = AVRational{30, 1};
+    writer.encoder->bit_rate = 500000;
+    writer.encoder->gop_size = 12;
+    writer.encoder->max_b_frames = 0;
+    if ((writer.format->oformat->flags & AVFMT_GLOBALHEADER) != 0) {
+        writer.encoder->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    }
+    requireFfmpeg(avcodec_open2(writer.encoder, codec, nullptr),
+                   "Opening the interframe test encoder");
+    requireFfmpeg(
+        avcodec_parameters_from_context(stream->codecpar, writer.encoder),
+        "Writing the interframe test stream parameters");
+    stream->time_base = writer.encoder->time_base;
+    if ((writer.format->oformat->flags & AVFMT_NOFILE) == 0) {
+        requireFfmpeg(avio_open(&writer.format->pb, output_name.c_str(), AVIO_FLAG_WRITE),
+                      "Opening the interframe test output");
+    }
+    requireFfmpeg(avformat_write_header(writer.format, nullptr),
+                   "Writing the interframe test header");
+
+    writer.frame = av_frame_alloc();
+    writer.packet = av_packet_alloc();
+    require(writer.frame != nullptr && writer.packet != nullptr,
+            "Allocating interframe test buffers failed.");
+    writer.frame->format = writer.encoder->pix_fmt;
+    writer.frame->width = width;
+    writer.frame->height = height;
+    requireFfmpeg(av_frame_get_buffer(writer.frame, 32),
+                   "Allocating interframe test pixels");
+
+    const auto write_packets = [&]() {
+        while (true) {
+            const int receive_result =
+                avcodec_receive_packet(writer.encoder, writer.packet);
+            if (receive_result == AVERROR(EAGAIN) || receive_result == AVERROR_EOF) return;
+            requireFfmpeg(receive_result, "Encoding an interframe test packet");
+            av_packet_rescale_ts(
+                writer.packet, writer.encoder->time_base, stream->time_base);
+            writer.packet->stream_index = stream->index;
+            const int write_result =
+                av_interleaved_write_frame(writer.format, writer.packet);
+            av_packet_unref(writer.packet);
+            requireFfmpeg(write_result, "Writing an interframe test packet");
+        }
+    };
+
+    for (int index = 0; index < frame_count; ++index) {
+        requireFfmpeg(av_frame_make_writable(writer.frame),
+                       "Preparing interframe test pixels");
+        writer.frame->pts = index;
+        for (int y = 0; y < height; ++y) {
+            auto* row = writer.frame->data[0] + y * writer.frame->linesize[0];
+            for (int x = 0; x < width; ++x) {
+                row[x] = static_cast<std::uint8_t>(
+                    16 + ((index * 13 + x * 3 + y * 7) % 220));
+            }
+        }
+        for (int y = 0; y < height / 2; ++y) {
+            auto* u_row = writer.frame->data[1] + y * writer.frame->linesize[1];
+            auto* v_row = writer.frame->data[2] + y * writer.frame->linesize[2];
+            for (int x = 0; x < width / 2; ++x) {
+                u_row[x] = static_cast<std::uint8_t>(80 + (index % 80));
+                v_row[x] = static_cast<std::uint8_t>(160 - (index % 80));
+            }
+        }
+        requireFfmpeg(avcodec_send_frame(writer.encoder, writer.frame),
+                       "Submitting an interframe test frame");
+        write_packets();
+    }
+    requireFfmpeg(avcodec_send_frame(writer.encoder, nullptr),
+                   "Flushing the interframe test encoder");
+    write_packets();
+    requireFfmpeg(av_write_trailer(writer.format),
+                   "Finishing the interframe test container");
+    return output_path;
 }
 
 void validateForwardDecode(
@@ -154,6 +293,86 @@ void validateForwardDecode(
     metrics.setEnabled(true);
 }
 
+void validateLongSeekDecode(
+    const std::filesystem::path& path,
+    rendering::PreviewPerformanceMetrics& metrics) {
+    constexpr std::int64_t target_frame = 31;
+    constexpr std::int64_t next_frame = target_frame + 1;
+
+    auto reference_session = media::VideoPlaybackSession::open(path);
+    media::VideoFramePtr reference_target;
+    media::VideoFramePtr reference_next;
+    for (std::int64_t index = 0; index <= next_frame; ++index) {
+        const auto frame = reference_session->decode_next_frame();
+        require(frame.has_value() && *frame != nullptr,
+                "The reference frames for long seek decode were not available.");
+        if (index == target_frame) reference_target = *frame;
+        if (index == next_frame) reference_next = *frame;
+    }
+
+    auto session = media::VideoPlaybackSession::open(path);
+    const auto first = session->decode_next_frame();
+    require(first.has_value() && *first != nullptr,
+            "Long seek decode could not initialize its decoder position.");
+
+    metrics.reset();
+    const auto sought = session->decode_frame_at(target_frame);
+    const auto seek_snapshot = metrics.takeSnapshotAndReset();
+    require(sought.has_value() && *sought != nullptr &&
+                (*sought)->rgba_pixels == reference_target->rgba_pixels,
+            "Long seek decode changed the target RGBA frame.");
+    require(session->current_frame_index() == target_frame,
+            "Long seek decode finished at the wrong source frame.");
+    require(seek_snapshot.decode_discarded_frames > 0 &&
+                seek_snapshot.pixel_conversion.count == 1,
+            "Long seek decode did not discard raw intermediates as expected (discarded=" +
+                std::to_string(seek_snapshot.decode_discarded_frames) +
+                ", conversions=" +
+                std::to_string(seek_snapshot.pixel_conversion.count) + ").");
+
+    const auto continued = session->decode_next_frame();
+    require(continued.has_value() && *continued != nullptr &&
+                (*continued)->rgba_pixels == reference_next->rgba_pixels &&
+                session->current_frame_index() == next_frame,
+            "Sequential decoding did not continue correctly after a long seek.");
+    static_cast<void>(session->take_cache_hit_count());
+    const auto cached_target = session->decode_frame_at(target_frame);
+    require(cached_target.has_value() && *cached_target == *sought &&
+                session->take_cache_hit_count() >= 1,
+            "The requested long-seek frame was not cached.");
+    static_cast<void>(session->take_cache_hit_count());
+    const auto uncached_intermediate = session->decode_frame_at(target_frame - 1);
+    require(uncached_intermediate.has_value() && *uncached_intermediate != nullptr &&
+                session->take_cache_hit_count() == 0,
+            "Long seek decode cached an intermediate frame.");
+
+    auto cancelled_session = media::VideoPlaybackSession::open(path);
+    require(cancelled_session->decode_next_frame().has_value(),
+            "The long-seek cancellation test could not initialize its decoder.");
+    int cancellation_checks = 0;
+    metrics.reset();
+    const auto cancelled = cancelled_session->decode_frame_at(
+        target_frame,
+        [&cancellation_checks]() { return ++cancellation_checks >= 5; });
+    const auto cancelled_snapshot = metrics.takeSnapshotAndReset();
+    require(!cancelled.has_value() &&
+                cancelled_session->current_frame_index() < target_frame &&
+                cancelled_snapshot.pixel_conversion.count == 0,
+            "A cancelled long seek materialized or returned an obsolete target frame.");
+
+    auto fallback_session = media::VideoPlaybackSession::open(path);
+    require(fallback_session->decode_next_frame().has_value(),
+            "The failed-seek fallback test could not initialize its decoder.");
+    metrics.reset();
+    const auto out_of_range = fallback_session->decode_frame_at(
+        std::numeric_limits<std::int64_t>::max());
+    const auto fallback_snapshot = metrics.takeSnapshotAndReset();
+    require(!out_of_range.has_value() && fallback_session->at_end() &&
+                fallback_session->current_frame_index() > 0 &&
+                fallback_snapshot.pixel_conversion.count == 0,
+            "A rejected seek did not continue safely from the valid sequential position.");
+}
+
 void validateReference(const std::filesystem::path& path) {
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     metrics.setEnabled(true);
@@ -266,7 +485,15 @@ int main(int argc, char* argv[]) {
         std::ofstream(empty_file, std::ios::binary).close();
         expectMediaError(empty_file, "Opening media for playback");
 
-        if (argc == 2) validateReference(argv[1]);
+        if (argc == 2) {
+            validateReference(argv[1]);
+            const auto interframe_path = createInterframeTestVideo(
+                directory / "interframe-seek.mkv");
+            auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+            metrics.setEnabled(true);
+            validateLongSeekDecode(interframe_path, metrics);
+            metrics.setEnabled(false);
+        }
     } catch (const std::exception& error) {
         std::error_code cleanup_error;
         std::filesystem::remove_all(directory, cleanup_error);

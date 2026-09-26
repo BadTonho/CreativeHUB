@@ -467,6 +467,21 @@ void validateTransitionPlan() {
             "Transition endpoints no longer use the first worker session.");
 }
 
+void validatePlaybackDecodeGapPolicy() {
+    using playback::detail::shouldUseSequentialDecode;
+    require(shouldUseSequentialDecode(10, 11),
+            "A one-frame source gap did not select sequential decoding.");
+    require(shouldUseSequentialDecode(10, 18),
+            "The eight-frame source-gap boundary did not select sequential decoding.");
+    require(!shouldUseSequentialDecode(10, 19),
+            "A nine-frame source gap did not select direct seeking.");
+    require(!shouldUseSequentialDecode(-1, 7),
+            "An uninitialized decoder position selected sequential decoding.");
+    require(!shouldUseSequentialDecode(10, 10) &&
+                !shouldUseSequentialDecode(10, 9),
+            "A same-frame or backward request selected sequential decoding.");
+}
+
 void validateCompositionTransitions(
     const std::filesystem::path& path) {
     const auto make_layer = [&path](qint64 timeline_start,
@@ -1305,6 +1320,7 @@ int main(int argc, char* argv[]) {
 
     try {
         validateTransitionPlan();
+        validatePlaybackDecodeGapPolicy();
         validateWorkerDiagnostics(application);
         validateMissingMedia(application);
         validateSeekWithoutMedia(application);

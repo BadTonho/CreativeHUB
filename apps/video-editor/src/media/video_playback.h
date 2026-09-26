@@ -68,6 +68,9 @@ private:
     explicit VideoPlaybackSession(std::unique_ptr<Impl> impl);
 
     static std::unique_ptr<Impl> openImpl(const std::filesystem::path& source_path);
+    static bool decodeRawNextFrame(
+        Impl& impl,
+        ForwardDecodeDiagnostics* diagnostics = nullptr);
     static bool decodeNextFrame(
         Impl& impl,
         VideoFramePtr* output_frame,

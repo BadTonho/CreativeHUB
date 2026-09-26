@@ -1435,8 +1435,8 @@ PlaybackWorker::decodeCompositionLayers(
             bool tried_frame_at_decode = false;
             const auto current_source_frame =
                 composition.session->current_frame_index();
-            if (playing_ && request.allow_forward_decode && current_source_frame >= 0 &&
-                source_frame > current_source_frame) {
+            if (playing_ && request.allow_forward_decode &&
+                detail::shouldUseSequentialDecode(current_source_frame, source_frame)) {
                 tried_forward_decode = true;
                 decoded = composition.session->decode_forward_to(
                     source_frame,

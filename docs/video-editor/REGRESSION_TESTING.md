@@ -28,8 +28,8 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | --- | --- |
 | Structured logging | File creation, required fields, escaping, rotation, retention limit |
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions, PNG/JPEG/BMP/WebP/TIFF still-image probing, RGBA transparency, 150-frame defaults, and animated-GIF rejection |
-| Playback session | Sequential frames, forward catch-up without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
-| Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, composition decoder-session reuse across media activation and playback of consecutive activated clips, final composition-cache reuse and invalidation, Full/Half/Quarter composition dimensions and same-frame cache invalidation on quality changes, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
+| Playback session | Sequential frames, forward catch-up and random seeks without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, rejected-seek sequential fallback, optimized random seeking, EOF, segment limits |
+| Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, sequential decode through an eight-source-frame gap and direct seeking for larger composed-playback gaps, playback completion, separated layer decode/composition, composition decoder-session reuse across media activation and playback of consecutive activated clips, final composition-cache reuse and invalidation, Full/Half/Quarter composition dimensions and same-frame cache invalidation on quality changes, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
 | Playback controller | Monotonic Timeline clock using the first valid clip rate or 30 fps; continuous playhead during delayed media activation; trimmed source in-point seek; current-position seek before playback resumes; stale-frame rejection; pending activation cancellation on Pause, Stop, and seek; preview-quality forwarding and paused-frame recomposition without changing playhead or dirty state; and clean project dirty state |
 | Playback transition plan | Cross Dissolve held outgoing frame and incoming blend at its first, middle, and final frames; Fade to Black on both sides of the cut; one-frame durations; inactive and invalid transitions; unaffected layers on other tracks |
 | Frame-step navigation | Worker steps within a clip; forward/backward activation at contiguous junctions, one-frame clips, gaps and Timeline limits, media overlaps and cross-track priority, transitions, and missing or invalid active clip locations |
@@ -339,9 +339,13 @@ in the running Video Editor after UI or integration changes:
 - with Preview metrics enabled, compare `decode_avg_ms` with
   `decode_packet_avg_ms`, `decode_receive_avg_ms`, `pixel_conversion_avg_ms`,
   `frame_cache_copy_avg_ms`, and `decode_discarded_frames`; confirm that
-  sequential playback reuses the pixel converter, forward catch-up materializes
-  only its final target frame, reports zero `frame_cache_copy_count`, keeps the
-  same frame counts, and does not add overwritten frames or visual differences;
+  sequential playback reuses the pixel converter, composed-playback gaps up to
+  eight source frames use sequential draining and larger gaps use direct seek,
+  neither path converts intermediate frames to RGBA, and only the requested
+  target is materialized. Confirm zero `frame_cache_copy_count`, unchanged
+  target pixels, and no extra overwritten frames; a seek rejected before moving
+  a valid decoder position should continue from that position without
+  materializing the intervening frames;
 - with Preview metrics enabled during playback, compare `playback_ticks`,
   `pacing_skipped_frames`, `pacing_coalesced_frames`, `pacing_lag_avg_ms`,
   `pacing_lag_max_ms`, `pacing_lag_p95_ms`, `pacing_lag_p99_ms`,
@@ -371,7 +375,10 @@ in the running Video Editor after UI or integration changes:
   decoder receive, target pixel conversion, and residual time. Confirm that
   the measured substages do not exceed total forward time. Compare these worker
   timings with aggregate UI/GPU timings to distinguish decode, composition,
-  and presentation delays. Confirm no paths or frame
+  and presentation delays. For composed-playback `frame_at` samples with a
+  source-frame gap greater than eight, confirm that aggregate discarded-frame
+  counts rise without a corresponding RGBA conversion for each intermediate
+  frame. Confirm no paths or frame
   contents are logged, the existing `preview/performance_metrics` schema
   remains `4`, and the project dirty state and playback output are unchanged;
 - with Preview metrics enabled, verify one `playback/frame_delivery` event at

@@ -33,6 +33,21 @@ namespace playback {
 
 using VideoFramePtr = media::VideoFramePtr;
 
+namespace detail {
+
+inline constexpr qint64 maximum_sequential_decode_gap_frames = 8;
+
+[[nodiscard]] constexpr bool shouldUseSequentialDecode(
+    qint64 current_source_frame,
+    qint64 requested_source_frame) noexcept {
+    return current_source_frame >= 0 &&
+        requested_source_frame > current_source_frame &&
+        requested_source_frame - current_source_frame <=
+            maximum_sequential_decode_gap_frames;
+}
+
+} // namespace detail
+
 enum class PreviewQuality {
     Full,
     Half,
