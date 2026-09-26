@@ -24,6 +24,27 @@ struct AlphaCoverage {
 
 using AlphaCoveragePtr = std::shared_ptr<const AlphaCoverage>;
 
+enum class CompositionRasterPath : std::uint8_t {
+    Unprocessed,
+    FullFrameCopy,
+    AlphaCoverage,
+    AxisAligned,
+    Rotated,
+    GeneralFallback,
+};
+
+struct FullFrameCopyEligibility {
+    bool source_dimensions_match = false;
+    bool source_stride_matches = false;
+    bool position_x_centered = false;
+    bool position_y_centered = false;
+    bool scale_is_one = false;
+    bool rotation_is_zero = false;
+    bool opacity_is_one = false;
+    bool alpha_check_performed = false;
+    bool source_pixels_opaque = false;
+};
+
 struct CompositionLayer {
     const media::VideoFrame* frame = nullptr;
     timeline::Transform2D transform;
@@ -34,9 +55,13 @@ struct CompositionLayerTimings {
     std::uint64_t setup_nanoseconds = 0;
     std::uint64_t raster_blend_nanoseconds = 0;
     std::uint64_t fast_path_copy_nanoseconds = 0;
+    CompositionRasterPath raster_path = CompositionRasterPath::Unprocessed;
+    FullFrameCopyEligibility full_frame_copy_eligibility;
 };
 
 struct FrameCompositionTimings {
+    int canvas_width = 0;
+    int canvas_height = 0;
     std::uint64_t layer_list_setup_nanoseconds = 0;
     std::uint64_t output_buffer_create_nanoseconds = 0;
     std::uint64_t output_background_fill_nanoseconds = 0;

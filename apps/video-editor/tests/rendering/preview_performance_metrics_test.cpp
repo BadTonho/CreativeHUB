@@ -220,6 +220,8 @@ int main() {
         first_slow_frame.composition_nanoseconds = 12'000'000;
         first_slow_frame.payload_nanoseconds = 2'000'000;
         first_slow_frame.active_layer_count = 5;
+        first_slow_frame.composition_canvas_width = 1920;
+        first_slow_frame.composition_canvas_height = 1080;
         for (std::uint64_t layer_index = 0; layer_index < 6; ++layer_index) {
             rendering::SlowFrameLayerSample layer;
             layer.track_id = 11;
@@ -227,8 +229,19 @@ int main() {
             layer.track_index = 0;
             layer.clip_index = static_cast<std::int64_t>(layer_index);
             layer.source_frame = 120;
+            layer.source_width = 1920;
+            layer.source_height = 1080;
+            layer.source_stride = 7680;
+            layer.transform_position_x = 0.5;
+            layer.transform_position_y = 0.5;
+            layer.transform_scale = 1.0;
+            layer.transform_rotation_degrees = 0.0;
+            layer.transform_opacity = 1.0;
             layer.kind = rendering::SlowFrameLayerKind::Video;
             layer.decode_path = rendering::SlowFrameDecodePath::Forward;
+            layer.composition_path = rendering::CompositionRasterPath::FullFrameCopy;
+            layer.full_frame_copy_eligibility = rendering::FullFrameCopyEligibility{
+                true, true, true, true, true, true, true, true, true};
             layer.decode_nanoseconds = (layer_index + 1) * 1'000'000;
             if (layer_index == 5) {
                 layer.forward_decode_collected = true;
@@ -280,8 +293,20 @@ int main() {
                     snapshot.worst_slow_frame->timeline_frame_rate_denominator == 1'001 &&
                     snapshot.worst_slow_frame->processing_nanoseconds ==
                         41'000'000 &&
+                    snapshot.worst_slow_frame->composition_canvas_width == 1920 &&
+                    snapshot.worst_slow_frame->composition_canvas_height == 1080 &&
                     snapshot.worst_slow_frame->slow_layer_count == 4 &&
                     snapshot.worst_slow_frame->slow_layers[0].clip_id == 22 &&
+                    snapshot.worst_slow_frame->slow_layers[0].source_width == 1920 &&
+                    snapshot.worst_slow_frame->slow_layers[0].source_height == 1080 &&
+                    snapshot.worst_slow_frame->slow_layers[0].source_stride == 7680 &&
+                    snapshot.worst_slow_frame->slow_layers[0].transform_position_x == 0.5 &&
+                    snapshot.worst_slow_frame->slow_layers[0].composition_path ==
+                        rendering::CompositionRasterPath::FullFrameCopy &&
+                    snapshot.worst_slow_frame->slow_layers[0]
+                        .full_frame_copy_eligibility.alpha_check_performed &&
+                    snapshot.worst_slow_frame->slow_layers[0]
+                        .full_frame_copy_eligibility.source_pixels_opaque &&
                     snapshot.worst_slow_frame->slow_layers[0].forward_decode_collected &&
                     snapshot.worst_slow_frame->slow_layers[0].forward_decode_completed &&
                     snapshot.worst_slow_frame->slow_layers[0].forward_decode_start_frame == 90 &&

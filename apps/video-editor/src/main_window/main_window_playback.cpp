@@ -46,8 +46,10 @@
 #include <cmath>
 #include <filesystem>
 #include <functional>
+#include <iomanip>
 #include <iterator>
 #include <limits>
+#include <sstream>
 #include <string_view>
 #include <system_error>
 #include <type_traits>
@@ -349,6 +351,27 @@ const char* slowFrameDecodePathName(
     return "unknown";
 }
 
+const char* compositionRasterPathName(
+    rendering::CompositionRasterPath path) noexcept {
+    using Path = rendering::CompositionRasterPath;
+    switch (path) {
+    case Path::Unprocessed: return "unprocessed";
+    case Path::FullFrameCopy: return "full_frame_copy";
+    case Path::AlphaCoverage: return "alpha_coverage";
+    case Path::AxisAligned: return "axis_aligned";
+    case Path::Rotated: return "rotated";
+    case Path::GeneralFallback: return "general_fallback";
+    }
+    return "unknown";
+}
+
+std::string diagnosticDouble(double value) {
+    std::ostringstream formatted;
+    formatted << std::setprecision(std::numeric_limits<double>::max_digits10)
+              << value;
+    return formatted.str();
+}
+
 const char* deliveryStageName(
     rendering::PreviewFrameDeliveryStage stage) noexcept {
     using Stage = rendering::PreviewFrameDeliveryStage;
@@ -480,7 +503,7 @@ void appendSlowFrameContext(
     const rendering::PreviewPerformanceSnapshot& snapshot) {
     if (!snapshot.worst_slow_frame.has_value()) return;
     const auto& frame = *snapshot.worst_slow_frame;
-    context.emplace_back("diagnostic_schema_version", "4");
+    context.emplace_back("diagnostic_schema_version", "5");
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back("sample_origin_thread_role", "playback_worker");
     context.emplace_back(
@@ -530,6 +553,12 @@ void appendSlowFrameContext(
         "composition_fast_path_copy_ms",
         milliseconds(frame.composition_fast_path_copy_nanoseconds));
     context.emplace_back(
+        "composition_canvas_width",
+        std::to_string(frame.composition_canvas_width));
+    context.emplace_back(
+        "composition_canvas_height",
+        std::to_string(frame.composition_canvas_height));
+    context.emplace_back(
         "active_layer_count", std::to_string(frame.active_layer_count));
     context.emplace_back(
         "slow_layer_count", std::to_string(frame.slow_layer_count));
@@ -545,9 +574,74 @@ void appendSlowFrameContext(
         context.emplace_back(
             prefix + "source_frame", std::to_string(layer.source_frame));
         context.emplace_back(
+            prefix + "source_width", std::to_string(layer.source_width));
+        context.emplace_back(
+            prefix + "source_height", std::to_string(layer.source_height));
+        context.emplace_back(
+            prefix + "source_stride", std::to_string(layer.source_stride));
+        context.emplace_back(
+            prefix + "transform_position_x",
+            diagnosticDouble(layer.transform_position_x));
+        context.emplace_back(
+            prefix + "transform_position_y",
+            diagnosticDouble(layer.transform_position_y));
+        context.emplace_back(
+            prefix + "transform_scale",
+            diagnosticDouble(layer.transform_scale));
+        context.emplace_back(
+            prefix + "transform_rotation_degrees",
+            diagnosticDouble(layer.transform_rotation_degrees));
+        context.emplace_back(
+            prefix + "transform_opacity",
+            diagnosticDouble(layer.transform_opacity));
+        context.emplace_back(
             prefix + "kind", slowFrameLayerKindName(layer.kind));
         context.emplace_back(
             prefix + "decode_path", slowFrameDecodePathName(layer.decode_path));
+        context.emplace_back(
+            prefix + "composition_path",
+            compositionRasterPathName(layer.composition_path));
+        context.emplace_back(
+            prefix + "full_copy_source_dimensions_match",
+            layer.full_frame_copy_eligibility.source_dimensions_match
+                ? "true"
+                : "false");
+        context.emplace_back(
+            prefix + "full_copy_source_stride_matches",
+            layer.full_frame_copy_eligibility.source_stride_matches
+                ? "true"
+                : "false");
+        context.emplace_back(
+            prefix + "full_copy_position_x_centered",
+            layer.full_frame_copy_eligibility.position_x_centered
+                ? "true"
+                : "false");
+        context.emplace_back(
+            prefix + "full_copy_position_y_centered",
+            layer.full_frame_copy_eligibility.position_y_centered
+                ? "true"
+                : "false");
+        context.emplace_back(
+            prefix + "full_copy_scale_is_one",
+            layer.full_frame_copy_eligibility.scale_is_one ? "true" : "false");
+        context.emplace_back(
+            prefix + "full_copy_rotation_is_zero",
+            layer.full_frame_copy_eligibility.rotation_is_zero
+                ? "true"
+                : "false");
+        context.emplace_back(
+            prefix + "full_copy_opacity_is_one",
+            layer.full_frame_copy_eligibility.opacity_is_one ? "true" : "false");
+        context.emplace_back(
+            prefix + "full_copy_alpha_check_performed",
+            layer.full_frame_copy_eligibility.alpha_check_performed
+                ? "true"
+                : "false");
+        context.emplace_back(
+            prefix + "full_copy_source_pixels_opaque",
+            layer.full_frame_copy_eligibility.source_pixels_opaque
+                ? "true"
+                : "false");
         context.emplace_back(
             prefix + "decode_ms", milliseconds(layer.decode_nanoseconds));
         context.emplace_back(

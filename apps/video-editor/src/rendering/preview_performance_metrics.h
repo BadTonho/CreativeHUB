@@ -1,5 +1,7 @@
 #pragma once
 
+#include "frame_compositor.h"
+
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -69,8 +71,18 @@ struct SlowFrameLayerSample {
     std::int64_t track_index = -1;
     std::int64_t clip_index = -1;
     std::int64_t source_frame = -1;
+    std::int64_t source_width = 0;
+    std::int64_t source_height = 0;
+    std::int64_t source_stride = 0;
+    double transform_position_x = 0.0;
+    double transform_position_y = 0.0;
+    double transform_scale = 1.0;
+    double transform_rotation_degrees = 0.0;
+    double transform_opacity = 1.0;
     SlowFrameLayerKind kind = SlowFrameLayerKind::Video;
     SlowFrameDecodePath decode_path = SlowFrameDecodePath::None;
+    CompositionRasterPath composition_path = CompositionRasterPath::Unprocessed;
+    FullFrameCopyEligibility full_frame_copy_eligibility;
     std::uint64_t decode_nanoseconds = 0;
     std::uint64_t composition_nanoseconds = 0;
     std::uint64_t composition_setup_nanoseconds = 0;
@@ -109,6 +121,8 @@ struct SlowFrameSample {
     std::uint64_t composition_layer_setup_nanoseconds = 0;
     std::uint64_t composition_raster_blend_nanoseconds = 0;
     std::uint64_t composition_fast_path_copy_nanoseconds = 0;
+    std::int64_t composition_canvas_width = 0;
+    std::int64_t composition_canvas_height = 0;
     std::uint64_t active_layer_count = 0;
     std::uint8_t slow_layer_count = 0;
     std::array<SlowFrameLayerSample, 4> slow_layers{};

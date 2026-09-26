@@ -281,6 +281,8 @@ int main() {
         require(composed.has_value() && composed->width == 512 && composed->height == 512,
                 "The compositor did not create the expected canvas.");
         require(composition_timings.layers.size() == layers.size() &&
+                    composition_timings.canvas_width == 512 &&
+                    composition_timings.canvas_height == 512 &&
                     composition_timings.output_buffer_create_nanoseconds > 0 &&
                     composition_timings.output_background_fill_nanoseconds > 0 &&
                     composition_timings.layers[0].setup_nanoseconds +
@@ -319,6 +321,8 @@ int main() {
         require(axis_aligned_timings.layers.size() == exact_layers.size() &&
                     axis_aligned_timings.layers[0].raster_blend_nanoseconds > 0 &&
                     axis_aligned_timings.layers[1].raster_blend_nanoseconds > 0 &&
+                    axis_aligned_timings.layers[0].raster_path ==
+                        rendering::CompositionRasterPath::AxisAligned &&
                     axis_aligned_timings.layers[2].fast_path_copy_nanoseconds == 0,
                 "The unrotated fast path did not preserve compositor timing categories.");
 
@@ -432,8 +436,141 @@ int main() {
                 "The compositor changed pixels in the opaque copy path.");
         require(copy_timings.layers.size() == 1 &&
                     copy_timings.layers[0].fast_path_copy_nanoseconds > 0 &&
-                    copy_timings.layers[0].raster_blend_nanoseconds == 0,
+                    copy_timings.layers[0].raster_blend_nanoseconds == 0 &&
+                    copy_timings.canvas_width == large_opaque.width &&
+                    copy_timings.canvas_height == large_opaque.height &&
+                    copy_timings.layers[0].raster_path ==
+                        rendering::CompositionRasterPath::FullFrameCopy &&
+                    copy_timings.layers[0].full_frame_copy_eligibility
+                        .source_dimensions_match &&
+                    copy_timings.layers[0].full_frame_copy_eligibility
+                        .source_stride_matches &&
+                    copy_timings.layers[0].full_frame_copy_eligibility
+                        .position_x_centered &&
+                    copy_timings.layers[0].full_frame_copy_eligibility
+                        .position_y_centered &&
+                    copy_timings.layers[0].full_frame_copy_eligibility
+                        .scale_is_one &&
+                    copy_timings.layers[0].full_frame_copy_eligibility
+                        .rotation_is_zero &&
+                    copy_timings.layers[0].full_frame_copy_eligibility
+                        .opacity_is_one &&
+                    copy_timings.layers[0].full_frame_copy_eligibility
+                        .alpha_check_performed &&
+                    copy_timings.layers[0].full_frame_copy_eligibility
+                        .source_pixels_opaque,
                 "The compositor did not isolate the opaque fast-path copy timing.");
+
+        const auto mismatched_dimensions = rendering::FrameCompositor::compose(
+            5,
+            4,
+            std::vector<rendering::CompositionLayer>{{&opaque_full, identity}},
+            &copy_timings);
+        require(mismatched_dimensions.has_value() &&
+                    copy_timings.layers[0].raster_path ==
+                        rendering::CompositionRasterPath::AxisAligned &&
+                    !copy_timings.layers[0].full_frame_copy_eligibility
+                        .source_dimensions_match &&
+                    !copy_timings.layers[0].full_frame_copy_eligibility
+                        .source_stride_matches &&
+                    !copy_timings.layers[0].full_frame_copy_eligibility
+                        .alpha_check_performed,
+                "A canvas-size mismatch was not reported as a full-frame copy rejection.");
+
+        auto padded_opaque = opaque_full;
+        padded_opaque.stride = 20;
+        padded_opaque.rgba_pixels.assign(80, 0);
+        for (int row = 0; row < padded_opaque.height; ++row) {
+            std::copy_n(
+                opaque_full.rgba_pixels.begin() + row * opaque_full.stride,
+                opaque_full.stride,
+                padded_opaque.rgba_pixels.begin() + row * padded_opaque.stride);
+        }
+        const auto mismatched_stride = rendering::FrameCompositor::compose(
+            4,
+            4,
+            std::vector<rendering::CompositionLayer>{{&padded_opaque, identity}},
+            &copy_timings);
+        require(mismatched_stride.has_value() &&
+                    copy_timings.layers[0].raster_path ==
+                        rendering::CompositionRasterPath::AxisAligned &&
+                    copy_timings.layers[0].full_frame_copy_eligibility
+                        .source_dimensions_match &&
+                    !copy_timings.layers[0].full_frame_copy_eligibility
+                        .source_stride_matches &&
+                    !copy_timings.layers[0].full_frame_copy_eligibility
+                        .alpha_check_performed,
+                "A padded source stride was not reported as a full-frame copy rejection.");
+
+        const auto verifyTransformRejection = [&](
+            timeline::Transform2D transform,
+            bool position_x_centered,
+            bool position_y_centered,
+            bool scale_is_one,
+            bool rotation_is_zero,
+            bool opacity_is_one,
+            rendering::CompositionRasterPath expected_path) {
+            const auto transformed = rendering::FrameCompositor::compose(
+                4,
+                4,
+                std::vector<rendering::CompositionLayer>{{&opaque_full, transform}},
+                &copy_timings);
+            const auto& eligibility =
+                copy_timings.layers[0].full_frame_copy_eligibility;
+            require(transformed.has_value() &&
+                        copy_timings.layers[0].raster_path == expected_path &&
+                        eligibility.source_dimensions_match &&
+                        eligibility.source_stride_matches &&
+                        eligibility.position_x_centered == position_x_centered &&
+                        eligibility.position_y_centered == position_y_centered &&
+                        eligibility.scale_is_one == scale_is_one &&
+                        eligibility.rotation_is_zero == rotation_is_zero &&
+                        eligibility.opacity_is_one == opacity_is_one &&
+                        !eligibility.alpha_check_performed,
+                    "A transform mismatch was not reported as a full-frame copy rejection.");
+        };
+        auto position_x_offset = identity;
+        position_x_offset.position_x = 0.49;
+        verifyTransformRejection(
+            position_x_offset, false, true, true, true, true,
+            rendering::CompositionRasterPath::AxisAligned);
+        auto position_y_offset = identity;
+        position_y_offset.position_y = 0.51;
+        verifyTransformRejection(
+            position_y_offset, true, false, true, true, true,
+            rendering::CompositionRasterPath::AxisAligned);
+        auto scaled = identity;
+        scaled.scale = 0.9;
+        verifyTransformRejection(
+            scaled, true, true, false, true, true,
+            rendering::CompositionRasterPath::AxisAligned);
+        auto rotated_copy_candidate = identity;
+        rotated_copy_candidate.rotation_degrees = 5.0;
+        verifyTransformRejection(
+            rotated_copy_candidate, true, true, true, false, true,
+            rendering::CompositionRasterPath::Rotated);
+        auto transparent_opacity = identity;
+        transparent_opacity.opacity = 0.9;
+        verifyTransformRejection(
+            transparent_opacity, true, true, true, true, false,
+            rendering::CompositionRasterPath::AxisAligned);
+
+        const auto transparent_copy_candidate = fullFrame(1, 2, 3, 128);
+        const auto non_opaque_composition = rendering::FrameCompositor::compose(
+            4,
+            4,
+            std::vector<rendering::CompositionLayer>{{
+                &transparent_copy_candidate,
+                identity}},
+            &copy_timings);
+        require(non_opaque_composition.has_value() &&
+                    copy_timings.layers[0].raster_path ==
+                        rendering::CompositionRasterPath::AxisAligned &&
+                    copy_timings.layers[0].full_frame_copy_eligibility
+                        .alpha_check_performed &&
+                    !copy_timings.layers[0].full_frame_copy_eligibility
+                        .source_pixels_opaque,
+                "The alpha check result was not reused to explain a rejected frame copy.");
 
         auto near_identity = identity;
         near_identity.position_x = 0.500001;
@@ -446,13 +583,19 @@ int main() {
                 "The compositor fast path differs from the general transform path.");
 
         const auto transparent = fullFrame(0, 0, 0, 0);
+        rendering::FrameCompositionTimings transparent_overlay_timings;
         const auto transparent_overlay = rendering::FrameCompositor::compose(
             4,
             4,
             std::vector<rendering::CompositionLayer>{{&opaque_full, identity},
-                                                     {&transparent, identity}});
+                                                     {&transparent, identity}},
+            &transparent_overlay_timings);
         require(transparent_overlay.has_value() &&
-                    transparent_overlay->rgba_pixels == opaque_full.rgba_pixels,
+                    transparent_overlay->rgba_pixels == opaque_full.rgba_pixels &&
+                    transparent_overlay_timings.layers[0].raster_path ==
+                        rendering::CompositionRasterPath::FullFrameCopy &&
+                    transparent_overlay_timings.layers[1].raster_path ==
+                        rendering::CompositionRasterPath::AxisAligned,
                 "A transparent layer changed the composed pixels.");
 
         const std::vector<rendering::CompositionLayer> reversed_layers{
@@ -496,6 +639,8 @@ int main() {
         require(alpha_timings.layers.size() == 1 &&
                     alpha_timings.layers[0].setup_nanoseconds > 0 &&
                     alpha_timings.layers[0].raster_blend_nanoseconds > 0 &&
+                    alpha_timings.layers[0].raster_path ==
+                        rendering::CompositionRasterPath::AlphaCoverage &&
                     alpha_timings.layers[0].fast_path_copy_nanoseconds == 0,
                 "The compositor did not isolate alpha-coverage setup and raster timings.");
 
@@ -504,19 +649,23 @@ int main() {
         require(!rendering::FrameCompositor::canUseAlphaCoverageFastPath(
                     rendering::CompositionLayer{&sparse, rotated, coverage}),
                 "A rotated alpha coverage layer incorrectly used the fast path.");
+        rendering::FrameCompositionTimings rotated_timings;
         const auto rotated_with_coverage = rendering::FrameCompositor::compose(
             512,
             512,
             std::vector<rendering::CompositionLayer>{{
                 &sparse,
                 rotated,
-                coverage}});
+                coverage}},
+            &rotated_timings);
         const auto rotated_general = rendering::FrameCompositor::compose(
             512,
             512,
             std::vector<rendering::CompositionLayer>{{&sparse, rotated}});
         require(rotated_with_coverage.has_value() && rotated_general.has_value() &&
-                    rotated_with_coverage->rgba_pixels == rotated_general->rgba_pixels,
+                    rotated_with_coverage->rgba_pixels == rotated_general->rgba_pixels &&
+                    rotated_timings.layers[0].raster_path ==
+                        rendering::CompositionRasterPath::Rotated,
                 "Rotated alpha coverage did not use the general compositor path.");
 
         media::VideoFrame empty = sparse;

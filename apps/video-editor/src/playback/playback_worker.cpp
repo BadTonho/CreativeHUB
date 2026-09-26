@@ -678,6 +678,8 @@ void PlaybackWorker::renderCompositionFrame(
                 std::max<std::int64_t>(0,
                     std::chrono::duration_cast<std::chrono::nanoseconds>(
                         Clock::now() - frame_started).count()));
+            const bool sample_is_slow =
+                sample.processing_nanoseconds > sample.frame_budget_nanoseconds;
             sample.decode_nanoseconds = static_cast<std::uint64_t>(
                 std::max<std::int64_t>(0, decode_elapsed.count()));
             sample.composition_nanoseconds = static_cast<std::uint64_t>(
@@ -691,6 +693,10 @@ void PlaybackWorker::renderCompositionFrame(
             sample.output_background_fill_nanoseconds =
                 composition_timings.output_background_fill_nanoseconds;
             sample.active_layer_count = decoded_layers->size();
+            if (sample_is_slow) {
+                sample.composition_canvas_width = composition_timings.canvas_width;
+                sample.composition_canvas_height = composition_timings.canvas_height;
+            }
 
             for (std::size_t index = 0; index < decoded_layers->size(); ++index) {
                 const auto& decoded = (*decoded_layers)[index];
@@ -700,6 +706,17 @@ void PlaybackWorker::renderCompositionFrame(
                 layer.track_index = decoded.track_index;
                 layer.clip_index = decoded.clip_index;
                 layer.source_frame = decoded.source_frame;
+                if (sample_is_slow && decoded.frame != nullptr) {
+                    layer.source_width = decoded.frame->width;
+                    layer.source_height = decoded.frame->height;
+                    layer.source_stride = decoded.frame->stride;
+                    layer.transform_position_x = decoded.transform.position_x;
+                    layer.transform_position_y = decoded.transform.position_y;
+                    layer.transform_scale = decoded.transform.scale;
+                    layer.transform_rotation_degrees =
+                        decoded.transform.rotation_degrees;
+                    layer.transform_opacity = decoded.transform.opacity;
+                }
                 switch (decoded.kind) {
                 case timeline::ClipKind::Video:
                     layer.kind = rendering::SlowFrameLayerKind::Video;
@@ -721,6 +738,11 @@ void PlaybackWorker::renderCompositionFrame(
                         layer_timing.raster_blend_nanoseconds;
                     layer.fast_path_copy_nanoseconds =
                         layer_timing.fast_path_copy_nanoseconds;
+                    if (sample_is_slow) {
+                        layer.composition_path = layer_timing.raster_path;
+                        layer.full_frame_copy_eligibility =
+                            layer_timing.full_frame_copy_eligibility;
+                    }
                     layer.composition_nanoseconds =
                         layer.composition_setup_nanoseconds +
                         layer.raster_blend_nanoseconds +

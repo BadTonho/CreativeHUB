@@ -154,7 +154,7 @@ During composed Timeline playback, frames whose worker processing time exceeds
 the target-FPS frame budget contribute to a bounded slow-frame summary. The UI
 timer writes at most one additional `playback/slow_frame` event per metrics
 interval, and only when that interval contains a slow frame. Its
-`diagnostic_schema_version` is `4`; it reports the slow-frame count and the
+`diagnostic_schema_version` is `5`; it reports the slow-frame count and the
 slowest frame's timeline position, generation, target FPS, budget, processing,
 decode, composition, and payload timings. It also reports compositor timings
 for adapter/list setup, output-buffer allocation, background initialization,
@@ -165,13 +165,21 @@ active layers are ranked by combined decode/preparation and compositor time,
 with stable track/clip IDs, current indices, source frame, layer kind, decode
 path, and per-layer setup, raster/blend, and copy timings. The compositor does
 not have a separate effects stage, so this diagnostic does not create one.
+For each reported slow layer, schema `5` also records the composition canvas,
+source dimensions and stride, transform values, and the selected raster path.
+Individual full-frame-copy checks report whether source dimensions, stride,
+center position, unit scale, zero rotation, and full opacity matched. The alpha
+check is marked as unchecked when those conditions were not met; otherwise its
+result reuses the compositor's existing opacity scan. It does not trigger a
+second scan. The `fast_path_copy_ms` bucket still measures only a whole-frame
+copy; per-pixel copies inside raster loops remain part of raster/blend time.
 Layer decode/preparation and CPU composition timings are collected only during
 active Timeline playback while this preference is enabled. Paused frame
 refreshes, seeks, isolated media previews, and offline export do not collect
 this per-layer data. UI and GPU presentation timings remain in the existing
 aggregate sample and can be compared with the slow-frame event.
 
-For video layers that perform forward catch-up, schema `4` also records the
+For video layers that perform forward catch-up, schema `5` also records the
 decoder frame before the request, requested source frame, number of discarded
 intermediate frames, and total forward-call time. It separates accumulated
 packet read/send, decoder receive, and requested-frame pixel conversion time;

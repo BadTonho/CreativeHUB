@@ -108,11 +108,15 @@ void blendOverOpaqueDestination(
     destination[3] = 255;
 }
 
-bool isOpaqueFrame(const media::VideoFrame& frame) noexcept {
+bool isOpaqueFrame(
+    const media::VideoFrame& frame,
+    bool* alpha_check_performed = nullptr) noexcept {
+    if (alpha_check_performed != nullptr) *alpha_check_performed = false;
     if (frame.width <= 0 || frame.height <= 0 || frame.stride < frame.width * 4 ||
         frame.rgba_pixels.size() < static_cast<std::size_t>(frame.stride) * frame.height) {
         return false;
     }
+    if (alpha_check_performed != nullptr) *alpha_check_performed = true;
     for (int y = 0; y < frame.height; ++y) {
         const auto* row = frame.rgba_pixels.data() +
             static_cast<std::size_t>(y) * frame.stride;
@@ -121,18 +125,6 @@ bool isOpaqueFrame(const media::VideoFrame& frame) noexcept {
         }
     }
     return true;
-}
-
-bool isFullFrameIdentity(
-    const media::VideoFrame& frame,
-    int width,
-    int height,
-    const timeline::Transform2D& transform) noexcept {
-    return frame.width == width && frame.height == height &&
-        frame.stride == width * 4 &&
-        transform.position_x == 0.5 && transform.position_y == 0.5 &&
-        transform.scale == 1.0 && transform.rotation_degrees == 0.0 &&
-        transform.opacity == 1.0;
 }
 
 struct PixelRange {
@@ -455,6 +447,8 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
     output.stride = width * 4;
     using Clock = std::chrono::steady_clock;
     if (timings != nullptr) {
+        timings->canvas_width = width;
+        timings->canvas_height = height;
         timings->layer_list_setup_nanoseconds = 0;
         timings->output_buffer_create_nanoseconds = 0;
         timings->output_background_fill_nanoseconds = 0;
@@ -496,8 +490,43 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
             record_layer_elapsed();
             continue;
         }
-        if (isFullFrameIdentity(*layer.frame, width, height, layer.transform) &&
-            isOpaqueFrame(*layer.frame)) {
+
+        FullFrameCopyEligibility copy_eligibility;
+        copy_eligibility.source_dimensions_match =
+            layer.frame->width == width && layer.frame->height == height;
+        copy_eligibility.source_stride_matches =
+            layer.frame->stride == output.stride;
+        copy_eligibility.position_x_centered =
+            layer.transform.position_x == 0.5;
+        copy_eligibility.position_y_centered =
+            layer.transform.position_y == 0.5;
+        copy_eligibility.scale_is_one = layer.transform.scale == 1.0;
+        copy_eligibility.rotation_is_zero =
+            layer.transform.rotation_degrees == 0.0;
+        copy_eligibility.opacity_is_one = layer.transform.opacity == 1.0;
+        const bool copy_geometry_and_transform_match =
+            copy_eligibility.source_dimensions_match &&
+            copy_eligibility.source_stride_matches &&
+            copy_eligibility.position_x_centered &&
+            copy_eligibility.position_y_centered &&
+            copy_eligibility.scale_is_one &&
+            copy_eligibility.rotation_is_zero &&
+            copy_eligibility.opacity_is_one;
+        if (copy_geometry_and_transform_match) {
+            // Reuse this result for both branch selection and the bounded slow-frame
+            // diagnostic. Do not rescan the source pixels when emitting metrics.
+            copy_eligibility.source_pixels_opaque = isOpaqueFrame(
+                *layer.frame,
+                &copy_eligibility.alpha_check_performed);
+        }
+        if (layer_timings != nullptr) {
+            layer_timings->full_frame_copy_eligibility = copy_eligibility;
+        }
+        if (copy_geometry_and_transform_match &&
+            copy_eligibility.source_pixels_opaque) {
+            if (layer_timings != nullptr) {
+                layer_timings->raster_path = CompositionRasterPath::FullFrameCopy;
+            }
             record_layer_elapsed();
             const auto copy_started = layer_timings != nullptr
                 ? Clock::now()
@@ -513,6 +542,9 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
             continue;
         }
         if (canUseAlphaCoverageFastPath(layer)) {
+            if (layer_timings != nullptr) {
+                layer_timings->raster_path = CompositionRasterPath::AlphaCoverage;
+            }
             record_layer_elapsed();
             composeAlphaCoverageLayer(output, layer, layer_timings);
             continue;
@@ -532,9 +564,17 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
             static_cast<std::size_t>(frame.height) <= maximum_size / stride &&
             frame.rgba_pixels.size() >= stride * static_cast<std::size_t>(frame.height);
         if (layer.transform.rotation_degrees == 0.0 && has_valid_rgba_storage) {
+            if (layer_timings != nullptr) {
+                layer_timings->raster_path = CompositionRasterPath::AxisAligned;
+            }
             record_layer_elapsed();
             composeAxisAlignedLayer(output, layer, layer_timings);
             continue;
+        }
+        if (layer_timings != nullptr) {
+            layer_timings->raster_path = layer.transform.rotation_degrees == 0.0
+                ? CompositionRasterPath::GeneralFallback
+                : CompositionRasterPath::Rotated;
         }
         const double fit = std::min(
             static_cast<double>(width) / frame.width,
