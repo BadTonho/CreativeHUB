@@ -59,21 +59,20 @@ void applyTransitionRequests(
         const auto boundary = transition.boundary_frame;
         const auto duration = transition.duration_frames;
         if (transition.kind == timeline::TransitionKind::CrossDissolve) {
-            if (global_frame < boundary || global_frame >= boundary + duration) {
+            if (global_frame < boundary - duration || global_frame >= boundary) {
                 continue;
             }
-            const auto offset = global_frame - boundary;
-            const auto from_local = std::max<std::int64_t>(
-                0, from->spec->segment_frame_count - 1);
-            const auto to_local = offset;
+            const auto offset = global_frame - (boundary - duration);
+            const auto from_local = global_frame - from->spec->timeline_start_frame;
+            const auto to_local = global_frame - to->spec->timeline_start_frame;
             const double blend = duration == 1
                 ? 1.0
                 : static_cast<double>(offset + 1) / static_cast<double>(duration);
             remove_requests_for(from->session_index);
             remove_requests_for(to->session_index);
-            // FrameCompositor starts from an opaque black canvas. The outgoing
-            // layer stays opaque; only incoming alpha controls the blend.
-            append_transition_request(from->session_index, from_local, 1.0, false);
+            // Both endpoints advance through their Timeline ranges. The incoming
+            // clip starts at local frame zero and reaches local frame D at cut.
+            append_transition_request(from->session_index, from_local, 1.0);
             append_transition_request(to->session_index, to_local, blend);
         } else if (transition.kind == timeline::TransitionKind::FadeToBlack) {
             if (global_frame >= boundary - duration && global_frame < boundary) {

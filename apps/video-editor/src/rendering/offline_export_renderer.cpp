@@ -214,17 +214,20 @@ std::vector<ClipRequest> activeClipRequests(
         const auto to_index = static_cast<std::size_t>(std::distance(clips.begin(), to));
 
         if (transition.kind == timeline::TransitionKind::CrossDissolve &&
-            frame >= transition.boundary &&
-            frame < transition.boundary + transition.duration) {
-            const auto offset = frame - transition.boundary;
+            frame >= transition.boundary - transition.duration &&
+            frame < transition.boundary) {
+            const auto offset = frame -
+                (transition.boundary - transition.duration);
             const double blend = transition.duration == 1
                 ? 1.0
                 : static_cast<double>(offset + 1) /
                     static_cast<double>(transition.duration);
             removeClip(from_index);
             removeClip(to_index);
-            addClip(from_index, 1.0, clips[from_index].clip->duration_frames - 1);
-            addClip(to_index, blend, frame - transition.boundary);
+            addClip(from_index, 1.0,
+                    frame - clips[from_index].clip->timeline_start_frame);
+            addClip(to_index, blend,
+                    frame - clips[to_index].clip->timeline_start_frame);
         } else if (transition.kind == timeline::TransitionKind::FadeToBlack &&
                    frame >= transition.boundary - transition.duration &&
                    frame < transition.boundary) {
@@ -717,6 +720,7 @@ std::int64_t timelineDuration(const project::ProjectDocument& document) {
 
 void mixAudioBlock(
     std::vector<RenderClip>& clips,
+    const std::vector<RenderTransition>& transitions,
     double timeline_fps,
     std::int64_t block_start,
     int sample_count,
@@ -731,7 +735,17 @@ void mixAudioBlock(
             render_clip.track->audio_muted || render_clip.clip->audio_muted) continue;
         checkCanceled(canceled);
         const auto& clip = *render_clip.clip;
+        auto clip_start_frame = clip.timeline_start_frame;
+        for (const auto& transition : transitions) {
+            if (transition.kind == timeline::TransitionKind::CrossDissolve &&
+                transition.track_index == render_clip.track_index &&
+                transition.to_clip_index == render_clip.clip_index) {
+                clip_start_frame = std::max(clip_start_frame, transition.boundary);
+            }
+        }
         const auto clip_start = static_cast<std::int64_t>(std::llround(
+            static_cast<long double>(clip_start_frame) * sample_rate / timeline_fps));
+        const auto timeline_origin_sample = static_cast<std::int64_t>(std::llround(
             static_cast<long double>(clip.timeline_start_frame) * sample_rate / timeline_fps));
         const auto clip_end = static_cast<std::int64_t>(std::llround(
             static_cast<long double>(clip.timeline_start_frame + clip.duration_frames) *
@@ -740,10 +754,12 @@ void mixAudioBlock(
         const auto overlap_end = std::min(block_end, clip_end);
         if (overlap_start >= overlap_end) continue;
         const auto local_sample = overlap_start - clip_start;
+        const auto clip_preroll_samples = clip_start - timeline_origin_sample;
         const auto source_start_sample = static_cast<std::int64_t>(std::llround(
             static_cast<long double>(clip.source_start_frame) * sample_rate /
             render_clip.source_fps));
-        const auto requested_source_sample = source_start_sample + local_sample;
+        const auto requested_source_sample =
+            source_start_sample + clip_preroll_samples + local_sample;
         render_clip.audio->seek_to_sample_index(requested_source_sample);
         auto remaining = static_cast<std::size_t>(overlap_end - overlap_start);
         auto source_cursor = requested_source_sample;
@@ -869,7 +885,7 @@ void OfflineExportRenderer::render(
             while (sample < total_samples) {
                 checkCanceled(cancel_requested);
                 const auto block_count = encoder.nextAudioInputSampleCount();
-                mixAudioBlock(clips, timeline_fps,
+                mixAudioBlock(clips, transitions, timeline_fps,
                               sample, block_count, mixed, cancel_requested);
                 encoder.writeAudio(mixed, block_count);
                 sample += block_count;

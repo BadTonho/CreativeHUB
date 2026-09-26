@@ -207,8 +207,8 @@ std::filesystem::path createVideoWithAudioFixture(const std::filesystem::path& r
         const bool green_frame = index >= 44;
         for (int pixel = 0; pixel < video->width * video->height; ++pixel) {
             const auto offset = static_cast<std::size_t>(pixel) * 4U;
-            rgba[offset] = green_frame ? 20 : 220;
-            rgba[offset + 1] = green_frame ? 220 : 30;
+            rgba[offset] = green_frame ? 20 : static_cast<std::uint8_t>(220 - index * 2);
+            rgba[offset + 1] = green_frame ? 220 : static_cast<std::uint8_t>(30 + index * 3);
             rgba[offset + 2] = 30;
         }
         sws_scale(scaler, source_data, source_lines, 0, video->height,
@@ -226,7 +226,7 @@ std::filesystem::path createVideoWithAudioFixture(const std::filesystem::path& r
         auto* samples = reinterpret_cast<std::int16_t*>(audio_frame->data[0]);
         for (int index = 0; index < count; ++index) {
             const auto source_sample = audio_sample + index;
-            const auto amplitude = source_sample >= 48000 ? 12000.0 : 1000.0;
+            const auto amplitude = source_sample >= 64000 ? 12000.0 : 1000.0;
             const auto value = static_cast<std::int16_t>(std::lround(
                 std::sin(2.0 * pi * 440.0 * source_sample / 48000.0) * amplitude));
             samples[index * 2] = value;
@@ -283,7 +283,9 @@ ui::RenderJob makeImageJob(
     return job;
 }
 
-void verifyExport(const std::filesystem::path& path) {
+void verifyExport(
+    const std::filesystem::path& path,
+    int expected_video_frames = 8) {
     AVFormatContext* format = nullptr;
     const auto utf8 = path.u8string();
     const std::string native_path(
@@ -307,8 +309,8 @@ void verifyExport(const std::filesystem::path& path) {
         decoded_frames.push_back(*frame);
         ++frame_count;
     }
-    require(frame_count == 8,
-            "The export did not convert four 30 fps timeline frames into eight 60 fps frames.");
+    require(frame_count == expected_video_frames,
+            "The export did not produce the expected number of output frames.");
     const auto centerPixel = [](const media::VideoFrame& frame, int channel) {
         const auto offset = static_cast<std::size_t>(12 * frame.stride + 16 * 4 + channel);
         return frame.rgba_pixels[offset];
@@ -330,11 +332,11 @@ void validateDirectExport(
     const auto target = root / ("completed." + extension);
     auto job = makeImageJob(output, image_path, target, 101);
     auto& track = job.project_snapshot.timeline_tracks.front();
-    track.clips.front().duration_frames = 2;
+    track.clips.front().duration_frames = 4;
     project::ProjectClip incoming;
     incoming.source_path = green_image_path;
     incoming.timeline_start_frame = 2;
-    incoming.duration_frames = 2;
+    incoming.duration_frames = 4;
     incoming.kind = timeline::ClipKind::Image;
     track.clips.push_back(incoming);
     track.transitions.push_back(project::ProjectTransition{
@@ -348,7 +350,7 @@ void validateDirectExport(
     require(!progress.empty() && progress.back() == 100 &&
                 std::is_sorted(progress.begin(), progress.end()),
             "Export progress must be monotonic and reach 100 percent.");
-    verifyExport(target);
+    verifyExport(target, 12);
 
     const auto sentinel_path = root / ("preserved." + extension);
     const std::string sentinel = "keep previous destination";
@@ -415,7 +417,7 @@ void validateQueueContinuesAfterFailure(
     track.clips.front().duration_frames = 2;
     project::ProjectClip incoming;
     incoming.source_path = green_image_path;
-    incoming.timeline_start_frame = 2;
+    incoming.timeline_start_frame = 0;
     incoming.duration_frames = 2;
     incoming.kind = timeline::ClipKind::Image;
     track.clips.push_back(incoming);
@@ -589,6 +591,30 @@ double decodedAudioRms(const std::filesystem::path& path) {
     return count == 0 ? 0.0 : std::sqrt(static_cast<double>(sum_squares / count));
 }
 
+double decodedAudioRmsRange(
+    const std::filesystem::path& path,
+    std::int64_t start_sample,
+    std::size_t sample_count) {
+    auto decoder = media::AudioPlaybackSession::open(path, {48000, 2});
+    require(decoder->has_audio(), "The rendered file did not contain an audio stream.");
+    decoder->seek_to_sample_index(start_sample);
+    const auto target_values = sample_count * 2U;
+    long double sum_squares = 0.0L;
+    std::size_t count = 0;
+    while (count < target_values) {
+        auto chunk = decoder->decode_samples(
+            std::min<std::size_t>(4096, (target_values - count + 1U) / 2U));
+        if (!chunk.has_value()) break;
+        for (const auto sample : chunk->samples) {
+            if (count >= target_values) break;
+            const long double normalized = static_cast<long double>(sample) / 32768.0L;
+            sum_squares += normalized * normalized;
+            ++count;
+        }
+    }
+    return count == 0 ? 0.0 : std::sqrt(static_cast<double>(sum_squares / count));
+}
+
 void validateEmbeddedAudioMixing(
     const OutputChoice& output,
     const std::filesystem::path& root) {
@@ -622,8 +648,34 @@ void validateEmbeddedAudioMixing(
                 output_frames[30]->rgba_pixels[center_offset],
             "The 60 fps export did not map its frame to the trimmed source position at 30 fps.");
     const auto audible_rms = decodedAudioRms(pathFromQString(job.settings.output_path));
-    require(audible_rms > 0.04 && audible_rms < 0.10,
+    require(audible_rms > 0.025 && audible_rms < 0.05,
             "Embedded video audio was not mixed with the configured track and clip gains.");
+
+    auto dissolve_job = makeImageJob(
+        output, source, root / ("audio-dissolve." + extension), 403, 24);
+    dissolve_job.project_snapshot.timeline_frame_rate = {24, 1};
+    auto& dissolve_track = dissolve_job.project_snapshot.timeline_tracks.front();
+    auto& outgoing = dissolve_track.clips.front();
+    outgoing.kind = timeline::ClipKind::Video;
+    outgoing.source_start_frame = 0;
+    outgoing.source_duration_frames = 30;
+    project::ProjectClip incoming;
+    incoming.source_path = source;
+    incoming.timeline_start_frame = 16;
+    incoming.source_start_frame = 35;
+    incoming.duration_frames = 20;
+    incoming.source_duration_frames = 25;
+    incoming.kind = timeline::ClipKind::Video;
+    dissolve_track.clips.push_back(incoming);
+    dissolve_track.transitions.push_back(project::ProjectTransition{
+        0, 1, timeline::TransitionKind::CrossDissolve, 8});
+    rendering::OfflineExportRenderer::render(dissolve_job, canceled);
+    const auto dissolve_path = pathFromQString(dissolve_job.settings.output_path);
+    const auto before_cut_rms = decodedAudioRmsRange(dissolve_path, 28800, 14400);
+    const auto after_cut_rms = decodedAudioRmsRange(dissolve_path, 50400, 24000);
+    require(before_cut_rms < 0.04 && after_cut_rms > 0.12 &&
+                after_cut_rms > before_cut_rms * 4.0,
+            "Cross Dissolve audio did not stay on the original hard cut or start from the incoming local frame D.");
 
     track.audio_muted = true;
     job.id = 402;

@@ -68,7 +68,7 @@ void run() {
             "Track hit testing did not respect row gaps and row boundaries.");
 
     const std::vector<TimelineTrack> transition_tracks{{
-        8, "Transition", 1.0, false, {clip(8, 0, 50), clip(9, 50, 30)},
+        8, "Transition", 1.0, false, {clip(8, 0, 50), clip(9, 45, 30)},
         {{8, 9, TransitionKind::CrossDissolve, 5}}}};
     const TimelineGeometry transition_geometry(
         transition_tracks, QSizeF(900.0, 200.0), 70.0, 1.0, 100);

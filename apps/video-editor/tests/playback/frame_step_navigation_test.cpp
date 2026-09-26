@@ -140,10 +140,10 @@ void validateTransitionsAndInvalidSelection() {
             "The frame-step transition fixture could not be created.");
     expectDecision(model, timeline::ClipLocation{0, 0}, 4,
                    FrameStepDirection::Forward, FrameStepAction::ActivateClip,
-                   timeline::ClipLocation{0, 1}, 0);
+                   timeline::ClipLocation{0, 1}, 2);
     expectDecision(model, timeline::ClipLocation{0, 1}, 0,
                    FrameStepDirection::Backward, FrameStepAction::ActivateClip,
-                   timeline::ClipLocation{0, 0}, 4);
+                   timeline::ClipLocation{0, 0}, 2);
 
     require(model.updateTransition(0, 0, 1,
                 timeline::TransitionKind::FadeToBlack, 2) ==

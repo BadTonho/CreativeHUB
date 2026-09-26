@@ -365,30 +365,36 @@ Browser selection and does not disable the Timeline playback controls.
 
 ## Essential transitions
 
-Tracks may store transitions associated with the junction between two
-consecutive clips. A transition never creates structural overlap and never
-moves or resizes either endpoint. The endpoint clips must be on the same
-track, have no gap between them, and have a positive duration. The default
-duration is 15 timeline frames and the maximum is the shorter endpoint
-duration. Video-to-video, video-to-text, and text-to-video junctions are
-supported; text-over-text overlap remains rejected. An individual media edge
-trim may create a media overlap without adding a transition.
+Tracks may store transitions associated with two consecutive clips. The
+endpoint clips must be on the same track, have positive durations, and be
+adjacent before a transition is added. The default duration is 15 Timeline
+frames and the maximum is the shorter endpoint duration. Video-to-video,
+video-to-text, and text-to-video transitions are supported; text-over-text
+overlap remains rejected. An individual media edge trim may create a media
+overlap without adding a transition.
 
-`Cross Dissolve` starts at the junction. The outgoing clip holds its last
-frame while the incoming clip advances from local frame zero, with a linear
-blend until the incoming clip is fully visible. `Fade to Black` fades the
-outgoing clip before the junction, is fully black at the junction, and fades
-the incoming clip in after it. Audio still cuts normally; there is no audio
-crossfade in this milestone.
+`Cross Dissolve` occupies the D frames immediately before the original cut:
+the outgoing clip advances through its final D frames while the incoming clip
+advances from local frame zero. At the cut, the incoming clip is at local frame
+D and continues normally. The incoming clip and every later clip on that track
+are shifted left by D frames, so the transition consumes sequence duration.
+The blend is linear. `Fade to Black` keeps the clips adjacent and fades the
+outgoing clip before the cut, is fully black at the cut, and fades the incoming
+clip in afterward. Audio remains a hard cut at the original cut, with no audio
+crossfade: outgoing audio continues through the visual dissolve and incoming
+audio starts at the original cut, synchronized to the incoming source frame
+shown at local frame D.
 
-The Timeline displays transition regions around valid junctions. A junction
-can be selected or opened with its context menu to add Cross Dissolve, add
-Fade to Black, or remove the transition. The Inspector confirms the type and
-duration edits. Cross Dissolve and Fade to Black can also be dragged from the
-Effects dock onto a contiguous junction. The Timeline highlights the target
-cut within its hit area (at least eight pixels) and commits the transition on
-release. Moving, splitting, trimming, or deleting an endpoint removes only
-transitions whose adjacency or endpoint validity is no longer true.
-Transitions are included in bounded Undo/Redo snapshots and are persisted in
-`.csp` version 8. Projects from earlier versions load with no transitions,
-100% timeline zoom, and the default 70-pixel track-row height.
+The Timeline displays transition regions at the Cross Dissolve overlap and
+around Fade to Black cuts. A valid cut can be selected or opened with its
+context menu to add Cross Dissolve, add Fade to Black, or remove the
+transition. The Inspector edits the type and duration. Cross Dissolve and Fade
+to Black can also be dragged from the Effects dock onto a contiguous cut. The
+Timeline highlights the target cut within its hit area (at least eight
+pixels) and commits the transition on release. Updating or removing a Cross
+Dissolve ripples the incoming clip and later clips on that track atomically.
+Moving, splitting, trimming, or deleting an endpoint preserves valid
+transitions or removes them and repairs the affected overlap. Transitions are
+included in bounded Undo/Redo snapshots and persisted in `.csp` version 12.
+Projects through version 11 migrate existing Cross Dissolves to the overlap
+semantics on load; Fade to Black is unchanged.

@@ -252,6 +252,23 @@ void run() {
                 already_removed_transition.reason == application::EditReason::TransitionNotFound &&
                 service.undoCount() == 6,
             "Removing an absent transition created a history entry.");
+    const auto undo_transition_remove = service.undo();
+    const auto* restored_transition = model.transitionBetween(0, 0, 1);
+    require(undo_transition_remove.changed() && service.undoCount() == 5 &&
+                restored_transition != nullptr &&
+                restored_transition->kind == timeline::TransitionKind::FadeToBlack &&
+                service.canRedo(),
+            ("Undo did not restore the removed Timeline transition: changed=" +
+             std::to_string(undo_transition_remove.changed()) + ", undoCount=" +
+             std::to_string(service.undoCount()) + ", restored=" +
+             std::to_string(restored_transition != nullptr) + ", kind=" +
+             (restored_transition == nullptr
+                  ? std::string("missing")
+                  : std::to_string(static_cast<int>(restored_transition->kind)))));
+    const auto redo_transition_remove = service.redo();
+    require(redo_transition_remove.changed() && service.undoCount() == 6 &&
+                model.transitionBetween(0, 0, 1) == nullptr,
+            "Redo did not remove the restored Timeline transition.");
 
     const auto trimmed = service.execute(application::TrimClipRangeCommand{2, 70, 50});
     require(trimmed.changed() && service.undoCount() == 7,

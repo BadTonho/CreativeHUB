@@ -96,46 +96,95 @@ bool preserveTransitionContinuity(TimelineTrack& track) noexcept {
                 from.timeline_duration_frames) {
             return false;
         }
-        const auto from_end = from.timeline_start_frame + from.timeline_duration_frames;
-        const auto delta = from_end - to.timeline_start_frame;
-        if (delta != 0) {
-            for (std::size_t index = to_index; index < track.clips.size(); ++index) {
-                auto& clip = track.clips[index];
-                if (clip.timeline_start_frame < 0 || clip.timeline_duration_frames <= 0) {
-                    return false;
-                }
-                std::int64_t shifted_start = 0;
-                if (delta < 0) {
-                    const auto removed = -delta;
-                    if (clip.timeline_start_frame < removed) return false;
-                    shifted_start = clip.timeline_start_frame - removed;
-                } else {
-                    if (clip.timeline_start_frame >
-                        std::numeric_limits<std::int64_t>::max() - delta) {
-                        return false;
-                    }
-                    shifted_start = clip.timeline_start_frame + delta;
-                }
-                if (shifted_start > std::numeric_limits<std::int64_t>::max() -
-                        clip.timeline_duration_frames) {
-                    return false;
-                }
-                clip.timeline_start_frame = shifted_start;
-            }
-        }
-
-        const auto maximum_transition_duration = std::min(
-            from.timeline_duration_frames, to.timeline_duration_frames);
         const auto transition = std::find_if(
             track.transitions.begin(), track.transitions.end(),
             [&from, &to](const TimelineTransition& candidate) {
                 return candidate.from_clip_id == from.clip_id &&
                     candidate.to_clip_id == to.clip_id;
             });
-        if (transition != track.transitions.end()) {
-            transition->duration_frames = std::clamp<std::int64_t>(
-                transition->duration_frames, 1, maximum_transition_duration);
+        if (transition == track.transitions.end()) return false;
+
+        const auto maximum_transition_duration = std::min(
+            from.timeline_duration_frames, to.timeline_duration_frames);
+        if (maximum_transition_duration <= 0) return false;
+        transition->duration_frames = std::clamp<std::int64_t>(
+            transition->duration_frames, 1, maximum_transition_duration);
+        const auto from_end = from.timeline_start_frame + from.timeline_duration_frames;
+        const auto target_start = transition->kind == TransitionKind::CrossDissolve
+            ? from_end - transition->duration_frames
+            : from_end;
+        const auto delta = target_start - to.timeline_start_frame;
+        if (delta < 0) {
+            const auto removed = static_cast<std::uint64_t>(-(delta + 1)) + 1U;
+            for (std::size_t index = to_index; index < track.clips.size(); ++index) {
+                const auto& clip = track.clips[index];
+                if (clip.timeline_start_frame < 0 || clip.timeline_duration_frames <= 0 ||
+                    static_cast<std::uint64_t>(clip.timeline_start_frame) < removed ||
+                    clip.timeline_duration_frames > std::numeric_limits<std::int64_t>::max() -
+                        (clip.timeline_start_frame - static_cast<std::int64_t>(removed))) {
+                    return false;
+                }
+            }
+        } else if (delta > 0) {
+            for (std::size_t index = to_index; index < track.clips.size(); ++index) {
+                const auto& clip = track.clips[index];
+                if (clip.timeline_start_frame < 0 || clip.timeline_duration_frames <= 0 ||
+                    clip.timeline_start_frame >
+                        std::numeric_limits<std::int64_t>::max() - delta ||
+                    clip.timeline_start_frame + delta >
+                        std::numeric_limits<std::int64_t>::max() -
+                            clip.timeline_duration_frames) {
+                    return false;
+                }
+            }
         }
+        if (delta < 0) {
+            const auto removed = static_cast<std::int64_t>(
+                static_cast<std::uint64_t>(-(delta + 1)) + 1U);
+            for (std::size_t index = to_index; index < track.clips.size(); ++index) {
+                track.clips[index].timeline_start_frame -= removed;
+            }
+        } else if (delta > 0) {
+            for (std::size_t index = to_index; index < track.clips.size(); ++index) {
+                track.clips[index].timeline_start_frame += delta;
+            }
+        }
+    }
+    return true;
+}
+
+bool shiftTimelineSuffix(
+    TimelineTrack& track,
+    std::size_t first_index,
+    std::int64_t delta) noexcept {
+    if (first_index >= track.clips.size()) return false;
+    if (delta == 0) return true;
+    for (std::size_t index = first_index; index < track.clips.size(); ++index) {
+        const auto& clip = track.clips[index];
+        if (clip.timeline_start_frame < 0 || clip.timeline_duration_frames <= 0) {
+            return false;
+        }
+        std::int64_t shifted_start = 0;
+        if (delta < 0) {
+            const auto removed = static_cast<std::uint64_t>(-(delta + 1)) + 1U;
+            if (static_cast<std::uint64_t>(clip.timeline_start_frame) < removed) {
+                return false;
+            }
+            shifted_start = clip.timeline_start_frame - static_cast<std::int64_t>(removed);
+        } else {
+            if (clip.timeline_start_frame >
+                std::numeric_limits<std::int64_t>::max() - delta) {
+                return false;
+            }
+            shifted_start = clip.timeline_start_frame + delta;
+        }
+        if (shifted_start > std::numeric_limits<std::int64_t>::max() -
+                clip.timeline_duration_frames) {
+            return false;
+        }
+    }
+    for (std::size_t index = first_index; index < track.clips.size(); ++index) {
+        track.clips[index].timeline_start_frame += delta;
     }
     return true;
 }
@@ -240,6 +289,17 @@ TransformKeyframes reframeKeyframes(
 bool sameOverlapClass(const TimelineClip& left, const TimelineClip& right) noexcept {
     return left.kind == right.kind ||
         (isMediaClipKind(left.kind) && isMediaClipKind(right.kind));
+}
+
+bool hasCrossDissolveForClip(
+    const TimelineTrack& track,
+    ClipId clip_id) noexcept {
+    return std::any_of(track.transitions.begin(), track.transitions.end(),
+        [clip_id](const TimelineTransition& transition) {
+            return transition.kind == TransitionKind::CrossDissolve &&
+                (transition.from_clip_id == clip_id ||
+                 transition.to_clip_id == clip_id);
+        });
 }
 
 } // namespace
@@ -675,6 +735,7 @@ AddClipResult TimelineModel::addClip(
               [](const auto& left, const auto& right) {
                   return left.timeline_start_frame < right.timeline_start_frame;
               });
+    removeInvalidTransitions(*track);
     assertIdentityInvariants();
     return AddClipResult::Added;
 }
@@ -779,6 +840,7 @@ AddClipResult TimelineModel::addTextClip(
               [](const auto& left, const auto& right) {
                   return left.timeline_start_frame < right.timeline_start_frame;
               });
+    removeInvalidTransitions(*track);
     assertIdentityInvariants();
     return AddClipResult::Added;
 }
@@ -802,6 +864,15 @@ MoveClipResult TimelineModel::moveClip(
     if (from.track_index == to.track_index && from.clip_index == to.clip_index &&
         clip.timeline_start_frame == timeline_start_frame) {
         return MoveClipResult::NoChange;
+    }
+    if (hasCrossDissolveForClip(*source_track, clip.clip_id)) {
+        auto staged = *this;
+        if (!staged.removeCrossDissolvesForClip(from.track_index, clip.clip_id)) {
+            return MoveClipResult::InvalidPosition;
+        }
+        const auto result = staged.moveClip(from, to, timeline_start_frame);
+        if (result == MoveClipResult::Moved) *this = std::move(staged);
+        return result;
     }
     for (std::size_t index = 0; index < target_track->clips.size(); ++index) {
         if (target_track == source_track && index == from.clip_index) continue;
@@ -833,6 +904,16 @@ SplitClipResult TimelineModel::splitClip(
     auto* track = trackAt(track_index);
     if (track == nullptr || clip_index >= track->clips.size()) {
         return SplitClipResult::InvalidIndex;
+    }
+    if (hasCrossDissolveForClip(*track, track->clips[clip_index].clip_id)) {
+        const auto clip_id = track->clips[clip_index].clip_id;
+        auto staged = *this;
+        if (!staged.removeCrossDissolvesForClip(track_index, clip_id)) {
+            return SplitClipResult::InvalidBoundary;
+        }
+        const auto result = staged.splitClip(track_index, clip_index, local_frame);
+        if (result == SplitClipResult::Split) *this = std::move(staged);
+        return result;
     }
     auto& clip = track->clips[clip_index];
     if (local_frame <= 0 || local_frame >= clip.timeline_duration_frames ||
@@ -894,6 +975,16 @@ RemoveClipResult TimelineModel::removeClip(
     if (track == nullptr || clip_index >= track->clips.size()) {
         return RemoveClipResult::InvalidIndex;
     }
+    if (hasCrossDissolveForClip(*track, track->clips[clip_index].clip_id)) {
+        const auto clip_id = track->clips[clip_index].clip_id;
+        auto staged = *this;
+        if (!staged.removeCrossDissolvesForClip(track_index, clip_id)) {
+            return RemoveClipResult::InvalidIndex;
+        }
+        const auto result = staged.removeClip(track_index, clip_index);
+        if (result == RemoveClipResult::Removed) *this = std::move(staged);
+        return result;
+    }
     track->clips.erase(track->clips.begin() + static_cast<std::ptrdiff_t>(clip_index));
     removeInvalidTransitions(*track);
     assertIdentityInvariants();
@@ -908,6 +999,17 @@ TrimClipResult TimelineModel::trimClip(
     auto* track = trackAt(track_index);
     if (track == nullptr || clip_index >= track->clips.size()) {
         return TrimClipResult::InvalidIndex;
+    }
+    if (hasCrossDissolveForClip(*track, track->clips[clip_index].clip_id)) {
+        const auto clip_id = track->clips[clip_index].clip_id;
+        auto staged = *this;
+        if (!staged.removeCrossDissolvesForClip(track_index, clip_id)) {
+            return TrimClipResult::InvalidRange;
+        }
+        const auto result = staged.trimClip(
+            track_index, clip_index, new_source_start_frame, new_duration_frames);
+        if (result == TrimClipResult::Trimmed) *this = std::move(staged);
+        return result;
     }
     auto& clip = track->clips[clip_index];
     const auto old_source_duration = sourceDurationForClip(clip, frame_rate_);
@@ -974,6 +1076,17 @@ TrimClipResult TimelineModel::trimClipEdge(
     auto* track = trackAt(track_index);
     if (track == nullptr || clip_index >= track->clips.size()) {
         return TrimClipResult::InvalidIndex;
+    }
+    if (hasCrossDissolveForClip(*track, track->clips[clip_index].clip_id)) {
+        const auto clip_id = track->clips[clip_index].clip_id;
+        auto staged = *this;
+        if (!staged.removeCrossDissolvesForClip(track_index, clip_id)) {
+            return TrimClipResult::InvalidRange;
+        }
+        const auto result = staged.trimClipEdge(
+            track_index, clip_index, edge, boundary_frame, mode);
+        if (result == TrimClipResult::Trimmed) *this = std::move(staged);
+        return result;
     }
     const auto preview = previewClipEdgeEdit(
         tracks_, ClipLocation{track_index, clip_index}, edge, boundary_frame, mode,
@@ -1136,9 +1249,32 @@ std::optional<ClipLocation> TimelineModel::clipAt(
 
 std::optional<ClipLocation> TimelineModel::topClipAt(std::int64_t timeline_frame) const {
     for (std::size_t track = 0; track < tracks_.size(); ++track) {
-        if (const auto location = clipAt(track, timeline_frame); location.has_value()) {
-            return location;
+        const auto location = clipAt(track, timeline_frame);
+        if (!location.has_value()) continue;
+        const auto& timeline_track = tracks_[track];
+        const auto& visible_clip = timeline_track.clips[location->clip_index];
+        for (const auto& transition : timeline_track.transitions) {
+            if (transition.kind != TransitionKind::CrossDissolve ||
+                transition.to_clip_id != visible_clip.clip_id) {
+                continue;
+            }
+            const auto indexes = transitionClipIndexes(timeline_track, transition);
+            if (!indexes.has_value() || indexes->second != indexes->first + 1) continue;
+            const auto& from = timeline_track.clips[indexes->first];
+            if (from.timeline_start_frame < 0 || from.timeline_duration_frames <= 0 ||
+                from.timeline_start_frame > std::numeric_limits<std::int64_t>::max() -
+                    from.timeline_duration_frames) {
+                continue;
+            }
+            const auto cut_frame = from.timeline_start_frame +
+                from.timeline_duration_frames;
+            if (visible_clip.timeline_start_frame == cut_frame -
+                    transition.duration_frames &&
+                timeline_frame < cut_frame) {
+                return ClipLocation{track, indexes->first};
+            }
         }
+        return location;
     }
     return std::nullopt;
 }
@@ -1264,35 +1400,151 @@ TimelineModel::transitionClipIndexes(
     return std::make_pair(*from_index, *to_index);
 }
 
+bool TimelineModel::removeCrossDissolvesForClip(
+    std::size_t track_index,
+    ClipId clip_id) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_id == 0) return false;
+
+    struct AttachedTransition {
+        std::size_t from_index = 0;
+        std::size_t to_index = 0;
+        ClipId from_id = 0;
+        ClipId to_id = 0;
+    };
+    std::vector<AttachedTransition> attached;
+    for (const auto& transition : track->transitions) {
+        if (transition.kind != TransitionKind::CrossDissolve ||
+            (transition.from_clip_id != clip_id &&
+             transition.to_clip_id != clip_id)) {
+            continue;
+        }
+        const auto indexes = transitionClipIndexes(*track, transition);
+        if (!indexes.has_value()) continue;
+        attached.push_back({
+            indexes->first, indexes->second,
+            transition.from_clip_id, transition.to_clip_id});
+    }
+    if (attached.empty()) return false;
+    std::sort(attached.begin(), attached.end(),
+        [](const AttachedTransition& left, const AttachedTransition& right) {
+            return left.from_index < right.from_index;
+        });
+
+    for (const auto& item : attached) {
+        auto transition = std::find_if(
+            track->transitions.begin(), track->transitions.end(),
+            [&item](const TimelineTransition& candidate) {
+                return candidate.from_clip_id == item.from_id &&
+                    candidate.to_clip_id == item.to_id &&
+                    candidate.kind == TransitionKind::CrossDissolve;
+            });
+        if (transition == track->transitions.end()) continue;
+        const auto indexes = transitionClipIndexes(*track, *transition);
+        if (!indexes.has_value() || indexes->second <= indexes->first) {
+            track->transitions.erase(transition);
+            continue;
+        }
+        const auto& from = track->clips[indexes->first];
+        if (from.timeline_start_frame < 0 || from.timeline_duration_frames <= 0 ||
+            from.timeline_start_frame > std::numeric_limits<std::int64_t>::max() -
+                from.timeline_duration_frames) {
+            return false;
+        }
+        auto target_start = from.timeline_start_frame + from.timeline_duration_frames;
+        for (std::size_t index = indexes->first + 1;
+             index < indexes->second; ++index) {
+            const auto end = clipTimelineEnd(track->clips[index]);
+            if (!end.has_value()) return false;
+            target_start = std::max(target_start, *end);
+        }
+        target_start = std::max(target_start,
+            track->clips[indexes->second].timeline_start_frame);
+        const auto delta = target_start -
+            track->clips[indexes->second].timeline_start_frame;
+        if (delta > 0 && !shiftTimelineSuffix(*track, indexes->second, delta)) {
+            return false;
+        }
+        track->transitions.erase(transition);
+    }
+    return true;
+}
+
 void TimelineModel::removeInvalidTransitions(TimelineTrack& track) noexcept {
-    track.transitions.erase(
-        std::remove_if(
-            track.transitions.begin(),
-            track.transitions.end(),
-            [&track](const TimelineTransition& transition) {
-                if (!validTransitionKind(transition.kind) ||
-                    transition.duration_frames <= 0) {
-                    return true;
-                }
-                const auto indexes = transitionClipIndexes(track, transition);
-                if (!indexes.has_value() || indexes->second != indexes->first + 1) {
-                    return true;
-                }
-                const auto& from = track.clips[indexes->first];
-                const auto& to = track.clips[indexes->second];
-                if (from.timeline_start_frame >
-                        std::numeric_limits<std::int64_t>::max() -
-                            from.timeline_duration_frames ||
-                    from.timeline_start_frame + from.timeline_duration_frames !=
-                        to.timeline_start_frame) {
-                    return true;
-                }
-                const auto maximum = std::min(
-                    from.timeline_duration_frames,
-                    to.timeline_duration_frames);
-                return maximum <= 0 || transition.duration_frames > maximum;
-            }),
-        track.transitions.end());
+    std::size_t index = 0;
+    while (index < track.transitions.size()) {
+        auto& transition = track.transitions[index];
+        const auto indexes = transitionClipIndexes(track, transition);
+        const auto pair = std::make_pair(
+            transition.from_clip_id, transition.to_clip_id);
+        bool duplicate_pair = false;
+        for (std::size_t prior = 0; prior < index; ++prior) {
+            if (track.transitions[prior].from_clip_id == pair.first &&
+                track.transitions[prior].to_clip_id == pair.second) {
+                duplicate_pair = true;
+                break;
+            }
+        }
+        bool keep = validTransitionKind(transition.kind) &&
+            indexes.has_value() && indexes->second == indexes->first + 1 &&
+            transition.duration_frames > 0;
+        if (keep) {
+            keep = track.clips[indexes->first].kind != ClipKind::Text ||
+                track.clips[indexes->second].kind != ClipKind::Text;
+        }
+        if (keep) {
+            keep = !duplicate_pair;
+        }
+        if (keep) {
+            const auto& from = track.clips[indexes->first];
+            const auto& to = track.clips[indexes->second];
+            const auto maximum = std::min(
+                from.timeline_duration_frames, to.timeline_duration_frames);
+            keep = maximum > 0 && from.timeline_start_frame >= 0 &&
+                from.timeline_duration_frames > 0 &&
+                from.timeline_start_frame <= std::numeric_limits<std::int64_t>::max() -
+                    from.timeline_duration_frames;
+            if (keep) {
+                transition.duration_frames = std::min(
+                    transition.duration_frames, maximum);
+                const auto from_end = from.timeline_start_frame +
+                    from.timeline_duration_frames;
+                const auto target_start = transition.kind == TransitionKind::CrossDissolve
+                    ? from_end - transition.duration_frames
+                    : from_end;
+                const auto delta = target_start - to.timeline_start_frame;
+                keep = shiftTimelineSuffix(track, indexes->second, delta);
+            }
+        }
+        if (keep) {
+            ++index;
+            continue;
+        }
+
+        // If an invalidated Cross Dissolve left its endpoints overlapping,
+        // move the later clip and its suffix to the first free frame.
+        if (!duplicate_pair && transition.kind == TransitionKind::CrossDissolve &&
+            indexes.has_value() &&
+            indexes->second > indexes->first) {
+            const auto to_index = indexes->second;
+            std::optional<std::int64_t> occupied_end;
+            for (std::size_t prior = indexes->first; prior < to_index; ++prior) {
+                const auto end = clipTimelineEnd(track.clips[prior]);
+                if (!end.has_value()) continue;
+                occupied_end = occupied_end.has_value()
+                    ? std::max(*occupied_end, *end)
+                    : *end;
+            }
+            if (occupied_end.has_value() &&
+                track.clips[to_index].timeline_start_frame < *occupied_end) {
+                const auto delta = *occupied_end -
+                    track.clips[to_index].timeline_start_frame;
+                static_cast<void>(shiftTimelineSuffix(track, to_index, delta));
+            }
+        }
+        track.transitions.erase(track.transitions.begin() +
+            static_cast<std::ptrdiff_t>(index));
+    }
 }
 
 void TimelineModel::updateDisplayNameForSource(
@@ -1432,6 +1684,14 @@ TransitionMutationResult TimelineModel::addTransition(
     }
     const auto& from = track->clips[from_clip_index];
     const auto& to = track->clips[to_clip_index];
+    if (from.kind == ClipKind::Text && to.kind == ClipKind::Text) {
+        return TransitionMutationResult::InvalidBoundary;
+    }
+    if (const auto* existing = transitionBetween(
+            track_index, from_clip_index, to_clip_index);
+        existing != nullptr) {
+        return TransitionMutationResult::NoChange;
+    }
     if (from.timeline_start_frame >
             std::numeric_limits<std::int64_t>::max() - from.timeline_duration_frames ||
         from.timeline_start_frame + from.timeline_duration_frames !=
@@ -1443,16 +1703,17 @@ TransitionMutationResult TimelineModel::addTransition(
     if (duration_frames <= 0 || maximum <= 0 || duration_frames > maximum) {
         return TransitionMutationResult::InvalidRange;
     }
-    if (const auto* existing = transitionBetween(
-            track_index, from_clip_index, to_clip_index);
-        existing != nullptr) {
-        return TransitionMutationResult::NoChange;
+    auto updated = *track;
+    if (kind == TransitionKind::CrossDissolve &&
+        !shiftTimelineSuffix(updated, to_clip_index, -duration_frames)) {
+        return TransitionMutationResult::InvalidRange;
     }
-    track->transitions.push_back(TimelineTransition{
+    updated.transitions.push_back(TimelineTransition{
         from.clip_id,
         to.clip_id,
         kind,
         duration_frames});
+    *track = std::move(updated);
     return TransitionMutationResult::Added;
 }
 
@@ -1470,34 +1731,49 @@ TransitionMutationResult TimelineModel::updateTransition(
     if (!validTransitionKind(kind) || from_clip_index + 1 != to_clip_index) {
         return TransitionMutationResult::InvalidBoundary;
     }
-    const auto& from = track->clips[from_clip_index];
-    const auto& to = track->clips[to_clip_index];
-    if (from.timeline_start_frame >
-            std::numeric_limits<std::int64_t>::max() - from.timeline_duration_frames ||
-        from.timeline_start_frame + from.timeline_duration_frames !=
-            to.timeline_start_frame) {
-        return TransitionMutationResult::InvalidBoundary;
-    }
-    const auto maximum = std::min(from.timeline_duration_frames,
-                                  to.timeline_duration_frames);
-    if (duration_frames <= 0 || maximum <= 0 || duration_frames > maximum) {
-        return TransitionMutationResult::InvalidRange;
-    }
-    const auto from_id = from.clip_id;
-    const auto to_id = to.clip_id;
+    const auto from_id = track->clips[from_clip_index].clip_id;
+    const auto to_id = track->clips[to_clip_index].clip_id;
     const auto found = std::find_if(
-        track->transitions.begin(),
-        track->transitions.end(),
+        track->transitions.begin(), track->transitions.end(),
         [from_id, to_id](const TimelineTransition& transition) {
             return transition.from_clip_id == from_id &&
                 transition.to_clip_id == to_id;
         });
     if (found == track->transitions.end()) return TransitionMutationResult::NotFound;
+    const auto maximum = std::min(
+        track->clips[from_clip_index].timeline_duration_frames,
+        track->clips[to_clip_index].timeline_duration_frames);
+    if (duration_frames <= 0 || maximum <= 0 || duration_frames > maximum) {
+        return TransitionMutationResult::InvalidRange;
+    }
     if (found->kind == kind && found->duration_frames == duration_frames) {
         return TransitionMutationResult::NoChange;
     }
-    found->kind = kind;
-    found->duration_frames = duration_frames;
+    auto updated = *track;
+    auto updated_transition = std::find_if(
+        updated.transitions.begin(), updated.transitions.end(),
+        [from_id, to_id](const TimelineTransition& transition) {
+            return transition.from_clip_id == from_id &&
+                transition.to_clip_id == to_id;
+        });
+    const auto& from = updated.clips[from_clip_index];
+    const auto& to = updated.clips[to_clip_index];
+    if (from.timeline_start_frame < 0 || from.timeline_duration_frames <= 0 ||
+        from.timeline_start_frame > std::numeric_limits<std::int64_t>::max() -
+            from.timeline_duration_frames) {
+        return TransitionMutationResult::InvalidRange;
+    }
+    const auto from_end = from.timeline_start_frame + from.timeline_duration_frames;
+    const auto target_start = kind == TransitionKind::CrossDissolve
+        ? from_end - duration_frames
+        : from_end;
+    if (!shiftTimelineSuffix(
+            updated, to_clip_index, target_start - to.timeline_start_frame)) {
+        return TransitionMutationResult::InvalidRange;
+    }
+    updated_transition->kind = kind;
+    updated_transition->duration_frames = duration_frames;
+    *track = std::move(updated);
     return TransitionMutationResult::Updated;
 }
 
@@ -1520,7 +1796,24 @@ TransitionMutationResult TimelineModel::removeTransition(
                 transition.to_clip_id == to_id;
         });
     if (found == track->transitions.end()) return TransitionMutationResult::NotFound;
-    track->transitions.erase(found);
+    auto updated = *track;
+    if (found->kind == TransitionKind::CrossDissolve) {
+        const auto& from = updated.clips[from_clip_index];
+        const auto& to = updated.clips[to_clip_index];
+        if (from.timeline_start_frame < 0 || from.timeline_duration_frames <= 0 ||
+            from.timeline_start_frame > std::numeric_limits<std::int64_t>::max() -
+                from.timeline_duration_frames) {
+            return TransitionMutationResult::InvalidRange;
+        }
+        const auto from_end = from.timeline_start_frame + from.timeline_duration_frames;
+        if (!shiftTimelineSuffix(
+                updated, to_clip_index, from_end - to.timeline_start_frame)) {
+            return TransitionMutationResult::InvalidRange;
+        }
+    }
+    updated.transitions.erase(updated.transitions.begin() +
+        static_cast<std::ptrdiff_t>(found - track->transitions.begin()));
+    *track = std::move(updated);
     return TransitionMutationResult::Removed;
 }
 

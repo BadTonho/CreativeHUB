@@ -408,12 +408,17 @@ the final presentation path for the composed RGBA frame.
 
 The playback worker receives transition specifications together with the
 composition layers. This keeps transition timing, source decoding, transform
-evaluation, and alpha composition outside the UI thread. A Cross Dissolve
-uses the outgoing endpoint's final segment frame and the incoming endpoint's
-local frame sequence after the junction. A Fade to Black applies a linear
-outgoing fade before the junction, a black junction frame, and a linear
-incoming fade afterward. Transition duration is expressed in timeline frames
-and does not change clip positions or durations.
+evaluation, and alpha composition outside the UI thread. A Cross Dissolve of
+D Timeline frames occupies `[cut - D, cut)`: the outgoing and incoming clips
+both advance during the overlap, with the incoming clip starting at local
+frame zero. At the original cut, the incoming clip is at local frame D and
+continues from there. Adding, resizing, or removing the transition ripples the
+incoming clip and the later clips on its track so the overlap remains valid.
+A Fade to Black keeps the clips adjacent and applies a linear outgoing fade
+before the junction, a black junction frame, and a linear incoming fade
+afterward. Both transition durations use Timeline frames. Audio remains a hard
+cut at the original Cross Dissolve cut; incoming audio starts at the source
+position corresponding to local frame D.
 
 The internal `playback_transition_plan` adjusts lightweight requests for the
 visible composition sessions at each global frame. It selects the local source

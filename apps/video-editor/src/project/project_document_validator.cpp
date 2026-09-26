@@ -202,23 +202,6 @@ void validateDocument(const ProjectDocument& document,
             }
             validate_clip(clip);
         }
-        for (std::size_t left = 0; left < track.clips.size(); ++left) {
-            const auto& first = track.clips[left];
-            const auto first_end =
-                first.timeline_start_frame + first.duration_frames;
-            for (std::size_t right = left + 1; right < track.clips.size(); ++right) {
-                const auto& second = track.clips[right];
-                const auto second_end =
-                    second.timeline_start_frame + second.duration_frames;
-                if (first.kind == timeline::ClipKind::Text &&
-                    second.kind == timeline::ClipKind::Text &&
-                    second.timeline_start_frame < first_end &&
-                    first.timeline_start_frame <
-                        second_end) {
-                    throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains overlapping clips on one track.");
-                }
-            }
-        }
         std::vector<std::pair<std::size_t, std::size_t>> transition_pairs;
         for (const auto& transition : track.transitions) {
             if (!validTransitionKind(transition.kind) ||
@@ -233,18 +216,25 @@ void validateDocument(const ProjectDocument& document,
             }
             const auto& from = track.clips[transition.from_clip_index];
             const auto& to = track.clips[transition.to_clip_index];
-            if (from.timeline_start_frame >
-                    std::numeric_limits<std::int64_t>::max() - from.duration_frames ||
-                from.timeline_start_frame + from.duration_frames !=
-                    to.timeline_start_frame) {
+            if (from.kind == timeline::ClipKind::Text &&
+                to.kind == timeline::ClipKind::Text) {
                 throwJson(ProjectErrorCode::InvalidTimeline, project_path,
-                          "Project JSON contains a transition across a gap.");
+                          "Project JSON contains a transition between two text clips on one track.");
             }
             const auto maximum = std::min(from.duration_frames, to.duration_frames);
             if (transition.duration_frames <= 0 ||
                 transition.duration_frames > maximum) {
                 throwJson(ProjectErrorCode::InvalidTimeline, project_path,
                           "Project JSON contains a transition with an invalid duration.");
+            }
+            const auto from_end = from.timeline_start_frame + from.duration_frames;
+            const auto expected_to_start =
+                transition.kind == timeline::TransitionKind::CrossDissolve
+                ? from_end - transition.duration_frames
+                : from_end;
+            if (to.timeline_start_frame != expected_to_start) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains a transition with invalid clip timing.");
             }
             const auto pair = std::make_pair(
                 transition.from_clip_index, transition.to_clip_index);
@@ -254,6 +244,22 @@ void validateDocument(const ProjectDocument& document,
                           "Project JSON contains duplicate transitions.");
             }
             transition_pairs.push_back(pair);
+        }
+
+        for (std::size_t left = 0; left < track.clips.size(); ++left) {
+            const auto& first = track.clips[left];
+            const auto first_end = first.timeline_start_frame + first.duration_frames;
+            for (std::size_t right = left + 1; right < track.clips.size(); ++right) {
+                const auto& second = track.clips[right];
+                const auto second_end = second.timeline_start_frame + second.duration_frames;
+                const bool overlap = second.timeline_start_frame < first_end &&
+                    first.timeline_start_frame < second_end;
+                if (overlap && first.kind == timeline::ClipKind::Text &&
+                    second.kind == timeline::ClipKind::Text) {
+                    throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                              "Project JSON contains overlapping text clips on one track.");
+                }
+            }
         }
     }
 }

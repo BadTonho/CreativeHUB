@@ -344,7 +344,7 @@ void validateTransitionPlan() {
     layers[0].segment_frame_count = 60;
     layers[1].track_index = 0;
     layers[1].clip_index = 1;
-    layers[1].timeline_start_frame = 60;
+    layers[1].timeline_start_frame = 50;
     layers[1].segment_frame_count = 60;
     layers[2].track_index = 1;
     layers[2].clip_index = 0;
@@ -384,37 +384,38 @@ void validateTransitionPlan() {
 
     const playback::CompositionTransitionSpec dissolve{
         0, 0, 1, 60, 10, timeline::TransitionKind::CrossDissolve};
-    const auto before_dissolve = at(59, dissolve);
+    const auto before_dissolve = at(49, dissolve);
     require(before_dissolve.size() == 2 &&
-                request_for(before_dissolve, 0)->local_frame == 59 &&
+                request_for(before_dissolve, 0)->local_frame == 49 &&
                 request_for(before_dissolve, 1) == nullptr,
             "Cross dissolve changed requests before its boundary.");
     for (const auto [frame, expected_blend] :
-         {std::pair{60, 0.1}, std::pair{64, 0.5}, std::pair{69, 1.0}}) {
+         {std::pair{50, 0.1}, std::pair{54, 0.5}, std::pair{59, 1.0}}) {
         const auto requests = at(frame, dissolve);
         const auto* from = request_for(requests, 0);
         const auto* to = request_for(requests, 1);
         const auto* other = request_for(requests, 2);
         require(requests.size() == 3 && from != nullptr && to != nullptr &&
-                    other != nullptr && from->local_frame == 59 &&
-                    !from->allow_forward_decode && close(from->opacity_multiplier, 1.0) &&
-                    to->local_frame == frame - 60 &&
+                    other != nullptr && from->local_frame == frame &&
+                    from->allow_forward_decode && close(from->opacity_multiplier, 1.0) &&
+                    to->local_frame == frame - 50 &&
                     close(to->opacity_multiplier, expected_blend) &&
                     other->local_frame == frame &&
                     close(other->opacity_multiplier, 1.0),
                 "Cross dissolve changed its held frame, blend, or unrelated layer.");
     }
-    const auto after_dissolve = at(70, dissolve);
+    const auto after_dissolve = at(60, dissolve);
     require(after_dissolve.size() == 2 && request_for(after_dissolve, 0) == nullptr &&
                 request_for(after_dissolve, 1)->local_frame == 10,
             "Cross dissolve remained active beyond its last frame.");
     auto one_frame_dissolve = dissolve;
     one_frame_dissolve.duration_frames = 1;
-    const auto single_dissolve = at(60, one_frame_dissolve);
+    const auto single_dissolve = at(59, one_frame_dissolve);
     require(single_dissolve.size() == 3 &&
                 close(request_for(single_dissolve, 1)->opacity_multiplier, 1.0),
             "A one-frame Cross Dissolve did not fully show the incoming clip.");
 
+    layers[1].timeline_start_frame = 60;
     const playback::CompositionTransitionSpec fade{
         0, 0, 1, 60, 10, timeline::TransitionKind::FadeToBlack};
     const auto fade_start = at(50, fade);
@@ -469,7 +470,7 @@ void validateTransitionPlan() {
     std::vector<CompositionFrameRequest> duplicate_requests{
         {1, 0, 1.0, true}, {2, 60, 1.0, true}};
     playback::detail::applyTransitionRequests(
-        duplicate_requests, reordered, std::span(&dissolve, 1), 60);
+        duplicate_requests, reordered, std::span(&dissolve, 1), 55);
     require(duplicate_requests.size() == 3 &&
                 request_for(duplicate_requests, 0) != nullptr &&
                 request_for(duplicate_requests, 1) != nullptr &&
@@ -547,16 +548,28 @@ void validateCompositionTransitions(
         0,
         0,
         101);
+    const auto outgoing_motion = capture(
+        QVector<playback::CompositionLayerSpec>{make_layer(0, 0, 60, 0)},
+        {},
+        55,
+        55,
+        102);
+    const auto incoming_motion = capture(
+        QVector<playback::CompositionLayerSpec>{make_layer(50, 60, 59, 1)},
+        {},
+        55,
+        5,
+        103);
     const auto mixed = capture(
         QVector<playback::CompositionLayerSpec>{
             make_layer(0, 0, 60, 0),
-            make_layer(60, 60, 59, 1)},
+            make_layer(50, 60, 59, 1)},
         QVector<playback::CompositionTransitionSpec>{
             playback::CompositionTransitionSpec{
                 0, 0, 1, 60, 10, timeline::TransitionKind::CrossDissolve}},
-        60,
-        60,
-        102);
+        55,
+        55,
+        104);
 
     require(outgoing.width == 1920 && outgoing.height == 1080 &&
                 incoming.width == 1920 && mixed.width == 1920,
@@ -569,18 +582,19 @@ void validateCompositionTransitions(
             frame.rgba_pixels[offset], frame.rgba_pixels[offset + 1],
             frame.rgba_pixels[offset + 2], frame.rgba_pixels[offset + 3]};
     };
-    const auto outgoing_pixel = pixel(outgoing);
-    const auto incoming_pixel = pixel(incoming);
+    const auto outgoing_motion_pixel = pixel(outgoing_motion);
+    const auto incoming_motion_pixel = pixel(incoming_motion);
     const auto mixed_pixel = pixel(mixed);
     for (std::size_t channel = 0; channel < 3; ++channel) {
         const auto expected = static_cast<int>(std::lround(
-            outgoing_pixel[channel] * 0.9 + incoming_pixel[channel] * 0.1));
+            outgoing_motion_pixel[channel] * 0.4 +
+            incoming_motion_pixel[channel] * 0.6));
         require(std::abs(mixed_pixel[channel] - expected) <= 2,
                 "Cross dissolve did not produce the expected intermediate pixel: " +
                     std::to_string(mixed_pixel[channel]) + " vs " +
                     std::to_string(expected) + " (out=" +
-                    std::to_string(outgoing_pixel[channel]) + ", in=" +
-                    std::to_string(incoming_pixel[channel]) + ")");
+                    std::to_string(outgoing_motion_pixel[channel]) + ", in=" +
+                    std::to_string(incoming_motion_pixel[channel]) + ")");
     }
 
     const auto black = capture(

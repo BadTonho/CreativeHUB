@@ -509,7 +509,9 @@ void testLegacyTimelineRateMigrationAndOfflineReconnect() {
     project::ProjectClip last;
     last.clip_id = 3;
     last.source_path = video;
-    last.timeline_start_frame = 174;
+    // Save the v12 overlap, then restore the pre-v12 cut position in the JSON
+    // fixture below before exercising legacy migration.
+    last.timeline_start_frame = 159;
     last.source_start_frame = 8;
     last.duration_frames = 24;
     last.source_duration_frames = 24;
@@ -517,7 +519,13 @@ void testLegacyTimelineRateMigrationAndOfflineReconnect() {
     track.transitions.push_back({
         1, 2, timeline::TransitionKind::CrossDissolve, 15});
     document.timeline_tracks.push_back(track);
-    project::save(project_path, document);
+    try {
+        project::save(project_path, document);
+    } catch (const std::exception& error) {
+        throw std::runtime_error(
+            std::string("Could not save the current-format migration fixture: ") +
+            error.what());
+    }
 
     std::ifstream project_input(project_path, std::ios::binary);
     const std::string current_json{
@@ -533,6 +541,11 @@ void testLegacyTimelineRateMigrationAndOfflineReconnect() {
     for (qsizetype track_index = 0; track_index < tracks.size(); ++track_index) {
         auto track_object = tracks.at(track_index).toObject();
         auto clips = track_object.value("clips").toArray();
+        if (track_index == 0 && clips.size() >= 3) {
+            auto legacy_last = clips.at(2).toObject();
+            legacy_last.insert("timeline_start_frame", 174);
+            clips.replace(2, legacy_last);
+        }
         for (qsizetype clip_index = 0; clip_index < clips.size(); ++clip_index) {
             auto clip_object = clips.at(clip_index).toObject();
             clip_object.remove("source_duration_frames");
@@ -572,9 +585,14 @@ void testLegacyTimelineRateMigrationAndOfflineReconnect() {
                 offline_clip.source_duration_migration_pending,
             "An offline legacy clip did not keep its source duration pending reconnection.");
     require(prepared.document.timeline_tracks.front().transitions.size() == 1 &&
-                prepared.document.timeline_tracks.front().clips[2].timeline_start_frame == 174,
+                prepared.document.timeline_tracks.front().clips[2].timeline_start_frame == 159,
             "The legacy transition or following clip moved before the offline source was available.");
-    project::save(project_path, prepared.document);
+    try {
+        project::save(project_path, prepared.document);
+    } catch (const std::exception& error) {
+        throw std::runtime_error(
+            std::string("Could not save the migrated project: ") + error.what());
+    }
     application::EditorSession migrated_session;
     application::ProjectController migrated_controller(migrated_session);
     migrated_controller.commitPrepared(
@@ -598,11 +616,14 @@ void testLegacyTimelineRateMigrationAndOfflineReconnect() {
                 !reconnected_track.clips[1].source_duration_migration_pending &&
                 reconnected_track.clips[1].source_duration_frames == 150 &&
                 reconnected_track.clips[1].duration_frames == 120 &&
-                reconnected_track.clips[2].timeline_start_frame == 144 &&
+                reconnected_track.clips[2].timeline_start_frame == 129 &&
+                reconnected_track.transitions.size() == 1 &&
+                reconnected_track.transitions.front().kind ==
+                    timeline::TransitionKind::CrossDissolve &&
                 reconnected_track.clips[1].timeline_start_frame +
-                    reconnected_track.clips[1].duration_frames ==
-                    reconnected_track.clips[2].timeline_start_frame &&
-                reconnected_track.transitions.size() == 1,
+                    reconnected_track.clips[1].duration_frames -
+                    reconnected_track.transitions.front().duration_frames ==
+                    reconnected_track.clips[2].timeline_start_frame,
             "Reconnection did not convert the source duration once and preserve transition continuity.");
 
     const auto fallback_path = root / "legacy-without-video.csp";

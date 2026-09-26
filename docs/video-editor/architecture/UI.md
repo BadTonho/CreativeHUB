@@ -70,8 +70,10 @@ category filters the five currently implemented entries — `Grayscale`, `Gain`,
 `Cross Dissolve`, `Fade to Black`, and `Text` — in the Effects dock. The Text
 entry is the Timeline text-clip tool: it can be dragged to a track and frame
 in the Timeline to create a five-second text clip. `Cross Dissolve` and `Fade
-to Black` can be dragged onto a contiguous clip junction in the same track;
-the Timeline highlights the junction and adds the transition on release. The
+to Black` can be dragged onto a contiguous cut in the same track; the Timeline
+highlights the cut and adds the transition on release. Cross Dissolve then
+creates a moving overlap and ripples the incoming and later clips left by its
+duration. Fade to Black leaves clip positions unchanged. The
 `Grayscale` and `Gain` entries remain UI prototypes and cannot be applied from
 this dock to the Preview, Timeline, or project. The toolbar `Effects` action
 activates all three docks and hides the Media Pool pair, while `View > Effects` controls
@@ -447,7 +449,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 11 format. Image media context menus can open a
+the current `.csp` version 12 format. Image media context menus can open a
 shared Image Editor document, and image clip context menus can open a
 clip-specific variant. The Main Window records those references in the project
 and polls published PNG revisions asynchronously; UI presentation updates only
@@ -459,19 +461,21 @@ keyboard shortcut is introduced for text creation or editing.
 
 ## Transition editing
 
-The Timeline marks valid clip junctions with a transition region. A junction
-context menu provides Add Cross Dissolve, Add Fade to Black, and Remove
-Transition. Selecting a junction switches the Inspector to transition controls
-for the type and duration; applying a change creates one Timeline history
-entry. The default duration is 15 frames and it is limited by the endpoint
-clips.
+The Timeline marks valid clip cuts with a transition region. A cut context
+menu provides Add Cross Dissolve, Add Fade to Black, and Remove Transition.
+Selecting a transition switches the Inspector to type and duration controls;
+one edit creates a single Timeline history entry. The default duration is 15
+frames and it is limited by the endpoint clips.
 
-Transitions do not create overlap or change clip placement. They are evaluated
-by the playback worker while the UI continues to present the resulting
-composed frame. Playback pauses while a transition is created, edited, or
-removed, then the current composition is requested again. Undo/Redo restores
-transition data, selection, and playhead while remaining paused. Invalid
-junctions and gaps are intentional no-op outcomes and are not logged.
+Cross Dissolve occupies the final D frames before the original cut. Adding,
+resizing, or removing it ripples the incoming clip and later clips on that
+track so both clips move during the overlap. Fade to Black leaves clip
+positions unchanged. Both are evaluated by the playback worker while the UI
+presents the composed frame. Playback pauses while a transition is created,
+edited, or removed, then the current composition is requested again. Undo/Redo
+restores clip positions, transition data, selection, and playhead while
+remaining paused. Invalid cuts and gaps are intentional no-op outcomes and
+are not logged.
 
 `MainWindow` remains the application shell and is implemented in
 responsibility-focused translation units under

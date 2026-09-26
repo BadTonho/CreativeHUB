@@ -92,11 +92,11 @@ void validatePendingMediaTimingReconnect(const std::filesystem::path& directory)
                 !migrated_track.clips[0].source_duration_migration_pending &&
                 migrated_track.clips[0].source_duration_frames == 24 &&
                 migrated_track.clips[0].display_name == "Reconnected video" &&
-                migrated_track.clips[1].timeline_start_frame == 12 &&
-                migrated_track.clips[2].timeline_start_frame == 42 &&
+                migrated_track.clips[1].timeline_start_frame == 0 &&
+                migrated_track.clips[2].timeline_start_frame == 30 &&
                 migrated_track.transitions.size() == 1 &&
                 migrated_track.transitions.front().duration_frames == 12,
-            "Reconnect migration did not preserve the transition junction and following clips.");
+            "Reconnect migration did not preserve the Cross Dissolve overlap and following clips.");
     const auto migrated_snapshot = model.snapshot();
     require(model.migratePendingMediaTiming(offline_path, metadata) ==
                 timeline::PendingMediaTimingMigrationResult::NoPendingClips &&
@@ -1094,20 +1094,58 @@ int main() {
                     timeline::TransitionMutationResult::Added,
                 "A cross dissolve could not be created at a clip junction.");
         require(transition_model.transitionBetween(0, 0, 1) != nullptr &&
-                    transition_model.tracks()[0].transitions.front().duration_frames == 15,
-                "The default transition duration was not preserved.");
+                    transition_model.tracks()[0].transitions.front().duration_frames == 15 &&
+                    transition_model.tracks()[0].clips[1].timeline_start_frame == 105 &&
+                    transition_model.tracks()[0].clips[2].timeline_start_frame == 165,
+                "Adding a Cross Dissolve did not create an overlap and ripple the suffix.");
+        const auto clip_during_dissolve = transition_model.topClipAt(105);
+        const auto clip_before_cut = transition_model.topClipAt(119);
+        const auto clip_at_cut = transition_model.topClipAt(120);
+        require(clip_during_dissolve.has_value() &&
+                    clip_before_cut.has_value() && clip_at_cut.has_value() &&
+                    clip_during_dissolve->clip_index == 0 &&
+                    clip_before_cut->clip_index == 0 &&
+                    clip_at_cut->clip_index == 1,
+                "The active clip or audio-priority clip did not switch at the original Cross Dissolve cut.");
         require(transition_model.addTransition(
                     0, 1, 2, timeline::TransitionKind::FadeToBlack, 10) ==
                     timeline::TransitionMutationResult::Added,
                 "A fade to black could not connect video and text clips.");
+        const auto dissolve_snapshot = transition_model.snapshot();
         require(transition_model.updateTransition(
                     0, 0, 1, timeline::TransitionKind::FadeToBlack, 20) ==
                     timeline::TransitionMutationResult::Updated,
-                "A transition could not be updated.");
+                "A Cross Dissolve could not be converted back to a cut-based Fade to Black.");
         require(transition_model.tracks()[0].transitions.front().kind ==
                     timeline::TransitionKind::FadeToBlack &&
-                    transition_model.tracks()[0].transitions.front().duration_frames == 20,
-                "The updated transition settings were not preserved.");
+                    transition_model.tracks()[0].transitions.front().duration_frames == 20 &&
+                    transition_model.tracks()[0].clips[1].timeline_start_frame == 120 &&
+                    transition_model.tracks()[0].clips[2].timeline_start_frame == 180,
+                "Updating the transition did not restore the original cut and suffix positions.");
+        require(transition_model.updateTransition(
+                    0, 0, 1, timeline::TransitionKind::CrossDissolve, 12) ==
+                    timeline::TransitionMutationResult::Updated &&
+                    transition_model.tracks()[0].clips[1].timeline_start_frame == 108 &&
+                    transition_model.tracks()[0].clips[2].timeline_start_frame == 168,
+                "Updating a Fade to Cross Dissolve did not ripple clips by the new duration.");
+        require(transition_model.updateTransition(
+                    0, 0, 1, timeline::TransitionKind::CrossDissolve, 8) ==
+                    timeline::TransitionMutationResult::Updated &&
+                    transition_model.tracks()[0].clips[1].timeline_start_frame == 112 &&
+                    transition_model.tracks()[0].clips[2].timeline_start_frame == 172,
+                "Resizing an existing Cross Dissolve did not ripple by the duration delta.");
+        transition_model.restore(dissolve_snapshot);
+        require(transition_model.tracks()[0].clips[1].timeline_start_frame == 105 &&
+                    transition_model.tracks()[0].clips[2].timeline_start_frame == 165,
+                "Restoring a timeline snapshot did not undo transition ripples.");
+        require(transition_model.removeTransition(0, 0, 1) ==
+                    timeline::TransitionMutationResult::Removed &&
+                    transition_model.tracks()[0].clips[1].timeline_start_frame == 120 &&
+                    transition_model.tracks()[0].clips[2].timeline_start_frame == 180,
+                "Removing a Cross Dissolve did not restore the incoming clip and suffix positions.");
+        require(transition_model.removeTransition(0, 1, 2) ==
+                    timeline::TransitionMutationResult::Removed,
+                "A Fade to Black could not be removed.");
         require(transition_model.addTransition(
                     0, 0, 2, timeline::TransitionKind::CrossDissolve, 1) ==
                     timeline::TransitionMutationResult::InvalidBoundary,
@@ -1123,10 +1161,18 @@ int main() {
                         0, 0, 1, timeline::TransitionKind::CrossDissolve, 121) ==
                     timeline::TransitionMutationResult::InvalidRange,
                 "An invalid transition duration was accepted.");
-        require(transition_model.removeTransition(0, 0, 1) ==
-                    timeline::TransitionMutationResult::Removed &&
-                    transition_model.transitionBetween(0, 0, 1) == nullptr,
-                "A transition could not be removed.");
+        require(transition_model.transitionBetween(0, 0, 1) == nullptr,
+                "Rejected transition commands unexpectedly changed the model.");
+
+        timeline::TimelineModel text_transition_model;
+        require(text_transition_model.addTextClip(0, 0, 30) ==
+                    timeline::AddClipResult::Added &&
+                    text_transition_model.addTextClip(0, 30, 30) ==
+                    timeline::AddClipResult::Added &&
+                    text_transition_model.addTransition(
+                        0, 0, 1, timeline::TransitionKind::CrossDissolve) ==
+                    timeline::TransitionMutationResult::InvalidBoundary,
+                "A transition between text clips was accepted.");
 
         timeline::TimelineModel gap_transition_model;
         require(gap_transition_model.addClip(0, first_metadata, 0) ==
@@ -1154,15 +1200,41 @@ int main() {
                 "Transitions were not included in a timeline snapshot.");
         require(cleanup_transition_model.splitClip(0, 0, 30) ==
                     timeline::SplitClipResult::Split &&
-                    cleanup_transition_model.tracks()[0].transitions.empty(),
-                "Splitting a transition endpoint did not remove the invalid transition.");
+                    cleanup_transition_model.tracks()[0].transitions.empty() &&
+                    cleanup_transition_model.tracks()[0].clips[1].timeline_start_frame == 30 &&
+                    cleanup_transition_model.tracks()[0].clips[2].timeline_start_frame == 120,
+                "Splitting a transition endpoint left an orphan overlap or did not restore the cut.");
         cleanup_transition_model.restore(transition_snapshot);
         require(cleanup_transition_model.tracks()[0].transitions.size() == 1,
                 "Restoring a snapshot did not restore its transition.");
         require(cleanup_transition_model.trimClip(0, 0, 0, 20) ==
                     timeline::TrimClipResult::Trimmed &&
-                    cleanup_transition_model.tracks()[0].transitions.empty(),
-                "Trimming a transition endpoint did not remove the gap transition.");
+                    cleanup_transition_model.tracks()[0].transitions.empty() &&
+                    cleanup_transition_model.tracks()[0].clips[1].timeline_start_frame == 120,
+                "Trimming a transition endpoint left an orphan overlap.");
+
+        timeline::TimelineModel move_transition_model;
+        require(move_transition_model.addClip(0, first_metadata, 0) ==
+                    timeline::AddClipResult::Added &&
+                    move_transition_model.addClip(0, second_metadata, 120) ==
+                    timeline::AddClipResult::Added &&
+                    move_transition_model.addTransition(
+                        0, 0, 1, timeline::TransitionKind::CrossDissolve) ==
+                    timeline::TransitionMutationResult::Added,
+                "The transition move test setup failed.");
+        const auto moving_id = move_transition_model.tracks().front().clips[1].clip_id;
+        const auto move_result = move_transition_model.moveClip(
+            {0, 1}, {0, 1}, 240);
+        const auto moved_location = move_transition_model.locateClip(moving_id);
+        require(move_result == timeline::MoveClipResult::Moved &&
+                    move_transition_model.transitionBetween(0, 0, 1) == nullptr &&
+                    moved_location.has_value() &&
+                    move_transition_model.tracks()[moved_location->track_index]
+                            .clips[moved_location->clip_index]
+                            .timeline_start_frame == 240 &&
+                    move_transition_model.tracks().front().clips[0]
+                            .timeline_start_frame == 0,
+                "Moving a Cross Dissolve endpoint did not remove the overlap cleanly.");
 
         timeline::TimelineModel history_model;
         require(history_model.addClip(first_metadata) == timeline::AddClipResult::Added,

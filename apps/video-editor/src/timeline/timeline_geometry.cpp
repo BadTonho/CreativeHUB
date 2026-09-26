@@ -220,22 +220,42 @@ std::optional<std::pair<std::size_t, std::size_t>> TimelineHitTester::transition
         const auto& from = displayedClip(tracks, {*track_index, from_index}, preview);
         const auto& to = displayedClip(tracks, {*track_index, from_index + 1}, preview);
         if (from.timeline_start_frame > std::numeric_limits<std::int64_t>::max() -
-                from.timeline_duration_frames ||
-            from.timeline_start_frame + from.timeline_duration_frames != to.timeline_start_frame) {
+                from.timeline_duration_frames) {
             continue;
         }
+        const auto boundary_frame = from.timeline_start_frame +
+            from.timeline_duration_frames;
         const double boundary = content.left() + content.width() *
-            static_cast<double>(to.timeline_start_frame) / static_cast<double>(duration);
+            static_cast<double>(boundary_frame) / static_cast<double>(duration);
         const auto transition = std::find_if(
             track.transitions.begin(), track.transitions.end(), [&from, &to](const auto& value) {
                 return value.from_clip_id == from.clip_id && value.to_clip_id == to.clip_id;
             });
-        const double tolerance = transition == track.transitions.end()
-            ? 8.0
-            : std::max(8.0, content.width() *
-                static_cast<double>(transition->duration_frames) / static_cast<double>(duration));
-        if (std::abs(x - boundary) <= tolerance) {
+        if (transition == track.transitions.end()) {
+            if (boundary_frame != to.timeline_start_frame || std::abs(x - boundary) > 8.0) {
+                continue;
+            }
             return std::make_pair(from_index, from_index + 1);
+        }
+        if (transition->duration_frames <= 0) continue;
+        const auto transition_width = content.width() *
+            static_cast<double>(transition->duration_frames) /
+            static_cast<double>(duration);
+        if (transition->kind == TransitionKind::CrossDissolve) {
+            if (to.timeline_start_frame != boundary_frame -
+                    transition->duration_frames) {
+                continue;
+            }
+            const auto transition_left = boundary - transition_width;
+            if (x >= transition_left - 4.0 && x <= boundary + 4.0) {
+                return std::make_pair(from_index, from_index + 1);
+            }
+        } else {
+            if (to.timeline_start_frame != boundary_frame) continue;
+            const auto tolerance = std::max(8.0, transition_width);
+            if (std::abs(x - boundary) <= tolerance) {
+                return std::make_pair(from_index, from_index + 1);
+            }
         }
     }
     return std::nullopt;

@@ -108,6 +108,80 @@ std::filesystem::path resolvedPath(const std::filesystem::path& project_path,
     throw ProjectError(code, message, std::nullopt, project_path);
 }
 
+void migrateLegacyCrossDissolves(
+    ProjectDocument& document,
+    const std::filesystem::path& project_path) {
+    for (auto& track : document.timeline_tracks) {
+        std::vector<std::size_t> ordered_transitions(track.transitions.size());
+        for (std::size_t index = 0; index < ordered_transitions.size(); ++index) {
+            ordered_transitions[index] = index;
+        }
+        std::sort(ordered_transitions.begin(), ordered_transitions.end(),
+            [&track](std::size_t left, std::size_t right) {
+                const auto& left_transition = track.transitions[left];
+                const auto& right_transition = track.transitions[right];
+                const auto left_start = left_transition.from_clip_index < track.clips.size()
+                    ? track.clips[left_transition.from_clip_index].timeline_start_frame
+                    : std::numeric_limits<std::int64_t>::max();
+                const auto right_start = right_transition.from_clip_index < track.clips.size()
+                    ? track.clips[right_transition.from_clip_index].timeline_start_frame
+                    : std::numeric_limits<std::int64_t>::max();
+                return left_start < right_start;
+            });
+
+        std::vector<std::pair<std::size_t, std::size_t>> seen;
+        for (const auto transition_index : ordered_transitions) {
+            const auto& transition = track.transitions[transition_index];
+            if (transition.from_clip_index >= track.clips.size() ||
+                transition.to_clip_index >= track.clips.size() ||
+                transition.from_clip_index + 1 != transition.to_clip_index) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "A legacy transition does not connect consecutive clips.");
+            }
+            const auto pair = std::make_pair(
+                transition.from_clip_index, transition.to_clip_index);
+            if (std::find(seen.begin(), seen.end(), pair) != seen.end()) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "A legacy project contains duplicate transitions.");
+            }
+            seen.push_back(pair);
+            const auto& from = track.clips[transition.from_clip_index];
+            const auto& to = track.clips[transition.to_clip_index];
+            if (from.duration_frames <= 0 || to.duration_frames <= 0 ||
+                from.timeline_start_frame < 0 || to.timeline_start_frame < 0 ||
+                from.timeline_start_frame > std::numeric_limits<std::int64_t>::max() -
+                    from.duration_frames ||
+                transition.duration_frames <= 0 ||
+                transition.duration_frames > std::min(
+                    from.duration_frames, to.duration_frames) ||
+                from.timeline_start_frame + from.duration_frames !=
+                    to.timeline_start_frame) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "A legacy transition has invalid timing or duration.");
+            }
+        }
+
+        for (const auto transition_index : ordered_transitions) {
+            const auto& transition = track.transitions[transition_index];
+            if (transition.kind != timeline::TransitionKind::CrossDissolve) continue;
+            const auto& from = track.clips[transition.from_clip_index];
+            const auto cut_frame = from.timeline_start_frame + from.duration_frames;
+            for (const auto& clip : track.clips) {
+                if (clip.timeline_start_frame >= cut_frame &&
+                    clip.timeline_start_frame < transition.duration_frames) {
+                    throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                              "A legacy Cross Dissolve cannot be migrated without a negative clip position.");
+                }
+            }
+            for (auto& clip : track.clips) {
+                if (clip.timeline_start_frame >= cut_frame) {
+                    clip.timeline_start_frame -= transition.duration_frames;
+                }
+            }
+        }
+    }
+}
+
 std::int64_t requiredInteger(const QJsonObject& object,
                              const char* key,
                              const std::filesystem::path& project_path) {
@@ -626,6 +700,9 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
         }
     }
 
+    if (version < cross_dissolve_overlap_format_version) {
+        migrateLegacyCrossDissolves(document, project_path);
+    }
     detail::validateDocument(document, project_path);
     return document;
 }

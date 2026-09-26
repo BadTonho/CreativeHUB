@@ -1157,8 +1157,10 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                     to.timeline_duration_frames)) {
                 continue;
             }
+            const auto boundary_frame = from.timeline_start_frame +
+                from.timeline_duration_frames;
             const auto boundary = content.left() + content.width() *
-                static_cast<double>(to.timeline_start_frame) / total;
+                static_cast<double>(boundary_frame) / total;
             const auto transition_width = content.width() *
                 static_cast<double>(transition.duration_frames) / total;
             const auto selected = selected_transition_.has_value() &&
@@ -1167,10 +1169,10 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                 selected_transition_->to_clip_index == indexes->second;
             const auto left = transition.kind == TransitionKind::FadeToBlack
                 ? boundary - transition_width
-                : boundary;
+                : boundary - transition_width;
             const auto right = transition.kind == TransitionKind::FadeToBlack
                 ? boundary + transition_width
-                : boundary + transition_width;
+                : boundary;
             painter.setPen(QPen(
                 selected ? QColor("#fff0a3") : QColor("#d5a94b"),
                 selected ? 2.0 : 1.0,

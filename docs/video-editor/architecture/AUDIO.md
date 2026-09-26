@@ -37,6 +37,8 @@ stored as optional fields in `.csp` version 2. Older projects use the defaults
 `1.0` and `false`.
 
 Audio-only media, independent audio tracks, mixing, waveforms, automation,
-recording, audio crossfades, and export remain future work. Timeline video and
-text transitions therefore do not change the audio cut: the visible clip's
-audio follows the normal endpoint transition at the junction.
+recording, and audio crossfades remain future work. A Cross Dissolve changes
+video timing but keeps audio as a hard cut at the original cut: outgoing audio
+continues through the visual overlap, and incoming audio starts at the cut
+using the source position corresponding to incoming Timeline frame D. Fade to
+Black also leaves the audio cut at the junction.

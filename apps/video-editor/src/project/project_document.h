@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 11;
+inline constexpr int current_format_version = 12;
+inline constexpr int cross_dissolve_overlap_format_version = 12;
 inline constexpr int timeline_frame_rate_format_version = 11;
 inline constexpr int separated_source_duration_format_version = 11;
 inline constexpr int stable_ids_format_version = 9;

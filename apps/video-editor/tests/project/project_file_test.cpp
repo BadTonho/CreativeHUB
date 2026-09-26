@@ -99,6 +99,8 @@ int main(int argc, char** argv) {
             directory / "media" / "still.png.image-editor" / "clips" /
                 "clip-still-uuid" / "output.png"};
         original.timeline_tracks.front().clips.push_back(image_clip);
+        original.timeline_tracks.front().clips[1].timeline_start_frame = 45;
+        original.timeline_tracks.front().clips.back().timeline_start_frame = 85;
         original.timeline_tracks.front().transitions.push_back(
             project::ProjectTransition{
                 0,
@@ -172,7 +174,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 11") != std::string::npos &&
+        require(saved_json.find("\"version\": 12") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
@@ -183,7 +185,7 @@ int main(int argc, char** argv) {
                     saved_json.find("cross_dissolve") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
                     saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline frame timing and linked image references were not written to the version 11 project.");
+                "Timeline frame timing and linked image references were not written to the version 12 project.");
         require(saved_json.find("\"kind\": \"image\"") != std::string::npos &&
                     loaded.media.back().kind == media::MediaKind::Image &&
                     loaded.timeline_tracks.front().clips.back().kind == timeline::ClipKind::Image,
@@ -192,6 +194,27 @@ int main(int argc, char** argv) {
         auto version_9_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         version_9_json.insert("version", 9);
+        auto restore_legacy_transition_geometry = [](QJsonObject& json) {
+            auto timeline = json.value("timeline").toObject();
+            auto tracks = timeline.value("tracks").toArray();
+            for (qsizetype index = 0; index < tracks.size(); ++index) {
+                auto track = tracks.at(index).toObject();
+                auto clips = track.value("clips").toArray();
+                if (clips.size() >= 4) {
+                    auto incoming = clips.at(1).toObject();
+                    incoming.insert("timeline_start_frame", 60);
+                    clips.replace(1, incoming);
+                    auto following = clips.at(3).toObject();
+                    following.insert("timeline_start_frame", 100);
+                    clips.replace(3, following);
+                }
+                track.insert("clips", clips);
+                tracks.replace(index, track);
+            }
+            timeline.insert("tracks", tracks);
+            json.insert("timeline", timeline);
+        };
+        restore_legacy_transition_geometry(version_9_json);
         auto version_9_media = version_9_json.value("media").toArray();
         for (qsizetype index = 0; index < version_9_media.size(); ++index) {
             auto media_item = version_9_media.at(index).toObject();
@@ -226,6 +249,7 @@ int main(int argc, char** argv) {
         auto version_10_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         version_10_json.insert("version", 10);
+        restore_legacy_transition_geometry(version_10_json);
         auto version_10_timeline = version_10_json.value("timeline").toObject();
         version_10_timeline.remove("frame_rate");
         auto version_10_tracks = version_10_timeline.value("tracks").toArray();
@@ -250,8 +274,59 @@ int main(int argc, char** argv) {
                     version_10_document.timeline_tracks.front().clips.front()
                         .source_duration_frames == 60 &&
                     version_10_document.timeline_tracks.front().clips.front()
-                        .source_duration_migration_pending,
+                        .source_duration_migration_pending &&
+                    version_10_document.timeline_tracks.front().clips[1]
+                        .timeline_start_frame == 45 &&
+                    version_10_document.timeline_tracks.front().clips[3]
+                        .timeline_start_frame == 85,
                 "A version 10 project did not load with deferred timing migration metadata.");
+        project::save(project_path, original);
+
+        auto version_11_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        version_11_json.insert("version", 11);
+        restore_legacy_transition_geometry(version_11_json);
+        auto version_11_timeline = version_11_json.value("timeline").toObject();
+        auto version_11_tracks = version_11_timeline.value("tracks").toArray();
+        auto version_11_track = version_11_tracks.at(0).toObject();
+        auto version_11_clips = version_11_track.value("clips").toArray();
+        auto legacy_title = version_11_clips.at(2).toObject();
+        legacy_title.insert("timeline_start_frame", 90);
+        version_11_clips.replace(2, legacy_title);
+        auto legacy_image = version_11_clips.at(3).toObject();
+        legacy_image.insert("timeline_start_frame", 110);
+        version_11_clips.replace(3, legacy_image);
+        version_11_track.insert("clips", version_11_clips);
+        auto version_11_transitions = version_11_track.value("transitions").toArray();
+        version_11_transitions.push_back(QJsonObject{
+            {"from_clip", 1},
+            {"to_clip", 2},
+            {"kind", "fade_to_black"},
+            {"duration_frames", 5}});
+        version_11_track.insert("transitions", version_11_transitions);
+        version_11_tracks.replace(0, version_11_track);
+        version_11_timeline.insert("tracks", version_11_tracks);
+        version_11_json.insert("timeline", version_11_timeline);
+        writeText(project_path,
+                  QJsonDocument(version_11_json).toJson().toStdString());
+        const auto migrated_version_11 = project::load(project_path);
+        const auto& migrated_track = migrated_version_11.timeline_tracks.front();
+        require(migrated_track.clips[1].timeline_start_frame == 45 &&
+                    migrated_track.clips[2].timeline_start_frame == 75 &&
+                    migrated_track.clips[3].timeline_start_frame == 95 &&
+                    migrated_version_11.timeline_tracks[1].clips.front()
+                        .timeline_start_frame == 0 &&
+                    migrated_track.transitions.size() == 2 &&
+                    migrated_track.transitions[0].kind ==
+                        timeline::TransitionKind::CrossDissolve &&
+                    migrated_track.transitions[1].kind ==
+                        timeline::TransitionKind::FadeToBlack &&
+                    !migrated_version_11.timing_migration_required,
+                "A version 11 project did not migrate Cross Dissolve ripple on only its affected track while preserving Fade to Black.");
+        project::save(project_path, migrated_version_11);
+        const auto reopened_migrated_version_11 = project::load(project_path);
+        require(reopened_migrated_version_11 == migrated_version_11,
+                "Saving and reopening a migrated version 11 project changed its overlap geometry.");
         project::save(project_path, original);
 
         for (const auto& invalid_component : {

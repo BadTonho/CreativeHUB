@@ -357,6 +357,9 @@ private:
     transitionClipIndexes(
         const TimelineTrack& track,
         const TimelineTransition& transition) noexcept;
+    bool removeCrossDissolvesForClip(
+        std::size_t track_index,
+        ClipId clip_id);
     static void removeInvalidTransitions(TimelineTrack& track) noexcept;
     [[nodiscard]] TimelineTrack* trackAt(std::size_t track_index) noexcept;
     [[nodiscard]] const TimelineTrack* trackAt(std::size_t track_index) const noexcept;

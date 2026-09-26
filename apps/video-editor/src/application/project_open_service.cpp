@@ -90,8 +90,27 @@ void preserveTransitionContinuity(
             transition.to_clip_index >= track.clips.size() ||
             transition.to_clip_index != transition.from_clip_index + 1) continue;
         auto& from = track.clips[transition.from_clip_index];
-        const auto end = from.timeline_start_frame + from.duration_frames;
-        const auto delta = end - track.clips[transition.to_clip_index].timeline_start_frame;
+        const auto maximum = std::min(
+            from.duration_frames,
+            track.clips[transition.to_clip_index].duration_frames);
+        auto found = std::find_if(track.transitions.begin(), track.transitions.end(),
+            [&transition](const auto& candidate) {
+                return candidate.from_clip_index == transition.from_clip_index &&
+                    candidate.to_clip_index == transition.to_clip_index;
+            });
+        if (found != track.transitions.end()) {
+            found->duration_frames = std::clamp<std::int64_t>(
+                found->duration_frames, 1, maximum);
+        }
+        const auto cut = from.timeline_start_frame + from.duration_frames;
+        const auto expected_incoming_start =
+            transition.kind == timeline::TransitionKind::CrossDissolve
+            ? cut - (found != track.transitions.end()
+                         ? found->duration_frames
+                         : transition.duration_frames)
+            : cut;
+        const auto delta = expected_incoming_start -
+            track.clips[transition.to_clip_index].timeline_start_frame;
         if (delta != 0) {
             for (std::size_t index = transition.to_clip_index;
                  index < track.clips.size(); ++index) {
@@ -107,18 +126,6 @@ void preserveTransitionContinuity(
                 }
                 clip.timeline_start_frame += delta;
             }
-        }
-        const auto maximum = std::min(
-            from.duration_frames,
-            track.clips[transition.to_clip_index].duration_frames);
-        auto found = std::find_if(track.transitions.begin(), track.transitions.end(),
-            [&transition](const auto& candidate) {
-                return candidate.from_clip_index == transition.from_clip_index &&
-                    candidate.to_clip_index == transition.to_clip_index;
-            });
-        if (found != track.transitions.end()) {
-            found->duration_frames = std::clamp<std::int64_t>(
-                found->duration_frames, 1, maximum);
         }
     }
 }
