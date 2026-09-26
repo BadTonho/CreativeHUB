@@ -668,12 +668,30 @@ void validateCompositionReuseAcrossMediaActivation(
 
     playback::PlaybackWorker worker;
     bool received_frame = false;
+    bool playback_finished = false;
     bool playback_error = false;
+    std::size_t received_frame_count = 0;
+    bool start_playback_after_seek = false;
     QObject::connect(
         &worker,
         &playback::PlaybackWorker::frameReady,
-        [&received_frame](playback::VideoFramePtr frame, qint64, quint64) {
-            received_frame = frame != nullptr;
+        [&worker, &received_frame, &received_frame_count,
+         &start_playback_after_seek](playback::VideoFramePtr frame, qint64, quint64) {
+            if (frame != nullptr) {
+                received_frame = true;
+                ++received_frame_count;
+                if (start_playback_after_seek) {
+                    start_playback_after_seek = false;
+                    worker.play();
+                }
+            }
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackFinished,
+        [&application, &playback_finished](quint64, bool during_playback) {
+            playback_finished = during_playback;
+            if (during_playback) application.quit();
         });
     QObject::connect(
         &worker,
@@ -683,22 +701,23 @@ void validateCompositionReuseAcrossMediaActivation(
             application.quit();
         });
 
-    playback::CompositionLayerSpec layer;
-    layer.source_path = toQString(path);
-    layer.frame_rate = 30.0;
-    layer.timeline_start_frame = 0;
-    layer.source_start_frame = 0;
-    layer.segment_frame_count = 30;
-    layer.track_index = 0;
-    layer.clip_index = 0;
+    QVector<playback::CompositionLayerSpec> layers;
+    for (qint64 clip_index = 0; clip_index < 2; ++clip_index) {
+        playback::CompositionLayerSpec layer;
+        layer.source_path = toQString(path);
+        layer.frame_rate = 30.0;
+        layer.timeline_start_frame = clip_index * 30;
+        layer.source_start_frame = 0;
+        layer.segment_frame_count = 30;
+        layer.track_index = 0;
+        layer.clip_index = clip_index;
+        layers.push_back(std::move(layer));
+    }
     worker.setActiveCompositionClip(0, 0);
     worker.setComposition(
-        QVector<playback::CompositionLayerSpec>{layer},
+        std::move(layers),
         {},
         810);
-    worker.setMedia(
-        toQString(path), 30.0, 0, 30, 1.0, false, 1.0, false, 0, 0, 811);
-    worker.requestSeek(0, 811);
 
     QTimer timeout;
     timeout.setSingleShot(true);
@@ -707,16 +726,38 @@ void validateCompositionReuseAcrossMediaActivation(
         &QTimer::timeout,
         &application,
         &QCoreApplication::quit);
-    timeout.start(5000);
-    application.exec();
+    const auto playActivatedClip = [&](qint64 clip_index, quint64 generation) {
+        received_frame = false;
+        received_frame_count = 0;
+        playback_finished = false;
+        playback_error = false;
+        worker.setActiveCompositionClip(0, clip_index);
+        worker.setMedia(
+            toQString(path), 30.0, 0, 30,
+            1.0, false, 1.0, false,
+            0, clip_index, generation);
+        start_playback_after_seek = true;
+        worker.requestSeek(0, generation);
+        timeout.start(5000);
+        application.exec();
+        timeout.stop();
+
+        require(!playback_error,
+                "Playback after activating a prepared composition clip reported an error.");
+        require(playback_finished,
+                "Playback after activating a prepared composition clip did not finish cleanly.");
+        require(received_frame && received_frame_count >= 2,
+                "Playback after activating a prepared composition clip emitted too few frames.");
+    };
+
+    playActivatedClip(0, 811);
+    playActivatedClip(1, 812);
 
     const auto snapshot = metrics.takeSnapshotAndReset();
     metrics.setEnabled(false);
-    require(!playback_error && received_frame,
-            "Media activation discarded a ready composition decoder session.");
-    require(snapshot.composition_setup.count == 1 && snapshot.media_open.count == 1 &&
+    require(snapshot.composition_setup.count == 1 && snapshot.media_open.count == 2 &&
                 snapshot.composed_frames > 0,
-            "Media activation reopened or disabled the prepared composition session.");
+            "Media activation reopened or disabled the prepared composition sessions.");
 }
 
 void validateCompositionSeekMetrics(

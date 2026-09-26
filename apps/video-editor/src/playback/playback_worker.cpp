@@ -804,7 +804,7 @@ void PlaybackWorker::decodeTick() {
             return;
         }
 
-        if (!session_) {
+        if (!session_ && !composition_enabled_) {
             throw media::MediaError("Playback session is not available.");
         }
         if (audio_enabled_) {

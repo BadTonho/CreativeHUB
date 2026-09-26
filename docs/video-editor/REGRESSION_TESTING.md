@@ -29,7 +29,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Structured logging | File creation, required fields, escaping, rotation, retention limit |
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions, PNG/JPEG/BMP/WebP/TIFF still-image probing, RGBA transparency, 150-frame defaults, and animated-GIF rejection |
 | Playback session | Sequential frames, forward catch-up without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, optimized random seeking, EOF, segment limits |
-| Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, composition decoder-session reuse across media activation, final composition-cache reuse and invalidation, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
+| Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, latest-frame mailbox behavior, controlled intermediate-frame skipping, forward decoder catch-up for direct and composed playback, playback completion, separated layer decode/composition, composition decoder-session reuse across media activation and playback of consecutive activated clips, final composition-cache reuse and invalidation, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
 | Playback controller | Monotonic Timeline clock using the first valid clip rate or 30 fps; continuous playhead during delayed media activation; trimmed source in-point seek; current-position seek before playback resumes; stale-frame rejection; pending activation cancellation on Pause, Stop, and seek; and clean project dirty state |
 | Playback transition plan | Cross Dissolve held outgoing frame and incoming blend at its first, middle, and final frames; Fade to Black on both sides of the cut; one-frame durations; inactive and invalid transitions; unaffected layers on other tracks |
 | Frame-step navigation | Worker steps within a clip; forward/backward activation at contiguous junctions, one-frame clips, gaps and Timeline limits, media overlaps and cross-track priority, transitions, and missing or invalid active clip locations |
@@ -457,6 +457,10 @@ in the running Video Editor after UI or integration changes:
   is not confused with mailbox coalescing. Verify seek,
   Previous Frame, Next Frame, Blade Tool, selection, playback completion, and
   project dirty state remain unchanged.
+- composed video activation: play a video clip whose decoder session was prepared
+  by the Timeline composition, then continue into another prepared video clip.
+  Confirm playback completes both activations without a “Playback session is
+  not available” error and the Preview keeps showing composed frames.
 - absolute-deadline pacing: run a continuous 24 fps and 25 fps playback for at
   least 30 seconds, with Preview performance metrics enabled. Confirm that
   normal playback does not show a periodic frame-loss pattern, that the
