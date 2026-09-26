@@ -120,7 +120,10 @@ public slots:
         QVector<CompositionLayerSpec> layers,
         QVector<CompositionTransitionSpec> transitions,
         quint64 generation);
-    virtual void setActiveCompositionClip(qint64 track_index, qint64 clip_index);
+    virtual void setActiveCompositionClip(
+        qint64 track_index,
+        qint64 clip_index,
+        qint64 global_timeline_frame = std::numeric_limits<qint64>::min());
     virtual void cancelActivation(quint64 generation);
     virtual void renderCompositionFrame(
         qint64 global_frame,
@@ -257,6 +260,10 @@ private:
     rendering::FrameCompositionTimings composition_timings_scratch_;
     bool composition_enabled_ = false;
     std::int64_t primary_timeline_start_frame_ = 0;
+    std::int64_t composition_start_frame_ = 0;
+    std::int64_t composition_end_frame_ = 0;
+    std::int64_t current_timeline_frame_ = 0;
+    bool composition_position_initialized_ = false;
     quint64 cached_composition_generation_ = 0;
     std::int64_t cached_composition_global_frame_ = -1;
     VideoFramePtr cached_composition_frame_;

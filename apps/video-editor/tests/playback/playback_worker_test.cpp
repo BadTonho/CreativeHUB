@@ -1479,6 +1479,140 @@ void validateNormalCompositionPacing(QCoreApplication& application) {
     }
 }
 
+void validateGlobalCompositionClockAcrossTextOverlay(
+    QCoreApplication& application) {
+    playback::PlaybackWorker worker;
+    bool text_clip_activated = false;
+    bool base_clip_restored = false;
+    bool seek_resume_pending = false;
+    bool seek_resumed_playback = false;
+    bool playback_finished = false;
+    bool playback_error = false;
+    bool finished_before_base_clip_restored = false;
+    qint64 last_frame_index = -1;
+    std::size_t emitted_frames = 0;
+    std::vector<std::uint8_t> initial_composition_pixels;
+    std::vector<std::uint8_t> final_composition_pixels;
+
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&last_frame_index, &emitted_frames, &initial_composition_pixels,
+         &final_composition_pixels, &worker, &seek_resume_pending,
+         &seek_resumed_playback](
+            playback::VideoFramePtr frame, qint64 frame_index, quint64, quint64) {
+            require(frame != nullptr,
+                    "Global Timeline playback emitted an empty composition frame.");
+            if (emitted_frames == 0) {
+                initial_composition_pixels = frame->rgba_pixels;
+            }
+            if (frame_index >= 490) {
+                final_composition_pixels = frame->rgba_pixels;
+            }
+            last_frame_index = frame_index;
+            ++emitted_frames;
+            if (seek_resume_pending) {
+                seek_resume_pending = false;
+                seek_resumed_playback = true;
+                worker.play();
+            }
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackFinished,
+        [&application, &playback_finished, &finished_before_base_clip_restored,
+         &base_clip_restored](quint64, bool during_playback) {
+            playback_finished = during_playback;
+            finished_before_base_clip_restored = !base_clip_restored;
+            application.quit();
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&application, &playback_error](const QString&, qint64, quint64) {
+            playback_error = true;
+            application.quit();
+        });
+
+    auto background = std::make_shared<const media::VideoFrame>(media::VideoFrame{
+        2, 1, 8, std::vector<std::uint8_t>{32, 80, 144, 255, 80, 144, 32, 255}});
+    playback::CompositionLayerSpec base_clip;
+    base_clip.kind = timeline::ClipKind::Image;
+    base_clip.timeline_frame_rate = {1000, 1};
+    base_clip.timeline_start_frame = 0;
+    base_clip.segment_frame_count = 491;
+    base_clip.track_index = 0;
+    base_clip.clip_index = 0;
+    base_clip.still_frame = background;
+    require(timeline::setKeyframe(
+                base_clip.keyframes,
+                timeline::TransformProperty::PositionX,
+                0,
+                0.25) &&
+                timeline::setKeyframe(
+                    base_clip.keyframes,
+                    timeline::TransformProperty::PositionX,
+                    491,
+                    0.75),
+            "Could not seed an animated background for the global-clock regression.");
+
+    playback::CompositionLayerSpec text_clip;
+    text_clip.kind = timeline::ClipKind::Text;
+    text_clip.timeline_frame_rate = {1000, 1};
+    text_clip.timeline_start_frame = 294;
+    text_clip.segment_frame_count = 150;
+    text_clip.track_index = 1;
+    text_clip.clip_index = 0;
+    text_clip.text.content = "Overlay";
+
+    worker.setPreviewQuality(playback::PreviewQuality::Quarter);
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition({base_clip, text_clip}, {}, 901);
+    worker.renderCompositionFrame(293, 293, 901);
+    worker.play();
+
+    QTimer::singleShot(5, &worker, [&worker, &text_clip_activated]() {
+        text_clip_activated = true;
+        worker.setActiveCompositionClip(1, 0, 294);
+    });
+    QTimer::singleShot(50, &worker, [&worker, &seek_resume_pending]() {
+        worker.pause();
+        seek_resume_pending = true;
+        worker.requestSeek(56, 901);
+    });
+    QTimer::singleShot(155, &worker, [&worker, &base_clip_restored]() {
+        base_clip_restored = true;
+        worker.setActiveCompositionClip(0, 0, 444);
+    });
+
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(
+        &timeout,
+        &QTimer::timeout,
+        &application,
+        &QCoreApplication::quit);
+    timeout.start(5000);
+    application.exec();
+
+    require(!playback_error,
+            "Switching the active composition layer emitted a playback error.");
+    require(playback_finished,
+            "The composition did not finish at its global Timeline end.");
+    require(text_clip_activated && base_clip_restored,
+            "The test did not activate both sides of the text overlay boundary.");
+    require(seek_resumed_playback,
+            "Playback did not resume from the global position translated from a local text-clip seek.");
+    require(!finished_before_base_clip_restored,
+            "Playback ended at the shorter text clip boundary instead of the composition end.");
+    require(emitted_frames >= 3 && last_frame_index >= 490,
+            "The global composition clock did not continue through the text clip to frame 490.");
+    require(!initial_composition_pixels.empty() &&
+                !final_composition_pixels.empty() &&
+                initial_composition_pixels != final_composition_pixels,
+            "The background composition did not update after the text overlay ended.");
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -1494,6 +1628,7 @@ int main(int argc, char* argv[]) {
         validateCompositionPreviewQuality();
         validateCompositionPacing(application);
         validateNormalCompositionPacing(application);
+        validateGlobalCompositionClockAcrossTextOverlay(application);
         validateCompositionCaching();
         validateAnimatedTextGeometry();
         validateStaticImageComposition();

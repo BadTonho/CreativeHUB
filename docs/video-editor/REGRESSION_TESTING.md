@@ -554,6 +554,13 @@ in the running Video Editor after UI or integration changes:
   is not confused with mailbox coalescing. Verify seek,
   Previous Frame, Next Frame, Blade Tool, selection, playback completion, and
   project dirty state remain unchanged.
+- composed global clock with text: use a Timeline with a 491-frame background
+  clip and a 150-frame text clip beginning at frame 294. Confirm the active
+  layer can switch to text and back while playback continues in the composition's
+  global frame domain; the background keeps advancing during and after the text,
+  playback ends only at the composition end, and no burst of stale catch-up
+  frames appears. The automated worker regression uses a deterministic synthetic
+  background and accelerated Timeline rate to cover the same boundaries.
 - composed video activation: play a video clip whose decoder session was prepared
   by the Timeline composition, then continue into another prepared video clip.
   Confirm playback completes both activations without a “Playback session is

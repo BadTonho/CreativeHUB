@@ -283,15 +283,18 @@ void PlaybackController::refreshComposition() {
         }
     }
     const auto preview_quality = preview_quality_;
+    const auto global_timeline_frame = timelineFrame();
     queueWorker([this, revision, active_track, active_clip, preview_quality,
+                 global_timeline_frame,
                  layers = std::move(layers),
                  transitions = std::move(transitions)]
                 (PlaybackWorker& worker) mutable {
         if (composition_revision_.load(std::memory_order_acquire) != revision) return;
         const auto generation = published_generation_.load(std::memory_order_acquire);
         worker.setPreviewQuality(preview_quality);
-        worker.setActiveCompositionClip(active_track, active_clip);
         worker.setComposition(std::move(layers), std::move(transitions), generation);
+        worker.setActiveCompositionClip(
+            active_track, active_clip, static_cast<qint64>(global_timeline_frame));
     });
 }
 
@@ -504,9 +507,14 @@ PlaybackCommandResult PlaybackController::activateClip(
         if (composition_ready_) {
             const auto worker_track_index = static_cast<qint64>(location->track_index);
             const auto worker_clip_index = static_cast<qint64>(location->clip_index);
+            const auto global_timeline_frame = timelineFrame();
             const auto generation = generation_;
-            queueWorker([worker_track_index, worker_clip_index](PlaybackWorker& worker) {
-                worker.setActiveCompositionClip(worker_track_index, worker_clip_index);
+            queueWorker([worker_track_index, worker_clip_index, global_timeline_frame]
+                        (PlaybackWorker& worker) {
+                worker.setActiveCompositionClip(
+                    worker_track_index,
+                    worker_clip_index,
+                    static_cast<qint64>(global_timeline_frame));
             }, generation);
         } else {
             refreshComposition();
@@ -556,8 +564,13 @@ PlaybackCommandResult PlaybackController::activateClip(
             track_index, clip_index, generation);
     }, generation);
     if (composition_ready_) {
-        queueWorker([track_index, clip_index](PlaybackWorker& worker) {
-            worker.setActiveCompositionClip(track_index, clip_index);
+        const auto global_timeline_frame = timelineFrame();
+        queueWorker([track_index, clip_index, global_timeline_frame]
+                    (PlaybackWorker& worker) {
+            worker.setActiveCompositionClip(
+                track_index,
+                clip_index,
+                static_cast<qint64>(global_timeline_frame));
         }, generation);
     } else {
         refreshComposition();

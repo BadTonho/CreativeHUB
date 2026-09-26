@@ -226,19 +226,9 @@ void PlaybackWorker::setMedia(
 }
 
 void PlaybackWorker::play() {
-    if (source_path_.empty()) {
-        if (!composition_enabled_ || segment_frame_count_ <= 0) return;
-
-        ensureTimer();
-        if (!playing_) {
-            startPlaybackClock();
-            playing_ = true;
-            rendering::PreviewPerformanceMetrics::instance().setPlaybackActive(true);
-            emit playbackStateChanged(true, generation_);
-        }
-        scheduleNextPlaybackTick();
-        return;
-    }
+    if (!composition_enabled_ && source_path_.empty()) return;
+    if (composition_enabled_ &&
+        composition_end_frame_ <= composition_start_frame_) return;
 
     try {
         if (!composition_enabled_) {
@@ -285,7 +275,9 @@ void PlaybackWorker::play() {
                                 ? std::optional<int>(static_cast<int>(audio_code))
                                 : std::nullopt);
                     }
-                    audio_clock_origin_frame_ = current_frame_index_;
+                    audio_clock_origin_frame_ = composition_enabled_
+                        ? current_timeline_frame_
+                        : current_frame_index_;
                     audio_clock_origin_usecs_ = audio_output_->processedUsecs();
                 } catch (const media::MediaError& error) {
                     reportAudioFailure(error, "output");
@@ -401,6 +393,11 @@ void PlaybackWorker::setComposition(
     composition_transitions_ = std::move(transitions);
     composition_sessions_.clear();
     composition_enabled_ = !composition_specs_.isEmpty();
+    composition_start_frame_ = 0;
+    composition_end_frame_ = 0;
+    if (!composition_enabled_) {
+        composition_position_initialized_ = false;
+    }
     composition_timeline_frame_rate_valid_ = false;
     if (composition_enabled_) {
         const auto rate = std::find_if(
@@ -483,6 +480,26 @@ void PlaybackWorker::setComposition(
             composition_sessions_.push_back(std::move(composition_session));
         }
 
+        const bool has_composition_range =
+            composition_start != std::numeric_limits<std::int64_t>::max() &&
+            composition_end > composition_start;
+        if (has_composition_range) {
+            composition_start_frame_ = composition_start;
+            composition_end_frame_ = composition_end;
+            if (!composition_position_initialized_ ||
+                current_timeline_frame_ < composition_start_frame_ ||
+                current_timeline_frame_ >= composition_end_frame_) {
+                current_timeline_frame_ = has_primary_clip
+                    ? primary_timeline_start_frame_
+                    : composition_start_frame_;
+            }
+            composition_position_initialized_ = true;
+        } else {
+            composition_start_frame_ = 0;
+            composition_end_frame_ = 0;
+            composition_position_initialized_ = false;
+        }
+
         if (has_primary_clip) {
             if (primary_is_static) {
                 source_path_.clear();
@@ -497,13 +514,19 @@ void PlaybackWorker::setComposition(
                 session_.reset();
             }
             segment_frame_count_ = primary_clip_duration;
-            current_frame_index_ = 0;
+            current_frame_index_ = std::clamp<std::int64_t>(
+                current_timeline_frame_ - primary_timeline_start_frame_,
+                0,
+                std::max<std::int64_t>(0, segment_frame_count_ - 1));
         } else if (source_path_.empty() && composition_start !=
                        std::numeric_limits<std::int64_t>::max() &&
                    composition_end > composition_start) {
             primary_timeline_start_frame_ = composition_start;
-            current_frame_index_ = 0;
             segment_frame_count_ = composition_end - composition_start;
+            current_frame_index_ = std::clamp<std::int64_t>(
+                current_timeline_frame_ - primary_timeline_start_frame_,
+                0,
+                std::max<std::int64_t>(0, segment_frame_count_ - 1));
             if (!composition_timeline_frame_rate_valid_) {
                 setFallbackTimelineFrameRate(default_frame_rate);
             }
@@ -514,6 +537,9 @@ void PlaybackWorker::setComposition(
         composition_transitions_.clear();
         composition_enabled_ = false;
         composition_timeline_frame_rate_valid_ = false;
+        composition_start_frame_ = 0;
+        composition_end_frame_ = 0;
+        composition_position_initialized_ = false;
         metrics.setCompositionWorkload(0, 0, 0, false);
         updateFrameRateMetrics();
         reportFailure(error, "compose");
@@ -522,6 +548,9 @@ void PlaybackWorker::setComposition(
         composition_transitions_.clear();
         composition_enabled_ = false;
         composition_timeline_frame_rate_valid_ = false;
+        composition_start_frame_ = 0;
+        composition_end_frame_ = 0;
+        composition_position_initialized_ = false;
         metrics.setCompositionWorkload(0, 0, 0, false);
         updateFrameRateMetrics();
         reportFailure(error, "compose");
@@ -530,7 +559,8 @@ void PlaybackWorker::setComposition(
 
 void PlaybackWorker::setActiveCompositionClip(
     qint64 track_index,
-    qint64 clip_index) {
+    qint64 clip_index,
+    qint64 global_timeline_frame) {
     track_index_ = track_index;
     clip_index_ = clip_index;
     const auto active = std::find_if(
@@ -543,8 +573,18 @@ void PlaybackWorker::setActiveCompositionClip(
 
     primary_timeline_start_frame_ = active->timeline_start_frame;
     segment_frame_count_ = active->segment_frame_count;
+    if (global_timeline_frame != std::numeric_limits<qint64>::min()) {
+        current_timeline_frame_ = global_timeline_frame;
+    } else {
+        current_timeline_frame_ = primary_timeline_start_frame_ +
+            std::clamp<std::int64_t>(
+                current_frame_index_, 0,
+                std::max<std::int64_t>(0, segment_frame_count_ - 1));
+    }
+    composition_position_initialized_ = true;
     current_frame_index_ = std::clamp<std::int64_t>(
-        current_frame_index_, 0,
+        current_timeline_frame_ - primary_timeline_start_frame_,
+        0,
         std::max<std::int64_t>(0, segment_frame_count_ - 1));
     if (active->kind == timeline::ClipKind::Video &&
         std::isfinite(active->frame_rate) && active->frame_rate > 0.0 &&
@@ -583,6 +623,8 @@ void PlaybackWorker::renderCompositionFrame(
     if (generation < generation_ || !composition_enabled_) return;
     generation_ = generation;
     try {
+        current_timeline_frame_ = global_frame;
+        composition_position_initialized_ = true;
         if (composition_enabled_ && segment_frame_count_ > 0) {
             current_frame_index_ = std::clamp<std::int64_t>(
                 frame_index,
@@ -819,12 +861,16 @@ void PlaybackWorker::renderCompositionFrame(
 void PlaybackWorker::stepForward() {
     pause();
     if (composition_enabled_) {
-        if (segment_frame_count_ <= 0 ||
-            current_frame_index_ >= segment_frame_count_ - 1) {
+        if (composition_end_frame_ <= composition_start_frame_ ||
+            current_timeline_frame_ >= composition_end_frame_ - 1) {
             finishPlayback();
             return;
         }
-        ++current_frame_index_;
+        ++current_timeline_frame_;
+        current_frame_index_ = std::clamp<std::int64_t>(
+            current_timeline_frame_ - primary_timeline_start_frame_,
+            0,
+            std::max<std::int64_t>(0, segment_frame_count_ - 1));
         emitComposedFrame();
         return;
     }
@@ -870,7 +916,12 @@ void PlaybackWorker::stepForward() {
 void PlaybackWorker::stepBackward() {
     pause();
     if (composition_enabled_) {
-        current_frame_index_ = std::max<std::int64_t>(0, current_frame_index_ - 1);
+        current_timeline_frame_ = std::max<std::int64_t>(
+            composition_start_frame_, current_timeline_frame_ - 1);
+        current_frame_index_ = std::clamp<std::int64_t>(
+            current_timeline_frame_ - primary_timeline_start_frame_,
+            0,
+            std::max<std::int64_t>(0, segment_frame_count_ - 1));
         emitComposedFrame();
         return;
     }
@@ -942,6 +993,11 @@ void PlaybackWorker::processPendingSeek() {
             // playback error and the Main Window keeps the visual playhead.
             if (composition_enabled_) {
                 current_frame_index_ = frame_index;
+                current_timeline_frame_ = primary_timeline_start_frame_ + frame_index;
+                composition_position_initialized_ = true;
+                audio_position_valid_ = false;
+                pending_audio_bytes_.clear();
+                if (audio_output_ != nullptr) audio_output_->stop();
                 emitComposedFrame();
             } else if (!source_path_.empty()) {
                 if (!session_) {
@@ -1008,28 +1064,66 @@ void PlaybackWorker::decodeTick() {
     const auto deadline_target_frame = playback_scheduler_.targetFrame(now);
 
     try {
-        if (composition_enabled_ && source_path_.empty()) {
-            if (segment_frame_count_ > 0 &&
-                current_frame_index_ >= segment_frame_count_ - 1) {
+        if (composition_enabled_) {
+            if (composition_end_frame_ <= composition_start_frame_ ||
+                current_timeline_frame_ >= composition_end_frame_ - 1) {
                 finishPlayback();
                 return;
             }
 
-            const auto target_frame = segment_frame_count_ > 0
-                ? std::min(segment_frame_count_ - 1, deadline_target_frame)
-                : deadline_target_frame;
-            playback_scheduler_.advanceAfterTarget(
-                std::max(target_frame, current_frame_index_));
-            if (target_frame <= current_frame_index_) {
+            if (audio_enabled_) {
+                try {
+                    fillAudioOutput();
+                    updateAudioBufferMetric();
+                } catch (const media::MediaError& error) {
+                    reportAudioFailure(error, "decode");
+                } catch (const std::exception& error) {
+                    reportAudioFailure(error, "decode");
+                }
+            }
+
+            const auto scheduler_target_frame = std::min(
+                deadline_target_frame, composition_end_frame_ - 1);
+            detail::AudioPacingDecision pacing_decision;
+            pacing_decision.target_frame = scheduler_target_frame;
+            if (audio_enabled_ && audio_output_ != nullptr) {
+                const auto elapsed_usecs = std::max<qint64>(
+                    0,
+                    audio_output_->processedUsecs() - audio_clock_origin_usecs_);
+                const auto clock_frame_rate = playbackFrameRate();
+                const auto audio_target_frame = detail::timelineFrameFromAudioElapsedUsecs(
+                    audio_clock_origin_frame_, elapsed_usecs, clock_frame_rate);
+                const auto bounded_audio_target = std::min(
+                    audio_target_frame, composition_end_frame_ - 1);
+                const auto drift_frames = bounded_audio_target - scheduler_target_frame;
+                metrics.recordAudioClockDrift(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::duration<double>(
+                            static_cast<double>(drift_frames) / clock_frame_rate)));
+                pacing_decision = audio_pacing_policy_.selectTarget(
+                    current_timeline_frame_,
+                    scheduler_target_frame,
+                    bounded_audio_target);
+            } else {
+                pacing_decision = audio_pacing_policy_.selectTarget(
+                    current_timeline_frame_,
+                    scheduler_target_frame,
+                    scheduler_target_frame);
+                metrics.setAudioBufferedUsecs(std::nullopt);
+            }
+
+            playback_scheduler_.advanceAfterTarget(scheduler_target_frame);
+            const auto target_frame = pacing_decision.target_frame;
+            if (target_frame <= current_timeline_frame_) {
                 scheduleNextPlaybackTick();
                 return;
             }
-            recordPacingCatchup(
-                metrics,
-                static_cast<std::uint64_t>(
-                    target_frame - current_frame_index_ - 1),
-                false);
-            current_frame_index_ = target_frame;
+            recordPacingCatchup(metrics, pacing_decision);
+            current_timeline_frame_ = target_frame;
+            current_frame_index_ = std::clamp<std::int64_t>(
+                current_timeline_frame_ - primary_timeline_start_frame_,
+                0,
+                std::max<std::int64_t>(0, segment_frame_count_ - 1));
             emitComposedFrame();
             scheduleNextPlaybackTick();
             return;
@@ -1393,6 +1487,8 @@ void PlaybackWorker::emitFrame(std::optional<media::VideoFramePtr> frame) {
     }
     current_frame_index_ = source_frame - source_start_frame_;
     if (composition_enabled_) {
+        current_timeline_frame_ = primary_timeline_start_frame_ + current_frame_index_;
+        composition_position_initialized_ = true;
         emitComposedFrame();
         return;
     }
@@ -1407,8 +1503,12 @@ void PlaybackWorker::emitFrame(std::optional<media::VideoFramePtr> frame) {
 }
 
 void PlaybackWorker::emitComposedFrame() {
+    current_frame_index_ = std::clamp<std::int64_t>(
+        current_timeline_frame_ - primary_timeline_start_frame_,
+        0,
+        std::max<std::int64_t>(0, segment_frame_count_ - 1));
     renderCompositionFrame(
-        primary_timeline_start_frame_ + current_frame_index_,
+        current_timeline_frame_,
         current_frame_index_,
         generation_);
 }
@@ -1792,7 +1892,9 @@ bool PlaybackWorker::isSourceFrameInRange(std::int64_t source_frame) const noexc
 
 void PlaybackWorker::startPlaybackClock() noexcept {
     playback_scheduler_.start(
-        Clock::now(), current_frame_index_, playbackFrameRate());
+        Clock::now(),
+        composition_enabled_ ? current_timeline_frame_ : current_frame_index_,
+        playbackFrameRate());
 }
 
 double PlaybackWorker::playbackFrameRate() const noexcept {

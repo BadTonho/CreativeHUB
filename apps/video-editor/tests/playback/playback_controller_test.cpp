@@ -49,6 +49,7 @@ struct FakeWorkerState {
     std::atomic<quint64> render_request_generation{0};
     std::atomic<int> render_request_count{0};
     std::atomic<int> preview_quality_value{-1};
+    std::atomic<qint64> last_active_composition_global_frame{-1};
     std::atomic<quint64> seek_request_generation{0};
     std::atomic<qint64> last_seek_frame{-1};
     std::atomic<int> media_open_delay_ms{0};
@@ -128,7 +129,10 @@ public:
         state_->composition_request_generation.store(generation, std::memory_order_release);
         composition_generation_ = generation;
     }
-    void setActiveCompositionClip(qint64, qint64) override {}
+    void setActiveCompositionClip(qint64, qint64, qint64 global_frame) override {
+        state_->last_active_composition_global_frame.store(
+            global_frame, std::memory_order_release);
+    }
 
     void renderCompositionFrame(qint64, qint64 frame, quint64 generation) override {
         state_->render_request_generation.store(generation, std::memory_order_release);
@@ -334,6 +338,9 @@ void runContinuousClockTests() {
     require(waitUntil([&]() {
         return fake_state->last_seek_frame.load(std::memory_order_acquire) >= 3;
     }), "The activation seek did not account for the moving timeline clock.");
+    require(fake_state->last_active_composition_global_frame.load(
+                std::memory_order_acquire) >= 720,
+            "The active composition clip was not synchronized to the global Timeline frame.");
     require(controller.isPlaying(),
             "Playback was not resumed after the trimmed clip's first current frame.");
     require(session.preservedPlayheadFrameForUi().has_value() &&
