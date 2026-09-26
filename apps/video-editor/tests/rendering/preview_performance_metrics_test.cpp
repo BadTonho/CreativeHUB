@@ -47,6 +47,13 @@ int main() {
         rendering::SlowFrameSample disabled_slow_frame;
         disabled_slow_frame.processing_nanoseconds = 40'000'000;
         disabled_slow_frame.frame_budget_nanoseconds = 33'000'000;
+        rendering::SlowFrameLayerSample disabled_lookup_layer;
+        disabled_lookup_layer.blend_lookup_built = true;
+        disabled_lookup_layer.blend_lookup_build_nanoseconds = 100'000;
+        disabled_lookup_layer.blend_lookup_active_block_nanoseconds = 200'000;
+        disabled_lookup_layer.blend_lookup_pixel_count = 100;
+        disabled_lookup_layer.blend_lookup_active_block_count = 2;
+        rendering::addSlowFrameLayer(disabled_slow_frame, disabled_lookup_layer);
         metrics.recordSlowFrame(disabled_slow_frame);
         metrics.setTimelineFrameRate(30, 1'000'001);
         const auto disabled = metrics.takeSnapshotAndReset();
@@ -243,6 +250,11 @@ int main() {
             layer.full_frame_copy_eligibility = rendering::FullFrameCopyEligibility{
                 true, true, true, true, true, true, true, true, true};
             layer.decode_nanoseconds = (layer_index + 1) * 1'000'000;
+            layer.blend_lookup_built = true;
+            layer.blend_lookup_build_nanoseconds = 125'000;
+            layer.blend_lookup_active_block_nanoseconds = 850'000;
+            layer.blend_lookup_pixel_count = 1920U * 1080U;
+            layer.blend_lookup_active_block_count = 68;
             if (layer_index == 5) {
                 layer.forward_decode_collected = true;
                 layer.forward_decode_completed = true;
@@ -301,6 +313,15 @@ int main() {
                     snapshot.worst_slow_frame->slow_layers[0].source_height == 1080 &&
                     snapshot.worst_slow_frame->slow_layers[0].source_stride == 7680 &&
                     snapshot.worst_slow_frame->slow_layers[0].transform_position_x == 0.5 &&
+                    snapshot.worst_slow_frame->slow_layers[0].blend_lookup_built &&
+                    snapshot.worst_slow_frame->slow_layers[0]
+                            .blend_lookup_build_nanoseconds == 125'000 &&
+                    snapshot.worst_slow_frame->slow_layers[0]
+                            .blend_lookup_active_block_nanoseconds == 850'000 &&
+                    snapshot.worst_slow_frame->slow_layers[0]
+                            .blend_lookup_pixel_count == 1920U * 1080U &&
+                    snapshot.worst_slow_frame->slow_layers[0]
+                            .blend_lookup_active_block_count == 68 &&
                     snapshot.worst_slow_frame->slow_layers[0].composition_path ==
                         rendering::CompositionRasterPath::FullFrameCopy &&
                     snapshot.worst_slow_frame->slow_layers[0]

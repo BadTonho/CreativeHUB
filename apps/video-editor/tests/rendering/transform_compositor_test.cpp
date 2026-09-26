@@ -706,6 +706,96 @@ int main() {
                     alpha_timings.layers[0].fast_path_copy_nanoseconds == 0,
                 "The compositor did not isolate alpha-coverage setup and raster timings.");
 
+        auto opaque_lookup_frame = patternedFrame(32, 32);
+        for (std::size_t offset = 3; offset < opaque_lookup_frame.rgba_pixels.size();
+             offset += 4) {
+            opaque_lookup_frame.rgba_pixels[offset] = 255;
+        }
+        auto partial_opacity_transform = identity;
+        partial_opacity_transform.opacity = 0.5;
+        rendering::FrameCompositionTimings lookup_timings;
+        const auto lookup_output = rendering::FrameCompositor::compose(
+            32,
+            32,
+            std::vector<rendering::CompositionLayer>{{
+                &opaque_lookup_frame,
+                partial_opacity_transform}},
+            &lookup_timings);
+        const auto lookup_reference = referenceGeneralComposition(
+            32,
+            32,
+            std::vector<rendering::CompositionLayer>{{
+                &opaque_lookup_frame,
+                partial_opacity_transform}});
+        const auto& lookup_layer_timings = lookup_timings.layers[0];
+        require(lookup_output.has_value() &&
+                    lookup_output->rgba_pixels == lookup_reference.rgba_pixels &&
+                    lookup_layer_timings.blend_lookup_built &&
+                    lookup_layer_timings.blend_lookup_build_nanoseconds > 0 &&
+                    lookup_layer_timings.blend_lookup_pixel_count == 32U * 32U &&
+                    lookup_layer_timings.blend_lookup_active_block_count == 2 &&
+                    lookup_layer_timings.blend_lookup_active_block_nanoseconds > 0,
+                "Opaque partial-opacity raster did not report exact lookup usage and active blocks.");
+
+        rendering::FrameCompositionTimings opaque_copy_lookup_timings;
+        const auto opaque_copy_lookup = rendering::FrameCompositor::compose(
+            4,
+            4,
+            std::vector<rendering::CompositionLayer>{{&opaque_full, identity}},
+            &opaque_copy_lookup_timings);
+        require(opaque_copy_lookup.has_value() &&
+                    !opaque_copy_lookup_timings.layers[0].blend_lookup_built &&
+                    opaque_copy_lookup_timings.layers[0].blend_lookup_pixel_count == 0 &&
+                    opaque_copy_lookup_timings.layers[0]
+                            .blend_lookup_active_block_count == 0,
+                "Full-opacity direct copies unexpectedly built or used the blend lookup.");
+
+        const auto semitransparent = solid(170, 90, 40, 128);
+        rendering::FrameCompositionTimings semitransparent_lookup_timings;
+        const auto semitransparent_output = rendering::FrameCompositor::compose(
+            4,
+            4,
+            std::vector<rendering::CompositionLayer>{{
+                &semitransparent,
+                partial_opacity_transform}},
+            &semitransparent_lookup_timings);
+        require(semitransparent_output.has_value() &&
+                    !semitransparent_lookup_timings.layers[0].blend_lookup_built &&
+                    semitransparent_lookup_timings.layers[0]
+                            .blend_lookup_pixel_count == 0 &&
+                    semitransparent_lookup_timings.layers[0]
+                            .blend_lookup_active_block_count == 0,
+                "Semitransparent source pixels unexpectedly used the opaque blend lookup.");
+
+        const auto mixed_alpha_frame = sparseAlphaFrame();
+        const auto mixed_alpha_coverage =
+            rendering::FrameCompositor::buildAlphaCoverage(mixed_alpha_frame);
+        rendering::FrameCompositionTimings mixed_alpha_lookup_timings;
+        const auto mixed_alpha_lookup_output = rendering::FrameCompositor::compose(
+            5,
+            4,
+            std::vector<rendering::CompositionLayer>{{
+                &mixed_alpha_frame,
+                partial_opacity_transform,
+                mixed_alpha_coverage}},
+            &mixed_alpha_lookup_timings);
+        const auto mixed_alpha_reference = referenceGeneralComposition(
+            5,
+            4,
+            std::vector<rendering::CompositionLayer>{{
+                &mixed_alpha_frame,
+                partial_opacity_transform,
+                mixed_alpha_coverage}});
+        require(mixed_alpha_lookup_output.has_value() &&
+                    mixed_alpha_lookup_output->rgba_pixels ==
+                        mixed_alpha_reference.rgba_pixels &&
+                    mixed_alpha_lookup_timings.layers[0].blend_lookup_built &&
+                    mixed_alpha_lookup_timings.layers[0]
+                            .blend_lookup_pixel_count == 2 &&
+                    mixed_alpha_lookup_timings.layers[0]
+                            .blend_lookup_active_block_count == 1,
+                "Alpha-coverage raster did not count only its opaque source pixels.");
+
         auto rotated = text_transform;
         rotated.rotation_degrees = 15.0;
         require(!rendering::FrameCompositor::canUseAlphaCoverageFastPath(
@@ -727,7 +817,10 @@ int main() {
         require(rotated_with_coverage.has_value() && rotated_general.has_value() &&
                     rotated_with_coverage->rgba_pixels == rotated_general->rgba_pixels &&
                     rotated_timings.layers[0].raster_path ==
-                        rendering::CompositionRasterPath::Rotated,
+                        rendering::CompositionRasterPath::Rotated &&
+                    !rotated_timings.layers[0].blend_lookup_built &&
+                    rotated_timings.layers[0].blend_lookup_pixel_count == 0 &&
+                    rotated_timings.layers[0].blend_lookup_active_block_count == 0,
                 "Rotated alpha coverage did not use the general compositor path.");
 
         media::VideoFrame empty = sparse;

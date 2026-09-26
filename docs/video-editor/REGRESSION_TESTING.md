@@ -392,7 +392,7 @@ in the running Video Editor after UI or integration changes:
   unrotated video layer for 15 seconds at Full quality, then repeat the same
   section once to warm decoder and text caches;
   confirm one `playback/slow_frame` event at most per metrics interval, only
-  when frames exceed the target-FPS budget. Check that schema `5` reports the interval
+  when frames exceed the target-FPS budget. Check that schema `6` reports the interval
   slow-frame count, the worst timeline frame, total processing/decode/
   composition/payload times, compositor list/output initialization and layer
   setup/raster/blend/copy buckets, and no more than four costly layers with
@@ -401,6 +401,12 @@ in the running Video Editor after UI or integration changes:
   raster path, and each full-frame-copy eligibility condition; confirm
   `full_copy_alpha_check_performed` is false when another condition rejects the
   copy.
+  For partially opaque, unrotated layers, check `blend_lookup_built`, lookup
+  build time, exact `blend_lookup_pixel_count`, and the count and inclusive
+  time of 16-row blocks that used the table. Treat the block time as an estimate
+  that includes other raster work in those blocks and may include lazy table
+  construction in the first active block; confirm that metrics remain
+  aggregated and no event is emitted per frame.
   For forward-decoded video layers, check the decoder start and requested frames,
   discarded intermediate-frame count, total forward time, packet read/send,
   decoder receive, target pixel conversion, and residual time. Confirm that

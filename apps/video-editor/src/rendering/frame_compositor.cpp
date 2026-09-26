@@ -110,8 +110,16 @@ void blendOverOpaqueDestination(
     destination[3] = 255;
 }
 
+std::uint64_t elapsedNanoseconds(
+    std::chrono::steady_clock::time_point started) noexcept;
+
 class OpaqueSourceBlendLookup final {
+    using Clock = std::chrono::steady_clock;
+
 public:
+    explicit OpaqueSourceBlendLookup(CompositionLayerTimings* timings) noexcept
+        : timings_(timings) {}
+
     [[nodiscard]] bool tryBlend(
         std::uint8_t* destination,
         const std::uint8_t* source,
@@ -127,34 +135,44 @@ public:
             destination[channel] = values_[index];
         }
         destination[3] = 255;
+        if (timings_ != nullptr) ++timings_->blend_lookup_pixel_count;
         return true;
     }
 
 private:
     void initialize(double opacity) noexcept {
         initialized_ = true;
+        const auto build_started =
+            timings_ != nullptr ? Clock::now() : Clock::time_point{};
         const double source_alpha = std::clamp(opacity, 0.0, 1.0);
         const double output_alpha = source_alpha + (1.0 - source_alpha);
-        if (output_alpha != 1.0) return;
-
-        values_.reset(new (std::nothrow) std::uint8_t[256U * 256U]);
-        if (!values_) return;
-        const double inverse_source_alpha = 1.0 - source_alpha;
-        for (std::size_t source = 0; source < 256; ++source) {
-            const double source_value = static_cast<double>(source) / 255.0;
-            for (std::size_t destination = 0; destination < 256; ++destination) {
-                const double output = source_value * source_alpha +
-                    (static_cast<double>(destination) / 255.0) *
-                        inverse_source_alpha;
-                values_[(source << 8U) | destination] =
-                    static_cast<std::uint8_t>(std::lround(
-                        std::clamp(output, 0.0, 1.0) * 255.0));
+        if (output_alpha == 1.0) {
+            values_.reset(new (std::nothrow) std::uint8_t[256U * 256U]);
+            if (values_) {
+                const double inverse_source_alpha = 1.0 - source_alpha;
+                for (std::size_t source = 0; source < 256; ++source) {
+                    const double source_value = static_cast<double>(source) / 255.0;
+                    for (std::size_t destination = 0; destination < 256; ++destination) {
+                        const double output = source_value * source_alpha +
+                            (static_cast<double>(destination) / 255.0) *
+                                inverse_source_alpha;
+                        values_[(source << 8U) | destination] =
+                            static_cast<std::uint8_t>(std::lround(
+                                std::clamp(output, 0.0, 1.0) * 255.0));
+                    }
+                }
+                usable_ = true;
             }
         }
-        usable_ = true;
+        if (timings_ != nullptr) {
+            timings_->blend_lookup_build_nanoseconds +=
+                elapsedNanoseconds(build_started);
+            timings_->blend_lookup_built = usable_;
+        }
     }
 
     std::unique_ptr<std::uint8_t[]> values_;
+    CompositionLayerTimings* timings_ = nullptr;
     bool initialized_ = false;
     bool usable_ = false;
 };
@@ -239,7 +257,7 @@ void composeAlphaCoverageLayer(
         return;
     }
     const bool copy_opaque_source_pixels = layer.transform.opacity == 1.0;
-    OpaqueSourceBlendLookup opaque_source_blend_lookup;
+    OpaqueSourceBlendLookup opaque_source_blend_lookup(timings);
 
     const double fit = std::min(
         static_cast<double>(output.width) / frame.width,
@@ -304,42 +322,56 @@ void composeAlphaCoverageLayer(
     }
     const auto raster_started = timings != nullptr ? Clock::now() : Clock::time_point{};
 
-    for (int destination_y = vertical->begin;
-         destination_y <= vertical->end;
-         ++destination_y) {
-        const auto source_y = source_y_lookup[
-            static_cast<std::size_t>(destination_y - vertical->begin)];
-        if (source_y < 0 || source_y >= static_cast<int>(mapped_rows.size())) continue;
-        const auto* source_row = frame.rgba_pixels.data() +
-            static_cast<std::size_t>(source_y) * frame.stride;
-        for (const auto& range : mapped_rows[static_cast<std::size_t>(source_y)]) {
-            for (int destination_x = range.begin;
-                 destination_x <= range.end;
-                 ++destination_x) {
-                const auto source_x = source_x_lookup[
-                    static_cast<std::size_t>(destination_x - horizontal->begin)];
-                const auto* source_pixel = source_row +
-                    static_cast<std::size_t>(source_x) * 4;
-                auto* destination = output.rgba_pixels.data() +
-                    static_cast<std::size_t>(destination_y) * output.stride +
-                    static_cast<std::size_t>(destination_x) * 4;
-                if (copy_opaque_source_pixels && source_pixel[3] == 255) {
-                    std::memcpy(destination, source_pixel, 4);
-                    continue;
+    for (int block_begin = vertical->begin;;) {
+        const int block_end = block_begin +
+            std::min(15, vertical->end - block_begin);
+        const auto block_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+        std::uint64_t block_lookup_pixel_count = 0;
+        for (int destination_y = block_begin;
+             destination_y <= block_end;
+             ++destination_y) {
+            const auto source_y = source_y_lookup[
+                static_cast<std::size_t>(destination_y - vertical->begin)];
+            if (source_y < 0 || source_y >= static_cast<int>(mapped_rows.size())) continue;
+            const auto* source_row = frame.rgba_pixels.data() +
+                static_cast<std::size_t>(source_y) * frame.stride;
+            for (const auto& range : mapped_rows[static_cast<std::size_t>(source_y)]) {
+                for (int destination_x = range.begin;
+                     destination_x <= range.end;
+                     ++destination_x) {
+                    const auto source_x = source_x_lookup[
+                        static_cast<std::size_t>(destination_x - horizontal->begin)];
+                    const auto* source_pixel = source_row +
+                        static_cast<std::size_t>(source_x) * 4;
+                    auto* destination = output.rgba_pixels.data() +
+                        static_cast<std::size_t>(destination_y) * output.stride +
+                        static_cast<std::size_t>(destination_x) * 4;
+                    if (copy_opaque_source_pixels && source_pixel[3] == 255) {
+                        std::memcpy(destination, source_pixel, 4);
+                        continue;
+                    }
+                    if (opaque_source_blend_lookup.tryBlend(
+                            destination, source_pixel, layer.transform.opacity)) {
+                        ++block_lookup_pixel_count;
+                        continue;
+                    }
+                    auto color = Color{
+                        source_pixel[0] / 255.0,
+                        source_pixel[1] / 255.0,
+                        source_pixel[2] / 255.0,
+                        source_pixel[3] / 255.0};
+                    color.alpha *= layer.transform.opacity;
+                    blendOverOpaqueDestination(destination, color);
                 }
-                if (opaque_source_blend_lookup.tryBlend(
-                        destination, source_pixel, layer.transform.opacity)) {
-                    continue;
-                }
-                auto color = Color{
-                    source_pixel[0] / 255.0,
-                    source_pixel[1] / 255.0,
-                    source_pixel[2] / 255.0,
-                    source_pixel[3] / 255.0};
-                color.alpha *= layer.transform.opacity;
-                blendOverOpaqueDestination(destination, color);
             }
         }
+        if (timings != nullptr && block_lookup_pixel_count > 0) {
+            timings->blend_lookup_active_block_nanoseconds +=
+                elapsedNanoseconds(block_started);
+            ++timings->blend_lookup_active_block_count;
+        }
+        if (block_end == vertical->end) break;
+        block_begin = block_end + 1;
     }
     if (timings != nullptr) {
         timings->raster_blend_nanoseconds += elapsedNanoseconds(raster_started);
@@ -354,7 +386,7 @@ void composeAxisAlignedLayer(
     const auto setup_started = timings != nullptr ? Clock::now() : Clock::time_point{};
     const auto& frame = *layer.frame;
     const bool copy_opaque_source_pixels = layer.transform.opacity == 1.0;
-    OpaqueSourceBlendLookup opaque_source_blend_lookup;
+    OpaqueSourceBlendLookup opaque_source_blend_lookup(timings);
     const double fit = std::min(
         static_cast<double>(output.width) / frame.width,
         static_cast<double>(output.height) / frame.height);
@@ -404,38 +436,52 @@ void composeAxisAlignedLayer(
     }
     const auto raster_started = timings != nullptr ? Clock::now() : Clock::time_point{};
 
-    for (int destination_y = vertical->begin;
-         destination_y <= vertical->end;
-         ++destination_y) {
-        const auto source_y = source_y_lookup[
-            static_cast<std::size_t>(destination_y - vertical->begin)];
-        const auto* source_row = frame.rgba_pixels.data() +
-            static_cast<std::size_t>(source_y) * frame.stride;
-        auto* destination = output.rgba_pixels.data() +
-            static_cast<std::size_t>(destination_y) * output.stride +
-            static_cast<std::size_t>(horizontal->begin) * 4;
-        for (const auto source_x : source_x_lookup) {
-            const auto* source_pixel = source_row +
-                static_cast<std::size_t>(source_x) * 4;
-            if (copy_opaque_source_pixels && source_pixel[3] == 255) {
-                std::memcpy(destination, source_pixel, 4);
+    for (int block_begin = vertical->begin;;) {
+        const int block_end = block_begin +
+            std::min(15, vertical->end - block_begin);
+        const auto block_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+        std::uint64_t block_lookup_pixel_count = 0;
+        for (int destination_y = block_begin;
+             destination_y <= block_end;
+             ++destination_y) {
+            const auto source_y = source_y_lookup[
+                static_cast<std::size_t>(destination_y - vertical->begin)];
+            const auto* source_row = frame.rgba_pixels.data() +
+                static_cast<std::size_t>(source_y) * frame.stride;
+            auto* destination = output.rgba_pixels.data() +
+                static_cast<std::size_t>(destination_y) * output.stride +
+                static_cast<std::size_t>(horizontal->begin) * 4;
+            for (const auto source_x : source_x_lookup) {
+                const auto* source_pixel = source_row +
+                    static_cast<std::size_t>(source_x) * 4;
+                if (copy_opaque_source_pixels && source_pixel[3] == 255) {
+                    std::memcpy(destination, source_pixel, 4);
+                    destination += 4;
+                    continue;
+                }
+                if (opaque_source_blend_lookup.tryBlend(
+                        destination, source_pixel, layer.transform.opacity)) {
+                    ++block_lookup_pixel_count;
+                    destination += 4;
+                    continue;
+                }
+                auto color = Color{
+                    source_pixel[0] / 255.0,
+                    source_pixel[1] / 255.0,
+                    source_pixel[2] / 255.0,
+                    source_pixel[3] / 255.0};
+                color.alpha *= layer.transform.opacity;
+                blendOverOpaqueDestination(destination, color);
                 destination += 4;
-                continue;
             }
-            if (opaque_source_blend_lookup.tryBlend(
-                    destination, source_pixel, layer.transform.opacity)) {
-                destination += 4;
-                continue;
-            }
-            auto color = Color{
-                source_pixel[0] / 255.0,
-                source_pixel[1] / 255.0,
-                source_pixel[2] / 255.0,
-                source_pixel[3] / 255.0};
-            color.alpha *= layer.transform.opacity;
-            blendOverOpaqueDestination(destination, color);
-            destination += 4;
         }
+        if (timings != nullptr && block_lookup_pixel_count > 0) {
+            timings->blend_lookup_active_block_nanoseconds +=
+                elapsedNanoseconds(block_started);
+            ++timings->blend_lookup_active_block_count;
+        }
+        if (block_end == vertical->end) break;
+        block_begin = block_end + 1;
     }
     if (timings != nullptr) {
         timings->raster_blend_nanoseconds += elapsedNanoseconds(raster_started);

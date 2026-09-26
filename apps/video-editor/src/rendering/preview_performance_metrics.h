@@ -88,6 +88,11 @@ struct SlowFrameLayerSample {
     std::uint64_t composition_setup_nanoseconds = 0;
     std::uint64_t raster_blend_nanoseconds = 0;
     std::uint64_t fast_path_copy_nanoseconds = 0;
+    bool blend_lookup_built = false;
+    std::uint64_t blend_lookup_build_nanoseconds = 0;
+    std::uint64_t blend_lookup_active_block_nanoseconds = 0;
+    std::uint64_t blend_lookup_pixel_count = 0;
+    std::uint64_t blend_lookup_active_block_count = 0;
     bool forward_decode_collected = false;
     bool forward_decode_completed = false;
     bool forward_decode_cancelled = false;

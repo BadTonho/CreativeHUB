@@ -503,7 +503,7 @@ void appendSlowFrameContext(
     const rendering::PreviewPerformanceSnapshot& snapshot) {
     if (!snapshot.worst_slow_frame.has_value()) return;
     const auto& frame = *snapshot.worst_slow_frame;
-    context.emplace_back("diagnostic_schema_version", "5");
+    context.emplace_back("diagnostic_schema_version", "6");
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back("sample_origin_thread_role", "playback_worker");
     context.emplace_back(
@@ -656,6 +656,21 @@ void appendSlowFrameContext(
         context.emplace_back(
             prefix + "fast_path_copy_ms",
             milliseconds(layer.fast_path_copy_nanoseconds));
+        context.emplace_back(
+            prefix + "blend_lookup_built",
+            layer.blend_lookup_built ? "true" : "false");
+        context.emplace_back(
+            prefix + "blend_lookup_build_ms",
+            milliseconds(layer.blend_lookup_build_nanoseconds));
+        context.emplace_back(
+            prefix + "blend_lookup_active_block_ms",
+            milliseconds(layer.blend_lookup_active_block_nanoseconds));
+        context.emplace_back(
+            prefix + "blend_lookup_pixel_count",
+            std::to_string(layer.blend_lookup_pixel_count));
+        context.emplace_back(
+            prefix + "blend_lookup_active_block_count",
+            std::to_string(layer.blend_lookup_active_block_count));
         context.emplace_back(
             prefix + "forward_decode_collected",
             layer.forward_decode_collected ? "true" : "false");

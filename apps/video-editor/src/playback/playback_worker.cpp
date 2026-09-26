@@ -738,6 +738,15 @@ void PlaybackWorker::renderCompositionFrame(
                         layer_timing.raster_blend_nanoseconds;
                     layer.fast_path_copy_nanoseconds =
                         layer_timing.fast_path_copy_nanoseconds;
+                    layer.blend_lookup_built = layer_timing.blend_lookup_built;
+                    layer.blend_lookup_build_nanoseconds =
+                        layer_timing.blend_lookup_build_nanoseconds;
+                    layer.blend_lookup_active_block_nanoseconds =
+                        layer_timing.blend_lookup_active_block_nanoseconds;
+                    layer.blend_lookup_pixel_count =
+                        layer_timing.blend_lookup_pixel_count;
+                    layer.blend_lookup_active_block_count =
+                        layer_timing.blend_lookup_active_block_count;
                     if (sample_is_slow) {
                         layer.composition_path = layer_timing.raster_path;
                         layer.full_frame_copy_eligibility =
