@@ -44,6 +44,7 @@ public:
     explicit TimelineWidget(QWidget* parent = nullptr);
 
     void setTracks(const std::vector<TimelineTrack>& tracks);
+    void setFrameRate(FrameRate frame_rate) noexcept;
     void setClips(const std::vector<TimelineClip>& clips);
     void clearClips();
     void setActiveClip(std::optional<ClipLocation> location);
@@ -209,6 +210,7 @@ private:
     std::int64_t playhead_frame_ = 0;
     bool move_requires_alt_ = false;
     bool read_only_ = false;
+    FrameRate frame_rate_;
     TimelineInteractionController interaction_controller_;
     bool razor_mode_ = false;
     QPointF move_preview_position_{};

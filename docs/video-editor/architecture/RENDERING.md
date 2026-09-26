@@ -378,10 +378,15 @@ and settings snapshot, while source media remains referenced by its path.
 Exporting does not alter the open project, its history, or its dirty state.
 
 `OfflineExportRenderer` uses the CPU `FrameCompositor` to compose frames at the
-configured output dimensions. It derives Timeline time from the first valid
-media clip rate (still images use 30 fps; projects without a usable rate fall
-back to 30 fps), then maps each output frame to that Timeline rate. It renders
-through the end of the last clip; uncovered frames are black. The current
+configured output dimensions. It uses the project's persisted rational
+Timeline rate (30/1 FPS for new projects) and maps each output frame to a
+Timeline position at that rate. Every video layer then maps its local Timeline
+position to the source frame using the clip's source rate, source in-point, and
+stored source duration. Still images use a 30 FPS source timebase and hold
+their cached frame. Playback and export therefore share the same Timeline to
+source-frame mapping, while export output FPS remains independently
+configurable. It renders through the end of the last clip; uncovered frames
+are black. The current
 composition path evaluates clip transforms and keyframes and supports video,
 still-image, and text layers plus Cross Dissolve and Fade to Black transitions.
 Preview-only viewing effects such as Grayscale are not applied to exports.

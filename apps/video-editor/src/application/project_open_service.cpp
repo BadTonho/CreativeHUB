@@ -59,6 +59,70 @@ std::optional<std::int64_t> availableFrameCount(const media::VideoMetadata& meta
     return std::max<std::int64_t>(1, static_cast<std::int64_t>(std::ceil(estimate)));
 }
 
+timeline::FrameRate inferLegacyTimelineRate(
+    const project::ProjectDocument& document,
+    const media::MediaLibrary& library) {
+    for (const auto& track : document.timeline_tracks) {
+        for (const auto& clip : track.clips) {
+            if (clip.kind != timeline::ClipKind::Video) continue;
+            const auto media_index = library.indexForPath(clip.source_path);
+            if (media_index >= library.size()) continue;
+            const auto& item = library.items()[media_index];
+            if (item.offline || item.metadata.kind != media::MediaKind::Video ||
+                !item.metadata.frame_rate.has_value()) continue;
+            const auto rate = timeline::frameRateFromDouble(*item.metadata.frame_rate);
+            if (rate.has_value()) return *rate;
+        }
+    }
+    return {};
+}
+
+void preserveTransitionContinuity(
+    project::ProjectTrack& track,
+    const std::filesystem::path& project_path) {
+    auto transitions = track.transitions;
+    std::stable_sort(transitions.begin(), transitions.end(),
+        [](const auto& left, const auto& right) {
+            return left.from_clip_index < right.from_clip_index;
+        });
+    for (const auto& transition : transitions) {
+        if (transition.from_clip_index >= track.clips.size() ||
+            transition.to_clip_index >= track.clips.size() ||
+            transition.to_clip_index != transition.from_clip_index + 1) continue;
+        auto& from = track.clips[transition.from_clip_index];
+        const auto end = from.timeline_start_frame + from.duration_frames;
+        const auto delta = end - track.clips[transition.to_clip_index].timeline_start_frame;
+        if (delta != 0) {
+            for (std::size_t index = transition.to_clip_index;
+                 index < track.clips.size(); ++index) {
+                auto& clip = track.clips[index];
+                if ((delta < 0 && clip.timeline_start_frame < -delta) ||
+                    (delta > 0 && clip.timeline_start_frame >
+                        std::numeric_limits<std::int64_t>::max() - delta)) {
+                    throw project::ProjectError(
+                        project::ProjectErrorCode::InvalidTimeline,
+                        "A timing migration would move a clip outside the supported timeline range.",
+                        std::nullopt,
+                        project_path);
+                }
+                clip.timeline_start_frame += delta;
+            }
+        }
+        const auto maximum = std::min(
+            from.duration_frames,
+            track.clips[transition.to_clip_index].duration_frames);
+        auto found = std::find_if(track.transitions.begin(), track.transitions.end(),
+            [&transition](const auto& candidate) {
+                return candidate.from_clip_index == transition.from_clip_index &&
+                    candidate.to_clip_index == transition.to_clip_index;
+            });
+        if (found != track.transitions.end()) {
+            found->duration_frames = std::clamp<std::int64_t>(
+                found->duration_frames, 1, maximum);
+        }
+    }
+}
+
 ProjectOpenResult cancelledResult(std::vector<ProjectOpenIssue> warnings) {
     ProjectOpenResult result;
     result.status = ProjectOpenStatus::Cancelled;
@@ -81,6 +145,7 @@ ProjectOpenResult ProjectOpenService::prepare(
 
     try {
         auto document = project::load(project_path);
+        const auto loaded_source_document = document;
         if (cancel_requested.load(std::memory_order_relaxed)) {
             return cancelledResult(std::move(warnings));
         }
@@ -146,7 +211,7 @@ ProjectOpenResult ProjectOpenService::prepare(
                 }
             }
             const bool exists = source_exists || linked_output_exists;
-            if (!exists || (project_media.offline && !linked_output_exists)) {
+            if (!exists) {
                 if (!exists && !project_media.offline) {
                     normalized_media.offline = true;
                     warnings.push_back({
@@ -225,6 +290,7 @@ ProjectOpenResult ProjectOpenService::prepare(
                 item.metadata.source_path = media::MediaLibrary::canonicalPath(
                     project_media.source_path);
                 normalized_media.display_name = display_name;
+                normalized_media.offline = false;
                 const auto added = loaded_library.addOnline(
                     std::move(item.metadata),
                     std::move(item.first_frame),
@@ -247,7 +313,94 @@ ProjectOpenResult ProjectOpenService::prepare(
         }
         normalized_document.bins = loaded_library.bins();
 
+        if (document.timing_migration_required) {
+            document.timeline_frame_rate = inferLegacyTimelineRate(
+                document, loaded_library);
+        }
+        if (!timeline::validFrameRate(document.timeline_frame_rate)) {
+            throw project::ProjectError(
+                project::ProjectErrorCode::InvalidValue,
+                "The project timeline frame rate is invalid.",
+                std::nullopt,
+                project_path);
+        }
+        document.timeline_frame_rate = timeline::reducedFrameRate(
+            document.timeline_frame_rate);
+
+        for (auto& track : document.timeline_tracks) {
+            bool converted_timing = false;
+            for (auto& clip : track.clips) {
+                if (!timeline::isMediaClipKind(clip.kind)) continue;
+                const bool legacy_clip = document.timing_migration_required;
+                if (legacy_clip) clip.source_duration_frames = clip.duration_frames;
+                if (clip.source_duration_frames <= 0) {
+                    throw project::ProjectError(
+                        project::ProjectErrorCode::InvalidTimeline,
+                        "A media clip has no valid source duration.",
+                        std::nullopt,
+                        clip.source_path);
+                }
+
+                const auto media_index = loaded_library.indexForPath(clip.source_path);
+                if (media_index >= loaded_library.size()) {
+                    throw project::ProjectError(
+                        project::ProjectErrorCode::MediaUnavailable,
+                        "A timeline clip refers to media that is not imported in the project.",
+                        std::nullopt,
+                        clip.source_path);
+                }
+                const auto& item = loaded_library.items()[media_index];
+                if (item.metadata.kind == media::MediaKind::Image) {
+                    clip.kind = timeline::ClipKind::Image;
+                } else {
+                    clip.kind = timeline::ClipKind::Video;
+                }
+
+                const bool migrate_now = !item.offline &&
+                    (legacy_clip || clip.source_duration_migration_pending);
+                if (!migrate_now) {
+                    if (legacy_clip) clip.source_duration_migration_pending = true;
+                    continue;
+                }
+
+                const double source_rate = clip.kind == timeline::ClipKind::Image
+                    ? media::kStillImageFrameRate
+                    : item.metadata.frame_rate.value_or(
+                          document.timeline_frame_rate.asDouble());
+                const auto duration = timeline::timelineFramesForSourceDuration(
+                    clip.source_duration_frames, source_rate,
+                    document.timeline_frame_rate);
+                if (!duration.has_value()) {
+                    throw project::ProjectError(
+                        project::ProjectErrorCode::InvalidTimeline,
+                        "A media clip duration could not be converted to the project timeline rate.",
+                        std::nullopt,
+                        clip.source_path);
+                }
+                clip.duration_frames = *duration;
+                clip.source_duration_migration_pending = false;
+                converted_timing = true;
+
+                const auto source_count = availableFrameCount(item.metadata);
+                if (source_count.has_value() &&
+                    (clip.source_start_frame > *source_count ||
+                     clip.source_duration_frames > *source_count -
+                         clip.source_start_frame)) {
+                    throw project::ProjectError(
+                        project::ProjectErrorCode::InvalidTimeline,
+                        "A timeline clip is outside the current media source bounds.",
+                        std::nullopt,
+                        clip.source_path);
+                }
+            }
+            if (converted_timing) preserveTransitionContinuity(track, project_path);
+        }
+        normalized_document.timeline_frame_rate = document.timeline_frame_rate;
+        normalized_document.timeline_tracks = document.timeline_tracks;
+        normalized_document.timing_migration_required = false;
+
         timeline::TimelineModel::Snapshot snapshot;
+        snapshot.frame_rate = document.timeline_frame_rate;
         timeline::TrackId next_track_id = 1;
         timeline::ClipId next_clip_id = 1;
         for (std::size_t track_index = 0;
@@ -293,9 +446,10 @@ ProjectOpenResult ProjectOpenService::prepare(
                     text_clip.display_name = project_clip.text.content.empty()
                         ? "Text"
                         : project_clip.text.content;
-                    text_clip.duration_seconds =
-                        static_cast<double>(project_clip.duration_frames) / 30.0;
-                    text_clip.frame_rate = 30.0;
+                    text_clip.duration_seconds = static_cast<double>(
+                        project_clip.duration_frames) /
+                        document.timeline_frame_rate.asDouble();
+                    text_clip.frame_rate = document.timeline_frame_rate.asDouble();
                     text_clip.frame_count = project_clip.duration_frames;
                     text_clip.audio_gain = project_clip.audio_gain;
                     text_clip.audio_muted = project_clip.audio_muted;
@@ -324,12 +478,13 @@ ProjectOpenResult ProjectOpenService::prepare(
                 const auto frame_count = loaded_item.offline
                     ? std::optional<std::int64_t>{}
                     : availableFrameCount(metadata);
+                const auto source_duration = project_clip.source_duration_frames;
                 if ((!loaded_item.offline && !frame_count) ||
                     project_clip.source_start_frame < 0 ||
                     project_clip.duration_frames <= 0 ||
                     (!loaded_item.offline &&
                      (project_clip.source_start_frame > *frame_count ||
-                      project_clip.duration_frames > *frame_count -
+                      source_duration > *frame_count -
                           project_clip.source_start_frame)) ||
                     project_clip.timeline_start_frame < 0) {
                     throw project::ProjectError(
@@ -343,6 +498,9 @@ ProjectOpenResult ProjectOpenService::prepare(
                 clip.timeline_start_frame = project_clip.timeline_start_frame;
                 clip.source_start_frame = project_clip.source_start_frame;
                 clip.timeline_duration_frames = project_clip.duration_frames;
+                clip.source_duration_frames = source_duration;
+                clip.source_duration_migration_pending =
+                    project_clip.source_duration_migration_pending;
                 clip.source_path = media::MediaLibrary::canonicalPath(metadata.source_path);
                 clip.display_name = loaded_item.display_name;
                 clip.duration_seconds = metadata.duration_seconds;
@@ -423,6 +581,10 @@ ProjectOpenResult ProjectOpenService::prepare(
                   media::MediaLibrary::canonicalPath(*active_project_path))
             : std::nullopt;
         prepared.document = std::move(normalized_document);
+        if (saved_baseline.has_value() &&
+            *saved_baseline == loaded_source_document) {
+            saved_baseline = prepared.document;
+        }
         prepared.saved_baseline = std::move(saved_baseline);
 
         ProjectOpenResult result;

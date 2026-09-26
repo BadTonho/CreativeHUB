@@ -66,8 +66,10 @@ project::ProjectDocument makeMultiTrackProject(
     };
     document.timeline_tracks[0].track_id = 1;
     document.timeline_tracks[0].clips[0].clip_id = 1;
+    document.timeline_tracks[0].clips[0].source_duration_frames = 1;
     document.timeline_tracks[1].track_id = 2;
     document.timeline_tracks[1].clips[0].clip_id = 2;
+    document.timeline_tracks[1].clips[0].source_duration_frames = 1;
     return document;
 }
 
@@ -696,6 +698,7 @@ public:
         linked_clip.clip_id = 81;
         linked_clip.source_path = linked_source;
         linked_clip.duration_frames = 30;
+        linked_clip.source_duration_frames = 30;
         linked_clip.kind = timeline::ClipKind::Image;
         linked_track.clips.push_back(linked_clip);
         project::ProjectClip variant_clip;
@@ -703,6 +706,7 @@ public:
         variant_clip.source_path = linked_source;
         variant_clip.timeline_start_frame = 30;
         variant_clip.duration_frames = 30;
+        variant_clip.source_duration_frames = 30;
         variant_clip.kind = timeline::ClipKind::Image;
         variant_clip.image_editor_variant = media::LinkedImageReference{
             "clip-specific-window-link", variant_document, variant_output};

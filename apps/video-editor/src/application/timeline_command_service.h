@@ -178,6 +178,9 @@ public:
     [[nodiscard]] TimelineEditResult execute(const SetClipTextCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetTransformPropertyCommand& command);
     [[nodiscard]] TimelineEditResult execute(const ToggleTransformKeyframeCommand& command);
+    [[nodiscard]] timeline::PendingMediaTimingMigrationResult migratePendingMediaTiming(
+        const std::filesystem::path& source_path,
+        const media::VideoMetadata& metadata);
 
     [[nodiscard]] EditBatchId beginEditBatch();
     [[nodiscard]] TimelineEditResult finishEditBatch(EditBatchId batch_id);

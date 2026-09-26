@@ -346,14 +346,7 @@ void MainWindow::createWorkspace() {
         },
         [this] { return currentProjectDocument(); },
         [this] {
-            for (const auto& track : editor_session_.timeline().tracks()) {
-                for (const auto& clip : track.clips) {
-                    if (clip.frame_rate.has_value() && *clip.frame_rate > 0.0) {
-                        return *clip.frame_rate;
-                    }
-                }
-            }
-            return 30.0;
+            return editor_session_.timeline().frameRate().asDouble();
         },
         this);
     render_workspace_->createPanels(this);

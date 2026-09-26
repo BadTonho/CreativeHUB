@@ -11,6 +11,7 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
     const EditorSession& session,
     TimelinePresentationState presentation) {
     project::ProjectDocument document;
+    document.timeline_frame_rate = session.timeline().frameRate();
     document.timeline_zoom = presentation.zoom;
     document.timeline_row_height = presentation.row_height;
     const auto& library = session.mediaLibrary();
@@ -50,6 +51,9 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             project_clip.kind = clip.kind;
             project_clip.text = clip.text;
             project_clip.image_editor_variant = clip.image_editor_variant;
+            project_clip.source_duration_frames = clip.source_duration_frames;
+            project_clip.source_duration_migration_pending =
+                clip.source_duration_migration_pending;
             project_track.clips.push_back(std::move(project_clip));
         }
         for (const auto& transition : track.transitions) {

@@ -2,6 +2,8 @@
 #include "playback/playback_frame_mailbox.h"
 #include "playback/playback_transition_plan.h"
 #include "logging/logger.h"
+#include "media/video_playback.h"
+#include "rendering/frame_compositor.h"
 #include "rendering/preview_performance_metrics.h"
 
 #include <QGuiApplication>
@@ -587,6 +589,46 @@ void validateCompositionTransitions(
     require(black_pixel[0] == 0 && black_pixel[1] == 0 &&
                 black_pixel[2] == 0 && black_pixel[3] == 255,
             "Fade to black did not produce an opaque black junction frame.");
+}
+
+void validateCompositionSourceRateMapping(
+    const std::filesystem::path& path) {
+    constexpr std::int64_t timeline_frame = 15;
+    constexpr std::int64_t expected_source_frame = 22;
+    playback::CompositionLayerSpec layer;
+    layer.source_path = toQString(path);
+    layer.frame_rate = 24.0;
+    layer.timeline_frame_rate = {30, 1};
+    layer.timeline_start_frame = 0;
+    layer.source_start_frame = 10;
+    layer.source_duration_frames = 48;
+    layer.segment_frame_count = 60;
+    layer.track_index = 0;
+    layer.clip_index = 0;
+
+    auto reference = media::VideoPlaybackSession::open(path);
+    const auto source_frame = reference->decode_frame_at(expected_source_frame);
+    require(source_frame.has_value() && *source_frame != nullptr,
+            "The source-rate mapping fixture did not contain its expected source frame.");
+    const std::vector<rendering::CompositionLayer> reference_layers{{
+        source_frame->get(), layer.transform, {}}};
+    const auto expected = rendering::FrameCompositor::compose(
+        1920, 1080, reference_layers);
+    require(expected.has_value(),
+            "The source-rate mapping reference frame could not be composed.");
+
+    playback::PlaybackWorker worker;
+    media::VideoFramePtr actual;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&actual](playback::VideoFramePtr frame, qint64, quint64, quint64) {
+            actual = std::move(frame);
+        });
+    worker.setComposition({layer}, {}, 403);
+    worker.renderCompositionFrame(timeline_frame, timeline_frame, 403);
+    require(actual != nullptr && actual->rgba_pixels == expected->rgba_pixels,
+            "Composition preview did not map the Timeline frame to the matching trimmed source frame.");
 }
 
 void validateCompositionPlayback(
@@ -1335,6 +1377,7 @@ int main(int argc, char* argv[]) {
             validateSeekCoalescing(application, std::filesystem::path(argv[1]));
             validateSegmentRange(application, std::filesystem::path(argv[1]));
             validateCompositionTransitions(std::filesystem::path(argv[1]));
+            validateCompositionSourceRateMapping(std::filesystem::path(argv[1]));
             validateCompositionPlayback(application, std::filesystem::path(argv[1]));
             validateCompositionReuseAcrossMediaActivation(
                 application, std::filesystem::path(argv[1]));

@@ -10,7 +10,8 @@ void TimelineTrimGesture::begin(
     std::int64_t original_boundary_frame,
     std::int64_t scale_duration,
     TrimPointerPosition position,
-    std::optional<std::pair<std::size_t, std::size_t>> transition_pair) {
+    std::optional<std::pair<std::size_t, std::size_t>> transition_pair,
+    FrameRate timeline_frame_rate) {
     phase_ = transition_pair.has_value() ? Phase::PendingTransition : Phase::Active;
     location_ = location;
     edge_ = edge;
@@ -19,8 +20,12 @@ void TimelineTrimGesture::begin(
     scale_duration_ = scale_duration;
     last_position_ = position;
     transition_pair_ = transition_pair;
+    timeline_frame_rate_ = validFrameRate(timeline_frame_rate)
+        ? reducedFrameRate(timeline_frame_rate)
+        : FrameRate{};
     preview_ = previewClipEdgeEdit(
-        tracks, location, edge, original_boundary_frame, mode);
+        tracks, location, edge, original_boundary_frame, mode,
+        timeline_frame_rate_);
 }
 
 TrimGestureMove TimelineTrimGesture::move(
@@ -32,7 +37,8 @@ TrimGestureMove TimelineTrimGesture::move(
 
     if (phase_ == Phase::PendingTransition) {
         const auto candidate = boundary_frame.has_value()
-            ? previewClipEdgeEdit(tracks, location_, edge_, *boundary_frame, mode_)
+            ? previewClipEdgeEdit(tracks, location_, edge_, *boundary_frame, mode_,
+                                  timeline_frame_rate_)
             : std::nullopt;
         if (!candidate.has_value() ||
             candidate->boundary_frame == original_boundary_frame_) {
@@ -116,7 +122,7 @@ void TimelineTrimGesture::refreshPreview(
     std::optional<std::int64_t> boundary_frame) {
     if (!boundary_frame.has_value()) return;
     const auto candidate = previewClipEdgeEdit(
-        tracks, location_, edge_, *boundary_frame, mode_);
+        tracks, location_, edge_, *boundary_frame, mode_, timeline_frame_rate_);
     if (candidate.has_value()) preview_ = *candidate;
 }
 

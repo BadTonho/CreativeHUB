@@ -1361,8 +1361,10 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
     int duplicate_count = 0;
     int failed_count = 0;
     bool changed = false;
+    bool timeline_timing_changed = false;
     std::filesystem::path path_to_select;
     QStringList failures;
+    QStringList timing_warnings;
     const bool selection_is_current = result.selection_generation == selection_generation_;
 
     for (auto& file : result.files) {
@@ -1384,6 +1386,9 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
         const auto existing_index = media_controller_.library().indexForPath(file.path);
         const bool was_offline = existing_index != media_controller_.library().size() &&
             media_controller_.library().items()[existing_index].offline;
+        const auto restored_metadata = was_offline
+            ? std::optional<media::VideoMetadata>(file.item->metadata)
+            : std::nullopt;
         const auto committed = media_controller_.commitImported(std::move(*file.item));
         if (committed.status == application::MediaCommandStatus::Rejected) {
             if (committed.code == application::MediaCommandCode::Duplicate) {
@@ -1394,8 +1399,45 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
         }
         if (committed.changed()) {
             changed = true;
-            if (was_offline) ++restored_count;
-            else ++imported_count;
+            if (was_offline) {
+                ++restored_count;
+                if (restored_metadata.has_value()) {
+                    const auto migration = timeline_command_service_.migratePendingMediaTiming(
+                        file.path, *restored_metadata);
+                    if (migration == timeline::PendingMediaTimingMigrationResult::Migrated) {
+                        timeline_timing_changed = true;
+                    } else if (migration !=
+                               timeline::PendingMediaTimingMigrationResult::NoPendingClips) {
+                        const char* cause = "Pending legacy clip timing could not be converted.";
+                        switch (migration) {
+                        case timeline::PendingMediaTimingMigrationResult::InvalidMetadata:
+                            cause = "The restored media has invalid timing metadata.";
+                            break;
+                        case timeline::PendingMediaTimingMigrationResult::SourceRangeOutOfBounds:
+                            cause = "A pending clip range exceeds the restored media duration.";
+                            break;
+                        case timeline::PendingMediaTimingMigrationResult::TimelineRangeOverflow:
+                            cause = "Converting pending clips would exceed the Timeline range.";
+                            break;
+                        case timeline::PendingMediaTimingMigrationResult::NoPendingClips:
+                        case timeline::PendingMediaTimingMigrationResult::Migrated:
+                            break;
+                        }
+                        logging::Logger::instance().log(
+                            logging::Level::Error,
+                            "timeline",
+                            "reconnect_timing_migration",
+                            cause,
+                            {{"path", pathToUtf8(file.path)}});
+                        timing_warnings.push_back(
+                            QString("%1: %2")
+                                .arg(fromUtf8(pathToUtf8(file.path.filename())))
+                                .arg(QString::fromUtf8(cause)));
+                    }
+                }
+            } else {
+                ++imported_count;
+            }
             if (selection_is_current) path_to_select = file.path;
         } else {
             ++duplicate_count;
@@ -1403,6 +1445,11 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
         }
     }
 
+    if (timeline_timing_changed) {
+        updateTimelineState();
+        updateHistoryActions();
+        refreshPlaybackComposition();
+    }
     if (changed) updateProjectDirtyState();
     if (!path_to_select.empty()) populateMediaBrowser(path_to_select);
     statusBar()->showMessage(
@@ -1412,8 +1459,14 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
             .arg(restored_count)
             .arg(duplicate_count)
             .arg(failed_count));
+    const bool has_timing_warnings = !timing_warnings.isEmpty();
+    failures.append(timing_warnings);
     if (!failures.isEmpty()) {
-        QMessageBox::warning(this, "Some media could not be imported", failures.join('\n'));
+        QMessageBox::warning(
+            this,
+            has_timing_warnings ? "Media import needs attention" :
+                                  "Some media could not be imported",
+            failures.join('\n'));
     } else if (imported_count + restored_count == 1 && duplicate_count == 0) {
         statusBar()->showMessage("Media imported with preview frame.");
     }

@@ -14,6 +14,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -51,6 +52,7 @@ int main(int argc, char** argv) {
         std::ofstream(outside_source, std::ios::binary).close();
 
         project::ProjectDocument original;
+        original.timeline_frame_rate = {30000, 1001};
         require(original.timeline_row_height == 70.0,
                 "A new project document did not start with the 70-pixel default row height.");
         original.media = {
@@ -68,6 +70,8 @@ int main(int argc, char** argv) {
                 {first_source, 60, 0, 30, 1.25, false},
             }},
         };
+        original.timeline_tracks.front().clips[0].source_duration_frames = 60;
+        original.timeline_tracks.front().clips[1].source_duration_frames = 30;
         original.timeline_tracks.front().track_id = 1;
         original.timeline_tracks.front().clips[0].clip_id = 1;
         original.timeline_tracks.front().clips[1].clip_id = 2;
@@ -86,6 +90,7 @@ int main(int argc, char** argv) {
         image_clip.source_path = image_source;
         image_clip.timeline_start_frame = 100;
         image_clip.duration_frames = 150;
+        image_clip.source_duration_frames = 150;
         image_clip.kind = timeline::ClipKind::Image;
         image_clip.image_editor_variant = media::LinkedImageReference{
             "clip-still-uuid",
@@ -167,14 +172,18 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 10") != std::string::npos &&
+        require(saved_json.find("\"version\": 11") != std::string::npos &&
+                    saved_json.find("\"frame_rate\"") != std::string::npos &&
+                    saved_json.find("\"numerator\": 30000") != std::string::npos &&
+                    saved_json.find("\"denominator\": 1001") != std::string::npos &&
+                    saved_json.find("\"source_duration_frames\": 60") != std::string::npos &&
                     saved_json.find("\"zoom\": 512") != std::string::npos &&
                     saved_json.find("\"row_height\": 123.5") != std::string::npos &&
                     saved_json.find("\"transitions\"") != std::string::npos &&
                     saved_json.find("cross_dissolve") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
                     saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline state and linked image references were not written to the version 10 project.");
+                "Timeline frame timing and linked image references were not written to the version 11 project.");
         require(saved_json.find("\"kind\": \"image\"") != std::string::npos &&
                     loaded.media.back().kind == media::MediaKind::Image &&
                     loaded.timeline_tracks.front().clips.back().kind == timeline::ClipKind::Image,
@@ -212,6 +221,62 @@ int main(int argc, char** argv) {
                     !version_9_document.timeline_tracks.front().clips.back()
                          .image_editor_variant.has_value(),
                 "A version 9 project did not load without new linked-image fields.");
+        project::save(project_path, original);
+
+        auto version_10_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        version_10_json.insert("version", 10);
+        auto version_10_timeline = version_10_json.value("timeline").toObject();
+        version_10_timeline.remove("frame_rate");
+        auto version_10_tracks = version_10_timeline.value("tracks").toArray();
+        for (qsizetype track_index = 0; track_index < version_10_tracks.size(); ++track_index) {
+            auto track = version_10_tracks.at(track_index).toObject();
+            auto clips = track.value("clips").toArray();
+            for (qsizetype clip_index = 0; clip_index < clips.size(); ++clip_index) {
+                auto clip = clips.at(clip_index).toObject();
+                clip.remove("source_duration_frames");
+                clip.remove("source_duration_migration_pending");
+                clips.replace(clip_index, clip);
+            }
+            track.insert("clips", clips);
+            version_10_tracks.replace(track_index, track);
+        }
+        version_10_timeline.insert("tracks", version_10_tracks);
+        version_10_json.insert("timeline", version_10_timeline);
+        writeText(project_path,
+                  QJsonDocument(version_10_json).toJson().toStdString());
+        const auto version_10_document = project::load(project_path);
+        require(version_10_document.timing_migration_required &&
+                    version_10_document.timeline_tracks.front().clips.front()
+                        .source_duration_frames == 60 &&
+                    version_10_document.timeline_tracks.front().clips.front()
+                        .source_duration_migration_pending,
+                "A version 10 project did not load with deferred timing migration metadata.");
+        project::save(project_path, original);
+
+        for (const auto& invalid_component : {
+                 std::pair<const char*, int>{"numerator", 0},
+                 std::pair<const char*, int>{"denominator", -1}}) {
+            auto invalid_rate_json = QJsonDocument::fromJson(
+                QByteArray::fromStdString(saved_json)).object();
+            auto invalid_rate_timeline =
+                invalid_rate_json.value("timeline").toObject();
+            auto invalid_rate =
+                invalid_rate_timeline.value("frame_rate").toObject();
+            invalid_rate.insert(invalid_component.first, invalid_component.second);
+            invalid_rate_timeline.insert("frame_rate", invalid_rate);
+            invalid_rate_json.insert("timeline", invalid_rate_timeline);
+            writeText(project_path,
+                      QJsonDocument(invalid_rate_json).toJson().toStdString());
+            try {
+                static_cast<void>(project::load(project_path));
+                throw std::runtime_error(
+                    "An invalid rational Timeline frame rate was accepted.");
+            } catch (const project::ProjectError& error) {
+                require(error.code() == project::ProjectErrorCode::InvalidValue,
+                        "An invalid Timeline frame-rate component returned the wrong error category.");
+            }
+        }
         project::save(project_path, original);
 
         const auto original_contents = saved_json;
@@ -419,11 +484,13 @@ int main(int argc, char** argv) {
         first_overlapping_clip.timeline_start_frame = 0;
         first_overlapping_clip.source_start_frame = 0;
         first_overlapping_clip.duration_frames = 60;
+        first_overlapping_clip.source_duration_frames = 60;
         project::ProjectClip second_overlapping_clip;
         second_overlapping_clip.source_path = first_source;
         second_overlapping_clip.timeline_start_frame = 40;
         second_overlapping_clip.source_start_frame = 40;
         second_overlapping_clip.duration_frames = 60;
+        second_overlapping_clip.source_duration_frames = 60;
         overlapping_document.timeline_tracks = {project::ProjectTrack{
             "Video 1", 1.0, false,
             {first_overlapping_clip, second_overlapping_clip}, {}}};

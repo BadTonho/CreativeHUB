@@ -292,6 +292,8 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
     }
 
     ProjectDocument document;
+    document.timing_migration_required =
+        version < timeline_frame_rate_format_version;
     if (version >= canvas_format_version) {
         const auto canvas_value = root.value("canvas");
         if (!canvas_value.isObject()) {
@@ -360,6 +362,23 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
         throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing the timeline object.");
     }
     const auto timeline_object = timeline_value.toObject();
+    if (version >= timeline_frame_rate_format_version) {
+        const auto rate_value = timeline_object.value("frame_rate");
+        if (!rate_value.isObject()) {
+            throwJson(ProjectErrorCode::MissingField, project_path,
+                      "Project JSON is missing the timeline frame rate.");
+        }
+        const auto rate_object = rate_value.toObject();
+        document.timeline_frame_rate = {
+            requiredInteger(rate_object, "numerator", project_path),
+            requiredInteger(rate_object, "denominator", project_path)};
+        if (!timeline::validFrameRate(document.timeline_frame_rate)) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid rational timeline frame rate.");
+        }
+        document.timeline_frame_rate = timeline::reducedFrameRate(
+            document.timeline_frame_rate);
+    }
     if (version >= timeline_zoom_format_version) {
         const auto zoom_value = timeline_object.value("zoom");
         if (zoom_value.isUndefined()) {
@@ -410,6 +429,8 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
             clip.timeline_start_frame = timeline_start;
             clip.source_start_frame = requiredInteger(clip_object, "source_start_frame", project_path);
             clip.duration_frames = requiredInteger(clip_object, "duration_frames", project_path);
+            clip.source_duration_frames = clip.duration_frames;
+            clip.source_duration_migration_pending = true;
             if (clip.duration_frames > 0 && timeline_start <=
                 std::numeric_limits<std::int64_t>::max() - clip.duration_frames) {
                 timeline_start += clip.duration_frames;
@@ -486,6 +507,21 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                 clip.timeline_start_frame = requiredInteger(clip_object, "timeline_start_frame", project_path);
                 clip.source_start_frame = requiredInteger(clip_object, "source_start_frame", project_path);
                 clip.duration_frames = requiredInteger(clip_object, "duration_frames", project_path);
+                if (version >= separated_source_duration_format_version &&
+                    timeline::isMediaClipKind(clip.kind)) {
+                    clip.source_duration_frames = requiredInteger(
+                        clip_object, "source_duration_frames", project_path);
+                    const auto pending = clip_object.value(
+                        "source_duration_migration_pending");
+                    if (!pending.isBool()) {
+                        throwJson(ProjectErrorCode::MissingField, project_path,
+                                  "A media clip is missing its source duration migration state.");
+                    }
+                    clip.source_duration_migration_pending = pending.toBool();
+                } else if (timeline::isMediaClipKind(clip.kind)) {
+                    clip.source_duration_frames = clip.duration_frames;
+                    clip.source_duration_migration_pending = true;
+                }
                 if (clip_object.contains("audio_gain")) {
                     if (!clip_object.value("audio_gain").isDouble()) {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip audio gain.");

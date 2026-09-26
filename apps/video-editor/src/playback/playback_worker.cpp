@@ -157,6 +157,7 @@ void PlaybackWorker::setMedia(
     frame_rate_ = std::isfinite(frame_rate) && frame_rate > 0.0
         ? frame_rate
         : default_frame_rate;
+    source_frame_rate_ = frame_rate_;
     rendering::PreviewPerformanceMetrics::instance().setTargetFrameRate(frame_rate_);
     source_start_frame_ = source_start_frame;
     segment_frame_count_ = segment_frame_count;
@@ -248,7 +249,7 @@ void PlaybackWorker::play() {
                     if (!source_frame.has_value()) {
                         throw media::MediaError("The requested audio source frame is invalid.");
                     }
-                    audio_session_->seek_to_source_frame(*source_frame, frame_rate_);
+                    audio_session_->seek_to_source_frame(*source_frame, source_frame_rate_);
                     audio_position_valid_ = true;
                     pending_audio_bytes_.clear();
                 }
@@ -425,6 +426,9 @@ void PlaybackWorker::setComposition(
             }
             CompositionSession composition_session;
             composition_session.spec = spec;
+            if (timeline::validFrameRate(spec.timeline_frame_rate)) {
+                frame_rate_ = spec.timeline_frame_rate.asDouble();
+            }
             if (spec.kind == timeline::ClipKind::Video) {
                 if (spec.source_path.isEmpty()) continue;
                 composition_session.session = openVideoPlaybackSession(
@@ -438,9 +442,8 @@ void PlaybackWorker::setComposition(
                 has_primary_clip = true;
                 primary_is_static = spec.kind != timeline::ClipKind::Video;
                 primary_clip_duration = spec.segment_frame_count;
-                if (std::isfinite(spec.frame_rate) && spec.frame_rate > 0.0) {
-                    frame_rate_ = spec.frame_rate;
-                }
+                if (std::isfinite(spec.frame_rate) && spec.frame_rate > 0.0)
+                    source_frame_rate_ = spec.frame_rate;
             }
             composition_sessions_.push_back(std::move(composition_session));
         }
@@ -503,7 +506,10 @@ void PlaybackWorker::setActiveCompositionClip(
         current_frame_index_, 0,
         std::max<std::int64_t>(0, segment_frame_count_ - 1));
     if (std::isfinite(active->frame_rate) && active->frame_rate > 0.0) {
-        frame_rate_ = active->frame_rate;
+        source_frame_rate_ = active->frame_rate;
+        if (!timeline::validFrameRate(active->timeline_frame_rate)) {
+            frame_rate_ = active->frame_rate;
+        }
         rendering::PreviewPerformanceMetrics::instance().setTargetFrameRate(frame_rate_);
     }
 
@@ -1115,7 +1121,7 @@ void PlaybackWorker::configureAudio() {
         if (!source_frame.has_value()) {
             throw media::MediaError("The audio source frame is invalid.");
         }
-        audio_session_->seek_to_source_frame(*source_frame, frame_rate_);
+        audio_session_->seek_to_source_frame(*source_frame, source_frame_rate_);
         audio_position_valid_ = true;
         audio_enabled_ = true;
         rendering::PreviewPerformanceMetrics::instance().setAudioEnabled(true);
@@ -1138,11 +1144,12 @@ void PlaybackWorker::fillAudioOutput() {
     const auto target_bytes = static_cast<std::size_t>(
         output.sample_rate * output.channel_count * 2 / 5);
     std::int64_t segment_end_sample = std::numeric_limits<std::int64_t>::max();
-    if (segment_frame_count_ > 0 &&
-        source_start_frame_ <= std::numeric_limits<std::int64_t>::max() - segment_frame_count_) {
+    if (segment_frame_count_ > 0 && source_frame_rate_ > 0.0 && frame_rate_ > 0.0) {
+        const long double source_end_seconds =
+            static_cast<long double>(source_start_frame_) / source_frame_rate_ +
+            static_cast<long double>(segment_frame_count_) / frame_rate_;
         segment_end_sample = static_cast<std::int64_t>(std::ceil(
-            static_cast<long double>(source_start_frame_ + segment_frame_count_) *
-            output.sample_rate / static_cast<long double>(frame_rate_)));
+            source_end_seconds * output.sample_rate));
     }
 
     while (pending_audio_bytes_.size() < static_cast<qsizetype>(target_bytes)) {
@@ -1387,12 +1394,18 @@ PlaybackWorker::decodeCompositionLayers(
         auto& composition = composition_sessions_[request.session_index];
         const auto& spec = composition.spec;
         if (request.local_frame < 0 ||
-            request.local_frame >= spec.segment_frame_count ||
-            spec.source_start_frame >
-                std::numeric_limits<std::int64_t>::max() - request.local_frame) {
+            request.local_frame >= spec.segment_frame_count) {
             continue;
         }
-        const auto source_frame = spec.source_start_frame + request.local_frame;
+        const auto source_offset = timeline::sourceFrameOffsetForTimelineFrame(
+            request.local_frame, spec.frame_rate, spec.timeline_frame_rate,
+            spec.source_duration_frames);
+        if (!source_offset.has_value() || spec.source_start_frame < 0 ||
+            *source_offset > std::numeric_limits<std::int64_t>::max() -
+                spec.source_start_frame) {
+            continue;
+        }
+        const auto source_frame = spec.source_start_frame + *source_offset;
         std::shared_ptr<const media::VideoFrame> frame;
         auto& metrics = rendering::PreviewPerformanceMetrics::instance();
         const bool collect_layer_timing = playing_ && metrics.isEnabled();
@@ -1632,6 +1645,27 @@ void PlaybackWorker::reportFailure(
 
 std::optional<std::int64_t> PlaybackWorker::sourceFrameForLocal(
     std::int64_t local_frame) const noexcept {
+    if (local_frame < 0) return std::nullopt;
+    if (composition_enabled_) {
+        const auto active = std::find_if(
+            composition_sessions_.cbegin(), composition_sessions_.cend(),
+            [this](const CompositionSession& item) {
+                return item.spec.track_index == track_index_ &&
+                    item.spec.clip_index == clip_index_;
+            });
+        if (active != composition_sessions_.cend()) {
+            const auto& spec = active->spec;
+            const auto offset = timeline::sourceFrameOffsetForTimelineFrame(
+                local_frame, spec.frame_rate, spec.timeline_frame_rate,
+                spec.source_duration_frames);
+            if (!offset.has_value() || spec.source_start_frame < 0 ||
+                *offset > std::numeric_limits<std::int64_t>::max() -
+                    spec.source_start_frame) {
+                return std::nullopt;
+            }
+            return spec.source_start_frame + *offset;
+        }
+    }
     if (local_frame < 0 ||
         local_frame > std::numeric_limits<std::int64_t>::max() -
             source_start_frame_) {

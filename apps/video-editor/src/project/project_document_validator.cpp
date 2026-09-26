@@ -80,6 +80,11 @@ void validateDocument(const ProjectDocument& document,
     if (document.canvas_width != 1920 || document.canvas_height != 1080) {
         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an unsupported canvas size; only 1920x1080 is supported.");
     }
+    if (!document.timing_migration_required &&
+        !timeline::validFrameRate(document.timeline_frame_rate)) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid rational timeline frame rate.");
+    }
     if (!std::isfinite(document.timeline_zoom) ||
         document.timeline_zoom < timeline::kMinTimelineZoomFactor ||
         document.timeline_zoom > timeline::kMaxTimelineZoomFactor) {
@@ -132,10 +137,13 @@ void validateDocument(const ProjectDocument& document,
                 clip.timeline_start_frame) {
             throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains an overflowing timeline range.");
         }
-        if (clip.duration_frames >
-            std::numeric_limits<std::int64_t>::max() -
-                clip.source_start_frame) {
-            throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains an overflowing media source range.");
+        const auto source_duration = timeline::isMediaClipKind(clip.kind)
+            ? clip.source_duration_frames
+            : clip.duration_frames;
+        if (source_duration <= 0 || source_duration >
+            std::numeric_limits<std::int64_t>::max() - clip.source_start_frame) {
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                      "Project JSON contains an invalid or overflowing media source range.");
         }
         if (!validAudioGain(clip.audio_gain)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip audio gain.");

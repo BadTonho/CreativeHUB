@@ -280,7 +280,7 @@ void runContinuousClockTests() {
             "Could not seed the continuous playback track.");
     require(model.addClip(0, first_media.metadata, 0) == timeline::AddClipResult::Added,
             "Could not seed the first continuous playback clip.");
-    require(model.addClip(0, trimmed_media.metadata, 600) == timeline::AddClipResult::Added,
+    require(model.addClip(0, trimmed_media.metadata, 720) == timeline::AddClipResult::Added,
             "Could not seed the second continuous playback clip.");
     require(model.trimClip(0, 1, 12, 300) == timeline::TrimClipResult::Trimmed,
             "Could not seed a clip with a nonzero source in-point.");
@@ -292,7 +292,7 @@ void runContinuousClockTests() {
         [fake_state]() { return new FakePlaybackWorker(fake_state); });
     std::vector<playback::PlaybackControllerEvent> events;
     controller.setEventHandler([&](const auto& event) { events.push_back(event); });
-    require(controller.activateClip(1, 599, false) ==
+    require(controller.activateClip(1, 719, false) ==
                 playback::PlaybackCommandResult::Pending,
             "Could not activate the first clip near its cut.");
     require(waitUntil([&]() {
@@ -302,13 +302,13 @@ void runContinuousClockTests() {
                 activation->phase == playback::PlaybackActivationPhase::Committed;
         });
     }), "The first clip did not finish its initial activation.");
-    require(controller.seekTimeline(599) == playback::PlaybackCommandResult::Applied,
+    require(controller.seekTimeline(719) == playback::PlaybackCommandResult::Applied,
             "Could not position the playhead immediately before the cut.");
     require(waitUntil([&]() {
-        return fake_state->last_seek_frame.load(std::memory_order_acquire) == 599;
+        return fake_state->last_seek_frame.load(std::memory_order_acquire) == 719;
     }), "The first clip seek did not reach the playback worker.");
     require(waitUntil([&]() {
-        return session.playheadFrame() == 599;
+        return session.playheadFrame() == 719;
     }), "The first clip seek did not update the local playhead.");
 
     fake_state->media_open_delay_ms.store(180, std::memory_order_release);
@@ -319,7 +319,7 @@ void runContinuousClockTests() {
     }), "The global playback clock did not remain active while opening the next clip.");
     require(waitUntil([&]() {
         const auto& preserved = session.preservedPlayheadFrameForUi();
-        return preserved.has_value() && *preserved >= 603;
+        return preserved.has_value() && *preserved >= 723;
     }, 1000), "The timeline playhead stopped while the next clip was opening.");
     require(controller.isPlaying(),
             "Playback stopped while the next clip was opening.");
@@ -337,7 +337,7 @@ void runContinuousClockTests() {
     require(controller.isPlaying(),
             "Playback was not resumed after the trimmed clip's first current frame.");
     require(session.preservedPlayheadFrameForUi().has_value() &&
-                *session.preservedPlayheadFrameForUi() <= 608,
+                *session.preservedPlayheadFrameForUi() <= 728,
             "The Timeline clock switched to the second clip's different frame rate.");
     require(!session.projectDirty(),
             "Continuous playback unexpectedly marked the project as changed.");

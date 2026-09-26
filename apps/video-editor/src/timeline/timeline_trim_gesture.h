@@ -52,7 +52,8 @@ public:
         std::int64_t original_boundary_frame,
         std::int64_t scale_duration,
         TrimPointerPosition position,
-        std::optional<std::pair<std::size_t, std::size_t>> transition_pair = std::nullopt);
+        std::optional<std::pair<std::size_t, std::size_t>> transition_pair = std::nullopt,
+        FrameRate timeline_frame_rate = {});
     [[nodiscard]] TrimGestureMove move(
         const std::vector<TimelineTrack>& tracks,
         std::optional<std::int64_t> boundary_frame,
@@ -86,6 +87,7 @@ private:
     TrimPointerPosition last_position_{};
     std::optional<std::pair<std::size_t, std::size_t>> transition_pair_;
     std::optional<ClipEdgeEditPreview> preview_;
+    FrameRate timeline_frame_rate_;
 };
 
 } // namespace timeline

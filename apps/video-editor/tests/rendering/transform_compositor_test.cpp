@@ -257,8 +257,8 @@ int main() {
         require(model.tracks().front().clips[0].transform.position_x == 0.25 &&
                     model.tracks().front().clips[1].transform.position_x == 0.75,
                 "Splitting changed the transform bases incorrectly.");
-        require(model.tracks().front().clips[1].source_start_frame == 10 &&
-                    model.tracks().front().clips[1].timeline_duration_frames == 10,
+        require(model.tracks().front().clips[1].source_start_frame == 7 &&
+                    model.tracks().front().clips[1].timeline_duration_frames == 20,
                 "The split source offsets were incorrect.");
 
         require(model.trimClip(0, 1, 12, 6) == timeline::TrimClipResult::Trimmed,

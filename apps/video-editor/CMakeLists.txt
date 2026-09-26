@@ -103,6 +103,7 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/project/project_document_validator.cpp
     src/timeline/timeline_model.cpp
     src/timeline/timeline_model.h
+    src/timeline/timeline_frame_rate.h
     src/timeline/timeline_clip_edge_command.cpp
     src/timeline/timeline_clip_edge_command.h
     src/timeline/timeline_layout.h

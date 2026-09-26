@@ -202,8 +202,15 @@ std::filesystem::path createVideoWithAudioFixture(const std::filesystem::path& r
     }
     const std::uint8_t* source_data[4]{rgba.data(), nullptr, nullptr, nullptr};
     const int source_lines[4]{video->width * 4, 0, 0, 0};
-    for (int index = 0; index < 30; ++index) {
+    for (int index = 0; index < 60; ++index) {
         requireFfmpeg(av_frame_make_writable(video_frame), "Preparing source video pixels");
+        const bool green_frame = index >= 44;
+        for (int pixel = 0; pixel < video->width * video->height; ++pixel) {
+            const auto offset = static_cast<std::size_t>(pixel) * 4U;
+            rgba[offset] = green_frame ? 20 : 220;
+            rgba[offset + 1] = green_frame ? 220 : 30;
+            rgba[offset + 2] = 30;
+        }
         sws_scale(scaler, source_data, source_lines, 0, video->height,
                   video_frame->data, video_frame->linesize);
         video_frame->pts = index;
@@ -211,15 +218,17 @@ std::filesystem::path createVideoWithAudioFixture(const std::filesystem::path& r
     }
     constexpr double pi = 3.14159265358979323846;
     std::int64_t audio_sample = 0;
-    while (audio_sample < 48000) {
+    while (audio_sample < 96000) {
         const int count = static_cast<int>(std::min<std::int64_t>(
-            audio_frame->nb_samples, 48000 - audio_sample));
+            audio_frame->nb_samples, 96000 - audio_sample));
         requireFfmpeg(av_frame_make_writable(audio_frame), "Preparing source audio samples");
         audio_frame->nb_samples = count;
         auto* samples = reinterpret_cast<std::int16_t*>(audio_frame->data[0]);
         for (int index = 0; index < count; ++index) {
+            const auto source_sample = audio_sample + index;
+            const auto amplitude = source_sample >= 48000 ? 12000.0 : 1000.0;
             const auto value = static_cast<std::int16_t>(std::lround(
-                std::sin(2.0 * pi * 440.0 * (audio_sample + index) / 48000.0) * 12000.0));
+                std::sin(2.0 * pi * 440.0 * source_sample / 48000.0) * amplitude));
             samples[index * 2] = value;
             samples[index * 2 + 1] = value;
         }
@@ -588,13 +597,30 @@ void validateEmbeddedAudioMixing(
         : output.container.extensions.substr(0, output.container.extensions.find(','));
     const auto source = createVideoWithAudioFixture(root);
     auto job = makeImageJob(
-        output, source, root / ("audio-mix." + extension), 401, 30);
+        output, source, root / ("audio-mix." + extension), 401, 24);
+    job.project_snapshot.timeline_frame_rate = {24, 1};
     auto& track = job.project_snapshot.timeline_tracks.front();
     track.audio_gain = 0.5;
     track.clips.front().kind = timeline::ClipKind::Video;
+    track.clips.front().source_start_frame = 30;
+    track.clips.front().source_duration_frames = 30;
     track.clips.front().audio_gain = 0.5;
     std::atomic_bool canceled{false};
     rendering::OfflineExportRenderer::render(job, canceled);
+    auto video_decoder = media::VideoPlaybackSession::open(
+        pathFromQString(job.settings.output_path));
+    std::vector<media::VideoFramePtr> output_frames;
+    while (const auto frame = video_decoder->decode_next_frame()) {
+        output_frames.push_back(*frame);
+    }
+    require(output_frames.size() == 60,
+            "A 24 fps timeline exported at 60 fps did not preserve one second of duration.");
+    const auto center_offset = static_cast<std::size_t>(
+        (output_frames[30]->height / 2) * output_frames[30]->stride +
+        (output_frames[30]->width / 2) * 4);
+    require(output_frames[30]->rgba_pixels[center_offset + 1] >
+                output_frames[30]->rgba_pixels[center_offset],
+            "The 60 fps export did not map its frame to the trimmed source position at 30 fps.");
     const auto audible_rms = decodedAudioRms(pathFromQString(job.settings.output_path));
     require(audible_rms > 0.04 && audible_rms < 0.10,
             "Embedded video audio was not mixed with the configured track and clip gains.");

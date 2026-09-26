@@ -36,6 +36,88 @@ media::VideoMetadata makeMetadata(
     return metadata;
 }
 
+void validatePendingMediaTimingReconnect(const std::filesystem::path& directory) {
+    const auto offline_path = directory / "reconnected.mkv";
+    timeline::TimelineModel model;
+    timeline::TimelineModel::Snapshot snapshot;
+    snapshot.frame_rate = {30, 1};
+    timeline::TimelineTrack track;
+    track.track_id = 1;
+    track.name = "V1";
+    timeline::TimelineClip pending;
+    pending.timeline_start_frame = 0;
+    pending.timeline_duration_frames = 24;
+    pending.source_path = offline_path;
+    pending.display_name = "Offline video";
+    pending.frame_rate = 60.0;
+    pending.frame_count = 60;
+    pending.clip_id = 1;
+    pending.track_id = 1;
+    pending.kind = timeline::ClipKind::Video;
+    pending.source_duration_frames = 24;
+    pending.source_duration_migration_pending = true;
+    auto following = pending;
+    following.timeline_start_frame = 24;
+    following.timeline_duration_frames = 30;
+    following.source_path = directory / "already-online.mkv";
+    following.display_name = "Following clip";
+    following.frame_rate = 30.0;
+    following.clip_id = 2;
+    following.source_duration_frames = 30;
+    following.source_duration_migration_pending = false;
+    auto last = following;
+    last.timeline_start_frame = 54;
+    last.timeline_duration_frames = 15;
+    last.clip_id = 3;
+    last.source_duration_frames = 15;
+    track.clips = {pending, following, last};
+    track.transitions.push_back({1, 2, timeline::TransitionKind::CrossDissolve, 15});
+    snapshot.tracks.push_back(track);
+    snapshot.next_track_id = 2;
+    snapshot.next_clip_id = 4;
+    model.restore(snapshot);
+
+    media::VideoMetadata metadata;
+    metadata.source_path = offline_path;
+    metadata.display_name = "Reconnected video";
+    metadata.kind = media::MediaKind::Video;
+    metadata.duration_seconds = 1.0;
+    metadata.frame_rate = 60.0;
+    metadata.frame_count = 60;
+    require(model.migratePendingMediaTiming(offline_path, metadata) ==
+                timeline::PendingMediaTimingMigrationResult::Migrated,
+            "Reconnecting media did not migrate its pending Timeline duration.");
+    const auto& migrated_track = model.tracks().front();
+    require(migrated_track.clips[0].timeline_duration_frames == 12 &&
+                !migrated_track.clips[0].source_duration_migration_pending &&
+                migrated_track.clips[0].source_duration_frames == 24 &&
+                migrated_track.clips[0].display_name == "Reconnected video" &&
+                migrated_track.clips[1].timeline_start_frame == 12 &&
+                migrated_track.clips[2].timeline_start_frame == 42 &&
+                migrated_track.transitions.size() == 1 &&
+                migrated_track.transitions.front().duration_frames == 12,
+            "Reconnect migration did not preserve the transition junction and following clips.");
+    const auto migrated_snapshot = model.snapshot();
+    require(model.migratePendingMediaTiming(offline_path, metadata) ==
+                timeline::PendingMediaTimingMigrationResult::NoPendingClips &&
+                model.snapshot() == migrated_snapshot,
+            "A restored clip was converted more than once.");
+
+    timeline::TimelineModel invalid_model;
+    auto invalid_snapshot = snapshot;
+    invalid_snapshot.tracks.front().clips.resize(1);
+    invalid_snapshot.tracks.front().transitions.clear();
+    invalid_snapshot.next_clip_id = 2;
+    invalid_model.restore(invalid_snapshot);
+    const auto before_invalid_reconnect = invalid_model.snapshot();
+    metadata.frame_count = 12;
+    metadata.duration_seconds = 0.2;
+    require(invalid_model.migratePendingMediaTiming(offline_path, metadata) ==
+                timeline::PendingMediaTimingMigrationResult::SourceRangeOutOfBounds &&
+                invalid_model.snapshot() == before_invalid_reconnect,
+            "An out-of-bounds reconnect partially changed the Timeline.");
+}
+
 void validateClipEdgeTrimCommand(
     const std::filesystem::path& first_source,
     const std::filesystem::path& second_source) {
@@ -162,6 +244,66 @@ void validateClipEdgeTrimCommand(
             "Image trim did not keep the playhead inside the extended clip.");
 }
 
+void validateMixedFrameRateMapping(const std::filesystem::path& source_path) {
+    for (const double source_rate : {24.0, 30.0, 60.0}) {
+        timeline::TimelineModel model;
+        auto snapshot = model.snapshot();
+        snapshot.frame_rate = {30, 1};
+        model.restore(snapshot);
+
+        auto metadata = makeMetadata(
+            source_path,
+            "mixed-rate.mkv",
+            static_cast<std::int64_t>(source_rate * 10.0));
+        metadata.duration_seconds = 10.0;
+        metadata.frame_rate = source_rate;
+        require(model.addClip(metadata) == timeline::AddClipResult::Added,
+                "A 24/30/60 FPS source was rejected by a 30 FPS Timeline.");
+        const auto& clip = model.tracks().front().clips.front();
+        require(clip.source_duration_frames == metadata.frame_count.value() &&
+                    clip.timeline_duration_frames == 300,
+                "A 10-second source did not map to 300 Timeline frames.");
+        require(model.splitClip(0, 0, 150) == timeline::SplitClipResult::Split,
+                "A mixed-rate clip could not be split at five Timeline seconds.");
+        const auto& split_clips = model.tracks().front().clips;
+        const auto expected_source_offset =
+            static_cast<std::int64_t>(source_rate * 5.0);
+        require(split_clips[0].source_duration_frames == expected_source_offset &&
+                    split_clips[1].source_start_frame == expected_source_offset &&
+                    split_clips[1].source_duration_frames == expected_source_offset &&
+                    split_clips[0].timeline_duration_frames == 150 &&
+                    split_clips[1].timeline_duration_frames == 150,
+                "Splitting did not map Timeline frames into the source frame rate.");
+    }
+
+    timeline::TimelineModel trimmed;
+    auto snapshot = trimmed.snapshot();
+    snapshot.frame_rate = {30, 1};
+    trimmed.restore(snapshot);
+    auto metadata = makeMetadata(source_path, "trimmed-24fps.mkv", 240);
+    metadata.duration_seconds = 10.0;
+    metadata.frame_rate = 24.0;
+    require(trimmed.addClip(metadata) == timeline::AddClipResult::Added &&
+                trimmed.trimClip(0, 0, 24, 120) ==
+                    timeline::TrimClipResult::Trimmed,
+            "A 24 FPS clip could not be trimmed on a 30 FPS Timeline.");
+    const auto& trimmed_clip = trimmed.tracks().front().clips.front();
+    require(trimmed_clip.source_start_frame == 24 &&
+                trimmed_clip.source_duration_frames == 96 &&
+                trimmed_clip.timeline_duration_frames == 120,
+            "Trim did not preserve the requested source in-point and Timeline duration.");
+    require(trimmed.splitClip(0, 0, 60) == timeline::SplitClipResult::Split &&
+                trimmed.tracks().front().clips[1].source_start_frame == 72 &&
+                trimmed.tracks().front().clips[0].source_duration_frames == 48 &&
+                trimmed.tracks().front().clips[1].source_duration_frames == 48,
+            "A split after trimming did not preserve source-frame positions.");
+
+    require(timeline::timelineFrameOffsetForSourceFrame(1, 24.0, {30, 1}) == 1 &&
+                timeline::timelineFrameCapacityForSourceFrames(1, 24.0, {30, 1}) == 1 &&
+                timeline::timelineFrameCapacityForSourceFrames(1, 60.0, {30, 1}) == 0,
+            "Source-position and safe-trim boundary conversions were inconsistent.");
+}
+
 } // namespace
 
 int main() {
@@ -174,7 +316,9 @@ int main() {
         std::ofstream(first_source, std::ios::binary).close();
         std::ofstream(second_source, std::ios::binary).close();
 
+        validatePendingMediaTimingReconnect(directory);
         validateClipEdgeTrimCommand(first_source, second_source);
+        validateMixedFrameRateMapping(first_source);
 
         const auto non_canonical_first =
             directory / "media" / ".." / "media" / "first.mkv";
@@ -278,7 +422,7 @@ int main() {
         fallback_metadata.frame_rate = 24.0;
         require(model.addClip(fallback_metadata) == timeline::AddClipResult::Added,
                 "Duration and frame rate fallback metadata was rejected.");
-        require(model.tracks().front().clips.back().timeline_duration_frames == 60,
+        require(model.tracks().front().clips.back().timeline_duration_frames == 75,
                 "Duration and frame rate fallback was calculated incorrectly.");
 
         timeline::TimelineModel split_model;
@@ -606,7 +750,7 @@ int main() {
                     fallback_edge_model.trimClipEdge(
                         0, 0, timeline::ClipEdge::Right, 100) ==
                         timeline::TrimClipResult::Trimmed &&
-                    fallback_edge_model.tracks().front().clips[0].timeline_duration_frames == 20,
+                    fallback_edge_model.tracks().front().clips[0].timeline_duration_frames == 60,
                 "Video edge extension ignored the duration/FPS source bound fallback.");
 
         timeline::TimelineModel image_edge_model;
@@ -811,7 +955,7 @@ int main() {
         require(model.tracks().front().clips[0].timeline_start_frame == 0 &&
                     model.tracks().front().clips[1].timeline_start_frame == 60 &&
                     model.tracks().front().clips[2].timeline_start_frame == 180 &&
-                    model.tracks().front().clips[3].timeline_start_frame == 240,
+                    model.tracks().front().clips[3].timeline_start_frame == 255,
                 "The first-to-last move did not recalculate starts.");
         require(model.totalDurationFrames() == total_before_moves,
                 "Moving a clip changed the total duration.");

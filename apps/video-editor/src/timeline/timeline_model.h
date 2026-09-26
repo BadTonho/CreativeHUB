@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../media/video_metadata.h"
+#include "timeline_frame_rate.h"
 #include "timeline_transform.h"
 
 #include <cstddef>
@@ -76,6 +77,8 @@ struct TimelineClip {
     TextStyle text;
     std::optional<media::LinkedImageReference> image_editor_variant;
     std::shared_ptr<const media::VideoFrame> still_image_override;
+    std::int64_t source_duration_frames = 0;
+    bool source_duration_migration_pending = false;
 
     friend bool operator==(const TimelineClip&, const TimelineClip&) = default;
 };
@@ -133,7 +136,8 @@ struct ClipEdgeEditPreview {
     ClipLocation location,
     ClipEdge edge,
     std::int64_t boundary_frame,
-    ClipEdgeEditMode mode = ClipEdgeEditMode::Rolling);
+    ClipEdgeEditMode mode = ClipEdgeEditMode::Rolling,
+    FrameRate timeline_frame_rate = {});
 
 enum class AddTrackResult { Added, InvalidName };
 
@@ -179,12 +183,21 @@ enum class TransitionMutationResult {
     NoChange,
 };
 
+enum class PendingMediaTimingMigrationResult {
+    NoPendingClips,
+    Migrated,
+    InvalidMetadata,
+    SourceRangeOutOfBounds,
+    TimelineRangeOverflow,
+};
+
 class TimelineModel final {
 public:
     struct Snapshot {
         std::vector<TimelineTrack> tracks;
         TrackId next_track_id = 1;
         ClipId next_clip_id = 1;
+        FrameRate frame_rate;
 
         friend bool operator==(const Snapshot&, const Snapshot&) = default;
     };
@@ -200,6 +213,9 @@ public:
         std::size_t track_index,
         const media::VideoMetadata& metadata,
         std::int64_t timeline_start_frame);
+    [[nodiscard]] PendingMediaTimingMigrationResult migratePendingMediaTiming(
+        const std::filesystem::path& source_path,
+        const media::VideoMetadata& metadata);
     MoveClipResult moveClip(
         ClipLocation from,
         ClipLocation to,
@@ -287,6 +303,7 @@ public:
     [[nodiscard]] std::size_t clipCount(std::size_t track_index) const noexcept;
     [[nodiscard]] std::size_t trackCount() const noexcept;
     [[nodiscard]] std::int64_t totalDurationFrames() const noexcept;
+    [[nodiscard]] FrameRate frameRate() const noexcept;
     [[nodiscard]] const std::vector<TimelineTrack>& tracks() const noexcept;
     [[nodiscard]] bool setImageEditorVariant(
         ClipId clip_id,
@@ -319,7 +336,7 @@ public:
 private:
     friend class application::EditorSession;
 
-    [[nodiscard]] static std::optional<std::int64_t> durationInFrames(
+    [[nodiscard]] static std::optional<std::int64_t> sourceDurationInFrames(
         const media::VideoMetadata& metadata);
     [[nodiscard]] static std::filesystem::path canonicalPath(
         const std::filesystem::path& path);
@@ -347,6 +364,7 @@ private:
     void assertIdentityInvariants() const;
 
     std::vector<TimelineTrack> tracks_;
+    FrameRate frame_rate_;
     TrackId next_track_id_ = 1;
     ClipId next_clip_id_ = 1;
 };

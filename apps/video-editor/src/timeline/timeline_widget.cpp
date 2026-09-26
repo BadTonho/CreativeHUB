@@ -70,11 +70,11 @@ QString text(const std::string& value) {
     return QString::fromUtf8(value.data(), static_cast<int>(value.size()));
 }
 
-QString clipDuration(const TimelineClip& clip) {
-    if (clip.frame_rate.has_value() && std::isfinite(*clip.frame_rate) &&
-        *clip.frame_rate > 0.0 && clip.timeline_duration_frames > 0) {
+QString clipDuration(const TimelineClip& clip, double timeline_frame_rate) {
+    if (std::isfinite(timeline_frame_rate) && timeline_frame_rate > 0.0 &&
+        clip.timeline_duration_frames > 0) {
         return QString::number(
-            static_cast<double>(clip.timeline_duration_frames) / *clip.frame_rate,
+            static_cast<double>(clip.timeline_duration_frames) / timeline_frame_rate,
             'f',
             3) + " s";
     }
@@ -113,6 +113,12 @@ TimelineWidget::TimelineWidget(QWidget* parent)
     setAcceptDrops(true);
     setMouseTracking(true);
     setContextMenuPolicy(Qt::DefaultContextMenu);
+}
+
+void TimelineWidget::setFrameRate(FrameRate frame_rate) noexcept {
+    if (!validFrameRate(frame_rate)) return;
+    frame_rate_ = reducedFrameRate(frame_rate);
+    update();
 }
 
 void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
@@ -573,7 +579,8 @@ TimelineGeometry TimelineWidget::geometry() const noexcept {
         ? std::optional<std::int64_t>{interaction_controller_.trimGesture().scaleDuration()}
         : std::nullopt;
     return TimelineGeometry(
-        tracks_, QSizeF(width(), height()), track_row_height_, zoom_factor_, fixed_duration);
+        tracks_, QSizeF(width(), height()), track_row_height_, zoom_factor_,
+        fixed_duration, frame_rate_.asDouble());
 }
 
 QRectF TimelineWidget::rulerRect() const noexcept {
@@ -649,16 +656,18 @@ std::int64_t TimelineWidget::mediaDropDuration(
             : std::nullopt;
     };
 
+    const auto source_frame_rate = readDouble(ui::kMediaFrameRateMimeType)
+        .value_or(frame_rate_.asDouble());
     if (const auto frame_count = readInteger(ui::kMediaFrameCountMimeType);
         frame_count.has_value()) {
-        return *frame_count;
+        return timelineFramesForSourceDuration(
+            *frame_count, source_frame_rate, frame_rate_).value_or(1);
     }
     const auto duration_seconds = readDouble(ui::kMediaDurationSecondsMimeType);
-    const auto frame_rate = readDouble(ui::kMediaFrameRateMimeType);
-    if (!duration_seconds.has_value() || !frame_rate.has_value()) return 1;
+    if (!duration_seconds.has_value()) return 1;
 
     const auto estimated = static_cast<long double>(*duration_seconds) *
-        static_cast<long double>(*frame_rate);
+        static_cast<long double>(frame_rate_.asDouble());
     if (!std::isfinite(estimated) ||
         estimated >= static_cast<long double>(std::numeric_limits<std::int64_t>::max())) {
         return 1;
@@ -719,7 +728,7 @@ timeline::SnapPlacement TimelineWidget::snapPlacement(
 }
 
 double TimelineWidget::frameRate() const noexcept {
-    return geometry().frameRate();
+    return frame_rate_.asDouble();
 }
 
 std::int64_t TimelineWidget::standardDuration() const noexcept {
@@ -1034,7 +1043,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                 .arg(clip_index + 1)
                 .arg(clip.kind == ClipKind::Text ? "[Text] " : "")
                 .arg(text(clip.display_name))
-                + " - " + clipDuration(clip);
+                + " - " + clipDuration(clip, frame_rate_.asDouble());
             painter.drawText(rect.adjusted(6, 0, -6, 0),
                 Qt::AlignVCenter,
                 QFontMetrics(painter.font()).elidedText(
@@ -1609,7 +1618,8 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
             : clip.timeline_start_frame + clip.timeline_duration_frames;
         interaction_controller_.trimGesture().begin(
             tracks_, *location, *edge, trim_mode, original_boundary,
-            scale_duration, trimPointer(event->position()), *transition_indexes);
+            scale_duration, trimPointer(event->position()), *transition_indexes,
+            frame_rate_);
         grabMouse();
         setCursor(Qt::SizeHorCursor);
         event->accept();
@@ -1640,7 +1650,8 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         emit trimStarted();
         interaction_controller_.trimGesture().begin(
             tracks_, *location, *edge, trim_mode, original_boundary,
-            scale_duration, trimPointer(event->position()));
+            scale_duration, trimPointer(event->position()), std::nullopt,
+            frame_rate_);
         grabMouse();
         setCursor(Qt::SizeHorCursor);
         event->accept();

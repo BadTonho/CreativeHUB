@@ -7,6 +7,29 @@ video tracks and clips with stable identifiers, canonical source paths, media
 metadata, explicit timeline positions, source offsets, and segment durations.
 It does not own decoded frames, FFmpeg resources, or Qt objects.
 
+## Timeline timebase
+
+Each project stores a reduced rational Timeline frame rate. New projects start
+at 30/1 FPS; the project-creation UI does not expose a rate selector yet.
+Timeline positions, clip durations, playhead positions, transitions, and
+keyframes use Timeline frames. Video clips separately store their source
+duration and source in-point in source frames. Sampling maps a local Timeline
+frame to the nearest corresponding source frame using the clip's source rate
+and the persisted project rate. Trimming and splitting use the same conversion
+and enforce the available source-frame bounds.
+
+Still images use a 30 FPS source timebase and hold their decoded frame. Their
+default five-second duration is converted to the project's Timeline rate.
+Projects written before format version 11 infer the project rate from the first
+online video clip in track and clip order, or use 30/1 when no valid video rate
+is available. The selected rate is saved on the next project save and remains
+fixed if offline media is later reconnected. A legacy clip that was offline
+keeps its original source duration marked as pending. Restoring that media
+during a session converts the duration once using the saved project rate,
+preserves transition junctions by shifting following clips when necessary,
+updates playback, and records the timing change in Undo/Redo and project dirty
+state.
+
 Media clips can be videos or static raster images. Image clips use the cached
 first frame for every timeline frame, default to 150 frames at 30 FPS (five
 seconds), participate in the same movement, trim, overlap, snapping, history,

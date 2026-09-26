@@ -69,6 +69,8 @@ struct CompositionLayerSpec {
     VideoFramePtr still_frame;
     timeline::TrackId track_id = 0;
     timeline::ClipId clip_id = 0;
+    qint64 source_duration_frames = 0;
+    timeline::FrameRate timeline_frame_rate;
 };
 
 struct CompositionTransitionSpec {
@@ -209,6 +211,7 @@ private:
     QByteArray pending_audio_bytes_;
     std::filesystem::path source_path_;
     double frame_rate_ = 30.0;
+    double source_frame_rate_ = 30.0;
     std::int64_t source_start_frame_ = 0;
     std::int64_t segment_frame_count_ = 0;
     std::int64_t current_frame_index_ = 0;

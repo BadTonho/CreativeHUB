@@ -338,6 +338,7 @@ void MainWindow::updateTimelineState() {
     }
     synchronizeActiveTimelineSelection();
     if (editUi().timeline != nullptr) {
+        editUi().timeline->setFrameRate(timeline_model_.frameRate());
         editUi().timeline->setTracks(timeline_model_.tracks());
     }
 }

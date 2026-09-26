@@ -262,7 +262,7 @@ std::optional<media::VideoFrame> composeFrame(
     std::vector<RenderClip>& clips,
     const std::vector<RenderTransition>& transitions,
     std::int64_t timeline_frame,
-    double timeline_fps,
+    timeline::FrameRate timeline_frame_rate,
     int width,
     int height,
     const std::atomic_bool& canceled) {
@@ -298,14 +298,15 @@ std::optional<media::VideoFrame> composeFrame(
             }
             layers.push_back({&*render_clip.still, transform, {}});
         } else {
-            const long double local_seconds = static_cast<long double>(local_frame) /
-                static_cast<long double>(timeline_fps);
-            const auto source_offset = static_cast<std::int64_t>(std::llround(
-                local_seconds * static_cast<long double>(render_clip.source_fps)));
-            if (clip.source_start_frame > std::numeric_limits<std::int64_t>::max() - source_offset) {
+            const auto source_offset = timeline::sourceFrameOffsetForTimelineFrame(
+                local_frame, render_clip.source_fps, timeline_frame_rate,
+                clip.source_duration_frames);
+            if (!source_offset.has_value() || *source_offset < 0 ||
+                clip.source_start_frame > std::numeric_limits<std::int64_t>::max() -
+                    *source_offset) {
                 throw std::runtime_error("A source frame index exceeded the supported range.");
             }
-            const auto source_frame = clip.source_start_frame + source_offset;
+            const auto source_frame = clip.source_start_frame + *source_offset;
             auto decoded = render_clip.video->decode_frame_at(
                 source_frame,
                 [&canceled] { return canceled.load(std::memory_order_acquire); });
@@ -633,26 +634,10 @@ std::vector<RenderClip> prepareClips(
     const ui::RenderJob& job,
     const std::atomic_bool& canceled) {
     std::vector<RenderClip> clips;
-    double first_rate = 0.0;
-    for (const auto& track : document.timeline_tracks) {
-        for (const auto& clip : track.clips) {
-            if (clip.duration_frames <= 0 || clip.timeline_start_frame < 0) continue;
-            if (clip.kind == timeline::ClipKind::Text) continue;
-            const auto path = clipPath(clip);
-            if (path.empty()) continue;
-            std::error_code error;
-            if (!std::filesystem::is_regular_file(path, error) || error) continue;
-            if (clip.kind == timeline::ClipKind::Image) {
-                first_rate = media::kStillImageFrameRate;
-            } else {
-                const auto metadata = media::VideoProbe{}.probe(path);
-                first_rate = validFrameRate(metadata.frame_rate, 30.0);
-            }
-            break;
-        }
-        if (first_rate > 0.0) break;
+    if (!timeline::validFrameRate(document.timeline_frame_rate)) {
+        throw std::runtime_error("The project timeline frame rate is invalid.");
     }
-    timeline_fps = first_rate > 0.0 ? first_rate : 30.0;
+    timeline_fps = document.timeline_frame_rate.asDouble();
 
     for (std::size_t track_index = 0; track_index < document.timeline_tracks.size(); ++track_index) {
         const auto& track = document.timeline_tracks[track_index];
@@ -865,7 +850,8 @@ void OfflineExportRenderer::render(
                 static_cast<long double>(frame_index) * timeline_fps /
                 job.settings.frame_rate + 1.0e-9L));
             auto frame = composeFrame(
-                clips, transitions, timeline_frame, timeline_fps,
+                clips, transitions, timeline_frame,
+                job.project_snapshot.timeline_frame_rate,
                 job.settings.width, job.settings.height, cancel_requested);
             if (!frame.has_value()) throw std::runtime_error("Composing an output frame failed.");
             encoder.writeVideo(*frame, frame_index);

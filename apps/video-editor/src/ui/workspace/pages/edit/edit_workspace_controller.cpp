@@ -289,18 +289,7 @@ void EditWorkspaceController::addTextClipAt(
         return;
     }
 
-    double frame_rate = 30.0;
-    if (session_.selection().selected_source_path.has_value()) {
-        const auto media_index = session_.mediaLibrary().indexForPath(
-            *session_.selection().selected_source_path);
-        if (media_index < session_.mediaItems().size()) {
-            const auto& metadata = session_.mediaItems()[media_index].metadata;
-            if (metadata.frame_rate.has_value() &&
-                std::isfinite(*metadata.frame_rate) && *metadata.frame_rate > 0.0) {
-                frame_rate = *metadata.frame_rate;
-            }
-        }
-    }
+    const double frame_rate = timeline_model_.frameRate().asDouble();
     const auto duration_frames = std::max<std::int64_t>(
         1, static_cast<std::int64_t>(std::ceil(frame_rate * 5.0)));
     try {
@@ -825,6 +814,7 @@ void EditWorkspaceController::updateTimelineState() {
         ui_.clear_timeline->setEnabled(occupied);
     }
     if (timeline_widget_ != nullptr) {
+        timeline_widget_->setFrameRate(timeline_model_.frameRate());
         timeline_widget_->setTracks(timeline_model_.tracks());
         timeline_widget_->setActiveClip(selectedTimelineClipLocation());
         timeline_widget_->setPlayheadFrame(timelinePlayheadFrame());

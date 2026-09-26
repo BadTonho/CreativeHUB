@@ -468,12 +468,65 @@ void runInspectorAndTrackCommands() {
             "Undo did not restore the clips cleared by the typed command.");
 }
 
+void runReconnectTimingCommand() {
+    application::EditorSession session;
+    application::TimelineCommandService service(session);
+    timeline::TimelineModel::Snapshot snapshot;
+    snapshot.frame_rate = {30, 1};
+    timeline::TimelineTrack track;
+    track.track_id = 1;
+    track.name = "V1";
+    timeline::TimelineClip clip;
+    clip.timeline_start_frame = 0;
+    clip.source_path = std::filesystem::temp_directory_path() / "pending.mkv";
+    clip.display_name = "Offline source";
+    clip.frame_rate = 24.0;
+    clip.frame_count = 48;
+    clip.timeline_duration_frames = 24;
+    clip.source_duration_frames = 24;
+    clip.source_duration_migration_pending = true;
+    clip.clip_id = 1;
+    clip.track_id = 1;
+    clip.kind = timeline::ClipKind::Video;
+    track.clips.push_back(clip);
+    snapshot.tracks.push_back(track);
+    snapshot.next_track_id = 2;
+    snapshot.next_clip_id = 2;
+    session.legacyTimelineForUi().restore(snapshot);
+
+    media::VideoMetadata metadata;
+    metadata.source_path = clip.source_path;
+    metadata.display_name = "Restored source";
+    metadata.kind = media::MediaKind::Video;
+    metadata.duration_seconds = 2.0;
+    metadata.frame_rate = 24.0;
+    metadata.frame_count = 48;
+    require(service.migratePendingMediaTiming(clip.source_path, metadata) ==
+                timeline::PendingMediaTimingMigrationResult::Migrated &&
+                service.undoCount() == 1 &&
+                session.timeline().tracks().front().clips.front().timeline_duration_frames == 30 &&
+                !session.timeline().tracks().front().clips.front()
+                     .source_duration_migration_pending,
+            "The reconnect timing command did not migrate and record an undo state.");
+    require(service.undo().changed() &&
+                session.timeline().tracks().front().clips.front().timeline_duration_frames == 24 &&
+                session.timeline().tracks().front().clips.front()
+                    .source_duration_migration_pending,
+            "Undo did not restore the pending source timing state.");
+    require(service.redo().changed() &&
+                session.timeline().tracks().front().clips.front().timeline_duration_frames == 30 &&
+                !session.timeline().tracks().front().clips.front()
+                     .source_duration_migration_pending,
+            "Redo did not reapply the source timing conversion.");
+}
+
 } // namespace
 
 int main() {
     try {
         run();
         runInspectorAndTrackCommands();
+        runReconnectTimingCommand();
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

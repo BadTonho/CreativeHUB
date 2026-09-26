@@ -232,7 +232,7 @@ void PlaybackController::refreshComposition() {
                 clip.frame_rate.value_or(
                     imported != nullptr && imported->metadata.frame_rate.has_value()
                         ? *imported->metadata.frame_rate
-                        : 30.0),
+                        : model.frameRate().asDouble()),
                 clip.timeline_start_frame,
                 clip.source_start_frame,
                 clip.timeline_duration_frames,
@@ -244,7 +244,9 @@ void PlaybackController::refreshComposition() {
                 clip.text,
                 std::move(still_image_frame),
                 track.track_id,
-                clip.clip_id});
+                clip.clip_id,
+                clip.source_duration_frames,
+                model.frameRate()});
         }
 
         for (const auto& transition : track.transitions) {
@@ -534,7 +536,8 @@ PlaybackCommandResult PlaybackController::activateClip(
 
     queueWorker([](PlaybackWorker& worker) { worker.stop(); });
     const auto source_path = pathToQString(media_item->metadata.source_path);
-    const auto frame_rate = media_item->metadata.frame_rate.value_or(30.0);
+    const auto frame_rate = media_item->metadata.frame_rate.value_or(
+        session_.timeline().frameRate().asDouble());
     const auto source_start = clip.source_start_frame;
     const auto segment_duration = clip.timeline_duration_frames;
     const auto track_gain = track.audio_gain;
@@ -1080,15 +1083,7 @@ void PlaybackController::publishTimelinePosition(
 }
 
 double PlaybackController::timelineFrameRate() const noexcept {
-    for (const auto& track : session_.timeline().tracks()) {
-        for (const auto& clip : track.clips) {
-            if (clip.frame_rate.has_value() &&
-                std::isfinite(*clip.frame_rate) && *clip.frame_rate > 0.0) {
-                return *clip.frame_rate;
-            }
-        }
-    }
-    return 30.0;
+    return session_.timeline().frameRate().asDouble();
 }
 
 std::int64_t PlaybackController::timelineClockFrame() const noexcept {

@@ -144,6 +144,19 @@ bool validTransformProperty(timeline::TransformProperty property) noexcept {
 TimelineCommandService::TimelineCommandService(EditorSession& session) noexcept
     : session_(session) {}
 
+timeline::PendingMediaTimingMigrationResult
+TimelineCommandService::migratePendingMediaTiming(
+    const std::filesystem::path& source_path,
+    const media::VideoMetadata& metadata) {
+    auto before = session_.captureEditState();
+    const auto migration = session_.timeline_.migratePendingMediaTiming(
+        source_path, metadata);
+    if (migration == timeline::PendingMediaTimingMigrationResult::Migrated) {
+        recordSuccessfulEdit(std::move(before));
+    }
+    return migration;
+}
+
 TimelineEditResult TimelineCommandService::result(
     EditStatus status,
     EditReason reason) const {
@@ -325,8 +338,12 @@ TimelineEditResult TimelineCommandService::execute(const TrimClipRangeCommand& c
     recordSuccessfulEdit(std::move(before));
     selectClip(command.clip_id);
     const auto source_delta = command.source_start_frame - old_clip.source_start_frame;
+    const auto timeline_delta = timeline::timelineFrameOffsetForSourceFrame(
+        source_delta,
+        old_clip.frame_rate.value_or(session_.timeline_.frameRate().asDouble()),
+        session_.timeline_.frameRate()).value_or(0);
     session_.playhead_frame_ = was_active
-        ? std::clamp<std::int64_t>(old_playhead_frame - source_delta, 0, command.duration_frames - 1)
+        ? std::clamp<std::int64_t>(old_playhead_frame - timeline_delta, 0, command.duration_frames - 1)
         : 0;
     session_.preserved_playhead_frame_.reset();
     auto output = result(EditStatus::Applied);

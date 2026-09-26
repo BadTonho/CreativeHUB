@@ -2,16 +2,42 @@
 
 Status: provisional.
 
+## Version 11 Timeline timebase
+
+The current root uses `version: 11`. The Timeline object stores a reduced
+rational `frame_rate` as a positive `numerator` and `denominator`. New projects
+default to 30/1 FPS. Media clips store `source_duration_frames` separately from
+their Timeline `duration_frames`; `source_duration_migration_pending` marks an
+offline legacy clip whose duration must be converted after its media is
+reconnected. The project validator rejects invalid rates, missing version 11
+timing fields, and source ranges outside the supported integer bounds.
+
+Opening versions 1 through 10 performs timing migration after media probing.
+The first online video in Timeline order determines the fixed Timeline rate;
+projects without a valid online video rate use 30/1. Existing source durations
+are converted to Timeline durations to preserve playback speed. When that
+conversion breaks a saved transition junction, later clips on that track are
+shifted to retain continuity, and a transition is shortened only when it no
+longer fits its endpoint clips. Offline media keeps its old source duration
+and a pending marker. Reconnecting it converts the duration once using the
+already saved project rate. This conversion also runs when offline media is
+restored from the Media Pool in an active session. It is recorded in Timeline
+history, marks the project dirty through the normal edit flow, and is applied
+only once to each pending clip. Migration while opening an old project does
+not by itself mark the project dirty; the next ordinary save writes the
+normalized version 11 document.
+
 ## Version 10 linked-image references
 
-The current root uses `version: 10`. Version 10 adds optional
+Version 10 project files added optional
 `image_editor_link` data to image media entries and optional
 `image_editor_variant` data to image timeline clips. Each reference contains a
 stable string `id`, a path to the editable `.cimg` document, and a path to the
 published raster output. Paths follow the same relative-within-project and
 absolute-outside-project rule as source media. Video and text records cannot
 carry these references. Version 1 through 9 projects remain readable and load
-without linked-image references; their next save writes version 10.
+without linked-image references; their next save writes the current version 11
+format, including the Timeline timebase migration.
 
 A Media Pool link is shared by every timeline occurrence of its image source.
 A timeline variant belongs to one stable clip ID and is initialized from an
@@ -98,9 +124,9 @@ keyframes. Version 2 files receive the identity transform, an empty keyframe
 set, and the 1920x1080 canvas when opened. Version 1 files containing
 `timeline.clips` remain supported; they are converted to a single Video 1
 track with sequential timeline starts computed from clip durations. The next
-successful save writes version 10 and includes the timeline zoom, row height,
-explicit media/clip kinds, and optional linked-image references. Existing
-version 1 through 9 projects continue
+successful save writes version 11 and includes the timeline zoom, row height,
+explicit media/clip kinds, optional linked-image references, and the rational
+Timeline rate with separate source durations. Existing version 1 through 10 projects continue
 to load; their media entries default to video unless a version 8 image kind is
 present.
 

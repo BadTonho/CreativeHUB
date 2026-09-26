@@ -319,8 +319,8 @@ discovered from the active FFmpeg runtime; only containers with a compatible
 video encoder and compatible audio/video encoder choices are listed. Available
 choices may differ by platform and FFmpeg build. Resolution starts at the
 project canvas size and also offers common presets and custom dimensions. Frame
-rate starts from the first Timeline clip with a valid rate, or 30 fps when no
-clip provides one. Low, Standard, and High profiles suggest video bitrates
+rate starts from the persisted project Timeline rate, which is 30 fps for new
+projects. Low, Standard, and High profiles suggest video bitrates
 scaled from 5/10/20 Mbps at 1920×1080 and 30 fps; audio suggestions are
 128/192/320 kbps. These are editable starting values, not a quality guarantee
 across encoders.
@@ -441,7 +441,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 10 format. Image media context menus can open a
+the current `.csp` version 11 format. Image media context menus can open a
 shared Image Editor document, and image clip context menus can open a
 clip-specific variant. The Main Window records those references in the project
 and polls published PNG revisions asynchronously; UI presentation updates only

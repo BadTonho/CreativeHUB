@@ -32,14 +32,20 @@ TimelineGeometry::TimelineGeometry(
     QSizeF bounds,
     double row_height,
     double zoom_factor,
-    std::optional<std::int64_t> fixed_duration) noexcept
+    std::optional<std::int64_t> fixed_duration,
+    double timeline_frame_rate) noexcept
     : tracks_(tracks),
       bounds_(bounds),
       row_height_(std::max(0.0, row_height)),
       zoom_factor_(std::isfinite(zoom_factor) && zoom_factor > 0.0 ? zoom_factor : 1.0),
-      fixed_duration_(fixed_duration) {}
+      fixed_duration_(fixed_duration),
+      timeline_frame_rate_(std::isfinite(timeline_frame_rate) &&
+                               timeline_frame_rate > 0.0
+          ? timeline_frame_rate
+          : 0.0) {}
 
 double TimelineGeometry::frameRate() const noexcept {
+    if (timeline_frame_rate_ > 0.0) return timeline_frame_rate_;
     for (const auto& track : tracks_) {
         for (const auto& clip : track.clips) {
             if (clip.frame_rate.has_value() && std::isfinite(*clip.frame_rate) &&

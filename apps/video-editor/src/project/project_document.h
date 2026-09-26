@@ -13,7 +13,9 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 10;
+inline constexpr int current_format_version = 11;
+inline constexpr int timeline_frame_rate_format_version = 11;
+inline constexpr int separated_source_duration_format_version = 11;
 inline constexpr int stable_ids_format_version = 9;
 inline constexpr int linked_image_format_version = 10;
 inline constexpr int media_kind_format_version = 8;
@@ -39,6 +41,8 @@ struct ProjectClip {
     timeline::TextStyle text;
     timeline::ClipId clip_id = 0;
     std::optional<media::LinkedImageReference> image_editor_variant;
+    std::int64_t source_duration_frames = 0;
+    bool source_duration_migration_pending = false;
 
     friend bool operator==(const ProjectClip&, const ProjectClip&) = default;
 };
@@ -77,11 +81,14 @@ struct ProjectMedia {
 struct ProjectDocument {
     int canvas_width = 1920;
     int canvas_height = 1080;
+    timeline::FrameRate timeline_frame_rate;
     double timeline_zoom = 1.0;
     double timeline_row_height = timeline::kDefaultTrackRowHeight;
     std::vector<ProjectMedia> media;
     std::vector<std::string> bins;
     std::vector<ProjectTrack> timeline_tracks;
+    // Set by the reader for formats before v11; cleared after timing migration.
+    bool timing_migration_required = false;
 
     friend bool operator==(const ProjectDocument&, const ProjectDocument&) = default;
 };

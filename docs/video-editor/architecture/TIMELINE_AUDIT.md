@@ -1,5 +1,7 @@
 # Auditoria da Timeline
 
+> **Atualização de 26/09/2026:** o problema prioritário 1 foi corrigido. O projeto agora salva a base de tempo racional da Timeline no formato 11; projetos novos usam 30/1 FPS; playback, edição e exportação convertem posições entre frames da Timeline e da mídia de origem por funções compartilhadas. Projetos antigos inferem a taxa pelo primeiro vídeo online, usam 30/1 como fallback e convertem clips offline quando a mídia é reconectada. Os testes de migração, edição e exportação foram ampliados. A compilação Release e os 43 testes CTest passaram; um teste opcional do Image Editor foi ignorado pela própria configuração da suíte.
+
 ## Objetivo e escopo
 
 Este documento preserva os resultados de uma revisão estática da Timeline do Video Editor, do playback, da composição do Preview, da exportação offline, do áudio, da persistência do projeto e dos testes relacionados. É um registro de diagnóstico para orientar o trabalho seguinte; por si só, não altera o comportamento do produto.

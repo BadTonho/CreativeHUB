@@ -137,6 +137,12 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
             item.insert("timeline_start_frame", static_cast<qint64>(clip.timeline_start_frame));
             item.insert("source_start_frame", static_cast<qint64>(clip.source_start_frame));
             item.insert("duration_frames", static_cast<qint64>(clip.duration_frames));
+            if (timeline::isMediaClipKind(clip.kind)) {
+                item.insert("source_duration_frames",
+                            static_cast<qint64>(clip.source_duration_frames));
+                item.insert("source_duration_migration_pending",
+                            clip.source_duration_migration_pending);
+            }
             item.insert("audio_gain", clip.audio_gain);
             item.insert("audio_muted", clip.audio_muted);
             QJsonObject transform;
@@ -188,6 +194,12 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
 
     QJsonObject timeline;
     timeline.insert("tracks", track_array);
+    QJsonObject frame_rate;
+    frame_rate.insert("numerator",
+                      static_cast<qint64>(document.timeline_frame_rate.numerator));
+    frame_rate.insert("denominator",
+                      static_cast<qint64>(document.timeline_frame_rate.denominator));
+    timeline.insert("frame_rate", frame_rate);
     timeline.insert("zoom", document.timeline_zoom);
     timeline.insert("row_height", document.timeline_row_height);
     QJsonObject root;

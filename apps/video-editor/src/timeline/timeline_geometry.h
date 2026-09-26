@@ -26,7 +26,8 @@ public:
         QSizeF bounds,
         double row_height,
         double zoom_factor,
-        std::optional<std::int64_t> fixed_duration = std::nullopt) noexcept;
+        std::optional<std::int64_t> fixed_duration = std::nullopt,
+        double timeline_frame_rate = 0.0) noexcept;
 
     [[nodiscard]] double frameRate() const noexcept;
     [[nodiscard]] std::int64_t totalDuration() const noexcept;
@@ -49,6 +50,7 @@ private:
     double row_height_ = 70.0;
     double zoom_factor_ = 1.0;
     std::optional<std::int64_t> fixed_duration_;
+    double timeline_frame_rate_ = 0.0;
 };
 
 class TimelineHitTester final {
