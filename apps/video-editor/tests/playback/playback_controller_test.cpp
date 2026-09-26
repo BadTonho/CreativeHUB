@@ -14,9 +14,11 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -49,6 +51,8 @@ struct FakeWorkerState {
     std::atomic<quint64> seek_request_generation{0};
     std::atomic<qint64> last_seek_frame{-1};
     std::atomic<int> media_open_delay_ms{0};
+    std::mutex composition_mutex;
+    std::vector<std::pair<timeline::TrackId, timeline::ClipId>> composition_clip_ids;
 };
 
 class FakePlaybackWorker final : public playback::PlaybackWorker {
@@ -103,9 +107,18 @@ public:
             static_cast<int>(quality), std::memory_order_release);
     }
     void setComposition(
-        QVector<playback::CompositionLayerSpec>,
+        QVector<playback::CompositionLayerSpec> layers,
         QVector<playback::CompositionTransitionSpec>,
         quint64 generation) override {
+        {
+            std::lock_guard lock(state_->composition_mutex);
+            state_->composition_clip_ids.clear();
+            for (const auto& layer : layers) {
+                state_->composition_clip_ids.emplace_back(
+                    layer.track_id,
+                    layer.clip_id);
+            }
+        }
         state_->composition_request_generation.store(generation, std::memory_order_release);
         composition_generation_ = generation;
     }
@@ -721,6 +734,19 @@ void runControllerTests() {
         return fake_state->composition_request_generation.load(std::memory_order_acquire) !=
             stale_generation;
     }), "A refreshed composition request did not receive the new playback generation.");
+    {
+        std::lock_guard lock(fake_state->composition_mutex);
+        const auto expected_track_id = model.tracks()[0].track_id;
+        const auto has_clip_id = [&](timeline::ClipId clip_id) {
+            return std::find(
+                fake_state->composition_clip_ids.begin(),
+                fake_state->composition_clip_ids.end(),
+                std::pair{expected_track_id, clip_id}) !=
+                fake_state->composition_clip_ids.end();
+        };
+        require(has_clip_id(1) && has_clip_id(2),
+                "Composition specs did not retain stable track and clip IDs.");
+    }
     fake_worker->emitFrameLater(2, stale_generation);
     fake_worker->emitFinishedLater(stale_generation, true);
     const auto frames_before_stale = std::count_if(

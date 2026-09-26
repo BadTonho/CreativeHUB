@@ -1,8 +1,11 @@
 #include "rendering/preview_performance_metrics.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <stdexcept>
+#include <thread>
+#include <vector>
 
 namespace {
 
@@ -37,6 +40,10 @@ int main() {
         metrics.recordTiming(
             rendering::PreviewTiming::TextRasterization,
             std::chrono::milliseconds(6));
+        rendering::SlowFrameSample disabled_slow_frame;
+        disabled_slow_frame.processing_nanoseconds = 40'000'000;
+        disabled_slow_frame.frame_budget_nanoseconds = 33'000'000;
+        metrics.recordSlowFrame(disabled_slow_frame);
         const auto disabled = metrics.takeSnapshotAndReset();
         require(disabled.decoded_frames == 0 &&
                     disabled.decode_discarded_frames == 0 &&
@@ -54,7 +61,9 @@ int main() {
                     disabled.audio_clock_drift_max_abs_nanoseconds == 0 &&
                     !disabled.audio_buffered_usecs.has_value() &&
                     disabled.pacing_audio_catchup_frames == 0 &&
-                    disabled.pacing_deadline_catchup_frames == 0,
+                    disabled.pacing_deadline_catchup_frames == 0 &&
+                    disabled.slow_frame_count == 0 &&
+                    !disabled.worst_slow_frame.has_value(),
                 "Disabled metrics recorded decoded-frame data.");
         require(disabled.decode.count == 0,
                 "Disabled metrics recorded timing data.");
@@ -180,6 +189,39 @@ int main() {
             rendering::PreviewTiming::CompositionSetup,
             std::chrono::milliseconds(5));
 
+        rendering::SlowFrameSample on_budget_slow_frame;
+        on_budget_slow_frame.processing_nanoseconds = 33'000'000;
+        on_budget_slow_frame.frame_budget_nanoseconds = 33'000'000;
+        metrics.recordSlowFrame(on_budget_slow_frame);
+        rendering::SlowFrameSample first_slow_frame;
+        first_slow_frame.playback_generation = 7;
+        first_slow_frame.timeline_frame = 120;
+        first_slow_frame.frame_rate_milli = 30'000;
+        first_slow_frame.frame_budget_nanoseconds = 33'000'000;
+        first_slow_frame.processing_nanoseconds = 34'000'000;
+        first_slow_frame.decode_nanoseconds = 20'000'000;
+        first_slow_frame.composition_nanoseconds = 12'000'000;
+        first_slow_frame.payload_nanoseconds = 2'000'000;
+        first_slow_frame.active_layer_count = 5;
+        for (std::uint64_t layer_index = 0; layer_index < 6; ++layer_index) {
+            rendering::SlowFrameLayerSample layer;
+            layer.track_id = 11;
+            layer.clip_id = 21 + layer_index;
+            layer.track_index = 0;
+            layer.clip_index = static_cast<std::int64_t>(layer_index);
+            layer.source_frame = 120;
+            layer.kind = rendering::SlowFrameLayerKind::Video;
+            layer.decode_path = rendering::SlowFrameDecodePath::Forward;
+            layer.decode_nanoseconds = (layer_index + 1) * 1'000'000;
+            rendering::addSlowFrameLayer(first_slow_frame, layer);
+        }
+        metrics.recordSlowFrame(first_slow_frame);
+        auto slower_frame = first_slow_frame;
+        slower_frame.timeline_frame = 121;
+        slower_frame.processing_nanoseconds = 41'000'000;
+        slower_frame.slow_layers[0].clip_id = 22;
+        metrics.recordSlowFrame(slower_frame);
+
         const auto snapshot = metrics.takeSnapshotAndReset();
         metrics.setPlaybackActive(false);
         require(snapshot.decoded_frames == 1,
@@ -203,6 +245,16 @@ int main() {
                 "Lifecycle event counts are incorrect.");
         require(snapshot.seek_operations == 1,
                 "Seek operation count is incorrect.");
+        require(snapshot.slow_frame_count == 2 &&
+                    snapshot.worst_slow_frame.has_value() &&
+                    snapshot.worst_slow_frame->timeline_frame == 121 &&
+                    snapshot.worst_slow_frame->processing_nanoseconds ==
+                        41'000'000 &&
+                    snapshot.worst_slow_frame->slow_layer_count == 4 &&
+                    snapshot.worst_slow_frame->slow_layers[0].clip_id == 22 &&
+                    snapshot.worst_slow_frame->slow_layers[1].clip_id == 25 &&
+                    snapshot.worst_slow_frame->slow_layers[3].clip_id == 23,
+                "Slow-frame threshold, count, worst sample, or layer bound is incorrect.");
         require(snapshot.composed_frames == 1,
                 "Composed frame count is incorrect.");
         require(snapshot.composition_cache_hits == 1,
@@ -367,8 +419,50 @@ int main() {
                     reset.composition_setup.count == 0 &&
                     reset.activation_to_presentation.count == 0 &&
                     reset.playback_start_to_presentation.count == 0 &&
-                    reset.seek_to_presentation.count == 0,
+                    reset.seek_to_presentation.count == 0 &&
+                    reset.slow_frame_count == 0 &&
+                    !reset.worst_slow_frame.has_value(),
                 "Taking a snapshot did not reset the metrics.");
+
+        constexpr std::size_t slow_samples_per_thread = 250;
+        constexpr std::size_t slow_producer_count = 4;
+        std::vector<std::thread> producers;
+        std::atomic_size_t completed_producers{0};
+        std::uint64_t concurrently_flushed_slow_samples = 0;
+        bool saw_concurrent_worst_sample = false;
+        for (std::size_t thread_index = 0;
+             thread_index < slow_producer_count;
+             ++thread_index) {
+            producers.emplace_back([&metrics, &completed_producers, thread_index]() {
+                rendering::SlowFrameSample sample;
+                sample.frame_budget_nanoseconds = 1;
+                sample.processing_nanoseconds = 2;
+                sample.timeline_frame = static_cast<std::int64_t>(thread_index);
+                for (std::size_t index = 0;
+                     index < slow_samples_per_thread;
+                     ++index) {
+                    metrics.recordSlowFrame(sample);
+                }
+                completed_producers.fetch_add(1, std::memory_order_release);
+            });
+        }
+        while (completed_producers.load(std::memory_order_acquire) <
+               slow_producer_count) {
+            const auto partial = metrics.takeSnapshotAndReset();
+            concurrently_flushed_slow_samples += partial.slow_frame_count;
+            saw_concurrent_worst_sample = saw_concurrent_worst_sample ||
+                partial.worst_slow_frame.has_value();
+            std::this_thread::yield();
+        }
+        for (auto& producer : producers) producer.join();
+        const auto concurrent_final = metrics.takeSnapshotAndReset();
+        concurrently_flushed_slow_samples += concurrent_final.slow_frame_count;
+        saw_concurrent_worst_sample = saw_concurrent_worst_sample ||
+            concurrent_final.worst_slow_frame.has_value();
+        require(concurrently_flushed_slow_samples ==
+                    slow_producer_count * slow_samples_per_thread &&
+                    saw_concurrent_worst_sample,
+                "Concurrent slow-frame aggregation lost samples.");
         metrics.setEnabled(false);
         const auto disabled_after_audio = metrics.takeSnapshotAndReset();
         require(

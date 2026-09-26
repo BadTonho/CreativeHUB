@@ -103,6 +103,10 @@ target_include_directories(creative-suite-main-editor-preview-performance-metric
     ${VIDEO_EDITOR_SOURCE_DIR}
 )
 
+target_link_libraries(creative-suite-main-editor-preview-performance-metrics-tests PRIVATE
+    Threads::Threads
+)
+
 target_compile_features(creative-suite-main-editor-preview-performance-metrics-tests PRIVATE cxx_std_20)
 
 if(MSVC)

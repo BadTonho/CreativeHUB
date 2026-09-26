@@ -1,6 +1,7 @@
 set(VIDEO_EDITOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 set(VIDEO_EDITOR_TEST_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 set(REFERENCE_VIDEO "${PROJECT_SOURCE_DIR}/prototypes/testdata/reference.mkv")
+find_package(Threads REQUIRED)
 
 macro(preserve_video_editor_test_working_directory)
     get_property(VIDEO_EDITOR_GROUP_TESTS DIRECTORY PROPERTY TESTS)

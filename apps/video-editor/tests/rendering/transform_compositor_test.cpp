@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -147,9 +148,16 @@ int main() {
         const std::vector<rendering::CompositionLayer> layers{
             {&bottom, identity},
             {&top, identity}};
-        const auto composed = rendering::FrameCompositor::compose(4, 4, layers);
+        std::vector<std::uint64_t> layer_elapsed_nanoseconds;
+        const auto composed = rendering::FrameCompositor::compose(
+            4,
+            4,
+            layers,
+            &layer_elapsed_nanoseconds);
         require(composed.has_value() && composed->width == 4 && composed->height == 4,
                 "The compositor did not create the expected canvas.");
+        require(layer_elapsed_nanoseconds.size() == layers.size(),
+                "The compositor did not report one timing for each Preview layer.");
         require(composed->rgba_pixels[0] > 100 && composed->rgba_pixels[1] > 100,
                 "The compositor did not blend alpha layers.");
 

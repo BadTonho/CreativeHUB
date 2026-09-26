@@ -358,6 +358,17 @@ in the running Video Editor after UI or integration changes:
   immediately skip video frames, that audio catch-up starts only after three
   consecutive ticks above the tolerance, and that no more than one additional
   audio catch-up frame is selected per tick;
+- with Preview metrics enabled, play a layered Timeline for 15 seconds at Full
+  quality, then repeat the same section once to warm decoder and text caches;
+  confirm one `playback/slow_frame` event at most per metrics interval, only
+  when frames exceed the target-FPS budget. Check that it reports the interval
+  slow-frame count, the worst timeline frame, total processing/decode/
+  composition/payload times, and no more than four costly layers with IDs,
+  indices, source frames, kinds, decode paths, and per-layer timings. Compare
+  these worker timings with aggregate UI/GPU timings to distinguish decode,
+  composition, and presentation delays. Confirm no paths or frame contents are
+  logged, the existing `preview/performance_metrics` schema remains `4`, and
+  the project dirty state and playback output are unchanged;
 - with Preview metrics enabled, activate a media item and perform seeks in a
   composition with text and video layers; confirm `activation_events`,
   `playback_start_events`, `seek_requests`, and `seek_operations` distinguish

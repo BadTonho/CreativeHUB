@@ -1,6 +1,7 @@
 #include "frame_compositor.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -266,7 +267,8 @@ bool FrameCompositor::canUseAlphaCoverageFastPath(
 std::optional<media::VideoFrame> FrameCompositor::compose(
     int width,
     int height,
-    const std::vector<CompositionLayer>& layers) {
+    const std::vector<CompositionLayer>& layers,
+    std::vector<std::uint64_t>* layer_elapsed_nanoseconds) {
     if (width <= 0 || height <= 0) return std::nullopt;
     if (static_cast<std::size_t>(width) >
             std::numeric_limits<std::size_t>::max() / static_cast<std::size_t>(height) / 4) {
@@ -284,9 +286,26 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
         output.rgba_pixels[index] = 255;
     }
 
-    for (const auto& layer : layers) {
+    using Clock = std::chrono::steady_clock;
+    if (layer_elapsed_nanoseconds != nullptr) {
+        layer_elapsed_nanoseconds->assign(layers.size(), 0);
+    }
+    for (std::size_t layer_index = 0; layer_index < layers.size(); ++layer_index) {
+        const auto layer_started = layer_elapsed_nanoseconds != nullptr
+            ? Clock::now()
+            : Clock::time_point{};
+        const auto record_layer_elapsed = [&]() {
+            if (layer_elapsed_nanoseconds == nullptr) return;
+            const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                Clock::now() - layer_started).count();
+            (*layer_elapsed_nanoseconds)[layer_index] = elapsed <= 0
+                ? 0U
+                : static_cast<std::uint64_t>(elapsed);
+        };
+        const auto& layer = layers[layer_index];
         if (layer.frame == nullptr || !timeline::validTransform(layer.transform) ||
             layer.frame->width <= 0 || layer.frame->height <= 0) {
+            record_layer_elapsed();
             continue;
         }
         if (isFullFrameIdentity(*layer.frame, width, height, layer.transform) &&
@@ -295,10 +314,12 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
                 output.rgba_pixels.data(),
                 layer.frame->rgba_pixels.data(),
                 output.rgba_pixels.size());
+            record_layer_elapsed();
             continue;
         }
         if (canUseAlphaCoverageFastPath(layer)) {
             composeAlphaCoverageLayer(output, layer);
+            record_layer_elapsed();
             continue;
         }
         const double fit = std::min(
@@ -306,7 +327,10 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
             static_cast<double>(height) / layer.frame->height);
         const double displayed_width = layer.frame->width * fit * layer.transform.scale;
         const double displayed_height = layer.frame->height * fit * layer.transform.scale;
-        if (displayed_width <= 0.0 || displayed_height <= 0.0) continue;
+        if (displayed_width <= 0.0 || displayed_height <= 0.0) {
+            record_layer_elapsed();
+            continue;
+        }
         const double center_x = layer.transform.position_x * width;
         const double center_y = layer.transform.position_y * height;
         const double angle = layer.transform.rotation_degrees * 3.14159265358979323846 / 180.0;
@@ -339,6 +363,7 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
                 blend(destination, color);
             }
         }
+        record_layer_elapsed();
     }
     return output;
 }

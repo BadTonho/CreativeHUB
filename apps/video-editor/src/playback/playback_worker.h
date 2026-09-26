@@ -4,6 +4,7 @@
 #include "../media/video_metadata.h"
 #include "../media/audio_playback.h"
 #include "../rendering/frame_compositor.h"
+#include "../rendering/preview_performance_metrics.h"
 #include "../timeline/timeline_model.h"
 #include "audio_output.h"
 #include "playback_audio_pacing.h"
@@ -51,6 +52,8 @@ struct CompositionLayerSpec {
     timeline::ClipKind kind = timeline::ClipKind::Video;
     timeline::TextStyle text;
     VideoFramePtr still_frame;
+    timeline::TrackId track_id = 0;
+    timeline::ClipId clip_id = 0;
 };
 
 struct CompositionTransitionSpec {
@@ -127,6 +130,15 @@ private:
         std::shared_ptr<const media::VideoFrame> frame;
         timeline::Transform2D transform;
         rendering::AlphaCoveragePtr alpha_coverage;
+        timeline::TrackId track_id = 0;
+        timeline::ClipId clip_id = 0;
+        qint64 track_index = -1;
+        qint64 clip_index = -1;
+        qint64 source_frame = -1;
+        timeline::ClipKind kind = timeline::ClipKind::Video;
+        rendering::SlowFrameDecodePath decode_path =
+            rendering::SlowFrameDecodePath::None;
+        std::uint64_t decode_nanoseconds = 0;
     };
 
     bool ensureSessionAtCurrentFrame();
@@ -139,7 +151,8 @@ private:
         std::int64_t global_frame,
         const media::VideoPlaybackSession::CancellationPredicate& should_cancel);
     [[nodiscard]] std::optional<media::VideoFrame> composeCompositionLayers(
-        const std::vector<DecodedCompositionLayer>& layers) const;
+        const std::vector<DecodedCompositionLayer>& layers,
+        std::vector<std::uint64_t>* layer_elapsed_nanoseconds = nullptr) const;
     void clearCompositionCache() noexcept;
     void reportFailure(
         const media::MediaError& error,

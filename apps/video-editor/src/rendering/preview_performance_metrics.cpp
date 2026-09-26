@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace rendering {
 namespace {
@@ -145,12 +146,44 @@ double PreviewTimingSnapshot::percentile99Milliseconds() const noexcept {
     return static_cast<double>(percentile99_nanoseconds) / 1'000'000.0;
 }
 
+void addSlowFrameLayer(
+    SlowFrameSample& sample,
+    const SlowFrameLayerSample& layer) noexcept {
+    auto insertion_index = std::min<std::size_t>(
+        sample.slow_layer_count,
+        sample.slow_layers.size());
+    sample.slow_layer_count = static_cast<std::uint8_t>(insertion_index);
+    while (insertion_index > 0 &&
+           sample.slow_layers[insertion_index - 1].totalNanoseconds() <
+               layer.totalNanoseconds()) {
+        if (insertion_index < sample.slow_layers.size()) {
+            sample.slow_layers[insertion_index] =
+                sample.slow_layers[insertion_index - 1];
+        }
+        --insertion_index;
+    }
+    if (insertion_index >= sample.slow_layers.size()) return;
+    sample.slow_layers[insertion_index] = layer;
+    if (sample.slow_layer_count <
+        static_cast<std::uint8_t>(sample.slow_layers.size())) {
+        ++sample.slow_layer_count;
+    }
+}
+
 PreviewPerformanceMetrics& PreviewPerformanceMetrics::instance() noexcept {
     static PreviewPerformanceMetrics metrics;
     return metrics;
 }
 
 void PreviewPerformanceMetrics::setEnabled(bool enabled) noexcept {
+    if (!enabled) {
+        enabled_.store(false, std::memory_order_release);
+        {
+            std::lock_guard lock(slow_frames_mutex_);
+            slow_frame_count_ = 0;
+            worst_slow_frame_.reset();
+        }
+    }
     if (enabled) {
         enabled_started_nanoseconds_.store(
             nowNanoseconds(),
@@ -164,7 +197,7 @@ void PreviewPerformanceMetrics::setEnabled(bool enabled) noexcept {
             kUnavailableAudioBufferUsecs,
             std::memory_order_relaxed);
     }
-    enabled_.store(enabled, std::memory_order_release);
+    if (enabled) enabled_.store(true, std::memory_order_release);
 }
 
 bool PreviewPerformanceMetrics::isEnabled() const noexcept {
@@ -218,6 +251,23 @@ void PreviewPerformanceMetrics::recordTiming(
     storage->histogram[histogramBucket(
         nanoseconds,
         storage->histogram.size())].fetch_add(1, std::memory_order_relaxed);
+}
+
+void PreviewPerformanceMetrics::recordSlowFrame(
+    const SlowFrameSample& sample) noexcept {
+    if (!isEnabled() ||
+        sample.processing_nanoseconds <= sample.frame_budget_nanoseconds) {
+        return;
+    }
+
+    std::lock_guard lock(slow_frames_mutex_);
+    if (!isEnabled()) return;
+    ++slow_frame_count_;
+    if (!worst_slow_frame_.has_value() ||
+        sample.processing_nanoseconds >
+            worst_slow_frame_->processing_nanoseconds) {
+        worst_slow_frame_ = sample;
+    }
 }
 
 void PreviewPerformanceMetrics::recordDecodedFrame() noexcept {
@@ -578,6 +628,13 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
     snapshot.activation_to_presentation = takeTimingSnapshot(activation_to_presentation_);
     snapshot.playback_start_to_presentation = takeTimingSnapshot(playback_start_to_presentation_);
     snapshot.seek_to_presentation = takeTimingSnapshot(seek_to_presentation_);
+    {
+        std::lock_guard lock(slow_frames_mutex_);
+        snapshot.slow_frame_count = slow_frame_count_;
+        snapshot.worst_slow_frame = std::move(worst_slow_frame_);
+        slow_frame_count_ = 0;
+        worst_slow_frame_.reset();
+    }
     return snapshot;
 }
 

@@ -237,7 +237,9 @@ void PlaybackController::refreshComposition() {
                 clip.keyframes,
                 clip.kind,
                 clip.text,
-                std::move(still_image_frame)});
+                std::move(still_image_frame),
+                track.track_id,
+                clip.clip_id});
         }
 
         for (const auto& transition : track.transitions) {

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdint>
 #include <limits>
+#include <mutex>
 #include <optional>
 
 namespace rendering {
@@ -45,6 +46,56 @@ struct PreviewTimingSnapshot {
     [[nodiscard]] double percentile95Milliseconds() const noexcept;
     [[nodiscard]] double percentile99Milliseconds() const noexcept;
 };
+
+enum class SlowFrameLayerKind : std::uint8_t {
+    Video,
+    Image,
+    Text,
+};
+
+enum class SlowFrameDecodePath : std::uint8_t {
+    None,
+    Forward,
+    FrameAt,
+    ForwardFallbackFrameAt,
+    StaticFrame,
+    TextCache,
+    TextRasterization,
+};
+
+struct SlowFrameLayerSample {
+    std::uint64_t track_id = 0;
+    std::uint64_t clip_id = 0;
+    std::int64_t track_index = -1;
+    std::int64_t clip_index = -1;
+    std::int64_t source_frame = -1;
+    SlowFrameLayerKind kind = SlowFrameLayerKind::Video;
+    SlowFrameDecodePath decode_path = SlowFrameDecodePath::None;
+    std::uint64_t decode_nanoseconds = 0;
+    std::uint64_t composition_nanoseconds = 0;
+
+    [[nodiscard]] std::uint64_t totalNanoseconds() const noexcept {
+        return decode_nanoseconds + composition_nanoseconds;
+    }
+};
+
+struct SlowFrameSample {
+    std::uint64_t playback_generation = 0;
+    std::int64_t timeline_frame = -1;
+    std::uint64_t frame_rate_milli = 0;
+    std::uint64_t frame_budget_nanoseconds = 0;
+    std::uint64_t processing_nanoseconds = 0;
+    std::uint64_t decode_nanoseconds = 0;
+    std::uint64_t composition_nanoseconds = 0;
+    std::uint64_t payload_nanoseconds = 0;
+    std::uint64_t active_layer_count = 0;
+    std::uint8_t slow_layer_count = 0;
+    std::array<SlowFrameLayerSample, 4> slow_layers{};
+};
+
+void addSlowFrameLayer(
+    SlowFrameSample& sample,
+    const SlowFrameLayerSample& layer) noexcept;
 
 struct PreviewPerformanceSnapshot {
     std::uint64_t decoded_frames = 0;
@@ -114,6 +165,8 @@ struct PreviewPerformanceSnapshot {
     PreviewTimingSnapshot activation_to_presentation;
     PreviewTimingSnapshot playback_start_to_presentation;
     PreviewTimingSnapshot seek_to_presentation;
+    std::uint64_t slow_frame_count = 0;
+    std::optional<SlowFrameSample> worst_slow_frame;
 };
 
 class PreviewPerformanceMetrics final {
@@ -127,6 +180,7 @@ public:
     void recordTiming(
         PreviewTiming timing,
         std::chrono::nanoseconds elapsed) noexcept;
+    void recordSlowFrame(const SlowFrameSample& sample) noexcept;
     void recordDecodedFrame() noexcept;
     void recordDecodeDiscardedFrame() noexcept;
     void recordStaleFrameDiscarded() noexcept;
@@ -260,6 +314,9 @@ private:
     TimingStorage activation_to_presentation_;
     TimingStorage playback_start_to_presentation_;
     TimingStorage seek_to_presentation_;
+    std::mutex slow_frames_mutex_;
+    std::uint64_t slow_frame_count_ = 0;
+    std::optional<SlowFrameSample> worst_slow_frame_;
 };
 
 class PreviewPerformanceScope final {

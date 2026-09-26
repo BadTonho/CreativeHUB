@@ -317,6 +317,88 @@ void appendPerformanceContext(
         snapshot.seek_to_presentation);
 }
 
+const char* slowFrameLayerKindName(rendering::SlowFrameLayerKind kind) noexcept {
+    switch (kind) {
+    case rendering::SlowFrameLayerKind::Video: return "video";
+    case rendering::SlowFrameLayerKind::Image: return "image";
+    case rendering::SlowFrameLayerKind::Text: return "text";
+    }
+    return "unknown";
+}
+
+const char* slowFrameDecodePathName(
+    rendering::SlowFrameDecodePath path) noexcept {
+    switch (path) {
+    case rendering::SlowFrameDecodePath::None: return "none";
+    case rendering::SlowFrameDecodePath::Forward: return "forward";
+    case rendering::SlowFrameDecodePath::FrameAt: return "frame_at";
+    case rendering::SlowFrameDecodePath::ForwardFallbackFrameAt:
+        return "forward_fallback_frame_at";
+    case rendering::SlowFrameDecodePath::StaticFrame: return "static_frame";
+    case rendering::SlowFrameDecodePath::TextCache: return "text_cache";
+    case rendering::SlowFrameDecodePath::TextRasterization:
+        return "text_rasterization";
+    }
+    return "unknown";
+}
+
+void appendSlowFrameContext(
+    logging::Context& context,
+    const rendering::PreviewPerformanceSnapshot& snapshot) {
+    if (!snapshot.worst_slow_frame.has_value()) return;
+    const auto& frame = *snapshot.worst_slow_frame;
+    context.emplace_back("diagnostic_schema_version", "1");
+    context.emplace_back("thread_role", "ui_logger");
+    context.emplace_back("sample_origin_thread_role", "playback_worker");
+    context.emplace_back(
+        "playback_worker_thread_id",
+        std::to_string(snapshot.playback_worker_thread_id));
+    context.emplace_back(
+        "slow_frame_count", std::to_string(snapshot.slow_frame_count));
+    context.emplace_back(
+        "playback_generation", std::to_string(frame.playback_generation));
+    context.emplace_back("timeline_frame", std::to_string(frame.timeline_frame));
+    context.emplace_back(
+        "target_fps",
+        std::to_string(static_cast<double>(frame.frame_rate_milli) / 1000.0));
+    const auto milliseconds = [](std::uint64_t nanoseconds) {
+        return std::to_string(static_cast<double>(nanoseconds) / 1'000'000.0);
+    };
+    context.emplace_back(
+        "frame_budget_ms", milliseconds(frame.frame_budget_nanoseconds));
+    context.emplace_back(
+        "processing_ms", milliseconds(frame.processing_nanoseconds));
+    context.emplace_back("decode_ms", milliseconds(frame.decode_nanoseconds));
+    context.emplace_back(
+        "composition_ms", milliseconds(frame.composition_nanoseconds));
+    context.emplace_back("payload_ms", milliseconds(frame.payload_nanoseconds));
+    context.emplace_back(
+        "active_layer_count", std::to_string(frame.active_layer_count));
+    context.emplace_back(
+        "slow_layer_count", std::to_string(frame.slow_layer_count));
+    for (std::size_t index = 0; index < frame.slow_layer_count; ++index) {
+        const auto prefix = "slow_layer_" + std::to_string(index) + "_";
+        const auto& layer = frame.slow_layers[index];
+        context.emplace_back(prefix + "track_id", std::to_string(layer.track_id));
+        context.emplace_back(prefix + "clip_id", std::to_string(layer.clip_id));
+        context.emplace_back(
+            prefix + "track_index", std::to_string(layer.track_index));
+        context.emplace_back(
+            prefix + "clip_index", std::to_string(layer.clip_index));
+        context.emplace_back(
+            prefix + "source_frame", std::to_string(layer.source_frame));
+        context.emplace_back(
+            prefix + "kind", slowFrameLayerKindName(layer.kind));
+        context.emplace_back(
+            prefix + "decode_path", slowFrameDecodePathName(layer.decode_path));
+        context.emplace_back(
+            prefix + "decode_ms", milliseconds(layer.decode_nanoseconds));
+        context.emplace_back(
+            prefix + "composition_ms",
+            milliseconds(layer.composition_nanoseconds));
+    }
+}
+
 } // namespace
 
 void MainWindow::configurePreviewPerformanceMetrics(bool enabled) {
@@ -367,7 +449,8 @@ void MainWindow::flushPreviewPerformanceMetrics() {
         snapshot.activation_to_presentation.count == 0 &&
         snapshot.playback_start_to_presentation.count == 0 &&
         snapshot.seek_to_presentation.count == 0 &&
-        snapshot.audio_clock_drift_samples == 0) {
+        snapshot.audio_clock_drift_samples == 0 &&
+        snapshot.slow_frame_count == 0) {
         return;
     }
 
@@ -479,6 +562,16 @@ void MainWindow::flushPreviewPerformanceMetrics() {
         "performance_metrics",
         "Preview performance sample.",
         context);
+    if (snapshot.slow_frame_count > 0 && snapshot.worst_slow_frame.has_value()) {
+        logging::Context slow_frame_context;
+        appendSlowFrameContext(slow_frame_context, snapshot);
+        logging::Logger::instance().log(
+            logging::Level::Info,
+            "playback",
+            "slow_frame",
+            "Playback composition exceeded its frame budget.",
+            slow_frame_context);
+    }
 }
 
 void MainWindow::initializePlayback() {

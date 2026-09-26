@@ -125,8 +125,28 @@ CPU-presented, GPU-presented, overwritten, stale, skipped, and coalesced frame
 counts; the last frame dimensions; cache entry/byte counts; and the active
 composition workload. The text-rasterization timing is a subcomponent of the
 decode timing, so the existing decode values remain comparable with older
-logs; cached text frames do not create new rasterization samples. No media
-paths, frame contents, or per-frame log entries are written.
+logs; cached text frames do not create new rasterization samples. The aggregate
+event does not contain media paths or frame contents.
+
+During composed Timeline playback, frames whose worker processing time exceeds
+the target-FPS frame budget contribute to a bounded slow-frame summary. The UI
+timer writes at most one additional `playback/slow_frame` event per metrics
+interval, and only when that interval contains a slow frame. Its
+`diagnostic_schema_version` is `1`; it reports the slow-frame count and the
+slowest frame's timeline position, generation, target FPS, budget, processing,
+decode, composition, and payload timings. It also reports up to four active
+layers ranked by combined decode/preparation and compositor time, with stable
+track/clip IDs, current indices, source frame, layer kind, decode path, and the
+two timings. Layer decode/preparation and CPU composition timings are collected
+only during active Timeline playback while this preference is enabled. Paused
+frame refreshes, seeks, isolated media previews, and offline export do not
+collect this per-layer data. UI and GPU presentation timings remain in the
+existing aggregate sample and can be compared with the slow-frame event.
+
+The worker retains only the slowest over-budget frame and a count for the
+current metrics interval; it does not log each frame. Neither event contains
+media paths or frame contents. The aggregate `preview/performance_metrics`
+schema remains version `4`.
 
 Each timing summary contains count, average, maximum, and bounded-histogram
 approximations for the p95 and p99 milliseconds. The timings cover decoding,

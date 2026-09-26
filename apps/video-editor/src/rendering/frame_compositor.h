@@ -4,6 +4,7 @@
 #include "../timeline/timeline_transform.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -40,7 +41,8 @@ public:
     [[nodiscard]] static std::optional<media::VideoFrame> compose(
         int width,
         int height,
-        const std::vector<CompositionLayer>& layers);
+        const std::vector<CompositionLayer>& layers,
+        std::vector<std::uint64_t>* layer_elapsed_nanoseconds = nullptr);
 };
 
 } // namespace rendering

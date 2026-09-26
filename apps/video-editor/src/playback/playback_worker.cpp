@@ -549,41 +549,119 @@ void PlaybackWorker::renderCompositionFrame(
             return;
         }
 
+        const bool collect_slow_frame = playing_ && metrics.isEnabled();
+        const auto frame_started = collect_slow_frame ? Clock::now() : Clock::time_point{};
+
         const auto seek_sequence = pending_seek_sequence_.load(std::memory_order_acquire);
         const auto should_cancel = [this, seek_sequence]() {
             return !isSeekCurrent(seek_sequence);
         };
         std::optional<std::vector<DecodedCompositionLayer>> decoded_layers;
+        const auto decode_started = collect_slow_frame ? Clock::now() : Clock::time_point{};
         {
             rendering::PreviewPerformanceScope timing(
                 metrics,
                 rendering::PreviewTiming::Decode);
             decoded_layers = decodeCompositionLayers(global_frame, should_cancel);
         }
+        const auto decode_elapsed = collect_slow_frame
+            ? std::chrono::duration_cast<std::chrono::nanoseconds>(
+                Clock::now() - decode_started)
+            : std::chrono::nanoseconds::zero();
         if (should_cancel()) return;
         if (!decoded_layers.has_value()) {
             throw media::MediaError("The timeline composition could not produce a frame.");
         }
 
         std::optional<media::VideoFrame> composed;
+        std::vector<std::uint64_t> layer_composition_nanoseconds;
+        const auto composition_started = collect_slow_frame
+            ? Clock::now()
+            : Clock::time_point{};
         {
             rendering::PreviewPerformanceScope timing(
                 metrics,
                 rendering::PreviewTiming::Composition);
-            composed = composeCompositionLayers(*decoded_layers);
+            composed = composeCompositionLayers(
+                *decoded_layers,
+                collect_slow_frame ? &layer_composition_nanoseconds : nullptr);
         }
+        const auto composition_elapsed = collect_slow_frame
+            ? std::chrono::duration_cast<std::chrono::nanoseconds>(
+                Clock::now() - composition_started)
+            : std::chrono::nanoseconds::zero();
         if (should_cancel()) return;
         if (!composed.has_value()) {
             throw media::MediaError("The timeline composition could not produce a frame.");
         }
 
         std::shared_ptr<const media::VideoFrame> payload;
+        const auto payload_started = collect_slow_frame ? Clock::now() : Clock::time_point{};
         {
             rendering::PreviewPerformanceScope timing(
                 metrics,
                 rendering::PreviewTiming::Payload);
             payload = std::make_shared<const media::VideoFrame>(std::move(*composed));
         }
+        const auto payload_elapsed = collect_slow_frame
+            ? std::chrono::duration_cast<std::chrono::nanoseconds>(
+                Clock::now() - payload_started)
+            : std::chrono::nanoseconds::zero();
+
+        if (collect_slow_frame) {
+            rendering::SlowFrameSample sample;
+            sample.playback_generation = generation_;
+            sample.timeline_frame = global_frame;
+            sample.frame_rate_milli = std::isfinite(frame_rate_) && frame_rate_ > 0.0
+                ? static_cast<std::uint64_t>(std::llround(frame_rate_ * 1000.0))
+                : 0U;
+            sample.frame_budget_nanoseconds = std::isfinite(frame_rate_) &&
+                    frame_rate_ > 0.0
+                ? static_cast<std::uint64_t>(1'000'000'000.0 / frame_rate_)
+                : 0U;
+            sample.processing_nanoseconds = static_cast<std::uint64_t>(
+                std::max<std::int64_t>(0,
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        Clock::now() - frame_started).count()));
+            sample.decode_nanoseconds = static_cast<std::uint64_t>(
+                std::max<std::int64_t>(0, decode_elapsed.count()));
+            sample.composition_nanoseconds = static_cast<std::uint64_t>(
+                std::max<std::int64_t>(0, composition_elapsed.count()));
+            sample.payload_nanoseconds = static_cast<std::uint64_t>(
+                std::max<std::int64_t>(0, payload_elapsed.count()));
+            sample.active_layer_count = decoded_layers->size();
+
+            for (std::size_t index = 0; index < decoded_layers->size(); ++index) {
+                const auto& decoded = (*decoded_layers)[index];
+                rendering::SlowFrameLayerSample layer;
+                layer.track_id = decoded.track_id;
+                layer.clip_id = decoded.clip_id;
+                layer.track_index = decoded.track_index;
+                layer.clip_index = decoded.clip_index;
+                layer.source_frame = decoded.source_frame;
+                switch (decoded.kind) {
+                case timeline::ClipKind::Video:
+                    layer.kind = rendering::SlowFrameLayerKind::Video;
+                    break;
+                case timeline::ClipKind::Image:
+                    layer.kind = rendering::SlowFrameLayerKind::Image;
+                    break;
+                case timeline::ClipKind::Text:
+                    layer.kind = rendering::SlowFrameLayerKind::Text;
+                    break;
+                }
+                layer.decode_path = decoded.decode_path;
+                layer.decode_nanoseconds = decoded.decode_nanoseconds;
+                if (index < layer_composition_nanoseconds.size()) {
+                    layer.composition_nanoseconds =
+                        layer_composition_nanoseconds[index];
+                }
+
+                rendering::addSlowFrameLayer(sample, layer);
+            }
+            metrics.recordSlowFrame(sample);
+        }
+
         cached_composition_generation_ = generation_;
         cached_composition_global_frame_ = global_frame;
         cached_composition_frame_ = payload;
@@ -1264,10 +1342,16 @@ PlaybackWorker::decodeCompositionLayers(
         const auto source_frame = spec.source_start_frame + request.local_frame;
         std::shared_ptr<const media::VideoFrame> frame;
         auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+        const bool collect_layer_timing = playing_ && metrics.isEnabled();
+        const auto layer_started = collect_layer_timing
+            ? Clock::now()
+            : Clock::time_point{};
+        auto decode_path = rendering::SlowFrameDecodePath::None;
         if (should_cancel && should_cancel()) return std::nullopt;
         if (spec.kind == timeline::ClipKind::Text) {
             if (composition.cached_text_frame != nullptr) {
                 frame = composition.cached_text_frame;
+                decode_path = rendering::SlowFrameDecodePath::TextCache;
                 metrics.recordTextCacheHit();
             } else {
                 std::optional<media::VideoFrame> rendered;
@@ -1286,24 +1370,37 @@ PlaybackWorker::decodeCompositionLayers(
                     rendering::FrameCompositor::buildAlphaCoverage(
                         *composition.cached_text_frame);
                 frame = composition.cached_text_frame;
+                decode_path = rendering::SlowFrameDecodePath::TextRasterization;
             }
         } else if (spec.kind == timeline::ClipKind::Image) {
             frame = composition.static_frame;
+            decode_path = rendering::SlowFrameDecodePath::StaticFrame;
         } else if (composition.session != nullptr) {
             std::optional<media::VideoFramePtr> decoded;
+            bool tried_forward_decode = false;
+            bool tried_frame_at_decode = false;
             const auto current_source_frame =
                 composition.session->current_frame_index();
             if (playing_ && request.allow_forward_decode && current_source_frame >= 0 &&
                 source_frame > current_source_frame) {
+                tried_forward_decode = true;
                 decoded = composition.session->decode_forward_to(
                     source_frame,
                     should_cancel);
             }
             if (!decoded.has_value() && !composition.session->at_end() &&
                 !(should_cancel && should_cancel())) {
+                tried_frame_at_decode = true;
                 decoded = composition.session->decode_frame_at(
                     source_frame,
                     should_cancel);
+            }
+            if (tried_forward_decode && tried_frame_at_decode) {
+                decode_path = rendering::SlowFrameDecodePath::ForwardFallbackFrameAt;
+            } else if (tried_forward_decode) {
+                decode_path = rendering::SlowFrameDecodePath::Forward;
+            } else if (tried_frame_at_decode) {
+                decode_path = rendering::SlowFrameDecodePath::FrameAt;
             }
             if (should_cancel && should_cancel()) return std::nullopt;
             consumeDecodeCacheHits(*composition.session);
@@ -1318,18 +1415,33 @@ PlaybackWorker::decodeCompositionLayers(
             spec.keyframes,
             request.local_frame);
         transform.opacity *= request.opacity_multiplier;
+        const auto layer_decode_nanoseconds = collect_layer_timing
+            ? std::chrono::duration_cast<std::chrono::nanoseconds>(
+                Clock::now() - layer_started).count()
+            : 0;
         layers.push_back(DecodedCompositionLayer{
             std::move(frame),
             transform,
             spec.kind == timeline::ClipKind::Text
                 ? composition.cached_text_alpha_coverage
-                : rendering::AlphaCoveragePtr{}});
+                : rendering::AlphaCoveragePtr{},
+            spec.track_id,
+            spec.clip_id,
+            spec.track_index,
+            spec.clip_index,
+            source_frame,
+            spec.kind,
+            decode_path,
+            layer_decode_nanoseconds <= 0
+                ? 0U
+                : static_cast<std::uint64_t>(layer_decode_nanoseconds)});
     }
     return layers;
 }
 
 std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
-    const std::vector<DecodedCompositionLayer>& decoded_layers) const {
+    const std::vector<DecodedCompositionLayer>& decoded_layers,
+    std::vector<std::uint64_t>* layer_elapsed_nanoseconds) const {
     std::vector<rendering::CompositionLayer> layers;
     layers.reserve(decoded_layers.size());
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
@@ -1358,7 +1470,11 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     case PreviewQuality::Full:
         break;
     }
-    return rendering::FrameCompositor::compose(width, height, layers);
+    return rendering::FrameCompositor::compose(
+        width,
+        height,
+        layers,
+        layer_elapsed_nanoseconds);
 }
 
 void PlaybackWorker::reportFailure(
