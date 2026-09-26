@@ -1,10 +1,56 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <limits>
+#include <optional>
 
 namespace playback::detail {
+
+[[nodiscard]] inline std::int64_t timelineFrameFromAudioElapsedUsecs(
+    std::int64_t origin_frame,
+    std::int64_t elapsed_usecs,
+    double timeline_frame_rate) noexcept {
+    if (elapsed_usecs <= 0 || !std::isfinite(timeline_frame_rate) ||
+        timeline_frame_rate <= 0.0) {
+        return origin_frame;
+    }
+    const auto offset = std::floor(
+        static_cast<long double>(elapsed_usecs) * timeline_frame_rate / 1'000'000.0L);
+    const auto target = static_cast<long double>(origin_frame) + offset;
+    if (!std::isfinite(offset) || !std::isfinite(target) ||
+        target >= std::ldexp(1.0L, 63)) {
+        return std::numeric_limits<std::int64_t>::max();
+    }
+    if (target < -std::ldexp(1.0L, 63)) {
+        return std::numeric_limits<std::int64_t>::min();
+    }
+    return static_cast<std::int64_t>(target);
+}
+
+[[nodiscard]] inline std::optional<std::int64_t> audioSegmentEndSample(
+    std::int64_t source_start_frame,
+    double source_frame_rate,
+    std::int64_t timeline_duration_frames,
+    double timeline_frame_rate,
+    std::int64_t sample_rate) noexcept {
+    if (source_start_frame < 0 || timeline_duration_frames <= 0 ||
+        sample_rate <= 0 || !std::isfinite(source_frame_rate) ||
+        source_frame_rate <= 0.0 || !std::isfinite(timeline_frame_rate) ||
+        timeline_frame_rate <= 0.0) {
+        return std::nullopt;
+    }
+    const auto end_sample = std::ceil((
+        static_cast<long double>(source_start_frame) / source_frame_rate +
+        static_cast<long double>(timeline_duration_frames) / timeline_frame_rate) *
+        sample_rate);
+    if (!std::isfinite(end_sample) || end_sample < 0.0L ||
+        end_sample >= std::ldexp(1.0L, 63)) {
+        return std::nullopt;
+    }
+    return static_cast<std::int64_t>(end_sample);
+}
 
 struct AudioPacingDecision {
     std::int64_t target_frame = 0;

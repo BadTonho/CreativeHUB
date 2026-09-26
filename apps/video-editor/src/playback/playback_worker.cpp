@@ -154,11 +154,14 @@ void PlaybackWorker::setMedia(
 
     generation_ = generation;
     source_path_ = QFileInfo(source_path).filesystemFilePath();
-    frame_rate_ = std::isfinite(frame_rate) && frame_rate > 0.0
+    source_frame_rate_ = std::isfinite(frame_rate) && frame_rate > 0.0 &&
+            frame_rate <= 1000.0
         ? frame_rate
         : default_frame_rate;
-    source_frame_rate_ = frame_rate_;
-    rendering::PreviewPerformanceMetrics::instance().setTargetFrameRate(frame_rate_);
+    if (composition_enabled_ && !composition_timeline_frame_rate_valid_) {
+        setFallbackTimelineFrameRate(source_frame_rate_);
+    }
+    updateFrameRateMetrics();
     source_start_frame_ = source_start_frame;
     segment_frame_count_ = segment_frame_count;
     current_frame_index_ = 0;
@@ -390,6 +393,22 @@ void PlaybackWorker::setComposition(
     composition_transitions_ = std::move(transitions);
     composition_sessions_.clear();
     composition_enabled_ = !composition_specs_.isEmpty();
+    composition_timeline_frame_rate_valid_ = false;
+    if (composition_enabled_) {
+        const auto rate = std::find_if(
+            composition_specs_.cbegin(),
+            composition_specs_.cend(),
+            [](const CompositionLayerSpec& spec) {
+                return timeline::validFrameRate(spec.timeline_frame_rate);
+            });
+        if (rate != composition_specs_.cend()) {
+            timeline_frame_rate_ = timeline::reducedFrameRate(
+                rate->timeline_frame_rate);
+            composition_timeline_frame_rate_valid_ = true;
+        } else {
+            setFallbackTimelineFrameRate(source_frame_rate_);
+        }
+    }
     const auto text_layer_count = static_cast<std::uint64_t>(std::count_if(
         composition_specs_.cbegin(),
         composition_specs_.cend(),
@@ -402,7 +421,10 @@ void PlaybackWorker::setComposition(
         static_cast<std::uint64_t>(composition_transitions_.size()),
         composition_enabled_);
     primary_timeline_start_frame_ = 0;
-    if (!composition_enabled_) return;
+    if (!composition_enabled_) {
+        updateFrameRateMetrics();
+        return;
+    }
 
     std::int64_t composition_start = std::numeric_limits<std::int64_t>::max();
     std::int64_t composition_end = 0;
@@ -426,9 +448,6 @@ void PlaybackWorker::setComposition(
             }
             CompositionSession composition_session;
             composition_session.spec = spec;
-            if (timeline::validFrameRate(spec.timeline_frame_rate)) {
-                frame_rate_ = spec.timeline_frame_rate.asDouble();
-            }
             if (spec.kind == timeline::ClipKind::Video) {
                 if (spec.source_path.isEmpty()) continue;
                 composition_session.session = openVideoPlaybackSession(
@@ -442,8 +461,16 @@ void PlaybackWorker::setComposition(
                 has_primary_clip = true;
                 primary_is_static = spec.kind != timeline::ClipKind::Video;
                 primary_clip_duration = spec.segment_frame_count;
-                if (std::isfinite(spec.frame_rate) && spec.frame_rate > 0.0)
+                if (spec.kind == timeline::ClipKind::Video &&
+                    std::isfinite(spec.frame_rate) && spec.frame_rate > 0.0 &&
+                    spec.frame_rate <= 1000.0) {
                     source_frame_rate_ = spec.frame_rate;
+                    if (!composition_timeline_frame_rate_valid_) {
+                        setFallbackTimelineFrameRate(source_frame_rate_);
+                    }
+                } else if (!composition_timeline_frame_rate_valid_) {
+                    setFallbackTimelineFrameRate(default_frame_rate);
+                }
             }
             composition_sessions_.push_back(std::move(composition_session));
         }
@@ -469,20 +496,26 @@ void PlaybackWorker::setComposition(
             primary_timeline_start_frame_ = composition_start;
             current_frame_index_ = 0;
             segment_frame_count_ = composition_end - composition_start;
-            frame_rate_ = default_frame_rate;
+            if (!composition_timeline_frame_rate_valid_) {
+                setFallbackTimelineFrameRate(default_frame_rate);
+            }
         }
-        metrics.setTargetFrameRate(frame_rate_);
+        updateFrameRateMetrics();
     } catch (const media::MediaError& error) {
         composition_sessions_.clear();
         composition_transitions_.clear();
         composition_enabled_ = false;
+        composition_timeline_frame_rate_valid_ = false;
         metrics.setCompositionWorkload(0, 0, 0, false);
+        updateFrameRateMetrics();
         reportFailure(error, "compose");
     } catch (const std::exception& error) {
         composition_sessions_.clear();
         composition_transitions_.clear();
         composition_enabled_ = false;
+        composition_timeline_frame_rate_valid_ = false;
         metrics.setCompositionWorkload(0, 0, 0, false);
+        updateFrameRateMetrics();
         reportFailure(error, "compose");
     }
 }
@@ -505,13 +538,17 @@ void PlaybackWorker::setActiveCompositionClip(
     current_frame_index_ = std::clamp<std::int64_t>(
         current_frame_index_, 0,
         std::max<std::int64_t>(0, segment_frame_count_ - 1));
-    if (std::isfinite(active->frame_rate) && active->frame_rate > 0.0) {
+    if (active->kind == timeline::ClipKind::Video &&
+        std::isfinite(active->frame_rate) && active->frame_rate > 0.0 &&
+        active->frame_rate <= 1000.0) {
         source_frame_rate_ = active->frame_rate;
-        if (!timeline::validFrameRate(active->timeline_frame_rate)) {
-            frame_rate_ = active->frame_rate;
+        if (!composition_timeline_frame_rate_valid_) {
+            setFallbackTimelineFrameRate(source_frame_rate_);
         }
-        rendering::PreviewPerformanceMetrics::instance().setTargetFrameRate(frame_rate_);
+    } else if (!composition_timeline_frame_rate_valid_) {
+        setFallbackTimelineFrameRate(default_frame_rate);
     }
+    updateFrameRateMetrics();
 
     if (active->kind == timeline::ClipKind::Text ||
         active->kind == timeline::ClipKind::Image) {
@@ -622,12 +659,20 @@ void PlaybackWorker::renderCompositionFrame(
             rendering::SlowFrameSample sample;
             sample.playback_generation = generation_;
             sample.timeline_frame = global_frame;
-            sample.frame_rate_milli = std::isfinite(frame_rate_) && frame_rate_ > 0.0
-                ? static_cast<std::uint64_t>(std::llround(frame_rate_ * 1000.0))
+            const auto clock_frame_rate = playbackFrameRate();
+            sample.frame_rate_milli = std::isfinite(clock_frame_rate) &&
+                    clock_frame_rate > 0.0
+                ? static_cast<std::uint64_t>(std::llround(clock_frame_rate * 1000.0))
                 : 0U;
-            sample.frame_budget_nanoseconds = std::isfinite(frame_rate_) &&
-                    frame_rate_ > 0.0
-                ? static_cast<std::uint64_t>(1'000'000'000.0 / frame_rate_)
+            if (composition_enabled_ && timeline::validFrameRate(timeline_frame_rate_)) {
+                sample.timeline_frame_rate_numerator = static_cast<std::uint64_t>(
+                    timeline_frame_rate_.numerator);
+                sample.timeline_frame_rate_denominator = static_cast<std::uint64_t>(
+                    timeline_frame_rate_.denominator);
+            }
+            sample.frame_budget_nanoseconds = std::isfinite(clock_frame_rate) &&
+                    clock_frame_rate > 0.0
+                ? static_cast<std::uint64_t>(1'000'000'000.0 / clock_frame_rate)
                 : 0U;
             sample.processing_nanoseconds = static_cast<std::uint64_t>(
                 std::max<std::int64_t>(0,
@@ -976,10 +1021,9 @@ void PlaybackWorker::decodeTick() {
             const auto elapsed_usecs = std::max<qint64>(
                 0,
                 audio_output_->processedUsecs() - audio_clock_origin_usecs_);
-            const auto audio_target_frame = audio_clock_origin_frame_ +
-                static_cast<std::int64_t>(
-                    std::floor(static_cast<double>(elapsed_usecs) *
-                        frame_rate_ / 1000000.0));
+            const auto clock_frame_rate = playbackFrameRate();
+            const auto audio_target_frame = detail::timelineFrameFromAudioElapsedUsecs(
+                audio_clock_origin_frame_, elapsed_usecs, clock_frame_rate);
             const auto bounded_audio_target = segment_frame_count_ > 0
                 ? std::min(audio_target_frame, segment_frame_count_ - 1)
                 : audio_target_frame;
@@ -988,7 +1032,7 @@ void PlaybackWorker::decodeTick() {
             metrics.recordAudioClockDrift(
                 std::chrono::duration_cast<std::chrono::nanoseconds>(
                     std::chrono::duration<double>(
-                        static_cast<double>(drift_frames) / frame_rate_)));
+                        static_cast<double>(drift_frames) / clock_frame_rate)));
             pacing_decision = audio_pacing_policy_.selectTarget(
                 current_frame_index_,
                 scheduler_target_frame,
@@ -1144,12 +1188,14 @@ void PlaybackWorker::fillAudioOutput() {
     const auto target_bytes = static_cast<std::size_t>(
         output.sample_rate * output.channel_count * 2 / 5);
     std::int64_t segment_end_sample = std::numeric_limits<std::int64_t>::max();
-    if (segment_frame_count_ > 0 && source_frame_rate_ > 0.0 && frame_rate_ > 0.0) {
-        const long double source_end_seconds =
-            static_cast<long double>(source_start_frame_) / source_frame_rate_ +
-            static_cast<long double>(segment_frame_count_) / frame_rate_;
-        segment_end_sample = static_cast<std::int64_t>(std::ceil(
-            source_end_seconds * output.sample_rate));
+    if (segment_frame_count_ > 0 && source_frame_rate_ > 0.0) {
+        const auto end_sample = detail::audioSegmentEndSample(
+            source_start_frame_,
+            source_frame_rate_,
+            segment_frame_count_,
+            playbackFrameRate(),
+            output.sample_rate);
+        if (end_sample.has_value()) segment_end_sample = *end_sample;
     }
 
     while (pending_audio_bytes_.size() < static_cast<qsizetype>(target_bytes)) {
@@ -1686,7 +1732,36 @@ bool PlaybackWorker::isSourceFrameInRange(std::int64_t source_frame) const noexc
 }
 
 void PlaybackWorker::startPlaybackClock() noexcept {
-    playback_scheduler_.start(Clock::now(), current_frame_index_, frame_rate_);
+    playback_scheduler_.start(
+        Clock::now(), current_frame_index_, playbackFrameRate());
+}
+
+double PlaybackWorker::playbackFrameRate() const noexcept {
+    if (composition_enabled_ && timeline::validFrameRate(timeline_frame_rate_)) {
+        return timeline_frame_rate_.asDouble();
+    }
+    return std::isfinite(source_frame_rate_) && source_frame_rate_ > 0.0 &&
+            source_frame_rate_ <= 1000.0
+        ? source_frame_rate_
+        : default_frame_rate;
+}
+
+void PlaybackWorker::setFallbackTimelineFrameRate(
+    double source_frame_rate) noexcept {
+    const auto rate = timeline::frameRateFromDouble(source_frame_rate);
+    timeline_frame_rate_ = rate.value_or(timeline::FrameRate{30, 1});
+}
+
+void PlaybackWorker::updateFrameRateMetrics() noexcept {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setTargetFrameRate(playbackFrameRate());
+    if (composition_enabled_ && timeline::validFrameRate(timeline_frame_rate_)) {
+        metrics.setTimelineFrameRate(
+            static_cast<std::uint64_t>(timeline_frame_rate_.numerator),
+            static_cast<std::uint64_t>(timeline_frame_rate_.denominator));
+    } else {
+        metrics.setTimelineFrameRate(0, 0);
+    }
 }
 
 void PlaybackWorker::resetPlaybackClock() noexcept {

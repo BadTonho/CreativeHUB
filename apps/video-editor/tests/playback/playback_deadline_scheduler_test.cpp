@@ -109,6 +109,24 @@ void validateAudioTargetDoesNotChangeCadence() {
         "An audio target changed the next video timer delay.");
 }
 
+void validateTimelineAudioClockAndSourceSegmentRates() {
+    require(
+        playback::detail::timelineFrameFromAudioElapsedUsecs(100, 500'000, 30.0) == 115,
+        "The audio clock did not advance in Timeline frames at the Timeline rate.");
+    require(
+        playback::detail::timelineFrameFromAudioElapsedUsecs(100, 500'000, 24.0) == 112,
+        "The audio clock did not use the supplied Timeline frame rate.");
+
+    const auto end_sample = playback::detail::audioSegmentEndSample(
+        120, 60.0, 60, 24.0, 48'000);
+    require(
+        end_sample.has_value() && *end_sample == 216'000,
+        "The audio segment end did not combine the source in-point with Timeline duration.");
+    require(
+        !playback::detail::audioSegmentEndSample(120, 0.0, 60, 24.0, 48'000).has_value(),
+        "An invalid source rate produced an audio segment end.");
+}
+
 void validateResetAndRestart() {
     const auto origin = Clock::time_point{};
     Scheduler scheduler;
@@ -192,6 +210,7 @@ int main() {
         validateFractionalDeadlines();
         validateEarlyAndLateCallbacks();
         validateAudioTargetDoesNotChangeCadence();
+        validateTimelineAudioClockAndSourceSegmentRates();
         validateResetAndRestart();
         validateAudioPacingToleranceAndPersistence();
     } catch (const std::exception& error) {

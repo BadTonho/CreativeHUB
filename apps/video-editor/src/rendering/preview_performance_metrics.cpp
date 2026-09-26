@@ -715,6 +715,20 @@ void PreviewPerformanceMetrics::setTargetFrameRate(double frame_rate) noexcept {
     target_frame_rate_milli_.store(scaled, std::memory_order_relaxed);
 }
 
+void PreviewPerformanceMetrics::setTimelineFrameRate(
+    std::uint64_t numerator,
+    std::uint64_t denominator) noexcept {
+    if (numerator == 0 || numerator > 1'000'000'000ULL ||
+        denominator == 0 || denominator > 1'000'000ULL ||
+        numerator > denominator * 1'000ULL) {
+        timeline_frame_rate_packed_.store(0, std::memory_order_relaxed);
+        return;
+    }
+    timeline_frame_rate_packed_.store(
+        (numerator << kTimelineRateDenominatorBits) | denominator,
+        std::memory_order_relaxed);
+}
+
 void PreviewPerformanceMetrics::setCompositionWorkload(
     std::uint64_t layer_count,
     std::uint64_t text_layer_count,
@@ -856,6 +870,12 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
     snapshot.composition_text_layer_count = composition_text_layer_count_.load(std::memory_order_relaxed);
     snapshot.composition_transition_count = composition_transition_count_.load(std::memory_order_relaxed);
     snapshot.target_frame_rate_milli = target_frame_rate_milli_.load(std::memory_order_relaxed);
+    const auto packed_timeline_frame_rate = timeline_frame_rate_packed_.load(
+        std::memory_order_relaxed);
+    snapshot.timeline_frame_rate_numerator = packed_timeline_frame_rate >>
+        kTimelineRateDenominatorBits;
+    snapshot.timeline_frame_rate_denominator = packed_timeline_frame_rate &
+        kTimelineRateDenominatorMask;
     snapshot.composition_enabled = composition_enabled_.load(std::memory_order_relaxed);
     snapshot.audio_enabled = audio_enabled_.load(std::memory_order_relaxed);
     snapshot.decode = takeTimingSnapshot(decode_);

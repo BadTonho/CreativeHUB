@@ -98,7 +98,13 @@ void appendOptionalUint64Context(
 void appendPerformanceContext(
     logging::Context& context,
     const PreviewPerformanceSnapshot& snapshot) {
-    context.emplace_back("metrics_schema_version", "4");
+    context.emplace_back("metrics_schema_version", "5");
+    context.emplace_back(
+        "timeline_fps_numerator",
+        std::to_string(snapshot.timeline_frame_rate_numerator));
+    context.emplace_back(
+        "timeline_fps_denominator",
+        std::to_string(snapshot.timeline_frame_rate_denominator));
     context.emplace_back(
         "decoded_frames", std::to_string(snapshot.decoded_frames));
     context.emplace_back(
@@ -474,7 +480,7 @@ void appendSlowFrameContext(
     const rendering::PreviewPerformanceSnapshot& snapshot) {
     if (!snapshot.worst_slow_frame.has_value()) return;
     const auto& frame = *snapshot.worst_slow_frame;
-    context.emplace_back("diagnostic_schema_version", "3");
+    context.emplace_back("diagnostic_schema_version", "4");
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back("sample_origin_thread_role", "playback_worker");
     context.emplace_back(
@@ -485,6 +491,12 @@ void appendSlowFrameContext(
     context.emplace_back(
         "playback_generation", std::to_string(frame.playback_generation));
     context.emplace_back("timeline_frame", std::to_string(frame.timeline_frame));
+    context.emplace_back(
+        "timeline_fps_numerator",
+        std::to_string(frame.timeline_frame_rate_numerator));
+    context.emplace_back(
+        "timeline_fps_denominator",
+        std::to_string(frame.timeline_frame_rate_denominator));
     context.emplace_back(
         "target_fps",
         std::to_string(static_cast<double>(frame.frame_rate_milli) / 1000.0));

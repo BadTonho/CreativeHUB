@@ -197,6 +197,9 @@ private:
     void disableAudioOutput() noexcept;
     [[nodiscard]] std::optional<std::int64_t> sourceFrameForLocal(
         std::int64_t local_frame) const noexcept;
+    [[nodiscard]] double playbackFrameRate() const noexcept;
+    void updateFrameRateMetrics() noexcept;
+    void setFallbackTimelineFrameRate(double source_frame_rate) noexcept;
     [[nodiscard]] bool isLocalFrameInRange(std::int64_t local_frame) const noexcept;
     [[nodiscard]] bool isSourceFrameInRange(std::int64_t source_frame) const noexcept;
     [[nodiscard]] bool isSeekCurrent(quint64 sequence) const noexcept;
@@ -210,8 +213,9 @@ private:
     std::unique_ptr<AudioOutput> audio_output_;
     QByteArray pending_audio_bytes_;
     std::filesystem::path source_path_;
-    double frame_rate_ = 30.0;
+    timeline::FrameRate timeline_frame_rate_{30, 1};
     double source_frame_rate_ = 30.0;
+    bool composition_timeline_frame_rate_valid_ = false;
     std::int64_t source_start_frame_ = 0;
     std::int64_t segment_frame_count_ = 0;
     std::int64_t current_frame_index_ = 0;

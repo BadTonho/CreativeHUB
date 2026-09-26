@@ -29,7 +29,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Structured logging | File creation, required fields, escaping, rotation, retention limit |
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions, PNG/JPEG/BMP/WebP/TIFF still-image probing, RGBA transparency, 150-frame defaults, and animated-GIF rejection |
 | Playback session | Sequential frames, forward catch-up and random seeks without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, seek-free consecutive decoding, rejected-seek sequential fallback, optimized random seeking, EOF, segment limits |
-| Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, 24 fps source sampling on a 30 fps Timeline with a trimmed source in-point, latest-frame mailbox behavior, controlled intermediate-frame skipping, sequential decode through an eight-source-frame gap and direct seeking for larger composed-playback gaps, playback completion, separated layer decode/composition, composition decoder-session reuse across media activation and playback of consecutive activated clips, final composition-cache reuse and invalidation, Full/Half/Quarter composition dimensions and same-frame cache invalidation on quality changes, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
+| Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, 24/30/60 fps source sampling on a fixed 30 fps Timeline with trimmed source in-points, source-rate changes without changing the composed clock, latest-frame mailbox behavior, controlled intermediate-frame skipping, sequential decode through an eight-source-frame gap and direct seeking for larger composed-playback gaps, playback completion, separated layer decode/composition, composition decoder-session reuse across media activation and playback of consecutive activated clips, final composition-cache reuse and invalidation, Full/Half/Quarter composition dimensions and same-frame cache invalidation on quality changes, text-raster cache reuse, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
 | Playback controller | Monotonic Timeline clock using the persisted rational project rate (30/1 FPS for new projects); mixed source-rate mapping and trimmed source in-point seek; continuous playhead during delayed media activation; current-position seek before playback resumes; stale-frame rejection; pending activation cancellation on Pause, Stop, and seek; preview-quality forwarding and paused-frame recomposition without changing playhead or dirty state; and clean project dirty state |
 | Playback transition plan | Cross Dissolve held outgoing frame and incoming blend at its first, middle, and final frames; Fade to Black on both sides of the cut; one-frame durations; inactive and invalid transitions; unaffected layers on other tracks |
 | Frame-step navigation | Worker steps within a clip; forward/backward activation at contiguous junctions, one-frame clips, gaps and Timeline limits, media overlaps and cross-track priority, transitions, and missing or invalid active clip locations |
@@ -116,6 +116,14 @@ in the running Video Editor after UI or integration changes:
   frame, older preview frames may be skipped. Pause, Stop, seek, and edit during
   a pending activation and confirm stale frames do not reappear and the project
   dirty state changes only for the actual edit;
+- Playback FPS separation: keep the project Timeline at 30/1 FPS and play
+  adjacent 24, 30, and 60 FPS sources with nonzero source in-points. Confirm the
+  Timeline playhead cadence and audio clock remain at 30 FPS through each cut,
+  while the Preview follows the matching source frames. Check Preview metrics
+  for `timeline_fps_numerator=30`, `timeline_fps_denominator=1`, and
+  `target_fps=30`; the media metadata continues to report each source's own
+  `source_fps`. Also check standalone media playback: `target_fps` follows the
+  source rate and Timeline FPS is reported as `0/0`;
 - Timeline timebase and migration: create a new project and confirm its
   Timeline rate is 30/1 FPS. Place 24, 30, and 60 FPS videos on the Timeline,
   including a nonzero source in-point; play and export the same section at
@@ -346,7 +354,8 @@ in the running Video Editor after UI or integration changes:
   Settings) and compare a simple 1080p playback run
   with the metrics disabled: confirm the one-second summaries include decode,
   composition, decoded-frame cache hits, text-raster cache hits, and final
-  composition-cache hits, `metrics_schema_version="4"`, p95/p99 timings,
+  composition-cache hits, `metrics_schema_version="5"`, Timeline FPS rational
+  fields, p95/p99 timings,
   delivery FPS, window-local `first_frame_ms`, lifecycle timings for media
   open, audio setup, composition setup, activation, playback start, and seek,
   cache bytes, and process-resource fields;
@@ -383,7 +392,7 @@ in the running Video Editor after UI or integration changes:
   unrotated video layer for 15 seconds at Full quality, then repeat the same
   section once to warm decoder and text caches;
   confirm one `playback/slow_frame` event at most per metrics interval, only
-  when frames exceed the target-FPS budget. Check that schema `3` reports the interval
+  when frames exceed the target-FPS budget. Check that schema `4` reports the interval
   slow-frame count, the worst timeline frame, total processing/decode/
   composition/payload times, compositor list/output initialization and layer
   setup/raster/blend/copy buckets, and no more than four costly layers with
@@ -401,7 +410,7 @@ in the running Video Editor after UI or integration changes:
   report the measured change without applying a hardware-independent threshold.
   Confirm no paths or frame
   contents are logged, the existing `preview/performance_metrics` schema
-  remains `4`, and the project dirty state and playback output are unchanged;
+  is `5`, and the project dirty state and playback output are unchanged;
 - with Preview metrics enabled, verify one `playback/frame_delivery` event at
   most per metrics interval. Correlate the same trace ID from worker emission
   through mailbox, controller, window callback, Preview submission, and either

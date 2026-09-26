@@ -593,31 +593,13 @@ void validateCompositionTransitions(
 
 void validateCompositionSourceRateMapping(
     const std::filesystem::path& path) {
-    constexpr std::int64_t timeline_frame = 15;
-    constexpr std::int64_t expected_source_frame = 22;
-    playback::CompositionLayerSpec layer;
-    layer.source_path = toQString(path);
-    layer.frame_rate = 24.0;
-    layer.timeline_frame_rate = {30, 1};
-    layer.timeline_start_frame = 0;
-    layer.source_start_frame = 10;
-    layer.source_duration_frames = 48;
-    layer.segment_frame_count = 60;
-    layer.track_index = 0;
-    layer.clip_index = 0;
-
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
     auto reference = media::VideoPlaybackSession::open(path);
-    const auto source_frame = reference->decode_frame_at(expected_source_frame);
-    require(source_frame.has_value() && *source_frame != nullptr,
-            "The source-rate mapping fixture did not contain its expected source frame.");
-    const std::vector<rendering::CompositionLayer> reference_layers{{
-        source_frame->get(), layer.transform, {}}};
-    const auto expected = rendering::FrameCompositor::compose(
-        1920, 1080, reference_layers);
-    require(expected.has_value(),
-            "The source-rate mapping reference frame could not be composed.");
-
     playback::PlaybackWorker worker;
+    bool media_ready = false;
+    bool playback_error = false;
     media::VideoFramePtr actual;
     QObject::connect(
         &worker,
@@ -625,10 +607,90 @@ void validateCompositionSourceRateMapping(
         [&actual](playback::VideoFramePtr frame, qint64, quint64, quint64) {
             actual = std::move(frame);
         });
-    worker.setComposition({layer}, {}, 403);
-    worker.renderCompositionFrame(timeline_frame, timeline_frame, 403);
-    require(actual != nullptr && actual->rgba_pixels == expected->rgba_pixels,
-            "Composition preview did not map the Timeline frame to the matching trimmed source frame.");
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::mediaReady,
+        [&media_ready](quint64) { media_ready = true; });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&playback_error](const QString&, qint64, quint64) {
+            playback_error = true;
+        });
+
+    // Standalone playback uses the source rate until a valid composition
+    // snapshot supplies its project rate.
+    worker.setMedia(toQString(path), 60.0, 10, 60,
+        1.0, false, 1.0, false, 0, 0, 402);
+    require(media_ready && !playback_error,
+            "Preparing standalone playback before composition failed.");
+    auto rate_snapshot = metrics.takeSnapshotAndReset();
+    require(rate_snapshot.target_frame_rate_milli == 60'000 &&
+                rate_snapshot.timeline_frame_rate_numerator == 0 &&
+                rate_snapshot.timeline_frame_rate_denominator == 0,
+            "Standalone playback did not report its source rate without a Timeline rate.");
+
+    constexpr std::array<double, 3> source_rates{24.0, 30.0, 60.0};
+    constexpr std::int64_t timeline_frame_rate = 30;
+    constexpr std::int64_t local_frame = 15;
+    QVector<playback::CompositionLayerSpec> layers;
+    for (std::size_t index = 0; index < source_rates.size(); ++index) {
+        playback::CompositionLayerSpec layer;
+        layer.source_path = toQString(path);
+        layer.frame_rate = source_rates[index];
+        layer.timeline_frame_rate = {timeline_frame_rate, 1};
+        layer.timeline_start_frame = static_cast<std::int64_t>(index) * 60;
+        layer.source_start_frame = 10;
+        layer.source_duration_frames = 1'000;
+        layer.segment_frame_count = 60;
+        layer.track_index = 0;
+        layer.clip_index = static_cast<std::int64_t>(index);
+        layers.push_back(std::move(layer));
+    }
+    worker.setComposition(std::move(layers), {}, 403);
+    rate_snapshot = metrics.takeSnapshotAndReset();
+    require(rate_snapshot.target_frame_rate_milli == 30'000 &&
+                rate_snapshot.timeline_frame_rate_numerator == 30 &&
+                rate_snapshot.timeline_frame_rate_denominator == 1,
+            "Preparing a composition did not replace the standalone clock with the project Timeline rate.");
+
+    constexpr std::array<std::int64_t, 3> expected_source_offsets{12, 15, 30};
+    for (std::size_t index = 0; index < source_rates.size(); ++index) {
+        const auto clip_index = static_cast<std::int64_t>(index);
+        const auto generation = static_cast<quint64>(404 + index);
+        media_ready = false;
+        worker.setMedia(
+            toQString(path), source_rates[index], 10, 60,
+            1.0, false, 1.0, false, 0, clip_index, generation);
+        worker.setActiveCompositionClip(0, clip_index);
+        require(media_ready && !playback_error,
+                "Activating a source with a different FPS failed after composition preparation.");
+        rate_snapshot = metrics.takeSnapshotAndReset();
+        require(rate_snapshot.target_frame_rate_milli == 30'000 &&
+                    rate_snapshot.timeline_frame_rate_numerator == 30 &&
+                    rate_snapshot.timeline_frame_rate_denominator == 1,
+                "Changing the active source replaced the composed Timeline clock rate.");
+
+        const auto expected_source_frame = 10 + expected_source_offsets[index];
+        const auto source_frame = reference->decode_frame_at(expected_source_frame);
+        require(source_frame.has_value() && *source_frame != nullptr,
+                "The source-rate mapping fixture did not contain its expected source frame.");
+        const std::vector<rendering::CompositionLayer> reference_layers{{
+            source_frame->get(), timeline::Transform2D{}, {}}};
+        const auto expected = rendering::FrameCompositor::compose(
+            1920, 1080, reference_layers);
+        require(expected.has_value(),
+                "The source-rate mapping reference frame could not be composed.");
+
+        actual.reset();
+        const auto global_frame = clip_index * 60 + local_frame;
+        worker.renderCompositionFrame(global_frame, local_frame, generation);
+        require(actual != nullptr && actual->rgba_pixels == expected->rgba_pixels,
+                "Composition preview did not map the Timeline frame through the active source rate and in-point.");
+    }
+
+    metrics.setEnabled(false);
+    metrics.reset();
 }
 
 void validateCompositionPlayback(

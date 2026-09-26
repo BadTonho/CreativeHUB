@@ -48,6 +48,7 @@ int main() {
         disabled_slow_frame.processing_nanoseconds = 40'000'000;
         disabled_slow_frame.frame_budget_nanoseconds = 33'000'000;
         metrics.recordSlowFrame(disabled_slow_frame);
+        metrics.setTimelineFrameRate(30, 1'000'001);
         const auto disabled = metrics.takeSnapshotAndReset();
         require(disabled.decoded_frames == 0 &&
                     disabled.decode_discarded_frames == 0 &&
@@ -68,6 +69,8 @@ int main() {
                     disabled.pacing_deadline_catchup_frames == 0 &&
                     disabled.slow_frame_count == 0 &&
                     !disabled.worst_slow_frame.has_value() &&
+                    disabled.timeline_frame_rate_numerator == 0 &&
+                    disabled.timeline_frame_rate_denominator == 0 &&
                     disabled.frame_delivery.sample_count == 0 &&
                     disabled.frame_delivery.incomplete_trace_count == 0,
                 "Disabled metrics recorded decoded-frame data.");
@@ -76,6 +79,11 @@ int main() {
         require(disabled.decode.percentile95_nanoseconds == 0 &&
                     disabled.decode.percentile99_nanoseconds == 0,
                 "Disabled metrics recorded percentile data.");
+        metrics.setTimelineFrameRate(1'001, 1);
+        const auto invalid_timeline_rate = metrics.takeSnapshotAndReset();
+        require(invalid_timeline_rate.timeline_frame_rate_numerator == 0 &&
+                    invalid_timeline_rate.timeline_frame_rate_denominator == 0,
+                "Metrics accepted a Timeline rate outside the project rate bounds.");
         require(disabled.decode_packet.count == 0 &&
                     disabled.decode_receive.count == 0 &&
                     disabled.pixel_conversion.count == 0 &&
@@ -144,6 +152,7 @@ int main() {
         metrics.recordPacingCoalescedFrame();
         metrics.setPlaybackWorkerThreadId(12345);
         metrics.setTargetFrameRate(23.976);
+        metrics.setTimelineFrameRate(30'000, 1'001);
         metrics.setCompositionWorkload(4, 1, 2, true);
         metrics.setAudioEnabled(true);
         metrics.recordTiming(
@@ -203,6 +212,8 @@ int main() {
         first_slow_frame.playback_generation = 7;
         first_slow_frame.timeline_frame = 120;
         first_slow_frame.frame_rate_milli = 30'000;
+        first_slow_frame.timeline_frame_rate_numerator = 30'000;
+        first_slow_frame.timeline_frame_rate_denominator = 1'001;
         first_slow_frame.frame_budget_nanoseconds = 33'000'000;
         first_slow_frame.processing_nanoseconds = 34'000'000;
         first_slow_frame.decode_nanoseconds = 20'000'000;
@@ -265,6 +276,8 @@ int main() {
         require(snapshot.slow_frame_count == 2 &&
                     snapshot.worst_slow_frame.has_value() &&
                     snapshot.worst_slow_frame->timeline_frame == 121 &&
+                    snapshot.worst_slow_frame->timeline_frame_rate_numerator == 30'000 &&
+                    snapshot.worst_slow_frame->timeline_frame_rate_denominator == 1'001 &&
                     snapshot.worst_slow_frame->processing_nanoseconds ==
                         41'000'000 &&
                     snapshot.worst_slow_frame->slow_layer_count == 4 &&
@@ -323,6 +336,8 @@ int main() {
                     snapshot.last_frame_height == 1080,
                 "Last frame dimensions are incorrect.");
         require(snapshot.target_frame_rate_milli == 23976 &&
+                    snapshot.timeline_frame_rate_numerator == 30'000 &&
+                    snapshot.timeline_frame_rate_denominator == 1'001 &&
                     snapshot.composition_layer_count == 4 &&
                     snapshot.composition_text_layer_count == 1 &&
                     snapshot.composition_transition_count == 2 &&

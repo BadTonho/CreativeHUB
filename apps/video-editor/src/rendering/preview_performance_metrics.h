@@ -96,6 +96,8 @@ struct SlowFrameSample {
     std::uint64_t playback_generation = 0;
     std::int64_t timeline_frame = -1;
     std::uint64_t frame_rate_milli = 0;
+    std::uint64_t timeline_frame_rate_numerator = 0;
+    std::uint64_t timeline_frame_rate_denominator = 0;
     std::uint64_t frame_budget_nanoseconds = 0;
     std::uint64_t processing_nanoseconds = 0;
     std::uint64_t decode_nanoseconds = 0;
@@ -226,6 +228,8 @@ struct PreviewPerformanceSnapshot {
     std::uint64_t playback_active_nanoseconds = 0;
     std::uint64_t first_frame_nanoseconds = 0;
     std::uint64_t target_frame_rate_milli = 0;
+    std::uint64_t timeline_frame_rate_numerator = 0;
+    std::uint64_t timeline_frame_rate_denominator = 0;
     bool composition_enabled = false;
     bool audio_enabled = false;
 
@@ -310,6 +314,9 @@ public:
         std::optional<std::uint64_t> buffered_usecs) noexcept;
     void setPlaybackWorkerThreadId(std::uint64_t thread_id) noexcept;
     void setTargetFrameRate(double frame_rate) noexcept;
+    void setTimelineFrameRate(
+        std::uint64_t numerator,
+        std::uint64_t denominator) noexcept;
     void setCompositionWorkload(
         std::uint64_t layer_count,
         std::uint64_t text_layer_count,
@@ -323,6 +330,9 @@ public:
 private:
     static constexpr std::size_t kTimingHistogramBucketCount = 64;
     static constexpr std::size_t kFrameDeliveryTraceCapacity = 512;
+    static constexpr std::uint64_t kTimelineRateDenominatorBits = 20;
+    static constexpr std::uint64_t kTimelineRateDenominatorMask =
+        (std::uint64_t{1} << kTimelineRateDenominatorBits) - 1U;
 
     struct FrameDeliveryTraceRecord {
         std::uint64_t trace_id = 0;
@@ -402,6 +412,7 @@ private:
     std::atomic<std::uint64_t> composition_text_layer_count_{0};
     std::atomic<std::uint64_t> composition_transition_count_{0};
     std::atomic<std::uint64_t> target_frame_rate_milli_{0};
+    std::atomic<std::uint64_t> timeline_frame_rate_packed_{0};
     std::atomic_bool composition_enabled_{false};
     std::atomic_bool audio_enabled_{false};
     TimingStorage decode_;

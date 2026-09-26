@@ -134,7 +134,13 @@ When enabled, the application aggregates data for one-second intervals and
 writes at most one summary per interval through the existing logger using the
 `preview/performance_metrics` operation. `metrics_schema_version` identifies
 the current field set while existing fields retain their previous meaning. The
-current schema version is `4`.
+current schema version is `5`. The summary includes
+`timeline_fps_numerator` and `timeline_fps_denominator` for the active project
+Timeline; `0/0` means standalone media playback, which has no project Timeline
+rate. `target_fps` is the rate used by the worker in the current mode: the
+persisted Timeline rate for composed playback, or the source rate for isolated
+media playback. The media source metadata continues to report its own
+`source_fps` independently.
 The summary includes decoded, decoded-frame cache hits, text-raster cache hits,
 seeked, composed, final-composition cache hits, emitted, received, submitted,
 CPU-presented, GPU-presented, overwritten, stale, skipped, and coalesced frame
@@ -148,7 +154,7 @@ During composed Timeline playback, frames whose worker processing time exceeds
 the target-FPS frame budget contribute to a bounded slow-frame summary. The UI
 timer writes at most one additional `playback/slow_frame` event per metrics
 interval, and only when that interval contains a slow frame. Its
-`diagnostic_schema_version` is `3`; it reports the slow-frame count and the
+`diagnostic_schema_version` is `4`; it reports the slow-frame count and the
 slowest frame's timeline position, generation, target FPS, budget, processing,
 decode, composition, and payload timings. It also reports compositor timings
 for adapter/list setup, output-buffer allocation, background initialization,
@@ -165,7 +171,7 @@ refreshes, seeks, isolated media previews, and offline export do not collect
 this per-layer data. UI and GPU presentation timings remain in the existing
 aggregate sample and can be compared with the slow-frame event.
 
-For video layers that perform forward catch-up, schema `3` also records the
+For video layers that perform forward catch-up, schema `4` also records the
 decoder frame before the request, requested source frame, number of discarded
 intermediate frames, and total forward-call time. It separates accumulated
 packet read/send, decoder receive, and requested-frame pixel conversion time;
@@ -197,12 +203,12 @@ evicted. No
 media path or frame content is included. Disabling `Enable preview performance
 metrics` stops collection and clears retained delivery traces. Neither this
 event nor the slow-frame diagnostic changes the aggregate
-`preview/performance_metrics` schema, which remains version `4`.
+`preview/performance_metrics` schema, which remains version `5`.
 
 The worker retains only the slowest over-budget frame and a count for the
 current metrics interval; it does not log each frame. Neither event contains
 media paths or frame contents. The aggregate `preview/performance_metrics`
-schema remains version `4`.
+schema remains version `5`.
 
 Each timing summary contains count, average, maximum, and bounded-histogram
 approximations for the p95 and p99 milliseconds. The timings cover decoding,
