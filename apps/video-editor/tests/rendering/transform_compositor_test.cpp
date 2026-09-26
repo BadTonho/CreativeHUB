@@ -81,6 +81,130 @@ media::VideoFrame sparseAlphaFrame() {
     return frame;
 }
 
+media::VideoFrame patternedFrame(int width, int height) {
+    media::VideoFrame frame;
+    frame.width = width;
+    frame.height = height;
+    frame.stride = width * 4;
+    frame.rgba_pixels.resize(static_cast<std::size_t>(frame.stride) * height);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            auto* pixel = frame.rgba_pixels.data() +
+                static_cast<std::size_t>(y) * frame.stride +
+                static_cast<std::size_t>(x) * 4;
+            pixel[0] = static_cast<std::uint8_t>((x * 47 + y * 13) % 256);
+            pixel[1] = static_cast<std::uint8_t>((x * 19 + y * 61) % 256);
+            pixel[2] = static_cast<std::uint8_t>((x * 83 + y * 29) % 256);
+            pixel[3] = static_cast<std::uint8_t>((x * 37 + y * 53) % 256);
+        }
+    }
+    return frame;
+}
+
+media::VideoFrame referenceGeneralComposition(
+    int width,
+    int height,
+    const std::vector<rendering::CompositionLayer>& layers) {
+    media::VideoFrame output;
+    output.width = width;
+    output.height = height;
+    output.stride = width * 4;
+    output.rgba_pixels.assign(
+        static_cast<std::size_t>(output.stride) * output.height, 0);
+    for (std::size_t index = 3; index < output.rgba_pixels.size(); index += 4) {
+        output.rgba_pixels[index] = 255;
+    }
+
+    for (const auto& layer : layers) {
+        if (layer.frame == nullptr || !timeline::validTransform(layer.transform) ||
+            layer.frame->width <= 0 || layer.frame->height <= 0) {
+            continue;
+        }
+        const auto& frame = *layer.frame;
+        const double fit = std::min(
+            static_cast<double>(width) / frame.width,
+            static_cast<double>(height) / frame.height);
+        const double displayed_width = frame.width * fit * layer.transform.scale;
+        const double displayed_height = frame.height * fit * layer.transform.scale;
+        if (displayed_width <= 0.0 || displayed_height <= 0.0) continue;
+
+        const double center_x = layer.transform.position_x * width;
+        const double center_y = layer.transform.position_y * height;
+        const double angle = layer.transform.rotation_degrees *
+            3.14159265358979323846 / 180.0;
+        const double cosine = std::cos(angle);
+        const double sine = std::sin(angle);
+        const double radius = std::hypot(displayed_width, displayed_height) * 0.5;
+        const int left = std::max(
+            0, static_cast<int>(std::floor(center_x - radius - 1.0)));
+        const int right = std::min(
+            width - 1, static_cast<int>(std::ceil(center_x + radius + 1.0)));
+        const int top = std::max(
+            0, static_cast<int>(std::floor(center_y - radius - 1.0)));
+        const int bottom = std::min(
+            height - 1, static_cast<int>(std::ceil(center_y + radius + 1.0)));
+
+        for (int y = top; y <= bottom; ++y) {
+            for (int x = left; x <= right; ++x) {
+                const double dx = x + 0.5 - center_x;
+                const double dy = y + 0.5 - center_y;
+                const double unrotated_x = cosine * dx + sine * dy;
+                const double unrotated_y = -sine * dx + cosine * dy;
+                if (std::abs(unrotated_x) > displayed_width * 0.5 ||
+                    std::abs(unrotated_y) > displayed_height * 0.5) {
+                    continue;
+                }
+                const double source_x =
+                    (unrotated_x / displayed_width + 0.5) * frame.width;
+                const double source_y =
+                    (unrotated_y / displayed_height + 0.5) * frame.height;
+                const int pixel_x = std::clamp(
+                    static_cast<int>(std::floor(source_x)), 0, frame.width - 1);
+                const int pixel_y = std::clamp(
+                    static_cast<int>(std::floor(source_y)), 0, frame.height - 1);
+                const auto* source = frame.rgba_pixels.data() +
+                    static_cast<std::size_t>(pixel_y) * frame.stride +
+                    static_cast<std::size_t>(pixel_x) * 4;
+                const double source_alpha = std::clamp(
+                    source[3] / 255.0 * layer.transform.opacity, 0.0, 1.0);
+                if (source_alpha <= 0.0) continue;
+                auto* destination = output.rgba_pixels.data() +
+                    static_cast<std::size_t>(y) * output.stride +
+                    static_cast<std::size_t>(x) * 4;
+                if (source_alpha >= 1.0) {
+                    destination[0] = source[0];
+                    destination[1] = source[1];
+                    destination[2] = source[2];
+                    destination[3] = 255;
+                    continue;
+                }
+                const double destination_alpha = destination[3] / 255.0;
+                const double output_alpha = source_alpha +
+                    destination_alpha * (1.0 - source_alpha);
+                if (output_alpha <= 0.0) continue;
+                const auto blend_channel = [source_alpha, destination_alpha,
+                                            output_alpha](std::uint8_t source_value,
+                                                          std::uint8_t destination_value) {
+                    const double value =
+                        (source_value / 255.0 * source_alpha +
+                         destination_value / 255.0 * destination_alpha *
+                             (1.0 - source_alpha)) /
+                        output_alpha;
+                    return static_cast<std::uint8_t>(std::lround(
+                        std::clamp(value, 0.0, 1.0) * 255.0));
+                };
+                for (int channel = 0; channel < 3; ++channel) {
+                    destination[channel] = blend_channel(
+                        source[channel], destination[channel]);
+                }
+                destination[3] = static_cast<std::uint8_t>(std::lround(
+                    output_alpha * 255.0));
+            }
+        }
+    }
+    return output;
+}
+
 } // namespace
 
 int main() {
@@ -166,6 +290,46 @@ int main() {
                 "The compositor did not report output and general raster timings.");
         require(composed->rgba_pixels[0] > 100 && composed->rgba_pixels[1] > 100,
                 "The compositor did not blend alpha layers.");
+
+        const auto patterned = patternedFrame(5, 3);
+        auto centered = identity;
+        auto clipped_overlay = identity;
+        clipped_overlay.position_x = 0.25;
+        clipped_overlay.position_y = 0.68;
+        clipped_overlay.scale = 0.8;
+        clipped_overlay.opacity = 0.63;
+        auto edge_overlay = identity;
+        edge_overlay.position_x = 1.05;
+        edge_overlay.position_y = 0.1;
+        edge_overlay.scale = 1.2;
+        const auto sparse_overlay = sparseAlphaFrame();
+        const auto transparent_axis_overlay = fullFrame(0, 0, 0, 0);
+        const std::vector<rendering::CompositionLayer> exact_layers{
+            {&patterned, centered},
+            {&sparse_overlay, clipped_overlay},
+            {&transparent_axis_overlay, edge_overlay}};
+        rendering::FrameCompositionTimings axis_aligned_timings;
+        const auto axis_aligned = rendering::FrameCompositor::compose(
+            11, 7, exact_layers, &axis_aligned_timings);
+        const auto axis_aligned_reference = referenceGeneralComposition(
+            11, 7, exact_layers);
+        require(axis_aligned.has_value() &&
+                    axis_aligned->rgba_pixels == axis_aligned_reference.rgba_pixels,
+                "The unrotated fast path changed pixels from the scalar reference.");
+        require(axis_aligned_timings.layers.size() == exact_layers.size() &&
+                    axis_aligned_timings.layers[0].raster_blend_nanoseconds > 0 &&
+                    axis_aligned_timings.layers[1].raster_blend_nanoseconds > 0 &&
+                    axis_aligned_timings.layers[2].fast_path_copy_nanoseconds == 0,
+                "The unrotated fast path did not preserve compositor timing categories.");
+        const auto empty_output = rendering::FrameCompositor::compose(3, 2, {});
+        require(empty_output.has_value(), "The empty output buffer was not created.");
+        for (std::size_t index = 0; index < empty_output->rgba_pixels.size(); index += 4) {
+            require(empty_output->rgba_pixels[index] == 0 &&
+                        empty_output->rgba_pixels[index + 1] == 0 &&
+                        empty_output->rgba_pixels[index + 2] == 0 &&
+                        empty_output->rgba_pixels[index + 3] == 255,
+                    "The empty output buffer did not retain its black opaque background.");
+        }
 
         const auto opaque_full = fullFrame(31, 63, 127);
         const auto direct = rendering::FrameCompositor::compose(

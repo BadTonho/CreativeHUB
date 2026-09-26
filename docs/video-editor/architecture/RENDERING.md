@@ -105,6 +105,13 @@ Rotated or unsupported layers use the general transform, rotation, opacity,
 and alpha path. The result is still one final RGBA frame sent to OpenGL;
 per-layer texture blending is deliberately deferred to a later milestone.
 
+Other valid layers without rotation use an axis-aligned path. It computes the
+visible rectangular bounds and horizontal/vertical nearest-neighbor source
+lookups once per layer, then applies the same blend formula only to pixels in
+that rectangle. Rotated layers retain the general inverse-transform loop. The
+output buffer is zero-initialized when allocated, and the background pass only
+sets its alpha bytes to opaque; it does not clear the RGB bytes a second time.
+
 ## Preview performance diagnostics
 
 Preview performance metrics are enabled by default while the Preview is under

@@ -252,6 +252,90 @@ void composeAlphaCoverageLayer(
     }
 }
 
+void composeAxisAlignedLayer(
+    media::VideoFrame& output,
+    const CompositionLayer& layer,
+    CompositionLayerTimings* timings) {
+    using Clock = std::chrono::steady_clock;
+    const auto setup_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+    const auto& frame = *layer.frame;
+    const double fit = std::min(
+        static_cast<double>(output.width) / frame.width,
+        static_cast<double>(output.height) / frame.height);
+    const double displayed_width = frame.width * fit * layer.transform.scale;
+    const double displayed_height = frame.height * fit * layer.transform.scale;
+    if (displayed_width <= 0.0 || displayed_height <= 0.0) {
+        if (timings != nullptr) {
+            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+        }
+        return;
+    }
+
+    const double center_x = layer.transform.position_x * output.width;
+    const double center_y = layer.transform.position_y * output.height;
+    const auto horizontal = axisAlignedPixelRange(
+        center_x, displayed_width, output.width);
+    const auto vertical = axisAlignedPixelRange(
+        center_y, displayed_height, output.height);
+    if (!horizontal.has_value() || !vertical.has_value()) {
+        if (timings != nullptr) {
+            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+        }
+        return;
+    }
+
+    const auto source_x_lookup = buildSourceLookup(
+        horizontal->begin,
+        horizontal->end,
+        center_x,
+        displayed_width,
+        frame.width);
+    const auto source_y_lookup = buildSourceLookup(
+        vertical->begin,
+        vertical->end,
+        center_y,
+        displayed_height,
+        frame.height);
+    if (source_x_lookup.empty() || source_y_lookup.empty()) {
+        if (timings != nullptr) {
+            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+        }
+        return;
+    }
+
+    if (timings != nullptr) {
+        timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+    }
+    const auto raster_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+
+    for (int destination_y = vertical->begin;
+         destination_y <= vertical->end;
+         ++destination_y) {
+        const auto source_y = source_y_lookup[
+            static_cast<std::size_t>(destination_y - vertical->begin)];
+        const auto* source_row = frame.rgba_pixels.data() +
+            static_cast<std::size_t>(source_y) * frame.stride;
+        auto* destination = output.rgba_pixels.data() +
+            static_cast<std::size_t>(destination_y) * output.stride +
+            static_cast<std::size_t>(horizontal->begin) * 4;
+        for (const auto source_x : source_x_lookup) {
+            const auto* source_pixel = source_row +
+                static_cast<std::size_t>(source_x) * 4;
+            auto color = Color{
+                source_pixel[0] / 255.0,
+                source_pixel[1] / 255.0,
+                source_pixel[2] / 255.0,
+                source_pixel[3] / 255.0};
+            color.alpha *= layer.transform.opacity;
+            blend(destination, color);
+            destination += 4;
+        }
+    }
+    if (timings != nullptr) {
+        timings->raster_blend_nanoseconds += elapsedNanoseconds(raster_started);
+    }
+}
+
 } // namespace
 
 AlphaCoveragePtr FrameCompositor::buildAlphaCoverage(
@@ -336,7 +420,6 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
             elapsedNanoseconds(output_create_started);
     }
     const auto background_fill_started = timings != nullptr ? Clock::now() : Clock::time_point{};
-    for (auto& pixel : output.rgba_pixels) pixel = 0;
     for (std::size_t index = 3; index < output.rgba_pixels.size(); index += 4) {
         output.rgba_pixels[index] = 255;
     }
@@ -382,11 +465,30 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
             composeAlphaCoverageLayer(output, layer, layer_timings);
             continue;
         }
+        const auto& frame = *layer.frame;
+        const auto maximum_size = std::numeric_limits<std::size_t>::max();
+        const bool width_stride_is_representable =
+            static_cast<std::size_t>(frame.width) <= maximum_size / 4;
+        const auto minimum_stride = width_stride_is_representable
+            ? static_cast<std::size_t>(frame.width) * 4
+            : maximum_size;
+        const auto stride = frame.stride > 0
+            ? static_cast<std::size_t>(frame.stride)
+            : 0U;
+        const bool has_valid_rgba_storage = width_stride_is_representable &&
+            stride >= minimum_stride &&
+            static_cast<std::size_t>(frame.height) <= maximum_size / stride &&
+            frame.rgba_pixels.size() >= stride * static_cast<std::size_t>(frame.height);
+        if (layer.transform.rotation_degrees == 0.0 && has_valid_rgba_storage) {
+            record_layer_elapsed();
+            composeAxisAlignedLayer(output, layer, layer_timings);
+            continue;
+        }
         const double fit = std::min(
-            static_cast<double>(width) / layer.frame->width,
-            static_cast<double>(height) / layer.frame->height);
-        const double displayed_width = layer.frame->width * fit * layer.transform.scale;
-        const double displayed_height = layer.frame->height * fit * layer.transform.scale;
+            static_cast<double>(width) / frame.width,
+            static_cast<double>(height) / frame.height);
+        const double displayed_width = frame.width * fit * layer.transform.scale;
+        const double displayed_height = frame.height * fit * layer.transform.scale;
         if (displayed_width <= 0.0 || displayed_height <= 0.0) {
             record_layer_elapsed();
             continue;
@@ -416,10 +518,10 @@ std::optional<media::VideoFrame> FrameCompositor::compose(
                     continue;
                 }
                 const double source_x =
-                    (unrotated_x / displayed_width + 0.5) * layer.frame->width;
+                    (unrotated_x / displayed_width + 0.5) * frame.width;
                 const double source_y =
-                    (unrotated_y / displayed_height + 0.5) * layer.frame->height;
-                auto color = sampleNearest(*layer.frame, source_x, source_y);
+                    (unrotated_y / displayed_height + 0.5) * frame.height;
+                auto color = sampleNearest(frame, source_x, source_y);
                 color.alpha *= layer.transform.opacity;
                 auto* destination = output.rgba_pixels.data() +
                     static_cast<std::size_t>(y) * output.stride +
