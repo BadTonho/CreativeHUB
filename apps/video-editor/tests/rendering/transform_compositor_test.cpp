@@ -362,6 +362,68 @@ int main() {
                         alpha_sweep_reference.rgba_pixels,
                 "Opaque-destination blending changed pixels across alpha values and layers.");
 
+        media::VideoFrame blend_pair_background;
+        blend_pair_background.width = 256;
+        blend_pair_background.height = 256;
+        blend_pair_background.stride = 256 * 4;
+        blend_pair_background.rgba_pixels.resize(
+            static_cast<std::size_t>(blend_pair_background.stride) *
+            blend_pair_background.height);
+        media::VideoFrame blend_pair_source = blend_pair_background;
+        for (int y = 0; y < 256; ++y) {
+            for (int x = 0; x < 256; ++x) {
+                auto* background_pixel = blend_pair_background.rgba_pixels.data() +
+                    static_cast<std::size_t>(y) * blend_pair_background.stride +
+                    static_cast<std::size_t>(x) * 4;
+                auto* source_pixel = blend_pair_source.rgba_pixels.data() +
+                    static_cast<std::size_t>(y) * blend_pair_source.stride +
+                    static_cast<std::size_t>(x) * 4;
+                const auto high = static_cast<std::uint8_t>(y);
+                const auto low = static_cast<std::uint8_t>(x);
+                background_pixel[0] = low;
+                background_pixel[1] = high;
+                background_pixel[2] = low;
+                background_pixel[3] = 255;
+                source_pixel[0] = high;
+                source_pixel[1] = low;
+                source_pixel[2] = high;
+                source_pixel[3] = 255;
+            }
+        }
+        const auto blend_pair_coverage =
+            rendering::FrameCompositor::buildAlphaCoverage(blend_pair_source);
+        const auto verifyExactOpaqueBlend = [&](double opacity, bool use_coverage) {
+            auto partial_opacity = identity;
+            partial_opacity.opacity = opacity;
+            std::vector<rendering::CompositionLayer> blend_layers{
+                {&blend_pair_background, identity},
+                {&blend_pair_source,
+                 partial_opacity,
+                 use_coverage ? blend_pair_coverage : nullptr}};
+            rendering::FrameCompositionTimings blend_timings;
+            const auto actual = rendering::FrameCompositor::compose(
+                256, 256, blend_layers, &blend_timings);
+            const auto reference = referenceGeneralComposition(
+                256, 256, blend_layers);
+            const auto expected_raster_path = use_coverage
+                ? rendering::CompositionRasterPath::AlphaCoverage
+                : rendering::CompositionRasterPath::AxisAligned;
+            require(actual.has_value() &&
+                        actual->rgba_pixels == reference.rgba_pixels &&
+                        blend_timings.layers.size() == 2 &&
+                        blend_timings.layers[1].raster_path == expected_raster_path,
+                    "The partial-opacity lookup blend changed pixels or bypassed its intended raster path.");
+        };
+        for (const double opacity : {
+                 0.21428571428571427,
+                 0.26666666666666672,
+                 0.5,
+                 0.8666666666666667,
+                 0.123456789}) {
+            verifyExactOpaqueBlend(opacity, false);
+            verifyExactOpaqueBlend(opacity, true);
+        }
+
         auto opaque_transformed = patternedFrame(5, 3);
         for (std::size_t index = 3; index < opaque_transformed.rgba_pixels.size(); index += 4) {
             opaque_transformed.rgba_pixels[index] = 255;

@@ -412,6 +412,10 @@ in the running Video Editor after UI or integration changes:
   frame. Compare raster/blend timings with the previous baseline using the same
   project and Full quality, first with cold caches and then with warmed caches;
   report the measured change without applying a hardware-independent threshold.
+  Include a section with partially opaque full-frame video layers and compare
+  its raster/blend time with the prior run; verify that fades and overlapping
+  layers look unchanged, while the automated compositor test checks exact RGBA
+  equality for the optimized blend path.
   Confirm no paths or frame
   contents are logged, the existing `preview/performance_metrics` schema
   is `5`, metrics-disabled playback collects no slow-frame diagnostics, and the

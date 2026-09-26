@@ -108,11 +108,17 @@ opaque output. It skips destination-alpha work and channel division when the
 resulting alpha is exactly opaque, retaining the general blend as a fallback
 for other floating-point results. When layer opacity is 1 and a sampled source
 pixel has alpha 255, both paths copy its RGBA bytes directly instead of
-converting channels or invoking the blend. Pixel-by-pixel tests compare these
-paths with the scalar reference, including transformed opaque layers. Rotated
-or unsupported layers retain the general transform, rotation, opacity, and
-alpha path. The result is still one final RGBA frame sent to OpenGL; per-layer
-texture blending is deliberately deferred to a later milestone.
+converting channels or invoking the blend. For partially transparent layers,
+opaque source pixels in these unrotated paths use a temporary 256-by-256 byte
+lookup table. The table is generated lazily per layer from the existing blend
+equation and rounding order; semitransparent source pixels keep the original
+blend. This avoids repeated floating-point conversions for opaque video pixels
+without changing their RGBA output. Pixel-by-pixel tests compare these paths
+with the scalar reference across all source/destination channel pairs and
+several opacities, including transformed opaque layers. Rotated or unsupported
+layers retain the general transform, rotation, opacity, and alpha path. The
+result is still one final RGBA frame sent to OpenGL; per-layer texture blending
+is deliberately deferred to a later milestone.
 
 Other valid layers without rotation use an axis-aligned path. It computes the
 visible rectangular bounds and horizontal/vertical nearest-neighbor source

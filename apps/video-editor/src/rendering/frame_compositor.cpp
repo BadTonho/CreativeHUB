@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
+#include <new>
 
 namespace rendering {
 namespace {
@@ -108,6 +110,55 @@ void blendOverOpaqueDestination(
     destination[3] = 255;
 }
 
+class OpaqueSourceBlendLookup final {
+public:
+    [[nodiscard]] bool tryBlend(
+        std::uint8_t* destination,
+        const std::uint8_t* source,
+        double opacity) noexcept {
+        if (source[3] != 255 || opacity <= 0.0 || opacity >= 1.0) return false;
+        if (!initialized_) initialize(opacity);
+        if (!usable_) return false;
+
+        for (std::size_t channel = 0; channel < 3; ++channel) {
+            const auto index =
+                (static_cast<std::size_t>(source[channel]) << 8U) |
+                static_cast<std::size_t>(destination[channel]);
+            destination[channel] = values_[index];
+        }
+        destination[3] = 255;
+        return true;
+    }
+
+private:
+    void initialize(double opacity) noexcept {
+        initialized_ = true;
+        const double source_alpha = std::clamp(opacity, 0.0, 1.0);
+        const double output_alpha = source_alpha + (1.0 - source_alpha);
+        if (output_alpha != 1.0) return;
+
+        values_.reset(new (std::nothrow) std::uint8_t[256U * 256U]);
+        if (!values_) return;
+        const double inverse_source_alpha = 1.0 - source_alpha;
+        for (std::size_t source = 0; source < 256; ++source) {
+            const double source_value = static_cast<double>(source) / 255.0;
+            for (std::size_t destination = 0; destination < 256; ++destination) {
+                const double output = source_value * source_alpha +
+                    (static_cast<double>(destination) / 255.0) *
+                        inverse_source_alpha;
+                values_[(source << 8U) | destination] =
+                    static_cast<std::uint8_t>(std::lround(
+                        std::clamp(output, 0.0, 1.0) * 255.0));
+            }
+        }
+        usable_ = true;
+    }
+
+    std::unique_ptr<std::uint8_t[]> values_;
+    bool initialized_ = false;
+    bool usable_ = false;
+};
+
 bool isOpaqueFrame(
     const media::VideoFrame& frame,
     bool* alpha_check_performed = nullptr) noexcept {
@@ -188,6 +239,7 @@ void composeAlphaCoverageLayer(
         return;
     }
     const bool copy_opaque_source_pixels = layer.transform.opacity == 1.0;
+    OpaqueSourceBlendLookup opaque_source_blend_lookup;
 
     const double fit = std::min(
         static_cast<double>(output.width) / frame.width,
@@ -275,6 +327,10 @@ void composeAlphaCoverageLayer(
                     std::memcpy(destination, source_pixel, 4);
                     continue;
                 }
+                if (opaque_source_blend_lookup.tryBlend(
+                        destination, source_pixel, layer.transform.opacity)) {
+                    continue;
+                }
                 auto color = Color{
                     source_pixel[0] / 255.0,
                     source_pixel[1] / 255.0,
@@ -298,6 +354,7 @@ void composeAxisAlignedLayer(
     const auto setup_started = timings != nullptr ? Clock::now() : Clock::time_point{};
     const auto& frame = *layer.frame;
     const bool copy_opaque_source_pixels = layer.transform.opacity == 1.0;
+    OpaqueSourceBlendLookup opaque_source_blend_lookup;
     const double fit = std::min(
         static_cast<double>(output.width) / frame.width,
         static_cast<double>(output.height) / frame.height);
@@ -362,6 +419,11 @@ void composeAxisAlignedLayer(
                 static_cast<std::size_t>(source_x) * 4;
             if (copy_opaque_source_pixels && source_pixel[3] == 255) {
                 std::memcpy(destination, source_pixel, 4);
+                destination += 4;
+                continue;
+            }
+            if (opaque_source_blend_lookup.tryBlend(
+                    destination, source_pixel, layer.transform.opacity)) {
                 destination += 4;
                 continue;
             }
