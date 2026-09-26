@@ -211,6 +211,10 @@ gaps, and allows overlap only across different tracks. It displays a shared
 track-specific colors, and explicit drop/playhead markers. The dock
 provides Add Video Track, Rename Track, Track Up, Track Down, and Remove Track.
 Only empty tracks can be removed.
+The upper-left corner of the ruler shows the current absolute Timeline
+playhead timecode, formatted from the project's rational frame rate. It updates
+during playback, seek, and scrub, remains fixed while the Timeline scrolls
+horizontally, and is also visible in Render above the shared read-only Timeline.
 Clips fill the height of their track row without an additional top or bottom
 margin; the track row height itself remains unchanged.
 Playback state is shown in a compact fixed footer below the timeline content;
@@ -376,6 +380,8 @@ The upper time ruler is also a playhead scrub area. Clicking or dragging it
 updates the visible playhead without selecting a clip, then requests the seek
 when the pointer is released. Scrubbing remains bounded by the real project
 duration even when the visual timeline has empty space beyond the last clip.
+The fixed timecode in the ruler's upper-left corner follows the displayed
+global frame, including the transient scrub position.
 The playhead keeps its pointer position while the playback worker processes the
 request, and the window converts the absolute ruler frame to the target clip's
 local playback frame. Once scrubbing ends, incoming playback frames replace

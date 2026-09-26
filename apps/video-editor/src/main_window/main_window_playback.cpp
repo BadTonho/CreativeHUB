@@ -5,6 +5,7 @@
 #include "ui/preview/preview_widget.h"
 #include "project/project_file.h"
 #include "rendering/preview_performance_metrics.h"
+#include "timeline/timeline_time.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
 
@@ -97,10 +98,39 @@ void appendOptionalUint64Context(
         value.has_value() ? std::to_string(*value) : "N/A");
 }
 
+void appendTimelinePositionContext(
+    logging::Context& context,
+    const std::string& prefix,
+    std::int64_t frame,
+    timeline::FrameRate frame_rate) {
+    context.emplace_back(prefix + "timeline_frame", std::to_string(frame));
+    context.emplace_back(
+        prefix + "timeline_time_seconds",
+        std::to_string(static_cast<double>(
+            timeline::timelineTimeSeconds(frame, frame_rate))));
+    context.emplace_back(
+        prefix + "timeline_timecode",
+        timeline::formatTimelineTimecode(frame, frame_rate));
+}
+
+timeline::FrameRate slowFrameRate(
+    const rendering::SlowFrameSample& frame) noexcept {
+    if (frame.timeline_frame_rate_numerator == 0 ||
+        frame.timeline_frame_rate_denominator == 0 ||
+        frame.timeline_frame_rate_numerator > 1'000'000'000ULL ||
+        frame.timeline_frame_rate_denominator > 1'000'000ULL) {
+        return {30, 1};
+    }
+    const timeline::FrameRate rate{
+        static_cast<std::int64_t>(frame.timeline_frame_rate_numerator),
+        static_cast<std::int64_t>(frame.timeline_frame_rate_denominator)};
+    return timeline::validFrameRate(rate) ? rate : timeline::FrameRate{30, 1};
+}
+
 void appendPerformanceContext(
     logging::Context& context,
     const PreviewPerformanceSnapshot& snapshot) {
-    context.emplace_back("metrics_schema_version", "6");
+    context.emplace_back("metrics_schema_version", "7");
     context.emplace_back(
         "timeline_fps_numerator",
         std::to_string(snapshot.timeline_frame_rate_numerator));
@@ -436,8 +466,9 @@ const char* deliveryDropReasonName(
 
 void appendFrameDeliveryContext(
     logging::Context& context,
-    const rendering::PreviewFrameDeliverySnapshot& snapshot) {
-    context.emplace_back("diagnostic_schema_version", "1");
+    const rendering::PreviewFrameDeliverySnapshot& snapshot,
+    timeline::FrameRate frame_rate) {
+    context.emplace_back("diagnostic_schema_version", "2");
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back("sample_origin_thread_role", "playback_worker");
     context.emplace_back("trace_capacity", "512");
@@ -488,8 +519,10 @@ void appendFrameDeliveryContext(
         context.emplace_back(
             prefix + "playback_generation",
             std::to_string(sample.playback_generation));
-        context.emplace_back(
-            prefix + "timeline_frame", std::to_string(sample.timeline_frame));
+        if (sample.timeline_frame >= 0) {
+            appendTimelinePositionContext(
+                context, prefix, sample.timeline_frame, frame_rate);
+        }
         context.emplace_back(
             prefix + "last_stage", deliveryStageName(sample.last_stage));
         context.emplace_back(
@@ -529,7 +562,7 @@ void appendSlowFrameContext(
     const rendering::PreviewPerformanceSnapshot& snapshot) {
     if (!snapshot.worst_slow_frame.has_value()) return;
     const auto& frame = *snapshot.worst_slow_frame;
-    context.emplace_back("diagnostic_schema_version", "6");
+    context.emplace_back("diagnostic_schema_version", "7");
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back("sample_origin_thread_role", "playback_worker");
     context.emplace_back(
@@ -539,7 +572,8 @@ void appendSlowFrameContext(
         "slow_frame_count", std::to_string(snapshot.slow_frame_count));
     context.emplace_back(
         "playback_generation", std::to_string(frame.playback_generation));
-    context.emplace_back("timeline_frame", std::to_string(frame.timeline_frame));
+    appendTimelinePositionContext(
+        context, "", frame.timeline_frame, slowFrameRate(frame));
     context.emplace_back(
         "timeline_fps_numerator",
         std::to_string(frame.timeline_frame_rate_numerator));
@@ -708,10 +742,10 @@ void appendSlowFrameContext(
                 prefix + "forward_decode_cancelled",
                 layer.forward_decode_cancelled ? "true" : "false");
             context.emplace_back(
-                prefix + "forward_decode_start_frame",
+                prefix + "forward_decode_start_source_frame",
                 std::to_string(layer.forward_decode_start_frame));
             context.emplace_back(
-                prefix + "forward_decode_requested_frame",
+                prefix + "forward_decode_requested_source_frame",
                 std::to_string(layer.forward_decode_requested_frame));
             context.emplace_back(
                 prefix + "forward_decode_discarded_frames",
@@ -809,6 +843,13 @@ void MainWindow::flushPreviewPerformanceMetrics() {
 
     logging::Context context;
     appendPerformanceContext(context, snapshot);
+    if (snapshot.composition_enabled && editUi().timeline != nullptr) {
+        appendTimelinePositionContext(
+            context,
+            "",
+            editUi().timeline->displayedPlayheadFrame(),
+            timeline_model_.frameRate());
+    }
     const auto resources = performance_sampler_.sample();
     appendOptionalDoubleContext(
         context,
@@ -904,7 +945,7 @@ void MainWindow::flushPreviewPerformanceMetrics() {
             ? std::to_string(*active_timeline_clip_index_cache_)
             : "-1");
     context.emplace_back(
-        "playback_frame_index",
+        "active_clip_local_frame",
         std::to_string(static_cast<long long>(playback_frame_index_)));
     context.emplace_back(
         "playback_worker_thread_id",
@@ -927,7 +968,8 @@ void MainWindow::flushPreviewPerformanceMetrics() {
     }
     if (has_delivery_activity) {
         logging::Context delivery_context;
-        appendFrameDeliveryContext(delivery_context, snapshot.frame_delivery);
+        appendFrameDeliveryContext(
+            delivery_context, snapshot.frame_delivery, timeline_model_.frameRate());
         delivery_context.emplace_back(
             "playback_worker_thread_id",
             std::to_string(snapshot.playback_worker_thread_id));
@@ -1256,10 +1298,23 @@ void MainWindow::handlePlaybackError(const playback::PlaybackErrorEvent& event) 
         logging::Context context{
             {"path", pathToUtf8(event.source_path)},
             {"clip_id", std::to_string(*event.activation_clip_id)},
-            {"requested_frame", std::to_string(event.target_frame)},
+            {"requested_clip_local_frame", std::to_string(event.target_frame)},
             {"source_start_frame", std::to_string(event.source_start_frame)},
             {"segment_frame_count", std::to_string(event.segment_frame_count)},
             {"generation", std::to_string(event.generation)}};
+        if (const auto location = timeline_model_.locateClip(*event.activation_clip_id);
+            location.has_value() && event.target_frame >= 0) {
+            const auto& clip = timeline_model_.tracks()[location->track_index]
+                .clips[location->clip_index];
+            if (clip.timeline_start_frame <=
+                std::numeric_limits<std::int64_t>::max() - event.target_frame) {
+                appendTimelinePositionContext(
+                    context,
+                    "",
+                    clip.timeline_start_frame + event.target_frame,
+                    timeline_model_.frameRate());
+            }
+        }
         if (event.error_code >= 0) {
             context.emplace_back("error_code", std::to_string(event.error_code));
         }

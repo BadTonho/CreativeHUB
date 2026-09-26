@@ -3,6 +3,7 @@
 #include <QWidget>
 
 class QEvent;
+class QLabel;
 
 namespace timeline {
 
@@ -25,6 +26,7 @@ private:
     void updateOverlayGeometry();
 
     TimelineWidget* timeline_ = nullptr;
+    QLabel* playhead_timecode_ = nullptr;
     int vertical_scroll_offset_ = 0;
 };
 

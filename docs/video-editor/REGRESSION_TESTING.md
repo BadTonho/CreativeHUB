@@ -226,7 +226,10 @@ in the running Video Editor after UI or integration changes:
   text over clips, and no vertical grid lines crossing clip content,
   clips filling the track row vertically without top or bottom margins,
   Ctrl + wheel playhead anchoring, button playhead anchoring, timecode labels in
-  `HH:MM:SS.mmm`, click-and-drag
+  `HH:MM:SS.mmm`, and the fixed upper-left global playhead readout while
+  horizontally scrolling; confirm its rational-rate value advances through
+  adjacent clips, updates during playback, seek, and transient scrub, and stays
+  meaningful in gaps and with no active clip; click-and-drag
   playhead scrubbing on the upper time ruler, live playhead movement after a
   seek even when an intermediate frame is skipped, empty gaps without overlays,
   no Media Browser selection while scrubbing, selecting a clip without moving
@@ -354,14 +357,24 @@ in the running Video Editor after UI or integration changes:
   Settings) and compare a simple 1080p playback run
   with the metrics disabled: confirm the one-second summaries include decode,
   composition, decoded-frame cache hits, text-raster cache hits, and final
-  composition-cache hits, `metrics_schema_version="6"`, Timeline FPS rational
-  fields, p95/p99 timings,
+  composition-cache hits, `metrics_schema_version="7"`, absolute Timeline
+  frame/seconds/timecode when a project position is available, Timeline FPS
+  rational fields, p95/p99 timings,
   delivery FPS, window-local `first_frame_ms`, lifecycle timings for media
   open, audio setup, composition setup, activation, playback start, and seek,
   cache bytes, and process-resource fields;
   verify that a sequential run does not seek for every frame, that composition
   remains on the CPU, and that the optimized path does not change the Preview
   output, frame rate, project dirty state, or Undo/Redo;
+- with Preview metrics enabled, cross several clip cuts including a text layer,
+  scrub into a gap, and seek with no selected clip; confirm each associated
+  `preview/performance_metrics`, `playback/slow_frame`, `playback/frame_delivery`
+  sample, and playback error reports absolute `timeline_frame`,
+  `timeline_time_seconds`, and `timeline_timecode`. Verify the global frame and
+  timecode remain continuous at cuts while `active_clip_local_frame` or
+  `clip_local_frame` restarts, source decode frames remain separate, and each
+  delivery example's timecode matches its global frame. Standalone media events
+  without a Timeline association must not invent a global position;
 - with Preview metrics enabled, compare `decode_avg_ms` with
   `decode_packet_avg_ms`, `decode_receive_avg_ms`, `pixel_conversion_avg_ms`,
   `frame_cache_copy_avg_ms`, and `decode_discarded_frames`; confirm that
@@ -392,7 +405,7 @@ in the running Video Editor after UI or integration changes:
   unrotated video layer for 15 seconds at Full quality, then repeat the same
   section once to warm decoder and text caches;
   confirm one `playback/slow_frame` event at most per metrics interval, only
-  when frames exceed the target-FPS budget. Check that schema `6` reports the interval
+  when frames exceed the target-FPS budget. Check that schema `7` reports the interval
   slow-frame count, the worst timeline frame, total processing/decode/
   composition/payload times, compositor list/output initialization and layer
   setup/raster/blend/copy buckets, and no more than four costly layers with
@@ -429,7 +442,7 @@ in the running Video Editor after UI or integration changes:
   equality for the optimized blend path.
   Confirm no paths or frame
   contents are logged, the existing `preview/performance_metrics` schema
-  is `6`, metrics-disabled playback collects no slow-frame diagnostics, and the
+  is `7`, metrics-disabled playback collects no slow-frame diagnostics, and the
   project dirty state and playback output are unchanged;
 - with Preview metrics enabled, verify one `playback/frame_delivery` event at
   most per metrics interval. Correlate the same trace ID from worker emission

@@ -61,11 +61,15 @@ available viewport; content longer than one hour expands the timeline
 surface proportionally and is accessed with horizontal scrolling. The actual
 content duration remains authoritative for playback and project behavior.
 The left track-header column is rendered as a fixed overlay in the scroll
-viewport: track names, clip counts, and the active-track highlight remain
-visible while the ruler and clip content move horizontally. Vertical scrolling
-still moves the header rows together with their corresponding tracks. The
-overlay is visual only and does not change Timeline coordinate conversion or
-input event routing.
+viewport: the current global playhead timecode occupies its upper-left corner,
+and track names, clip counts, and the active-track highlight remain visible
+while the ruler and clip content move horizontally. The timecode uses the
+project's rational Timeline rate and follows playback, seeking, and scrubbing;
+it remains fixed during horizontal scrolling and is visible in the Render
+workspace because the same Timeline widget is shared. Vertical scrolling still
+moves the header rows together with their corresponding tracks. The overlay is
+visual only and does not change Timeline coordinate conversion or input event
+routing.
 The horizontal view can be zoomed from 25% through 51,200% using discrete
 levels. The upper time ruler combines the existing major time divisions with
 adaptive minor divisions aligned to frame boundaries. Minor divisions use

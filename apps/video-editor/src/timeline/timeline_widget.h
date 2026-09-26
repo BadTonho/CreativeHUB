@@ -51,6 +51,8 @@ public:
     void setActiveClipIndex(std::optional<std::size_t> clip_index);
     void setPlayheadFrame(std::int64_t frame_index);
     [[nodiscard]] std::int64_t playheadFrame() const noexcept;
+    [[nodiscard]] std::int64_t displayedPlayheadFrame() const noexcept;
+    [[nodiscard]] QString playheadTimecode() const;
     void setRazorMode(bool enabled);
     [[nodiscard]] bool razorMode() const noexcept;
     void setMoveRequiresAlt(bool enabled);
@@ -121,6 +123,7 @@ signals:
     void trackRowHeightChanged(double height);
     void snapEnabledChanged(bool enabled);
     void trackHeaderVisualsChanged();
+    void playheadVisualChanged();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;

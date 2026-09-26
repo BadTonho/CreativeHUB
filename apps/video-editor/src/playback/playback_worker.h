@@ -195,6 +195,8 @@ private:
         const std::exception& error,
         const char* operation,
         qint64 error_code = -1);
+    [[nodiscard]] std::optional<std::int64_t> timelineFrameForDiagnostics(
+        std::optional<std::int64_t> requested_clip_local_frame = std::nullopt) const noexcept;
     void configureAudio();
     void fillAudioOutput();
     void updateAudioBufferMetric() noexcept;

@@ -4,6 +4,7 @@
 #include "../logging/logger.h"
 #include "../rendering/preview_performance_metrics.h"
 #include "../rendering/text_renderer.h"
+#include "../timeline/timeline_time.h"
 
 #include <QFileInfo>
 #include <QByteArray>
@@ -49,6 +50,20 @@ void consumeDecodeCacheHits(media::VideoPlaybackSession& session) noexcept {
     metrics.recordDecodedCacheHits(session.take_cache_hit_count());
     const auto cache = session.cache_snapshot();
     metrics.recordDecodedCacheState(cache.entries, cache.bytes);
+}
+
+void appendTimelinePositionContext(
+    logging::Context& context,
+    std::int64_t frame,
+    timeline::FrameRate frame_rate) {
+    context.emplace_back("timeline_frame", std::to_string(frame));
+    context.emplace_back(
+        "timeline_time_seconds",
+        std::to_string(static_cast<double>(
+            timeline::timelineTimeSeconds(frame, frame_rate))));
+    context.emplace_back(
+        "timeline_timecode",
+        timeline::formatTimelineTimecode(frame, frame_rate));
 }
 
 std::unique_ptr<media::VideoPlaybackSession> openVideoPlaybackSession(
@@ -1415,13 +1430,18 @@ void PlaybackWorker::reportAudioFailure(
         try {
             logging::Context context{
                 {"path", safePathForLog(source_path_)},
-                {"frame_index", std::to_string(current_frame_index_)},
+                {"clip_local_frame", std::to_string(current_frame_index_)},
                 {"source_start_frame", std::to_string(source_start_frame_)},
                 {"segment_frame_count", std::to_string(segment_frame_count_)},
                 {"track_index", std::to_string(track_index_)},
                 {"clip_index", std::to_string(clip_index_)},
                 {"track_audio_gain", std::to_string(track_audio_gain_)},
                 {"clip_audio_gain", std::to_string(clip_audio_gain_)}};
+            if (const auto timeline_frame = timelineFrameForDiagnostics();
+                timeline_frame.has_value()) {
+                appendTimelinePositionContext(
+                    context, *timeline_frame, timeline_frame_rate_);
+            }
             if (audio_session_ != nullptr) {
                 context.emplace_back(
                     "sample_index",
@@ -1443,6 +1463,23 @@ void PlaybackWorker::reportAudioFailure(
     }
     disableAudioOutput();
     audio_session_.reset();
+}
+
+std::optional<std::int64_t> PlaybackWorker::timelineFrameForDiagnostics(
+    std::optional<std::int64_t> requested_clip_local_frame) const noexcept {
+    if (track_index_ < 0 || clip_index_ < 0) return std::nullopt;
+    if (composition_enabled_) {
+        return current_timeline_frame_ >= 0
+            ? std::optional<std::int64_t>(current_timeline_frame_)
+            : std::nullopt;
+    }
+    const auto local_frame = requested_clip_local_frame.value_or(current_frame_index_);
+    if (local_frame < 0 || primary_timeline_start_frame_ < 0 ||
+        primary_timeline_start_frame_ >
+            std::numeric_limits<std::int64_t>::max() - local_frame) {
+        return std::nullopt;
+    }
+    return primary_timeline_start_frame_ + local_frame;
 }
 
 void PlaybackWorker::ensureTimer() {
@@ -1494,9 +1531,10 @@ void PlaybackWorker::emitFrame(std::optional<media::VideoFramePtr> frame) {
     }
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     metrics.recordEmittedFrame();
+    const auto timeline_frame = timelineFrameForDiagnostics(current_frame_index_);
     const auto trace_id = playing_
         ? metrics.createFrameDeliveryTrace(
-            generation_, primary_timeline_start_frame_ + current_frame_index_)
+            generation_, timeline_frame.value_or(-1))
         : 0U;
     emit frameReady(
         std::move(*frame), current_frame_index_, generation_, trace_id);
@@ -1778,11 +1816,18 @@ void PlaybackWorker::reportFailure(
     try {
         logging::Context context{
             {"path", safePathForLog(source_path_)},
-            {"frame_index", std::to_string(current_frame_index_)},
+            {"clip_local_frame", std::to_string(current_frame_index_)},
             {"source_start_frame", std::to_string(source_start_frame_)},
             {"segment_frame_count", std::to_string(segment_frame_count_)}};
         if (requested_frame.has_value()) {
-            context.emplace_back("requested_frame", std::to_string(*requested_frame));
+            context.emplace_back(
+                "requested_clip_local_frame", std::to_string(*requested_frame));
+        }
+        if (const auto timeline_frame =
+                timelineFrameForDiagnostics(requested_frame);
+            timeline_frame.has_value()) {
+            appendTimelinePositionContext(
+                context, *timeline_frame, timeline_frame_rate_);
         }
         if (error.error_code().has_value()) {
             context.emplace_back("error_code", std::to_string(*error.error_code()));
@@ -1824,11 +1869,18 @@ void PlaybackWorker::reportFailure(
     try {
         logging::Context context{
             {"path", safePathForLog(source_path_)},
-            {"frame_index", std::to_string(current_frame_index_)},
+            {"clip_local_frame", std::to_string(current_frame_index_)},
             {"source_start_frame", std::to_string(source_start_frame_)},
             {"segment_frame_count", std::to_string(segment_frame_count_)}};
         if (requested_frame.has_value()) {
-            context.emplace_back("requested_frame", std::to_string(*requested_frame));
+            context.emplace_back(
+                "requested_clip_local_frame", std::to_string(*requested_frame));
+        }
+        if (const auto timeline_frame =
+                timelineFrameForDiagnostics(requested_frame);
+            timeline_frame.has_value()) {
+            appendTimelinePositionContext(
+                context, *timeline_frame, timeline_frame_rate_);
         }
         logging::Logger::instance().log(
             logging::Level::Error,

@@ -3,6 +3,8 @@
 #include "timeline_widget.h"
 
 #include <QEvent>
+#include <QFont>
+#include <QLabel>
 #include <QPainter>
 #include <QPaintEvent>
 
@@ -19,6 +21,15 @@ TimelineTrackHeaderOverlay::TimelineTrackHeaderOverlay(
     setAttribute(Qt::WA_NoSystemBackground, true);
     setFocusPolicy(Qt::NoFocus);
 
+    playhead_timecode_ = new QLabel(this);
+    playhead_timecode_->setObjectName(QStringLiteral("timelinePlayheadTimecode"));
+    playhead_timecode_->setAccessibleName(QStringLiteral("Timeline playhead timecode"));
+    playhead_timecode_->setToolTip(QStringLiteral("Current global Timeline time"));
+    playhead_timecode_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    playhead_timecode_->setFont(QFont(playhead_timecode_->font().family(), 8));
+    playhead_timecode_->setStyleSheet(
+        QStringLiteral("QLabel { color: #9aa4b2; background: transparent; }"));
+
     if (parentWidget() != nullptr) {
         parentWidget()->installEventFilter(this);
     }
@@ -28,6 +39,16 @@ TimelineTrackHeaderOverlay::TimelineTrackHeaderOverlay(
             &TimelineWidget::trackHeaderVisualsChanged,
             this,
             [this]() { update(); });
+        connect(
+            timeline_,
+            &TimelineWidget::playheadVisualChanged,
+            this,
+            [this]() {
+                if (timeline_ != nullptr && playhead_timecode_ != nullptr) {
+                    playhead_timecode_->setText(timeline_->playheadTimecode());
+                }
+            });
+        playhead_timecode_->setText(timeline_->playheadTimecode());
     }
     updateOverlayGeometry();
     raise();
@@ -69,6 +90,9 @@ void TimelineTrackHeaderOverlay::updateOverlayGeometry() {
         0,
         timeline_->trackHeaderOverlayWidth(),
         parentWidget()->height());
+    if (playhead_timecode_ != nullptr) {
+        playhead_timecode_->setGeometry(12, 12, std::max(0, width() - 24), 25);
+    }
     raise();
     update();
 }

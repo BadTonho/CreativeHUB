@@ -150,13 +150,23 @@ When enabled, the application aggregates data for one-second intervals and
 writes at most one summary per interval through the existing logger using the
 `preview/performance_metrics` operation. `metrics_schema_version` identifies
 the current field set while existing fields retain their previous meaning. The
-current schema version is `6`. The summary includes
+current schema version is `7`. The summary includes
 `timeline_fps_numerator` and `timeline_fps_denominator` for the active project
 Timeline; `0/0` means standalone media playback, which has no project Timeline
 rate. `target_fps` is the rate used by the worker in the current mode: the
 persisted Timeline rate for composed playback, or the source rate for isolated
 media playback. The media source metadata continues to report its own
 `source_fps` independently.
+When the event has an associated project position, it records the absolute
+`timeline_frame`, `timeline_time_seconds`, and rational-rate-derived
+`timeline_timecode`. Clip-local positions use names such as
+`active_clip_local_frame`; source decode positions remain explicitly reported
+as source frames.
+Playback-worker and activation error entries include the same global Timeline
+position when tied to a Timeline clip. Their clip-local values are named
+`clip_local_frame` or `requested_clip_local_frame`; decoder positions remain
+separately labeled as source frames. Standalone media errors do not receive a
+fabricated Timeline position.
 The summary includes decoded, decoded-frame cache hits, text-raster cache hits,
 seeked, composed, final-composition cache hits, emitted, received, submitted,
 CPU-presented, GPU-presented, overwritten, stale, skipped, and coalesced frame
@@ -177,7 +187,7 @@ During composed Timeline playback, frames whose worker processing time exceeds
 the target-FPS frame budget contribute to a bounded slow-frame summary. The UI
 timer writes at most one additional `playback/slow_frame` event per metrics
 interval, and only when that interval contains a slow frame. Its
-`diagnostic_schema_version` is `6`; it reports the slow-frame count and the
+`diagnostic_schema_version` is `7`; it reports the slow-frame count and the
 slowest frame's timeline position, generation, target FPS, budget, processing,
 decode, composition, and payload timings. It also reports compositor timings
 for adapter/list setup, output-buffer allocation, background initialization,
@@ -188,7 +198,7 @@ active layers are ranked by combined decode/preparation and compositor time,
 with stable track/clip IDs, current indices, source frame, layer kind, decode
 path, and per-layer setup, raster/blend, and copy timings. The compositor does
 not have a separate effects stage, so this diagnostic does not create one.
-For each reported slow layer, schema `6` also records the composition canvas,
+For each reported slow layer, schema `7` also records the composition canvas,
 source dimensions and stride, transform values, and the selected raster path.
 Individual full-frame-copy checks report whether source dimensions, stride,
 center position, unit scale, zero rotation, and full opacity matched. The alpha
@@ -212,7 +222,7 @@ refreshes, seeks, isolated media previews, and offline export do not collect
 this per-layer data. UI and GPU presentation timings remain in the existing
 aggregate sample and can be compared with the slow-frame event.
 
-For video layers that perform forward catch-up, schema `6` also records the
+For video layers that perform forward catch-up, schema `7` also records the
 decoder frame before the request, requested source frame, number of discarded
 intermediate frames, and total forward-call time. It separates accumulated
 packet read/send, decoder receive, and requested-frame pixel conversion time;
@@ -225,13 +235,16 @@ trace ID. The ID follows the shared frame reference through the one-slot
 mailbox, controller delivery, MainWindow callback, Preview submission, and the
 active presentation backend. With performance metrics enabled, the application
 writes an aggregated `playback/frame_delivery` event with
-`diagnostic_schema_version` `1`, at most once per metrics interval. It records
+`diagnostic_schema_version` `2`, at most once per metrics interval. It records
 counts and bounded latency summaries for worker-to-mailbox, mailbox wait,
 controller-to-window, window-to-Preview, GPU upload, GPU draw, and Qt frame swap;
 the CPU fallback records its paint event instead. A Qt `frameSwapped` signal is
 a Qt presentation milestone and does not measure physical monitor scanout.
 
-The delivery event distinguishes mailbox coalescing, stale generations,
+Each delivery sample retains its absolute Timeline frame and adds
+`timeline_time_seconds` and `timeline_timecode`, so samples remain comparable
+across clip cuts where clip-local frame numbers restart. The delivery event
+distinguishes mailbox coalescing, stale generations,
 Timeline-behind frames, Preview replacement, invalid frames, missing active
 clips, GPU failure, and shutdown. It includes up to four slow or incomplete
 trace examples with IDs, generation, Timeline frame, last observed stage, age,
@@ -244,12 +257,12 @@ evicted. No
 media path or frame content is included. Disabling `Enable preview performance
 metrics` stops collection and clears retained delivery traces. The delivery
 and slow-frame events keep their own schemas; the aggregate
-`preview/performance_metrics` schema is version `6`.
+`preview/performance_metrics` schema is version `7`.
 
 The worker retains only the slowest over-budget frame and a count for the
 current metrics interval; it does not log each frame. Neither event contains
 media paths or frame contents. The aggregate `preview/performance_metrics`
-schema is version `6`.
+schema is version `7`.
 
 Each timing summary contains count, average, maximum, and bounded-histogram
 approximations for the p95 and p99 milliseconds. The timings cover decoding,

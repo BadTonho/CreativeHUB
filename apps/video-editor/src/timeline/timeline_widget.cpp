@@ -1,4 +1,5 @@
 #include "timeline_widget.h"
+#include "timeline_time.h"
 
 #include "../ui/media_browser/media_drag_mime.h"
 
@@ -119,6 +120,7 @@ void TimelineWidget::setFrameRate(FrameRate frame_rate) noexcept {
     if (!validFrameRate(frame_rate)) return;
     frame_rate_ = reducedFrameRate(frame_rate);
     update();
+    emit playheadVisualChanged();
 }
 
 void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
@@ -162,6 +164,7 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
     interaction_controller_.cancelAll();
     clearDragPreview();
     emit trackHeaderVisualsChanged();
+    emit playheadVisualChanged();
     update();
 }
 
@@ -183,6 +186,7 @@ void TimelineWidget::clearClips() {
     clearDragPreview();
     selected_transition_.reset();
     emit trackHeaderVisualsChanged();
+    emit playheadVisualChanged();
     update();
 }
 
@@ -195,6 +199,7 @@ void TimelineWidget::setActiveClip(std::optional<ClipLocation> location) {
     active_clip_ = location;
     interaction_controller_.clearTransientPreview();
     emit trackHeaderVisualsChanged();
+    emit playheadVisualChanged();
     update();
 }
 
@@ -218,10 +223,36 @@ void TimelineWidget::setPlayheadFrame(std::int64_t frame_index) {
     // live playhead must win even if the decoder skipped over that exact
     // frame.
     update();
+    emit playheadVisualChanged();
 }
 
 std::int64_t TimelineWidget::playheadFrame() const noexcept {
     return playhead_frame_;
+}
+
+std::int64_t TimelineWidget::displayedPlayheadFrame() const noexcept {
+    const auto ruler_frame = interaction_controller_.rulerPreviewFrame();
+    auto frame = ruler_frame.value_or(playhead_frame_);
+    const auto drag_frame = interaction_controller_.seekPreviewLocalFrame();
+    const bool active_clip_valid = active_clip_.has_value() &&
+        active_clip_->track_index < tracks_.size() &&
+        active_clip_->clip_index < tracks_[active_clip_->track_index].clips.size();
+    if (!ruler_frame.has_value() && active_clip_valid && drag_frame.has_value()) {
+        const auto& clip = tracks_[active_clip_->track_index]
+            .clips[active_clip_->clip_index];
+        if (*drag_frame >= 0 && clip.timeline_start_frame <=
+            std::numeric_limits<std::int64_t>::max() - *drag_frame) {
+            frame = clip.timeline_start_frame + *drag_frame;
+        }
+    }
+    const auto duration = totalDuration();
+    if (duration > 0) frame = std::clamp<std::int64_t>(frame, 0, duration - 1);
+    return std::max<std::int64_t>(0, frame);
+}
+
+QString TimelineWidget::playheadTimecode() const {
+    return QString::fromStdString(
+        timeline::formatTimelineTimecode(displayedPlayheadFrame(), frame_rate_));
 }
 
 void TimelineWidget::setRazorMode(bool enabled) {
@@ -262,6 +293,7 @@ void TimelineWidget::setReadOnly(bool read_only) {
         suppress_next_context_menu_ = false;
     }
     update();
+    emit playheadVisualChanged();
 }
 
 bool TimelineWidget::isReadOnly() const noexcept {
@@ -478,6 +510,13 @@ void TimelineWidget::paintTrackHeaderOverlay(
         0.0,
         overlay_width,
         static_cast<double>(painter.viewport().height())));
+    painter.fillRect(
+        QRectF(0.0, 0.0, overlay_width, TimelineGeometry::top_margin),
+        QColor("#171a20"));
+    painter.setPen(QColor("#384250"));
+    painter.drawLine(
+        QPointF(overlay_width - 1.0, 12.0),
+        QPointF(overlay_width - 1.0, 37.0));
     if (last_row_bottom > first_row_top) {
         painter.fillRect(
             QRectF(0.0, first_row_top, overlay_width, last_row_bottom - first_row_top),
@@ -1571,6 +1610,7 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         emit seekStarted();
         grabMouse();
         update();
+        emit playheadVisualChanged();
         event->accept();
         return;
     }
@@ -1704,6 +1744,7 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
             frame.has_value()) {
             interaction_controller_.updateRulerSeek(*frame, ruler_x);
             update();
+            emit playheadVisualChanged();
         }
         event->accept();
         return;
@@ -1798,6 +1839,7 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
         static_cast<void>(interaction_controller_.updateSeek(
             event->position(), local_frame));
         update();
+        emit playheadVisualChanged();
         event->accept();
     } else {
         updateTrimHoverCursor(event->position());
@@ -1819,6 +1861,7 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
         releaseMouse();
         if (frame.has_value()) emit seekRequested(*frame);
         update();
+        emit playheadVisualChanged();
         event->accept();
         return;
     }
@@ -1882,6 +1925,7 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
         if (frame.has_value()) emit seekRequested(*frame);
         updateTrimHoverCursor(event->position());
         update();
+        emit playheadVisualChanged();
         event->accept();
         return;
     }

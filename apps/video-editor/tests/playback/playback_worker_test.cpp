@@ -179,7 +179,7 @@ void validateReference(QCoreApplication& application, const std::filesystem::pat
             application.quit();
         });
 
-    worker.setMedia(toQString(path), 30.0, 0, 0, 1.0, false, 1.0, false, 0, 0, 7);
+    worker.setMedia(toQString(path), 30.0, 0, 0, 1.0, false, 1.0, false, -1, -1, 7);
     require(media_ready, "Opening valid media did not emit mediaReady.");
 
     worker.play();
@@ -205,6 +205,14 @@ void validateReference(QCoreApplication& application, const std::filesystem::pat
             "Media activation did not measure opening and audio setup.");
     require(snapshot.playback_start_events == 1,
             "Media playback did not record its start transition.");
+    require(snapshot.frame_delivery.sample_count > 0,
+            "Standalone media playback did not produce delivery samples.");
+    for (std::size_t index = 0;
+         index < snapshot.frame_delivery.sample_count;
+         ++index) {
+        require(snapshot.frame_delivery.samples[index].timeline_frame < 0,
+                "Standalone media playback fabricated a global Timeline position.");
+    }
 
     worker.setMedia(toQString(path), 30.0, 0, 0, 1.0, false, 1.0, false, 0, 0, 8);
     require(ready_count == 2, "Reactivating media did not emit mediaReady again.");

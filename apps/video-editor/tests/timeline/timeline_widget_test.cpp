@@ -1,5 +1,6 @@
 #include "timeline/timeline_widget.h"
 #include "timeline/timeline_track_header_overlay.h"
+#include "timeline/timeline_time.h"
 #include "ui/media_browser/media_drag_mime.h"
 
 #include <QApplication>
@@ -10,6 +11,7 @@
 #include <QDropEvent>
 #include <QEvent>
 #include <QImage>
+#include <QLabel>
 #include <QMimeData>
 #include <QMenu>
 #include <QMouseEvent>
@@ -349,6 +351,8 @@ int main(int argc, char* argv[]) {
         scroll_area.setWidgetResizable(true);
         auto* viewport_timeline = new timeline::TimelineWidget;
         viewport_timeline->setTracks({top_track, lower_track});
+        viewport_timeline->setFrameRate({30000, 1001});
+        viewport_timeline->setPlayheadFrame(30);
         viewport_timeline->setZoomFactor(2.0);
         viewport_timeline->setActiveClip(timeline::ClipLocation{0, 0});
         viewport_timeline->setAcceptDrops(false);
@@ -359,6 +363,13 @@ int main(int argc, char* argv[]) {
         auto* header_overlay = new timeline::TimelineTrackHeaderOverlay(
             viewport_timeline,
             scroll_area.viewport());
+        auto* playhead_timecode = header_overlay->findChild<QLabel*>(
+            QStringLiteral("timelinePlayheadTimecode"));
+        require(playhead_timecode != nullptr &&
+                    playhead_timecode->text() == QStringLiteral("00:00:01.001") &&
+                    playhead_timecode->accessibleName() ==
+                        QStringLiteral("Timeline playhead timecode"),
+                "The fixed Timeline corner did not expose the global playhead timecode.");
         QObject::connect(
             scroll_area.verticalScrollBar(),
             &QScrollBar::valueChanged,
@@ -387,6 +398,12 @@ int main(int argc, char* argv[]) {
         scroll_area.viewport()->render(&header_before_scroll);
         scroll_area.horizontalScrollBar()->setValue(100);
         application.processEvents();
+        require(playhead_timecode->text() == QStringLiteral("00:00:01.001") &&
+                    playhead_timecode->geometry() == QRect(12, 12, 130, 25),
+                "The Timeline timecode moved or changed during horizontal scrolling.");
+        viewport_timeline->setPlayheadFrame(60);
+        require(playhead_timecode->text() == QStringLiteral("00:00:02.002"),
+                "The fixed Timeline timecode did not refresh when the playhead advanced.");
         QImage header_after_scroll(360, 220, QImage::Format_ARGB32);
         header_after_scroll.fill(Qt::transparent);
         scroll_area.viewport()->render(&header_after_scroll);
@@ -516,6 +533,15 @@ int main(int argc, char* argv[]) {
                 timeline::TimelineWidget::formatTimecode(30 * 60 * 60, 30.0) ==
                     "01:00:00.000",
             "The timeline ruler timecode format is incorrect.");
+        require(
+            timeline::formatTimelineTimecode(30, {30000, 1001}) ==
+                    "00:00:01.001" &&
+                timeline::formatTimelineTimecode(90000, {24000, 1001}) ==
+                    "01:02:33.750" &&
+                std::abs(static_cast<double>(
+                    timeline::timelineTimeSeconds(30, {30000, 1001}) - 1.001L)) <
+                    0.000001,
+            "Timeline timecode and seconds did not use the rational project rate.");
         require(!widget.moveRequiresAlt(),
                 "The timeline did not default to moving clips without Alt.");
         widget.setMoveRequiresAlt(true);
@@ -774,6 +800,9 @@ int main(int argc, char* argv[]) {
         const auto ruler_frame_x = playhead_widget.contentXForFrame(15);
         sendMouse(playhead_widget, QEvent::MouseButtonPress,
                   QPointF(ruler_frame_x, 25), Qt::LeftButton);
+        require(playhead_widget.displayedPlayheadFrame() == 15 &&
+                    playhead_widget.playheadTimecode() == "00:00:00.500",
+                "The playhead timecode did not follow the transient ruler scrub.");
         sendMouse(playhead_widget, QEvent::MouseButtonRelease,
                   QPointF(ruler_frame_x, 25), Qt::NoButton);
         playhead_widget.setPlayheadFrame(18);
@@ -801,6 +830,18 @@ int main(int argc, char* argv[]) {
                     deselected_playhead_image.pixelColor(live_playhead_x, 100)),
                 "Clearing the active clip hid the timeline playhead.");
         playhead_widget.close();
+
+        timeline::TimelineWidget global_time_widget;
+        global_time_widget.setTracks({timeline::TimelineTrack{
+            8, "Video 1", 1.0, false,
+            {makeClip("before-cut.mkv", 0, 30, "before"),
+             makeClip("after-cut.mkv", 30, 30, "after")}}});
+        global_time_widget.setFrameRate({24, 1});
+        global_time_widget.setActiveClip(timeline::ClipLocation{0, 1});
+        global_time_widget.setPlayheadFrame(35);
+        require(global_time_widget.displayedPlayheadFrame() == 35 &&
+                    global_time_widget.playheadTimecode() == "00:00:01.458",
+                "The playhead timecode restarted at a clip cut instead of using global Timeline frames.");
         widget.setZoomFactor(1.0);
         widget.setTrackRowHeight(timeline::kMaximumTrackRowHeight);
         widget.resize(1000, 500);
