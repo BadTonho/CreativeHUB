@@ -67,6 +67,47 @@ void blend(std::uint8_t* destination, const Color& source) noexcept {
     destination[3] = static_cast<std::uint8_t>(std::lround(output_alpha * 255.0));
 }
 
+void blendOverOpaqueDestination(
+    std::uint8_t* destination,
+    const Color& source) noexcept {
+    const double source_alpha = std::clamp(source.alpha, 0.0, 1.0);
+    if (source_alpha <= 0.0) return;
+    if (source_alpha >= 1.0) {
+        destination[0] = static_cast<std::uint8_t>(std::lround(
+            std::clamp(source.red, 0.0, 1.0) * 255.0));
+        destination[1] = static_cast<std::uint8_t>(std::lround(
+            std::clamp(source.green, 0.0, 1.0) * 255.0));
+        destination[2] = static_cast<std::uint8_t>(std::lround(
+            std::clamp(source.blue, 0.0, 1.0) * 255.0));
+        destination[3] = 255;
+        return;
+    }
+
+    // The output starts opaque and every compositor path preserves that
+    // invariant. Keep the original calculation as a fallback for any floating
+    // point edge case where the opaque destination would not produce alpha 1.
+    const double output_alpha = source_alpha + (1.0 - source_alpha);
+    if (output_alpha != 1.0) {
+        blend(destination, source);
+        return;
+    }
+
+    const double inverse_source_alpha = 1.0 - source_alpha;
+    const auto output = [source_alpha, inverse_source_alpha](
+                            double source_value,
+                            std::uint8_t destination_value) {
+        return source_value * source_alpha +
+            (destination_value / 255.0) * inverse_source_alpha;
+    };
+    destination[0] = static_cast<std::uint8_t>(std::lround(std::clamp(output(
+        source.red, destination[0]), 0.0, 1.0) * 255.0));
+    destination[1] = static_cast<std::uint8_t>(std::lround(std::clamp(output(
+        source.green, destination[1]), 0.0, 1.0) * 255.0));
+    destination[2] = static_cast<std::uint8_t>(std::lround(std::clamp(output(
+        source.blue, destination[2]), 0.0, 1.0) * 255.0));
+    destination[3] = 255;
+}
+
 bool isOpaqueFrame(const media::VideoFrame& frame) noexcept {
     if (frame.width <= 0 || frame.height <= 0 || frame.stride < frame.width * 4 ||
         frame.rgba_pixels.size() < static_cast<std::size_t>(frame.stride) * frame.height) {
@@ -243,7 +284,7 @@ void composeAlphaCoverageLayer(
                 auto* destination = output.rgba_pixels.data() +
                     static_cast<std::size_t>(destination_y) * output.stride +
                     static_cast<std::size_t>(destination_x) * 4;
-                blend(destination, color);
+                blendOverOpaqueDestination(destination, color);
             }
         }
     }
@@ -327,7 +368,7 @@ void composeAxisAlignedLayer(
                 source_pixel[2] / 255.0,
                 source_pixel[3] / 255.0};
             color.alpha *= layer.transform.opacity;
-            blend(destination, color);
+            blendOverOpaqueDestination(destination, color);
             destination += 4;
         }
     }

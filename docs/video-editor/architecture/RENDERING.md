@@ -102,18 +102,22 @@ configured output dimensions.
 The CPU compositor has a fast path for an opaque, full-canvas layer with the
 identity transform. Cached text layers also retain immutable per-row alpha
 coverage. When a text layer has no rotation, the compositor maps only the
-non-transparent source spans and reuses the existing sampling and blending
-formulas, preserving the previous pixels while avoiding transparent work.
-Rotated or unsupported layers use the general transform, rotation, opacity,
-and alpha path. The result is still one final RGBA frame sent to OpenGL;
-per-layer texture blending is deliberately deferred to a later milestone.
+non-transparent source spans and avoids work on transparent pixels. Both this
+path and the axis-aligned path use a specialized blend over the compositor's
+opaque output. It skips destination-alpha work and channel division when the
+resulting alpha is exactly opaque, retaining the general blend as a fallback
+for other floating-point results. Pixel-by-pixel tests compare both paths with
+the scalar reference. Rotated or unsupported layers retain the general
+transform, rotation, opacity, and alpha path. The result is still one final
+RGBA frame sent to OpenGL; per-layer texture blending is deliberately deferred
+to a later milestone.
 
 Other valid layers without rotation use an axis-aligned path. It computes the
 visible rectangular bounds and horizontal/vertical nearest-neighbor source
-lookups once per layer, then applies the same blend formula only to pixels in
-that rectangle. Rotated layers retain the general inverse-transform loop. The
-output buffer is zero-initialized when allocated, and the background pass only
-sets its alpha bytes to opaque; it does not clear the RGB bytes a second time.
+lookups once per layer, then blends only pixels in that rectangle. Rotated
+layers retain the general inverse-transform loop. The output buffer is
+zero-initialized when allocated, and the background pass only sets its alpha
+bytes to opaque; it does not clear the RGB bytes a second time.
 
 ## Preview performance diagnostics
 

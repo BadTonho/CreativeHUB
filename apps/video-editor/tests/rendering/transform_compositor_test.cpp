@@ -321,6 +321,43 @@ int main() {
                     axis_aligned_timings.layers[1].raster_blend_nanoseconds > 0 &&
                     axis_aligned_timings.layers[2].fast_path_copy_nanoseconds == 0,
                 "The unrotated fast path did not preserve compositor timing categories.");
+
+        auto alpha_sweep_under = patternedFrame(256, 1);
+        auto alpha_sweep_middle = patternedFrame(256, 1);
+        auto alpha_sweep_top = patternedFrame(256, 1);
+        for (int x = 0; x < 256; ++x) {
+            auto* middle_pixel = alpha_sweep_middle.rgba_pixels.data() +
+                static_cast<std::size_t>(x) * 4;
+            middle_pixel[0] = static_cast<std::uint8_t>(255 - middle_pixel[0]);
+            middle_pixel[1] = static_cast<std::uint8_t>(255 - middle_pixel[1]);
+            middle_pixel[3] = static_cast<std::uint8_t>((x * 73 + 11) % 256);
+
+            auto* top_pixel = alpha_sweep_top.rgba_pixels.data() +
+                static_cast<std::size_t>(x) * 4;
+            top_pixel[2] = static_cast<std::uint8_t>(255 - top_pixel[2]);
+            top_pixel[3] = static_cast<std::uint8_t>((x * 151 + 83) % 256);
+        }
+        auto alpha_sweep_under_transform = identity;
+        alpha_sweep_under_transform.opacity = 0.29;
+        auto alpha_sweep_middle_transform = identity;
+        alpha_sweep_middle_transform.opacity = 0.57;
+        auto alpha_sweep_top_transform = identity;
+        alpha_sweep_top_transform.opacity = 0.83;
+        const auto alpha_sweep_coverage =
+            rendering::FrameCompositor::buildAlphaCoverage(alpha_sweep_middle);
+        const std::vector<rendering::CompositionLayer> alpha_sweep_layers{
+            {&alpha_sweep_under, alpha_sweep_under_transform},
+            {&alpha_sweep_middle, alpha_sweep_middle_transform, alpha_sweep_coverage},
+            {&alpha_sweep_top, alpha_sweep_top_transform}};
+        const auto alpha_sweep_composed = rendering::FrameCompositor::compose(
+            256, 1, alpha_sweep_layers);
+        const auto alpha_sweep_reference = referenceGeneralComposition(
+            256, 1, alpha_sweep_layers);
+        require(alpha_sweep_composed.has_value() &&
+                    alpha_sweep_composed->rgba_pixels ==
+                        alpha_sweep_reference.rgba_pixels,
+                "Opaque-destination blending changed pixels across alpha values and layers.");
+
         const auto empty_output = rendering::FrameCompositor::compose(3, 2, {});
         require(empty_output.has_value(), "The empty output buffer was not created.");
         for (std::size_t index = 0; index < empty_output->rgba_pixels.size(); index += 4) {

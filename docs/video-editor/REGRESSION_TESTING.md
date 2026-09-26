@@ -48,7 +48,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Transform Inspector | Slider and numeric-field synchronization, transform ranges, keyframe-aware edits, live preview updates, and one coalesced history entry per slider drag |
 | Inspector audio tabs | Audio tab organization, Clip and Track volume/mute controls, disabled state without a valid video clip, and preserved audio edit behavior |
 | Settings dialog | Modal shell, General, Autosave, Timeline, and Shortcuts tabs, empty and populated autosave snapshot table, refresh/restore/delete/open-folder requests, Close action, independent component construction, and editable shortcut preferences |
-| Preview performance metrics | Deterministic counter/timing aggregation, bounded p95/p99 timing histograms, decoded/stale-frame counters, playback delivery-rate derivation, failure counters, cache state, workload context, process-resource sampling, reset behavior, disabled behavior, Settings persistence and signal propagation, compositor setup/raster/fast-copy timings, bounded delivery trace IDs through worker/mailbox/controller/Preview, coalesced/dropped/incomplete classification, and offscreen CPU paint instrumentation |
+| Preview performance metrics | Deterministic counter/timing aggregation, bounded p95/p99 timing histograms, decoded/stale-frame counters, playback delivery-rate derivation, failure counters, cache state, workload context, process-resource sampling, reset behavior, disabled behavior, Settings persistence and signal propagation, compositor setup/raster/fast-copy timings, pixel-identical opaque-destination blend fast path against the scalar reference, bounded delivery trace IDs through worker/mailbox/controller/Preview, coalesced/dropped/incomplete classification, and offscreen CPU paint instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
 | Project persistence | Versioned JSON v9, persisted stable track/clip IDs, canonical multi-track video/image/text kind round-trip, media overlap round-trip with text-over-text rejection, timeline zoom and row-height persistence, version 1-8 migration with legacy flat clips converted to `timeline_tracks`, duplicate/zero ID rejection, invalid input, offline media, transactional open |
 | MainWindow integration | Offscreen multi-track project open, preservation of tracks, clips, and stable IDs, clean dirty state immediately after opening, selection initialized by ID, equality using only the canonical loaded document, save/reopen round-trip, stale pending activation rejection, EditWorkspace-built Inspector and Timeline plus FusionWorkspace-built panels shared with WorkspaceHost, one shared Preview/Timeline/EditorSession, unchanged selection/playhead/playback/history/dirty state across workspace changes, workspace-only layout behavior, and controlled MainWindow construction and shutdown |
@@ -378,7 +378,10 @@ in the running Video Editor after UI or integration changes:
   and presentation delays. For composed-playback `frame_at` samples with a
   source-frame gap greater than eight, confirm that aggregate discarded-frame
   counts rise without a corresponding RGBA conversion for each intermediate
-  frame. Confirm no paths or frame
+  frame. Compare raster/blend timings with the previous baseline using the same
+  project and Full quality, first with cold caches and then with warmed caches;
+  report the measured change without applying a hardware-independent threshold.
+  Confirm no paths or frame
   contents are logged, the existing `preview/performance_metrics` schema
   remains `4`, and the project dirty state and playback output are unchanged;
 - with Preview metrics enabled, verify one `playback/frame_delivery` event at
