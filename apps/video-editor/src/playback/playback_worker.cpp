@@ -641,6 +641,9 @@ void PlaybackWorker::renderCompositionFrame(
         if (!composed.has_value()) {
             throw media::MediaError("The timeline composition could not produce a frame.");
         }
+        if (collect_slow_frame) {
+            metrics.recordBlendLookupComposition(composition_timings);
+        }
 
         std::shared_ptr<const media::VideoFrame> payload;
         const auto payload_started = collect_slow_frame ? Clock::now() : Clock::time_point{};

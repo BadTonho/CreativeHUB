@@ -243,6 +243,14 @@ struct PreviewPerformanceSnapshot {
     std::uint64_t composition_layer_count = 0;
     std::uint64_t composition_text_layer_count = 0;
     std::uint64_t composition_transition_count = 0;
+    std::uint64_t blend_lookup_composition_frames = 0;
+    std::uint64_t blend_lookup_layer_observations = 0;
+    std::uint64_t blend_lookup_active_layer_observations = 0;
+    std::uint64_t blend_lookup_table_builds = 0;
+    std::uint64_t blend_lookup_build_nanoseconds = 0;
+    std::uint64_t blend_lookup_pixel_count = 0;
+    std::uint64_t blend_lookup_active_block_count = 0;
+    std::uint64_t blend_lookup_active_block_nanoseconds = 0;
     std::uint64_t preview_window_elapsed_nanoseconds = 0;
     std::uint64_t playback_active_nanoseconds = 0;
     std::uint64_t first_frame_nanoseconds = 0;
@@ -290,6 +298,8 @@ public:
         PreviewTiming timing,
         std::chrono::nanoseconds elapsed) noexcept;
     void recordSlowFrame(const SlowFrameSample& sample) noexcept;
+    void recordBlendLookupComposition(
+        const FrameCompositionTimings& timings) noexcept;
     [[nodiscard]] std::uint64_t createFrameDeliveryTrace(
         std::uint64_t playback_generation,
         std::int64_t timeline_frame) noexcept;
@@ -430,6 +440,14 @@ private:
     std::atomic<std::uint64_t> composition_layer_count_{0};
     std::atomic<std::uint64_t> composition_text_layer_count_{0};
     std::atomic<std::uint64_t> composition_transition_count_{0};
+    std::atomic<std::uint64_t> blend_lookup_composition_frames_{0};
+    std::atomic<std::uint64_t> blend_lookup_layer_observations_{0};
+    std::atomic<std::uint64_t> blend_lookup_active_layer_observations_{0};
+    std::atomic<std::uint64_t> blend_lookup_table_builds_{0};
+    std::atomic<std::uint64_t> blend_lookup_build_nanoseconds_{0};
+    std::atomic<std::uint64_t> blend_lookup_pixel_count_{0};
+    std::atomic<std::uint64_t> blend_lookup_active_block_count_{0};
+    std::atomic<std::uint64_t> blend_lookup_active_block_nanoseconds_{0};
     std::atomic<std::uint64_t> target_frame_rate_milli_{0};
     std::atomic<std::uint64_t> timeline_frame_rate_packed_{0};
     std::atomic_bool composition_enabled_{false};

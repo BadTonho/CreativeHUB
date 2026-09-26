@@ -100,7 +100,7 @@ void appendOptionalUint64Context(
 void appendPerformanceContext(
     logging::Context& context,
     const PreviewPerformanceSnapshot& snapshot) {
-    context.emplace_back("metrics_schema_version", "5");
+    context.emplace_back("metrics_schema_version", "6");
     context.emplace_back(
         "timeline_fps_numerator",
         std::to_string(snapshot.timeline_frame_rate_numerator));
@@ -193,6 +193,32 @@ void appendPerformanceContext(
     context.emplace_back(
         "composition_transition_count",
         std::to_string(snapshot.composition_transition_count));
+    context.emplace_back(
+        "blend_lookup_composition_frames",
+        std::to_string(snapshot.blend_lookup_composition_frames));
+    context.emplace_back(
+        "blend_lookup_layer_observations",
+        std::to_string(snapshot.blend_lookup_layer_observations));
+    context.emplace_back(
+        "blend_lookup_active_layer_observations",
+        std::to_string(snapshot.blend_lookup_active_layer_observations));
+    context.emplace_back(
+        "blend_lookup_table_builds",
+        std::to_string(snapshot.blend_lookup_table_builds));
+    context.emplace_back(
+        "blend_lookup_build_ms",
+        std::to_string(static_cast<double>(
+            snapshot.blend_lookup_build_nanoseconds) / 1'000'000.0));
+    context.emplace_back(
+        "blend_lookup_pixel_count",
+        std::to_string(snapshot.blend_lookup_pixel_count));
+    context.emplace_back(
+        "blend_lookup_active_block_count",
+        std::to_string(snapshot.blend_lookup_active_block_count));
+    context.emplace_back(
+        "blend_lookup_active_block_estimated_ms",
+        std::to_string(static_cast<double>(
+            snapshot.blend_lookup_active_block_nanoseconds) / 1'000'000.0));
     context.emplace_back(
         "composition_enabled",
         snapshot.composition_enabled ? "true" : "false");
@@ -769,6 +795,14 @@ void MainWindow::flushPreviewPerformanceMetrics() {
         snapshot.playback_start_to_presentation.count == 0 &&
         snapshot.seek_to_presentation.count == 0 &&
         snapshot.audio_clock_drift_samples == 0 &&
+        snapshot.blend_lookup_composition_frames == 0 &&
+        snapshot.blend_lookup_layer_observations == 0 &&
+        snapshot.blend_lookup_active_layer_observations == 0 &&
+        snapshot.blend_lookup_table_builds == 0 &&
+        snapshot.blend_lookup_build_nanoseconds == 0 &&
+        snapshot.blend_lookup_pixel_count == 0 &&
+        snapshot.blend_lookup_active_block_count == 0 &&
+        snapshot.blend_lookup_active_block_nanoseconds == 0 &&
         snapshot.slow_frame_count == 0 && !has_delivery_activity) {
         return;
     }

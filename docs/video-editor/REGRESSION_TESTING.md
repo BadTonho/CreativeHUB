@@ -354,7 +354,7 @@ in the running Video Editor after UI or integration changes:
   Settings) and compare a simple 1080p playback run
   with the metrics disabled: confirm the one-second summaries include decode,
   composition, decoded-frame cache hits, text-raster cache hits, and final
-  composition-cache hits, `metrics_schema_version="5"`, Timeline FPS rational
+  composition-cache hits, `metrics_schema_version="6"`, Timeline FPS rational
   fields, p95/p99 timings,
   delivery FPS, window-local `first_frame_ms`, lifecycle timings for media
   open, audio setup, composition setup, activation, playback start, and seek,
@@ -401,7 +401,12 @@ in the running Video Editor after UI or integration changes:
   raster path, and each full-frame-copy eligibility condition; confirm
   `full_copy_alpha_check_performed` is false when another condition rejects the
   copy.
-  For partially opaque, unrotated layers, check `blend_lookup_built`, lookup
+  Check the `preview/performance_metrics` interval totals for composition
+  frames, observed and active layers, lookup table builds, build time, exact
+  lookup pixel count, active block count, and inclusive estimated block time.
+  These totals must be present even if the interval has no slow-frame event;
+  cached compositions do not add layer observations. For partially opaque,
+  unrotated layers, check `blend_lookup_built`, lookup
   build time, exact `blend_lookup_pixel_count`, and the count and inclusive
   time of 16-row blocks that used the table. Treat the block time as an estimate
   that includes other raster work in those blocks and may include lazy table
@@ -424,7 +429,7 @@ in the running Video Editor after UI or integration changes:
   equality for the optimized blend path.
   Confirm no paths or frame
   contents are logged, the existing `preview/performance_metrics` schema
-  is `5`, metrics-disabled playback collects no slow-frame diagnostics, and the
+  is `6`, metrics-disabled playback collects no slow-frame diagnostics, and the
   project dirty state and playback output are unchanged;
 - with Preview metrics enabled, verify one `playback/frame_delivery` event at
   most per metrics interval. Correlate the same trace ID from worker emission

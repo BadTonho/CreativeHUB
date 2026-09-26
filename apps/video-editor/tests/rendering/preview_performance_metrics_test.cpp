@@ -55,6 +55,11 @@ int main() {
         disabled_lookup_layer.blend_lookup_active_block_count = 2;
         rendering::addSlowFrameLayer(disabled_slow_frame, disabled_lookup_layer);
         metrics.recordSlowFrame(disabled_slow_frame);
+        rendering::FrameCompositionTimings disabled_blend_timings;
+        disabled_blend_timings.layers.resize(1);
+        disabled_blend_timings.layers[0].blend_lookup_built = true;
+        disabled_blend_timings.layers[0].blend_lookup_pixel_count = 100;
+        metrics.recordBlendLookupComposition(disabled_blend_timings);
         metrics.setTimelineFrameRate(30, 1'000'001);
         const auto disabled = metrics.takeSnapshotAndReset();
         require(disabled.decoded_frames == 0 &&
@@ -76,6 +81,14 @@ int main() {
                     disabled.pacing_deadline_catchup_frames == 0 &&
                     disabled.slow_frame_count == 0 &&
                     !disabled.worst_slow_frame.has_value() &&
+                    disabled.blend_lookup_composition_frames == 0 &&
+                    disabled.blend_lookup_layer_observations == 0 &&
+                    disabled.blend_lookup_active_layer_observations == 0 &&
+                    disabled.blend_lookup_table_builds == 0 &&
+                    disabled.blend_lookup_build_nanoseconds == 0 &&
+                    disabled.blend_lookup_pixel_count == 0 &&
+                    disabled.blend_lookup_active_block_count == 0 &&
+                    disabled.blend_lookup_active_block_nanoseconds == 0 &&
                     disabled.timeline_frame_rate_numerator == 0 &&
                     disabled.timeline_frame_rate_denominator == 0 &&
                     disabled.frame_delivery.sample_count == 0 &&
@@ -125,6 +138,40 @@ int main() {
                 "Disabled metrics recorded text composition fast-path data.");
 
         metrics.setEnabled(true);
+        rendering::FrameCompositionTimings lookup_composition;
+        lookup_composition.layers.resize(3);
+        lookup_composition.layers[0].blend_lookup_built = true;
+        lookup_composition.layers[0].blend_lookup_build_nanoseconds = 3'000;
+        lookup_composition.layers[0].blend_lookup_pixel_count = 10;
+        lookup_composition.layers[0].blend_lookup_active_block_count = 2;
+        lookup_composition.layers[0].blend_lookup_active_block_nanoseconds = 17'000;
+        metrics.recordBlendLookupComposition(lookup_composition);
+        rendering::FrameCompositionTimings no_lookup_composition;
+        no_lookup_composition.layers.resize(2);
+        metrics.recordBlendLookupComposition(no_lookup_composition);
+        const auto lookup_interval = metrics.takeSnapshotAndReset();
+        require(lookup_interval.blend_lookup_composition_frames == 2 &&
+                    lookup_interval.blend_lookup_layer_observations == 5 &&
+                    lookup_interval.blend_lookup_active_layer_observations == 1 &&
+                    lookup_interval.blend_lookup_table_builds == 1 &&
+                    lookup_interval.blend_lookup_build_nanoseconds == 3'000 &&
+                    lookup_interval.blend_lookup_pixel_count == 10 &&
+                    lookup_interval.blend_lookup_active_block_count == 2 &&
+                    lookup_interval.blend_lookup_active_block_nanoseconds == 17'000 &&
+                    lookup_interval.slow_frame_count == 0 &&
+                    !lookup_interval.worst_slow_frame.has_value(),
+                "Blend lookup interval aggregation depended on slow-frame samples or summed incorrectly.");
+        const auto empty_lookup_interval = metrics.takeSnapshotAndReset();
+        require(empty_lookup_interval.blend_lookup_composition_frames == 0 &&
+                    empty_lookup_interval.blend_lookup_layer_observations == 0 &&
+                    empty_lookup_interval.blend_lookup_active_layer_observations == 0 &&
+                    empty_lookup_interval.blend_lookup_table_builds == 0 &&
+                    empty_lookup_interval.blend_lookup_build_nanoseconds == 0 &&
+                    empty_lookup_interval.blend_lookup_pixel_count == 0 &&
+                    empty_lookup_interval.blend_lookup_active_block_count == 0 &&
+                    empty_lookup_interval.blend_lookup_active_block_nanoseconds == 0,
+                "Blend lookup counters were not reset with the metrics interval.");
+
         metrics.recordActivationStarted();
         metrics.recordSeekRequest();
         metrics.recordSeekOperation();
@@ -552,6 +599,76 @@ int main() {
                     slow_producer_count * slow_samples_per_thread &&
                     saw_concurrent_worst_sample,
                 "Concurrent slow-frame aggregation lost samples.");
+
+        metrics.reset();
+        constexpr std::size_t lookup_samples_per_thread = 200;
+        constexpr std::size_t lookup_producer_count = 4;
+        constexpr std::uint64_t expected_lookup_samples =
+            lookup_samples_per_thread * lookup_producer_count;
+        std::vector<std::thread> lookup_producers;
+        std::atomic_size_t completed_lookup_producers{0};
+        rendering::FrameCompositionTimings concurrent_lookup_composition;
+        concurrent_lookup_composition.layers.resize(1);
+        concurrent_lookup_composition.layers[0].blend_lookup_built = true;
+        concurrent_lookup_composition.layers[0].blend_lookup_build_nanoseconds = 3;
+        concurrent_lookup_composition.layers[0].blend_lookup_pixel_count = 7;
+        concurrent_lookup_composition.layers[0].blend_lookup_active_block_count = 2;
+        concurrent_lookup_composition.layers[0].blend_lookup_active_block_nanoseconds = 11;
+        std::uint64_t observed_lookup_frames = 0;
+        std::uint64_t observed_lookup_layers = 0;
+        std::uint64_t observed_lookup_active_layers = 0;
+        std::uint64_t observed_lookup_builds = 0;
+        std::uint64_t observed_lookup_build_nanoseconds = 0;
+        std::uint64_t observed_lookup_pixels = 0;
+        std::uint64_t observed_lookup_blocks = 0;
+        std::uint64_t observed_lookup_block_nanoseconds = 0;
+        const auto collect_lookup_counts = [&](const auto& partial) {
+            observed_lookup_frames += partial.blend_lookup_composition_frames;
+            observed_lookup_layers += partial.blend_lookup_layer_observations;
+            observed_lookup_active_layers +=
+                partial.blend_lookup_active_layer_observations;
+            observed_lookup_builds += partial.blend_lookup_table_builds;
+            observed_lookup_build_nanoseconds +=
+                partial.blend_lookup_build_nanoseconds;
+            observed_lookup_pixels += partial.blend_lookup_pixel_count;
+            observed_lookup_blocks += partial.blend_lookup_active_block_count;
+            observed_lookup_block_nanoseconds +=
+                partial.blend_lookup_active_block_nanoseconds;
+        };
+        for (std::size_t producer = 0;
+             producer < lookup_producer_count;
+             ++producer) {
+            lookup_producers.emplace_back(
+                [&metrics, &completed_lookup_producers,
+                 &concurrent_lookup_composition,
+                 lookup_samples_per_thread]() {
+                    for (std::size_t index = 0;
+                         index < lookup_samples_per_thread;
+                         ++index) {
+                        metrics.recordBlendLookupComposition(
+                            concurrent_lookup_composition);
+                    }
+                    completed_lookup_producers.fetch_add(
+                        1,
+                        std::memory_order_release);
+                });
+        }
+        while (completed_lookup_producers.load(std::memory_order_acquire) <
+               lookup_producer_count) {
+            collect_lookup_counts(metrics.takeSnapshotAndReset());
+            std::this_thread::yield();
+        }
+        for (auto& producer : lookup_producers) producer.join();
+        collect_lookup_counts(metrics.takeSnapshotAndReset());
+        require(observed_lookup_frames == expected_lookup_samples &&
+                    observed_lookup_layers == expected_lookup_samples &&
+                    observed_lookup_active_layers == expected_lookup_samples &&
+                    observed_lookup_builds == expected_lookup_samples &&
+                    observed_lookup_build_nanoseconds == expected_lookup_samples * 3 &&
+                    observed_lookup_pixels == expected_lookup_samples * 7 &&
+                    observed_lookup_blocks == expected_lookup_samples * 2 &&
+                    observed_lookup_block_nanoseconds == expected_lookup_samples * 11,
+                "Concurrent blend lookup interval aggregation lost or duplicated samples.");
 
         metrics.reset();
         const auto complete_trace = metrics.createFrameDeliveryTrace(12, 240);

@@ -140,7 +140,7 @@ When enabled, the application aggregates data for one-second intervals and
 writes at most one summary per interval through the existing logger using the
 `preview/performance_metrics` operation. `metrics_schema_version` identifies
 the current field set while existing fields retain their previous meaning. The
-current schema version is `5`. The summary includes
+current schema version is `6`. The summary includes
 `timeline_fps_numerator` and `timeline_fps_denominator` for the active project
 Timeline; `0/0` means standalone media playback, which has no project Timeline
 rate. `target_fps` is the rate used by the worker in the current mode: the
@@ -154,7 +154,14 @@ counts; the last frame dimensions; cache entry/byte counts; and the active
 composition workload. The text-rasterization timing is a subcomponent of the
 decode timing, so the existing decode values remain comparable with older
 logs; cached text frames do not create new rasterization samples. The aggregate
-event does not contain media paths or frame contents.
+event does not contain media paths or frame contents. For composed playback,
+it also aggregates opaque-source blend-lookup use across the interval:
+measured composition frames, layer observations, layers that used the lookup,
+table builds and build time, exact lookup pixel count, and active 16-row blocks
+with their inclusive estimated time. Layer observations cover each layer
+passed to the compositor during measured playback; composition-cache hits do
+not add observations. These counters are available even when no frame exceeds
+its processing budget and do not produce per-frame log events.
 
 During composed Timeline playback, frames whose worker processing time exceeds
 the target-FPS frame budget contribute to a bounded slow-frame summary. The UI
@@ -179,15 +186,16 @@ check is marked as unchecked when those conditions were not met; otherwise its
 result reuses the compositor's existing opacity scan. It does not trigger a
 second scan. The `fast_path_copy_ms` bucket still measures only a whole-frame
 copy; per-pixel copies inside raster loops remain part of raster/blend time.
-For unrotated partial-opacity layers, the slow-frame layer sample also reports
-whether the opaque-source blend lookup was built, its build time, the exact
-number of pixels blended through the lookup, and the number and inclusive time
-of 16-row raster blocks that used it. The active-block time includes other
+For unrotated partial-opacity layers, the bounded slow-frame layer sample also
+reports per-layer lookup details: whether the lookup was built, its build time,
+the exact number of pixels blended through it, and the number and inclusive
+time of 16-row raster blocks that used it. The active-block time includes other
 work performed in those blocks and is an estimate, not isolated lookup time.
 The first active block may include lazy table construction, which is also
-reported separately.
-Lookup collection requires the existing Preview metrics preference and is
-limited to the already-bounded slow-frame sample; it adds no per-pixel timer.
+reported separately. These detailed layer fields remain limited to the
+slow-frame sample; the aggregate event reports interval totals. Lookup
+collection requires the existing Preview metrics preference and adds no
+per-pixel timer.
 Layer decode/preparation and CPU composition timings are collected only during
 active Timeline playback while this preference is enabled. Paused frame
 refreshes, seeks, isolated media previews, and offline export do not collect
@@ -224,14 +232,14 @@ ring of 512 slots; summarized completed/dropped traces are retired, while
 unfinished traces remain bounded until a later stage arrives or they are
 evicted. No
 media path or frame content is included. Disabling `Enable preview performance
-metrics` stops collection and clears retained delivery traces. Neither this
-event nor the slow-frame diagnostic changes the aggregate
-`preview/performance_metrics` schema, which remains version `5`.
+metrics` stops collection and clears retained delivery traces. The delivery
+and slow-frame events keep their own schemas; the aggregate
+`preview/performance_metrics` schema is version `6`.
 
 The worker retains only the slowest over-budget frame and a count for the
 current metrics interval; it does not log each frame. Neither event contains
 media paths or frame contents. The aggregate `preview/performance_metrics`
-schema remains version `5`.
+schema is version `6`.
 
 Each timing summary contains count, average, maximum, and bounded-histogram
 approximations for the p95 and p99 milliseconds. The timings cover decoding,

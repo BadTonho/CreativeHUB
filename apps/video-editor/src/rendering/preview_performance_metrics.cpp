@@ -287,6 +287,36 @@ void PreviewPerformanceMetrics::recordSlowFrame(
     }
 }
 
+void PreviewPerformanceMetrics::recordBlendLookupComposition(
+    const FrameCompositionTimings& timings) noexcept {
+    if (!isEnabled()) return;
+
+    blend_lookup_composition_frames_.fetch_add(1, std::memory_order_relaxed);
+    for (const auto& layer : timings.layers) {
+        blend_lookup_layer_observations_.fetch_add(1, std::memory_order_relaxed);
+        if (layer.blend_lookup_pixel_count > 0) {
+            blend_lookup_active_layer_observations_.fetch_add(
+                1,
+                std::memory_order_relaxed);
+        }
+        if (layer.blend_lookup_built) {
+            blend_lookup_table_builds_.fetch_add(1, std::memory_order_relaxed);
+        }
+        blend_lookup_build_nanoseconds_.fetch_add(
+            layer.blend_lookup_build_nanoseconds,
+            std::memory_order_relaxed);
+        blend_lookup_pixel_count_.fetch_add(
+            layer.blend_lookup_pixel_count,
+            std::memory_order_relaxed);
+        blend_lookup_active_block_count_.fetch_add(
+            layer.blend_lookup_active_block_count,
+            std::memory_order_relaxed);
+        blend_lookup_active_block_nanoseconds_.fetch_add(
+            layer.blend_lookup_active_block_nanoseconds,
+            std::memory_order_relaxed);
+    }
+}
+
 std::uint64_t PreviewPerformanceMetrics::createFrameDeliveryTrace(
     std::uint64_t playback_generation,
     std::int64_t timeline_frame) noexcept {
@@ -869,6 +899,22 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
     snapshot.composition_layer_count = composition_layer_count_.load(std::memory_order_relaxed);
     snapshot.composition_text_layer_count = composition_text_layer_count_.load(std::memory_order_relaxed);
     snapshot.composition_transition_count = composition_transition_count_.load(std::memory_order_relaxed);
+    snapshot.blend_lookup_composition_frames =
+        blend_lookup_composition_frames_.exchange(0, std::memory_order_relaxed);
+    snapshot.blend_lookup_layer_observations =
+        blend_lookup_layer_observations_.exchange(0, std::memory_order_relaxed);
+    snapshot.blend_lookup_active_layer_observations =
+        blend_lookup_active_layer_observations_.exchange(0, std::memory_order_relaxed);
+    snapshot.blend_lookup_table_builds =
+        blend_lookup_table_builds_.exchange(0, std::memory_order_relaxed);
+    snapshot.blend_lookup_build_nanoseconds =
+        blend_lookup_build_nanoseconds_.exchange(0, std::memory_order_relaxed);
+    snapshot.blend_lookup_pixel_count =
+        blend_lookup_pixel_count_.exchange(0, std::memory_order_relaxed);
+    snapshot.blend_lookup_active_block_count =
+        blend_lookup_active_block_count_.exchange(0, std::memory_order_relaxed);
+    snapshot.blend_lookup_active_block_nanoseconds =
+        blend_lookup_active_block_nanoseconds_.exchange(0, std::memory_order_relaxed);
     snapshot.target_frame_rate_milli = target_frame_rate_milli_.load(std::memory_order_relaxed);
     const auto packed_timeline_frame_rate = timeline_frame_rate_packed_.load(
         std::memory_order_relaxed);

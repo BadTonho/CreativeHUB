@@ -744,6 +744,7 @@ void validateCompositionPlayback(
     layer.segment_frame_count = 3;
     layer.track_index = 0;
     layer.clip_index = 0;
+    layer.transform.opacity = 0.5;
 
     worker.setActiveCompositionClip(0, 0);
     worker.setComposition(
@@ -778,6 +779,13 @@ void validateCompositionPlayback(
     require(snapshot.playback_start_events == 1 &&
                 snapshot.playback_start_to_presentation.count == 1,
             "Composition playback start-to-presentation timing was not recorded.");
+    require(snapshot.blend_lookup_composition_frames > 0 &&
+                snapshot.blend_lookup_layer_observations > 0 &&
+                snapshot.blend_lookup_active_layer_observations > 0 &&
+                snapshot.blend_lookup_table_builds > 0 &&
+                snapshot.blend_lookup_pixel_count > 0 &&
+                snapshot.blend_lookup_active_block_count > 0,
+            "Partial-opacity Timeline playback did not contribute blend lookup interval metrics.");
 }
 
 void validateCompositionReuseAcrossMediaActivation(
