@@ -143,6 +143,7 @@ private:
         rendering::SlowFrameDecodePath decode_path =
             rendering::SlowFrameDecodePath::None;
         std::uint64_t decode_nanoseconds = 0;
+        media::ForwardDecodeDiagnostics forward_decode;
     };
 
     bool ensureSessionAtCurrentFrame();

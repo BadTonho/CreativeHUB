@@ -10,6 +10,20 @@
 
 namespace media {
 
+struct ForwardDecodeDiagnostics {
+    bool collected = false;
+    bool attempted = false;
+    bool completed = false;
+    bool cancelled = false;
+    std::int64_t starting_frame = -1;
+    std::int64_t requested_frame = -1;
+    std::uint64_t discarded_intermediate_frames = 0;
+    std::uint64_t elapsed_nanoseconds = 0;
+    std::uint64_t packet_io_nanoseconds = 0;
+    std::uint64_t decoder_receive_nanoseconds = 0;
+    std::uint64_t target_pixel_conversion_nanoseconds = 0;
+};
+
 class VideoPlaybackSession final {
 public:
     using CancellationPredicate = std::function<bool()>;
@@ -35,7 +49,8 @@ public:
     // initial, or invalid decoder-position requests return no frame.
     std::optional<VideoFramePtr> decode_forward_to(
         std::int64_t frame_index,
-        const CancellationPredicate& should_cancel = {});
+        const CancellationPredicate& should_cancel = {},
+        ForwardDecodeDiagnostics* diagnostics = nullptr);
     std::optional<VideoFramePtr> decode_frame_at(std::int64_t frame_index);
     std::optional<VideoFramePtr> decode_frame_at(
         std::int64_t frame_index,
@@ -53,8 +68,13 @@ private:
     explicit VideoPlaybackSession(std::unique_ptr<Impl> impl);
 
     static std::unique_ptr<Impl> openImpl(const std::filesystem::path& source_path);
-    static bool decodeNextFrame(Impl& impl, VideoFramePtr* output_frame);
-    static bool discardNextFrame(Impl& impl);
+    static bool decodeNextFrame(
+        Impl& impl,
+        VideoFramePtr* output_frame,
+        ForwardDecodeDiagnostics* diagnostics = nullptr);
+    static bool discardNextFrame(
+        Impl& impl,
+        ForwardDecodeDiagnostics* diagnostics = nullptr);
     static void cacheFrame(
         Impl& impl,
         std::int64_t frame_index,

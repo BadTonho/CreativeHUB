@@ -53,7 +53,11 @@ void validateForwardDecode(
             "Forward decode could not initialize its decoder position.");
 
     metrics.reset();
-    const auto advanced = session->decode_forward_to(target_frame);
+    media::ForwardDecodeDiagnostics forward_diagnostics;
+    const auto advanced = session->decode_forward_to(
+        target_frame,
+        {},
+        &forward_diagnostics);
     require(advanced.has_value() && *advanced != nullptr,
             "Forward decode did not return its target frame.");
     require(session->current_frame_index() == target_frame,
@@ -69,6 +73,20 @@ void validateForwardDecode(
             "Forward decode did not discard the expected intermediate frames.");
     require(forward_snapshot.pixel_conversion.count == 1,
             "Forward decode converted an intermediate frame to RGBA.");
+    const auto forward_substage_nanoseconds =
+        forward_diagnostics.packet_io_nanoseconds +
+        forward_diagnostics.decoder_receive_nanoseconds +
+        forward_diagnostics.target_pixel_conversion_nanoseconds;
+    require(forward_diagnostics.collected && forward_diagnostics.attempted &&
+                forward_diagnostics.completed && !forward_diagnostics.cancelled &&
+                forward_diagnostics.starting_frame == 0 &&
+                forward_diagnostics.requested_frame == target_frame &&
+                forward_diagnostics.discarded_intermediate_frames == target_frame - 1 &&
+                forward_diagnostics.elapsed_nanoseconds > 0 &&
+                forward_diagnostics.target_pixel_conversion_nanoseconds > 0 &&
+                forward_substage_nanoseconds <=
+                    forward_diagnostics.elapsed_nanoseconds,
+            "Forward decode diagnostics did not describe the measured operation.");
 
     const auto cached_target = session->decode_frame_at(target_frame);
     require(cached_target.has_value() && *cached_target == *advanced,
@@ -86,18 +104,54 @@ void validateForwardDecode(
     require(cancelled_session->decode_next_frame().has_value(),
             "The cancellation test could not initialize its decoder position.");
     int cancellation_checks = 0;
+    media::ForwardDecodeDiagnostics cancelled_diagnostics;
     const auto cancelled = cancelled_session->decode_forward_to(
         target_frame,
         [&cancellation_checks]() {
             return ++cancellation_checks >= 3;
-        });
+        },
+        &cancelled_diagnostics);
+    const auto cancelled_substage_nanoseconds =
+        cancelled_diagnostics.packet_io_nanoseconds +
+        cancelled_diagnostics.decoder_receive_nanoseconds +
+        cancelled_diagnostics.target_pixel_conversion_nanoseconds;
     require(!cancelled.has_value(),
             "Forward decode ignored its cancellation predicate.");
     require(cancelled_session->current_frame_index() < target_frame,
             "Cancelled forward decode reached its target frame.");
+    require(cancelled_diagnostics.collected &&
+                cancelled_diagnostics.attempted &&
+                !cancelled_diagnostics.completed &&
+                cancelled_diagnostics.cancelled &&
+                cancelled_diagnostics.starting_frame == 0 &&
+                cancelled_diagnostics.requested_frame == target_frame &&
+                cancelled_diagnostics.discarded_intermediate_frames == 2 &&
+                cancelled_diagnostics.elapsed_nanoseconds > 0 &&
+                cancelled_diagnostics.target_pixel_conversion_nanoseconds == 0 &&
+                cancelled_substage_nanoseconds <=
+                    cancelled_diagnostics.elapsed_nanoseconds,
+            "Cancelled forward decode did not preserve its partial diagnostics.");
     const auto recovered = cancelled_session->decode_frame_at(target_frame);
     require(recovered.has_value() && *recovered != nullptr,
             "A random seek did not recover after forward decode cancellation.");
+
+    metrics.setEnabled(false);
+    auto unmeasured_session = media::VideoPlaybackSession::open(path);
+    require(unmeasured_session->decode_next_frame().has_value(),
+            "The disabled-metrics test could not initialize its decoder.");
+    media::ForwardDecodeDiagnostics disabled_diagnostics;
+    const auto unmeasured = unmeasured_session->decode_forward_to(
+        target_frame,
+        {},
+        &disabled_diagnostics);
+    require(unmeasured.has_value() && !disabled_diagnostics.collected &&
+                !disabled_diagnostics.attempted &&
+                disabled_diagnostics.elapsed_nanoseconds == 0 &&
+                disabled_diagnostics.packet_io_nanoseconds == 0 &&
+                disabled_diagnostics.decoder_receive_nanoseconds == 0 &&
+                disabled_diagnostics.target_pixel_conversion_nanoseconds == 0,
+            "Forward decode collected detailed timings while metrics were disabled.");
+    metrics.setEnabled(true);
 }
 
 void validateReference(const std::filesystem::path& path) {

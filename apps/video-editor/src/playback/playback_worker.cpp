@@ -681,6 +681,26 @@ void PlaybackWorker::renderCompositionFrame(
                     sample.composition_fast_path_copy_nanoseconds +=
                         layer.fast_path_copy_nanoseconds;
                 }
+                layer.forward_decode_collected =
+                    decoded.forward_decode.collected;
+                layer.forward_decode_completed =
+                    decoded.forward_decode.completed;
+                layer.forward_decode_cancelled =
+                    decoded.forward_decode.cancelled;
+                layer.forward_decode_start_frame =
+                    decoded.forward_decode.starting_frame;
+                layer.forward_decode_requested_frame =
+                    decoded.forward_decode.requested_frame;
+                layer.forward_decode_discarded_frames =
+                    decoded.forward_decode.discarded_intermediate_frames;
+                layer.forward_decode_elapsed_nanoseconds =
+                    decoded.forward_decode.elapsed_nanoseconds;
+                layer.forward_decode_packet_io_nanoseconds =
+                    decoded.forward_decode.packet_io_nanoseconds;
+                layer.forward_decode_receive_nanoseconds =
+                    decoded.forward_decode.decoder_receive_nanoseconds;
+                layer.forward_decode_pixel_conversion_nanoseconds =
+                    decoded.forward_decode.target_pixel_conversion_nanoseconds;
 
                 rendering::addSlowFrameLayer(sample, layer);
             }
@@ -1380,6 +1400,7 @@ PlaybackWorker::decodeCompositionLayers(
             ? Clock::now()
             : Clock::time_point{};
         auto decode_path = rendering::SlowFrameDecodePath::None;
+        media::ForwardDecodeDiagnostics forward_decode_diagnostics;
         if (should_cancel && should_cancel()) return std::nullopt;
         if (spec.kind == timeline::ClipKind::Text) {
             if (composition.cached_text_frame != nullptr) {
@@ -1419,7 +1440,8 @@ PlaybackWorker::decodeCompositionLayers(
                 tried_forward_decode = true;
                 decoded = composition.session->decode_forward_to(
                     source_frame,
-                    should_cancel);
+                    should_cancel,
+                    collect_layer_timing ? &forward_decode_diagnostics : nullptr);
             }
             if (!decoded.has_value() && !composition.session->at_end() &&
                 !(should_cancel && should_cancel())) {
@@ -1467,7 +1489,8 @@ PlaybackWorker::decodeCompositionLayers(
             decode_path,
             layer_decode_nanoseconds <= 0
                 ? 0U
-                : static_cast<std::uint64_t>(layer_decode_nanoseconds)});
+                : static_cast<std::uint64_t>(layer_decode_nanoseconds),
+            forward_decode_diagnostics});
     }
     return layers;
 }

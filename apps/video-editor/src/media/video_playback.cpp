@@ -13,6 +13,7 @@ extern "C" {
 
 #include <cstddef>
 #include <cmath>
+#include <chrono>
 #include <deque>
 #include <filesystem>
 #include <limits>
@@ -59,6 +60,28 @@ using CodecContextPtr = std::unique_ptr<AVCodecContext, CodecContextDeleter>;
 using PacketPtr = std::unique_ptr<AVPacket, PacketDeleter>;
 using FramePtr = std::unique_ptr<AVFrame, FrameDeleter>;
 using SwsContextPtr = std::unique_ptr<SwsContext, SwsContextDeleter>;
+
+class OptionalDurationAccumulator final {
+public:
+    explicit OptionalDurationAccumulator(std::uint64_t* destination) noexcept
+        : destination_(destination),
+          started_(destination != nullptr ? Clock::now() : Clock::time_point{}) {}
+
+    ~OptionalDurationAccumulator() {
+        if (destination_ == nullptr) return;
+        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            Clock::now() - started_).count();
+        if (elapsed > 0) *destination_ += static_cast<std::uint64_t>(elapsed);
+    }
+
+    OptionalDurationAccumulator(const OptionalDurationAccumulator&) = delete;
+    OptionalDurationAccumulator& operator=(const OptionalDurationAccumulator&) = delete;
+
+private:
+    using Clock = std::chrono::steady_clock;
+    std::uint64_t* destination_ = nullptr;
+    Clock::time_point started_{};
+};
 
 std::string toUtf8(const std::filesystem::path& path) {
     const auto value = path.u8string();
@@ -430,13 +453,20 @@ std::unique_ptr<VideoPlaybackSession::Impl> VideoPlaybackSession::openImpl(
     return impl;
 }
 
-bool VideoPlaybackSession::decodeNextFrame(Impl& impl, VideoFramePtr* output_frame) {
+bool VideoPlaybackSession::decodeNextFrame(
+    Impl& impl,
+    VideoFramePtr* output_frame,
+    ForwardDecodeDiagnostics* diagnostics) {
     if (impl.end_reached) return false;
 
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     while (true) {
         if (!impl.flush_sent) {
             while (true) {
+                OptionalDurationAccumulator packet_duration(
+                    diagnostics != nullptr
+                        ? &diagnostics->packet_io_nanoseconds
+                        : nullptr);
                 rendering::PreviewPerformanceScope packet_timing(
                     metrics,
                     rendering::PreviewTiming::DecodePacket);
@@ -470,12 +500,27 @@ bool VideoPlaybackSession::decodeNextFrame(Impl& impl, VideoFramePtr* output_fra
         rendering::PreviewPerformanceScope receive_timing(
             metrics,
             rendering::PreviewTiming::DecodeReceive);
-        const int receive_result = avcodec_receive_frame(impl.decoder.get(), impl.frame.get());
+        int receive_result = 0;
+        {
+            OptionalDurationAccumulator receive_duration(
+                diagnostics != nullptr
+                    ? &diagnostics->decoder_receive_nanoseconds
+                    : nullptr);
+            receive_result = avcodec_receive_frame(
+                impl.decoder.get(), impl.frame.get());
+        }
         if (receive_result == 0) {
             ++impl.current_frame_index;
             impl.last_decoded_timestamp = impl.frame->best_effort_timestamp;
             if (output_frame != nullptr) {
-                auto decoded_frame = copyRgbaFrame(*impl.frame, impl.scaler, metrics);
+                VideoFramePtr decoded_frame;
+                {
+                    OptionalDurationAccumulator conversion_duration(
+                        diagnostics != nullptr
+                            ? &diagnostics->target_pixel_conversion_nanoseconds
+                            : nullptr);
+                    decoded_frame = copyRgbaFrame(*impl.frame, impl.scaler, metrics);
+                }
                 if (impl.cache_decoded_frames) {
                     VideoPlaybackSession::cacheFrame(
                         impl,
@@ -503,8 +548,10 @@ bool VideoPlaybackSession::decodeNextFrame(Impl& impl, VideoFramePtr* output_fra
     }
 }
 
-bool VideoPlaybackSession::discardNextFrame(Impl& impl) {
-    return decodeNextFrame(impl, nullptr);
+bool VideoPlaybackSession::discardNextFrame(
+    Impl& impl,
+    ForwardDecodeDiagnostics* diagnostics) {
+    return decodeNextFrame(impl, nullptr, diagnostics);
 }
 
 std::optional<VideoFramePtr> VideoPlaybackSession::decode_next_frame() {
@@ -526,7 +573,22 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_next_frame() {
 
 std::optional<VideoFramePtr> VideoPlaybackSession::decode_forward_to(
     std::int64_t frame_index,
-    const CancellationPredicate& should_cancel) {
+    const CancellationPredicate& should_cancel,
+    ForwardDecodeDiagnostics* diagnostics) {
+    if (diagnostics != nullptr) *diagnostics = {};
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    auto* collected_diagnostics =
+        diagnostics != nullptr && metrics.isEnabled() ? diagnostics : nullptr;
+    if (collected_diagnostics != nullptr) {
+        collected_diagnostics->collected = true;
+        collected_diagnostics->attempted = true;
+        collected_diagnostics->starting_frame = impl_->current_frame_index;
+        collected_diagnostics->requested_frame = frame_index;
+    }
+    OptionalDurationAccumulator elapsed_duration(
+        collected_diagnostics != nullptr
+            ? &collected_diagnostics->elapsed_nanoseconds
+            : nullptr);
     try {
         if (frame_index < 0) {
             throw MediaError("The requested frame index is negative.");
@@ -540,14 +602,33 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_forward_to(
             return should_cancel && should_cancel();
         };
         while (impl_->current_frame_index < frame_index - 1) {
-            if (cancelled() || !discardNextFrame(*impl_)) return std::nullopt;
+            if (cancelled()) {
+                if (collected_diagnostics != nullptr) {
+                    collected_diagnostics->cancelled = true;
+                }
+                return std::nullopt;
+            }
+            if (!discardNextFrame(*impl_, collected_diagnostics)) {
+                return std::nullopt;
+            }
+            if (collected_diagnostics != nullptr) {
+                ++collected_diagnostics->discarded_intermediate_frames;
+            }
         }
-        if (cancelled()) return std::nullopt;
+        if (cancelled()) {
+            if (collected_diagnostics != nullptr) {
+                collected_diagnostics->cancelled = true;
+            }
+            return std::nullopt;
+        }
 
         VideoFramePtr frame;
-        if (!decodeNextFrame(*impl_, &frame) ||
+        if (!decodeNextFrame(*impl_, &frame, collected_diagnostics) ||
             impl_->current_frame_index != frame_index) {
             return std::nullopt;
+        }
+        if (collected_diagnostics != nullptr) {
+            collected_diagnostics->completed = true;
         }
         return frame;
     } catch (const MediaError& error) {

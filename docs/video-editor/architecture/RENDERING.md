@@ -139,7 +139,7 @@ During composed Timeline playback, frames whose worker processing time exceeds
 the target-FPS frame budget contribute to a bounded slow-frame summary. The UI
 timer writes at most one additional `playback/slow_frame` event per metrics
 interval, and only when that interval contains a slow frame. Its
-`diagnostic_schema_version` is `2`; it reports the slow-frame count and the
+`diagnostic_schema_version` is `3`; it reports the slow-frame count and the
 slowest frame's timeline position, generation, target FPS, budget, processing,
 decode, composition, and payload timings. It also reports compositor timings
 for adapter/list setup, output-buffer allocation, background initialization,
@@ -155,6 +155,14 @@ active Timeline playback while this preference is enabled. Paused frame
 refreshes, seeks, isolated media previews, and offline export do not collect
 this per-layer data. UI and GPU presentation timings remain in the existing
 aggregate sample and can be compared with the slow-frame event.
+
+For video layers that perform forward catch-up, schema `3` also records the
+decoder frame before the request, requested source frame, number of discarded
+intermediate frames, and total forward-call time. It separates accumulated
+packet read/send, decoder receive, and requested-frame pixel conversion time;
+the remaining time is reported as `forward_other_ms`. The detail is attached
+to the bounded layer sample, not emitted per frame. It contains no media paths
+or frame contents.
 
 During playback, the worker assigns each emitted frame a monotonic in-memory
 trace ID. The ID follows the shared frame reference through the one-slot

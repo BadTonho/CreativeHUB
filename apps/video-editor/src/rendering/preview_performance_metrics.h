@@ -76,6 +76,16 @@ struct SlowFrameLayerSample {
     std::uint64_t composition_setup_nanoseconds = 0;
     std::uint64_t raster_blend_nanoseconds = 0;
     std::uint64_t fast_path_copy_nanoseconds = 0;
+    bool forward_decode_collected = false;
+    bool forward_decode_completed = false;
+    bool forward_decode_cancelled = false;
+    std::int64_t forward_decode_start_frame = -1;
+    std::int64_t forward_decode_requested_frame = -1;
+    std::uint64_t forward_decode_discarded_frames = 0;
+    std::uint64_t forward_decode_elapsed_nanoseconds = 0;
+    std::uint64_t forward_decode_packet_io_nanoseconds = 0;
+    std::uint64_t forward_decode_receive_nanoseconds = 0;
+    std::uint64_t forward_decode_pixel_conversion_nanoseconds = 0;
 
     [[nodiscard]] std::uint64_t totalNanoseconds() const noexcept {
         return decode_nanoseconds + composition_nanoseconds;

@@ -219,6 +219,17 @@ int main() {
             layer.kind = rendering::SlowFrameLayerKind::Video;
             layer.decode_path = rendering::SlowFrameDecodePath::Forward;
             layer.decode_nanoseconds = (layer_index + 1) * 1'000'000;
+            if (layer_index == 5) {
+                layer.forward_decode_collected = true;
+                layer.forward_decode_completed = true;
+                layer.forward_decode_start_frame = 90;
+                layer.forward_decode_requested_frame = 120;
+                layer.forward_decode_discarded_frames = 29;
+                layer.forward_decode_elapsed_nanoseconds = 15'000'000;
+                layer.forward_decode_packet_io_nanoseconds = 4'000'000;
+                layer.forward_decode_receive_nanoseconds = 6'000'000;
+                layer.forward_decode_pixel_conversion_nanoseconds = 3'000'000;
+            }
             rendering::addSlowFrameLayer(first_slow_frame, layer);
         }
         metrics.recordSlowFrame(first_slow_frame);
@@ -258,6 +269,15 @@ int main() {
                         41'000'000 &&
                     snapshot.worst_slow_frame->slow_layer_count == 4 &&
                     snapshot.worst_slow_frame->slow_layers[0].clip_id == 22 &&
+                    snapshot.worst_slow_frame->slow_layers[0].forward_decode_collected &&
+                    snapshot.worst_slow_frame->slow_layers[0].forward_decode_completed &&
+                    snapshot.worst_slow_frame->slow_layers[0].forward_decode_start_frame == 90 &&
+                    snapshot.worst_slow_frame->slow_layers[0].forward_decode_requested_frame == 120 &&
+                    snapshot.worst_slow_frame->slow_layers[0].forward_decode_discarded_frames == 29 &&
+                    snapshot.worst_slow_frame->slow_layers[0].forward_decode_elapsed_nanoseconds == 15'000'000 &&
+                    snapshot.worst_slow_frame->slow_layers[0].forward_decode_packet_io_nanoseconds == 4'000'000 &&
+                    snapshot.worst_slow_frame->slow_layers[0].forward_decode_receive_nanoseconds == 6'000'000 &&
+                    snapshot.worst_slow_frame->slow_layers[0].forward_decode_pixel_conversion_nanoseconds == 3'000'000 &&
                     snapshot.worst_slow_frame->slow_layers[1].clip_id == 25 &&
                     snapshot.worst_slow_frame->slow_layers[3].clip_id == 23,
                 "Slow-frame threshold, count, worst sample, or layer bound is incorrect.");

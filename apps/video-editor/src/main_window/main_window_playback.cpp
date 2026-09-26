@@ -474,7 +474,7 @@ void appendSlowFrameContext(
     const rendering::PreviewPerformanceSnapshot& snapshot) {
     if (!snapshot.worst_slow_frame.has_value()) return;
     const auto& frame = *snapshot.worst_slow_frame;
-    context.emplace_back("diagnostic_schema_version", "2");
+    context.emplace_back("diagnostic_schema_version", "3");
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back("sample_origin_thread_role", "playback_worker");
     context.emplace_back(
@@ -550,6 +550,49 @@ void appendSlowFrameContext(
         context.emplace_back(
             prefix + "fast_path_copy_ms",
             milliseconds(layer.fast_path_copy_nanoseconds));
+        context.emplace_back(
+            prefix + "forward_decode_collected",
+            layer.forward_decode_collected ? "true" : "false");
+        if (layer.forward_decode_collected) {
+            context.emplace_back(
+                prefix + "forward_decode_completed",
+                layer.forward_decode_completed ? "true" : "false");
+            context.emplace_back(
+                prefix + "forward_decode_cancelled",
+                layer.forward_decode_cancelled ? "true" : "false");
+            context.emplace_back(
+                prefix + "forward_decode_start_frame",
+                std::to_string(layer.forward_decode_start_frame));
+            context.emplace_back(
+                prefix + "forward_decode_requested_frame",
+                std::to_string(layer.forward_decode_requested_frame));
+            context.emplace_back(
+                prefix + "forward_decode_discarded_frames",
+                std::to_string(layer.forward_decode_discarded_frames));
+            context.emplace_back(
+                prefix + "forward_decode_ms",
+                milliseconds(layer.forward_decode_elapsed_nanoseconds));
+            context.emplace_back(
+                prefix + "forward_packet_io_ms",
+                milliseconds(layer.forward_decode_packet_io_nanoseconds));
+            context.emplace_back(
+                prefix + "forward_receive_ms",
+                milliseconds(layer.forward_decode_receive_nanoseconds));
+            context.emplace_back(
+                prefix + "forward_pixel_conversion_ms",
+                milliseconds(layer.forward_decode_pixel_conversion_nanoseconds));
+            const auto forward_substage_nanoseconds =
+                layer.forward_decode_packet_io_nanoseconds +
+                layer.forward_decode_receive_nanoseconds +
+                layer.forward_decode_pixel_conversion_nanoseconds;
+            context.emplace_back(
+                prefix + "forward_other_ms",
+                milliseconds(layer.forward_decode_elapsed_nanoseconds >
+                        forward_substage_nanoseconds
+                    ? layer.forward_decode_elapsed_nanoseconds -
+                        forward_substage_nanoseconds
+                    : 0U));
+        }
     }
 }
 
