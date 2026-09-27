@@ -116,25 +116,25 @@ bool testGeneralCanvasSelection() {
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, image_point(QPointF(16, 12)));
     if (last_selection != QStringList{QStringLiteral("top-shape")} ||
         last_active_layer != QStringLiteral("top-shapes")) {
-        std::cerr << "Select did not choose the topmost overlapping object and its layer.\n";
+        std::cerr << "Selection did not choose the topmost overlapping object and its layer.\n";
         return false;
     }
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, image_point(QPointF(35, 10)));
     if (last_selection != QStringList{QStringLiteral("paint")} ||
         last_active_layer != QStringLiteral("paint-layer")) {
-        std::cerr << "Select could not hit-test a paint stroke.\n";
+        std::cerr << "Selection could not hit-test a paint stroke.\n";
         return false;
     }
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, image_point(QPointF(35, 30)));
     if (last_selection != QStringList{QStringLiteral("eraser")} ||
         last_active_layer != QStringLiteral("eraser-layer")) {
-        std::cerr << "Select could not hit-test an eraser operation.\n";
+        std::cerr << "Selection could not hit-test an eraser operation.\n";
         return false;
     }
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, image_point(QPointF(70, 20)));
     if (last_selection != QStringList{QStringLiteral("shape")} ||
         last_active_layer != QStringLiteral("shapes")) {
-        std::cerr << "Select could not hit-test a shape.\n";
+        std::cerr << "Selection could not hit-test a shape.\n";
         return false;
     }
 
@@ -256,11 +256,11 @@ bool testRenamedShortcutPersistence() {
     auto* select_action = reopened.findChild<QAction*>(QStringLiteral("selectShapesToolAction"));
     auto* delete_action = reopened.findChild<QAction*>(QStringLiteral("deleteSelectedShapeAction"));
     if (select_action == nullptr || delete_action == nullptr ||
-        select_action->text() != QStringLiteral("Select") ||
+        select_action->text() != QStringLiteral("Selection") ||
         delete_action->text() != QStringLiteral("Delete Selected Objects") ||
         select_action->shortcut() != select_shortcut ||
         delete_action->shortcut() != delete_shortcut) {
-        std::cerr << "The renamed Select and Delete actions did not retain saved shortcuts.\n";
+        std::cerr << "The renamed Selection and Delete actions did not retain saved shortcuts.\n";
         return false;
     }
     return true;
@@ -324,7 +324,7 @@ int main(int argc, char* argv[]) {
         settings_menu->title() != QStringLiteral("Settings") ||
         paint_tool_action->shortcut() != QKeySequence(Qt::Key_B) ||
         eraser_tool_action->shortcut() != QKeySequence(Qt::Key_E) ||
-        select_shapes_tool_action->text() != QStringLiteral("Select") ||
+        select_shapes_tool_action->text() != QStringLiteral("Selection") ||
         delete_shape_action->text() != QStringLiteral("Delete Selected Objects") ||
         paint_tool_action->isChecked() || paint_tool_action->isEnabled() ||
         eraser_tool_action->isChecked() || eraser_tool_action->isEnabled() ||
@@ -1333,11 +1333,16 @@ int main(int argc, char* argv[]) {
         QStringLiteral("shapeFillColorButton"));
     auto* linked_layer_list = linked_window.findChild<QListWidget*>(
         QStringLiteral("imageLayerList"));
+    const QImage selection_icon_24 = linked_select_shapes_button == nullptr
+        ? QImage{}
+        : linked_select_shapes_button->icon().pixmap(QSize(24, 24)).toImage();
     if (linked_shapes_action == nullptr || linked_select_shapes_action == nullptr ||
         linked_shapes_button == nullptr || linked_select_shapes_button == nullptr ||
         delete_objects_button == nullptr ||
-        linked_select_shapes_action->text() != QStringLiteral("Select") ||
-        linked_select_shapes_button->toolTip() != QStringLiteral("Select objects") ||
+        linked_select_shapes_action->text() != QStringLiteral("Selection") ||
+        linked_select_shapes_button->toolTip() != QStringLiteral("Selection") ||
+        linked_select_shapes_button->accessibleName() != QStringLiteral("Selection tool") ||
+        selection_icon_24.isNull() || selection_icon_24.pixelColor(5, 8).alpha() == 0 ||
         delete_objects_button->text() != QStringLiteral("Delete Selected Objects") ||
         shape_options_action == nullptr || shape_kind == nullptr || shape_stroke == nullptr ||
         shape_fill == nullptr || shape_width == nullptr || shape_stroke_color == nullptr ||
@@ -1415,7 +1420,7 @@ int main(int argc, char* argv[]) {
     QCoreApplication::processEvents();
     if (!linked_select_shapes_button->isChecked() || linked_shapes_button->isChecked() ||
         shape_kind->isEnabled()) {
-        std::cerr << "Shapes and Select were not mutually exclusive.\n";
+        std::cerr << "Shapes and Selection were not mutually exclusive.\n";
         return 1;
     }
     linked_layer_list->setCurrentRow(2);

@@ -844,7 +844,7 @@ void ImageEditorWindow::createActions() {
             : (current == ToolSidebar::Tool::Shapes ? ToolSidebar::Tool::None : current));
     });
 
-    select_tool_action_ = new QAction(QStringLiteral("Select"), this);
+    select_tool_action_ = new QAction(QStringLiteral("Selection"), this);
     // Keep the old preference key so customized shortcuts survive this rename.
     select_tool_action_->setObjectName(QStringLiteral("selectShapesToolAction"));
     select_tool_action_->setCheckable(true);

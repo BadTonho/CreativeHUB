@@ -85,14 +85,19 @@ QIcon selectToolIcon() {
     icon.fill(Qt::transparent);
     QPainter painter(&icon);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(QPen(QColor(190, 210, 235), 2.0, Qt::DashLine));
-    painter.setBrush(Qt::NoBrush);
-    painter.drawRect(QRectF(5, 5, 21, 21));
-    painter.setPen(QPen(QColor(250, 205, 100), 2.5, Qt::SolidLine, Qt::RoundCap));
-    painter.drawPoint(QPointF(5, 5));
-    painter.drawPoint(QPointF(26, 5));
-    painter.drawPoint(QPointF(5, 26));
-    painter.drawPoint(QPointF(26, 26));
+    QPainterPath pointer;
+    pointer.moveTo(6.0, 3.0);
+    pointer.lineTo(6.0, 25.0);
+    pointer.lineTo(11.6, 19.8);
+    pointer.lineTo(16.2, 28.0);
+    pointer.lineTo(20.0, 26.0);
+    pointer.lineTo(15.5, 17.8);
+    pointer.lineTo(24.5, 17.8);
+    pointer.closeSubpath();
+    painter.setPen(QPen(QColor(31, 38, 48), 1.8, Qt::SolidLine,
+                        Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(QColor(232, 239, 248));
+    painter.drawPath(pointer);
     return QIcon(icon);
 }
 
@@ -142,8 +147,8 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
     select_shapes_button_ = new QToolButton(this);
     select_shapes_button_->setObjectName(QStringLiteral("selectShapesToolButton"));
-    select_shapes_button_->setToolTip(QStringLiteral("Select objects"));
-    select_shapes_button_->setAccessibleName(QStringLiteral("Select objects tool"));
+    select_shapes_button_->setToolTip(QStringLiteral("Selection"));
+    select_shapes_button_->setAccessibleName(QStringLiteral("Selection tool"));
     select_shapes_button_->setIcon(selectToolIcon());
     select_shapes_button_->setIconSize(QSize(24, 24));
     select_shapes_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
@@ -282,8 +287,8 @@ void ToolSidebar::updateControls() {
             ? QStringLiteral("Select or create an editable layer to erase")
             : QStringLiteral("Open an image to erase")));
     select_shapes_button_->setToolTip(document_available_
-        ? QStringLiteral("Select objects")
-        : QStringLiteral("Open an image to select objects"));
+        ? QStringLiteral("Selection")
+        : QStringLiteral("Open an image to use Selection"));
     color_button_->setEnabled(true);
 }
 

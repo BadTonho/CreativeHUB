@@ -19,7 +19,7 @@ rejected. Use **Reset All** to restore the defaults.
 | Eraser tool | `E` (toggle Eraser on or off when an editable layer is available) |
 | Cancel crop selection, shape creation, or object selection gesture | `Esc` |
 | Shapes tool | Unassigned by default |
-| Select tool | Unassigned by default |
+| Selection tool | Unassigned by default |
 | Delete selected objects | Unassigned by default |
 | Open editable document | Unassigned by default |
 | Relink source image | Unassigned by default |
@@ -32,9 +32,9 @@ rejected. Use **Reset All** to restore the defaults.
 | Toggle Layers panel | Unassigned by default |
 
 Use the mouse wheel to zoom, the middle mouse button to pan, and the Crop
-Selection toolbar or Edit menu action to start a crop gesture. Select can pick
-paint strokes, eraser strokes, and shapes on visible editable layers. Click an
-object to select it; Shift-click toggles it in the selection. Drag on empty
+Selection toolbar or Edit menu action to start a crop gesture. Selection can
+pick paint strokes, eraser strokes, and shapes on visible editable layers. Click
+an object to select it; Shift-click toggles it in the selection. Drag on empty
 canvas to select every object whose visible geometry intersects the marquee.
 Drag a selected object to move the selection, or drag a corner handle to scale
 it with proportions preserved. Hold Alt during resize for independent

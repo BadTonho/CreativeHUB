@@ -79,7 +79,7 @@ persistence, and recovery.
   point; normal hover tracking resumes on subsequent mouse movement. The gesture
   updates the window controls without changing the document or history.
 - `ImageCanvas` previews line, rectangle, and ellipse operations while drawing.
-  **Select** hit-tests paint strokes, erase strokes, and shapes across visible
+  **Selection** hit-tests paint strokes, erase strokes, and shapes across visible
   editable layers from top to bottom. Click selects the topmost object; Shift
   click toggles objects in the selection, and a marquee selects objects whose
   visible geometry it intersects. Selecting an object activates its layer.
@@ -93,7 +93,8 @@ persistence, and recovery.
   creation or an active selection gesture. Each object transform, shape style
   edit, or object deletion is one Undo/Redo edit.
 - `ToolSidebar` contains mutually exclusive, checkable, icon-only Paint,
-  Eraser, Shapes, and Select tools in a compact rail; all can be inactive.
+  Eraser, Shapes, and Selection tools in a compact rail; all can be inactive.
+  Selection uses a mouse-pointer icon.
   The always-visible color swatch remains specific to Paint. `ImageEditorWindow`
   owns a persistent top tool options bar; it is empty when no tool is active and
   shows synchronized size controls (1–1024 pixels) for Paint and Eraser, plus
@@ -115,8 +116,8 @@ persistence, and recovery.
   rerender them. Background
   remains fixed at the bottom, with visibility as its only editable property.
   Selecting Background disables Paint, Eraser, Shapes, and layer transforms,
-  and explains that an editable layer is required. Select remains available to
-  select objects on other visible layers. Opacity slider drags are
+  and explains that an editable layer is required. Selection remains available
+  to select objects on other visible layers. Opacity slider drags are
   grouped into one undo entry.
 - `ImageEditorWindow` routes menu and sidebar actions, prompts before discarding
   edits, and projects session state into the window. A completed paint gesture
@@ -125,12 +126,13 @@ persistence, and recovery.
   Keyboard Shortcuts** dialog. Stable action names identify preferences stored
   with `QSettings`, separately from editable documents. Defaults use Qt standard
   sequences plus `B` for Paint, `E` for Eraser, and `Esc` to cancel crop or an
-  in-progress shape. Shapes, Select, and Delete Selected Objects have no
-  default shortcut. The Select and delete actions keep their existing settings
-  keys so user-assigned shortcuts survive the rename. Duplicate assignments
-  are rejected. Paint, Eraser, and Shapes require an editable layer; Select
-  remains available with Background selected. The fixed tool-size mouse gesture is documented
-  separately and is not part of the keyboard shortcut preferences.
+  in-progress shape. Shapes, Selection, and Delete Selected Objects have no
+  default shortcut. The Selection and delete actions keep their existing
+  settings keys so user-assigned shortcuts survive the rename. Duplicate
+  assignments are rejected. Paint, Eraser, and Shapes require an editable
+  layer; Selection remains available with Background selected. The fixed
+  tool-size mouse gesture is documented separately and is not part of the
+  keyboard shortcut preferences.
 - In standalone mode, the window opens and saves `.cimg` documents normally. A
   linked launch accepts `--linked-source`, `--linked-document`, and
   `--publish-output`. It opens an existing linked document or creates one from

@@ -38,10 +38,10 @@ run.
    and drag a crop. Rotate both directions, flip horizontally and vertically,
    then use Undo and Redo. Confirm the canvas and dirty marker update.
 8. Open a disposable image and create a canvas in separate runs. Confirm Paint,
-   Eraser, Shapes, and Select appear as icons without labels in the
-   compact left sidebar and start inactive. Hover over each icon until its tooltip
-   appears and confirm its name. Confirm the top options bar remains visible but
-   empty.
+   Eraser, Shapes, and Selection appear as icons without labels in the
+   compact left sidebar and start inactive. Confirm Selection shows a
+   mouse-pointer icon. Hover over each icon until its tooltip appears and
+   confirm its name. Confirm the top options bar remains visible but empty.
    Use the color swatch at the bottom of the sidebar to choose a color (including
    a partially transparent color), then activate Paint. Confirm the top bar
    shows a slider and numeric brush-size field, and that changing either control
@@ -87,9 +87,10 @@ run.
    conflict without closing. Clear Paint's shortcut, restore all defaults, and
    confirm `B` toggles Paint and `E` toggles Eraser only when an editable layer
    is selected. With Crop Selection active, confirm `Esc` cancels it. Activate
-   Select, begin a marquee, and press `Esc`; confirm the selection gesture ends.
-   Assign shortcuts to Select and Delete Selected Objects, close and restart the
-   editor, and confirm both assignments persist.
+   Selection, begin a marquee, and press `Esc`; confirm the selection gesture
+   ends.
+   Assign shortcuts to Selection and Delete Selected Objects, close and restart
+   the editor, and confirm both assignments persist.
 9. Save an editable `.cimg`, close it, reopen it, and confirm the rendered
    result is unchanged. Compare the original source file before and after to
    verify it was not overwritten.
@@ -143,7 +144,7 @@ run.
    increments. Change stroke and fill independently, use translucent colors,
    and vary the stroke width.
 3. Create shapes, paint strokes, and erase strokes on multiple editable layers.
-   Switch to Select and click objects to select them. Confirm the uppermost hit
+   Switch to Selection and click objects to select them. Confirm the uppermost hit
    object is selected and its layer becomes active. Shift-click to add an object
    and Shift-click it again to remove it. Drag a marquee across portions of
    objects and confirm every intersecting object is selected. Click empty
