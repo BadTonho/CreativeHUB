@@ -10,6 +10,7 @@ class QListWidget;
 class QLabel;
 class QEvent;
 class QObject;
+class QPushButton;
 class QSlider;
 class QToolButton;
 
@@ -27,8 +28,10 @@ public:
     void setLayers(const QVector<ImageLayerData>& layers,
                    const QString& selected_layer_id,
                    const QHash<QString, QImage>& thumbnails);
+    void setQuickExportEnabled(bool enabled);
 
 signals:
+    void quickExportRequested();
     void layerSelected(const QString& layer_id);
     void layerVisibilityChanged(const QString& layer_id, bool visible);
     void layerRenamed(const QString& layer_id, const QString& name);
@@ -44,6 +47,7 @@ private:
     [[nodiscard]] QString selectedLayerId() const;
     void updateControls();
 
+    QPushButton* quick_export_button_ = nullptr;
     QListWidget* layer_list_ = nullptr;
     QLabel* edit_hint_ = nullptr;
     QSlider* opacity_slider_ = nullptr;

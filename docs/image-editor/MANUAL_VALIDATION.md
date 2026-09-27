@@ -21,8 +21,11 @@ run.
 5. Export a transparent canvas to PNG and JPEG. Confirm PNG transparency is
    retained and JPEG uses quality 95 and a white background by default. Export
    again with a custom JPEG background and low and high quality values. Confirm
-   the selected options are remembered after restarting the application. Use
-   **File > Quick Export** to save the selected editable layer as PNG and JPEG.
+   the selected options are remembered after restarting the application.
+   Confirm the **Quick Export** button appears above the layer list in the
+   Layers dock and stays disabled until an image is open. Use both the dock
+   button and **File > Quick Export** to save the selected editable layer as
+   PNG and JPEG.
    Confirm it preserves canvas dimensions and transparency without showing JPEG
    options, and that Quick JPEG uses the saved quality and background. Repeat
    with Background selected and with the editable layer hidden; confirm other

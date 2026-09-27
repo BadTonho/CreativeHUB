@@ -11,6 +11,8 @@
 #include <QFileDialog>
 #include <QImage>
 #include <QLabel>
+#include <QLayout>
+#include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
 #include <QProgressBar>
@@ -37,7 +39,8 @@ bool driveExportAction(
     const std::function<bool(image_editor::JpegExportOptionsDialog*)>& options_interaction,
     bool* options_were_seen,
     bool* progress_was_seen = nullptr,
-    const QString& action_object_name = QStringLiteral("exportImageAction")) {
+    const QString& action_object_name = QStringLiteral("exportImageAction"),
+    bool trigger_layer_panel_button = false) {
     bool file_dialog_was_seen = false;
     bool interaction_failed = false;
     QString last_modal_type;
@@ -86,10 +89,19 @@ bool driveExportAction(
 
     poll.start();
     watchdog.start(10000);
-    if (auto* action = window.findChild<QAction*>(action_object_name)) {
-        action->trigger();
+    if (trigger_layer_panel_button) {
+        if (auto* button = window.findChild<QPushButton*>(
+                QStringLiteral("quickExportLayerButton"))) {
+            button->click();
+        } else {
+            interaction_failed = true;
+        }
     } else {
-        interaction_failed = true;
+        if (auto* action = window.findChild<QAction*>(action_object_name)) {
+            action->trigger();
+        } else {
+            interaction_failed = true;
+        }
     }
     poll.stop();
     watchdog.stop();
@@ -123,8 +135,28 @@ int main(int argc, char* argv[]) {
     const QColor expected_background(28, 116, 205);
     const QString first_output = temporary.filePath(QStringLiteral("custom.jpg"));
     image_editor::ImageEditorWindow first_window;
+    auto* quick_export_button = first_window.findChild<QPushButton*>(
+        QStringLiteral("quickExportLayerButton"));
+    auto* layer_list = first_window.findChild<QListWidget*>(
+        QStringLiteral("imageLayerList"));
+    auto* layer_panel = first_window.findChild<QWidget*>(
+        QStringLiteral("imageEditorLayerPanel"));
+    if (quick_export_button == nullptr || layer_list == nullptr || layer_panel == nullptr ||
+        layer_panel->layout() == nullptr ||
+        layer_panel->layout()->indexOf(quick_export_button) < 0 ||
+        layer_panel->layout()->indexOf(layer_list) < 0 ||
+        layer_panel->layout()->indexOf(quick_export_button) >=
+            layer_panel->layout()->indexOf(layer_list) ||
+        quick_export_button->isEnabled()) {
+        std::cerr << "The layer-panel Quick Export button is missing, misplaced, or initially enabled.\n";
+        return 1;
+    }
     if (!first_window.openImagePath(source_path)) {
         std::cerr << "Could not open the transparent export fixture.\n";
+        return 1;
+    }
+    if (!quick_export_button->isEnabled()) {
+        std::cerr << "The layer-panel Quick Export button stayed disabled for an open image.\n";
         return 1;
     }
     bool first_options_seen = false;
@@ -212,7 +244,7 @@ int main(int argc, char* argv[]) {
             quick_png_options_seen = true;
             return false;
         }, &quick_png_options_seen, &quick_png_progress_seen,
-        QStringLiteral("quickExportImageAction"));
+        QStringLiteral("quickExportImageAction"), true);
     const QImage quick_png(quick_png_output);
     if (!quick_png_completed || !quick_png_progress_seen || quick_png_options_seen ||
         quick_png.isNull() || quick_png.size() != source.size() ||

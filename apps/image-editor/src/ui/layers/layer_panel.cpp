@@ -12,6 +12,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QStyle>
@@ -150,6 +151,11 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     layout->setContentsMargins(6, 6, 6, 6);
     layout->setSpacing(6);
 
+    quick_export_button_ = new QPushButton(QStringLiteral("Quick Export"), this);
+    quick_export_button_->setObjectName(QStringLiteral("quickExportLayerButton"));
+    quick_export_button_->setEnabled(false);
+    layout->addWidget(quick_export_button_);
+
     layer_list_ = new QListWidget(this);
     layer_list_->setObjectName(QStringLiteral("imageLayerList"));
     layer_list_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -225,6 +231,8 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
                     emit layerRenamed(id, item->text());
                 }
             });
+    connect(quick_export_button_, &QPushButton::clicked, this,
+            &LayerPanel::quickExportRequested);
     connect(add_button_, &QToolButton::clicked, this,
             &LayerPanel::addLayerRequested);
     connect(delete_button_, &QToolButton::clicked, this,
@@ -291,6 +299,10 @@ void LayerPanel::setLayers(const QVector<ImageLayerData>& layers,
     }
     refreshing_ = false;
     updateControls();
+}
+
+void LayerPanel::setQuickExportEnabled(bool enabled) {
+    quick_export_button_->setEnabled(enabled);
 }
 
 bool LayerPanel::eventFilter(QObject* watched, QEvent* event) {

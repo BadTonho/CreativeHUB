@@ -146,6 +146,8 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     createToolOptionsBar();
     createLayerPanel();
     createActions();
+    connect(layer_panel_, &LayerPanel::quickExportRequested, this,
+            [this]() { quick_export_action_->trigger(); });
     connect(canvas_, &ImageCanvas::cropSelected, this,
             [this](const QRect& crop) { handleCrop(crop); });
     connect(canvas_, &ImageCanvas::paintStrokeSelected, this,
@@ -666,6 +668,7 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     save_as_action_->setEnabled(session_.hasSource());
     export_action_->setEnabled(session_.hasSource());
     quick_export_action_->setEnabled(session_.hasSource());
+    layer_panel_->setQuickExportEnabled(session_.hasSource());
     relink_action_->setEnabled(session_.sourceIsMissing());
     const bool selected_layer_editable = session_.hasSource() &&
         session_.selectedLayerIsEditable();

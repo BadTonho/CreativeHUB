@@ -52,6 +52,9 @@ persistence, and recovery.
   cancellation requested in that phase discards the temporary output after
   encoding returns. Linked image publication continues to use its synchronous
   composite PNG path and default options.
+- The Layers dock places a **Quick Export** button above the layer list. It
+  invokes the same selected-layer export action as **File > Quick Export** and
+  stays disabled until an image is open.
 - `RecoveryStore` writes a local snapshot every 60 seconds while a dirty
   document with a renderable base is open. Unsaved canvases use a persisted
   session identity so they remain recoverable without a source path. On the
