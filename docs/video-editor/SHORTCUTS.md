@@ -50,4 +50,5 @@ Mouse gestures remain outside the customizable shortcut list.
 | Ctrl + Z / Cmd + Z | Undo | Image Editor |
 | Ctrl + Y / Ctrl + Shift + Z; platform standard Redo sequence | Redo | Image Editor |
 | B | Activate or deactivate the Paint tool when an editable layer is selected | Image Editor |
-| Esc | Cancel crop selection | Image Editor |
+| Esc | Cancel crop selection or in-progress shape creation | Image Editor |
+| Unassigned by default | Activate Shapes, Select Shapes, or Delete Selected Shape | Image Editor |

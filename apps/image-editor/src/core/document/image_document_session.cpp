@@ -76,6 +76,52 @@ QImage eraseStroke(QImage image, const ImageEraseStroke& stroke) {
     return image;
 }
 
+QImage drawShape(QImage image, const ImageShapeData& shape) {
+    image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const QRectF bounds(shape.start, shape.end);
+    if (shape.kind == ImageShapeKind::Line) {
+        if (shape.stroke_enabled) {
+            painter.setBrush(Qt::NoBrush);
+            painter.setPen(QPen(shape.stroke_color, shape.stroke_width,
+                                Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            painter.drawLine(shape.start, shape.end);
+        }
+    } else {
+        painter.setPen(shape.stroke_enabled
+            ? QPen(shape.stroke_color, shape.stroke_width, Qt::SolidLine,
+                   Qt::SquareCap, Qt::MiterJoin)
+            : QPen(Qt::NoPen));
+        painter.setBrush(shape.fill_enabled ? QBrush(shape.fill_color)
+                                           : QBrush(Qt::NoBrush));
+        if (shape.kind == ImageShapeKind::Rectangle) painter.drawRect(bounds.normalized());
+        else painter.drawEllipse(bounds.normalized());
+    }
+    painter.end();
+    return image;
+}
+
+QPointF transformShapePoint(QPointF point,
+                            const ImageOperation& operation,
+                            const QSize& canvas_size,
+                            bool inverse = false) {
+    if (operation.kind == OperationKind::FlipHorizontal) {
+        point.setX(canvas_size.width() - 1.0 - point.x());
+    } else if (operation.kind == OperationKind::FlipVertical) {
+        point.setY(canvas_size.height() - 1.0 - point.y());
+    } else if (operation.kind == OperationKind::Rotate) {
+        QTransform transform;
+        const qreal center_x = canvas_size.width() / 2.0;
+        const qreal center_y = canvas_size.height() / 2.0;
+        transform.translate(center_x, center_y);
+        transform.rotate((inverse ? -operation.quarter_turns : operation.quarter_turns) * 90.0);
+        transform.translate(-center_x, -center_y);
+        point = transform.map(point);
+    }
+    return point;
+}
+
 QImage applyOperations(QImage image,
                        const QVector<ImageOperation>& operations,
                        bool fixed_canvas,
@@ -130,6 +176,9 @@ QImage applyOperations(QImage image,
         case OperationKind::EraseStroke:
             image = eraseStroke(std::move(image), operation.erase_stroke);
             break;
+        case OperationKind::Shape:
+            image = drawShape(std::move(image), operation.shape);
+            break;
         }
     }
     return image;
@@ -142,7 +191,8 @@ bool exportWasCancelled(const std::atomic_bool* cancellation_requested) {
 
 QImage renderComposite(const QImage& source_image,
                        const ImageDocumentData& document,
-                       const std::atomic_bool* cancellation_requested = nullptr) {
+                       const std::atomic_bool* cancellation_requested = nullptr,
+                       const QString& excluded_shape_id = {}) {
     if (source_image.isNull() || exportWasCancelled(cancellation_requested)) return {};
 
     QImage background = applyOperations(
@@ -173,8 +223,16 @@ QImage renderComposite(const QImage& source_image,
             return {};
         }
         pixels.fill(Qt::transparent);
+        QVector<ImageOperation> operations = layer.operations;
+        if (!excluded_shape_id.isEmpty()) {
+            operations.erase(std::remove_if(operations.begin(), operations.end(),
+                [&excluded_shape_id](const ImageOperation& operation) {
+                    return operation.kind == OperationKind::Shape &&
+                        operation.shape.id == excluded_shape_id;
+                }), operations.end());
+        }
         pixels = applyOperations(
-            std::move(pixels), layer.operations, true, cancellation_requested);
+            std::move(pixels), operations, true, cancellation_requested);
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
             painter.end();
             return {};
@@ -295,6 +353,14 @@ QImage renderLayerThumbnail(QImage image,
                 1, qRound(operation.erase_stroke.diameter * std::min(scale_x, scale_y)));
             break;
         }
+        case OperationKind::Shape:
+            scaled_operation.shape.start.setX(operation.shape.start.x() * scale_x);
+            scaled_operation.shape.start.setY(operation.shape.start.y() * scale_y);
+            scaled_operation.shape.end.setX(operation.shape.end.x() * scale_x);
+            scaled_operation.shape.end.setY(operation.shape.end.y() * scale_y);
+            scaled_operation.shape.stroke_width = std::max(
+                1, qRound(operation.shape.stroke_width * std::min(scale_x, scale_y)));
+            break;
         case OperationKind::FlipHorizontal:
         case OperationKind::FlipVertical:
             break;
@@ -659,6 +725,34 @@ QImage ImageDocumentSession::renderedImage() const {
     return renderComposite(source_image_, data_);
 }
 
+QImage ImageDocumentSession::renderedImageWithoutShape(const QString& shape_id) const {
+    return renderComposite(source_image_, data_, nullptr, shape_id);
+}
+
+QVector<ImageShapePlacement> ImageDocumentSession::visibleShapes() const {
+    QVector<ImageShapePlacement> result;
+    const QSize size = renderedSize();
+    for (qsizetype layer_index = data_.layers.size(); layer_index > 1; --layer_index) {
+        const auto& layer = data_.layers.at(layer_index - 1);
+        if (!layer.visible || layer.opacity == 0) continue;
+        for (qsizetype index = layer.operations.size(); index > 0; --index) {
+            const auto& operation = layer.operations.at(index - 1);
+            if (operation.kind != OperationKind::Shape) continue;
+            ImageShapePlacement placement;
+            placement.shape = operation.shape;
+            placement.layer_id = layer.id;
+            placement.layer_opacity = layer.opacity;
+            for (qsizetype suffix = index; suffix < layer.operations.size(); ++suffix) {
+                const auto& later = layer.operations.at(suffix);
+                placement.shape.start = transformShapePoint(placement.shape.start, later, size);
+                placement.shape.end = transformShapePoint(placement.shape.end, later, size);
+            }
+            result.append(std::move(placement));
+        }
+    }
+    return result;
+}
+
 QImage ImageDocumentSession::renderedImageWithEraseStroke(
     const QVector<QPointF>& points, int diameter) const {
     if (!hasSource() || !selectedLayerIsEditable() || points.isEmpty() ||
@@ -864,6 +958,114 @@ bool ImageDocumentSession::applyEraseStroke(const QVector<QPointF>& points,
     operation.erase_stroke.diameter = diameter;
     data_.layers[layerIndex(selected_layer_id_)].operations.append(std::move(operation));
     return true;
+}
+
+QString ImageDocumentSession::addShape(ImageShapeData shape, QString* error) {
+    if (error != nullptr) error->clear();
+    if (!hasSource()) {
+        assignError(error, QStringLiteral("Open or relink an image before creating a shape."));
+        return {};
+    }
+    if (!selectedLayerIsEditable()) {
+        assignError(error, QStringLiteral("Select an editable layer before creating a shape."));
+        return {};
+    }
+    if (shape.id.isEmpty()) shape.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    if (!ImageDocumentStore::isValidShape(shape, renderedSize(), error)) return {};
+    for (const auto& layer : data_.layers) {
+        for (const auto& operation : layer.operations) {
+            if (operation.kind == OperationKind::Shape &&
+                operation.shape.id.compare(shape.id, Qt::CaseInsensitive) == 0) {
+                assignError(error, QStringLiteral("A shape with this ID already exists."));
+                return {};
+            }
+        }
+    }
+
+    const QString shape_id = shape.id;
+    pushEdit();
+    ImageOperation operation;
+    operation.kind = OperationKind::Shape;
+    operation.shape = std::move(shape);
+    data_.layers[layerIndex(selected_layer_id_)].operations.append(std::move(operation));
+    layer_thumbnail_cache_.clear();
+    return shape_id;
+}
+
+bool ImageDocumentSession::updateShape(const ImageShapeData& shape, QString* error) {
+    if (error != nullptr) error->clear();
+    if (!ImageDocumentStore::isValidShape(shape, renderedSize(), error)) return false;
+    for (qsizetype layer_index = 0; layer_index < data_.layers.size(); ++layer_index) {
+        const auto& layer = data_.layers.at(layer_index);
+        if (layer.background) continue;
+        for (qsizetype operation_index = 0;
+             operation_index < layer.operations.size(); ++operation_index) {
+            const auto& operation = layer.operations.at(operation_index);
+            if (operation.kind != OperationKind::Shape || operation.shape.id != shape.id) continue;
+            if (operation.shape == shape) return false;
+            pushEdit();
+            data_.layers[layer_index].operations[operation_index].shape = shape;
+            layer_thumbnail_cache_.clear();
+            return true;
+        }
+    }
+    assignError(error, QStringLiteral("The selected shape no longer exists."));
+    return false;
+}
+
+bool ImageDocumentSession::updateShapeRendered(const ImageShapeData& rendered_shape,
+                                               QString* error) {
+    ImageShapeData stored_shape = rendered_shape;
+    const QSize size = renderedSize();
+    for (const auto& layer : data_.layers) {
+        if (layer.background) continue;
+        for (qsizetype index = 0; index < layer.operations.size(); ++index) {
+            const auto& operation = layer.operations.at(index);
+            if (operation.kind != OperationKind::Shape ||
+                operation.shape.id != rendered_shape.id) continue;
+            for (qsizetype suffix = layer.operations.size(); suffix > index + 1; --suffix) {
+                const auto& later = layer.operations.at(suffix - 1);
+                stored_shape.start = transformShapePoint(stored_shape.start, later, size, true);
+                stored_shape.end = transformShapePoint(stored_shape.end, later, size, true);
+            }
+            return updateShape(stored_shape, error);
+        }
+    }
+    assignError(error, QStringLiteral("The selected shape no longer exists."));
+    return false;
+}
+
+bool ImageDocumentSession::deleteShape(const QString& shape_id) {
+    for (qsizetype layer_index = 0; layer_index < data_.layers.size(); ++layer_index) {
+        const auto& layer = data_.layers.at(layer_index);
+        if (layer.background) continue;
+        for (qsizetype index = 0; index < layer.operations.size(); ++index) {
+            const auto& operation = layer.operations.at(index);
+            if (operation.kind != OperationKind::Shape || operation.shape.id != shape_id) continue;
+            pushEdit();
+            data_.layers[layer_index].operations.removeAt(index);
+            layer_thumbnail_cache_.clear();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ImageDocumentSession::findShape(const QString& shape_id,
+                                     ImageShapeData* shape,
+                                     QString* layer_id) const {
+    for (const auto& layer : data_.layers) {
+        if (layer.background) continue;
+        for (auto operation = layer.operations.crbegin();
+             operation != layer.operations.crend(); ++operation) {
+            if (operation->kind != OperationKind::Shape ||
+                operation->shape.id != shape_id) continue;
+            if (shape != nullptr) *shape = operation->shape;
+            if (layer_id != nullptr) *layer_id = layer.id;
+            return true;
+        }
+    }
+    return false;
 }
 
 QString ImageDocumentSession::addLayer() {

@@ -17,6 +17,9 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QImageWriter>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QKeySequenceEdit>
 #include <QLabel>
 #include <QListWidget>
@@ -86,15 +89,27 @@ int main(int argc, char* argv[]) {
         QStringLiteral("keyboardShortcutsAction"));
     auto* paint_tool_action = window.findChild<QAction*>(QStringLiteral("paintToolAction"));
     auto* eraser_tool_action = window.findChild<QAction*>(QStringLiteral("eraserToolAction"));
+    auto* shapes_tool_action = window.findChild<QAction*>(QStringLiteral("shapesToolAction"));
+    auto* select_shapes_tool_action = window.findChild<QAction*>(
+        QStringLiteral("selectShapesToolAction"));
+    auto* delete_shape_action = window.findChild<QAction*>(
+        QStringLiteral("deleteSelectedShapeAction"));
     auto* cancel_crop_action = window.findChild<QAction*>(QStringLiteral("cancelCropAction"));
     if (settings_menu == nullptr || keyboard_shortcuts_action == nullptr ||
-        paint_tool_action == nullptr || eraser_tool_action == nullptr || cancel_crop_action == nullptr ||
+        paint_tool_action == nullptr || eraser_tool_action == nullptr ||
+        shapes_tool_action == nullptr || select_shapes_tool_action == nullptr ||
+        delete_shape_action == nullptr || cancel_crop_action == nullptr ||
         cancel_crop_action->shortcut() != QKeySequence(Qt::Key_Escape) ||
         settings_menu->title() != QStringLiteral("Settings") ||
         paint_tool_action->shortcut() != QKeySequence(Qt::Key_B) ||
         eraser_tool_action->shortcut() != QKeySequence(Qt::Key_E) ||
         paint_tool_action->isChecked() || paint_tool_action->isEnabled() ||
-        eraser_tool_action->isChecked() || eraser_tool_action->isEnabled()) {
+        eraser_tool_action->isChecked() || eraser_tool_action->isEnabled() ||
+        !shapes_tool_action->shortcut().isEmpty() ||
+        !select_shapes_tool_action->shortcut().isEmpty() ||
+        !delete_shape_action->shortcut().isEmpty() ||
+        shapes_tool_action->isEnabled() || select_shapes_tool_action->isEnabled() ||
+        delete_shape_action->isEnabled()) {
         std::cerr << "Settings or the default, inactive tool shortcuts were not created.\n";
         return 1;
     }
@@ -500,7 +515,7 @@ int main(int argc, char* argv[]) {
         tool_options_toolbar == nullptr || paint_options_action == nullptr ||
         paint_size_options == nullptr ||
         brush_size_slider == nullptr || brush_size == nullptr || redo_action == nullptr ||
-        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 3 ||
+        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 5 ||
         paint_button->isChecked() || paint_options_action->isVisible() ||
         paint_size_options->isVisible() ||
         !tool_options_toolbar->isVisible() || tool_options_toolbar->height() < 40 ||
@@ -1069,6 +1084,204 @@ int main(int argc, char* argv[]) {
     }
     source_after_edit.close();
 
+    auto* linked_shapes_action = linked_window.findChild<QAction*>(
+        QStringLiteral("shapesToolAction"));
+    auto* linked_select_shapes_action = linked_window.findChild<QAction*>(
+        QStringLiteral("selectShapesToolAction"));
+    auto* linked_shapes_button = linked_window.findChild<QToolButton*>(
+        QStringLiteral("shapesToolButton"));
+    auto* linked_select_shapes_button = linked_window.findChild<QToolButton*>(
+        QStringLiteral("selectShapesToolButton"));
+    auto* shape_options_action = linked_window.findChild<QAction*>(
+        QStringLiteral("shapeOptionsAction"));
+    auto* shape_kind = linked_window.findChild<QComboBox*>(
+        QStringLiteral("shapeKindComboBox"));
+    auto* shape_stroke = linked_window.findChild<QCheckBox*>(
+        QStringLiteral("shapeStrokeCheckBox"));
+    auto* shape_fill = linked_window.findChild<QCheckBox*>(
+        QStringLiteral("shapeFillCheckBox"));
+    auto* shape_width = linked_window.findChild<QSpinBox*>(
+        QStringLiteral("shapeStrokeWidthSpinBox"));
+    auto* shape_stroke_color = linked_window.findChild<QPushButton*>(
+        QStringLiteral("shapeStrokeColorButton"));
+    auto* shape_fill_color = linked_window.findChild<QPushButton*>(
+        QStringLiteral("shapeFillColorButton"));
+    auto* linked_layer_list = linked_window.findChild<QListWidget*>(
+        QStringLiteral("imageLayerList"));
+    if (linked_shapes_action == nullptr || linked_select_shapes_action == nullptr ||
+        linked_shapes_button == nullptr || linked_select_shapes_button == nullptr ||
+        shape_options_action == nullptr || shape_kind == nullptr || shape_stroke == nullptr ||
+        shape_fill == nullptr || shape_width == nullptr || shape_stroke_color == nullptr ||
+        shape_fill_color == nullptr || linked_layer_list == nullptr) {
+        std::cerr << "The shape tools or their options were not created.\n";
+        return 1;
+    }
+    linked_shapes_action->trigger();
+    QCoreApplication::processEvents();
+    if (!linked_shapes_button->isChecked() || !shape_options_action->isVisible() ||
+        !shape_kind->isEnabled() ||
+        shape_kind->currentData().toInt() != static_cast<int>(image_editor::ImageShapeKind::Rectangle) ||
+        !shape_stroke->isChecked() || !shape_fill->isChecked() || shape_width->value() != 2 ||
+        shape_stroke_color->toolTip() != QStringLiteral("#ff000000") ||
+        shape_fill_color->toolTip() != QStringLiteral("#ff000000")) {
+        std::cerr << "Shape creation did not show its default Rectangle, stroke, fill, and 2 px options.\n";
+        return 1;
+    }
+    const auto imagePoint = [](image_editor::ImageCanvas* target,
+                               const QSize& image_size,
+                               const QPointF& point) {
+        const qreal zoom = target->zoomFactor();
+        return QPoint(qRound((target->width() - image_size.width() * zoom) / 2.0 +
+                             point.x() * zoom),
+                      qRound((target->height() - image_size.height() * zoom) / 2.0 +
+                             point.y() * zoom));
+    };
+    shape_kind->setCurrentIndex(0);
+    if (shape_fill->isEnabled() || !shape_stroke->isChecked()) {
+        std::cerr << "Line options did not disable fill and retain their stroke.\n";
+        return 1;
+    }
+    shape_kind->setCurrentIndex(1);
+    shape_fill->setChecked(true);
+    auto* linked_undo_action = linked_window.findChild<QAction*>(QStringLiteral("undoAction"));
+    const bool undo_enabled_before_cancel =
+        linked_undo_action != nullptr && linked_undo_action->isEnabled();
+    const bool dirty_before_cancel = linked_window.windowTitle().startsWith('*');
+    const QPoint cancelled_start = imagePoint(linked_canvas, QSize(32, 24), QPointF(1, 1));
+    const QPoint cancelled_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(3, 3));
+    linked_canvas->setFocus();
+    QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, cancelled_start);
+    QTest::mouseMove(linked_canvas, cancelled_end);
+    QTest::keyClick(linked_canvas, Qt::Key_Escape);
+    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, cancelled_end);
+    QCoreApplication::processEvents();
+    if (linked_undo_action == nullptr ||
+        linked_undo_action->isEnabled() != undo_enabled_before_cancel ||
+        linked_window.windowTitle().startsWith('*') != dirty_before_cancel) {
+        std::cerr << "Escape did not cancel an unfinished shape without adding history.\n";
+        return 1;
+    }
+    const QPoint shape_start = imagePoint(linked_canvas, QSize(32, 24), QPointF(3, 4));
+    const QPoint shape_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(11, 10));
+    linked_canvas->setFocus();
+    QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, shape_start);
+    QTest::keyPress(linked_canvas, Qt::Key_Shift);
+    QTest::mouseMove(linked_canvas, shape_end);
+    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::ShiftModifier, shape_end);
+    QTest::keyRelease(linked_canvas, Qt::Key_Shift);
+    QCoreApplication::processEvents();
+    auto* add_shape_layer = linked_window.findChild<QToolButton*>(
+        QStringLiteral("addImageLayerButton"));
+    if (add_shape_layer == nullptr) return 1;
+    add_shape_layer->click();
+    QCoreApplication::processEvents();
+    shape_kind->setCurrentIndex(2);
+    const QPoint ellipse_start = imagePoint(linked_canvas, QSize(32, 24), QPointF(17, 14));
+    const QPoint ellipse_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(25, 22));
+    QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, ellipse_start);
+    QTest::mouseMove(linked_canvas, ellipse_end);
+    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, ellipse_end);
+    QCoreApplication::processEvents();
+    linked_select_shapes_action->trigger();
+    QCoreApplication::processEvents();
+    if (!linked_select_shapes_button->isChecked() || linked_shapes_button->isChecked() ||
+        shape_kind->isEnabled()) {
+        std::cerr << "Shapes and Select Shapes were not mutually exclusive.\n";
+        return 1;
+    }
+    linked_layer_list->setCurrentRow(2);
+    QCoreApplication::processEvents();
+    const QPoint ellipse_center = imagePoint(linked_canvas, QSize(32, 24), QPointF(21, 18));
+    QTest::mouseClick(linked_canvas, Qt::LeftButton, Qt::NoModifier, ellipse_center);
+    QCoreApplication::processEvents();
+    if (linked_layer_list->currentRow() != 0) {
+        std::cerr << "Selecting a shape on another visible layer did not activate its layer.\n";
+        return 1;
+    }
+    const QPoint old_center = imagePoint(linked_canvas, QSize(32, 24), QPointF(7, 8));
+    const QPoint moved_center = imagePoint(linked_canvas, QSize(32, 24), QPointF(25, 8));
+    QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, old_center);
+    QTest::mouseMove(linked_canvas, moved_center);
+    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, moved_center);
+    QCoreApplication::processEvents();
+    const QPoint moved_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(29, 12));
+    const QPoint resized_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(30, 10));
+    QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, moved_end);
+    QTest::keyPress(linked_canvas, Qt::Key_Shift);
+    QTest::mouseMove(linked_canvas, resized_end);
+    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::ShiftModifier, resized_end);
+    QTest::keyRelease(linked_canvas, Qt::Key_Shift);
+    QCoreApplication::processEvents();
+    shape_fill->setChecked(false);
+    QCoreApplication::processEvents();
+    const QPoint unfilled_body_start = imagePoint(
+        linked_canvas, QSize(32, 24), QPointF(25, 8));
+    const QPoint unfilled_body_end = imagePoint(
+        linked_canvas, QSize(32, 24), QPointF(26, 8));
+    QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier,
+                      unfilled_body_start);
+    QTest::mouseMove(linked_canvas, unfilled_body_end);
+    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier,
+                        unfilled_body_end);
+    QCoreApplication::processEvents();
+    linked_save_action->trigger();
+    QCoreApplication::processEvents();
+    QImage published_after_shape(linked_output);
+    if (published_after_shape.isNull() ||
+        published_after_shape.pixelColor(7, 8) != QColor(240, 20, 10, 255) ||
+        published_after_shape.pixelColor(25, 8) != QColor(240, 20, 10, 255) ||
+        published_after_shape.pixelColor(25, 4).red() > 80) {
+        std::cerr << "Moved, Shift-resized, or unfilled shapes were not published in the linked PNG: "
+                  << published_after_shape.size().width() << "x" << published_after_shape.size().height()
+                  << " old=" << published_after_shape.pixelColor(7, 8).name(QColor::HexArgb).toStdString()
+                  << " inside=" << published_after_shape.pixelColor(25, 8).name(QColor::HexArgb).toStdString()
+                  << " edge=" << published_after_shape.pixelColor(25, 4).name(QColor::HexArgb).toStdString()
+                  << "\n";
+        return 1;
+    }
+    QFile shape_document_file(linked_document);
+    if (!shape_document_file.open(QIODevice::ReadOnly)) return 1;
+    const QJsonObject shape_document_json =
+        QJsonDocument::fromJson(shape_document_file.readAll()).object();
+    const auto shape_operations = shape_document_json.value("layers").toArray()
+        .at(1).toObject().value("operations").toArray();
+    const QJsonObject persisted_shape = shape_operations.isEmpty()
+        ? QJsonObject{} : shape_operations.at(shape_operations.size() - 1).toObject();
+    if (shape_document_json.value("version").toInt() != 6 || shape_operations.isEmpty() ||
+        persisted_shape.value("kind").toString() != "shape" ||
+        qRound(persisted_shape.value("start_x").toDouble()) != 22 ||
+        qRound(persisted_shape.value("end_x").toDouble()) != 31 ||
+        qRound(persisted_shape.value("end_y").toDouble()) != 13 ||
+        persisted_shape.value("fill_enabled").toBool()) {
+        std::cerr << "Shape creation, Shift constraints, or style edits were not persisted in v6: version="
+                  << shape_document_json.value("version").toInt()
+                  << " operations=" << shape_operations.size()
+                  << " kind=" << persisted_shape.value("kind").toString().toStdString()
+                  << " geometry=" << persisted_shape.value("start_x").toDouble() << ","
+                  << persisted_shape.value("start_y").toDouble() << " to "
+                  << persisted_shape.value("end_x").toDouble() << ","
+                  << persisted_shape.value("end_y").toDouble()
+                  << " fill=" << persisted_shape.value("fill_enabled").toBool() << "\n";
+        return 1;
+    }
+    auto* linked_delete_shape_action = linked_window.findChild<QAction*>(
+        QStringLiteral("deleteSelectedShapeAction"));
+    if (linked_delete_shape_action == nullptr || linked_undo_action == nullptr ||
+        !linked_delete_shape_action->isEnabled()) {
+        std::cerr << "The selected shape was not available to the Delete Selected Shape action.\n";
+        return 1;
+    }
+    linked_delete_shape_action->trigger();
+    if (linked_delete_shape_action->isEnabled() || !linked_undo_action->isEnabled()) {
+        std::cerr << "Deleting the selected shape did not update the selection and history.\n";
+        return 1;
+    }
+    linked_undo_action->trigger();
+    if (linked_window.windowTitle().startsWith('*')) {
+        std::cerr << "Undo did not restore the saved baseline after deleting the linked shape.\n";
+        return 1;
+    }
+
     QFile external_revision(linked_document);
     if (!external_revision.open(QIODevice::Append) ||
         external_revision.write(QByteArrayLiteral("external revision")) < 0) {
@@ -1080,7 +1293,7 @@ int main(int argc, char* argv[]) {
     if (!newer_document.open(QIODevice::ReadOnly)) return 1;
     const QByteArray newer_document_bytes = newer_document.readAll();
     newer_document.close();
-    const QColor latest_published_pixel = published_after_save.pixelColor(16, 12);
+    const QColor latest_published_pixel = published_after_shape.pixelColor(16, 12);
     QTimer::singleShot(0, []() {
         if (auto* message = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
             message->accept();

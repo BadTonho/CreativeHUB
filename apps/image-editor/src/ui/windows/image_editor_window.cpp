@@ -12,6 +12,8 @@
 #include <QAction>
 #include <QCryptographicHash>
 #include <QCheckBox>
+#include <QColorDialog>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QCloseEvent>
 #include <QDockWidget>
@@ -42,6 +44,7 @@
 
 #include <memory>
 #include <atomic>
+#include <algorithm>
 
 namespace image_editor {
 namespace {
@@ -166,6 +169,36 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             [this](const QVector<QPointF>& points, int diameter) {
                 handleEraseStroke(points, diameter);
             });
+    connect(canvas_, &ImageCanvas::shapeCreated, this,
+            [this](const ImageShapeData& shape) { handleShapeCreated(shape); });
+    connect(canvas_, &ImageCanvas::shapeSelected, this,
+            [this](const QString& shape_id, const QString& layer_id) {
+                selected_shape_id_ = shape_id;
+                if (!layer_id.isEmpty() && session_.selectLayer(layer_id)) {
+                    layer_panel_->setLayers(session_.data().layers,
+                        session_.selectedLayerId(), session_.renderedLayerThumbnails(QSize(
+                            LayerPanel::kThumbnailWidth, LayerPanel::kThumbnailHeight)));
+                    tool_sidebar_->setPaintingAllowed(session_.selectedLayerIsEditable());
+                }
+                if (!selected_shape_id_.isEmpty()) {
+                    for (const auto& placement : session_.visibleShapes()) {
+                        if (placement.shape.id == selected_shape_id_) {
+                            shape_style_ = placement.shape;
+                            canvas_->setShapeStyle(shape_style_);
+                            break;
+                        }
+                    }
+                }
+                updateShapePlacements();
+                updateShapeOptions();
+                updateToolOptions();
+            });
+    connect(canvas_, &ImageCanvas::shapeTransformStarted, this,
+            [this](const QString& shape_id) {
+                canvas_->setTransientImage(session_.renderedImageWithoutShape(shape_id));
+            });
+    connect(canvas_, &ImageCanvas::shapeGeometryChanged, this,
+            [this](const ImageShapeData& shape) { handleShapeGeometryChanged(shape); });
     connect(canvas_, &ImageCanvas::brushDiameterChanged,
             brush_size_spin_, &QSpinBox::setValue);
     connect(tool_sidebar_, &ToolSidebar::activeToolChanged,
@@ -174,7 +207,10 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             this, [this](const QColor&) { updateCanvasBrush(); });
     connect(layer_panel_, &LayerPanel::layerSelected, this, [this](const QString& id) {
         if (!session_.selectLayer(id)) return;
-        if (!session_.selectedLayerIsEditable()) deactivateCanvasTools();
+        if (!session_.selectedLayerIsEditable() &&
+            tool_sidebar_->activeTool() != ToolSidebar::Tool::SelectShapes) {
+            deactivateCanvasTools();
+        }
         updateView(true);
     });
     connect(layer_panel_, &LayerPanel::layerVisibilityChanged, this,
@@ -203,7 +239,10 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     connect(layer_panel_, &LayerPanel::deleteLayerRequested, this,
             [this](const QString& id) {
                 if (!session_.deleteLayer(id)) return;
-                if (!session_.selectedLayerIsEditable()) deactivateCanvasTools();
+                if (!session_.selectedLayerIsEditable() &&
+                    tool_sidebar_->activeTool() != ToolSidebar::Tool::SelectShapes) {
+                    deactivateCanvasTools();
+                }
                 updateView(true);
             });
     connect(layer_panel_, &LayerPanel::moveLayerRequested, this,
@@ -305,6 +344,61 @@ void ImageEditorWindow::createToolOptionsBar() {
     tool_options_toolbar_->addAction(paint_options_action_);
     paint_options_action_->setVisible(false);
 
+    shape_options_widget_ = new QWidget(tool_options_toolbar_);
+    shape_options_widget_->setObjectName(QStringLiteral("shapeOptionsWidget"));
+    auto* shape_layout = new QHBoxLayout(shape_options_widget_);
+    shape_layout->setContentsMargins(8, 3, 8, 3);
+    shape_layout->setSpacing(7);
+    shape_layout->addWidget(new QLabel(QStringLiteral("Shape"), shape_options_widget_));
+    shape_kind_combo_ = new QComboBox(shape_options_widget_);
+    shape_kind_combo_->setObjectName(QStringLiteral("shapeKindComboBox"));
+    shape_kind_combo_->addItem(QStringLiteral("Line"), static_cast<int>(ImageShapeKind::Line));
+    shape_kind_combo_->addItem(QStringLiteral("Rectangle"), static_cast<int>(ImageShapeKind::Rectangle));
+    shape_kind_combo_->addItem(QStringLiteral("Ellipse"), static_cast<int>(ImageShapeKind::Ellipse));
+    shape_kind_combo_->setCurrentIndex(1);
+    shape_layout->addWidget(shape_kind_combo_);
+    shape_stroke_check_ = new QCheckBox(QStringLiteral("Stroke"), shape_options_widget_);
+    shape_stroke_check_->setObjectName(QStringLiteral("shapeStrokeCheckBox"));
+    shape_stroke_check_->setChecked(true);
+    shape_layout->addWidget(shape_stroke_check_);
+    shape_stroke_color_button_ = new QPushButton(QStringLiteral("Color"), shape_options_widget_);
+    shape_stroke_color_button_->setObjectName(QStringLiteral("shapeStrokeColorButton"));
+    shape_stroke_color_button_->setFixedWidth(62);
+    shape_layout->addWidget(shape_stroke_color_button_);
+    shape_fill_check_ = new QCheckBox(QStringLiteral("Fill"), shape_options_widget_);
+    shape_fill_check_->setObjectName(QStringLiteral("shapeFillCheckBox"));
+    shape_fill_check_->setChecked(true);
+    shape_layout->addWidget(shape_fill_check_);
+    shape_fill_color_button_ = new QPushButton(QStringLiteral("Color"), shape_options_widget_);
+    shape_fill_color_button_->setObjectName(QStringLiteral("shapeFillColorButton"));
+    shape_fill_color_button_->setFixedWidth(62);
+    shape_layout->addWidget(shape_fill_color_button_);
+    shape_layout->addWidget(new QLabel(QStringLiteral("Width"), shape_options_widget_));
+    shape_stroke_width_spin_ = new QSpinBox(shape_options_widget_);
+    shape_stroke_width_spin_->setObjectName(QStringLiteral("shapeStrokeWidthSpinBox"));
+    shape_stroke_width_spin_->setRange(1, ImageDocumentStore::kMaximumShapeStrokeWidth);
+    shape_stroke_width_spin_->setValue(2);
+    shape_stroke_width_spin_->setSuffix(QStringLiteral(" px"));
+    shape_stroke_width_spin_->setFixedWidth(82);
+    shape_layout->addWidget(shape_stroke_width_spin_);
+    delete_selected_shape_button_ = new QPushButton(
+        QStringLiteral("Delete Selected"), shape_options_widget_);
+    delete_selected_shape_button_->setObjectName(QStringLiteral("deleteSelectedShapeButton"));
+    shape_layout->addWidget(delete_selected_shape_button_);
+    shape_options_action_ = new QWidgetAction(tool_options_toolbar_);
+    shape_options_action_->setObjectName(QStringLiteral("shapeOptionsAction"));
+    shape_options_action_->setDefaultWidget(shape_options_widget_);
+    tool_options_toolbar_->addAction(shape_options_action_);
+    shape_options_action_->setVisible(false);
+
+    const auto refreshColorButton = [](QPushButton* button, const QColor& color) {
+        button->setStyleSheet(QStringLiteral("background-color: %1;").arg(
+            color.name(QColor::HexArgb)));
+        button->setToolTip(color.name(QColor::HexArgb));
+    };
+    refreshColorButton(shape_stroke_color_button_, shape_style_.stroke_color);
+    refreshColorButton(shape_fill_color_button_, shape_style_.fill_color);
+
     connect(brush_size_slider_, &QSlider::valueChanged,
             brush_size_spin_, &QSpinBox::setValue);
     connect(brush_size_spin_, &QSpinBox::valueChanged, this, [this](int diameter) {
@@ -318,6 +412,67 @@ void ImageEditorWindow::createToolOptionsBar() {
     });
     connect(eraser_preview_check_, &QCheckBox::toggled,
             canvas_, &ImageCanvas::setEraserPreviewEnabled);
+    connect(shape_kind_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [this](int index) {
+                shape_style_.kind = static_cast<ImageShapeKind>(
+                    shape_kind_combo_->itemData(index).toInt());
+                if (shape_style_.kind == ImageShapeKind::Line) shape_style_.fill_enabled = false;
+                updateShapeOptions();
+                canvas_->setShapeStyle(shape_style_);
+                applyShapeStyleToSelection(true);
+            });
+    connect(shape_stroke_check_, &QCheckBox::toggled, this, [this](bool enabled) {
+        if (shape_style_.kind == ImageShapeKind::Line && !enabled) enabled = true;
+        if (!enabled && !shape_style_.fill_enabled) {
+            shape_style_.fill_enabled = true;
+            const QSignalBlocker blocker(shape_fill_check_);
+            shape_fill_check_->setChecked(true);
+        }
+        shape_style_.stroke_enabled = enabled;
+        updateShapeOptions();
+        canvas_->setShapeStyle(shape_style_);
+        applyShapeStyleToSelection();
+    });
+    connect(shape_fill_check_, &QCheckBox::toggled, this, [this](bool enabled) {
+        if (shape_style_.kind == ImageShapeKind::Line) enabled = false;
+        if (!enabled && !shape_style_.stroke_enabled) {
+            shape_style_.stroke_enabled = true;
+            const QSignalBlocker blocker(shape_stroke_check_);
+            shape_stroke_check_->setChecked(true);
+        }
+        shape_style_.fill_enabled = enabled;
+        updateShapeOptions();
+        canvas_->setShapeStyle(shape_style_);
+        applyShapeStyleToSelection();
+    });
+    connect(shape_stroke_color_button_, &QPushButton::clicked, this, [this, refreshColorButton]() {
+        const QColor color = QColorDialog::getColor(
+            shape_style_.stroke_color, this, QStringLiteral("Shape Stroke Color"),
+            QColorDialog::ShowAlphaChannel);
+        if (!color.isValid()) return;
+        shape_style_.stroke_color = color;
+        refreshColorButton(shape_stroke_color_button_, color);
+        canvas_->setShapeStyle(shape_style_);
+        applyShapeStyleToSelection();
+    });
+    connect(shape_fill_color_button_, &QPushButton::clicked, this, [this, refreshColorButton]() {
+        const QColor color = QColorDialog::getColor(
+            shape_style_.fill_color, this, QStringLiteral("Shape Fill Color"),
+            QColorDialog::ShowAlphaChannel);
+        if (!color.isValid()) return;
+        shape_style_.fill_color = color;
+        refreshColorButton(shape_fill_color_button_, color);
+        canvas_->setShapeStyle(shape_style_);
+        applyShapeStyleToSelection();
+    });
+    connect(shape_stroke_width_spin_, qOverload<int>(&QSpinBox::valueChanged),
+            this, [this](int width) {
+                shape_style_.stroke_width = width;
+                canvas_->setShapeStyle(shape_style_);
+                applyShapeStyleToSelection();
+            });
+    connect(delete_selected_shape_button_, &QPushButton::clicked,
+            this, [this]() { deleteSelectedShape(); });
 }
 
 void ImageEditorWindow::updateToolOptions() {
@@ -338,6 +493,99 @@ void ImageEditorWindow::updateToolOptions() {
         eraser_active ? QStringLiteral("Eraser size in pixels")
                       : QStringLiteral("Brush size in pixels"));
     eraser_preview_check_->setVisible(eraser_active);
+    const auto tool = tool_sidebar_->activeTool();
+    const bool shapes_active = tool == ToolSidebar::Tool::Shapes ||
+        tool == ToolSidebar::Tool::SelectShapes;
+    shape_options_action_->setVisible(tool_active && shapes_active);
+    shape_options_widget_->setVisible(tool_active && shapes_active);
+    updateShapeOptions();
+}
+
+void ImageEditorWindow::updateShapeOptions() {
+    if (shape_options_widget_ == nullptr) return;
+    const QSignalBlocker kind_blocker(shape_kind_combo_);
+    const QSignalBlocker stroke_blocker(shape_stroke_check_);
+    const QSignalBlocker fill_blocker(shape_fill_check_);
+    const QSignalBlocker width_blocker(shape_stroke_width_spin_);
+    shape_kind_combo_->setCurrentIndex(shape_kind_combo_->findData(
+        static_cast<int>(shape_style_.kind)));
+    shape_kind_combo_->setEnabled(
+        tool_sidebar_->activeTool() == ToolSidebar::Tool::Shapes);
+    shape_stroke_check_->setChecked(shape_style_.stroke_enabled);
+    shape_fill_check_->setChecked(shape_style_.fill_enabled);
+    shape_fill_check_->setEnabled(shape_style_.kind != ImageShapeKind::Line);
+    shape_stroke_check_->setEnabled(shape_style_.kind != ImageShapeKind::Line);
+    shape_stroke_width_spin_->setValue(shape_style_.stroke_width);
+    shape_stroke_color_button_->setStyleSheet(QStringLiteral("background-color: %1;").arg(
+        shape_style_.stroke_color.name(QColor::HexArgb)));
+    shape_stroke_color_button_->setToolTip(shape_style_.stroke_color.name(QColor::HexArgb));
+    shape_fill_color_button_->setStyleSheet(QStringLiteral("background-color: %1;").arg(
+        shape_style_.fill_color.name(QColor::HexArgb)));
+    shape_fill_color_button_->setToolTip(shape_style_.fill_color.name(QColor::HexArgb));
+    delete_selected_shape_button_->setEnabled(!selected_shape_id_.isEmpty() &&
+        tool_sidebar_->activeTool() == ToolSidebar::Tool::SelectShapes);
+    if (delete_shape_action_ != nullptr) {
+        delete_shape_action_->setEnabled(!selected_shape_id_.isEmpty() &&
+            tool_sidebar_->activeTool() == ToolSidebar::Tool::SelectShapes);
+    }
+}
+
+void ImageEditorWindow::updateShapePlacements() {
+    const auto placements = session_.visibleShapes();
+    const bool still_visible = std::any_of(placements.cbegin(), placements.cend(),
+        [this](const ImageShapePlacement& placement) {
+            return placement.shape.id == selected_shape_id_;
+        });
+    if (!selected_shape_id_.isEmpty() && !still_visible) selected_shape_id_.clear();
+    canvas_->setShapePlacements(placements, selected_shape_id_);
+}
+
+void ImageEditorWindow::applyShapeStyleToSelection(bool include_kind) {
+    if (selected_shape_id_.isEmpty()) return;
+    for (const auto& placement : session_.visibleShapes()) {
+        if (placement.shape.id != selected_shape_id_) continue;
+        ImageShapeData updated = placement.shape;
+        if (include_kind) updated.kind = shape_style_.kind;
+        updated.stroke_enabled = shape_style_.kind == ImageShapeKind::Line
+            ? true : shape_style_.stroke_enabled;
+        updated.stroke_color = shape_style_.stroke_color;
+        updated.stroke_width = shape_style_.stroke_width;
+        updated.fill_enabled = updated.kind == ImageShapeKind::Line
+            ? false : shape_style_.fill_enabled;
+        updated.fill_color = shape_style_.fill_color;
+        QString error;
+        if (session_.updateShapeRendered(updated, &error)) updateView(true);
+        else if (!error.isEmpty()) reportError(QStringLiteral("update_shape_style"), error);
+        return;
+    }
+}
+
+void ImageEditorWindow::handleShapeCreated(const ImageShapeData& shape) {
+    QString error;
+    const QString id = session_.addShape(shape, &error);
+    if (id.isEmpty()) {
+        if (!error.isEmpty()) reportError(QStringLiteral("create_shape"), error);
+        return;
+    }
+    updateView(true);
+    statusBar()->showMessage(QStringLiteral("Shape created"), 1800);
+}
+
+void ImageEditorWindow::handleShapeGeometryChanged(const ImageShapeData& shape) {
+    QString error;
+    if (session_.updateShapeRendered(shape, &error)) {
+        updateView(true);
+        statusBar()->showMessage(QStringLiteral("Shape updated"), 1500);
+    } else if (!error.isEmpty()) {
+        reportError(QStringLiteral("update_shape_geometry"), error);
+    }
+}
+
+void ImageEditorWindow::deleteSelectedShape() {
+    if (selected_shape_id_.isEmpty() || !session_.deleteShape(selected_shape_id_)) return;
+    selected_shape_id_.clear();
+    updateView(true);
+    statusBar()->showMessage(QStringLiteral("Shape deleted"), 1800);
 }
 
 void ImageEditorWindow::updateCanvasBrush() {
@@ -348,6 +596,10 @@ void ImageEditorWindow::updateCanvasBrush() {
 }
 
 void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool) {
+    if (tool == ToolSidebar::Tool::Shapes && !selected_shape_id_.isEmpty()) {
+        selected_shape_id_.clear();
+        updateShapePlacements();
+    }
     if (tool != ToolSidebar::Tool::None && crop_action_ != nullptr &&
         crop_action_->isChecked()) {
         crop_action_->setChecked(false);
@@ -360,9 +612,27 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool) {
         const QSignalBlocker blocker(eraser_tool_action_);
         eraser_tool_action_->setChecked(tool == ToolSidebar::Tool::Eraser);
     }
+    if (shapes_tool_action_ != nullptr) {
+        const QSignalBlocker blocker(shapes_tool_action_);
+        shapes_tool_action_->setChecked(tool == ToolSidebar::Tool::Shapes);
+    }
+    if (select_shapes_tool_action_ != nullptr) {
+        const QSignalBlocker blocker(select_shapes_tool_action_);
+        select_shapes_tool_action_->setChecked(tool == ToolSidebar::Tool::SelectShapes);
+    }
+
+    if ((tool == ToolSidebar::Tool::Shapes || tool == ToolSidebar::Tool::SelectShapes) &&
+        !shape_colors_initialized_) {
+        shape_style_.stroke_color = tool_sidebar_->brushColor();
+        shape_style_.fill_color = tool_sidebar_->brushColor();
+        shape_colors_initialized_ = true;
+    }
 
     canvas_->setPaintMode(tool == ToolSidebar::Tool::Paint && session_.hasSource());
     canvas_->setEraserMode(tool == ToolSidebar::Tool::Eraser && session_.hasSource());
+    canvas_->setShapeMode(tool == ToolSidebar::Tool::Shapes && session_.hasSource(),
+                          tool == ToolSidebar::Tool::SelectShapes && session_.hasSource());
+    canvas_->setShapeStyle(shape_style_);
     canvas_->setEraserPreviewEnabled(eraser_preview_check_->isChecked());
     const int diameter = tool == ToolSidebar::Tool::Eraser
         ? eraser_diameter_ : paint_diameter_;
@@ -519,6 +789,35 @@ void ImageEditorWindow::createActions() {
             : (current == ToolSidebar::Tool::Eraser ? ToolSidebar::Tool::None : current));
     });
 
+    shapes_tool_action_ = new QAction(QStringLiteral("Shapes"), this);
+    shapes_tool_action_->setObjectName(QStringLiteral("shapesToolAction"));
+    shapes_tool_action_->setCheckable(true);
+    registerShortcutAction(shapes_tool_action_, {});
+    addAction(shapes_tool_action_);
+    connect(shapes_tool_action_, &QAction::toggled, this, [this](bool active) {
+        const auto current = tool_sidebar_->activeTool();
+        tool_sidebar_->setActiveTool(active ? ToolSidebar::Tool::Shapes
+            : (current == ToolSidebar::Tool::Shapes ? ToolSidebar::Tool::None : current));
+    });
+
+    select_shapes_tool_action_ = new QAction(QStringLiteral("Select Shapes"), this);
+    select_shapes_tool_action_->setObjectName(QStringLiteral("selectShapesToolAction"));
+    select_shapes_tool_action_->setCheckable(true);
+    registerShortcutAction(select_shapes_tool_action_, {});
+    addAction(select_shapes_tool_action_);
+    connect(select_shapes_tool_action_, &QAction::toggled, this, [this](bool active) {
+        const auto current = tool_sidebar_->activeTool();
+        tool_sidebar_->setActiveTool(active ? ToolSidebar::Tool::SelectShapes
+            : (current == ToolSidebar::Tool::SelectShapes ? ToolSidebar::Tool::None : current));
+    });
+
+    delete_shape_action_ = new QAction(QStringLiteral("Delete Selected Shape"), this);
+    delete_shape_action_->setObjectName(QStringLiteral("deleteSelectedShapeAction"));
+    registerShortcutAction(delete_shape_action_, {});
+    addAction(delete_shape_action_);
+    connect(delete_shape_action_, &QAction::triggered, this,
+            [this]() { deleteSelectedShape(); });
+
     auto* file_menu = menuBar()->addMenu(QStringLiteral("File"));
     file_menu->addAction(new_canvas_action_);
     file_menu->addSeparator();
@@ -536,6 +835,8 @@ void ImageEditorWindow::createActions() {
     auto* edit_menu = menuBar()->addMenu(QStringLiteral("Edit"));
     edit_menu->addAction(undo_action_);
     edit_menu->addAction(redo_action_);
+    edit_menu->addSeparator();
+    edit_menu->addAction(delete_shape_action_);
     edit_menu->addSeparator();
     edit_menu->addAction(crop_action_);
     edit_menu->addAction(rotate_left_action_);
@@ -660,6 +961,7 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
                             session_.renderedLayerThumbnails(QSize(
                                 LayerPanel::kThumbnailWidth,
                                 LayerPanel::kThumbnailHeight)));
+    updateShapePlacements();
     updateToolOptions();
     updateCanvasBrush();
     undo_action_->setEnabled(session_.canUndo());
@@ -681,6 +983,10 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     cancel_crop_action_->setEnabled(crop_action_->isChecked() && selected_layer_editable);
     paint_tool_action_->setEnabled(selected_layer_editable);
     eraser_tool_action_->setEnabled(selected_layer_editable);
+    shapes_tool_action_->setEnabled(selected_layer_editable);
+    select_shapes_tool_action_->setEnabled(session_.hasSource());
+    delete_shape_action_->setEnabled(!selected_shape_id_.isEmpty() &&
+        tool_sidebar_->activeTool() == ToolSidebar::Tool::SelectShapes);
 
     QString title = QStringLiteral("Image Editor");
     if (!session_.documentPath().isEmpty()) {
@@ -1086,6 +1392,7 @@ void ImageEditorWindow::deactivateCanvasTools() {
     canvas_->setPaintMode(false);
     canvas_->setEraserMode(false);
     canvas_->setCropMode(false);
+    canvas_->setShapeMode(false, false);
 }
 
 void ImageEditorWindow::maybeOfferRecovery() {

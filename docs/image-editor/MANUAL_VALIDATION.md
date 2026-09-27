@@ -37,9 +37,9 @@ run.
 7. Fit the image, zoom with the mouse wheel, pan with the middle mouse button,
    and drag a crop. Rotate both directions, flip horizontally and vertically,
    then use Undo and Redo. Confirm the canvas and dirty marker update.
-8. Open a disposable image and create a canvas in separate runs. Confirm Paint
-   and Eraser are the only tools in the compact left sidebar, appear as icons
-   without labels, and start inactive. Hover over each icon until its tooltip
+8. Open a disposable image and create a canvas in separate runs. Confirm Paint,
+   Eraser, Shapes, and Select Shapes appear as icons without labels in the
+   compact left sidebar and start inactive. Hover over each icon until its tooltip
    appears and confirm its name. Confirm the top options bar remains visible but
    empty.
    Use the color swatch at the bottom of the sidebar to choose a color (including
@@ -128,14 +128,42 @@ run.
     confirm the temporary output is discarded. Repeat with an existing
     destination and confirm its contents remain unchanged after cancellation.
 
+### Editable shapes
+
+1. On an editable layer, use **Shapes** to draw a line, rectangle, and ellipse.
+   Confirm the preview follows the drag and Escape cancels an unfinished shape.
+   Check that the initial type is Rectangle, stroke and fill are enabled with
+   the current Paint color, and stroke width is 2 px. Confirm lines use stroke
+   only and that the fill control is disabled for lines.
+2. Create a square and circle with Shift held during the drag, then create a
+   line at a non-45-degree angle with Shift. Confirm it snaps to 45-degree
+   increments. Change stroke and fill independently, use translucent colors,
+   and vary the stroke width.
+3. Create shapes on two editable layers. Switch to Select Shapes and select the
+   upper shape while another layer is active. Confirm the Layers panel follows
+   the selected shape. Move it by its body and resize it using its handles.
+   Hold Shift while resizing and confirm the geometry constraints remain active.
+   Click empty canvas to clear selection. Hide a shape's layer and set another
+   shape's layer opacity to zero; confirm those shapes cannot be selected.
+4. Change a shape's geometry and style, then delete it. Use Undo and Redo after
+   each operation and confirm each gesture or property edit is one history
+   entry. Save and reopen `.cimg`; confirm type, geometry, colors, alpha, stroke
+   width, stacking order, and rendered appearance persist. Confirm older v1–v5
+   documents still open with their previous appearance.
+5. Export the composite as PNG and JPEG and use Quick Export on a selected
+   shape layer. Confirm the shape appears in the appropriate output, layer
+   visibility and opacity are respected, and PNG transparency remains intact.
+   In linked mode, save a document containing shapes and confirm the published
+   PNG contains them and refreshes in the Video Editor.
+
 ### Recorded standalone validation
 
 - [x] User confirms the standalone workflow above was validated for the current
   baseline implementation, including the restart and recovery check. The
   platform, Qt version, run date, and scenario-by-scenario results were not
   recorded.
-- [ ] Validate the JPEG options, responsive export, and selected-layer Quick
-  Export steps added after that confirmation.
+- [ ] Validate the JPEG options, responsive export, selected-layer Quick
+  Export, and editable-shape steps added after that confirmation.
 - [ ] Cross-platform packaging and interaction checks below still need
   platform-specific records.
 

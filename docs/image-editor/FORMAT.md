@@ -1,8 +1,9 @@
 # Image Editor Document Format
 
-Status: **provisional version 5**. The `.cimg` extension is temporary until a
+Status: **provisional version 6**. The `.cimg` extension is temporary until a
 later format review. Version 4 added editable raster layers; version 5 adds
-eraser strokes. Versions 1 through 4 remain readable.
+eraser strokes; version 6 adds editable line, rectangle, and ellipse shapes.
+Versions 1 through 5 remain readable.
 
 ## Document contents
 
@@ -11,7 +12,7 @@ A `.cimg` file is UTF-8 JSON with these top-level fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite-image-document`. |
-| `version` | integer | Current version is `5`. |
+| `version` | integer | Current version is `6`. |
 | `base` | object | A linked source image or a self-contained canvas. |
 | `operations` | array | Version 1–3 edits retained as Background content. |
 | `layers` | array | Version 4 and later layer stack ordered bottom-to-top. |
@@ -41,7 +42,7 @@ canonical UUIDs. The stack is composited from bottom to top.
 ```json
 {
   "format": "creative-suite-image-document",
-  "version": 5,
+  "version": 6,
   "base": {
     "kind": "canvas",
     "width": 1920,
@@ -80,7 +81,7 @@ deleted, painted, transformed, or given a different opacity.
 
 The top-level `operations` array preserves the ordered, non-destructive edits
 from versions 1–3 and renders them as part of `Background`. This keeps old
-documents visually unchanged when they are opened and later saved as version 5.
+documents visually unchanged when they are opened and later saved as version 6.
 New edits are stored in the selected raster layer's `operations` array.
 
 Each layer operation is evaluated on the fixed document canvas. Crop keeps the
@@ -92,7 +93,9 @@ at that point in the layer's operation list. A paint color uses `#AARRGGBB`, a
 diameter is from 1 through 1024 pixels, and a stroke contains 1 through 100,000
 points. Version 5 adds `erase_stroke`, with the same point and diameter limits;
 it clears alpha in its raster layer with antialiased edges. It has no color
-field and reveals visible content in lower layers.
+field and reveals visible content in lower layers. Version 6 adds a `shape`
+operation to editable layer sequences. Shape operations retain their position
+among paint, erase, crop, rotate, and flip operations.
 
 ```json
 {
@@ -102,12 +105,39 @@ field and reveals visible content in lower layers.
 }
 ```
 
+A shape has a unique canonical UUID, a `shape_type` of `line`, `rectangle`, or
+`ellipse`, floating-point `start_x`, `start_y`, `end_x`, and `end_y` canvas
+coordinates, stroke and fill enable flags, `#AARRGGBB` colors, and an integer
+stroke width from 1 through 1024 pixels. Both endpoints must be finite and
+inside the canvas. Lines require a non-zero length, use stroke only, and cannot
+have fill enabled. Rectangles and ellipses require non-zero width and height.
+At least one of stroke or fill must be enabled. Shape IDs are unique across
+editable layers. Background cannot contain shape operations.
+
+```json
+{
+  "kind": "shape",
+  "id": "402f47e8-6e6a-452a-80d0-0e37bcd0268d",
+  "shape_type": "ellipse",
+  "start_x": 64.0,
+  "start_y": 48.0,
+  "end_x": 256.0,
+  "end_y": 192.0,
+  "stroke_enabled": true,
+  "stroke_color": "#FF202020",
+  "stroke_width": 2,
+  "fill_enabled": true,
+  "fill_color": "#8060A0FF"
+}
+```
+
 For legacy top-level operations, crops use the current image bounds and change
 the rendered Background size; rotations may swap its dimensions. This behavior
 is retained only to read and preserve documents created by versions 1–3.
 Version 1 uses the legacy `source` object. Version 2 adds canvas bases. Version
 3 adds top-level paint strokes. Version 4 adds layers. Version 5 adds
-layer-local eraser strokes. Saving any supported version writes version 5.
+layer-local eraser strokes. Version 6 adds editable shapes to layer operations.
+Saving any supported version writes version 6.
 
 Undo and redo history are in memory and are not stored in `.cimg`. A save writes
 to a temporary file and atomically replaces the destination. Export is a
@@ -130,7 +160,7 @@ Quick Export uses saved JPEG options without showing the options dialog.
 Recovery snapshots use a separate `creative-suite-image-recovery` JSON wrapper
 with the document payload, intended `.cimg` destination, and a session identity
 for unsaved canvases. Recovery wrapper version 1 accepts document payloads in
-versions 1 through 5. Autosave and recovery preserve layer order, properties,
+versions 1 through 6. Autosave and recovery preserve layer order, properties,
 IDs, and operations.
 
 Unsupported versions, invalid layer stacks, and invalid operation data are

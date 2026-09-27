@@ -66,6 +66,36 @@ QIcon eraserToolIcon() {
     return QIcon(icon);
 }
 
+QIcon shapesToolIcon() {
+    QPixmap icon(32, 32);
+    icon.fill(Qt::transparent);
+    QPainter painter(&icon);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(QColor(230, 210, 130), 2.2));
+    painter.drawLine(QPointF(4, 26), QPointF(27, 5));
+    painter.setBrush(QColor(80, 155, 210, 70));
+    painter.drawRect(QRectF(5, 6, 13, 12));
+    painter.setBrush(QColor(225, 125, 170, 70));
+    painter.drawEllipse(QRectF(16, 15, 12, 12));
+    return QIcon(icon);
+}
+
+QIcon selectShapesToolIcon() {
+    QPixmap icon(32, 32);
+    icon.fill(Qt::transparent);
+    QPainter painter(&icon);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(QColor(190, 210, 235), 2.0, Qt::DashLine));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(QRectF(5, 5, 21, 21));
+    painter.setPen(QPen(QColor(250, 205, 100), 2.5, Qt::SolidLine, Qt::RoundCap));
+    painter.drawPoint(QPointF(5, 5));
+    painter.drawPoint(QPointF(26, 5));
+    painter.drawPoint(QPointF(5, 26));
+    painter.drawPoint(QPointF(26, 26));
+    return QIcon(icon);
+}
+
 } // namespace
 
 ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
@@ -99,6 +129,28 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     eraser_button_->setFixedSize(40, 40);
     layout->addWidget(eraser_button_, 0, Qt::AlignHCenter);
 
+    shapes_button_ = new QToolButton(this);
+    shapes_button_->setObjectName(QStringLiteral("shapesToolButton"));
+    shapes_button_->setToolTip(QStringLiteral("Shapes"));
+    shapes_button_->setAccessibleName(QStringLiteral("Shapes tool"));
+    shapes_button_->setIcon(shapesToolIcon());
+    shapes_button_->setIconSize(QSize(24, 24));
+    shapes_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    shapes_button_->setCheckable(true);
+    shapes_button_->setFixedSize(40, 40);
+    layout->addWidget(shapes_button_, 0, Qt::AlignHCenter);
+
+    select_shapes_button_ = new QToolButton(this);
+    select_shapes_button_->setObjectName(QStringLiteral("selectShapesToolButton"));
+    select_shapes_button_->setToolTip(QStringLiteral("Select Shapes"));
+    select_shapes_button_->setAccessibleName(QStringLiteral("Select Shapes tool"));
+    select_shapes_button_->setIcon(selectShapesToolIcon());
+    select_shapes_button_->setIconSize(QSize(24, 24));
+    select_shapes_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    select_shapes_button_->setCheckable(true);
+    select_shapes_button_->setFixedSize(40, 40);
+    layout->addWidget(select_shapes_button_, 0, Qt::AlignHCenter);
+
     layout->addStretch(1);
 
     color_button_ = new QToolButton(this);
@@ -118,6 +170,14 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
         if (active) setActiveTool(Tool::Eraser);
         else if (active_tool_ == Tool::Eraser) setActiveTool(Tool::None);
     });
+    connect(shapes_button_, &QToolButton::toggled, this, [this](bool active) {
+        if (active) setActiveTool(Tool::Shapes);
+        else if (active_tool_ == Tool::Shapes) setActiveTool(Tool::None);
+    });
+    connect(select_shapes_button_, &QToolButton::toggled, this, [this](bool active) {
+        if (active) setActiveTool(Tool::SelectShapes);
+        else if (active_tool_ == Tool::SelectShapes) setActiveTool(Tool::None);
+    });
     connect(color_button_, &QToolButton::clicked, this, [this]() {
         const QColor selected = QColorDialog::getColor(
             brush_color_, this, QStringLiteral("Brush Color"),
@@ -134,13 +194,15 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
 void ToolSidebar::setDocumentAvailable(bool available) {
     document_available_ = available;
-    if (!document_available_ || !painting_allowed_) setActiveTool(Tool::None);
+    if (!document_available_ || (active_tool_ != Tool::SelectShapes && !painting_allowed_)) {
+        setActiveTool(Tool::None);
+    }
     updateControls();
 }
 
 void ToolSidebar::setPaintingAllowed(bool allowed) {
     painting_allowed_ = allowed;
-    if (!painting_allowed_) setActiveTool(Tool::None);
+    if (!painting_allowed_ && active_tool_ != Tool::SelectShapes) setActiveTool(Tool::None);
     updateControls();
 }
 
@@ -154,15 +216,30 @@ void ToolSidebar::setEraserToolActive(bool active) {
         (active_tool_ == Tool::Eraser ? Tool::None : active_tool_));
 }
 
+void ToolSidebar::setShapesToolActive(bool active) {
+    setActiveTool(active ? Tool::Shapes :
+        (active_tool_ == Tool::Shapes ? Tool::None : active_tool_));
+}
+
+void ToolSidebar::setSelectShapesToolActive(bool active) {
+    setActiveTool(active ? Tool::SelectShapes :
+        (active_tool_ == Tool::SelectShapes ? Tool::None : active_tool_));
+}
+
 void ToolSidebar::setActiveTool(Tool tool) {
-    if (!document_available_ || !painting_allowed_) tool = Tool::None;
+    if (!document_available_ || (tool != Tool::None && tool != Tool::SelectShapes &&
+                                 !painting_allowed_)) tool = Tool::None;
     const bool changed = active_tool_ != tool;
     active_tool_ = tool;
     {
         const QSignalBlocker paint_blocker(paint_button_);
         const QSignalBlocker eraser_blocker(eraser_button_);
+        const QSignalBlocker shapes_blocker(shapes_button_);
+        const QSignalBlocker select_shapes_blocker(select_shapes_button_);
         paint_button_->setChecked(tool == Tool::Paint);
         eraser_button_->setChecked(tool == Tool::Eraser);
+        shapes_button_->setChecked(tool == Tool::Shapes);
+        select_shapes_button_->setChecked(tool == Tool::SelectShapes);
     }
     updateControls();
     if (changed) emit activeToolChanged(active_tool_);
@@ -176,6 +253,14 @@ bool ToolSidebar::eraserToolActive() const noexcept {
     return active_tool_ == Tool::Eraser;
 }
 
+bool ToolSidebar::shapesToolActive() const noexcept {
+    return active_tool_ == Tool::Shapes;
+}
+
+bool ToolSidebar::selectShapesToolActive() const noexcept {
+    return active_tool_ == Tool::SelectShapes;
+}
+
 QColor ToolSidebar::brushColor() const {
     return brush_color_;
 }
@@ -184,6 +269,8 @@ void ToolSidebar::updateControls() {
     const bool enabled = document_available_ && painting_allowed_;
     paint_button_->setEnabled(enabled);
     eraser_button_->setEnabled(enabled);
+    shapes_button_->setEnabled(enabled);
+    select_shapes_button_->setEnabled(document_available_);
     paint_button_->setToolTip(enabled
         ? QStringLiteral("Paint")
         : (document_available_

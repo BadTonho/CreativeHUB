@@ -12,11 +12,13 @@
 class QAction;
 class QCheckBox;
 class QCloseEvent;
+class QComboBox;
 class QDockWidget;
 class QKeySequence;
 class QLabel;
 class QSlider;
 class QSpinBox;
+class QPushButton;
 class QToolBar;
 class QTimer;
 class QWidget;
@@ -70,6 +72,12 @@ private:
     void handleEraseStroke(const QVector<QPointF>& points, int diameter);
     void updateCanvasToolState(ToolSidebar::Tool tool);
     void updateCanvasBrush();
+    void updateShapeOptions();
+    void updateShapePlacements();
+    void applyShapeStyleToSelection(bool include_kind = false);
+    void handleShapeCreated(const ImageShapeData& shape);
+    void handleShapeGeometryChanged(const ImageShapeData& shape);
+    void deleteSelectedShape();
     void reportError(const QString& operation,
                      const QString& cause,
                      const QString& path = {});
@@ -83,11 +91,20 @@ private:
     LayerPanel* layer_panel_ = nullptr;
     QToolBar* tool_options_toolbar_ = nullptr;
     QWidgetAction* paint_options_action_ = nullptr;
+    QWidgetAction* shape_options_action_ = nullptr;
     QWidget* paint_size_options_ = nullptr;
+    QWidget* shape_options_widget_ = nullptr;
     QSlider* brush_size_slider_ = nullptr;
     QSpinBox* brush_size_spin_ = nullptr;
     QLabel* tool_size_label_ = nullptr;
     QCheckBox* eraser_preview_check_ = nullptr;
+    QComboBox* shape_kind_combo_ = nullptr;
+    QCheckBox* shape_stroke_check_ = nullptr;
+    QCheckBox* shape_fill_check_ = nullptr;
+    QPushButton* shape_stroke_color_button_ = nullptr;
+    QPushButton* shape_fill_color_button_ = nullptr;
+    QSpinBox* shape_stroke_width_spin_ = nullptr;
+    QPushButton* delete_selected_shape_button_ = nullptr;
     QLabel* status_label_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
     QAction* relink_action_ = nullptr;
@@ -109,6 +126,12 @@ private:
     QAction* fit_action_ = nullptr;
     QAction* paint_tool_action_ = nullptr;
     QAction* eraser_tool_action_ = nullptr;
+    QAction* shapes_tool_action_ = nullptr;
+    QAction* select_shapes_tool_action_ = nullptr;
+    QAction* delete_shape_action_ = nullptr;
+    ImageShapeData shape_style_;
+    QString selected_shape_id_;
+    bool shape_colors_initialized_ = false;
     int paint_diameter_ = 12;
     int eraser_diameter_ = 12;
     QList<QAction*> shortcut_actions_;

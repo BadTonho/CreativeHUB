@@ -21,7 +21,8 @@ constexpr int kLegacyDocumentVersion = 1;
 constexpr int kCanvasDocumentVersion = 2;
 constexpr int kPaintDocumentVersion = 3;
 constexpr int kLayerDocumentVersion = 4;
-constexpr int kDocumentVersion = 5;
+constexpr int kEraseDocumentVersion = 5;
+constexpr int kDocumentVersion = 6;
 constexpr int kRecoveryVersion = 1;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr auto kRecoveryFormat = "creative-suite-image-recovery";
@@ -99,6 +100,23 @@ QJsonObject encodeOperation(const ImageOperation& operation) {
             points.append(encoded_point);
         }
         encoded.insert("points", points);
+        break;
+    }
+    case OperationKind::Shape: {
+        const auto& shape = operation.shape;
+        encoded.insert("kind", "shape");
+        encoded.insert("id", shape.id);
+        encoded.insert("shape_type", shape.kind == ImageShapeKind::Line ? "line" :
+            (shape.kind == ImageShapeKind::Ellipse ? "ellipse" : "rectangle"));
+        encoded.insert("start_x", shape.start.x());
+        encoded.insert("start_y", shape.start.y());
+        encoded.insert("end_x", shape.end.x());
+        encoded.insert("end_y", shape.end.y());
+        encoded.insert("stroke_enabled", shape.stroke_enabled);
+        encoded.insert("stroke_color", shape.stroke_color.name(QColor::HexArgb));
+        encoded.insert("stroke_width", shape.stroke_width);
+        encoded.insert("fill_enabled", shape.fill_enabled);
+        encoded.insert("fill_color", shape.fill_color.name(QColor::HexArgb));
         break;
     }
     }
@@ -203,7 +221,7 @@ bool decodeOperations(const QJsonValue& value,
                 }
                 operation.paint_stroke.points.append(QPointF(x, y));
             }
-        } else if (kind == "erase_stroke" && version >= kDocumentVersion && fixed_canvas) {
+        } else if (kind == "erase_stroke" && version >= kEraseDocumentVersion && fixed_canvas) {
             const auto encoded_points = object.value("points").toArray();
             int diameter = 0;
             if (encoded_points.isEmpty() ||
@@ -237,6 +255,46 @@ bool decodeOperations(const QJsonValue& value,
                 }
                 operation.erase_stroke.points.append(QPointF(x, y));
             }
+        } else if (kind == "shape" && version >= kDocumentVersion && fixed_canvas) {
+            const QString id = object.value("id").toString();
+            const QString shape_type = object.value("shape_type").toString();
+            const QString stroke_color_text = object.value("stroke_color").toString();
+            const QString fill_color_text = object.value("fill_color").toString();
+            const QColor stroke_color(stroke_color_text);
+            const QColor fill_color(fill_color_text);
+            int stroke_width = 0;
+            const auto start_x = object.value("start_x");
+            const auto start_y = object.value("start_y");
+            const auto end_x = object.value("end_x");
+            const auto end_y = object.value("end_y");
+            if (!object.value("stroke_enabled").isBool() ||
+                !object.value("fill_enabled").isBool() ||
+                !isInteger(object.value("stroke_width"), &stroke_width) ||
+                !isArgbHexColor(stroke_color_text) || !stroke_color.isValid() ||
+                !isArgbHexColor(fill_color_text) || !fill_color.isValid() ||
+                !start_x.isDouble() || !start_y.isDouble() ||
+                !end_x.isDouble() || !end_y.isDouble()) {
+                assignError(error, QStringLiteral("The document contains an invalid shape."));
+                return false;
+            }
+            operation.kind = OperationKind::Shape;
+            operation.shape.id = id;
+            operation.shape.kind = shape_type == "line" ? ImageShapeKind::Line :
+                (shape_type == "ellipse" ? ImageShapeKind::Ellipse : ImageShapeKind::Rectangle);
+            if (shape_type != "line" && shape_type != "rectangle" && shape_type != "ellipse") {
+                assignError(error, QStringLiteral("The document contains an unsupported shape type."));
+                return false;
+            }
+            operation.shape.start = QPointF(start_x.toDouble(), start_y.toDouble());
+            operation.shape.end = QPointF(end_x.toDouble(), end_y.toDouble());
+            operation.shape.stroke_enabled = object.value("stroke_enabled").toBool();
+            operation.shape.stroke_color = stroke_color;
+            operation.shape.stroke_width = stroke_width;
+            operation.shape.fill_enabled = object.value("fill_enabled").toBool();
+            operation.shape.fill_color = fill_color;
+            if (!ImageDocumentStore::isValidShape(operation.shape, *current_size, error)) {
+                return false;
+            }
         } else {
             assignError(error, QStringLiteral("The document contains an unsupported edit."));
             return false;
@@ -268,6 +326,7 @@ bool validateLayers(const ImageDocumentData& document, QString* error) {
         return false;
     }
     QSet<QString> ids;
+    QSet<QString> shape_ids;
     const QSize canvas_size = sizeAfterOperations(document.source_size, document.operations);
     qsizetype background_count = 0;
     for (qsizetype index = 0; index < document.layers.size(); ++index) {
@@ -298,6 +357,15 @@ bool validateLayers(const ImageDocumentData& document, QString* error) {
         QJsonArray ops = encodeOperations(layer.operations);
         if (!decodeOperations(ops, kDocumentVersion, &layer_size, true, &validated, error)) {
             return false;
+        }
+        for (const auto& operation : validated) {
+            if (operation.kind != OperationKind::Shape) continue;
+            const QString shape_id = operation.shape.id.toLower();
+            if (shape_ids.contains(shape_id)) {
+                assignError(error, QStringLiteral("The document contains a duplicate shape ID."));
+                return false;
+            }
+            shape_ids.insert(shape_id);
         }
     }
     if (background_count != 1) {
@@ -612,6 +680,34 @@ bool ImageDocumentStore::isValidCanvasSize(const QSize& size) noexcept {
     }
     const qint64 pixel_count = static_cast<qint64>(size.width()) * size.height();
     return pixel_count <= kMaximumCanvasPixels;
+}
+
+bool ImageDocumentStore::isValidShape(const ImageShapeData& shape,
+                                      const QSize& canvas_size,
+                                      QString* error) {
+    const QUuid uuid(shape.id);
+    const bool valid_id = !uuid.isNull() &&
+        uuid.toString(QUuid::WithoutBraces).compare(shape.id, Qt::CaseInsensitive) == 0;
+    const auto valid_point = [&canvas_size](const QPointF& point) {
+        return std::isfinite(point.x()) && std::isfinite(point.y()) &&
+            point.x() >= 0.0 && point.y() >= 0.0 &&
+            point.x() < canvas_size.width() && point.y() < canvas_size.height();
+    };
+    const bool valid_kind = shape.kind == ImageShapeKind::Line ||
+        shape.kind == ImageShapeKind::Rectangle || shape.kind == ImageShapeKind::Ellipse;
+    const bool line = shape.kind == ImageShapeKind::Line;
+    const bool non_degenerate = line
+        ? shape.start != shape.end
+        : shape.start.x() != shape.end.x() && shape.start.y() != shape.end.y();
+    if (!valid_id || !valid_kind || !valid_point(shape.start) ||
+        !valid_point(shape.end) || !non_degenerate ||
+        shape.stroke_width < 1 || shape.stroke_width > kMaximumShapeStrokeWidth ||
+        !shape.stroke_color.isValid() || !shape.fill_color.isValid() ||
+        (!shape.stroke_enabled && !shape.fill_enabled) || (line && shape.fill_enabled)) {
+        assignError(error, QStringLiteral("The shape geometry or style is invalid."));
+        return false;
+    }
+    return true;
 }
 
 QStringList ImageDocumentStore::supportedImageExtensions() {

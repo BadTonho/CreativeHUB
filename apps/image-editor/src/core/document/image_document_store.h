@@ -22,6 +22,13 @@ enum class OperationKind {
     FlipVertical,
     PaintStroke,
     EraseStroke,
+    Shape,
+};
+
+enum class ImageShapeKind {
+    Line,
+    Rectangle,
+    Ellipse,
 };
 
 struct ImagePaintStroke {
@@ -39,12 +46,33 @@ struct ImageEraseStroke {
     bool operator==(const ImageEraseStroke&) const = default;
 };
 
+struct ImageShapeData {
+    QString id;
+    ImageShapeKind kind = ImageShapeKind::Rectangle;
+    QPointF start;
+    QPointF end;
+    bool stroke_enabled = true;
+    QColor stroke_color = Qt::black;
+    int stroke_width = 2;
+    bool fill_enabled = true;
+    QColor fill_color = Qt::black;
+
+    bool operator==(const ImageShapeData&) const = default;
+};
+
+struct ImageShapePlacement {
+    ImageShapeData shape;
+    QString layer_id;
+    int layer_opacity = 100;
+};
+
 struct ImageOperation {
     OperationKind kind = OperationKind::Crop;
     QRect crop;
     int quarter_turns = 0;
     ImagePaintStroke paint_stroke;
     ImageEraseStroke erase_stroke;
+    ImageShapeData shape;
 
     bool operator==(const ImageOperation&) const = default;
 };
@@ -84,11 +112,15 @@ public:
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
     static constexpr int kMaximumPaintBrushDiameter = 1024;
+    static constexpr int kMaximumShapeStrokeWidth = 1024;
     static constexpr qsizetype kMaximumLayers = 512;
     static constexpr qsizetype kMaximumLayerNameLength = 128;
     static constexpr qsizetype kMaximumOperations = 100'000;
 
     [[nodiscard]] static bool isValidCanvasSize(const QSize& size) noexcept;
+    [[nodiscard]] static bool isValidShape(const ImageShapeData& shape,
+                                           const QSize& canvas_size,
+                                           QString* error = nullptr);
 
     [[nodiscard]] static bool saveDocument(
         const QString& document_path,

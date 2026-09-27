@@ -1,7 +1,8 @@
 # Image Editor Roadmap
 
 Status: **standalone minimum implemented; baseline manual workflow user-confirmed;
-export changes need manual validation; cross-platform acceptance in progress**.
+export and editable-shape changes need manual validation; cross-platform acceptance
+in progress**.
 Current application version: **Beta 0.1.1**.
 This roadmap covers the independent application under `apps/image-editor/`.
 The Video Editor handoff implementation already exists as a bounded prototype,
@@ -59,14 +60,17 @@ of Motion Studio in the application sequence.
 - [x] Add a locked Background and editable raster layers with visibility,
   opacity, ordering, rename, delete, painting, erasing, fixed-canvas transforms, and
   `.cimg` v5 persistence while retaining v1–v4 compatibility.
+- [x] Add editable line, rectangle, and ellipse operations with creation,
+  selection across visible layers, movement, resizing, style editing, deletion,
+  Undo/Redo, and `.cimg` v6 persistence while retaining v1–v5 compatibility.
 - [x] Add canvas fit, zoom, pan, and drag-to-crop controls.
 - [-] Pass Release build and automated tests for documents, edits, relinking,
   export, recovery, logging, and the UI boundary.
 - [-] Complete the manual workflow in
   [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md), including a restart and
-  recovery check (the baseline workflow was user-confirmed; the export-options,
-  responsive-export, and selected-layer Quick Export changes still need manual
-  validation).
+  recovery check (the baseline workflow was user-confirmed; export options,
+  responsive export, selected-layer Quick Export, and editable shapes still
+  need manual validation).
 - [ ] Validate Windows packaging with PNG, JPEG, BMP, WebP, and TIFF plugins;
   then repeat build and interaction checks on macOS and Linux.
 

@@ -35,6 +35,17 @@ public:
     [[nodiscard]] bool applyEraseStroke(const QVector<QPointF>& points,
                                         int diameter,
                                         QString* error = nullptr);
+    [[nodiscard]] QString addShape(ImageShapeData shape, QString* error = nullptr);
+    [[nodiscard]] bool updateShape(const ImageShapeData& shape,
+                                   QString* error = nullptr);
+    [[nodiscard]] bool updateShapeRendered(const ImageShapeData& shape,
+                                           QString* error = nullptr);
+    [[nodiscard]] bool deleteShape(const QString& shape_id);
+    [[nodiscard]] bool findShape(const QString& shape_id,
+                                 ImageShapeData* shape,
+                                 QString* layer_id = nullptr) const;
+    [[nodiscard]] QImage renderedImageWithoutShape(const QString& shape_id) const;
+    [[nodiscard]] QVector<ImageShapePlacement> visibleShapes() const;
     [[nodiscard]] QString addLayer();
     [[nodiscard]] bool deleteLayer(const QString& layer_id);
     [[nodiscard]] bool renameLayer(const QString& layer_id,

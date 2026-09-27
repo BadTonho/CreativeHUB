@@ -1,5 +1,7 @@
 #pragma once
 
+#include "image_document_store.h"
+
 #include <QImage>
 #include <QColor>
 #include <QPoint>
@@ -11,6 +13,7 @@
 class QEvent;
 class QKeyEvent;
 class QMouseEvent;
+class QPainter;
 class QWheelEvent;
 
 namespace image_editor {
@@ -25,6 +28,10 @@ public:
     void setCropMode(bool enabled);
     void setPaintMode(bool enabled);
     void setEraserMode(bool enabled);
+    void setShapeMode(bool creation_enabled, bool selection_enabled);
+    void setShapeStyle(const ImageShapeData& style);
+    void setShapePlacements(QVector<ImageShapePlacement> placements,
+                            const QString& selected_shape_id);
     void setEraserPreviewEnabled(bool enabled);
     void setTransientImage(QImage image);
     void setBrush(QColor color, int diameter);
@@ -43,6 +50,10 @@ signals:
     void erasePreviewCleared();
     void eraseStrokeSelected(const QVector<QPointF>& image_points, int diameter);
     void brushDiameterChanged(int diameter);
+    void shapeCreated(const image_editor::ImageShapeData& shape);
+    void shapeSelected(const QString& shape_id, const QString& layer_id);
+    void shapeTransformStarted(const QString& shape_id);
+    void shapeGeometryChanged(const image_editor::ImageShapeData& shape);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -53,6 +64,7 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
     void leaveEvent(QEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
 
 private:
     [[nodiscard]] QRectF imageTargetRect() const;
@@ -60,6 +72,15 @@ private:
     [[nodiscard]] QPointF widgetToImageCoordinates(const QPointF& position) const;
     void appendPaintPoint(const QPointF& point);
     void updateHoverCursor(const QPointF& position);
+    [[nodiscard]] QPointF constrainShapePoint(const QPointF& point,
+                                             const QPointF& anchor,
+                                             ImageShapeKind kind,
+                                             bool shift) const;
+    [[nodiscard]] int shapeHitAt(const QPointF& image_point) const;
+    [[nodiscard]] int selectedHandleAt(const QPointF& image_point) const;
+    void drawShapeOverlay(QPainter& painter,
+                          const ImageShapeData& shape,
+                          int opacity = 100) const;
 
     QImage image_;
     QImage transient_image_;
@@ -69,12 +90,19 @@ private:
     bool crop_mode_ = false;
     bool paint_mode_ = false;
     bool eraser_mode_ = false;
+    bool shape_creation_mode_ = false;
+    bool shape_selection_mode_ = false;
     bool eraser_preview_enabled_ = false;
     bool selecting_crop_ = false;
     bool painting_ = false;
     bool erasing_ = false;
     bool resizing_brush_ = false;
+    bool shift_constrain_held_ = false;
     bool panning_ = false;
+    bool creating_shape_ = false;
+    bool transforming_shape_ = false;
+    bool moving_shape_ = false;
+    int resizing_shape_endpoint_ = -1;
     QPointF crop_start_;
     QRectF crop_selection_;
     QPointF pan_start_;
@@ -83,6 +111,13 @@ private:
     QPoint brush_resize_global_start_;
     int brush_resize_initial_diameter_ = 12;
     QVector<QPointF> paint_points_;
+    ImageShapeData shape_style_;
+    ImageShapeData shape_interaction_initial_;
+    ImageShapeData shape_interaction_current_;
+    QVector<ImageShapePlacement> shape_placements_;
+    QString selected_shape_id_;
+    QString transforming_shape_id_;
+    QPointF shape_gesture_start_;
     QColor brush_color_ = Qt::black;
     int brush_diameter_ = 12;
     QPointF brush_cursor_position_;

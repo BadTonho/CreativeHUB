@@ -34,8 +34,8 @@ persistence, and recovery.
   files remain unchanged.
 - `ImageDocumentStore` reads and atomically writes versioned `.cimg` documents
   and recovery snapshots. Version 4 stores layer UUIDs and properties; version
-  5 adds layer-local eraser strokes. The reader continues to accept versions
-  1–4. Its data format is specified in
+  5 adds layer-local eraser strokes; version 6 adds editable shape operations.
+  The reader continues to accept versions 1–5. Its data format is specified in
   [`FORMAT.md`](FORMAT.md).
 - `ImageExportSnapshot` captures the current source image, document data, and
   selected layer ID; its implicitly shared image and layer buffers exclude undo
@@ -77,14 +77,27 @@ persistence, and recovery.
   pointer leaves the image. On release, the system pointer returns to the press
   point; normal hover tracking resumes on subsequent mouse movement. The gesture
   updates the window controls without changing the document or history.
-- `ToolSidebar` contains mutually exclusive, checkable, icon-only Paint and
-  Eraser tools in a compact rail; both can be inactive. The always-visible color
-  swatch remains specific to Paint. `ImageEditorWindow` owns a persistent top
-  tool options bar; it is empty when no tool is active and shows synchronized
-  size controls (1–1024 pixels) for the active tool. Paint and Eraser sizes are
-  independent and start at 12 px. The Eraser-only Preview option starts off and
-  is session state, not document data. The sidebar tools and crop action cannot
-  be active at the same time.
+- `ImageCanvas` also previews line, rectangle, and ellipse operations while
+  drawing. **Select Shapes** searches visible editable layers from top to
+  bottom, selects one shape at a time, switches the Layers panel to its layer,
+  and supports moving or resizing from endpoint handles. Shift constrains
+  rectangles and ellipses to squares/circles and snaps line angles to 45-degree
+  increments. Escape cancels a shape creation. Each shape creation, movement,
+  resize, style change, or deletion is one Undo/Redo edit. A shape remains an
+  identified operation in its layer's ordered paint/erase sequence, preserving
+  its position among raster edits.
+- `ToolSidebar` contains mutually exclusive, checkable, icon-only Paint,
+  Eraser, Shapes, and Select Shapes tools in a compact rail; all can be inactive.
+  The always-visible color swatch remains specific to Paint. `ImageEditorWindow`
+  owns a persistent top tool options bar; it is empty when no tool is active and
+  shows synchronized size controls (1–1024 pixels) for Paint and Eraser, plus
+  shape type, stroke, fill, colors, and width controls for the shape tools. The
+  shape type chooses new shapes; stroke and fill controls edit a selected shape.
+  Paint and Eraser sizes are independent and start at 12 px. Shape defaults are
+  Rectangle, enabled stroke and fill using the current Paint color, and a 2 px
+  stroke. Shape options are session-only and are not stored in `.cimg`. The
+  Eraser-only Preview option starts off and is session state, not document data.
+  The sidebar tools and crop action cannot be active at the same time.
 - `LayerPanel` is hosted by a resizable, dockable right-side `QDockWidget`. It
   presents the stack top-to-bottom with an isolated, aspect-fitted thumbnail
   on the left, the layer name, and an eye visibility button on the right.
@@ -94,19 +107,22 @@ persistence, and recovery.
   previews by source and content, so selection and visibility changes do not
   rerender them. Background
   remains fixed at the bottom, with visibility as its only editable property.
-  Selecting Background disables painting and transforms and explains that an
-  editable layer is required. Opacity slider drags are grouped into one undo
-  entry.
+  Selecting Background disables Paint, Eraser, Shapes, and layer transforms,
+  and explains that an editable layer is required. Select Shapes remains
+  available to select shapes on other visible layers. Opacity slider drags are
+  grouped into one undo entry.
 - `ImageEditorWindow` routes menu and sidebar actions, prompts before discarding
   edits, and projects session state into the window. A completed paint gesture
   is one undoable document operation; changing tools does not modify the image.
 - `ImageEditorWindow` owns the command-action registry and the **Settings >
   Keyboard Shortcuts** dialog. Stable action names identify preferences stored
   with `QSettings`, separately from editable documents. Defaults use Qt standard
-  sequences plus `B` for Paint, `E` for Eraser, and `Esc` to cancel crop;
-  duplicate assignments are rejected, and tool actions stay disabled without an
-  editable layer. The fixed tool-size mouse gesture is documented separately
-  and is not part of the keyboard shortcut preferences.
+  sequences plus `B` for Paint, `E` for Eraser, and `Esc` to cancel crop or an
+  in-progress shape. Shapes, Select Shapes, and Delete Selected Shape have no
+  default shortcut. Duplicate assignments are rejected. Paint, Eraser, and
+  Shapes require an editable layer; Select Shapes remains available with
+  Background selected. The fixed tool-size mouse gesture is documented
+  separately and is not part of the keyboard shortcut preferences.
 - In standalone mode, the window opens and saves `.cimg` documents normally. A
   linked launch accepts `--linked-source`, `--linked-document`, and
   `--publish-output`. It opens an existing linked document or creates one from
@@ -115,7 +131,7 @@ persistence, and recovery.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema remains version 5; host links live in the Video Editor's
+  The `.cimg` schema is version 6; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
