@@ -118,10 +118,26 @@ curve evaluation remains a separate capability from composition.
 
 ## Deferred Technical Decisions
 
-Milestone 1 must compare viable language, rendering, and decoding options using
-a vertical prototype that opens and decodes video, navigates a composition
-timeline, presents a GPU-accelerated preview, and applies a simple effect. It
-must measure startup, memory, and interactive performance on Windows, macOS,
-and Linux, and record dependency and asset licenses. The prototype will also
-select output codecs and profiles and establish measurable responsiveness and
-resource targets. No final technology choice is made by this scope document.
+Milestone 1 starts by reusing evidence already in the repository. The C++ SDL3
+vertical slice covers one-video decoding, playback and seeking, a basic
+timeline, GPU texture presentation, and a simple grayscale effect. Its Windows
+Release build passed, but SDL3 GPU runtime initialization is blocked in the
+recorded host; macOS and Linux remain unvalidated. It is a technical reference,
+not a selected Motion Studio renderer.
+
+The Video Editor provides a second, distinct reference: Qt 6 and FFmpeg media
+handling, worker-side CPU layer composition, and Qt OpenGL presentation of the
+final composed frame. This already supports video, text, raster images, basic
+transforms, and linear keyframes. Its OpenGL presentation does not mean that
+layer composition runs on the GPU.
+
+First compare these existing capabilities with the MVP and record what evidence
+transfers and what gaps remain. Revalidate existing paths across Windows,
+macOS, and Linux, and measure startup, memory, timeline/seek response, preview
+latency, and rendering for small, medium, and heavy compositions. Add a narrow,
+isolated spike only for a Motion-specific requirement the existing code cannot
+validate; do not create another generic prototype or restart the full
+Rust/C++ comparison by default. Record dependency and asset licenses, output
+profile/codec findings, measurable resource and responsiveness targets, and
+remaining alternatives. No final language or renderer choice is made by this
+document.

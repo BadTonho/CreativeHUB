@@ -50,20 +50,28 @@ in [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md). The Video Editor
 foundation remains a stability priority; Image Editor milestones do not block
 this readiness work.
 
-### 1. Technical validation
+### 1. Technical validation and gap audit
 
-- [ ] Validate a vertical workflow that opens and decodes video, navigates a
-  composition timeline, shows a GPU-accelerated preview, and applies a simple
-  effect.
-- [ ] Measure startup time, memory, and interactive performance on small,
-  medium, and heavy compositions.
-- [ ] Build and run the prototype on Windows, macOS, and Linux.
-- [ ] Record dependency and asset licenses and compare alternatives before
-  making technology or renderer decisions.
+- [ ] Audit the existing C++ SDL3 vertical slice and the Video Editor's Qt 6,
+  FFmpeg, CPU composition, and OpenGL presentation path against the Motion
+  Studio MVP. Record evidence that transfers and gaps that remain.
+- [ ] Revalidate the applicable existing paths on Windows, macOS, and Linux;
+  record GPU runtime support separately from GPU presentation of CPU-composed
+  frames.
+- [ ] Measure startup, memory, timeline/seek response, preview latency, and
+  render performance for representative small, medium, and heavy compositions;
+  document targets and any unmet limits.
+- [ ] Create a narrow, isolated spike only when an important Motion-specific
+  gap cannot be answered from the existing implementations. Do not build a
+  second generic video prototype or restart the Rust/C++ comparison by default.
+- [ ] Record dependency and asset licenses, output profile/codec findings, and
+  alternatives needed to resolve the identified gaps before choosing a
+  renderer or other technology.
 
-**Exit criteria:** the prototype meets documented responsiveness and resource
-targets on all three platforms, or the remaining limitations and alternatives
-are documented before implementation proceeds.
+**Exit criteria:** existing evidence, Motion-specific gaps, cross-platform
+results, performance targets, and remaining alternatives are documented. Any
+new spike is limited to an unresolved requirement; a second implementation is
+not required when existing code provides sufficient evidence.
 
 ### 2. Composition foundation
 
