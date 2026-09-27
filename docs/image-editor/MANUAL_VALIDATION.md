@@ -8,7 +8,7 @@ run.
 
 1. Configure and build `creative-suite-image-editor` in Release mode, then
    launch it from the build output. Open **Help > System** and confirm the
-   version reads **Beta 0.1.1** and the executable path is shown.
+   version reads **Beta 0.1.2** and the executable path is shown.
 2. Use **File > New Canvas**. Try the square, portrait, story/reel, Full HD,
    and A4 presets, then create a custom-size canvas. Choose transparent, white,
    and a custom-color background in separate runs. Confirm transparent areas

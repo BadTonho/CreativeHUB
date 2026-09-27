@@ -9,7 +9,7 @@ int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
     QCoreApplication::setApplicationName(QStringLiteral("Image Editor"));
-    QApplication::setApplicationVersion(QStringLiteral("Beta 0.1.1"));
+    QApplication::setApplicationVersion(QStringLiteral("Beta 0.1.2"));
 
     QCommandLineParser parser;
     parser.addHelpOption();

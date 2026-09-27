@@ -3,7 +3,7 @@
 Status: **standalone minimum implemented; baseline manual workflow user-confirmed;
 export, editable shapes, general object selection, and layer groups need manual validation;
 cross-platform acceptance in progress**.
-Current application version: **Beta 0.1.1**.
+Current application version: **Beta 0.1.2**.
 This roadmap covers the independent application under `apps/image-editor/`.
 The Video Editor handoff implementation already exists as a bounded prototype,
 but its acceptance is gated on passing the standalone manual and
