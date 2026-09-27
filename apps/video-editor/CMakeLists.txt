@@ -1,6 +1,7 @@
 include(GNUInstallDirs)
 
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Widgets OpenGL OpenGLWidgets)
 find_package(Qt6 CONFIG QUIET COMPONENTS Multimedia)
@@ -179,6 +180,7 @@ add_library(creative-suite-main-editor-core STATIC
 
 add_executable(creative-suite-main-editor
     src/main.cpp
+    resources/app_icon.qrc
 )
 
 target_link_libraries(creative-suite-main-editor PRIVATE
@@ -230,6 +232,18 @@ set_target_properties(creative-suite-main-editor PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
+
+if(WIN32)
+    set(APP_ICON_FILE "${CMAKE_SOURCE_DIR}/docs/assets/app-icons/video-editor.ico")
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/cmake/windows_app_icon.rc.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/video_editor_app_icon.rc"
+        @ONLY
+    )
+    target_sources(creative-suite-main-editor PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}/video_editor_app_icon.rc"
+    )
+endif()
 
 install(TARGETS creative-suite-main-editor
     BUNDLE DESTINATION .

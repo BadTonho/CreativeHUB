@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.24)
 
 project(creative_suite LANGUAGES CXX)
 
+if(WIN32)
+    enable_language(RC)
+endif()
+
 include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)

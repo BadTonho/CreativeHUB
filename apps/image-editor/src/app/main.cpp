@@ -3,10 +3,12 @@
 #include <QApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
+#include <QIcon>
 #include <QMessageBox>
 
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
+    application.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
     QCoreApplication::setApplicationName(QStringLiteral("Image Editor"));
     QApplication::setApplicationVersion(QStringLiteral("Beta 0.1.2"));

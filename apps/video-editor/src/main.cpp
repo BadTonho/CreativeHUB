@@ -3,6 +3,7 @@
 #include "logging/logger.h"
 
 #include <QApplication>
+#include <QIcon>
 
 #include <cstdlib>
 #include <exception>
@@ -56,6 +57,7 @@ int main(int argc, char* argv[]) {
 
     try {
         QApplication application(argc, argv);
+        application.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
         QApplication::setApplicationName("Video Editor");
         QApplication::setApplicationVersion("Beta 0.1.3");
 

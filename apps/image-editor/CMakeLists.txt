@@ -1,6 +1,7 @@
 include(GNUInstallDirs)
 
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets)
 
@@ -31,6 +32,7 @@ target_compile_features(creative-suite-image-editor-core PUBLIC cxx_std_20)
 
 add_executable(creative-suite-image-editor
     src/app/main.cpp
+    resources/app_icon.qrc
     src/ui/windows/image_editor_window.cpp
     src/ui/windows/image_editor_window.h
     src/ui/windows/image_export_worker.cpp
@@ -77,6 +79,18 @@ set_target_properties(creative-suite-image-editor PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
+
+if(WIN32)
+    set(APP_ICON_FILE "${CMAKE_SOURCE_DIR}/docs/assets/app-icons/image-editor.ico")
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/cmake/windows_app_icon.rc.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/image_editor_app_icon.rc"
+        @ONLY
+    )
+    target_sources(creative-suite-image-editor PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}/image_editor_app_icon.rc"
+    )
+endif()
 
 install(TARGETS creative-suite-image-editor
     BUNDLE DESTINATION .

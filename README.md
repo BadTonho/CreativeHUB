@@ -18,7 +18,10 @@ macOS, and Linux.
 | <img src="docs/assets/app-icons/image-editor.png" alt="Temporary Image Editor icon" width="56"> | [Image Editor](docs/image-editor/ROADMAP.md) | Beta 0.1.2 | Layered raster editing with `.cimg` documents and PNG/JPEG export. |
 | <img src="docs/assets/app-icons/motion-studio.png" alt="Temporary Motion Studio icon" width="56"> | [Motion Studio](docs/motion-editor/ROADMAP.md) | Planned parallel track | Motion design, animation, and advanced compositing. |
 
-The icons above are temporary placeholders.
+The icons above are temporary placeholders. PNG icons are bundled into the
+Video and Image Editors for their runtime windows; Windows executable icons
+use generated multi-resolution `.ico` files. The Motion Studio icon is ready
+for a future executable target.
 
 The three tracks may be developed in parallel. Video Editor stability remains a
 priority. Cross-application work depends on validated interfaces and regression
@@ -75,7 +78,7 @@ coverage in both the producer and consumer applications.
 3. **Build the application you want:**
    ```bash
    # Video Editor
-   cmake --build build --config Release --target creative-suite-video-editor
+   cmake --build build --config Release --target creative-suite-main-editor
 
    # Image Editor
    cmake --build build --config Release --target creative-suite-image-editor

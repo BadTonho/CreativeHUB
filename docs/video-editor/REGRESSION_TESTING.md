@@ -69,6 +69,8 @@ Automated tests do not replace visual validation. The following must be checked
 in the running Video Editor after UI or integration changes:
 
 - application startup and clean shutdown;
+- on Windows, confirm the temporary Video Editor icon appears for the Release
+  executable in Explorer and for the running window/taskbar;
 - while a project is being prepared, confirm File, Edit, View, and Help remain
   available, project-changing commands are disabled, and the progress dialog
   does not block the rest of the application;
