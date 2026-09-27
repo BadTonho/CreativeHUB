@@ -848,10 +848,35 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool) {
         shape_colors_initialized_ = true;
     }
 
-    canvas_->setPaintMode(tool == ToolSidebar::Tool::Paint && session_.hasSource());
-    canvas_->setEraserMode(tool == ToolSidebar::Tool::Eraser && session_.hasSource());
-    canvas_->setShapeCreationMode(tool == ToolSidebar::Tool::Shapes && session_.hasSource());
-    canvas_->setObjectSelectionMode(tool == ToolSidebar::Tool::Select && session_.hasSource());
+    const bool has_source = session_.hasSource();
+    // Mode setters also update the cursor, so disable the other modes before
+    // enabling the selected one; otherwise a later disable can hide its cursor.
+    if (tool == ToolSidebar::Tool::Paint && has_source) {
+        canvas_->setEraserMode(false);
+        canvas_->setShapeCreationMode(false);
+        canvas_->setObjectSelectionMode(false);
+        canvas_->setPaintMode(true);
+    } else if (tool == ToolSidebar::Tool::Eraser && has_source) {
+        canvas_->setPaintMode(false);
+        canvas_->setShapeCreationMode(false);
+        canvas_->setObjectSelectionMode(false);
+        canvas_->setEraserMode(true);
+    } else if (tool == ToolSidebar::Tool::Shapes && has_source) {
+        canvas_->setPaintMode(false);
+        canvas_->setEraserMode(false);
+        canvas_->setObjectSelectionMode(false);
+        canvas_->setShapeCreationMode(true);
+    } else if (tool == ToolSidebar::Tool::Select && has_source) {
+        canvas_->setPaintMode(false);
+        canvas_->setEraserMode(false);
+        canvas_->setShapeCreationMode(false);
+        canvas_->setObjectSelectionMode(true);
+    } else {
+        canvas_->setPaintMode(false);
+        canvas_->setEraserMode(false);
+        canvas_->setShapeCreationMode(false);
+        canvas_->setObjectSelectionMode(false);
+    }
     canvas_->setShapeStyle(shape_style_);
     canvas_->setEraserPreviewEnabled(eraser_preview_check_->isChecked());
     const int diameter = tool == ToolSidebar::Tool::Eraser

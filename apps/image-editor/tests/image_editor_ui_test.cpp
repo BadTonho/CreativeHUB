@@ -1838,6 +1838,44 @@ int main(int argc, char* argv[]) {
         std::cerr << "Drawing with Background selected did not add a Shape 3 layer above it.\n";
         return 1;
     }
+    auto* linked_paint_button = linked_window.findChild<QToolButton*>(
+        QStringLiteral("paintToolButton"));
+    auto* linked_eraser_button = linked_window.findChild<QToolButton*>(
+        QStringLiteral("eraserToolButton"));
+    QSignalSpy shape_layer_paint_strokes(
+        linked_canvas, &image_editor::ImageCanvas::paintStrokeSelected);
+    QSignalSpy shape_layer_erase_strokes(
+        linked_canvas, &image_editor::ImageCanvas::eraseStrokeSelected);
+    if (linked_paint_button == nullptr || linked_eraser_button == nullptr ||
+        !linked_paint_button->isEnabled() || !linked_eraser_button->isEnabled() ||
+        !linked_paint_action->isEnabled()) {
+        std::cerr << "Creating a shape layer above Background did not enable Paint and Eraser.\n";
+        return 1;
+    }
+    const QPoint brush_start = imagePoint(linked_canvas, QSize(32, 24), QPointF(28, 21));
+    const QPoint brush_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(30, 21));
+    linked_paint_button->click();
+    QCoreApplication::processEvents();
+    QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, brush_start);
+    QTest::mouseMove(linked_canvas, brush_end);
+    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, brush_end);
+    QCoreApplication::processEvents();
+    if (!linked_canvas->paintMode() || linked_canvas->cursor().shape() != Qt::BlankCursor ||
+        shape_layer_paint_strokes.count() != 1) {
+        std::cerr << "Paint did not draw on the newly created shape layer.\n";
+        return 1;
+    }
+    linked_eraser_button->click();
+    QCoreApplication::processEvents();
+    QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, brush_start);
+    QTest::mouseMove(linked_canvas, brush_end);
+    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, brush_end);
+    QCoreApplication::processEvents();
+    if (!linked_canvas->eraserMode() || linked_canvas->cursor().shape() != Qt::BlankCursor ||
+        shape_layer_erase_strokes.count() != 1) {
+        std::cerr << "Eraser did not work on the newly created shape layer.\n";
+        return 1;
+    }
     shape_ellipse_button->click();
     QCoreApplication::processEvents();
     linked_select_shapes_action->trigger();
