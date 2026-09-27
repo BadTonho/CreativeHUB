@@ -719,6 +719,7 @@ int main(int argc, char* argv[]) {
         QStringLiteral("imageEditorToolSidebar"));
     auto* paint_button = window.findChild<QToolButton*>(QStringLiteral("paintToolButton"));
     auto* eraser_button = window.findChild<QToolButton*>(QStringLiteral("eraserToolButton"));
+    auto* shapes_button = window.findChild<QToolButton*>(QStringLiteral("shapesToolButton"));
     auto* color_button = window.findChild<QToolButton*>(QStringLiteral("paintBrushColorButton"));
     auto* tool_options_toolbar = window.findChild<QToolBar*>(
         QStringLiteral("toolOptionsToolBar"));
@@ -734,6 +735,7 @@ int main(int argc, char* argv[]) {
     auto* redo_action = window.findChild<QAction*>(QStringLiteral("redoAction"));
     auto* crop_action = window.findChild<QAction*>(QStringLiteral("cropSelectionAction"));
     if (tool_sidebar == nullptr || paint_button == nullptr || eraser_button == nullptr ||
+        shapes_button == nullptr ||
         color_button == nullptr || tool_size_label == nullptr || eraser_preview == nullptr ||
         tool_options_toolbar == nullptr || paint_options_action == nullptr ||
         paint_size_options == nullptr ||
@@ -1231,8 +1233,52 @@ int main(int argc, char* argv[]) {
     }
     layer_list->setCurrentRow(1);
     QCoreApplication::processEvents();
-    if (paint_button->isEnabled() || opacity_slider->isEnabled()) {
+    if (paint_button->isEnabled() || eraser_button->isEnabled() ||
+        !shapes_button->isEnabled() || !shapes_tool_action->isEnabled() ||
+        opacity_slider->isEnabled()) {
         std::cerr << "The panel did not lock editing controls for Background.\n";
+        return 1;
+    }
+    shapes_tool_action->trigger();
+    QCoreApplication::processEvents();
+    if (tool_sidebar->activeTool() != image_editor::ToolSidebar::Tool::Shapes ||
+        !shapes_button->isChecked()) {
+        std::cerr << "Shapes could not remain active with Background selected.\n";
+        return 1;
+    }
+    const auto canvasPoint = [](image_editor::ImageCanvas* target,
+                                const QSize& image_size,
+                                const QPointF& point) {
+        const qreal zoom = target->zoomFactor();
+        return QPoint(qRound((target->width() - image_size.width() * zoom) / 2.0 +
+                             point.x() * zoom),
+                      qRound((target->height() - image_size.height() * zoom) / 2.0 +
+                             point.y() * zoom));
+    };
+    const QPoint background_shape_start = canvasPoint(canvas, QSize(100, 80), QPointF(70, 55));
+    const QPoint background_shape_end = canvasPoint(canvas, QSize(100, 80), QPointF(85, 70));
+    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, background_shape_start);
+    QTest::mouseMove(canvas, background_shape_end);
+    QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, background_shape_end);
+    QCoreApplication::processEvents();
+    if (layer_list->count() != 3 || layer_list->currentRow() != 1 ||
+        layer_list->currentItem() == nullptr ||
+        layer_list->currentItem()->text() != QStringLiteral("Shape 1")) {
+        std::cerr << "Drawing with Background selected did not insert Shape 1 above it.\n";
+        return 1;
+    }
+    undo_action->trigger();
+    if (layer_list->count() != 2 || layer_list->currentRow() != 1 ||
+        layer_list->currentItem() == nullptr ||
+        layer_list->currentItem()->text() != QStringLiteral("Background")) {
+        std::cerr << "Undo did not remove the new shape layer and restore Background selection.\n";
+        return 1;
+    }
+    redo_action->trigger();
+    if (layer_list->count() != 3 || layer_list->currentRow() != 1 ||
+        layer_list->currentItem() == nullptr ||
+        layer_list->currentItem()->text() != QStringLiteral("Shape 1")) {
+        std::cerr << "Redo did not restore the shape layer and its selection.\n";
         return 1;
     }
 
@@ -1482,6 +1528,12 @@ int main(int argc, char* argv[]) {
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::ShiftModifier, shape_end);
     QTest::keyRelease(linked_canvas, Qt::Key_Shift);
     QCoreApplication::processEvents();
+    if (linked_layer_list->count() != 3 || linked_layer_list->currentRow() != 0 ||
+        linked_layer_list->currentItem() == nullptr ||
+        linked_layer_list->currentItem()->text() != QStringLiteral("Shape 1")) {
+        std::cerr << "The first shape did not create and select its own Shape 1 layer.\n";
+        return 1;
+    }
     auto* add_shape_layer = linked_window.findChild<QToolButton*>(
         QStringLiteral("addImageLayerButton"));
     if (add_shape_layer == nullptr) return 1;
@@ -1493,6 +1545,39 @@ int main(int argc, char* argv[]) {
     QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, ellipse_start);
     QTest::mouseMove(linked_canvas, ellipse_end);
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, ellipse_end);
+    QCoreApplication::processEvents();
+    if (linked_layer_list->count() != 5 || linked_layer_list->currentRow() != 0 ||
+        linked_layer_list->currentItem() == nullptr ||
+        linked_layer_list->currentItem()->text() != QStringLiteral("Shape 2")) {
+        std::cerr << "The ellipse did not create and select its own Shape 2 layer.\n";
+        return 1;
+    }
+    auto* linked_eraser_action = linked_window.findChild<QAction*>(
+        QStringLiteral("eraserToolAction"));
+    linked_layer_list->setCurrentRow(linked_layer_list->count() - 1);
+    QCoreApplication::processEvents();
+    if (linked_eraser_action == nullptr || linked_paint_action->isEnabled() ||
+        linked_eraser_action->isEnabled() || !linked_shapes_action->isEnabled() ||
+        linked_tool_sidebar->activeTool() != image_editor::ToolSidebar::Tool::Shapes) {
+        std::cerr << "Selecting Background did not leave Shapes available while locking Paint and Eraser.\n";
+        return 1;
+    }
+    shape_line_button->click();
+    const QPoint background_line_start = imagePoint(
+        linked_canvas, QSize(32, 24), QPointF(1, 20));
+    const QPoint background_line_end = imagePoint(
+        linked_canvas, QSize(32, 24), QPointF(5, 20));
+    QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, background_line_start);
+    QTest::mouseMove(linked_canvas, background_line_end);
+    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, background_line_end);
+    QCoreApplication::processEvents();
+    if (linked_layer_list->count() != 6 || linked_layer_list->currentRow() != 4 ||
+        linked_layer_list->currentItem() == nullptr ||
+        linked_layer_list->currentItem()->text() != QStringLiteral("Shape 3")) {
+        std::cerr << "Drawing with Background selected did not add a Shape 3 layer above it.\n";
+        return 1;
+    }
+    shape_ellipse_button->click();
     QCoreApplication::processEvents();
     linked_select_shapes_action->trigger();
     QCoreApplication::processEvents();
@@ -1543,19 +1628,32 @@ int main(int argc, char* argv[]) {
     if (!shape_document_file.open(QIODevice::ReadOnly)) return 1;
     const QJsonObject shape_document_json =
         QJsonDocument::fromJson(shape_document_file.readAll()).object();
-    const auto shape_operations = shape_document_json.value("layers").toArray()
-        .at(1).toObject().value("operations").toArray();
-    const QJsonObject persisted_shape = shape_operations.isEmpty()
-        ? QJsonObject{} : shape_operations.at(shape_operations.size() - 1).toObject();
-    if (shape_document_json.value("version").toInt() != 7 || shape_operations.isEmpty() ||
+    QJsonObject persisted_shape_layer;
+    QJsonObject persisted_shape;
+    for (const QJsonValue& layer_value : shape_document_json.value("layers").toArray()) {
+        const QJsonObject layer_object = layer_value.toObject();
+        const auto layer_operations = layer_object.value("operations").toArray();
+        for (const QJsonValue& operation_value : layer_operations) {
+            const QJsonObject operation_object = operation_value.toObject();
+            if (operation_object.value("kind").toString() == "shape" &&
+                qRound(operation_object.value("start_x").toDouble()) == 21 &&
+                qRound(operation_object.value("end_x").toDouble()) == 30 &&
+                qRound(operation_object.value("end_y").toDouble()) == 13) {
+                persisted_shape_layer = layer_object;
+                persisted_shape = operation_object;
+            }
+        }
+    }
+    if (shape_document_json.value("version").toInt() != 7 ||
+        persisted_shape_layer.isEmpty() ||
+        !persisted_shape_layer.value("name").toString().startsWith("Shape ") ||
+        persisted_shape_layer.value("operations").toArray().size() != 1 ||
         persisted_shape.value("kind").toString() != "shape" ||
-        qRound(persisted_shape.value("start_x").toDouble()) != 21 ||
-        qRound(persisted_shape.value("end_x").toDouble()) != 30 ||
-        qRound(persisted_shape.value("end_y").toDouble()) != 13 ||
         persisted_shape.value("fill_enabled").toBool()) {
-        std::cerr << "Shape creation, aspect-preserving resize, or style edits were not persisted in v7: version="
+        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in v7: version="
                   << shape_document_json.value("version").toInt()
-                  << " operations=" << shape_operations.size()
+                  << " operations=" << persisted_shape_layer.value("operations").toArray().size()
+                  << " layer=" << persisted_shape_layer.value("name").toString().toStdString()
                   << " kind=" << persisted_shape.value("kind").toString().toStdString()
                   << " geometry=" << persisted_shape.value("start_x").toDouble() << ","
                   << persisted_shape.value("start_y").toDouble() << " to "

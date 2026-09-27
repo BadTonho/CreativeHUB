@@ -104,8 +104,12 @@ persistence, and recovery.
   current shape type and activate Shapes; tooltips and accessible names identify
   each choice. The palette stays open while drawing and is hidden by its close
   button. Reopening it retains its position and current type. The Shapes
-  shortcut activates the current type without opening the palette. Stroke and
-  fill controls edit all selected shapes.
+  shortcut activates the current type without opening the palette. Each
+  completed shape creates and selects a new editable `Shape N` layer directly
+  above the selected layer, including Background; the new layer contains only
+  that shape. Shape creation and layer insertion are one Undo/Redo edit. Shapes
+  remains available with Background selected, while Paint and Eraser require
+  an editable layer. Stroke and fill controls edit all selected shapes.
   Paint and Eraser sizes are independent and start at 12 px. Shape defaults are
   Rectangle, enabled stroke and fill using the current Paint color, and a 2 px
   stroke. Shape options are session-only and are not stored in `.cimg`. The
@@ -120,10 +124,11 @@ persistence, and recovery.
   previews by source and content, so selection and visibility changes do not
   rerender them. Background
   remains fixed at the bottom, with visibility as its only editable property.
-  Selecting Background disables Paint, Eraser, Shapes, and layer transforms,
-  and explains that an editable layer is required. Selection remains available
-  to select objects on other visible layers. Opacity slider drags are
-  grouped into one undo entry.
+  Selecting Background disables Paint, Eraser, and layer transforms. Its hint
+  explains that Shapes creates a separate editable layer for each object.
+  Shapes and Selection remain available; shapes created with Background
+  selected are inserted immediately above it. Opacity slider drags are grouped
+  into one undo entry.
 - `ImageEditorWindow` routes menu and sidebar actions, prompts before discarding
   edits, and projects session state into the window. A completed paint gesture
   is one undoable document operation; changing tools does not modify the image.
@@ -134,8 +139,9 @@ persistence, and recovery.
   in-progress shape. Shapes, Selection, and Delete Selected Objects have no
   default shortcut. The Selection and delete actions keep their existing
   settings keys so user-assigned shortcuts survive the rename. Duplicate
-  assignments are rejected. Paint, Eraser, and Shapes require an editable
-  layer; Selection remains available with Background selected. The fixed
+  assignments are rejected. Paint and Eraser require an editable layer; Shapes
+  creates a new layer above the selected layer, and Selection remains
+  available with Background selected. The fixed
   tool-size mouse gesture is documented separately and is not part of the
   keyboard shortcut preferences.
 - In standalone mode, the window opens and saves `.cimg` documents normally. A

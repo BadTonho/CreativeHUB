@@ -78,6 +78,14 @@ layers remain. New documents start with `Background` and a transparent
 `Layer 1`. The Background can be hidden, but cannot be renamed, reordered,
 deleted, painted, transformed, or given a different opacity.
 
+When a user draws a shape, the editor stores it in a new editable raster layer
+named `Shape N`, inserted immediately above the selected layer. This also works
+with Background selected; Background itself remains locked. Each generated
+shape layer contains only the new shape, so its visibility, opacity, and
+Quick Export output can be controlled independently. This uses the existing
+layer structure and does not change the `.cimg` version or migrate shapes
+already stored in other layers.
+
 ## Operations
 
 The top-level `operations` array preserves the ordered, non-destructive edits

@@ -247,7 +247,8 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     connect(layer_panel_, &LayerPanel::layerSelected, this, [this](const QString& id) {
         if (!session_.selectLayer(id)) return;
         if (!session_.selectedLayerIsEditable() &&
-            tool_sidebar_->activeTool() != ToolSidebar::Tool::Select) {
+            tool_sidebar_->activeTool() != ToolSidebar::Tool::Select &&
+            tool_sidebar_->activeTool() != ToolSidebar::Tool::Shapes) {
             deactivateCanvasTools();
         }
         updateView(true);
@@ -279,7 +280,8 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             [this](const QString& id) {
                 if (!session_.deleteLayer(id)) return;
                 if (!session_.selectedLayerIsEditable() &&
-                    tool_sidebar_->activeTool() != ToolSidebar::Tool::Select) {
+                    tool_sidebar_->activeTool() != ToolSidebar::Tool::Select &&
+                    tool_sidebar_->activeTool() != ToolSidebar::Tool::Shapes) {
                     deactivateCanvasTools();
                 }
                 updateView(true);
@@ -629,7 +631,7 @@ void ImageEditorWindow::updateShapeOptions() {
 
 void ImageEditorWindow::updateShapePalette() {
     if (shape_palette_button_group_ == nullptr) return;
-    const bool enabled = session_.hasSource() && session_.selectedLayerIsEditable();
+    const bool enabled = session_.hasSource();
     for (auto* button : shape_palette_buttons_) {
         if (button != nullptr) button->setEnabled(enabled);
     }
@@ -720,6 +722,12 @@ void ImageEditorWindow::applyShapeStyleToSelection(bool include_kind) {
 }
 
 void ImageEditorWindow::handleShapeCreated(const ImageShapeData& shape) {
+    if (session_.data().layers.size() >= ImageDocumentStore::kMaximumLayers) {
+        statusBar()->showMessage(
+            QStringLiteral("Cannot create a shape: the 512-layer limit has been reached."),
+            4000);
+        return;
+    }
     QString error;
     const QString id = session_.addShape(shape, &error);
     if (id.isEmpty()) {
@@ -1145,7 +1153,7 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     cancel_crop_action_->setEnabled(crop_action_->isChecked() && selected_layer_editable);
     paint_tool_action_->setEnabled(selected_layer_editable);
     eraser_tool_action_->setEnabled(selected_layer_editable);
-    shapes_tool_action_->setEnabled(selected_layer_editable);
+    shapes_tool_action_->setEnabled(session_.hasSource());
     select_tool_action_->setEnabled(session_.hasSource());
     delete_objects_action_->setEnabled(!selected_object_ids_.isEmpty() &&
         tool_sidebar_->activeTool() == ToolSidebar::Tool::Select);

@@ -200,7 +200,9 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
 
 void ToolSidebar::setDocumentAvailable(bool available) {
     document_available_ = available;
-    if (!document_available_ || (active_tool_ != Tool::Select && !painting_allowed_)) {
+    if (!document_available_ ||
+        (!painting_allowed_ &&
+         (active_tool_ == Tool::Paint || active_tool_ == Tool::Eraser))) {
         setActiveTool(Tool::None);
     }
     updateControls();
@@ -208,7 +210,10 @@ void ToolSidebar::setDocumentAvailable(bool available) {
 
 void ToolSidebar::setPaintingAllowed(bool allowed) {
     painting_allowed_ = allowed;
-    if (!painting_allowed_ && active_tool_ != Tool::Select) setActiveTool(Tool::None);
+    if (!painting_allowed_ &&
+        (active_tool_ == Tool::Paint || active_tool_ == Tool::Eraser)) {
+        setActiveTool(Tool::None);
+    }
     updateControls();
 }
 
@@ -233,8 +238,10 @@ void ToolSidebar::setSelectToolActive(bool active) {
 }
 
 void ToolSidebar::setActiveTool(Tool tool) {
-    if (!document_available_ || (tool != Tool::None && tool != Tool::Select &&
-                                 !painting_allowed_)) tool = Tool::None;
+    const bool requires_editable_layer = tool == Tool::Paint || tool == Tool::Eraser;
+    if (!document_available_ || (requires_editable_layer && !painting_allowed_)) {
+        tool = Tool::None;
+    }
     const bool changed = active_tool_ != tool;
     active_tool_ = tool;
     {
@@ -272,17 +279,17 @@ QColor ToolSidebar::brushColor() const {
 }
 
 void ToolSidebar::updateControls() {
-    const bool enabled = document_available_ && painting_allowed_;
-    paint_button_->setEnabled(enabled);
-    eraser_button_->setEnabled(enabled);
-    shapes_button_->setEnabled(enabled);
+    const bool editable_layer_available = document_available_ && painting_allowed_;
+    paint_button_->setEnabled(editable_layer_available);
+    eraser_button_->setEnabled(editable_layer_available);
+    shapes_button_->setEnabled(document_available_);
     select_shapes_button_->setEnabled(document_available_);
-    paint_button_->setToolTip(enabled
+    paint_button_->setToolTip(editable_layer_available
         ? QStringLiteral("Paint")
         : (document_available_
             ? QStringLiteral("Select or create an editable layer to paint")
             : QStringLiteral("Open an image to paint")));
-    eraser_button_->setToolTip(enabled
+    eraser_button_->setToolTip(editable_layer_available
         ? QStringLiteral("Eraser")
         : (document_available_
             ? QStringLiteral("Select or create an editable layer to erase")
@@ -290,6 +297,9 @@ void ToolSidebar::updateControls() {
     select_shapes_button_->setToolTip(document_available_
         ? QStringLiteral("Selection")
         : QStringLiteral("Open an image to use Selection"));
+    shapes_button_->setToolTip(document_available_
+        ? QStringLiteral("Shapes")
+        : QStringLiteral("Open an image to use Shapes"));
     color_button_->setEnabled(true);
 }
 

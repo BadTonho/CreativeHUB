@@ -1207,8 +1207,9 @@ QString ImageDocumentSession::addShape(ImageShapeData shape, QString* error) {
         assignError(error, QStringLiteral("Open or relink an image before creating a shape."));
         return {};
     }
-    if (!selectedLayerIsEditable()) {
-        assignError(error, QStringLiteral("Select an editable layer before creating a shape."));
+    if (data_.layers.size() >= ImageDocumentStore::kMaximumLayers) {
+        assignError(error, QStringLiteral(
+            "The document has reached the maximum of 512 layers."));
         return {};
     }
     if (shape.id.isEmpty()) shape.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -1224,11 +1225,32 @@ QString ImageDocumentSession::addShape(ImageShapeData shape, QString* error) {
     }
 
     const QString shape_id = shape.id;
-    pushEdit();
+    int suffix = 1;
+    QString layer_name;
+    const auto nameExists = [this](const QString& candidate) {
+        return std::any_of(data_.layers.cbegin(), data_.layers.cend(),
+            [&candidate](const ImageLayerData& layer) {
+                return layer.name.compare(candidate, Qt::CaseInsensitive) == 0;
+            });
+    };
+    do {
+        layer_name = QStringLiteral("Shape %1").arg(suffix++);
+    } while (nameExists(layer_name));
+
+    ImageLayerData shape_layer;
+    shape_layer.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    shape_layer.name = layer_name;
     ImageOperation operation;
     operation.kind = OperationKind::Shape;
     operation.shape = std::move(shape);
-    data_.layers[layerIndex(selected_layer_id_)].operations.append(std::move(operation));
+
+    const qsizetype selected_index = layerIndex(selected_layer_id_);
+    const qsizetype insertion_index = selected_index < 0
+        ? data_.layers.size() : selected_index + 1;
+    pushEdit();
+    data_.layers.insert(insertion_index, std::move(shape_layer));
+    selected_layer_id_ = data_.layers.at(insertion_index).id;
+    data_.layers[insertion_index].operations.append(std::move(operation));
     layer_thumbnail_cache_.clear();
     return shape_id;
 }

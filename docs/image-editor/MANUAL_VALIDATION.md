@@ -134,7 +134,7 @@ run.
 
 ### Editable shapes and general object selection
 
-1. On an editable layer, click **Shapes**. Confirm a movable palette opens next
+1. Click **Shapes**. Confirm a movable palette opens next
    to the button with icon-only Line, Rectangle, and Ellipse choices, and that
    hovering each icon identifies its shape. Confirm Rectangle is selected
    initially, and stroke and fill are enabled with the current Paint color at
@@ -145,6 +145,13 @@ run.
    with its window close button and confirm Shapes and the selected type remain
    active. Click **Shapes** again and confirm the palette reopens at its moved
    position with the current type selected.
+   Draw a line, rectangle, and ellipse and confirm each creates a separately
+   selected `Shape N` layer directly above the selected layer. Select Background
+   and draw another shape; confirm Shapes remains available, the new layer is
+   inserted above Background, and Paint and Eraser remain disabled there.
+   Change each shape layer's visibility and opacity independently, then use
+   Quick Export on a selected shape layer and confirm it contains only that
+   shape over the full canvas bounds.
 2. Assign a shortcut to Shapes in **Settings > Keyboard Shortcuts**. Choose
    Ellipse in the palette, close it, and trigger the Shapes shortcut. Confirm
    Ellipse drawing activates without reopening the palette.

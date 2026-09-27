@@ -707,11 +707,23 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     rectangle.fill_color = QColor(10, 210, 40, 160);
     QString rectangle_id = session.addShape(rectangle, &error);
     require(!rectangle_id.isEmpty(), error);
+    QString rectangle_layer;
+    require(session.findShape(rectangle_id, nullptr, &rectangle_layer) &&
+                session.data().layers.size() == 3 &&
+                session.data().layers.at(2).name == QStringLiteral("Shape 1") &&
+                session.data().layers.at(2).operations.size() == 1 &&
+                session.selectedLayerId() == rectangle_layer,
+            QStringLiteral("Creating a shape did not add and select its own Shape 1 layer."));
     require(session.renderedImage().pixelColor(12, 12) == QColor(10, 210, 40, 160),
             QStringLiteral("The rectangle fill was not rendered with its alpha."));
-    require(session.undo() && session.renderedImage().pixelColor(12, 12).alpha() == 0 &&
-                session.redo() && session.renderedImage().pixelColor(12, 12).alpha() == 160,
-            QStringLiteral("Shape creation was not one undoable edit."));
+    const QString original_layer = session.data().layers.at(1).id;
+    require(session.undo() && session.data().layers.size() == 2 &&
+                session.selectedLayerId() == original_layer &&
+                session.renderedImage().pixelColor(12, 12).alpha() == 0 &&
+                session.redo() && session.data().layers.size() == 3 &&
+                session.selectedLayerId() == rectangle_layer &&
+                session.renderedImage().pixelColor(12, 12).alpha() == 160,
+            QStringLiteral("Shape layer creation was not one undoable edit."));
 
     const QString lower_layer = session.selectedLayerId();
     const QString upper_layer = session.addLayer();
@@ -724,6 +736,12 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     ellipse.fill_color = QColor(20, 60, 240, 210);
     const QString ellipse_id = session.addShape(ellipse, &error);
     require(!ellipse_id.isEmpty(), error);
+    QString ellipse_layer;
+    require(session.findShape(ellipse_id, nullptr, &ellipse_layer) &&
+                ellipse_layer != rectangle_layer &&
+                session.data().layers.at(4).name == QStringLiteral("Shape 2") &&
+                session.selectedLayerId() == ellipse_layer,
+            QStringLiteral("The ellipse did not receive its own numbered layer."));
     image_editor::ImageShapeData line;
     line.kind = image_editor::ImageShapeKind::Line;
     line.start = QPointF(4, 35);
@@ -732,6 +750,12 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     line.fill_enabled = false;
     const QString line_id = session.addShape(line, &error);
     require(!line_id.isEmpty(), error);
+    QString line_layer;
+    require(session.findShape(line_id, nullptr, &line_layer) &&
+                line_layer != rectangle_layer && line_layer != ellipse_layer &&
+                session.data().layers.at(5).name == QStringLiteral("Shape 3") &&
+                session.selectedLayerId() == line_layer,
+            QStringLiteral("The line did not receive a distinct selected layer."));
     const QImage rendered = session.renderedImage();
     require(rendered.size() == QSize(64, 48) &&
                 rendered.pixelColor(45, 15).blue() > 200 &&
@@ -746,15 +770,23 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     require(placements.size() == 3 && placements.front().shape.id == line_id &&
                 placements.at(1).shape.id == ellipse_id &&
                 placements.back().shape.id == rectangle_id &&
-                placements.front().layer_id == upper_layer,
+                placements.front().layer_id == line_layer &&
+                placements.at(1).layer_id == ellipse_layer &&
+                placements.back().layer_id == rectangle_layer,
             QStringLiteral("Visible shapes were not enumerated in top-to-bottom order."));
-    require(session.setLayerOpacity(upper_layer, 0) &&
-                session.visibleShapes().size() == 1 &&
+    require(session.setLayerOpacity(line_layer, 0) &&
+                session.visibleShapes().size() == 2 &&
                 session.undo() && session.visibleShapes().size() == 3,
             QStringLiteral("Zero-opacity shapes remained available for selection."));
-    require(session.setLayerVisible(upper_layer, false) &&
-                session.visibleShapes().size() == 1 &&
-                session.visibleShapes().front().shape.id == rectangle_id,
+    require(session.setLayerVisible(ellipse_layer, false),
+            QStringLiteral("Could not hide the ellipse layer."));
+    const auto shapes_with_hidden_ellipse = session.visibleShapes();
+    require(shapes_with_hidden_ellipse.size() == 2 &&
+                std::none_of(shapes_with_hidden_ellipse.cbegin(),
+                    shapes_with_hidden_ellipse.cend(),
+                    [&ellipse_id](const image_editor::ImageShapePlacement& placement) {
+                        return placement.shape.id == ellipse_id;
+                    }),
             QStringLiteral("Hidden-layer shapes remained available for selection."));
     require(session.undo() && session.visibleShapes().size() == 3,
             QStringLiteral("Undo did not restore shape visibility for selection."));
@@ -789,6 +821,8 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
 
     image_editor::ImageExportOptions selected_options;
     selected_options.scope = image_editor::ImageExportScope::SelectedLayer;
+    require(session.selectLayer(ellipse_layer),
+            QStringLiteral("Could not select the ellipse layer for Quick Export."));
     const QString selected_path = root + QStringLiteral("/selected-shapes.png");
     require(session.exportImage(selected_path, selected_options, &error), error);
     const QImage selected_export(selected_path);
@@ -804,11 +838,18 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
             QStringLiteral("The version 7 shape document could not be read."));
     QJsonObject document_json = QJsonDocument::fromJson(document_file.readAll()).object();
     document_file.close();
+    const auto saved_layers = document_json.value("layers").toArray();
+    const auto saved_rectangle_layer = std::find_if(
+        saved_layers.cbegin(), saved_layers.cend(), [&rectangle_layer](const QJsonValue& value) {
+            return value.toObject().value("id").toString() == rectangle_layer;
+        });
     require(document_json.value("version").toInt() == 7 &&
-                document_json.value("layers").toArray().at(1).toObject()
-                    .value("operations").toArray().at(0).toObject()
-                    .value("kind").toString() == "shape",
-            QStringLiteral("Shapes were not stored in the version 7 operation sequence."));
+                saved_rectangle_layer != saved_layers.cend() &&
+                (*saved_rectangle_layer).toObject().value("name").toString() == "Shape 1" &&
+                (*saved_rectangle_layer).toObject().value("operations").toArray().size() == 1 &&
+                (*saved_rectangle_layer).toObject().value("operations").toArray().at(0)
+                    .toObject().value("kind").toString() == "shape",
+            QStringLiteral("Shapes were not stored in individual v7 layer operation sequences."));
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error) &&
                 reopened.data() == session.data() && reopened.renderedImage() == session.renderedImage(),
@@ -817,12 +858,11 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     QJsonObject version_five = document_json;
     version_five.insert("version", 5);
     auto old_layers = version_five.value("layers").toArray();
-    auto lower = old_layers.at(1).toObject();
-    lower.insert("operations", QJsonArray{});
-    old_layers.replace(1, lower);
-    auto upper = old_layers.at(2).toObject();
-    upper.insert("operations", QJsonArray{});
-    old_layers.replace(2, upper);
+    for (qsizetype index = 1; index < old_layers.size(); ++index) {
+        auto layer = old_layers.at(index).toObject();
+        layer.insert("operations", QJsonArray{});
+        old_layers.replace(index, layer);
+    }
     version_five.insert("layers", old_layers);
     const QString v5_path = root + QStringLiteral("/shapes-v5-compatible.cimg");
     QFile v5_file(v5_path);
@@ -834,6 +874,72 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     require(v5_reopened.openDocument(v5_path, &error) &&
                 v5_reopened.visibleShapes().isEmpty(),
             QStringLiteral("A v5 document did not load with its pre-shape appearance."));
+
+    image_editor::ImageDocumentSession background_shape_session;
+    require(background_shape_session.createCanvas(
+                QSize(16, 16), QColor(0, 0, 0, 0), &error), error);
+    const QString background_id = background_shape_session.data().layers.front().id;
+    require(background_shape_session.selectLayer(background_id),
+            QStringLiteral("Could not select Background before creating a shape."));
+    image_editor::ImageShapeData background_shape;
+    background_shape.start = QPointF(3, 3);
+    background_shape.end = QPointF(12, 12);
+    const QString background_shape_id = background_shape_session.addShape(background_shape, &error);
+    QString background_shape_layer;
+    require(!background_shape_id.isEmpty() &&
+                background_shape_session.findShape(
+                    background_shape_id, nullptr, &background_shape_layer) &&
+                background_shape_session.data().layers.size() == 3 &&
+                background_shape_session.data().layers.at(1).name == QStringLiteral("Shape 1") &&
+                background_shape_session.data().layers.at(1).operations.size() == 1 &&
+                background_shape_session.selectedLayerId() == background_shape_layer &&
+                background_shape_session.selectedLayerIsEditable(),
+            QStringLiteral("A shape drawn with Background selected was not inserted above it."));
+    require(background_shape_session.undo() &&
+                background_shape_session.data().layers.size() == 2 &&
+                background_shape_session.selectedLayerId() == background_id &&
+                background_shape_session.redo() &&
+                background_shape_session.data().layers.size() == 3 &&
+                background_shape_session.selectedLayerId() == background_shape_layer,
+            QStringLiteral("Undo/Redo did not restore Background-anchored shape layer creation."));
+
+    image_editor::ImageDocumentSession name_collision_session;
+    require(name_collision_session.createCanvas(QSize(16, 16), Qt::transparent, &error), error);
+    const QString named_anchor = name_collision_session.selectedLayerId();
+    require(name_collision_session.renameLayer(named_anchor, QStringLiteral("shape 1"), &error),
+            error);
+    image_editor::ImageShapeData collision_shape;
+    collision_shape.start = QPointF(2, 2);
+    collision_shape.end = QPointF(8, 8);
+    const QString collision_shape_id = name_collision_session.addShape(collision_shape, &error);
+    QString collision_shape_layer;
+    require(!collision_shape_id.isEmpty() &&
+                name_collision_session.findShape(
+                    collision_shape_id, nullptr, &collision_shape_layer) &&
+                name_collision_session.data().layers.at(2).name == QStringLiteral("Shape 2") &&
+                name_collision_session.selectedLayerId() == collision_shape_layer,
+            QStringLiteral("Shape-layer naming collided with an existing user layer."));
+
+    image_editor::ImageDocumentSession full_layer_session;
+    require(full_layer_session.createCanvas(QSize(16, 16), Qt::transparent, &error), error);
+    for (qsizetype count = full_layer_session.data().layers.size();
+         count < image_editor::ImageDocumentStore::kMaximumLayers; ++count) {
+        require(!full_layer_session.addLayer().isEmpty(),
+                QStringLiteral("Could not fill the document to the layer limit."));
+    }
+    const auto document_at_layer_limit = full_layer_session.data();
+    const QString selection_at_layer_limit = full_layer_session.selectedLayerId();
+    const bool can_undo_at_layer_limit = full_layer_session.canUndo();
+    const bool can_redo_at_layer_limit = full_layer_session.canRedo();
+    image_editor::ImageShapeData limit_shape;
+    limit_shape.start = QPointF(2, 2);
+    limit_shape.end = QPointF(8, 8);
+    require(full_layer_session.addShape(limit_shape, &error).isEmpty() && !error.isEmpty() &&
+                full_layer_session.data() == document_at_layer_limit &&
+                full_layer_session.selectedLayerId() == selection_at_layer_limit &&
+                full_layer_session.canUndo() == can_undo_at_layer_limit &&
+                full_layer_session.canRedo() == can_redo_at_layer_limit,
+            QStringLiteral("The layer limit changed the document or selection."));
 
     image_editor::RecoveryStore recovery(root + QStringLiteral("/shape-recovery"));
     require(session.setLayerOpacity(upper_layer, 75),
@@ -902,8 +1008,8 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     require(ordered.renderedImage().pixelColor(8, 8) == QColor(Qt::blue),
             QStringLiteral("A later shape did not render above an earlier paint stroke."));
     require(ordered.applyEraseStroke({QPointF(8, 8)}, 5, &error), error);
-    require(ordered.renderedImage().pixelColor(8, 8).alpha() == 0,
-            QStringLiteral("A later eraser operation did not clear an earlier shape."));
+    require(ordered.renderedImage().pixelColor(8, 8).red() > 200,
+            QStringLiteral("Erasing the shape layer did not reveal the lower paint layer."));
     image_editor::ImageShapeData top_mark;
     top_mark.start = QPointF(7, 7);
     top_mark.end = QPointF(9, 9);
@@ -984,12 +1090,18 @@ void testGeneralObjectOperations(const QString& root) {
     first_shape.fill_color = Qt::blue;
     const QString first_shape_id = session.addShape(first_shape, &error);
     require(!first_shape_id.isEmpty(), error);
-    const QString second_layer = session.addLayer();
+    QString first_shape_layer;
+    require(session.findShape(first_shape_id, nullptr, &first_shape_layer),
+            QStringLiteral("The first object-selection shape layer was not created."));
     image_editor::ImageShapeData second_shape = first_shape;
     second_shape.start = QPointF(35, 30);
     second_shape.end = QPointF(46, 41);
     const QString second_shape_id = session.addShape(second_shape, &error);
     require(!second_shape_id.isEmpty(), error);
+    QString second_shape_layer;
+    require(session.findShape(second_shape_id, nullptr, &second_shape_layer) &&
+                second_shape_layer != first_shape_layer,
+            QStringLiteral("The second object-selection shape did not receive its own layer."));
     image_editor::ImageShapeData line_shape;
     line_shape.kind = image_editor::ImageShapeKind::Line;
     line_shape.start = QPointF(20, 30);
@@ -997,6 +1109,11 @@ void testGeneralObjectOperations(const QString& root) {
     line_shape.fill_enabled = false;
     const QString line_shape_id = session.addShape(line_shape, &error);
     require(!line_shape_id.isEmpty(), error);
+    QString line_shape_layer;
+    require(session.findShape(line_shape_id, nullptr, &line_shape_layer) &&
+                line_shape_layer != first_shape_layer &&
+                line_shape_layer != second_shape_layer,
+            QStringLiteral("The line object-selection shape did not receive its own layer."));
     image_editor::ImageShapeData style = first_shape;
     style.stroke_color = Qt::green;
     style.fill_color = QColor(20, 220, 80);
@@ -1030,7 +1147,7 @@ void testGeneralObjectOperations(const QString& root) {
                 session.redo(),
             QStringLiteral("Multi-shape style editing did not create one Undo/Redo entry."));
 
-    require(session.setLayerVisible(second_layer, false),
+    require(session.setLayerVisible(second_shape_layer, false),
             QStringLiteral("Could not hide the second object layer."));
     const auto hidden_objects = session.visibleObjects();
     require(std::none_of(hidden_objects.cbegin(), hidden_objects.cend(),

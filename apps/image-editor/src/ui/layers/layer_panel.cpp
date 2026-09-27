@@ -171,7 +171,9 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     edit_hint_ = new QLabel(this);
     edit_hint_->setObjectName(QStringLiteral("layerEditingHint"));
     edit_hint_->setWordWrap(true);
-    edit_hint_->setText(QStringLiteral("Select or create an editable layer to paint or transform."));
+    edit_hint_->setText(QStringLiteral(
+        "Background is locked. Select an editable layer to paint or transform; "
+        "Shapes creates a separate layer for each object."));
     layout->addWidget(edit_hint_);
 
     auto* actions = new QHBoxLayout;

@@ -63,6 +63,9 @@ of Motion Studio in the application sequence.
 - [x] Add editable line, rectangle, and ellipse operations with creation,
   selection across visible layers, movement, resizing, style editing, deletion,
   Undo/Redo, and `.cimg` v6 persistence while retaining v1–v5 compatibility.
+  New shapes each receive a dedicated `Shape N` layer using the existing v7
+  layer structure; Background can be the insertion anchor without becoming
+  editable.
 - [x] Add general multi-selection for paint, eraser, and shape operations,
   including marquee selection, grouped movement and scaling, and `.cimg` v7
   persistent object IDs while retaining visual compatibility with v1–v6.
