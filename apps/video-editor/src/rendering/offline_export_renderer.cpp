@@ -2,6 +2,7 @@
 
 #include "logging/logger.h"
 #include "media/audio_playback.h"
+#include "media/timeline_audio_mix.h"
 #include "media/still_image_decoder.h"
 #include "media/video_playback.h"
 #include "media/video_probe.h"
@@ -718,78 +719,82 @@ std::int64_t timelineDuration(const project::ProjectDocument& document) {
     return duration;
 }
 
+std::vector<media::TimelineAudioMixClip> audioMixClips(
+    const std::vector<RenderClip>& clips) {
+    std::vector<media::TimelineAudioMixClip> result;
+    result.reserve(clips.size());
+    for (std::size_t index = 0; index < clips.size(); ++index) {
+        const auto& render_clip = clips[index];
+        const auto& clip = *render_clip.clip;
+        result.push_back(media::TimelineAudioMixClip{
+            index,
+            static_cast<std::int64_t>(render_clip.track_index),
+            static_cast<std::int64_t>(render_clip.clip_index),
+            clip.kind,
+            render_clip.audio != nullptr && render_clip.audio->has_audio(),
+            clip.timeline_start_frame,
+            clip.duration_frames,
+            clip.source_start_frame,
+            render_clip.source_fps,
+            render_clip.track->audio_gain,
+            clip.audio_gain,
+            render_clip.track->audio_muted,
+            clip.audio_muted});
+    }
+    return result;
+}
+
+std::vector<media::TimelineAudioMixTransition> audioMixTransitions(
+    const std::vector<RenderTransition>& transitions) {
+    std::vector<media::TimelineAudioMixTransition> result;
+    result.reserve(transitions.size());
+    for (const auto& transition : transitions) {
+        result.push_back(media::TimelineAudioMixTransition{
+            static_cast<std::int64_t>(transition.track_index),
+            static_cast<std::int64_t>(transition.to_clip_index),
+            transition.boundary,
+            transition.kind});
+    }
+    return result;
+}
+
 void mixAudioBlock(
     std::vector<RenderClip>& clips,
-    const std::vector<RenderTransition>& transitions,
+    const std::vector<media::TimelineAudioMixClip>& audio_clips,
+    const std::vector<media::TimelineAudioMixTransition>& transitions,
     double timeline_fps,
     std::int64_t block_start,
     int sample_count,
     std::vector<float>& mixed,
     const std::atomic_bool& canceled) {
     constexpr int sample_rate = 48000;
-    const auto block_end = block_start + sample_count;
     mixed.assign(static_cast<std::size_t>(sample_count) * 2U, 0.0F);
-    for (auto& render_clip : clips) {
-        if (render_clip.clip->kind != timeline::ClipKind::Video ||
-            !render_clip.audio || !render_clip.audio->has_audio() ||
-            render_clip.track->audio_muted || render_clip.clip->audio_muted) continue;
+    const auto spans = media::planTimelineAudioMix(
+        audio_clips, transitions, timeline_fps, sample_rate,
+        block_start, sample_count);
+    for (const auto& span : spans) {
         checkCanceled(canceled);
-        const auto& clip = *render_clip.clip;
-        auto clip_start_frame = clip.timeline_start_frame;
-        for (const auto& transition : transitions) {
-            if (transition.kind == timeline::TransitionKind::CrossDissolve &&
-                transition.track_index == render_clip.track_index &&
-                transition.to_clip_index == render_clip.clip_index) {
-                clip_start_frame = std::max(clip_start_frame, transition.boundary);
-            }
-        }
-        const auto clip_start = static_cast<std::int64_t>(std::llround(
-            static_cast<long double>(clip_start_frame) * sample_rate / timeline_fps));
-        const auto timeline_origin_sample = static_cast<std::int64_t>(std::llround(
-            static_cast<long double>(clip.timeline_start_frame) * sample_rate / timeline_fps));
-        const auto clip_end = static_cast<std::int64_t>(std::llround(
-            static_cast<long double>(clip.timeline_start_frame + clip.duration_frames) *
-            sample_rate / timeline_fps));
-        const auto overlap_start = std::max(block_start, clip_start);
-        const auto overlap_end = std::min(block_end, clip_end);
-        if (overlap_start >= overlap_end) continue;
-        const auto local_sample = overlap_start - clip_start;
-        const auto clip_preroll_samples = clip_start - timeline_origin_sample;
-        const auto source_start_sample = static_cast<std::int64_t>(std::llround(
-            static_cast<long double>(clip.source_start_frame) * sample_rate /
-            render_clip.source_fps));
-        const auto requested_source_sample =
-            source_start_sample + clip_preroll_samples + local_sample;
-        render_clip.audio->seek_to_sample_index(requested_source_sample);
-        auto remaining = static_cast<std::size_t>(overlap_end - overlap_start);
-        auto source_cursor = requested_source_sample;
-        const auto gain = static_cast<float>(std::clamp(
-            render_clip.track->audio_gain * clip.audio_gain, 0.0, 16.0));
+        if (span.source_index >= clips.size()) continue;
+        auto& render_clip = clips[span.source_index];
+        if (!render_clip.audio || !render_clip.audio->has_audio()) continue;
+        render_clip.audio->seek_to_sample_index(span.source_start_sample);
+        auto source_cursor = span.source_start_sample;
+        const auto source_end = span.source_start_sample + span.sample_count;
+        auto remaining = static_cast<std::size_t>(span.sample_count);
         while (remaining > 0) {
             auto chunk = render_clip.audio->decode_samples(
                 std::min<std::size_t>(remaining + 2048, 8192),
                 [&canceled] { return canceled.load(std::memory_order_acquire); });
             if (!chunk.has_value() || chunk->sampleCount() == 0) break;
-            const auto chunk_begin = chunk->first_sample_index;
-            const auto chunk_end = chunk_begin + static_cast<std::int64_t>(chunk->sampleCount());
-            const auto source_begin = std::max(source_cursor, chunk_begin);
-            const auto destination_begin = overlap_start + (source_begin - requested_source_sample);
-            const auto source_end = std::min(
-                chunk_end,
-                requested_source_sample + (overlap_end - overlap_start));
-            for (auto source_index = source_begin; source_index < source_end; ++source_index) {
-                const auto source_offset = static_cast<std::size_t>(source_index - chunk_begin) * 2U;
-                const auto destination_offset = static_cast<std::size_t>(
-                    destination_begin + (source_index - source_begin) - block_start) * 2U;
-                mixed[destination_offset] +=
-                    static_cast<float>(chunk->samples[source_offset]) / 32768.0F * gain;
-                mixed[destination_offset + 1] +=
-                    static_cast<float>(chunk->samples[source_offset + 1]) / 32768.0F * gain;
-            }
-            const auto consumed = static_cast<std::size_t>(std::max<std::int64_t>(0, source_end - source_cursor));
+            media::accumulateTimelineAudioChunk(span, *chunk, mixed, 2);
+            const auto chunk_end = chunk->first_sample_index +
+                static_cast<std::int64_t>(chunk->sampleCount());
+            const auto consumed_end = std::min(source_end, chunk_end);
+            const auto consumed = static_cast<std::size_t>(
+                std::max<std::int64_t>(0, consumed_end - source_cursor));
             if (consumed == 0) break;
             remaining -= std::min(remaining, consumed);
-            source_cursor = source_end;
+            source_cursor = consumed_end;
         }
     }
 }
@@ -850,6 +855,8 @@ void OfflineExportRenderer::render(
         double timeline_fps = 30.0;
         auto clips = prepareClips(job.project_snapshot, timeline_fps, job, cancel_requested);
         const auto transitions = collectTransitions(job.project_snapshot);
+        const auto audio_clips = audioMixClips(clips);
+        const auto audio_transitions = audioMixTransitions(transitions);
         const auto duration_frames = timelineDuration(job.project_snapshot);
         if (duration_frames <= 0) throw std::runtime_error("The project timeline has no renderable duration.");
         const long double duration_seconds = static_cast<long double>(duration_frames) / timeline_fps;
@@ -885,7 +892,7 @@ void OfflineExportRenderer::render(
             while (sample < total_samples) {
                 checkCanceled(cancel_requested);
                 const auto block_count = encoder.nextAudioInputSampleCount();
-                mixAudioBlock(clips, transitions, timeline_fps,
+                mixAudioBlock(clips, audio_clips, audio_transitions, timeline_fps,
                               sample, block_count, mixed, cancel_requested);
                 encoder.writeAudio(mixed, block_count);
                 sample += block_count;

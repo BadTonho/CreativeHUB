@@ -119,6 +119,8 @@ PlaybackWorker::~PlaybackWorker() {
     composition_sessions_.clear();
     composition_specs_.clear();
     composition_transitions_.clear();
+    composition_audio_mix_clips_.clear();
+    composition_audio_mix_transitions_.clear();
     clearCompositionCache();
 }
 
@@ -212,6 +214,8 @@ void PlaybackWorker::setMedia(
     pending_audio_bytes_.clear();
     disableAudioOutput();
     audio_session_.reset();
+    composition_audio_configured_ = false;
+    composition_audio_cursor_valid_ = false;
     session_.reset();
     clearCompositionCache();
 
@@ -237,7 +241,7 @@ void PlaybackWorker::setMedia(
             rendering::PreviewPerformanceScope timing(
                 metrics,
                 rendering::PreviewTiming::AudioSetup);
-            configureAudio();
+            if (!composition_enabled_) configureAudio();
         }
         emit mediaReady(generation_);
     } catch (const media::MediaError& error) {
@@ -253,6 +257,12 @@ void PlaybackWorker::play() {
         composition_end_frame_ <= composition_start_frame_) return;
 
     try {
+        if (composition_enabled_) {
+            rendering::PreviewPerformanceScope timing(
+                rendering::PreviewPerformanceMetrics::instance(),
+                rendering::PreviewTiming::AudioSetup);
+            configureCompositionAudio();
+        }
         if (!composition_enabled_) {
             if (!session_) session_ = openVideoPlaybackSession(source_path_);
             if (session_->at_end()) {
@@ -265,9 +275,26 @@ void PlaybackWorker::play() {
             }
         }
 
-        if (audio_enabled_ && audio_session_ != nullptr && audio_output_ != nullptr) {
+        if (audio_enabled_ && audio_output_ != nullptr) {
             try {
-                if (!audio_position_valid_) {
+                if (composition_enabled_) {
+                    if (!composition_audio_cursor_valid_) {
+                        const auto sample_position = static_cast<long double>(
+                            current_timeline_frame_) * audio_output_->sampleRate() /
+                            timeline_frame_rate_.asDouble();
+                        if (current_timeline_frame_ < 0 ||
+                            !std::isfinite(sample_position) ||
+                            sample_position > static_cast<long double>(
+                                std::numeric_limits<std::int64_t>::max())) {
+                            throw media::MediaError(
+                                "The Timeline audio position is invalid.");
+                        }
+                        next_composition_audio_sample_ = static_cast<std::int64_t>(
+                            std::llround(sample_position));
+                        composition_audio_cursor_valid_ = true;
+                        pending_audio_bytes_.clear();
+                    }
+                } else if (audio_session_ != nullptr && !audio_position_valid_) {
                     const auto source_frame = sourceFrameForLocal(current_frame_index_);
                     if (!source_frame.has_value()) {
                         throw media::MediaError("The requested audio source frame is invalid.");
@@ -355,6 +382,7 @@ void PlaybackWorker::stop() {
     last_transition_preroll_start_frame_ = -1;
     if (audio_output_ != nullptr) audio_output_->stop();
     audio_position_valid_ = false;
+    composition_audio_cursor_valid_ = false;
     pending_audio_bytes_.clear();
 }
 
@@ -383,6 +411,55 @@ void PlaybackWorker::setAudioParameters(
     if (was_playing) play();
 }
 
+void PlaybackWorker::setCompositionAudioParameters(
+    qint64 track_index,
+    qint64 clip_index,
+    double track_audio_gain,
+    bool track_audio_muted,
+    double clip_audio_gain,
+    bool clip_audio_muted) {
+    const auto valid_gain = [](double gain) {
+        return std::isfinite(gain) && gain >= 0.0 && gain <= 2.0 ? gain : 1.0;
+    };
+    for (auto& spec : composition_specs_) {
+        if (spec.track_index == track_index) {
+            spec.track_audio_gain = valid_gain(track_audio_gain);
+            spec.track_audio_muted = track_audio_muted;
+        }
+        if (spec.track_index == track_index && spec.clip_index == clip_index) {
+            spec.clip_audio_gain = valid_gain(clip_audio_gain);
+            spec.clip_audio_muted = clip_audio_muted;
+        }
+    }
+    for (auto& entry : composition_sessions_) {
+        if (entry.spec.track_index == track_index) {
+            entry.spec.track_audio_gain = valid_gain(track_audio_gain);
+            entry.spec.track_audio_muted = track_audio_muted;
+        }
+        if (entry.spec.track_index == track_index &&
+            entry.spec.clip_index == clip_index) {
+            entry.spec.clip_audio_gain = valid_gain(clip_audio_gain);
+            entry.spec.clip_audio_muted = clip_audio_muted;
+        }
+    }
+    for (auto& clip : composition_audio_mix_clips_) {
+        if (clip.track_index == track_index) {
+            clip.track_gain = valid_gain(track_audio_gain);
+            clip.track_muted = track_audio_muted;
+        }
+        if (clip.track_index == track_index && clip.clip_index == clip_index) {
+            clip.clip_gain = valid_gain(clip_audio_gain);
+            clip.clip_muted = clip_audio_muted;
+        }
+    }
+
+    if (!composition_enabled_ || !audio_enabled_ || audio_output_ == nullptr) return;
+    pending_audio_bytes_.clear();
+    composition_audio_cursor_valid_ = false;
+    audio_output_->stop();
+    if (playing_) restartCompositionAudioOutput();
+}
+
 void PlaybackWorker::setMonitorVolume(double gain) {
     monitor_volume_gain_ = AudioOutput::normalizeVolume(gain);
     if (audio_output_ != nullptr) {
@@ -407,7 +484,15 @@ void PlaybackWorker::setComposition(
     QVector<CompositionTransitionSpec> transitions,
     quint64 generation) {
     if (generation < generation_) return;
+    const bool resume_audio_after_refresh = playing_;
     generation_ = generation;
+
+    disableAudioOutput();
+    audio_session_.reset();
+    composition_audio_configured_ = false;
+    composition_audio_cursor_valid_ = false;
+    composition_audio_mix_clips_.clear();
+    composition_audio_mix_transitions_.clear();
 
     cancelTransitionPreroll();
     if (composition_revision_ == std::numeric_limits<quint64>::max()) {
@@ -516,6 +601,32 @@ void PlaybackWorker::setComposition(
                 }
             }
             composition_sessions_.push_back(std::move(composition_session));
+            const auto& prepared = composition_sessions_.back().spec;
+            composition_audio_mix_clips_.push_back(media::TimelineAudioMixClip{
+                composition_sessions_.size() - 1,
+                prepared.track_index,
+                prepared.clip_index,
+                prepared.kind,
+                prepared.has_audio_stream,
+                prepared.timeline_start_frame,
+                prepared.segment_frame_count,
+                prepared.source_start_frame,
+                prepared.frame_rate,
+                prepared.track_audio_gain,
+                prepared.clip_audio_gain,
+                prepared.track_audio_muted,
+                prepared.clip_audio_muted});
+        }
+
+        composition_audio_mix_transitions_.reserve(
+            static_cast<std::size_t>(composition_transitions_.size()));
+        for (const auto& transition : composition_transitions_) {
+            composition_audio_mix_transitions_.push_back(
+                media::TimelineAudioMixTransition{
+                    transition.track_index,
+                    transition.to_clip_index,
+                    transition.boundary_frame,
+                    transition.kind});
         }
 
         const bool has_composition_range =
@@ -570,8 +681,14 @@ void PlaybackWorker::setComposition(
             }
         }
         updateFrameRateMetrics();
+        if (resume_audio_after_refresh && composition_enabled_) {
+            configureCompositionAudio();
+            restartCompositionAudioOutput();
+        }
     } catch (const media::MediaError& error) {
         composition_sessions_.clear();
+        composition_audio_mix_clips_.clear();
+        composition_audio_mix_transitions_.clear();
         composition_transitions_.clear();
         composition_enabled_ = false;
         composition_timeline_frame_rate_valid_ = false;
@@ -581,8 +698,11 @@ void PlaybackWorker::setComposition(
         metrics.setCompositionWorkload(0, 0, 0, false);
         updateFrameRateMetrics();
         reportFailure(error, "compose");
+        if (resume_audio_after_refresh) configureCompositionAudio();
     } catch (const std::exception& error) {
         composition_sessions_.clear();
+        composition_audio_mix_clips_.clear();
+        composition_audio_mix_transitions_.clear();
         composition_transitions_.clear();
         composition_enabled_ = false;
         composition_timeline_frame_rate_valid_ = false;
@@ -592,6 +712,7 @@ void PlaybackWorker::setComposition(
         metrics.setCompositionWorkload(0, 0, 0, false);
         updateFrameRateMetrics();
         reportFailure(error, "compose");
+        if (resume_audio_after_refresh) configureCompositionAudio();
     }
 }
 
@@ -640,8 +761,6 @@ void PlaybackWorker::setActiveCompositionClip(
         active->kind == timeline::ClipKind::Image) {
         source_path_.clear();
         session_.reset();
-        audio_session_.reset();
-        disableAudioOutput();
     }
 }
 
@@ -662,6 +781,11 @@ void PlaybackWorker::renderCompositionFrame(
     generation_ = generation;
     try {
         current_timeline_frame_ = global_frame;
+        if (!playing_) {
+            composition_audio_cursor_valid_ = false;
+            pending_audio_bytes_.clear();
+            if (audio_output_ != nullptr) audio_output_->stop();
+        }
         if (transition_preroll_state_ != nullptr &&
             global_frame >= transition_preroll_state_->transition_start_frame) {
             cancelTransitionPreroll();
@@ -1038,6 +1162,7 @@ void PlaybackWorker::processPendingSeek() {
                 current_timeline_frame_ = primary_timeline_start_frame_ + frame_index;
                 composition_position_initialized_ = true;
                 audio_position_valid_ = false;
+                composition_audio_cursor_valid_ = false;
                 pending_audio_bytes_.clear();
                 if (audio_output_ != nullptr) audio_output_->stop();
                 emitComposedFrame();
@@ -1298,6 +1423,7 @@ bool PlaybackWorker::ensureSessionAtCurrentFrame() {
 }
 
 void PlaybackWorker::configureAudio() {
+    composition_audio_configured_ = false;
     audio_enabled_ = false;
     audio_pacing_policy_.reset();
     rendering::PreviewPerformanceMetrics::instance().setAudioEnabled(false);
@@ -1358,7 +1484,12 @@ void PlaybackWorker::configureAudio() {
 }
 
 void PlaybackWorker::fillAudioOutput() {
-    if (!audio_enabled_ || audio_session_ == nullptr || audio_output_ == nullptr) return;
+    if (!audio_enabled_ || audio_output_ == nullptr) return;
+    if (composition_enabled_) {
+        fillCompositionAudioOutput();
+        return;
+    }
+    if (audio_session_ == nullptr) return;
 
     const auto effective_gain =
         (track_audio_muted_ || clip_audio_muted_)
@@ -1417,6 +1548,269 @@ void PlaybackWorker::fillAudioOutput() {
     }
 }
 
+void PlaybackWorker::configureCompositionAudio() {
+    if (composition_audio_configured_) return;
+    composition_audio_configured_ = true;
+    audio_enabled_ = false;
+    audio_pacing_policy_.reset();
+    audio_session_.reset();
+    rendering::PreviewPerformanceMetrics::instance().setAudioEnabled(false);
+
+    const bool has_timeline_audio = std::any_of(
+        composition_audio_mix_clips_.begin(),
+        composition_audio_mix_clips_.end(),
+        [](const media::TimelineAudioMixClip& clip) {
+            return clip.kind == timeline::ClipKind::Video && clip.has_audio;
+        });
+    if (!has_timeline_audio) return;
+
+    audio_output_ = std::make_unique<AudioOutput>();
+    audio_output_->setVolume(monitor_volume_gain_);
+    QString error_message;
+    qint64 error_code = 0;
+    if (!audio_output_->initialize(&error_message, &error_code)) {
+        if (!audio_output_->disabledByEnvironment()) {
+            reportAudioFailure(
+                std::runtime_error(error_message.isEmpty()
+                    ? "The Timeline audio output could not be initialized."
+                    : error_message.toUtf8().toStdString()),
+                "composition_output",
+                error_code);
+        }
+        return;
+    }
+
+    audio_enabled_ = true;
+    composition_audio_cursor_valid_ = false;
+    rendering::PreviewPerformanceMetrics::instance().setAudioEnabled(true);
+}
+
+void PlaybackWorker::restartCompositionAudioOutput() {
+    if (!composition_enabled_ || !audio_enabled_ || audio_output_ == nullptr) return;
+    const auto sample_position = static_cast<long double>(current_timeline_frame_) *
+        audio_output_->sampleRate() / timeline_frame_rate_.asDouble();
+    if (current_timeline_frame_ < 0 || !std::isfinite(sample_position) ||
+        sample_position > static_cast<long double>(
+            std::numeric_limits<std::int64_t>::max())) {
+        reportAudioFailure(
+            std::runtime_error("The Timeline audio position is invalid."),
+            "composition_seek");
+        return;
+    }
+    next_composition_audio_sample_ = static_cast<std::int64_t>(
+        std::llround(sample_position));
+    composition_audio_cursor_valid_ = true;
+    audio_clock_origin_frame_ = current_timeline_frame_;
+
+    QString error_message;
+    qint64 error_code = 0;
+    if (!audio_output_->start(&error_message, &error_code)) {
+        reportAudioFailure(
+            std::runtime_error(error_message.isEmpty()
+                ? "The Timeline audio output could not be started."
+                : error_message.toUtf8().toStdString()),
+            "composition_output",
+            error_code);
+        return;
+    }
+    audio_clock_origin_usecs_ = audio_output_->processedUsecs();
+    try {
+        fillCompositionAudioOutput();
+        updateAudioBufferMetric();
+    } catch (const media::MediaError& error) {
+        reportAudioFailure(error, "composition_decode");
+    } catch (const std::exception& error) {
+        reportAudioFailure(error, "composition_decode");
+    }
+}
+
+void PlaybackWorker::fillCompositionAudioOutput() {
+    if (!audio_enabled_ || audio_output_ == nullptr) return;
+    const auto output = media::AudioPlaybackSession::OutputSpec{
+        audio_output_->sampleRate(), audio_output_->channelCount()};
+    if (output.sample_rate <= 0 || output.channel_count <= 0) return;
+
+    const auto bytes_per_sample_frame = output.channel_count *
+        audio_output_->bytesPerSample();
+    const auto target_bytes = static_cast<std::size_t>(
+        output.sample_rate * bytes_per_sample_frame * 2 / 5);
+    constexpr std::int64_t mix_block_samples = 4096;
+    const auto monitor_gain = AudioOutput::sampleBoost(monitor_volume_gain_);
+
+    if (!composition_audio_cursor_valid_) {
+        const auto sample_position = static_cast<long double>(current_timeline_frame_) *
+            output.sample_rate / timeline_frame_rate_.asDouble();
+        if (current_timeline_frame_ < 0 || !std::isfinite(sample_position) ||
+            sample_position > static_cast<long double>(
+                std::numeric_limits<std::int64_t>::max())) {
+            throw media::MediaError("The Timeline audio position is invalid.");
+        }
+        next_composition_audio_sample_ = static_cast<std::int64_t>(
+            std::llround(sample_position));
+        composition_audio_cursor_valid_ = true;
+    }
+
+    while (pending_audio_bytes_.size() < static_cast<qsizetype>(target_bytes)) {
+        const auto block_samples = mix_block_samples;
+        // Audio sessions are per clip occurrence. Release decoders once the
+        // generated Timeline buffer has passed that occurrence so long
+        // projects do not keep every visited audio decoder open. A backward
+        // seek can reopen the session on demand.
+        for (const auto& clip : composition_audio_mix_clips_) {
+            if (clip.source_index >= composition_sessions_.size() ||
+                clip.kind != timeline::ClipKind::Video || !clip.has_audio ||
+                clip.duration_frames <= 0 || clip.timeline_start_frame < 0 ||
+                clip.timeline_start_frame >
+                    std::numeric_limits<std::int64_t>::max() - clip.duration_frames) {
+                continue;
+            }
+            const auto end_frame = clip.timeline_start_frame + clip.duration_frames;
+            const auto end_sample = std::round(
+                static_cast<long double>(end_frame) * output.sample_rate /
+                timeline_frame_rate_.asDouble());
+            if (!std::isfinite(end_sample) ||
+                end_sample > static_cast<long double>(
+                    std::numeric_limits<std::int64_t>::max()) ||
+                end_sample > next_composition_audio_sample_) {
+                continue;
+            }
+            auto& source = composition_sessions_[clip.source_index];
+            source.audio_session.reset();
+            if (!source.audio_open_failed) source.audio_open_attempted = false;
+        }
+
+        std::vector<float> mixed(
+            static_cast<std::size_t>(block_samples) *
+                static_cast<std::size_t>(output.channel_count),
+            0.0F);
+        const auto spans = media::planTimelineAudioMix(
+            composition_audio_mix_clips_,
+            composition_audio_mix_transitions_,
+            timeline_frame_rate_.asDouble(),
+            output.sample_rate,
+            next_composition_audio_sample_,
+            block_samples);
+
+        for (const auto& span : spans) {
+            if (span.source_index >= composition_sessions_.size()) continue;
+            auto& source = composition_sessions_[span.source_index];
+            if (source.audio_open_failed) continue;
+            if (!source.audio_open_attempted) {
+                source.audio_open_attempted = true;
+                try {
+                    source.audio_session = media::AudioPlaybackSession::open(
+                        QFileInfo(source.spec.source_path).filesystemFilePath(), output);
+                    if (!source.audio_session->has_audio()) {
+                        source.audio_session.reset();
+                    }
+                } catch (const media::MediaError& error) {
+                    source.audio_open_failed = true;
+                    reportCompositionAudioFailure(
+                        source.spec, error, "composition_source_open",
+                        error.error_code().value_or(-1));
+                    continue;
+                } catch (const std::exception& error) {
+                    source.audio_open_failed = true;
+                    reportCompositionAudioFailure(
+                        source.spec, error, "composition_source_open");
+                    continue;
+                }
+            }
+            if (source.audio_session == nullptr) continue;
+
+            try {
+                if (source.audio_session->current_sample_index() !=
+                    span.source_start_sample) {
+                    source.audio_session->seek_to_sample_index(
+                        span.source_start_sample);
+                }
+                auto source_cursor = span.source_start_sample;
+                const auto source_end = span.source_start_sample + span.sample_count;
+                while (source_cursor < source_end) {
+                    const auto remaining = static_cast<std::size_t>(
+                        source_end - source_cursor);
+                    auto chunk = source.audio_session->decode_samples(
+                        std::min<std::size_t>(remaining, 8192U));
+                    if (!chunk.has_value() || chunk->sampleCount() == 0) break;
+                    media::accumulateTimelineAudioChunk(
+                        span, *chunk, mixed, output.channel_count);
+                    const auto chunk_end = chunk->first_sample_index +
+                        static_cast<std::int64_t>(chunk->sampleCount());
+                    const auto consumed_end = std::min(source_end, chunk_end);
+                    if (consumed_end <= source_cursor) break;
+                    source_cursor = consumed_end;
+                }
+            } catch (const media::MediaError& error) {
+                source.audio_session.reset();
+                source.audio_open_failed = true;
+                reportCompositionAudioFailure(
+                    source.spec, error, "composition_source_decode",
+                    error.error_code().value_or(-1));
+            } catch (const std::exception& error) {
+                source.audio_session.reset();
+                source.audio_open_failed = true;
+                reportCompositionAudioFailure(
+                    source.spec, error, "composition_source_decode");
+            }
+        }
+
+        std::vector<std::int16_t> pcm(
+            static_cast<std::size_t>(block_samples) *
+                static_cast<std::size_t>(output.channel_count));
+        for (std::size_t index = 0; index < mixed.size(); ++index) {
+            const auto value = static_cast<double>(mixed[index]) * monitor_gain * 32768.0;
+            pcm[index] = static_cast<std::int16_t>(std::clamp(
+                value,
+                static_cast<double>(std::numeric_limits<std::int16_t>::min()),
+                static_cast<double>(std::numeric_limits<std::int16_t>::max())));
+        }
+        pending_audio_bytes_.append(
+            reinterpret_cast<const char*>(pcm.data()),
+            static_cast<qsizetype>(pcm.size() * sizeof(std::int16_t)));
+        if (next_composition_audio_sample_ >
+            std::numeric_limits<std::int64_t>::max() - block_samples) {
+            throw media::MediaError("The Timeline audio position overflowed.");
+        }
+        next_composition_audio_sample_ += block_samples;
+    }
+
+    while (!pending_audio_bytes_.isEmpty() && audio_output_->bytesFree() > 0) {
+        const auto writable = std::min<qint64>(
+            audio_output_->bytesFree(), pending_audio_bytes_.size());
+        const auto written = audio_output_->write(
+            pending_audio_bytes_.left(static_cast<qsizetype>(writable)));
+        if (written <= 0) break;
+        pending_audio_bytes_.remove(0, static_cast<qsizetype>(written));
+    }
+}
+
+void PlaybackWorker::reportCompositionAudioFailure(
+    const CompositionLayerSpec& spec,
+    const std::exception& error,
+    const char* operation,
+    qint64 error_code) {
+    try {
+        logging::Context context{
+            {"path", safePathForLog(
+                QFileInfo(spec.source_path).filesystemFilePath())},
+            {"track_id", std::to_string(spec.track_id)},
+            {"clip_id", std::to_string(spec.clip_id)},
+            {"track_index", std::to_string(spec.track_index)},
+            {"clip_index", std::to_string(spec.clip_index)},
+            {"timeline_frame", std::to_string(current_timeline_frame_)}};
+        if (error_code >= 0) {
+            context.emplace_back("error_code", std::to_string(error_code));
+        }
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "audio",
+            operation,
+            error.what(),
+            context);
+    } catch (...) {
+    }
+}
+
 void PlaybackWorker::updateAudioBufferMetric() noexcept {
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     if (!audio_enabled_ || audio_output_ == nullptr) {
@@ -1438,6 +1832,7 @@ void PlaybackWorker::disableAudioOutput() noexcept {
     audio_pacing_policy_.reset();
     rendering::PreviewPerformanceMetrics::instance().setAudioEnabled(false);
     audio_position_valid_ = false;
+    composition_audio_cursor_valid_ = false;
     pending_audio_bytes_.clear();
     if (audio_output_ != nullptr) audio_output_->stop();
 }

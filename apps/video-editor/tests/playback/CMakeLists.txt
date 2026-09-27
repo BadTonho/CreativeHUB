@@ -56,6 +56,8 @@ add_executable(creative-suite-main-editor-playback-worker-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/media/audio_frame.h
     ${VIDEO_EDITOR_SOURCE_DIR}/media/audio_playback.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/media/audio_playback.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/timeline_audio_mix.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/timeline_audio_mix.h
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/audio_output.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/audio_output.h
     ${VIDEO_EDITOR_SOURCE_DIR}/playback/playback_worker.cpp
@@ -256,6 +258,27 @@ endif()
 add_test(
     NAME creative-suite-main-editor-frame-step-navigation
     COMMAND creative-suite-main-editor-frame-step-navigation-tests
+)
+
+add_executable(creative-suite-main-editor-timeline-audio-mix-tests
+    timeline_audio_mix_test.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/audio_frame.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/timeline_audio_mix.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/timeline_audio_mix.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.h
+)
+target_include_directories(creative-suite-main-editor-timeline-audio-mix-tests PRIVATE
+    ${VIDEO_EDITOR_SOURCE_DIR}
+)
+target_compile_features(creative-suite-main-editor-timeline-audio-mix-tests PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-timeline-audio-mix-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-timeline-audio-mix-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(
+    NAME creative-suite-main-editor-timeline-audio-mix
+    COMMAND creative-suite-main-editor-timeline-audio-mix-tests
 )
 
 preserve_video_editor_test_working_directory()

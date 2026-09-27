@@ -3,6 +3,7 @@
 #include "../media/video_playback.h"
 #include "../media/video_metadata.h"
 #include "../media/audio_playback.h"
+#include "../media/timeline_audio_mix.h"
 #include "../rendering/frame_compositor.h"
 #include "../rendering/preview_performance_metrics.h"
 #include "../timeline/timeline_model.h"
@@ -74,6 +75,11 @@ struct CompositionLayerSpec {
     timeline::ClipId clip_id = 0;
     qint64 source_duration_frames = 0;
     timeline::FrameRate timeline_frame_rate;
+    bool has_audio_stream = false;
+    double track_audio_gain = 1.0;
+    bool track_audio_muted = false;
+    double clip_audio_gain = 1.0;
+    bool clip_audio_muted = false;
 };
 
 struct CompositionTransitionSpec {
@@ -113,6 +119,13 @@ public slots:
     virtual void pause();
     virtual void stop();
     virtual void setAudioParameters(
+        double track_audio_gain,
+        bool track_audio_muted,
+        double clip_audio_gain,
+        bool clip_audio_muted);
+    virtual void setCompositionAudioParameters(
+        qint64 track_index,
+        qint64 clip_index,
         double track_audio_gain,
         bool track_audio_muted,
         double clip_audio_gain,
@@ -201,7 +214,15 @@ private:
     [[nodiscard]] std::optional<std::int64_t> timelineFrameForDiagnostics(
         std::optional<std::int64_t> requested_clip_local_frame = std::nullopt) const noexcept;
     void configureAudio();
+    void configureCompositionAudio();
+    void restartCompositionAudioOutput();
     void fillAudioOutput();
+    void fillCompositionAudioOutput();
+    void reportCompositionAudioFailure(
+        const CompositionLayerSpec& spec,
+        const std::exception& error,
+        const char* operation,
+        qint64 error_code = -1);
     void updateAudioBufferMetric() noexcept;
     void disableAudioOutput() noexcept;
     [[nodiscard]] std::optional<std::int64_t> sourceFrameForLocal(
@@ -241,6 +262,9 @@ private:
     bool audio_enabled_ = false;
     bool audio_failure_reported_ = false;
     bool audio_position_valid_ = false;
+    bool composition_audio_configured_ = false;
+    bool composition_audio_cursor_valid_ = false;
+    std::int64_t next_composition_audio_sample_ = 0;
     qint64 audio_clock_origin_usecs_ = 0;
     std::int64_t audio_clock_origin_frame_ = 0;
     quint64 generation_ = 0;
@@ -257,6 +281,9 @@ private:
     struct CompositionSession {
         CompositionLayerSpec spec;
         std::unique_ptr<media::VideoPlaybackSession> session;
+        std::unique_ptr<media::AudioPlaybackSession> audio_session;
+        bool audio_open_attempted = false;
+        bool audio_open_failed = false;
         VideoFramePtr static_frame;
         std::shared_ptr<const media::VideoFrame> cached_text_frame;
         rendering::AlphaCoveragePtr cached_text_alpha_coverage;
@@ -286,6 +313,8 @@ private:
     QVector<CompositionLayerSpec> composition_specs_;
     QVector<CompositionTransitionSpec> composition_transitions_;
     std::vector<CompositionSession> composition_sessions_;
+    std::vector<media::TimelineAudioMixClip> composition_audio_mix_clips_;
+    std::vector<media::TimelineAudioMixTransition> composition_audio_mix_transitions_;
     std::shared_ptr<TransitionPrerollState> transition_preroll_state_;
     std::thread transition_preroll_thread_;
     std::size_t last_transition_preroll_session_index_ =

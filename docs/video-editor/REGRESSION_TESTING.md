@@ -30,6 +30,7 @@ they were run; cross-platform support is validated when all matrix jobs pass.
 | Media probing and decoding | Missing files, invalid inputs, reference metadata, frame dimensions, PNG/JPEG/BMP/WebP/TIFF still-image probing, RGBA transparency, 150-frame defaults, and animated-GIF rejection |
 | Playback session | Sequential frames, forward catch-up and random seeks without intermediate RGBA materialization, cancellation, reset, bounded frame-cache reuse, cache-hit preservation of an aligned decoder position and seek-free sequential continuation, rejected-seek sequential fallback, optimized random seeking, EOF, segment limits |
 | Playback worker | Media activation, generation handling, seek coalescing, absolute-deadline pacing with fractional frame rates, 24/30/60 fps source sampling on a fixed 30 fps Timeline with trimmed source in-points, source-rate changes without changing the composed clock, latest-frame mailbox behavior, controlled intermediate-frame skipping, sequential decode through an eight-source-frame gap and direct seeking for larger composed-playback gaps, one-second-ahead background decoder preroll for the next video Cross Dissolve, stale-preroll cancellation after composition replacement, cached first-frame reuse and sequential continuation, normal decode fallback when preroll is late, playback completion, separated layer decode/composition, composition decoder-session reuse across media activation and playback of consecutive activated clips, final composition-cache reuse and invalidation, Full/Half/Quarter composition dimensions and same-frame cache invalidation on quality changes, text-raster and static-text alpha-geometry cache reuse, animated text-geometry fallback, static-image frame reuse without FFmpeg/audio sessions, composition playback without a selected Media Browser source, global monitoring-volume updates, errors, and no-op seeks without a selected source |
+| Timeline audio mixer | Deterministic shared sample-span planning and PCM accumulation for overlapping embedded audio on multiple tracks, including visually covered clips; Timeline/source rates, nonzero trims, clip/track gains and mutes, silence in gaps, and the Cross Dissolve hard cut at the original edit point; runs without an audio device |
 | Playback controller | Monotonic Timeline clock using the persisted rational project rate (30/1 FPS for new projects); mixed source-rate mapping and trimmed source in-point seek; continuous playhead during delayed media activation; current-position seek before playback resumes; stale-frame rejection; pending activation cancellation on Pause, Stop, and seek; preview-quality forwarding and paused-frame recomposition without changing playhead or dirty state; and clean project dirty state |
 | Playback transition plan | Moving outgoing and incoming Cross Dissolve frames before the original cut; incoming local frame D at the cut and continued playback afterward; linear blend at the first, middle, and final overlap frames; Fade to Black on both sides of the unchanged cut; one-frame durations; inactive and invalid transitions; unaffected layers on other tracks |
 | Frame-step navigation | Worker steps within a clip; forward/backward activation at contiguous junctions, one-frame clips, gaps and Timeline limits, media overlaps and cross-track priority, transitions, and missing or invalid active clip locations |
@@ -582,6 +583,19 @@ in the running Video Editor after UI or integration changes:
   is not confused with mailbox coalescing. Verify seek,
   Previous Frame, Next Frame, Blade Tool, selection, playback completion, and
   project dirty state remain unchanged.
+- Timeline audio mix: place two videos with distinct embedded audio on
+  overlapping tracks, with one video visually covered. Confirm both audio
+  sources are audible in Preview; adjust each clip and track gain/mute and
+  confirm only the affected source changes. Seek across gaps and cuts, test a
+  trimmed clip with a source frame rate different from the Timeline, and
+  confirm Preview and exported audio follow the same sample scheduling. For a
+  Cross Dissolve, confirm outgoing audio continues until the original cut and
+  incoming audio starts at that cut from the source position corresponding to
+  local Timeline frame D, with no audio crossfade. Repeat with
+  `CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1` and confirm video playback remains
+  available; the deterministic mixer test validates sample output without
+  requiring a device. Audio-only clips and tracks are not supported by the
+  current Timeline model.
 - composed global clock with text: use a Timeline with a 491-frame background
   clip and a 150-frame text clip beginning at frame 294. Confirm the active
   layer can switch to text and back while playback continues in the composition's

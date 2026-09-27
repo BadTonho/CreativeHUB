@@ -85,6 +85,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/media/audio_frame.h
     src/media/audio_playback.cpp
     src/media/audio_playback.h
+    src/media/timeline_audio_mix.cpp
+    src/media/timeline_audio_mix.h
     src/media/media_library.cpp
     src/media/media_library.h
     src/media/video_metadata.h

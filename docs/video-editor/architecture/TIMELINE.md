@@ -218,21 +218,20 @@ occurrences independently.
 
 ## Playback
 
-The worker owns one FFmpeg video session and, when available, one embedded
-audio session at a time. The Video Editor chooses the highest-priority visible
-clip at the current playhead and changes both sessions when crossing a clip
-boundary. Composition playback may advance directly from the worker's
-composition frame range when the active timeline clip is text, so it does not
-depend on a Media Browser or Timeline item selection. The Play command resolves
-the clip at the current playhead before starting the worker. Audio is the
-playback clock when output is available; videos without audio and output
-failures use the existing video timer. Playback pauses in gaps and remains
-paused at the end of the last clip.
-Audio is never mixed between overlapping tracks: only the visible top-priority
-clip contributes. Within one track, the later-starting media clip supplies
-audio during a permitted overlap, and playback switches back to an underlying
-media clip if it remains visible after the overlapping clip ends. No audio
-crossfade is added.
+The worker owns the video sessions needed by the composition and lazily opens
+embedded audio sessions for every video clip that intersects the upcoming
+output buffer. It mixes those sources into one PCM stream regardless of visual
+track priority; track and clip mute and gain are applied per source. The
+composed audio clock drives the global Timeline even through silent gaps. The
+Video Editor still chooses the highest-priority visible clip for the image and
+changes the visual active clip when crossing a boundary. When the active
+Timeline clip is text, composition playback uses the worker's global
+composition frame range and does not depend on a Media Browser or Timeline
+item selection. The Play command resolves the clip at the current playhead
+before starting the worker. Audio is the playback clock when usable Timeline
+audio and output are available; videos without audio and output failures use
+the existing video timer. Playback pauses in gaps and remains paused at the end
+of the last clip.
 
 During active playback, a precise worker timer follows a steady-clock target.
 Audio output remains the authoritative clock when available; otherwise the
@@ -336,8 +335,9 @@ the new start. Invalid boundaries remain intentional no-op outcomes.
 At a global frame, all visible video clips are composed from the bottom track
 up to the top track. The compositor runs outside the UI worker boundary and
 produces one RGBA frame for the preview. The provisional canvas is 1920x1080;
-empty areas use the dark preview background. Audio keeps the existing rule of
-following only the highest-priority visible clip.
+empty areas use the dark preview background. Audio is mixed from every active
+video clip with an embedded stream, independently of which clip supplies the
+visible image.
 
 ## Text clips
 

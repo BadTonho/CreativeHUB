@@ -35,11 +35,9 @@ Se os metadados da mídia estiverem ausentes quando um projeto for aberto, um cl
 
 **Recomendação:** definir e persistir uma base de tempo explícita para o projeto/Timeline, de preferência como uma taxa racional. Adicionar uma política de migração para projetos antigos. Centralizar o mapeamento entre tempo da Timeline e tempo/frame de origem e usá-lo no Preview, na sincronização de áudio e na exportação. Definir o comportamento quando os metadados estiverem ausentes ou a mídia estiver offline, para que a reabertura não mude silenciosamente o relógio do projeto.
 
-### 2. O áudio de vídeos sobrepostos pode diferir entre Preview e exportação
+### 2. Áudio de todos os clips de vídeo ativos é mixado no Preview e na exportação
 
-A documentação da arquitetura da Timeline diz que, quando há sobreposição de clips de vídeo, o áudio vem do clip visível de maior prioridade. O mixer de áudio da exportação offline parece misturar o áudio de todos os clips de vídeo ativos. Assim, tracks sobrepostas podem produzir um áudio diferente no Preview e no arquivo exportado.
-
-**Recomendação:** escolher uma regra para sobreposições e aplicá-la tanto no Preview quanto na exportação. Se a regra pretendida for misturar todos os clips ativos, atualizar a documentação da arquitetura e fazer o Preview seguir essa regra. Se a regra pretendida for usar apenas o clip de maior prioridade, fazer o mixer da exportação aplicar a mesma seleção. Adicionar um caso de teste com sobreposição que confira as amostras de áudio resultantes ou um resumo determinístico da mixagem.
+Corrigido: o Preview agora mistura o áudio embutido de todos os clips de vídeo ativos na posição global da Timeline, inclusive em tracks visualmente cobertas. Preview e exportação usam o mesmo planejador de intervalos de amostras para taxas de origem/Timeline, trims, ganhos, mutes e o corte de áudio do Cross Dissolve. O dissolve continua sem crossfade de áudio: a saída toca até o corte original e a entrada começa nesse corte, na posição de origem correspondente ao frame local D. O teste determinístico do mixer cobre fontes sobrepostas, soma antes do clipping, gaps, taxas diferentes, ganhos/mutes e o corte; o teste de exportação valida áudio embutido e a semântica do dissolve. O modelo ainda não oferece clips ou tracks somente de áudio; isso permanece fora do escopo atual.
 
 ## Riscos de desempenho e escalabilidade
 
@@ -114,14 +112,14 @@ Os diagnósticos atuais não informam quantos pixels usaram o caminho de cópia 
 - Não foi encontrado um teste direto de equivalência entre Preview e exportação para mídias com taxas de origem diferentes, como 24, 30 e 60 FPS.
 - Existe um teste de conversão da taxa de frames da exportação, e um teste do relógio do controller de playback alterna entre clips com taxas de origem diferentes. O teste do controller usa um worker falso e não verifica o mapeamento real dos frames de origem.
 - Não foi identificada uma fixture de projeto VFR para conferir a precisão de busca e exportação.
-- Não foi identificado um teste explícito da regra de seleção/mixagem de áudio de vídeos sobrepostos entre Preview e exportação.
+- A mixagem sobreposta agora tem cobertura determinística no planejador compartilhado pelo Preview e pela exportação. A validação manual ainda deve confirmar a saída audível em um dispositivo real com clips de áudio distintos e uma track de vídeo visualmente coberta.
 - Não foi identificado um benchmark de escalabilidade para Timelines com centenas ou milhares de clips, mídias repetidas ou muitas tracks.
 - Os testes existentes do compositor conferem a correção dos pixels em caminhos importantes de blend e transformação; por si só, eles não provam qual caminho rápido um projeto real usa nem quantificam seu desempenho.
 
 ## Ordem de trabalho recomendada
 
 1. **Definir a base de tempo da Timeline e o mapeamento para a origem.** Persistir uma taxa de frames explícita do projeto com migração para projetos antigos e, em seguida, compartilhar o mesmo mapeamento entre tempo da Timeline e tempo/frame de origem no Preview, no áudio e na exportação.
-2. **Alinhar o comportamento do áudio em sobreposições.** Fazer a regra documentada, o Preview e a exportação concordarem e adicionar uma fixture de regressão.
+2. **Concluído — alinhar o áudio em sobreposições.** Preview e exportação agora misturam todos os clips de vídeo ativos usando o mesmo planejador de amostras e têm cobertura determinística compartilhada.
 3. **Adicionar casos determinísticos de correção.** Cobrir mídias de origem a 24/30/60 FPS, cortes com ponto de origem diferente de zero, reabertura com mídia online/offline, equivalência de frames do Preview e da exportação e áudio sobreposto.
 4. **Preencher as lacunas de observabilidade.** Adicionar medições agregadas da pintura da Timeline e contadores de uso dos caminhos rápidos do compositor, respeitando a preferência existente de métricas e evitando logs por frame.
 5. **Estabelecer medições de desempenho reproduzíveis.** Usar projetos pequenos, médios e pesados, com cache frio e aquecido, e relatar tempo de frame P50/P95, frames descartados/coalescidos, decodificação, composição, pintura da Timeline, preparação da composição e memória.
@@ -132,7 +130,7 @@ Os diagnósticos atuais não informam quantos pixels usaram o caminho de cópia 
 
 - [ ] Escolher a representação da base de tempo do projeto e a política de migração.
 - [ ] Adicionar testes compartilhados de mapeamento de frames de origem para Preview e exportação.
-- [ ] Definir e testar a semântica do áudio em sobreposições.
+- [x] Definir e testar a semântica do áudio em sobreposições; falta apenas a validação manual de escuta descrita acima.
 - [ ] Adicionar uma fixture VFR e documentar a precisão suportada.
 - [ ] Adicionar diagnósticos agregados da pintura da Timeline e dos caminhos rápidos do compositor.
 - [ ] Registrar uma referência de desempenho reproduzível antes da próxima otimização.

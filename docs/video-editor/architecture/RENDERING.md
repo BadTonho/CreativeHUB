@@ -39,6 +39,20 @@ thread. The OpenGL surface retains the shared payload until upload, and only
 the CPU fallback creates a copied image. Non-contiguous rows use a reusable
 staging buffer instead of allocating a new buffer for every upload.
 
+Composed Preview playback mixes embedded audio from every video clip active at
+the current Timeline position, including clips whose video is covered by a
+higher-priority track. It lazily opens per-occurrence audio sessions for clips
+needed by the upcoming output buffer, applies clip and track mute/gain, sums
+the sources before clipping the final PCM samples, and emits silence through
+gaps so the audio clock remains on the global Timeline. Expired sessions are
+released after the queued audio buffer passes their clip end and can be opened
+again after a backward seek. Preview and offline export share the same sample
+span planner for Timeline/source-rate conversion, source trims, gains, mutes,
+and Cross Dissolve audio cuts. The dissolve remains a hard audio cut at the
+original edit point: outgoing audio continues to the cut and incoming audio
+starts there at its corresponding source time. Audio-only clips and tracks
+remain outside the current project model.
+
 Playback uses a precise timer and a steady-clock target frame. The audio clock
 has priority when audio output is available; video-only playback derives its
 target from elapsed time and the source frame rate. If the worker falls behind,

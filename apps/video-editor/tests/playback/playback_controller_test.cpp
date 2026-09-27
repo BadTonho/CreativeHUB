@@ -41,6 +41,14 @@ bool selectionMatchesClip(const application::EditorSession& session, timeline::C
 }
 
 struct FakeWorkerState {
+    struct AudioParameterUpdate {
+        qint64 track_index = -1;
+        qint64 clip_index = -1;
+        double track_gain = 1.0;
+        bool track_muted = false;
+        double clip_gain = 1.0;
+        bool clip_muted = false;
+    };
     std::atomic<int> stop_calls{0};
     std::atomic<int> play_calls{0};
     std::atomic<int> pause_calls{0};
@@ -56,6 +64,8 @@ struct FakeWorkerState {
     std::atomic_bool emit_traced_frame{false};
     std::mutex composition_mutex;
     std::vector<std::pair<timeline::TrackId, timeline::ClipId>> composition_clip_ids;
+    std::vector<playback::CompositionLayerSpec> composition_layers;
+    std::vector<AudioParameterUpdate> audio_parameter_updates;
 };
 
 class FakePlaybackWorker final : public playback::PlaybackWorker {
@@ -108,6 +118,17 @@ public:
     }
 
     void setAudioParameters(double, bool, double, bool) override {}
+    void setCompositionAudioParameters(
+        qint64 track_index,
+        qint64 clip_index,
+        double track_gain,
+        bool track_muted,
+        double clip_gain,
+        bool clip_muted) override {
+        std::lock_guard lock(state_->composition_mutex);
+        state_->audio_parameter_updates.push_back(FakeWorkerState::AudioParameterUpdate{
+            track_index, clip_index, track_gain, track_muted, clip_gain, clip_muted});
+    }
     void setMonitorVolume(double) override {}
     void setPreviewQuality(playback::PreviewQuality quality) override {
         state_->preview_quality_value.store(
@@ -120,6 +141,7 @@ public:
         {
             std::lock_guard lock(state_->composition_mutex);
             state_->composition_clip_ids.clear();
+            state_->composition_layers.assign(layers.cbegin(), layers.cend());
             for (const auto& layer : layers) {
                 state_->composition_clip_ids.emplace_back(
                     layer.track_id,
@@ -252,6 +274,13 @@ media::MediaItem makeMedia(const std::filesystem::path& path) {
     first_frame.stride = 4;
     first_frame.rgba_pixels = {0, 0, 0, 255};
     return {metadata, std::move(first_frame), metadata.display_name, "Unsorted", false};
+}
+
+media::MediaItem makeAudioMedia(const std::filesystem::path& path) {
+    auto item = makeMedia(path);
+    item.metadata.audio = media::AudioMetadata{
+        "pcm_s16le", 48000, 2, item.metadata.duration_seconds};
+    return item;
 }
 
 media::MediaItem makeLongMedia(
@@ -564,7 +593,6 @@ void runControllerTests() {
     require(model.addClip(0, makeMedia(missing_media).metadata, 6) ==
                 timeline::AddClipResult::Added,
             "Could not seed a clip whose media is absent from the library.");
-
     auto fake_state = std::make_shared<FakeWorkerState>();
     fake_state->emit_traced_frame.store(true, std::memory_order_release);
     FakePlaybackWorker* fake_worker = nullptr;
@@ -846,11 +874,95 @@ void runControllerTests() {
             "Shutdown did not stop the playback worker before joining its thread.");
 }
 
+void runAudioCompositionSnapshotTests() {
+    application::EditorSession session;
+    application::MediaController media_controller(session);
+    const auto top_path = std::filesystem::temp_directory_path() /
+        "playback-audio-top.mkv";
+    const auto covered_path = std::filesystem::temp_directory_path() /
+        "playback-audio-covered.mkv";
+    const auto top_media = makeAudioMedia(top_path);
+    const auto covered_media = makeAudioMedia(covered_path);
+    require(media_controller.commitImported(top_media).changed() &&
+                media_controller.commitImported(covered_media).changed(),
+            "Could not seed the overlapping audio media items.");
+
+    auto& model = session.legacyTimelineForUi();
+    require(model.addTrack("Bottom") == timeline::AddTrackResult::Added &&
+                model.addTrack("Top") == timeline::AddTrackResult::Added,
+            "Could not create overlapping audio tracks.");
+    require(model.addClip(0, top_media.metadata, 0) == timeline::AddClipResult::Added &&
+                model.addClip(1, covered_media.metadata, 0) == timeline::AddClipResult::Added,
+            "Could not place overlapping clips on separate tracks.");
+    require(model.setTrackAudio(0, 0.75, false) == timeline::AudioParameterResult::Changed &&
+                model.setTrackAudio(1, 0.5, false) == timeline::AudioParameterResult::Changed &&
+                model.setClipAudio(0, 0, 0.8, false) == timeline::AudioParameterResult::Changed &&
+                model.setClipAudio(1, 0, 0.6, true) == timeline::AudioParameterResult::Changed,
+            "Could not configure gains and mute state for the overlapping clips.");
+
+    auto fake_state = std::make_shared<FakeWorkerState>();
+    playback::PlaybackController controller(
+        session,
+        nullptr,
+        [fake_state]() { return new FakePlaybackWorker(fake_state); });
+    std::vector<playback::PlaybackControllerEvent> events;
+    controller.setEventHandler([&](const auto& event) { events.push_back(event); });
+    require(controller.activateClip(1, 0, false) ==
+                playback::PlaybackCommandResult::Pending,
+            "The top overlapping audio clip could not be activated.");
+    require(waitUntil([&]() {
+        return std::any_of(events.begin(), events.end(), [](const auto& event) {
+            const auto* activation = std::get_if<playback::PlaybackActivationEvent>(&event);
+            return activation != nullptr && activation->clip_id == 1 &&
+                activation->phase == playback::PlaybackActivationPhase::Committed;
+        });
+    }), "The controller did not prepare the overlapping audio composition.");
+
+    {
+        std::lock_guard lock(fake_state->composition_mutex);
+        const auto top = std::find_if(
+            fake_state->composition_layers.begin(), fake_state->composition_layers.end(),
+            [](const auto& layer) { return layer.track_index == 0 && layer.clip_index == 0; });
+        const auto covered = std::find_if(
+            fake_state->composition_layers.begin(), fake_state->composition_layers.end(),
+            [](const auto& layer) { return layer.track_index == 1 && layer.clip_index == 0; });
+        require(top != fake_state->composition_layers.end() &&
+                    top->has_audio_stream && top->track_audio_gain == 0.75 &&
+                    top->clip_audio_gain == 0.8 && !top->track_audio_muted &&
+                    !top->clip_audio_muted,
+                "The controller did not forward the top clip's embedded audio settings.");
+        require(covered != fake_state->composition_layers.end() &&
+                    covered->has_audio_stream && covered->track_audio_gain == 0.5 &&
+                    covered->clip_audio_gain == 0.6 && !covered->track_audio_muted &&
+                    covered->clip_audio_muted,
+                "The controller omitted embedded audio settings for the visually covered clip.");
+    }
+
+    require(model.setTrackAudio(0, 1.25, false) == timeline::AudioParameterResult::Changed &&
+                model.setClipAudio(0, 0, 0.25, true) == timeline::AudioParameterResult::Changed,
+            "Could not edit audio settings after preparing the composition.");
+    controller.setAudioParametersForActiveClip();
+    require(waitUntil([&]() {
+        std::lock_guard lock(fake_state->composition_mutex);
+        return !fake_state->audio_parameter_updates.empty();
+    }), "The controller did not forward edited clip and track audio settings.");
+    {
+        std::lock_guard lock(fake_state->composition_mutex);
+        const auto& update = fake_state->audio_parameter_updates.back();
+        require(update.track_index == 0 && update.clip_index == 0 &&
+                    update.track_gain == 1.25 && !update.track_muted &&
+                    update.clip_gain == 0.25 && update.clip_muted,
+                "The controller forwarded incorrect audio settings for the active clip.");
+    }
+    controller.shutdown();
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
     try {
+        runAudioCompositionSnapshotTests();
         runControllerTests();
         runContinuousClockTests();
         runPendingActivationCancellationTests();

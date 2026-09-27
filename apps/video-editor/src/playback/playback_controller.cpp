@@ -246,7 +246,12 @@ void PlaybackController::refreshComposition() {
                 track.track_id,
                 clip.clip_id,
                 clip.source_duration_frames,
-                model.frameRate()});
+                model.frameRate(),
+                imported != nullptr && imported->metadata.audio.has_value(),
+                track.audio_gain,
+                track.audio_muted,
+                clip.audio_gain,
+                clip.audio_muted});
         }
 
         for (const auto& transition : track.transitions) {
@@ -331,11 +336,16 @@ void PlaybackController::setAudioParametersForActiveClip() {
     if (!location.has_value()) return;
     const auto& track = session_.timeline().tracks()[location->track_index];
     const auto& clip = track.clips[location->clip_index];
-    queueWorker([track_gain = track.audio_gain,
+    const auto track_index = static_cast<qint64>(location->track_index);
+    const auto clip_index = static_cast<qint64>(location->clip_index);
+    queueWorker([track_index, clip_index,
+                 track_gain = track.audio_gain,
                  track_muted = track.audio_muted,
                  clip_gain = clip.audio_gain,
                  clip_muted = clip.audio_muted](PlaybackWorker& worker) {
-        worker.setAudioParameters(track_gain, track_muted, clip_gain, clip_muted);
+        worker.setCompositionAudioParameters(
+            track_index, clip_index,
+            track_gain, track_muted, clip_gain, clip_muted);
     });
 }
 
