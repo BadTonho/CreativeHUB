@@ -4,6 +4,14 @@ Use local test copies of images so the original assets remain available for
 comparison. Record the OS, Qt version, image dimensions, and result for each
 run.
 
+## Validation record
+
+On 2026-09-27, the user confirmed on Windows that the Release build works,
+Paint and Eraser work after using Shapes, and export, `.cimg` save/reopen,
+editable shapes, general object selection, and layer groups work. macOS and
+Linux validation is deferred. Windows packaging and the remaining recovery,
+image-format plugin, and linked-image checks are still tracked in the roadmap.
+
 ## Standalone editing and recovery
 
 1. Configure and build `creative-suite-image-editor` in Release mode, then

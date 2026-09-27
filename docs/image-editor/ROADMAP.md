@@ -1,8 +1,8 @@
 # Image Editor Roadmap
 
-Status: **standalone minimum implemented; baseline manual workflow user-confirmed;
-export, editable shapes, general object selection, and layer groups need manual validation;
-cross-platform acceptance in progress**.
+Status: **standalone minimum implemented; baseline and recent editing workflows
+user-confirmed on Windows; packaging and linked-image acceptance remain in progress;
+macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.2**.
 This roadmap covers the independent application under `apps/image-editor/`.
 The Video Editor handoff implementation already exists as a bounded prototype,
@@ -77,13 +77,14 @@ of Motion Studio in the application sequence.
 - [x] Add canvas fit, zoom, pan, and drag-to-crop controls.
 - [x] Pass Release build and automated tests for documents, edits, relinking,
   export, recovery, logging, and the UI boundary.
-- [-] Complete the manual workflow in
-  [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md), including a restart and
-  recovery check (the baseline workflow was user-confirmed; export options,
-  responsive export, selected-item Quick Export, editable shapes, general
-  object selection, and layer groups still need manual validation).
+- [x] User-confirmed Windows validation of the Release build, Paint/Eraser
+  switching after Shapes, export, `.cimg` save/reopen, editable shapes, general
+  object selection, and layer groups.
+- [-] Complete the remaining manual workflow in
+  [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md), including restart/recovery
+  and deployed image-format plugin checks.
 - [ ] Validate Windows packaging with PNG, JPEG, BMP, WebP, and TIFF plugins;
-  then repeat build and interaction checks on macOS and Linux.
+  macOS and Linux builds and interaction checks are deferred.
 
 **Exit criteria:** the application builds independently, opens and edits a
 raster image without changing its source, saves and reopens `.cimg`, exports
@@ -112,7 +113,8 @@ coverage to catch regressions.
 - [x] Confirm the basic linked edit/save workflow manually: saving in the
   Image Editor refreshed the Video Editor (user-confirmed; platform unspecified).
 - [ ] Validate transparent images, repeated Media Pool uses, clip variants,
-  save/reopen, large files, and both applications on Windows, macOS, and Linux.
+  save/reopen, and large files in both applications on Windows. macOS and Linux
+  validation is deferred.
 
 **Exit criteria:** automated and manual checks confirm that saving a linked
 image refreshes every intended Video Editor use without modifying the original
