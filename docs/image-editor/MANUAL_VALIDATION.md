@@ -135,10 +135,11 @@ run.
 ### Editable shapes and general object selection
 
 1. On an editable layer, click **Shapes**. Confirm a movable palette opens next
-   to the button with Line, Rectangle, and Ellipse choices. Confirm Rectangle
-   is selected initially, and stroke and fill are enabled with the current Paint
-   color at 2 px width. Move the palette, choose Line, and confirm the palette
-   stays open while Line becomes active and Fill is disabled. Draw a line,
+   to the button with icon-only Line, Rectangle, and Ellipse choices, and that
+   hovering each icon identifies its shape. Confirm Rectangle is selected
+   initially, and stroke and fill are enabled with the current Paint color at
+   2 px width. Move the palette, choose Line, and confirm the palette stays
+   open while Line becomes active and Fill is disabled. Draw a line,
    rectangle, and ellipse using the palette choices; confirm each preview
    follows the drag and Escape cancels an unfinished shape. Close the palette
    with its window close button and confirm Shapes and the selected type remain

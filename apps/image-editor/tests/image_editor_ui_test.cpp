@@ -1356,9 +1356,18 @@ int main(int argc, char* argv[]) {
         shape_line_button == nullptr || shape_rectangle_button == nullptr ||
         shape_ellipse_button == nullptr ||
         linked_window.findChild<QComboBox*>(QStringLiteral("shapeKindComboBox")) != nullptr ||
-        shape_line_button->text() != QStringLiteral("Line") ||
-        shape_rectangle_button->text() != QStringLiteral("Rectangle") ||
-        shape_ellipse_button->text() != QStringLiteral("Ellipse") ||
+        !shape_line_button->text().isEmpty() ||
+        !shape_rectangle_button->text().isEmpty() ||
+        !shape_ellipse_button->text().isEmpty() ||
+        shape_line_button->toolButtonStyle() != Qt::ToolButtonIconOnly ||
+        shape_rectangle_button->toolButtonStyle() != Qt::ToolButtonIconOnly ||
+        shape_ellipse_button->toolButtonStyle() != Qt::ToolButtonIconOnly ||
+        shape_line_button->accessibleName() != QStringLiteral("Line shape") ||
+        shape_rectangle_button->accessibleName() != QStringLiteral("Rectangle shape") ||
+        shape_ellipse_button->accessibleName() != QStringLiteral("Ellipse shape") ||
+        shape_line_button->toolTip() != QStringLiteral("Draw a line") ||
+        shape_rectangle_button->toolTip() != QStringLiteral("Draw a rectangle") ||
+        shape_ellipse_button->toolTip() != QStringLiteral("Draw an ellipse") ||
         shape_line_button->icon().isNull() || shape_rectangle_button->icon().isNull() ||
         shape_ellipse_button->icon().isNull() || shape_stroke == nullptr ||
         shape_fill == nullptr || shape_width == nullptr || shape_stroke_color == nullptr ||

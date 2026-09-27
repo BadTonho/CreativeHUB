@@ -100,11 +100,12 @@ persistence, and recovery.
   shows synchronized size controls (1–1024 pixels) for Paint and Eraser, plus
   stroke, fill, colors, and width controls for Shapes and selected shapes.
   The Shapes sidebar button opens a movable, non-modal palette next to the
-  button on first use. Line, Rectangle, and Ellipse choices set the current
-  shape type and activate Shapes; the palette stays open while drawing and is
-  hidden by its close button. Reopening it retains its position and current
-  type. The Shapes shortcut activates the current type without opening the
-  palette. Stroke and fill controls edit all selected shapes.
+  button on first use. Icon-only Line, Rectangle, and Ellipse choices set the
+  current shape type and activate Shapes; tooltips and accessible names identify
+  each choice. The palette stays open while drawing and is hidden by its close
+  button. Reopening it retains its position and current type. The Shapes
+  shortcut activates the current type without opening the palette. Stroke and
+  fill controls edit all selected shapes.
   Paint and Eraser sizes are independent and start at 12 px. Shape defaults are
   Rectangle, enabled stroke and fill using the current Paint color, and a 2 px
   stroke. Shape options are session-only and are not stored in `.cimg`. The

@@ -521,14 +521,14 @@ void ImageEditorWindow::createShapePalette() {
         auto* button = new QToolButton(shape_palette_window_);
         button->setObjectName(object_name);
         button->setAccessibleName(text + QStringLiteral(" shape"));
-        button->setText(text);
         button->setIcon(shapePaletteIcon(kind));
         button->setIconSize(QSize(24, 24));
-        button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        button->setToolTip(QStringLiteral("Draw a %1").arg(text.toLower()));
+        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        const QString article = kind == ImageShapeKind::Ellipse
+            ? QStringLiteral("an") : QStringLiteral("a");
+        button->setToolTip(QStringLiteral("Draw %1 %2").arg(article, text.toLower()));
         button->setCheckable(true);
-        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        button->setMinimumHeight(36);
+        button->setFixedSize(36, 36);
         shape_palette_button_group_->addButton(button, static_cast<int>(kind));
         shape_palette_buttons_.append(button);
         layout->addWidget(button);
