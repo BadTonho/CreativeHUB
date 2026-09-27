@@ -1319,8 +1319,14 @@ int main(int argc, char* argv[]) {
         QStringLiteral("deleteSelectedShapeButton"));
     auto* shape_options_action = linked_window.findChild<QAction*>(
         QStringLiteral("shapeOptionsAction"));
-    auto* shape_kind = linked_window.findChild<QComboBox*>(
-        QStringLiteral("shapeKindComboBox"));
+    auto* shape_palette = linked_window.findChild<QDialog*>(
+        QStringLiteral("shapePaletteWindow"));
+    auto* shape_line_button = linked_window.findChild<QToolButton*>(
+        QStringLiteral("shapePaletteLineButton"));
+    auto* shape_rectangle_button = linked_window.findChild<QToolButton*>(
+        QStringLiteral("shapePaletteRectangleButton"));
+    auto* shape_ellipse_button = linked_window.findChild<QToolButton*>(
+        QStringLiteral("shapePaletteEllipseButton"));
     auto* shape_stroke = linked_window.findChild<QCheckBox*>(
         QStringLiteral("shapeStrokeCheckBox"));
     auto* shape_fill = linked_window.findChild<QCheckBox*>(
@@ -1333,6 +1339,8 @@ int main(int argc, char* argv[]) {
         QStringLiteral("shapeFillColorButton"));
     auto* linked_layer_list = linked_window.findChild<QListWidget*>(
         QStringLiteral("imageLayerList"));
+    auto* linked_tool_sidebar = linked_window.findChild<image_editor::ToolSidebar*>(
+        QStringLiteral("imageEditorToolSidebar"));
     const QImage selection_icon_24 = linked_select_shapes_button == nullptr
         ? QImage{}
         : linked_select_shapes_button->icon().pixmap(QSize(24, 24)).toImage();
@@ -1344,21 +1352,82 @@ int main(int argc, char* argv[]) {
         linked_select_shapes_button->accessibleName() != QStringLiteral("Selection tool") ||
         selection_icon_24.isNull() || selection_icon_24.pixelColor(5, 8).alpha() == 0 ||
         delete_objects_button->text() != QStringLiteral("Delete Selected Objects") ||
-        shape_options_action == nullptr || shape_kind == nullptr || shape_stroke == nullptr ||
+        shape_options_action == nullptr || shape_palette == nullptr ||
+        shape_line_button == nullptr || shape_rectangle_button == nullptr ||
+        shape_ellipse_button == nullptr ||
+        linked_window.findChild<QComboBox*>(QStringLiteral("shapeKindComboBox")) != nullptr ||
+        shape_line_button->text() != QStringLiteral("Line") ||
+        shape_rectangle_button->text() != QStringLiteral("Rectangle") ||
+        shape_ellipse_button->text() != QStringLiteral("Ellipse") ||
+        shape_line_button->icon().isNull() || shape_rectangle_button->icon().isNull() ||
+        shape_ellipse_button->icon().isNull() || shape_stroke == nullptr ||
         shape_fill == nullptr || shape_width == nullptr || shape_stroke_color == nullptr ||
-        shape_fill_color == nullptr || linked_layer_list == nullptr) {
+        shape_fill_color == nullptr || linked_layer_list == nullptr ||
+        linked_tool_sidebar == nullptr) {
         std::cerr << "The shape tools or their options were not created.\n";
         return 1;
     }
+    linked_shapes_button->click();
+    QCoreApplication::processEvents();
+    if (!shape_palette->isVisible() || linked_shapes_button->isChecked() ||
+        linked_tool_sidebar->activeTool() != image_editor::ToolSidebar::Tool::Paint) {
+        std::cerr << "Opening the Shapes palette changed the active tool before a shape was chosen.\n";
+        return 1;
+    }
+    shape_line_button->click();
+    QCoreApplication::processEvents();
+    if (!shape_palette->isVisible() || !shape_line_button->isChecked() ||
+        !linked_shapes_button->isChecked() || shape_fill->isEnabled() ||
+        linked_tool_sidebar->activeTool() != image_editor::ToolSidebar::Tool::Shapes) {
+        std::cerr << "Choosing Line did not activate drawing and keep the palette open.\n";
+        return 1;
+    }
+    linked_paint_action->trigger();
+    QCoreApplication::processEvents();
+    shape_palette->close();
+    QCoreApplication::processEvents();
     linked_shapes_action->trigger();
     QCoreApplication::processEvents();
     if (!linked_shapes_button->isChecked() || !shape_options_action->isVisible() ||
-        !shape_kind->isEnabled() ||
-        shape_kind->currentData().toInt() != static_cast<int>(image_editor::ImageShapeKind::Rectangle) ||
+        shape_palette->isVisible() || !shape_line_button->isChecked() ||
+        shape_fill->isEnabled() ||
+        linked_tool_sidebar->activeTool() != image_editor::ToolSidebar::Tool::Shapes) {
+        std::cerr << "The Shapes shortcut did not activate the last type without opening the palette.\n";
+        return 1;
+    }
+    linked_shapes_button->click();
+    QCoreApplication::processEvents();
+    if (!shape_palette->isVisible() || !shape_palette->isWindow() ||
+        !shape_palette->windowFlags().testFlag(Qt::Tool) ||
+        !linked_shapes_button->isChecked() ||
+        linked_tool_sidebar->activeTool() != image_editor::ToolSidebar::Tool::Shapes) {
+        std::cerr << "The Shapes button did not bring its floating palette forward.\n";
+        return 1;
+    }
+    shape_rectangle_button->click();
+    QCoreApplication::processEvents();
+    shape_fill->setChecked(true);
+    if (!shape_palette->isVisible() || !shape_rectangle_button->isChecked() ||
         !shape_stroke->isChecked() || !shape_fill->isChecked() || shape_width->value() != 2 ||
         shape_stroke_color->toolTip() != QStringLiteral("#ff000000") ||
         shape_fill_color->toolTip() != QStringLiteral("#ff000000")) {
-        std::cerr << "Shape creation did not show its default Rectangle, stroke, fill, and 2 px options.\n";
+        std::cerr << "Shape creation did not show its default Rectangle and style options.\n";
+        return 1;
+    }
+    shape_palette->move(120, 80);
+    shape_palette->close();
+    QCoreApplication::processEvents();
+    if (shape_palette->isVisible() || !linked_shapes_button->isChecked() ||
+        linked_tool_sidebar->activeTool() != image_editor::ToolSidebar::Tool::Shapes ||
+        !shape_rectangle_button->isChecked()) {
+        std::cerr << "Closing the palette changed the active shape tool or selected type.\n";
+        return 1;
+    }
+    linked_shapes_button->click();
+    QCoreApplication::processEvents();
+    if (!shape_palette->isVisible() || shape_palette->pos() != QPoint(120, 80) ||
+        !shape_rectangle_button->isChecked()) {
+        std::cerr << "Reopening the Shapes palette did not retain its position and selected type.\n";
         return 1;
     }
     const auto imagePoint = [](image_editor::ImageCanvas* target,
@@ -1370,12 +1439,12 @@ int main(int argc, char* argv[]) {
                       qRound((target->height() - image_size.height() * zoom) / 2.0 +
                              point.y() * zoom));
     };
-    shape_kind->setCurrentIndex(0);
+    shape_line_button->click();
     if (shape_fill->isEnabled() || !shape_stroke->isChecked()) {
         std::cerr << "Line options did not disable fill and retain their stroke.\n";
         return 1;
     }
-    shape_kind->setCurrentIndex(1);
+    shape_rectangle_button->click();
     shape_fill->setChecked(true);
     auto* linked_undo_action = linked_window.findChild<QAction*>(QStringLiteral("undoAction"));
     const bool undo_enabled_before_cancel =
@@ -1409,7 +1478,7 @@ int main(int argc, char* argv[]) {
     if (add_shape_layer == nullptr) return 1;
     add_shape_layer->click();
     QCoreApplication::processEvents();
-    shape_kind->setCurrentIndex(2);
+    shape_ellipse_button->click();
     const QPoint ellipse_start = imagePoint(linked_canvas, QSize(32, 24), QPointF(17, 14));
     const QPoint ellipse_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(25, 22));
     QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, ellipse_start);
@@ -1419,7 +1488,7 @@ int main(int argc, char* argv[]) {
     linked_select_shapes_action->trigger();
     QCoreApplication::processEvents();
     if (!linked_select_shapes_button->isChecked() || linked_shapes_button->isChecked() ||
-        shape_kind->isEnabled()) {
+        shape_options_action->isVisible() || !shape_ellipse_button->isChecked()) {
         std::cerr << "Shapes and Selection were not mutually exclusive.\n";
         return 1;
     }

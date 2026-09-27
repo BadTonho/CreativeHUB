@@ -11,16 +11,18 @@
 #include <QStringList>
 
 class QAction;
+class QButtonGroup;
 class QCheckBox;
 class QCloseEvent;
-class QComboBox;
 class QDockWidget;
+class QDialog;
 class QKeySequence;
 class QLabel;
 class QSlider;
 class QSpinBox;
 class QPushButton;
 class QToolBar;
+class QToolButton;
 class QTimer;
 class QWidget;
 class QWidgetAction;
@@ -49,6 +51,7 @@ protected:
 private:
     void createActions();
     void createToolOptionsBar();
+    void createShapePalette();
     void createLayerPanel();
     void registerShortcutAction(QAction* action, const QKeySequence& default_sequence);
     void loadShortcutPreferences();
@@ -74,6 +77,9 @@ private:
     void updateCanvasToolState(ToolSidebar::Tool tool);
     void updateCanvasBrush();
     void updateShapeOptions();
+    void updateShapePalette();
+    void openShapePalette();
+    void setShapeKind(ImageShapeKind kind);
     void updateObjectPlacements();
     void applyShapeStyleToSelection(bool include_kind = false);
     void handleShapeCreated(const ImageShapeData& shape);
@@ -95,11 +101,13 @@ private:
     QWidgetAction* shape_options_action_ = nullptr;
     QWidget* paint_size_options_ = nullptr;
     QWidget* shape_options_widget_ = nullptr;
+    QDialog* shape_palette_window_ = nullptr;
+    QButtonGroup* shape_palette_button_group_ = nullptr;
+    QList<QToolButton*> shape_palette_buttons_;
     QSlider* brush_size_slider_ = nullptr;
     QSpinBox* brush_size_spin_ = nullptr;
     QLabel* tool_size_label_ = nullptr;
     QCheckBox* eraser_preview_check_ = nullptr;
-    QComboBox* shape_kind_combo_ = nullptr;
     QCheckBox* shape_stroke_check_ = nullptr;
     QCheckBox* shape_fill_check_ = nullptr;
     QPushButton* shape_stroke_color_button_ = nullptr;
@@ -133,6 +141,7 @@ private:
     ImageShapeData shape_style_;
     QStringList selected_object_ids_;
     bool shape_colors_initialized_ = false;
+    bool shape_palette_positioned_ = false;
     int paint_diameter_ = 12;
     int eraser_diameter_ = 12;
     QList<QAction*> shortcut_actions_;

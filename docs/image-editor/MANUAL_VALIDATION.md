@@ -134,23 +134,31 @@ run.
 
 ### Editable shapes and general object selection
 
-1. On an editable layer, use **Shapes** to draw a line, rectangle, and ellipse.
-   Confirm the preview follows the drag and Escape cancels an unfinished shape.
-   Check that the initial type is Rectangle, stroke and fill are enabled with
-   the current Paint color, and stroke width is 2 px. Confirm lines use stroke
-   only and that the fill control is disabled for lines.
-2. Create a square and circle with Shift held during the drag, then create a
+1. On an editable layer, click **Shapes**. Confirm a movable palette opens next
+   to the button with Line, Rectangle, and Ellipse choices. Confirm Rectangle
+   is selected initially, and stroke and fill are enabled with the current Paint
+   color at 2 px width. Move the palette, choose Line, and confirm the palette
+   stays open while Line becomes active and Fill is disabled. Draw a line,
+   rectangle, and ellipse using the palette choices; confirm each preview
+   follows the drag and Escape cancels an unfinished shape. Close the palette
+   with its window close button and confirm Shapes and the selected type remain
+   active. Click **Shapes** again and confirm the palette reopens at its moved
+   position with the current type selected.
+2. Assign a shortcut to Shapes in **Settings > Keyboard Shortcuts**. Choose
+   Ellipse in the palette, close it, and trigger the Shapes shortcut. Confirm
+   Ellipse drawing activates without reopening the palette.
+3. Create a square and circle with Shift held during the drag, then create a
    line at a non-45-degree angle with Shift. Confirm it snaps to 45-degree
    increments. Change stroke and fill independently, use translucent colors,
    and vary the stroke width.
-3. Create shapes, paint strokes, and erase strokes on multiple editable layers.
+4. Create shapes, paint strokes, and erase strokes on multiple editable layers.
    Switch to Selection and click objects to select them. Confirm the uppermost hit
    object is selected and its layer becomes active. Shift-click to add an object
    and Shift-click it again to remove it. Drag a marquee across portions of
    objects and confirm every intersecting object is selected. Click empty
    canvas to clear the selection. Hide a layer, set another layer's opacity to
    zero, and select Background; confirm their objects cannot be selected.
-4. Drag a selected object's body and confirm the entire selection moves.
+5. Drag a selected object's body and confirm the entire selection moves.
    Resize from each corner and confirm proportions are preserved by default.
    Hold Alt during a corner drag to allow independent horizontal and vertical
    scaling. Confirm brush, eraser, and shape-outline thickness follows the
@@ -159,13 +167,13 @@ run.
    and confirm all selected shapes update while paint and eraser operations
    retain their original style. Press Delete Selected Objects and verify all
    selected operation types are removed together.
-5. Use Undo and Redo after selection transforms, shape style edits, and
+6. Use Undo and Redo after selection transforms, shape style edits, and
    deletion; confirm each gesture or property edit is one history entry. Save
    and reopen `.cimg`; confirm stable operation IDs, type, geometry, colors,
    alpha, stroke width, stacking order, and rendered appearance persist.
    Confirm older v1-v6 documents still open with their previous appearance and
    receive operation IDs when next saved.
-6. Export the composite as PNG and JPEG and use Quick Export on a selected
+7. Export the composite as PNG and JPEG and use Quick Export on a selected
    shape layer. Confirm the shape appears in the appropriate output, layer
    visibility and opacity are respected, and PNG transparency remains intact.
    In linked mode, save a document containing shapes and confirm the published

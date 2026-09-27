@@ -175,9 +175,10 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
         if (active) setActiveTool(Tool::Eraser);
         else if (active_tool_ == Tool::Eraser) setActiveTool(Tool::None);
     });
-    connect(shapes_button_, &QToolButton::toggled, this, [this](bool active) {
-        if (active) setActiveTool(Tool::Shapes);
-        else if (active_tool_ == Tool::Shapes) setActiveTool(Tool::None);
+    connect(shapes_button_, &QToolButton::clicked, this, [this]() {
+        const QSignalBlocker blocker(shapes_button_);
+        shapes_button_->setChecked(active_tool_ == Tool::Shapes);
+        emit shapesPaletteRequested();
     });
     connect(select_shapes_button_, &QToolButton::toggled, this, [this](bool active) {
         if (active) setActiveTool(Tool::Select);

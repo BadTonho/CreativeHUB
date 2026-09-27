@@ -98,9 +98,13 @@ persistence, and recovery.
   The always-visible color swatch remains specific to Paint. `ImageEditorWindow`
   owns a persistent top tool options bar; it is empty when no tool is active and
   shows synchronized size controls (1–1024 pixels) for Paint and Eraser, plus
-  shape type, stroke, fill, colors, and width controls for Shapes and selected
-  shapes. The shape type chooses new shapes; stroke and fill controls edit all
-  selected shapes.
+  stroke, fill, colors, and width controls for Shapes and selected shapes.
+  The Shapes sidebar button opens a movable, non-modal palette next to the
+  button on first use. Line, Rectangle, and Ellipse choices set the current
+  shape type and activate Shapes; the palette stays open while drawing and is
+  hidden by its close button. Reopening it retains its position and current
+  type. The Shapes shortcut activates the current type without opening the
+  palette. Stroke and fill controls edit all selected shapes.
   Paint and Eraser sizes are independent and start at 12 px. Shape defaults are
   Rectangle, enabled stroke and fill using the current Paint color, and a 2 px
   stroke. Shape options are session-only and are not stored in `.cimg`. The

@@ -34,6 +34,7 @@ public:
 signals:
     void activeToolChanged(image_editor::ToolSidebar::Tool tool);
     void brushColorChanged(const QColor& color);
+    void shapesPaletteRequested();
 
 private:
     void updateControls();
