@@ -173,9 +173,9 @@ void testCanvasCreationPersistenceAndRecovery(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The saved canvas document could not be read."));
     const auto document_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(document_json.value("version").toInt() == 6 &&
+    require(document_json.value("version").toInt() == 7 &&
                 document_json.value("base").toObject().value("kind").toString() == "canvas",
-            QStringLiteral("Canvas save did not use the version 6 layered representation."));
+            QStringLiteral("Canvas save did not use the version 7 layered representation."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -258,8 +258,8 @@ void testLegacyVersionOneDocument(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 1 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 6,
-            QStringLiteral("Saving a version 1 document did not upgrade it to version 6."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 7,
+            QStringLiteral("Saving a version 1 document did not upgrade it to version 7."));
 }
 
 void testVersionTwoDocumentCompatibility(const QString& root) {
@@ -292,8 +292,8 @@ void testVersionTwoDocumentCompatibility(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 2 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 6,
-            QStringLiteral("Saving a version 2 document did not upgrade it to version 6."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 7,
+            QStringLiteral("Saving a version 2 document did not upgrade it to version 7."));
 
     base.remove("path");
     base.insert("kind", "canvas");
@@ -346,9 +346,10 @@ void testVersionThreeMigrationToBackground(const QString& root) {
     const QImage original_render = session.renderedImage();
     require(original_render.pixelColor(3, 2).red() > 240 &&
                 session.data().operations.size() == 1 &&
+                !session.data().operations.front().paint_stroke.id.isEmpty() &&
                 session.data().layers.size() == 2 &&
                 session.selectedLayerIsEditable(),
-            QStringLiteral("A version 3 paint edit was not preserved on migrated Background."));
+            QStringLiteral("A version 3 paint edit or its generated object ID was not preserved on migrated Background."));
     const auto layer_thumbnails = session.renderedLayerThumbnails(QSize(48, 36));
     require(layer_thumbnails.value(session.data().layers.front().id)
                     .pixelColor(18, 12).red() > 240 &&
@@ -364,8 +365,8 @@ void testVersionThreeMigrationToBackground(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The migrated version 3 document could not be reopened."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 6,
-            QStringLiteral("Saving a version 3 document did not upgrade it to version 6."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 7,
+            QStringLiteral("Saving a version 3 document did not upgrade it to version 7."));
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(path, &error) && reopened.renderedImage() == original_render,
             QStringLiteral("Upgrading a version 3 document changed its visible pixels."));
@@ -454,17 +455,17 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     const int serialized_maximum_diameter = maximum_brush_json.value("layers").toArray()
         .at(1).toObject().value("operations").toArray()
         .at(0).toObject().value("diameter").toInt();
-    require(maximum_brush_json.value("version").toInt() == 6 &&
+    require(maximum_brush_json.value("version").toInt() == 7 &&
                 serialized_maximum_diameter ==
                     image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter,
-            QStringLiteral("The 1024 px paint diameter was not saved in version 6."));
+            QStringLiteral("The 1024 px paint diameter was not saved in version 7."));
     image_editor::ImageDocumentSession reopened_maximum_brush;
     require(reopened_maximum_brush.openDocument(maximum_brush_path, &error), error);
     require(reopened_maximum_brush.data() == maximum_brush_session.data() &&
                 reopened_maximum_brush.data().layers.at(1).operations.front()
                         .paint_stroke.diameter ==
                     image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter,
-            QStringLiteral("A 1024 px paint stroke did not round-trip through version 6."));
+            QStringLiteral("A 1024 px paint stroke did not round-trip through version 7."));
 
     require(session.undo() && session.renderedImage() == source && !session.isDirty(),
             QStringLiteral("Undo did not remove the complete paint stroke."));
@@ -477,11 +478,11 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The painted document could not be read."));
     const QJsonObject saved_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(saved_json.value("version").toInt() == 6 &&
+    require(saved_json.value("version").toInt() == 7 &&
                 saved_json.value("layers").toArray().at(1).toObject()
                     .value("operations").toArray().at(0).toObject()
                     .value("kind").toString() == "paint_stroke",
-            QStringLiteral("Paint was not serialized in the version 6 layer operations."));
+            QStringLiteral("Paint was not serialized in the version 7 layer operations."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -622,10 +623,10 @@ void testEraseStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     const QJsonObject maximum_json = QJsonDocument::fromJson(maximum_file.readAll()).object();
     const auto operations = maximum_json.value("layers").toArray().at(1).toObject()
         .value("operations").toArray();
-    require(maximum_json.value("version").toInt() == 6 && operations.size() == 2 &&
+    require(maximum_json.value("version").toInt() == 7 && operations.size() == 2 &&
                 operations.at(1).toObject().value("kind").toString() == "erase_stroke" &&
                 operations.at(1).toObject().value("diameter").toInt() == 1024,
-            QStringLiteral("A maximum-size erase stroke was not serialized as version 6."));
+            QStringLiteral("A maximum-size erase stroke was not serialized as version 7."));
     QJsonObject version_four_with_erase = maximum_json;
     version_four_with_erase.insert("version", 4);
     const QString invalid_v4_path = root + QStringLiteral("/version-four-erase.cimg");
@@ -800,18 +801,18 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     require(session.saveDocument(document_path, &error), error);
     QFile document_file(document_path);
     require(document_file.open(QIODevice::ReadOnly),
-            QStringLiteral("The version 6 shape document could not be read."));
+            QStringLiteral("The version 7 shape document could not be read."));
     QJsonObject document_json = QJsonDocument::fromJson(document_file.readAll()).object();
     document_file.close();
-    require(document_json.value("version").toInt() == 6 &&
+    require(document_json.value("version").toInt() == 7 &&
                 document_json.value("layers").toArray().at(1).toObject()
                     .value("operations").toArray().at(0).toObject()
                     .value("kind").toString() == "shape",
-            QStringLiteral("Shapes were not stored in the version 6 operation sequence."));
+            QStringLiteral("Shapes were not stored in the version 7 operation sequence."));
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error) &&
                 reopened.data() == session.data() && reopened.renderedImage() == session.renderedImage(),
-            QStringLiteral("Editable shapes did not round-trip through the v6 document."));
+            QStringLiteral("Editable shapes did not round-trip through the v7 document."));
 
     QJsonObject version_five = document_json;
     version_five.insert("version", 5);
@@ -842,13 +843,13 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     image_editor::ImageDocumentSession recovered;
     require(recovered.restoreRecovery(snapshot_path, &error) &&
                 recovered.data() == session.data() && recovered.renderedImage() == session.renderedImage(),
-            QStringLiteral("Recovery did not preserve version 6 shape operations."));
+            QStringLiteral("Recovery did not preserve version 7 shape operations."));
     QFile recovery_file(snapshot_path);
     require(recovery_file.open(QIODevice::ReadOnly),
             QStringLiteral("The shape recovery wrapper could not be read."));
     const QJsonObject recovery_json = QJsonDocument::fromJson(recovery_file.readAll()).object();
     require(recovery_json.value("version").toInt() == 1 &&
-                recovery_json.value("document").toObject().value("version").toInt() == 6,
+                recovery_json.value("document").toObject().value("version").toInt() == 7,
             QStringLiteral("Shape recovery changed the recovery wrapper version."));
 
     image_editor::ImageDocumentSession transformed;
@@ -931,6 +932,186 @@ void testCropNoOpAndInvalidOperations(const QString& root) {
             QStringLiteral("A partially intersecting crop was not clipped to the image."));
     require(session.renderedImage().size() == QSize(4, 3),
             QStringLiteral("The clipped layer crop changed the fixed canvas dimensions."));
+}
+
+void testGeneralObjectOperations(const QString& root) {
+    image_editor::ImageDocumentSession session;
+    QString error;
+    require(session.createCanvas(QSize(64, 48), QColor(0, 0, 0, 0), &error), error);
+    require(session.applyPaintStroke({QPointF(5, 12), QPointF(50, 12)}, Qt::red, 4, &error), error);
+    require(session.applyEraseStroke({QPointF(10, 12), QPointF(15, 12)}, 4, &error), error);
+
+    auto objects = session.visibleObjects();
+    require(objects.size() == 2 &&
+                objects.at(0).operation.kind == image_editor::OperationKind::EraseStroke &&
+                objects.at(1).operation.kind == image_editor::OperationKind::PaintStroke &&
+                !objects.at(0).operation.erase_stroke.id.isEmpty() &&
+                !objects.at(1).operation.paint_stroke.id.isEmpty() &&
+                objects.at(0).operation.erase_stroke.id != objects.at(1).operation.paint_stroke.id,
+            QStringLiteral("Paint and erase strokes were not assigned distinct selectable IDs."));
+    const QString erase_id = objects.at(0).operation.erase_stroke.id;
+    const QString paint_id = objects.at(1).operation.paint_stroke.id;
+    require(session.renderedImage().pixelColor(12, 12).alpha() == 0 &&
+                session.renderedImage().pixelColor(30, 12).red() > 200,
+            QStringLiteral("The test paint and erase operations did not render in order."));
+
+    auto moved_eraser = objects.front();
+    for (auto& point : moved_eraser.operation.erase_stroke.points) point.rx() += 18;
+    require(session.updateObjectsRendered({moved_eraser}, &error), error);
+    require(session.renderedImage().pixelColor(12, 12).red() > 200 &&
+                session.renderedImage().pixelColor(30, 12).alpha() == 0,
+            QStringLiteral("Moving an eraser did not move the erased region on its layer."));
+    require(session.undo() && session.renderedImage().pixelColor(12, 12).alpha() == 0 &&
+                session.redo() && session.renderedImage().pixelColor(12, 12).red() > 200,
+            QStringLiteral("Moving an eraser was not a single undoable edit."));
+
+    objects = session.visibleObjects();
+    auto moved_paint = objects.back();
+    require(moved_paint.operation.kind == image_editor::OperationKind::PaintStroke,
+            QStringLiteral("The paint operation was not present in object selection."));
+    for (auto& point : moved_paint.operation.paint_stroke.points) point.ry() += 10;
+    moved_paint.operation.paint_stroke.diameter = 8;
+    require(session.updateObjectsRendered({moved_paint}, &error), error);
+    require(session.renderedImage().pixelColor(30, 22).red() > 200 &&
+                session.renderedImage().pixelColor(30, 12).alpha() == 0,
+            QStringLiteral("Moving and resizing a paint stroke did not update its rendered geometry."));
+    require(session.undo() && session.redo(),
+            QStringLiteral("Paint stroke transforms were not undoable and redoable."));
+
+    image_editor::ImageShapeData first_shape;
+    first_shape.start = QPointF(5, 30);
+    first_shape.end = QPointF(16, 41);
+    first_shape.fill_color = Qt::blue;
+    const QString first_shape_id = session.addShape(first_shape, &error);
+    require(!first_shape_id.isEmpty(), error);
+    const QString second_layer = session.addLayer();
+    image_editor::ImageShapeData second_shape = first_shape;
+    second_shape.start = QPointF(35, 30);
+    second_shape.end = QPointF(46, 41);
+    const QString second_shape_id = session.addShape(second_shape, &error);
+    require(!second_shape_id.isEmpty(), error);
+    image_editor::ImageShapeData line_shape;
+    line_shape.kind = image_editor::ImageShapeKind::Line;
+    line_shape.start = QPointF(20, 30);
+    line_shape.end = QPointF(30, 40);
+    line_shape.fill_enabled = false;
+    const QString line_shape_id = session.addShape(line_shape, &error);
+    require(!line_shape_id.isEmpty(), error);
+    image_editor::ImageShapeData style = first_shape;
+    style.stroke_color = Qt::green;
+    style.fill_color = QColor(20, 220, 80);
+    style.stroke_width = 5;
+    require(session.updateShapeStyles(
+                {first_shape_id, second_shape_id, line_shape_id}, style, &error), error);
+    const auto styled_objects = session.visibleObjects();
+    const auto styled_line = std::find_if(styled_objects.cbegin(), styled_objects.cend(),
+        [&line_shape_id](const image_editor::ImageObjectPlacement& placement) {
+            return placement.operation.kind == image_editor::OperationKind::Shape &&
+                placement.operation.shape.id == line_shape_id;
+        });
+    require(session.renderedImage().pixelColor(10, 35) == style.fill_color &&
+                session.renderedImage().pixelColor(40, 35) == style.fill_color &&
+                styled_line != styled_objects.cend() &&
+                styled_line->operation.shape.stroke_color == style.stroke_color &&
+                styled_line->operation.shape.stroke_width == style.stroke_width &&
+                styled_line->operation.shape.stroke_enabled &&
+                !styled_line->operation.shape.fill_enabled,
+            QStringLiteral("Shape style controls did not update every selected shape (rect=%1 ellipse=%2 line=%3).")
+                .arg(session.renderedImage().pixelColor(10, 35).name(QColor::HexArgb),
+                     session.renderedImage().pixelColor(40, 35).name(QColor::HexArgb),
+                     styled_line == styled_objects.cend()
+                        ? QStringLiteral("missing")
+                        : QStringLiteral("%1/%2/%3/%4")
+                            .arg(styled_line->operation.shape.stroke_color.name(QColor::HexArgb))
+                            .arg(styled_line->operation.shape.stroke_width)
+                            .arg(styled_line->operation.shape.stroke_enabled)
+                            .arg(styled_line->operation.shape.fill_enabled)));
+    require(session.undo() && session.renderedImage().pixelColor(10, 35) == first_shape.fill_color &&
+                session.redo(),
+            QStringLiteral("Multi-shape style editing did not create one Undo/Redo entry."));
+
+    require(session.setLayerVisible(second_layer, false),
+            QStringLiteral("Could not hide the second object layer."));
+    const auto hidden_objects = session.visibleObjects();
+    require(std::none_of(hidden_objects.cbegin(), hidden_objects.cend(),
+                [&second_shape_id](const image_editor::ImageObjectPlacement& placement) {
+                    return placement.operation.kind == image_editor::OperationKind::Shape &&
+                        placement.operation.shape.id == second_shape_id;
+                }),
+            QStringLiteral("Objects from a hidden layer remained selectable."));
+    require(session.undo(), QStringLiteral("Could not restore the visible object layer."));
+
+    require(session.deleteObjects(
+                {paint_id, erase_id, first_shape_id, second_shape_id, line_shape_id}) &&
+                session.visibleObjects().isEmpty() && session.undo() &&
+                session.visibleObjects().size() == 5 && session.redo() &&
+                session.visibleObjects().isEmpty(),
+            QStringLiteral("Deleting a mixed multi-selection was not one undoable edit."));
+    require(session.undo(), QStringLiteral("Could not restore objects before v7 persistence."));
+
+    const QString v7_path = root + QStringLiteral("/general-objects-v7.cimg");
+    require(session.saveDocument(v7_path, &error), error);
+    QFile v7_file(v7_path);
+    require(v7_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the v7 object document."));
+    QJsonObject v7 = QJsonDocument::fromJson(v7_file.readAll()).object();
+    v7_file.close();
+    require(v7.value("version").toInt() == 7,
+            QStringLiteral("The document did not migrate to cimg v7."));
+    const auto layer_array = v7.value("layers").toArray();
+    const auto operation_array = layer_array.at(1).toObject().value("operations").toArray();
+    bool paint_id_persisted = false;
+    bool erase_id_persisted = false;
+    for (const auto& value : operation_array) {
+        const auto object = value.toObject();
+        if (object.value("kind") == "paint_stroke") {
+            paint_id_persisted = !object.value("id").toString().isEmpty();
+        } else if (object.value("kind") == "erase_stroke") {
+            erase_id_persisted = !object.value("id").toString().isEmpty();
+        }
+    }
+    require(paint_id_persisted && erase_id_persisted,
+            QStringLiteral("Cimg v7 did not persist paint and eraser object IDs."));
+
+    v7.insert("version", 6);
+    auto migrated_layers = v7.value("layers").toArray();
+    for (qsizetype index = 1; index < migrated_layers.size(); ++index) {
+        auto layer = migrated_layers.at(index).toObject();
+        auto operations = layer.value("operations").toArray();
+        for (qsizetype operation_index = 0; operation_index < operations.size(); ++operation_index) {
+            auto operation = operations.at(operation_index).toObject();
+            if (operation.value("kind") == "paint_stroke" ||
+                operation.value("kind") == "erase_stroke") operation.remove("id");
+            operations.replace(operation_index, operation);
+        }
+        layer.insert("operations", operations);
+        migrated_layers.replace(index, layer);
+    }
+    v7.insert("layers", migrated_layers);
+    const QString v6_path = root + QStringLiteral("/general-objects-v6.cimg");
+    QFile v6_file(v6_path);
+    require(v6_file.open(QIODevice::WriteOnly), QStringLiteral("Could not create a v6 fixture."));
+    v6_file.write(QJsonDocument(v7).toJson());
+    v6_file.close();
+    image_editor::ImageDocumentSession migrated;
+    require(migrated.openDocument(v6_path, &error) &&
+                migrated.renderedImage() == session.renderedImage(), error);
+    const auto migrated_objects = migrated.visibleObjects();
+    require(migrated_objects.size() == 5 &&
+                std::all_of(migrated_objects.cbegin(), migrated_objects.cend(),
+                    [](const image_editor::ImageObjectPlacement& placement) {
+                        if (placement.operation.kind == image_editor::OperationKind::PaintStroke)
+                            return !placement.operation.paint_stroke.id.isEmpty();
+                        if (placement.operation.kind == image_editor::OperationKind::EraseStroke)
+                            return !placement.operation.erase_stroke.id.isEmpty();
+                        return placement.operation.kind == image_editor::OperationKind::Shape &&
+                            !placement.operation.shape.id.isEmpty();
+                    }),
+            QStringLiteral("Loading v6 did not assign stable IDs to legacy stroke operations."));
+    require(migrated.saveDocument(v6_path, &error), error);
+    QFile resaved_v6(v6_path);
+    require(resaved_v6.open(QIODevice::ReadOnly) &&
+                QJsonDocument::fromJson(resaved_v6.readAll()).object().value("version").toInt() == 7,
+            QStringLiteral("Saving a v6 document did not upgrade it to v7."));
 }
 
 void testLayerManagementTransformsAndOpacity(const QString& root) {
@@ -1504,6 +1685,7 @@ int main(int argc, char* argv[]) {
         testEraseStrokesPersistenceUndoRedoAndValidation(root);
         testEditableShapesRenderingPersistenceAndHistory(root);
         testCropNoOpAndInvalidOperations(root);
+        testGeneralObjectOperations(root);
         testLayerManagementTransformsAndOpacity(root);
         testMissingSourceAndRelink(root);
         testExportAndFormatPlugins(root);

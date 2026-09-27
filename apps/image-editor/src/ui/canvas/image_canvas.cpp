@@ -22,6 +22,92 @@ namespace {
 
 constexpr qsizetype kMaximumPaintPreviewPoints = 100'000;
 
+QString objectId(const ImageOperation& operation) {
+    switch (operation.kind) {
+    case OperationKind::PaintStroke: return operation.paint_stroke.id;
+    case OperationKind::EraseStroke: return operation.erase_stroke.id;
+    case OperationKind::Shape: return operation.shape.id;
+    default: return {};
+    }
+}
+
+QPainterPath strokePath(const QVector<QPointF>& points, qreal width) {
+    QPainterPath path;
+    if (points.isEmpty()) return path;
+    if (points.size() == 1) {
+        const qreal radius = std::max<qreal>(0.5, width / 2.0);
+        path.addEllipse(points.front(), radius, radius);
+        return path;
+    }
+    path.moveTo(points.front());
+    for (qsizetype index = 1; index < points.size(); ++index) {
+        path.lineTo(points.at(index));
+    }
+    QPainterPathStroker stroker;
+    stroker.setWidth(width);
+    stroker.setCapStyle(Qt::RoundCap);
+    stroker.setJoinStyle(Qt::RoundJoin);
+    return stroker.createStroke(path);
+}
+
+QPainterPath objectPath(const ImageOperation& operation, qreal extra = 0.0) {
+    if (operation.kind == OperationKind::PaintStroke) {
+        return strokePath(operation.paint_stroke.points,
+                          operation.paint_stroke.diameter + extra * 2.0);
+    }
+    if (operation.kind == OperationKind::EraseStroke) {
+        return strokePath(operation.erase_stroke.points,
+                          operation.erase_stroke.diameter + extra * 2.0);
+    }
+    if (operation.kind != OperationKind::Shape) return {};
+
+    const auto& shape = operation.shape;
+    QPainterPath path;
+    if (shape.kind == ImageShapeKind::Line) {
+        path.moveTo(shape.start);
+        path.lineTo(shape.end);
+    } else if (shape.kind == ImageShapeKind::Rectangle) {
+        path.addRect(QRectF(shape.start, shape.end).normalized());
+    } else {
+        path.addEllipse(QRectF(shape.start, shape.end).normalized());
+    }
+    QPainterPath result;
+    if (shape.kind != ImageShapeKind::Line && shape.fill_enabled) result = path;
+    if (shape.stroke_enabled) {
+        QPainterPathStroker stroker;
+        stroker.setWidth(std::max<qreal>(1.0, shape.stroke_width + extra * 2.0));
+        stroker.setCapStyle(Qt::RoundCap);
+        stroker.setJoinStyle(Qt::RoundJoin);
+        result = result.united(stroker.createStroke(path));
+    }
+    return result;
+}
+
+QVector<QPointF>* operationPoints(ImageOperation* operation) {
+    if (operation == nullptr) return nullptr;
+    if (operation->kind == OperationKind::PaintStroke) return &operation->paint_stroke.points;
+    if (operation->kind == OperationKind::EraseStroke) return &operation->erase_stroke.points;
+    return nullptr;
+}
+
+int operationDiameter(const ImageOperation& operation) {
+    if (operation.kind == OperationKind::PaintStroke) return operation.paint_stroke.diameter;
+    if (operation.kind == OperationKind::EraseStroke) return operation.erase_stroke.diameter;
+    if (operation.kind == OperationKind::Shape) return operation.shape.stroke_width;
+    return 1;
+}
+
+void setOperationDiameter(ImageOperation* operation, int diameter) {
+    if (operation == nullptr) return;
+    if (operation->kind == OperationKind::PaintStroke) operation->paint_stroke.diameter = diameter;
+    else if (operation->kind == OperationKind::EraseStroke) operation->erase_stroke.diameter = diameter;
+    else if (operation->kind == OperationKind::Shape) operation->shape.stroke_width = diameter;
+}
+
+QRectF visibleObjectBounds(const ImageOperation& operation) {
+    return objectPath(operation).boundingRect();
+}
+
 } // namespace
 
 ImageCanvas::ImageCanvas(QWidget* parent) : QWidget(parent) {
@@ -39,9 +125,7 @@ void ImageCanvas::setImage(QImage image, bool resetView) {
     painting_ = false;
     erasing_ = false;
     creating_shape_ = false;
-    transforming_shape_ = false;
-    moving_shape_ = false;
-    resizing_shape_endpoint_ = -1;
+    clearObjectInteraction();
     resizing_brush_ = false;
     if (resetView) {
         pan_ = {};
@@ -58,6 +142,8 @@ void ImageCanvas::setCropMode(bool enabled) {
     if (enabled) {
         paint_mode_ = false;
         eraser_mode_ = false;
+        shape_creation_mode_ = false;
+        object_selection_mode_ = false;
     }
     selecting_crop_ = false;
     painting_ = false;
@@ -79,7 +165,7 @@ void ImageCanvas::setPaintMode(bool enabled) {
         crop_mode_ = false;
         eraser_mode_ = false;
         shape_creation_mode_ = false;
-        shape_selection_mode_ = false;
+        object_selection_mode_ = false;
     }
     painting_ = false;
     erasing_ = false;
@@ -102,7 +188,7 @@ void ImageCanvas::setEraserMode(bool enabled) {
         crop_mode_ = false;
         paint_mode_ = false;
         shape_creation_mode_ = false;
-        shape_selection_mode_ = false;
+        object_selection_mode_ = false;
     }
     painting_ = false;
     erasing_ = false;
@@ -118,27 +204,45 @@ void ImageCanvas::setEraserMode(bool enabled) {
     update();
 }
 
-void ImageCanvas::setShapeMode(bool creation_enabled, bool selection_enabled) {
-    if (creation_enabled && selection_enabled) selection_enabled = false;
-    shape_creation_mode_ = creation_enabled;
-    shape_selection_mode_ = selection_enabled;
-    if (creation_enabled || selection_enabled) {
+void ImageCanvas::setShapeCreationMode(bool enabled) {
+    shape_creation_mode_ = enabled;
+    if (enabled) {
         crop_mode_ = false;
         paint_mode_ = false;
         eraser_mode_ = false;
+        object_selection_mode_ = false;
     }
     painting_ = false;
     erasing_ = false;
     selecting_crop_ = false;
     creating_shape_ = false;
-    transforming_shape_ = false;
-    moving_shape_ = false;
-    resizing_shape_endpoint_ = -1;
+    clearObjectInteraction();
     paint_points_.clear();
     transient_image_ = {};
     crop_selection_ = {};
     brush_cursor_visible_ = false;
-    setCursor(creation_enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    update();
+}
+
+void ImageCanvas::setObjectSelectionMode(bool enabled) {
+    object_selection_mode_ = enabled;
+    if (enabled) {
+        crop_mode_ = false;
+        paint_mode_ = false;
+        eraser_mode_ = false;
+        shape_creation_mode_ = false;
+    }
+    painting_ = false;
+    erasing_ = false;
+    selecting_crop_ = false;
+    creating_shape_ = false;
+    clearObjectInteraction();
+    paint_points_.clear();
+    transient_image_ = {};
+    crop_selection_ = {};
+    brush_cursor_visible_ = false;
+    setCursor(Qt::ArrowCursor);
     update();
 }
 
@@ -147,10 +251,20 @@ void ImageCanvas::setShapeStyle(const ImageShapeData& style) {
     update();
 }
 
-void ImageCanvas::setShapePlacements(QVector<ImageShapePlacement> placements,
-                                     const QString& selected_shape_id) {
-    shape_placements_ = std::move(placements);
-    selected_shape_id_ = selected_shape_id;
+void ImageCanvas::setObjectPlacements(QVector<ImageObjectPlacement> placements,
+                                      QStringList selected_object_ids) {
+    object_placements_ = std::move(placements);
+    QStringList visible_ids;
+    for (const auto& placement : object_placements_) {
+        const QString id = objectId(placement.operation);
+        if (!id.isEmpty()) visible_ids.append(id);
+    }
+    selected_object_ids_.clear();
+    for (const auto& id : selected_object_ids) {
+        if (visible_ids.contains(id) && !selected_object_ids_.contains(id)) {
+            selected_object_ids_.append(id);
+        }
+    }
     update();
 }
 
@@ -242,44 +356,203 @@ QPointF ImageCanvas::constrainShapePoint(const QPointF& point,
                             (delta.y() < 0.0 ? -1.0 : 1.0) * side);
 }
 
-int ImageCanvas::selectedHandleAt(const QPointF& image_point) const {
-    if (selected_shape_id_.isEmpty()) return -1;
+int ImageCanvas::objectHitAt(const QPointF& image_point) const {
     const qreal tolerance = 9.0 / std::max(zoom_, 0.01);
-    for (const auto& placement : shape_placements_) {
-        if (placement.shape.id != selected_shape_id_) continue;
-        if (QLineF(image_point, placement.shape.start).length() <= tolerance) return 0;
-        if (QLineF(image_point, placement.shape.end).length() <= tolerance) return 1;
-        break;
+    for (qsizetype index = 0; index < object_placements_.size(); ++index) {
+        const auto& operation = object_placements_.at(index).operation;
+        if (operation.kind == OperationKind::PaintStroke &&
+            operation.paint_stroke.color.alpha() == 0) continue;
+        if (operation.kind == OperationKind::Shape &&
+            (!operation.shape.stroke_enabled || operation.shape.stroke_color.alpha() == 0) &&
+            (!operation.shape.fill_enabled || operation.shape.fill_color.alpha() == 0)) continue;
+        if (objectPath(operation, tolerance).contains(image_point)) {
+            return static_cast<int>(index);
+        }
     }
     return -1;
 }
 
-int ImageCanvas::shapeHitAt(const QPointF& image_point) const {
-    const qreal tolerance = 9.0 / std::max(zoom_, 0.01);
-    for (qsizetype index = 0; index < shape_placements_.size(); ++index) {
-        const auto& shape = shape_placements_.at(index).shape;
-        QPainterPath path;
-        if (shape.kind == ImageShapeKind::Line) {
-            path.moveTo(shape.start);
-            path.lineTo(shape.end);
-        } else if (shape.kind == ImageShapeKind::Rectangle) {
-            path.addRect(QRectF(shape.start, shape.end).normalized());
-        } else {
-            path.addEllipse(QRectF(shape.start, shape.end).normalized());
-        }
-        if (shape.kind != ImageShapeKind::Line && path.contains(image_point)) {
-            return static_cast<int>(index);
-        }
-        if (!shape.stroke_enabled) continue;
-        QPainterPathStroker stroker;
-        stroker.setWidth(std::max(tolerance, shape.stroke_width + tolerance));
-        stroker.setCapStyle(Qt::RoundCap);
-        stroker.setJoinStyle(Qt::RoundJoin);
-        if (stroker.createStroke(path).contains(image_point)) {
-            return static_cast<int>(index);
+QVector<ImageObjectPlacement> ImageCanvas::selectedObjects() const {
+    QVector<ImageObjectPlacement> result;
+    const auto& source = transforming_objects_ ? transform_current_objects_ : object_placements_;
+    for (const auto& placement : source) {
+        if (selected_object_ids_.contains(objectId(placement.operation))) {
+            result.append(placement);
         }
     }
+    return result;
+}
+
+QRectF ImageCanvas::objectBounds(const QVector<ImageObjectPlacement>& objects) const {
+    QRectF bounds;
+    bool first = true;
+    for (const auto& object : objects) {
+        const QRectF object_bounds = visibleObjectBounds(object.operation);
+        if (object_bounds.isEmpty()) continue;
+        bounds = first ? object_bounds : bounds.united(object_bounds);
+        first = false;
+    }
+    return first ? QRectF{} : bounds;
+}
+
+int ImageCanvas::resizeHandleAt(const QPointF& image_point) const {
+    if (selected_object_ids_.isEmpty()) return -1;
+    const QRectF bounds = objectBounds(selectedObjects());
+    if (bounds.isEmpty()) return -1;
+    const qreal tolerance = 9.0 / std::max(zoom_, 0.01);
+    const QPointF handles[] = {bounds.topLeft(), bounds.topRight(),
+                               bounds.bottomLeft(), bounds.bottomRight()};
+    for (int index = 0; index < 4; ++index) {
+        if (QLineF(image_point, handles[index]).length() <= tolerance) return index;
+    }
     return -1;
+}
+
+QVector<ImageObjectPlacement> ImageCanvas::selectionHits(const QRectF& bounds) const {
+    QVector<ImageObjectPlacement> hits;
+    if (bounds.isEmpty()) return hits;
+    QPainterPath selection;
+    selection.addRect(bounds.normalized());
+    for (const auto& placement : object_placements_) {
+        const auto& operation = placement.operation;
+        if (operation.kind == OperationKind::PaintStroke &&
+            operation.paint_stroke.color.alpha() == 0) continue;
+        if (operation.kind == OperationKind::Shape &&
+            (!operation.shape.stroke_enabled || operation.shape.stroke_color.alpha() == 0) &&
+            (!operation.shape.fill_enabled || operation.shape.fill_color.alpha() == 0)) continue;
+        const QPainterPath geometry = objectPath(operation);
+        if (geometry.intersects(selection) || selection.contains(geometry)) hits.append(placement);
+    }
+    return hits;
+}
+
+QVector<ImageObjectPlacement> ImageCanvas::transformObjects(
+    const QVector<ImageObjectPlacement>& objects, qreal scale_x, qreal scale_y,
+    const QPointF& origin, const QPointF& destination) const {
+    QVector<ImageObjectPlacement> transformed = objects;
+    const qreal width_scale = std::sqrt(std::abs(scale_x * scale_y));
+    const int max_diameter = ImageDocumentStore::kMaximumPaintBrushDiameter;
+    for (auto& placement : transformed) {
+        auto& operation = placement.operation;
+        const auto map_point = [origin, destination, scale_x, scale_y](const QPointF& point) {
+            return QPointF(destination.x() + (point.x() - origin.x()) * scale_x,
+                           destination.y() + (point.y() - origin.y()) * scale_y);
+        };
+        if (auto* points = operationPoints(&operation)) {
+            for (QPointF& point : *points) point = map_point(point);
+        } else if (operation.kind == OperationKind::Shape) {
+            operation.shape.start = map_point(operation.shape.start);
+            operation.shape.end = map_point(operation.shape.end);
+        }
+        const int diameter = std::clamp(
+            static_cast<int>(std::lround(operationDiameter(operation) * width_scale)),
+            1, max_diameter);
+        setOperationDiameter(&operation, diameter);
+    }
+    return transformed;
+}
+
+void ImageCanvas::beginObjectTransform(bool resize, int handle,
+                                       const QPointF& image_point) {
+    transform_initial_objects_ = selectedObjects();
+    if (transform_initial_objects_.isEmpty()) return;
+    transform_current_objects_ = transform_initial_objects_;
+    transform_initial_bounds_ = objectBounds(transform_initial_objects_);
+    transform_start_ = image_point;
+    resizing_objects_ = resize;
+    resizing_handle_ = handle;
+    transforming_objects_ = true;
+    moved_interaction_ = false;
+    if (resize) {
+        const QPointF anchors[] = {transform_initial_bounds_.bottomRight(),
+                                   transform_initial_bounds_.bottomLeft(),
+                                   transform_initial_bounds_.topRight(),
+                                   transform_initial_bounds_.topLeft()};
+        transform_fixed_anchor_ = anchors[handle];
+    }
+    emit objectTransformStarted(selected_object_ids_);
+    update();
+}
+
+void ImageCanvas::updateObjectTransform(const QPointF& image_point, bool freeform) {
+    if (!transforming_objects_ || transform_initial_objects_.isEmpty()) return;
+    const QSize size = image_.size();
+    if (!resizing_objects_) {
+        QPointF delta = image_point - transform_start_;
+        delta.setX(std::clamp(delta.x(), -transform_initial_bounds_.left(),
+            std::max(0.0, size.width() - transform_initial_bounds_.right())));
+        delta.setY(std::clamp(delta.y(), -transform_initial_bounds_.top(),
+            std::max(0.0, size.height() - transform_initial_bounds_.bottom())));
+        moved_interaction_ = moved_interaction_ || !qFuzzyIsNull(delta.x()) ||
+            !qFuzzyIsNull(delta.y());
+        transform_current_objects_ = transformObjects(
+            transform_initial_objects_, 1.0, 1.0,
+            transform_initial_bounds_.topLeft(),
+            transform_initial_bounds_.topLeft() + delta);
+        update();
+        return;
+    }
+
+    QPointF dragged = image_point;
+    dragged.setX(std::clamp(dragged.x(), 0.0, static_cast<qreal>(size.width() - 1)));
+    dragged.setY(std::clamp(dragged.y(), 0.0, static_cast<qreal>(size.height() - 1)));
+    const bool left_handle = resizing_handle_ == 0 || resizing_handle_ == 2;
+    const bool top_handle = resizing_handle_ == 0 || resizing_handle_ == 1;
+    const qreal original_width = std::max<qreal>(1.0, transform_initial_bounds_.width());
+    const qreal original_height = std::max<qreal>(1.0, transform_initial_bounds_.height());
+    qreal target_width = std::abs(dragged.x() - transform_fixed_anchor_.x());
+    qreal target_height = std::abs(dragged.y() - transform_fixed_anchor_.y());
+    target_width = std::max<qreal>(1.0, target_width);
+    target_height = std::max<qreal>(1.0, target_height);
+    qreal scale_x = target_width / original_width;
+    qreal scale_y = target_height / original_height;
+    if (!freeform) {
+        qreal scale = std::max(scale_x, scale_y);
+        const qreal available_width = left_handle
+            ? transform_fixed_anchor_.x()
+            : (size.width() - 1.0 - transform_fixed_anchor_.x());
+        const qreal available_height = top_handle
+            ? transform_fixed_anchor_.y()
+            : (size.height() - 1.0 - transform_fixed_anchor_.y());
+        scale = std::min(scale, std::min(available_width / original_width,
+                                         available_height / original_height));
+        scale_x = std::max<qreal>(1.0 / original_width, scale);
+        scale_y = std::max<qreal>(1.0 / original_height, scale);
+    } else {
+        const qreal available_width = left_handle
+            ? transform_fixed_anchor_.x()
+            : (size.width() - 1.0 - transform_fixed_anchor_.x());
+        const qreal available_height = top_handle
+            ? transform_fixed_anchor_.y()
+            : (size.height() - 1.0 - transform_fixed_anchor_.y());
+        scale_x = std::clamp(scale_x, 1.0 / original_width,
+                             std::max(1.0 / original_width, available_width / original_width));
+        scale_y = std::clamp(scale_y, 1.0 / original_height,
+                             std::max(1.0 / original_height, available_height / original_height));
+    }
+    const qreal new_width = original_width * scale_x;
+    const qreal new_height = original_height * scale_y;
+    QPointF new_top_left = transform_initial_bounds_.topLeft();
+    if (left_handle) new_top_left.setX(transform_fixed_anchor_.x() - new_width);
+    if (top_handle) new_top_left.setY(transform_fixed_anchor_.y() - new_height);
+    moved_interaction_ = true;
+    transform_current_objects_ = transformObjects(
+        transform_initial_objects_, scale_x, scale_y,
+        transform_initial_bounds_.topLeft(), new_top_left);
+    update();
+}
+
+void ImageCanvas::clearObjectInteraction() {
+    selecting_objects_ = false;
+    selection_toggle_ = false;
+    transforming_objects_ = false;
+    resizing_objects_ = false;
+    moved_interaction_ = false;
+    resizing_handle_ = -1;
+    object_selection_rect_ = {};
+    transform_initial_objects_.clear();
+    transform_current_objects_.clear();
+    transform_initial_bounds_ = {};
 }
 
 void ImageCanvas::drawShapeOverlay(QPainter& painter,
@@ -313,6 +586,55 @@ void ImageCanvas::drawShapeOverlay(QPainter& painter,
         const QRectF bounds(start, end);
         if (shape.kind == ImageShapeKind::Rectangle) painter.drawRect(bounds.normalized());
         else painter.drawEllipse(bounds.normalized());
+    }
+    painter.restore();
+}
+
+void ImageCanvas::drawObjectOverlay(QPainter& painter,
+                                    const ImageObjectPlacement& object) const {
+    const auto& operation = object.operation;
+    if (operation.kind == OperationKind::Shape) {
+        drawShapeOverlay(painter, operation.shape, object.layer_opacity);
+        return;
+    }
+    const QVector<QPointF>* points = nullptr;
+    qreal diameter = 1.0;
+    QColor color;
+    if (operation.kind == OperationKind::PaintStroke) {
+        points = &operation.paint_stroke.points;
+        diameter = operation.paint_stroke.diameter;
+        color = operation.paint_stroke.color;
+    } else if (operation.kind == OperationKind::EraseStroke) {
+        points = &operation.erase_stroke.points;
+        diameter = operation.erase_stroke.diameter;
+        color = QColor(240, 80, 125, 175);
+    }
+    if (points == nullptr || points->isEmpty()) return;
+
+    const QRectF target = imageTargetRect();
+    const auto toWidget = [&target, this](const QPointF& point) {
+        return QPointF(target.left() + point.x() * zoom_,
+                       target.top() + point.y() * zoom_);
+    };
+    painter.save();
+    painter.setClipRect(target);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setOpacity(std::clamp(object.layer_opacity, 0, 100) / 100.0);
+    QPen pen(color, diameter * zoom_, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    painter.setPen(pen);
+    if (points->size() == 1) {
+        const QPointF center = toWidget(points->front());
+        const qreal radius = diameter * zoom_ / 2.0;
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(color);
+        painter.drawEllipse(center, radius, radius);
+    } else {
+        QPainterPath path;
+        path.moveTo(toWidget(points->front()));
+        for (qsizetype index = 1; index < points->size(); ++index) {
+            path.lineTo(toWidget(points->at(index)));
+        }
+        painter.drawPath(path);
     }
     painter.restore();
 }
@@ -418,39 +740,24 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     if (creating_shape_) {
         drawShapeOverlay(painter, shape_interaction_current_);
     }
-    if (transforming_shape_) {
-        int opacity = 100;
-        for (const auto& placement : shape_placements_) {
-            if (placement.shape.id == transforming_shape_id_) {
-                opacity = placement.layer_opacity;
-                break;
-            }
-        }
-        drawShapeOverlay(painter, shape_interaction_current_, opacity);
+    if (transforming_objects_) {
+        for (const auto& object : transform_current_objects_) drawObjectOverlay(painter, object);
     }
-    if (shape_selection_mode_ && !selected_shape_id_.isEmpty()) {
-        ImageShapeData selected_shape;
-        bool found = false;
-        int opacity = 100;
-        for (const auto& placement : shape_placements_) {
-            if (placement.shape.id != selected_shape_id_) continue;
-            selected_shape = transforming_shape_
-                ? shape_interaction_current_ : placement.shape;
-            opacity = placement.layer_opacity;
-            found = true;
-            break;
-        }
-        if (found) {
-            const auto toWidget = [this, &target](const QPointF& point) {
-                return QPointF(target.left() + point.x() * zoom_,
-                               target.top() + point.y() * zoom_);
-            };
-            const QPointF handles[] = {toWidget(selected_shape.start),
-                                       toWidget(selected_shape.end)};
+    if (object_selection_mode_ && !selected_object_ids_.isEmpty()) {
+        const QRectF bounds = objectBounds(selectedObjects());
+        if (!bounds.isEmpty()) {
+            const QRectF widget_bounds(
+                target.left() + bounds.left() * zoom_,
+                target.top() + bounds.top() * zoom_,
+                bounds.width() * zoom_, bounds.height() * zoom_);
             painter.save();
             painter.setClipRect(target);
             painter.setRenderHint(QPainter::Antialiasing, true);
-            painter.setOpacity(opacity / 100.0);
+            painter.setPen(QPen(QColor(45, 155, 235), 1.0, Qt::DashLine));
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRect(widget_bounds);
+            const QPointF handles[] = {widget_bounds.topLeft(), widget_bounds.topRight(),
+                                       widget_bounds.bottomLeft(), widget_bounds.bottomRight()};
             for (const QPointF& handle : handles) {
                 const QRectF box(handle.x() - 4.0, handle.y() - 4.0, 8.0, 8.0);
                 painter.setPen(QPen(QColor(25, 28, 34), 1.0));
@@ -460,6 +767,13 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
             painter.restore();
         }
     }
+    if (object_selection_mode_ && selecting_objects_) {
+        const QRectF selection = object_selection_rect_.normalized().intersected(target);
+        painter.fillRect(selection, QColor(38, 150, 220, 36));
+        painter.setPen(QPen(QColor(120, 205, 255), 1.2, Qt::DashLine));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(selection);
+    }
 }
 
 void ImageCanvas::resizeEvent(QResizeEvent* event) {
@@ -468,6 +782,7 @@ void ImageCanvas::resizeEvent(QResizeEvent* event) {
 }
 
 void ImageCanvas::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) setFocus(Qt::MouseFocusReason);
     if (event->button() == Qt::MiddleButton) {
         panning_ = true;
         pan_start_ = event->position();
@@ -506,51 +821,53 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         shape_interaction_current_.id.clear();
         shape_interaction_current_.start = widgetToImageCoordinates(event->position());
         shape_interaction_current_.end = shape_interaction_current_.start;
-        shape_gesture_start_ = shape_interaction_current_.start;
         update();
         event->accept();
         return;
     }
-    if (shape_selection_mode_ && event->button() == Qt::LeftButton &&
+    if (object_selection_mode_ && event->button() == Qt::LeftButton &&
         imageTargetRect().contains(event->position())) {
         const QPointF point = widgetToImageCoordinates(event->position());
-        const int handle = selectedHandleAt(point);
+        const int handle = resizeHandleAt(point);
         if (handle >= 0) {
-            for (const auto& placement : shape_placements_) {
-                if (placement.shape.id != selected_shape_id_) continue;
-                shape_interaction_initial_ = placement.shape;
-                shape_interaction_current_ = placement.shape;
-                break;
-            }
-            transforming_shape_id_ = selected_shape_id_;
-            transforming_shape_ = true;
-            moving_shape_ = false;
-            resizing_shape_endpoint_ = handle;
-            shape_gesture_start_ = point;
-            emit shapeTransformStarted(transforming_shape_id_);
-            update();
+            beginObjectTransform(true, handle, point);
             event->accept();
             return;
         }
-        const int hit = shapeHitAt(point);
+        const int hit = objectHitAt(point);
         if (hit < 0) {
-            selected_shape_id_.clear();
-            emit shapeSelected({}, {});
+            selecting_objects_ = true;
+            selection_toggle_ = modifiers.testFlag(Qt::ShiftModifier);
+            moved_interaction_ = false;
+            selection_start_ = event->position();
+            object_selection_rect_ = QRectF(selection_start_, selection_start_);
             update();
             event->accept();
             return;
         }
-        const ImageShapePlacement placement = shape_placements_.at(hit);
-        selected_shape_id_ = placement.shape.id;
-        shape_interaction_initial_ = placement.shape;
-        shape_interaction_current_ = placement.shape;
-        emit shapeSelected(placement.shape.id, placement.layer_id);
-        transforming_shape_id_ = placement.shape.id;
-        transforming_shape_ = true;
-        moving_shape_ = true;
-        resizing_shape_endpoint_ = -1;
-        shape_gesture_start_ = point;
-        emit shapeTransformStarted(transforming_shape_id_);
+        const ImageObjectPlacement placement = object_placements_.at(hit);
+        const QString id = objectId(placement.operation);
+        if (modifiers.testFlag(Qt::ShiftModifier)) {
+            if (selected_object_ids_.contains(id)) selected_object_ids_.removeAll(id);
+            else selected_object_ids_.append(id);
+            QString active_layer = placement.layer_id;
+            if (!selected_object_ids_.contains(id)) {
+                active_layer.clear();
+                for (const auto& selected : object_placements_) {
+                    if (selected_object_ids_.contains(objectId(selected.operation))) {
+                        active_layer = selected.layer_id;
+                        break;
+                    }
+                }
+            }
+            emit objectsSelected(selected_object_ids_, active_layer);
+            update();
+            event->accept();
+            return;
+        }
+        if (!selected_object_ids_.contains(id)) selected_object_ids_ = {id};
+        emit objectsSelected(selected_object_ids_, placement.layer_id);
+        beginObjectTransform(false, -1, point);
         update();
         event->accept();
         return;
@@ -621,35 +938,17 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (transforming_shape_) {
-        const QPointF point = widgetToImageCoordinates(event->position());
-        const QSize size = image_.size();
-        if (moving_shape_) {
-            QPointF delta = point - shape_gesture_start_;
-            const qreal min_x = std::min(shape_interaction_initial_.start.x(),
-                                         shape_interaction_initial_.end.x());
-            const qreal max_x = std::max(shape_interaction_initial_.start.x(),
-                                         shape_interaction_initial_.end.x());
-            const qreal min_y = std::min(shape_interaction_initial_.start.y(),
-                                         shape_interaction_initial_.end.y());
-            const qreal max_y = std::max(shape_interaction_initial_.start.y(),
-                                         shape_interaction_initial_.end.y());
-            delta.setX(std::clamp(delta.x(), -min_x,
-                                  std::max(0.0, size.width() - 1.0 - max_x)));
-            delta.setY(std::clamp(delta.y(), -min_y,
-                                  std::max(0.0, size.height() - 1.0 - max_y)));
-            shape_interaction_current_.start = shape_interaction_initial_.start + delta;
-            shape_interaction_current_.end = shape_interaction_initial_.end + delta;
-        } else if (resizing_shape_endpoint_ >= 0) {
-            const QPointF fixed = resizing_shape_endpoint_ == 0
-                ? shape_interaction_initial_.end : shape_interaction_initial_.start;
-            const QPointF constrained = constrainShapePoint(
-                point, fixed, shape_interaction_initial_.kind,
-                shift_constrain_held_ || event->modifiers().testFlag(Qt::ShiftModifier));
-            if (resizing_shape_endpoint_ == 0) shape_interaction_current_.start = constrained;
-            else shape_interaction_current_.end = constrained;
-        }
+    if (selecting_objects_) {
+        object_selection_rect_ = QRectF(selection_start_, event->position()).normalized();
+        moved_interaction_ = moved_interaction_ ||
+            QLineF(selection_start_, event->position()).length() >= 4.0;
         update();
+        event->accept();
+        return;
+    }
+    if (transforming_objects_) {
+        const QPointF point = widgetToImageCoordinates(event->position());
+        updateObjectTransform(point, event->modifiers().testFlag(Qt::AltModifier));
         event->accept();
         return;
     }
@@ -700,6 +999,42 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if (event->button() == Qt::LeftButton && selecting_objects_) {
+        selecting_objects_ = false;
+        const bool was_drag = moved_interaction_;
+        const QRectF widget_bounds = object_selection_rect_.normalized();
+        object_selection_rect_ = {};
+        if (was_drag) {
+            const QRectF image_bounds(widgetToImageCoordinates(widget_bounds.topLeft()),
+                                      widgetToImageCoordinates(widget_bounds.bottomRight()));
+            const auto hits = selectionHits(image_bounds.normalized());
+            if (!selection_toggle_) selected_object_ids_.clear();
+            for (const auto& hit : hits) {
+                const QString id = objectId(hit.operation);
+                if (selection_toggle_ && selected_object_ids_.contains(id)) {
+                    selected_object_ids_.removeAll(id);
+                } else if (!selected_object_ids_.contains(id)) {
+                    selected_object_ids_.append(id);
+                }
+            }
+            QString active_layer;
+            for (const auto& placement : object_placements_) {
+                if (selected_object_ids_.contains(objectId(placement.operation))) {
+                    active_layer = placement.layer_id;
+                    break;
+                }
+            }
+            emit objectsSelected(selected_object_ids_, active_layer);
+        } else if (!selection_toggle_) {
+            selected_object_ids_.clear();
+            emit objectsSelected({}, {});
+        }
+        moved_interaction_ = false;
+        selection_toggle_ = false;
+        update();
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::LeftButton && creating_shape_) {
         const QPointF point = widgetToImageCoordinates(event->position());
         shape_interaction_current_.end = constrainShapePoint(
@@ -717,18 +1052,13 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (event->button() == Qt::LeftButton && transforming_shape_) {
-        const ImageShapeData shape = shape_interaction_current_;
-        const bool changed = shape != shape_interaction_initial_;
-        transforming_shape_ = false;
-        moving_shape_ = false;
-        resizing_shape_endpoint_ = -1;
-        transforming_shape_id_.clear();
-        shape_interaction_initial_ = {};
-        shape_interaction_current_ = {};
+    if (event->button() == Qt::LeftButton && transforming_objects_) {
+        const auto changed_objects = transform_current_objects_;
+        const bool changed = changed_objects != transform_initial_objects_;
+        clearObjectInteraction();
         transient_image_ = {};
         update();
-        if (changed) emit shapeGeometryChanged(shape);
+        if (changed) emit objectsGeometryChanged(changed_objects);
         event->accept();
         return;
     }
@@ -796,6 +1126,14 @@ void ImageCanvas::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Escape && creating_shape_) {
         creating_shape_ = false;
         shape_interaction_current_ = {};
+        update();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Escape &&
+        (selecting_objects_ || transforming_objects_)) {
+        clearObjectInteraction();
+        transient_image_ = {};
         update();
         event->accept();
         return;

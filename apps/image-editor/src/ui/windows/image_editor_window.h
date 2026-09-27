@@ -8,6 +8,7 @@
 #include <QList>
 #include <QByteArray>
 #include <QMainWindow>
+#include <QStringList>
 
 class QAction;
 class QCheckBox;
@@ -73,11 +74,11 @@ private:
     void updateCanvasToolState(ToolSidebar::Tool tool);
     void updateCanvasBrush();
     void updateShapeOptions();
-    void updateShapePlacements();
+    void updateObjectPlacements();
     void applyShapeStyleToSelection(bool include_kind = false);
     void handleShapeCreated(const ImageShapeData& shape);
-    void handleShapeGeometryChanged(const ImageShapeData& shape);
-    void deleteSelectedShape();
+    void handleObjectsGeometryChanged(const QVector<ImageObjectPlacement>& objects);
+    void deleteSelectedObjects();
     void reportError(const QString& operation,
                      const QString& cause,
                      const QString& path = {});
@@ -127,10 +128,10 @@ private:
     QAction* paint_tool_action_ = nullptr;
     QAction* eraser_tool_action_ = nullptr;
     QAction* shapes_tool_action_ = nullptr;
-    QAction* select_shapes_tool_action_ = nullptr;
-    QAction* delete_shape_action_ = nullptr;
+    QAction* select_tool_action_ = nullptr;
+    QAction* delete_objects_action_ = nullptr;
     ImageShapeData shape_style_;
-    QString selected_shape_id_;
+    QStringList selected_object_ids_;
     bool shape_colors_initialized_ = false;
     int paint_diameter_ = 12;
     int eraser_diameter_ = 12;

@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QImage>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 namespace image_editor {
@@ -46,6 +47,14 @@ public:
                                  QString* layer_id = nullptr) const;
     [[nodiscard]] QImage renderedImageWithoutShape(const QString& shape_id) const;
     [[nodiscard]] QVector<ImageShapePlacement> visibleShapes() const;
+    [[nodiscard]] QVector<ImageObjectPlacement> visibleObjects() const;
+    [[nodiscard]] QImage renderedImageWithoutObjects(const QStringList& object_ids) const;
+    [[nodiscard]] bool updateObjectsRendered(
+        const QVector<ImageObjectPlacement>& objects, QString* error = nullptr);
+    [[nodiscard]] bool updateShapeStyles(const QStringList& shape_ids,
+                                         const ImageShapeData& style,
+                                         QString* error = nullptr);
+    [[nodiscard]] bool deleteObjects(const QStringList& object_ids);
     [[nodiscard]] QString addLayer();
     [[nodiscard]] bool deleteLayer(const QString& layer_id);
     [[nodiscard]] bool renameLayer(const QString& layer_id,

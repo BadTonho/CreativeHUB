@@ -38,7 +38,7 @@ run.
    and drag a crop. Rotate both directions, flip horizontally and vertically,
    then use Undo and Redo. Confirm the canvas and dirty marker update.
 8. Open a disposable image and create a canvas in separate runs. Confirm Paint,
-   Eraser, Shapes, and Select Shapes appear as icons without labels in the
+   Eraser, Shapes, and Select appear as icons without labels in the
    compact left sidebar and start inactive. Hover over each icon until its tooltip
    appears and confirm its name. Confirm the top options bar remains visible but
    empty.
@@ -86,7 +86,10 @@ run.
    shortcut already used by another command and verify the dialog reports the
    conflict without closing. Clear Paint's shortcut, restore all defaults, and
    confirm `B` toggles Paint and `E` toggles Eraser only when an editable layer
-   is selected. With Crop Selection active, confirm `Esc` cancels it.
+   is selected. With Crop Selection active, confirm `Esc` cancels it. Activate
+   Select, begin a marquee, and press `Esc`; confirm the selection gesture ends.
+   Assign shortcuts to Select and Delete Selected Objects, close and restart the
+   editor, and confirm both assignments persist.
 9. Save an editable `.cimg`, close it, reopen it, and confirm the rendered
    result is unchanged. Compare the original source file before and after to
    verify it was not overwritten.
@@ -128,7 +131,7 @@ run.
     confirm the temporary output is discarded. Repeat with an existing
     destination and confirm its contents remain unchanged after cancellation.
 
-### Editable shapes
+### Editable shapes and general object selection
 
 1. On an editable layer, use **Shapes** to draw a line, rectangle, and ellipse.
    Confirm the preview follows the drag and Escape cancels an unfinished shape.
@@ -139,18 +142,29 @@ run.
    line at a non-45-degree angle with Shift. Confirm it snaps to 45-degree
    increments. Change stroke and fill independently, use translucent colors,
    and vary the stroke width.
-3. Create shapes on two editable layers. Switch to Select Shapes and select the
-   upper shape while another layer is active. Confirm the Layers panel follows
-   the selected shape. Move it by its body and resize it using its handles.
-   Hold Shift while resizing and confirm the geometry constraints remain active.
-   Click empty canvas to clear selection. Hide a shape's layer and set another
-   shape's layer opacity to zero; confirm those shapes cannot be selected.
-4. Change a shape's geometry and style, then delete it. Use Undo and Redo after
-   each operation and confirm each gesture or property edit is one history
-   entry. Save and reopen `.cimg`; confirm type, geometry, colors, alpha, stroke
-   width, stacking order, and rendered appearance persist. Confirm older v1–v5
-   documents still open with their previous appearance.
-5. Export the composite as PNG and JPEG and use Quick Export on a selected
+3. Create shapes, paint strokes, and erase strokes on multiple editable layers.
+   Switch to Select and click objects to select them. Confirm the uppermost hit
+   object is selected and its layer becomes active. Shift-click to add an object
+   and Shift-click it again to remove it. Drag a marquee across portions of
+   objects and confirm every intersecting object is selected. Click empty
+   canvas to clear the selection. Hide a layer, set another layer's opacity to
+   zero, and select Background; confirm their objects cannot be selected.
+4. Drag a selected object's body and confirm the entire selection moves.
+   Resize from each corner and confirm proportions are preserved by default.
+   Hold Alt during a corner drag to allow independent horizontal and vertical
+   scaling. Confirm brush, eraser, and shape-outline thickness follows the
+   geometric mean of the two scale factors. Verify the erased region moves with
+   its eraser operation. Change style controls with multiple shapes selected
+   and confirm all selected shapes update while paint and eraser operations
+   retain their original style. Press Delete Selected Objects and verify all
+   selected operation types are removed together.
+5. Use Undo and Redo after selection transforms, shape style edits, and
+   deletion; confirm each gesture or property edit is one history entry. Save
+   and reopen `.cimg`; confirm stable operation IDs, type, geometry, colors,
+   alpha, stroke width, stacking order, and rendered appearance persist.
+   Confirm older v1-v6 documents still open with their previous appearance and
+   receive operation IDs when next saved.
+6. Export the composite as PNG and JPEG and use Quick Export on a selected
    shape layer. Confirm the shape appears in the appropriate output, layer
    visibility and opacity are respected, and PNG transparency remains intact.
    In linked mode, save a document containing shapes and confirm the published

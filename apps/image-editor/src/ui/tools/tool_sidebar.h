@@ -11,7 +11,7 @@ class ToolSidebar final : public QWidget {
     Q_OBJECT
 
 public:
-    enum class Tool { None, Paint, Eraser, Shapes, SelectShapes };
+    enum class Tool { None, Paint, Eraser, Shapes, Select };
     Q_ENUM(Tool)
 
     explicit ToolSidebar(QWidget* parent = nullptr);
@@ -21,13 +21,13 @@ public:
     void setPaintToolActive(bool active);
     void setEraserToolActive(bool active);
     void setShapesToolActive(bool active);
-    void setSelectShapesToolActive(bool active);
+    void setSelectToolActive(bool active);
     void setActiveTool(Tool tool);
 
     [[nodiscard]] bool paintToolActive() const noexcept;
     [[nodiscard]] bool eraserToolActive() const noexcept;
     [[nodiscard]] bool shapesToolActive() const noexcept;
-    [[nodiscard]] bool selectShapesToolActive() const noexcept;
+    [[nodiscard]] bool selectToolActive() const noexcept;
     [[nodiscard]] Tool activeTool() const noexcept { return active_tool_; }
     [[nodiscard]] QColor brushColor() const;
 

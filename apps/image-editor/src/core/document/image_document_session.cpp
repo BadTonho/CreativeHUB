@@ -7,6 +7,7 @@
 #include <QPainterPath>
 #include <QPen>
 #include <QSaveFile>
+#include <QSet>
 #include <QTransform>
 #include <QDir>
 #include <QUuid>
@@ -122,6 +123,44 @@ QPointF transformShapePoint(QPointF point,
     return point;
 }
 
+QString operationObjectId(const ImageOperation& operation) {
+    switch (operation.kind) {
+    case OperationKind::PaintStroke: return operation.paint_stroke.id;
+    case OperationKind::EraseStroke: return operation.erase_stroke.id;
+    case OperationKind::Shape: return operation.shape.id;
+    default: return {};
+    }
+}
+
+void transformObjectGeometry(ImageOperation* operation,
+                             const ImageOperation& transform,
+                             const QSize& canvas_size,
+                             bool inverse = false) {
+    if (operation == nullptr) return;
+    auto transform_points = [&transform, &canvas_size, inverse](QVector<QPointF>* points) {
+        if (points == nullptr) return;
+        for (QPointF& point : *points) {
+            point = transformShapePoint(point, transform, canvas_size, inverse);
+        }
+    };
+    switch (operation->kind) {
+    case OperationKind::PaintStroke:
+        transform_points(&operation->paint_stroke.points);
+        break;
+    case OperationKind::EraseStroke:
+        transform_points(&operation->erase_stroke.points);
+        break;
+    case OperationKind::Shape:
+        operation->shape.start = transformShapePoint(
+            operation->shape.start, transform, canvas_size, inverse);
+        operation->shape.end = transformShapePoint(
+            operation->shape.end, transform, canvas_size, inverse);
+        break;
+    default:
+        break;
+    }
+}
+
 QImage applyOperations(QImage image,
                        const QVector<ImageOperation>& operations,
                        bool fixed_canvas,
@@ -192,7 +231,7 @@ bool exportWasCancelled(const std::atomic_bool* cancellation_requested) {
 QImage renderComposite(const QImage& source_image,
                        const ImageDocumentData& document,
                        const std::atomic_bool* cancellation_requested = nullptr,
-                       const QString& excluded_shape_id = {}) {
+                       const QStringList& excluded_object_ids = {}) {
     if (source_image.isNull() || exportWasCancelled(cancellation_requested)) return {};
 
     QImage background = applyOperations(
@@ -224,11 +263,10 @@ QImage renderComposite(const QImage& source_image,
         }
         pixels.fill(Qt::transparent);
         QVector<ImageOperation> operations = layer.operations;
-        if (!excluded_shape_id.isEmpty()) {
+        if (!excluded_object_ids.isEmpty()) {
             operations.erase(std::remove_if(operations.begin(), operations.end(),
-                [&excluded_shape_id](const ImageOperation& operation) {
-                    return operation.kind == OperationKind::Shape &&
-                        operation.shape.id == excluded_shape_id;
+                [&excluded_object_ids](const ImageOperation& operation) {
+                    return excluded_object_ids.contains(operationObjectId(operation));
                 }), operations.end());
         }
         pixels = applyOperations(
@@ -726,31 +764,232 @@ QImage ImageDocumentSession::renderedImage() const {
 }
 
 QImage ImageDocumentSession::renderedImageWithoutShape(const QString& shape_id) const {
-    return renderComposite(source_image_, data_, nullptr, shape_id);
+    return renderComposite(source_image_, data_, nullptr, QStringList{shape_id});
+}
+
+QImage ImageDocumentSession::renderedImageWithoutObjects(
+    const QStringList& object_ids) const {
+    return renderComposite(source_image_, data_, nullptr, object_ids);
 }
 
 QVector<ImageShapePlacement> ImageDocumentSession::visibleShapes() const {
     QVector<ImageShapePlacement> result;
+    const auto objects = visibleObjects();
+    result.reserve(objects.size());
+    for (const auto& object : objects) {
+        if (object.operation.kind != OperationKind::Shape) continue;
+        result.append({object.operation.shape, object.layer_id, object.layer_opacity});
+    }
+    return result;
+}
+
+QVector<ImageObjectPlacement> ImageDocumentSession::visibleObjects() const {
+    QVector<ImageObjectPlacement> result;
     const QSize size = renderedSize();
     for (qsizetype layer_index = data_.layers.size(); layer_index > 1; --layer_index) {
         const auto& layer = data_.layers.at(layer_index - 1);
         if (!layer.visible || layer.opacity == 0) continue;
         for (qsizetype index = layer.operations.size(); index > 0; --index) {
             const auto& operation = layer.operations.at(index - 1);
-            if (operation.kind != OperationKind::Shape) continue;
-            ImageShapePlacement placement;
-            placement.shape = operation.shape;
+            if (operation.kind != OperationKind::PaintStroke &&
+                operation.kind != OperationKind::EraseStroke &&
+                operation.kind != OperationKind::Shape) continue;
+            ImageObjectPlacement placement;
+            placement.operation = operation;
             placement.layer_id = layer.id;
             placement.layer_opacity = layer.opacity;
             for (qsizetype suffix = index; suffix < layer.operations.size(); ++suffix) {
                 const auto& later = layer.operations.at(suffix);
-                placement.shape.start = transformShapePoint(placement.shape.start, later, size);
-                placement.shape.end = transformShapePoint(placement.shape.end, later, size);
+                transformObjectGeometry(&placement.operation, later, size);
             }
             result.append(std::move(placement));
         }
     }
     return result;
+}
+
+bool ImageDocumentSession::updateObjectsRendered(
+    const QVector<ImageObjectPlacement>& objects, QString* error) {
+    if (error != nullptr) error->clear();
+    if (objects.isEmpty() || !hasSource()) return false;
+
+    struct Mutation {
+        qsizetype layer_index = -1;
+        qsizetype operation_index = -1;
+        ImageOperation operation;
+    };
+    QVector<Mutation> mutations;
+    QSet<QString> seen;
+    const QSize size = renderedSize();
+    for (const auto& placement : objects) {
+        const QString id = operationObjectId(placement.operation);
+        if (id.isEmpty() || seen.contains(id)) {
+            assignError(error, QStringLiteral("The selected objects are invalid or duplicated."));
+            return false;
+        }
+        seen.insert(id);
+
+        qsizetype layer_index = -1;
+        qsizetype operation_index = -1;
+        for (qsizetype candidate_layer = 1; candidate_layer < data_.layers.size(); ++candidate_layer) {
+            const auto& layer = data_.layers.at(candidate_layer);
+            if (layer.id != placement.layer_id || !layer.visible || layer.opacity == 0) continue;
+            for (qsizetype candidate_operation = 0;
+                 candidate_operation < layer.operations.size(); ++candidate_operation) {
+                const auto& operation = layer.operations.at(candidate_operation);
+                if (operationObjectId(operation) == id &&
+                    operation.kind == placement.operation.kind) {
+                    layer_index = candidate_layer;
+                    operation_index = candidate_operation;
+                    break;
+                }
+            }
+            if (layer_index >= 0) break;
+        }
+        if (layer_index < 0) {
+            assignError(error, QStringLiteral("A selected object is no longer available."));
+            return false;
+        }
+
+        const auto& layer = data_.layers.at(layer_index);
+        ImageOperation stored = placement.operation;
+        for (qsizetype suffix = layer.operations.size(); suffix > operation_index + 1; --suffix) {
+            transformObjectGeometry(&stored, layer.operations.at(suffix - 1), size, true);
+        }
+
+        bool valid = false;
+        if (stored.kind == OperationKind::PaintStroke) {
+            const auto& stroke = stored.paint_stroke;
+            valid = !stroke.id.isEmpty() && stroke.color.isValid() &&
+                stroke.diameter >= 1 &&
+                stroke.diameter <= ImageDocumentStore::kMaximumPaintBrushDiameter &&
+                !stroke.points.isEmpty() &&
+                stroke.points.size() <= ImageDocumentStore::kMaximumPaintStrokePoints;
+            for (const auto& point : stroke.points) {
+                valid = valid && std::isfinite(point.x()) && std::isfinite(point.y()) &&
+                    point.x() >= 0.0 && point.y() >= 0.0 &&
+                    point.x() < size.width() && point.y() < size.height();
+            }
+        } else if (stored.kind == OperationKind::EraseStroke) {
+            const auto& stroke = stored.erase_stroke;
+            valid = !stroke.id.isEmpty() && stroke.diameter >= 1 &&
+                stroke.diameter <= ImageDocumentStore::kMaximumPaintBrushDiameter &&
+                !stroke.points.isEmpty() &&
+                stroke.points.size() <= ImageDocumentStore::kMaximumPaintStrokePoints;
+            for (const auto& point : stroke.points) {
+                valid = valid && std::isfinite(point.x()) && std::isfinite(point.y()) &&
+                    point.x() >= 0.0 && point.y() >= 0.0 &&
+                    point.x() < size.width() && point.y() < size.height();
+            }
+        } else if (stored.kind == OperationKind::Shape) {
+            valid = ImageDocumentStore::isValidShape(stored.shape, size, error);
+        }
+        if (!valid) {
+            if (error == nullptr || error->isEmpty()) {
+                assignError(error, QStringLiteral("The selected object geometry is invalid."));
+            }
+            return false;
+        }
+        if (stored != layer.operations.at(operation_index)) {
+            mutations.append({layer_index, operation_index, std::move(stored)});
+        }
+    }
+
+    if (mutations.isEmpty()) return false;
+    pushEdit();
+    for (const auto& mutation : mutations) {
+        data_.layers[mutation.layer_index].operations[mutation.operation_index] =
+            mutation.operation;
+    }
+    layer_thumbnail_cache_.clear();
+    return true;
+}
+
+bool ImageDocumentSession::updateShapeStyles(const QStringList& shape_ids,
+                                             const ImageShapeData& style,
+                                             QString* error) {
+    if (error != nullptr) error->clear();
+    if (shape_ids.isEmpty() || !style.stroke_color.isValid() ||
+        !style.fill_color.isValid() || style.stroke_width < 1 ||
+        style.stroke_width > ImageDocumentStore::kMaximumShapeStrokeWidth) return false;
+
+    struct Mutation {
+        qsizetype layer_index = -1;
+        qsizetype operation_index = -1;
+        ImageShapeData shape;
+    };
+    QVector<Mutation> mutations;
+    QSet<QString> seen;
+    const QSize size = renderedSize();
+    for (const QString& id : shape_ids) {
+        if (id.isEmpty() || seen.contains(id)) continue;
+        seen.insert(id);
+        bool found = false;
+        for (qsizetype layer_index = 1; layer_index < data_.layers.size() && !found; ++layer_index) {
+            const auto& layer = data_.layers.at(layer_index);
+            if (!layer.visible || layer.opacity == 0) continue;
+            for (qsizetype operation_index = 0;
+                 operation_index < layer.operations.size(); ++operation_index) {
+                const auto& operation = layer.operations.at(operation_index);
+                if (operation.kind != OperationKind::Shape || operation.shape.id != id) continue;
+                ImageShapeData updated = operation.shape;
+                updated.stroke_enabled = updated.kind == ImageShapeKind::Line
+                    ? true : style.stroke_enabled;
+                updated.stroke_color = style.stroke_color;
+                updated.stroke_width = style.stroke_width;
+                updated.fill_enabled = updated.kind == ImageShapeKind::Line
+                    ? false : style.fill_enabled;
+                updated.fill_color = style.fill_color;
+                if (!ImageDocumentStore::isValidShape(updated, size, error)) return false;
+                if (updated != operation.shape) {
+                    mutations.append({layer_index, operation_index, std::move(updated)});
+                }
+                found = true;
+                break;
+            }
+        }
+    }
+    if (mutations.isEmpty()) return false;
+    pushEdit();
+    for (const auto& mutation : mutations) {
+        data_.layers[mutation.layer_index].operations[mutation.operation_index].shape =
+            mutation.shape;
+    }
+    layer_thumbnail_cache_.clear();
+    return true;
+}
+
+bool ImageDocumentSession::deleteObjects(const QStringList& object_ids) {
+    QSet<QString> remaining;
+    for (const auto& id : object_ids) if (!id.isEmpty()) remaining.insert(id);
+    if (remaining.isEmpty()) return false;
+
+    bool found = false;
+    for (qsizetype layer_index = 1; layer_index < data_.layers.size() && !found; ++layer_index) {
+        for (const auto& operation : data_.layers.at(layer_index).operations) {
+            if (remaining.contains(operationObjectId(operation))) {
+                found = true;
+                break;
+            }
+        }
+    }
+    if (!found) return false;
+
+    pushEdit();
+    remaining.clear();
+    for (const auto& id : object_ids) if (!id.isEmpty()) remaining.insert(id);
+    for (qsizetype layer_index = 1; layer_index < data_.layers.size(); ++layer_index) {
+        auto& operations = data_.layers[layer_index].operations;
+        for (qsizetype index = operations.size(); index > 0; --index) {
+            const QString id = operationObjectId(operations.at(index - 1));
+            if (!id.isEmpty() && remaining.contains(id)) {
+                remaining.remove(id);
+                operations.removeAt(index - 1);
+            }
+        }
+    }
+    layer_thumbnail_cache_.clear();
+    return true;
 }
 
 QImage ImageDocumentSession::renderedImageWithEraseStroke(
@@ -913,6 +1152,7 @@ bool ImageDocumentSession::applyPaintStroke(const QVector<QPointF>& points,
     pushEdit();
     ImageOperation operation;
     operation.kind = OperationKind::PaintStroke;
+    operation.paint_stroke.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     operation.paint_stroke.points = points;
     operation.paint_stroke.color = color;
     operation.paint_stroke.diameter = diameter;
@@ -954,6 +1194,7 @@ bool ImageDocumentSession::applyEraseStroke(const QVector<QPointF>& points,
     pushEdit();
     ImageOperation operation;
     operation.kind = OperationKind::EraseStroke;
+    operation.erase_stroke.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     operation.erase_stroke.points = points;
     operation.erase_stroke.diameter = diameter;
     data_.layers[layerIndex(selected_layer_id_)].operations.append(std::move(operation));

@@ -32,6 +32,7 @@ enum class ImageShapeKind {
 };
 
 struct ImagePaintStroke {
+    QString id;
     QVector<QPointF> points;
     QColor color = Qt::black;
     int diameter = 12;
@@ -40,6 +41,7 @@ struct ImagePaintStroke {
 };
 
 struct ImageEraseStroke {
+    QString id;
     QVector<QPointF> points;
     int diameter = 12;
 
@@ -75,6 +77,14 @@ struct ImageOperation {
     ImageShapeData shape;
 
     bool operator==(const ImageOperation&) const = default;
+};
+
+struct ImageObjectPlacement {
+    ImageOperation operation;
+    QString layer_id;
+    int layer_opacity = 100;
+
+    bool operator==(const ImageObjectPlacement&) const = default;
 };
 
 struct ImageLayerData {

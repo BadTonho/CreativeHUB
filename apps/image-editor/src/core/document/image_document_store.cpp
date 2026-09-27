@@ -22,7 +22,9 @@ constexpr int kCanvasDocumentVersion = 2;
 constexpr int kPaintDocumentVersion = 3;
 constexpr int kLayerDocumentVersion = 4;
 constexpr int kEraseDocumentVersion = 5;
-constexpr int kDocumentVersion = 6;
+constexpr int kShapeDocumentVersion = 6;
+constexpr int kObjectIdentityDocumentVersion = 7;
+constexpr int kDocumentVersion = 7;
 constexpr int kRecoveryVersion = 1;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr auto kRecoveryFormat = "creative-suite-image-recovery";
@@ -41,6 +43,41 @@ bool isInteger(const QJsonValue& value, int* result) {
     }
     *result = static_cast<int>(number);
     return true;
+}
+
+bool isCanonicalUuid(const QString& value) {
+    const QUuid uuid(value);
+    return !uuid.isNull() &&
+        uuid.toString(QUuid::WithoutBraces).compare(value, Qt::CaseInsensitive) == 0;
+}
+
+QString objectId(const ImageOperation& operation) {
+    switch (operation.kind) {
+    case OperationKind::PaintStroke: return operation.paint_stroke.id;
+    case OperationKind::EraseStroke: return operation.erase_stroke.id;
+    case OperationKind::Shape: return operation.shape.id;
+    default: return {};
+    }
+}
+
+void ensureObjectIds(ImageDocumentData* document) {
+    if (document == nullptr) return;
+    const auto ensure = [](QVector<ImageOperation>* operations) {
+        if (operations == nullptr) return;
+        for (auto& operation : *operations) {
+            if (operation.kind == OperationKind::PaintStroke &&
+                operation.paint_stroke.id.isEmpty()) {
+                operation.paint_stroke.id =
+                    QUuid::createUuid().toString(QUuid::WithoutBraces);
+            } else if (operation.kind == OperationKind::EraseStroke &&
+                       operation.erase_stroke.id.isEmpty()) {
+                operation.erase_stroke.id =
+                    QUuid::createUuid().toString(QUuid::WithoutBraces);
+            }
+        }
+    };
+    ensure(&document->operations);
+    for (auto& layer : document->layers) ensure(&layer.operations);
 }
 
 bool isArgbHexColor(const QString& value) {
@@ -77,6 +114,7 @@ QJsonObject encodeOperation(const ImageOperation& operation) {
         break;
     case OperationKind::PaintStroke: {
         encoded.insert("kind", "paint_stroke");
+        encoded.insert("id", operation.paint_stroke.id);
         encoded.insert("color", operation.paint_stroke.color.name(QColor::HexArgb));
         encoded.insert("diameter", operation.paint_stroke.diameter);
         QJsonArray points;
@@ -91,6 +129,7 @@ QJsonObject encodeOperation(const ImageOperation& operation) {
     }
     case OperationKind::EraseStroke: {
         encoded.insert("kind", "erase_stroke");
+        encoded.insert("id", operation.erase_stroke.id);
         encoded.insert("diameter", operation.erase_stroke.diameter);
         QJsonArray points;
         for (const auto& point : operation.erase_stroke.points) {
@@ -186,17 +225,21 @@ bool decodeOperations(const QJsonValue& value,
         } else if (kind == "paint_stroke" && version >= kPaintDocumentVersion) {
             const auto encoded_points = object.value("points").toArray();
             const QString encoded_color = object.value("color").toString();
+            const QString id = object.value("id").toString();
             const QColor color(encoded_color);
             int diameter = 0;
             if (encoded_points.isEmpty() ||
                 encoded_points.size() > ImageDocumentStore::kMaximumPaintStrokePoints ||
                 !isArgbHexColor(encoded_color) || !color.isValid() ||
                 !isInteger(object.value("diameter"), &diameter) ||
-                diameter < 1 || diameter > ImageDocumentStore::kMaximumPaintBrushDiameter) {
+                diameter < 1 || diameter > ImageDocumentStore::kMaximumPaintBrushDiameter ||
+                (version >= kObjectIdentityDocumentVersion && !isCanonicalUuid(id))) {
                 assignError(error, QStringLiteral("The document contains an invalid paint stroke."));
                 return false;
             }
             operation.kind = OperationKind::PaintStroke;
+            operation.paint_stroke.id = version >= kObjectIdentityDocumentVersion
+                ? id : QUuid::createUuid().toString(QUuid::WithoutBraces);
             operation.paint_stroke.color = color;
             operation.paint_stroke.diameter = diameter;
             operation.paint_stroke.points.reserve(encoded_points.size());
@@ -223,15 +266,19 @@ bool decodeOperations(const QJsonValue& value,
             }
         } else if (kind == "erase_stroke" && version >= kEraseDocumentVersion && fixed_canvas) {
             const auto encoded_points = object.value("points").toArray();
+            const QString id = object.value("id").toString();
             int diameter = 0;
             if (encoded_points.isEmpty() ||
                 encoded_points.size() > ImageDocumentStore::kMaximumPaintStrokePoints ||
                 !isInteger(object.value("diameter"), &diameter) || diameter < 1 ||
-                diameter > ImageDocumentStore::kMaximumPaintBrushDiameter) {
+                diameter > ImageDocumentStore::kMaximumPaintBrushDiameter ||
+                (version >= kObjectIdentityDocumentVersion && !isCanonicalUuid(id))) {
                 assignError(error, QStringLiteral("The document contains an invalid erase stroke."));
                 return false;
             }
             operation.kind = OperationKind::EraseStroke;
+            operation.erase_stroke.id = version >= kObjectIdentityDocumentVersion
+                ? id : QUuid::createUuid().toString(QUuid::WithoutBraces);
             operation.erase_stroke.diameter = diameter;
             operation.erase_stroke.points.reserve(encoded_points.size());
             for (const auto& encoded_point_value : encoded_points) {
@@ -255,7 +302,7 @@ bool decodeOperations(const QJsonValue& value,
                 }
                 operation.erase_stroke.points.append(QPointF(x, y));
             }
-        } else if (kind == "shape" && version >= kDocumentVersion && fixed_canvas) {
+        } else if (kind == "shape" && version >= kShapeDocumentVersion && fixed_canvas) {
             const QString id = object.value("id").toString();
             const QString shape_type = object.value("shape_type").toString();
             const QString stroke_color_text = object.value("stroke_color").toString();
@@ -313,12 +360,12 @@ QSize sizeAfterOperations(QSize size, const QVector<ImageOperation>& operations)
 }
 
 bool isValidLayerId(const QString& id) {
-    const QUuid uuid(id);
-    return !uuid.isNull() &&
-        uuid.toString(QUuid::WithoutBraces).compare(id, Qt::CaseInsensitive) == 0;
+    return isCanonicalUuid(id);
 }
 
-bool validateLayers(const ImageDocumentData& document, QString* error) {
+bool validateLayers(const ImageDocumentData& document,
+                    QSet<QString>& object_ids,
+                    QString* error) {
     if (document.layers.isEmpty() ||
         document.layers.size() > ImageDocumentStore::kMaximumLayers ||
         !document.layers.front().background) {
@@ -326,7 +373,6 @@ bool validateLayers(const ImageDocumentData& document, QString* error) {
         return false;
     }
     QSet<QString> ids;
-    QSet<QString> shape_ids;
     const QSize canvas_size = sizeAfterOperations(document.source_size, document.operations);
     qsizetype background_count = 0;
     for (qsizetype index = 0; index < document.layers.size(); ++index) {
@@ -359,13 +405,13 @@ bool validateLayers(const ImageDocumentData& document, QString* error) {
             return false;
         }
         for (const auto& operation : validated) {
-            if (operation.kind != OperationKind::Shape) continue;
-            const QString shape_id = operation.shape.id.toLower();
-            if (shape_ids.contains(shape_id)) {
-                assignError(error, QStringLiteral("The document contains a duplicate shape ID."));
+            const QString id = objectId(operation).toLower();
+            if (id.isEmpty()) continue;
+            if (!isCanonicalUuid(objectId(operation)) || object_ids.contains(id)) {
+                assignError(error, QStringLiteral("The document contains an invalid or duplicate object ID."));
                 return false;
             }
-            shape_ids.insert(shape_id);
+            object_ids.insert(id);
         }
     }
     if (background_count != 1) {
@@ -393,7 +439,20 @@ bool validateDocument(const ImageDocumentData& document, QString* error) {
                           &base_size, false, &checked_operations, error)) {
         return false;
     }
-    return validateLayers(document, error);
+    QSet<QString> object_ids;
+    const auto validate_ids = [&object_ids, error](const QVector<ImageOperation>& operations) {
+        for (const auto& operation : operations) {
+            const QString id = objectId(operation);
+            if (id.isEmpty()) continue;
+            if (!isCanonicalUuid(id) || object_ids.contains(id.toLower())) {
+                assignError(error, QStringLiteral("The document contains an invalid or duplicate object ID."));
+                return false;
+            }
+            object_ids.insert(id.toLower());
+        }
+        return true;
+    };
+    return validate_ids(checked_operations) && validateLayers(document, object_ids, error);
 }
 
 QJsonObject encodeDocument(const ImageDocumentData& document,
@@ -548,7 +607,6 @@ bool decodeDocument(const QJsonObject& root,
             }
             decoded.layers.append(std::move(layer));
         }
-        if (!validateLayers(decoded, error)) return false;
     } else {
         ImageLayerData background;
         background.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -560,6 +618,7 @@ bool decodeDocument(const QJsonObject& root,
         decoded.layers = {background, first_layer};
     }
 
+    if (!validateDocument(decoded, error)) return false;
     *document = std::move(decoded);
     return true;
 }
@@ -610,8 +669,10 @@ bool ImageDocumentStore::saveDocument(const QString& document_path,
         assignError(error, QStringLiteral("A document path is required."));
         return false;
     }
-    if (!validateDocument(document, error)) return false;
-    return writeJson(document_path, encodeDocument(document, document_path), error);
+    ImageDocumentData normalized = document;
+    ensureObjectIds(&normalized);
+    if (!validateDocument(normalized, error)) return false;
+    return writeJson(document_path, encodeDocument(normalized, document_path), error);
 }
 
 bool ImageDocumentStore::loadDocument(const QString& document_path,
@@ -633,13 +694,15 @@ bool ImageDocumentStore::saveRecovery(const QString& recovery_path,
         assignError(error, QStringLiteral("The recovery document is invalid."));
         return false;
     }
-    if (!validateDocument(recovery.document, error)) return false;
+    ImageDocumentData normalized = recovery.document;
+    ensureObjectIds(&normalized);
+    if (!validateDocument(normalized, error)) return false;
     QJsonObject root;
     root.insert("format", kRecoveryFormat);
     root.insert("version", kRecoveryVersion);
     root.insert("target_document_path", recovery.target_document_path);
     if (!recovery.session_id.isEmpty()) root.insert("session_id", recovery.session_id);
-    root.insert("document", encodeDocument(recovery.document, recovery_path));
+    root.insert("document", encodeDocument(normalized, recovery_path));
     return writeJson(recovery_path, root, error);
 }
 

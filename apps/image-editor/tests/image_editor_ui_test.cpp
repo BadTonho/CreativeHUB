@@ -24,6 +24,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QMenu>
 #include <QPainter>
 #include <QPushButton>
@@ -47,6 +48,224 @@
 
 #include <iostream>
 
+bool testGeneralCanvasSelection() {
+    image_editor::ImageCanvas canvas;
+    canvas.resize(640, 480);
+    canvas.show();
+    QCoreApplication::processEvents();
+
+    QImage backing(QSize(100, 80), QImage::Format_ARGB32_Premultiplied);
+    backing.fill(Qt::transparent);
+    canvas.setImage(backing);
+    canvas.setObjectSelectionMode(true);
+
+    image_editor::ImageObjectPlacement top_shape;
+    top_shape.layer_id = QStringLiteral("top-shapes");
+    top_shape.operation.kind = image_editor::OperationKind::Shape;
+    top_shape.operation.shape.id = QStringLiteral("top-shape");
+    top_shape.operation.shape.kind = image_editor::ImageShapeKind::Rectangle;
+    top_shape.operation.shape.start = QPointF(12, 8);
+    top_shape.operation.shape.end = QPointF(24, 18);
+    top_shape.operation.shape.stroke_enabled = false;
+    top_shape.operation.shape.fill_enabled = true;
+    top_shape.operation.shape.fill_color = Qt::green;
+
+    image_editor::ImageObjectPlacement shape;
+    shape.layer_id = QStringLiteral("shapes");
+    shape.operation.kind = image_editor::OperationKind::Shape;
+    shape.operation.shape.id = QStringLiteral("shape");
+    shape.operation.shape.kind = image_editor::ImageShapeKind::Rectangle;
+    shape.operation.shape.start = QPointF(60, 10);
+    shape.operation.shape.end = QPointF(80, 30);
+    shape.operation.shape.stroke_color = Qt::black;
+    shape.operation.shape.fill_enabled = true;
+    shape.operation.shape.fill_color = Qt::blue;
+
+    image_editor::ImageObjectPlacement eraser;
+    eraser.layer_id = QStringLiteral("eraser-layer");
+    eraser.operation.kind = image_editor::OperationKind::EraseStroke;
+    eraser.operation.erase_stroke.id = QStringLiteral("eraser");
+    eraser.operation.erase_stroke.points = {QPointF(20, 30), QPointF(50, 30)};
+    eraser.operation.erase_stroke.diameter = 6;
+
+    image_editor::ImageObjectPlacement paint;
+    paint.layer_id = QStringLiteral("paint-layer");
+    paint.operation.kind = image_editor::OperationKind::PaintStroke;
+    paint.operation.paint_stroke.id = QStringLiteral("paint");
+    paint.operation.paint_stroke.points = {QPointF(10, 10), QPointF(40, 10)};
+    paint.operation.paint_stroke.color = Qt::red;
+    paint.operation.paint_stroke.diameter = 4;
+
+    const QVector<image_editor::ImageObjectPlacement> placements{
+        top_shape, shape, eraser, paint};
+    const auto image_point = [&canvas](const QPointF& point) {
+        const qreal zoom = canvas.zoomFactor();
+        return QPoint(qRound((canvas.width() - 100 * zoom) / 2.0 + point.x() * zoom),
+                      qRound((canvas.height() - 80 * zoom) / 2.0 + point.y() * zoom));
+    };
+    canvas.setObjectPlacements(placements, {});
+
+    QStringList last_selection;
+    QString last_active_layer;
+    QObject::connect(&canvas, &image_editor::ImageCanvas::objectsSelected,
+        [&last_selection, &last_active_layer](const QStringList& ids, const QString& layer) {
+            last_selection = ids;
+            last_active_layer = layer;
+        });
+
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, image_point(QPointF(16, 12)));
+    if (last_selection != QStringList{QStringLiteral("top-shape")} ||
+        last_active_layer != QStringLiteral("top-shapes")) {
+        std::cerr << "Select did not choose the topmost overlapping object and its layer.\n";
+        return false;
+    }
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, image_point(QPointF(35, 10)));
+    if (last_selection != QStringList{QStringLiteral("paint")} ||
+        last_active_layer != QStringLiteral("paint-layer")) {
+        std::cerr << "Select could not hit-test a paint stroke.\n";
+        return false;
+    }
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, image_point(QPointF(35, 30)));
+    if (last_selection != QStringList{QStringLiteral("eraser")} ||
+        last_active_layer != QStringLiteral("eraser-layer")) {
+        std::cerr << "Select could not hit-test an eraser operation.\n";
+        return false;
+    }
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, image_point(QPointF(70, 20)));
+    if (last_selection != QStringList{QStringLiteral("shape")} ||
+        last_active_layer != QStringLiteral("shapes")) {
+        std::cerr << "Select could not hit-test a shape.\n";
+        return false;
+    }
+
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, image_point(QPointF(35, 10)));
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::ShiftModifier, image_point(QPointF(35, 30)));
+    if (!last_selection.contains(QStringLiteral("paint")) ||
+        !last_selection.contains(QStringLiteral("eraser")) || last_selection.size() != 2) {
+        std::cerr << "Shift-click did not add an object to the selection.\n";
+        return false;
+    }
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::ShiftModifier, image_point(QPointF(35, 30)));
+    if (last_selection != QStringList{QStringLiteral("paint")}) {
+        std::cerr << "Shift-click did not remove an object from the selection.\n";
+        return false;
+    }
+
+    QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, image_point(QPointF(8, 6)));
+    QTest::mouseMove(&canvas, image_point(QPointF(82, 32)));
+    QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, image_point(QPointF(82, 32)));
+    const QStringList expected_ids{QStringLiteral("top-shape"), QStringLiteral("shape"),
+                                   QStringLiteral("eraser"), QStringLiteral("paint")};
+    if (last_selection.size() != expected_ids.size() ||
+        !std::all_of(expected_ids.cbegin(), expected_ids.cend(),
+            [&last_selection](const QString& id) { return last_selection.contains(id); })) {
+        std::cerr << "The marquee did not select every object it intersected.\n";
+        return false;
+    }
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, image_point(QPointF(95, 70)));
+    if (!last_selection.isEmpty()) {
+        std::cerr << "Clicking empty canvas did not clear object selection.\n";
+        return false;
+    }
+
+    const QStringList all_ids{QStringLiteral("top-shape"), QStringLiteral("shape"),
+                              QStringLiteral("eraser"), QStringLiteral("paint")};
+    canvas.setObjectPlacements(placements, all_ids);
+    QStringList transformed_ids;
+    int geometry_changes = 0;
+    bool all_geometry_changed = false;
+    QObject::connect(&canvas, &image_editor::ImageCanvas::objectTransformStarted,
+        [&transformed_ids](const QStringList& ids) { transformed_ids = ids; });
+    QObject::connect(&canvas, &image_editor::ImageCanvas::objectsGeometryChanged,
+        [&geometry_changes, &all_geometry_changed, &paint](
+            const QVector<image_editor::ImageObjectPlacement>& changed) {
+            ++geometry_changes;
+            all_geometry_changed = changed.size() == 4 &&
+                std::any_of(changed.cbegin(), changed.cend(), [&paint](const auto& object) {
+                    return object.operation.kind == image_editor::OperationKind::PaintStroke &&
+                        object.operation.paint_stroke.points != paint.operation.paint_stroke.points;
+                });
+        });
+    const QPoint move_start = image_point(QPointF(35, 10));
+    const QPoint move_end = image_point(QPointF(39, 14));
+    QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, move_start);
+    QTest::mouseMove(&canvas, move_end);
+    QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, move_end);
+    if (transformed_ids.size() != all_ids.size() || geometry_changes != 1 ||
+        !all_geometry_changed) {
+        std::cerr << "Dragging a selected object did not transform the complete mixed selection.\n";
+        return false;
+    }
+
+    canvas.setObjectPlacements({paint}, {QStringLiteral("paint")});
+    image_editor::ImageObjectPlacement scaled_paint;
+    QObject::connect(&canvas, &image_editor::ImageCanvas::objectsGeometryChanged,
+        [&scaled_paint](const QVector<image_editor::ImageObjectPlacement>& changed) {
+            if (!changed.isEmpty()) scaled_paint = changed.front();
+        });
+    const auto freeform_resize = [&canvas, &image_point, &scaled_paint](
+        const image_editor::ImageObjectPlacement& object,
+        const QString& id,
+        const QPointF& start,
+        const QPointF& end) {
+        scaled_paint = {};
+        canvas.setObjectPlacements({object}, {id});
+        const QPoint resize_start = image_point(start);
+        const QPoint resize_end = image_point(end);
+        QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, resize_start);
+        QMouseEvent freeform_move(QEvent::MouseMove, QPointF(resize_end),
+            QPointF(canvas.mapToGlobal(resize_end)), Qt::NoButton, Qt::LeftButton,
+            Qt::AltModifier);
+        QApplication::sendEvent(&canvas, &freeform_move);
+        QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::AltModifier, resize_end);
+    };
+    freeform_resize(paint, QStringLiteral("paint"), QPointF(42, 12), QPointF(50, 28));
+    if (scaled_paint.operation.kind != image_editor::OperationKind::PaintStroke ||
+        scaled_paint.operation.paint_stroke.diameter != 10) {
+        std::cerr << "Alt resize did not scale a stroke using the geometric mean.\n";
+        return false;
+    }
+    freeform_resize(eraser, QStringLiteral("eraser"), QPointF(53, 33), QPointF(61, 43));
+    if (scaled_paint.operation.kind != image_editor::OperationKind::EraseStroke ||
+        scaled_paint.operation.erase_stroke.diameter != 11) {
+        std::cerr << "Alt resize did not scale eraser width using the geometric mean.\n";
+        return false;
+    }
+    freeform_resize(shape, QStringLiteral("shape"), QPointF(81, 31), QPointF(91, 41));
+    if (scaled_paint.operation.kind != image_editor::OperationKind::Shape ||
+        scaled_paint.operation.shape.stroke_width != 3) {
+        std::cerr << "Alt resize did not scale shape outlines using the geometric mean.\n";
+        return false;
+    }
+    return true;
+}
+
+bool testRenamedShortcutPersistence() {
+    const QKeySequence select_shortcut(QStringLiteral("Ctrl+Alt+S"));
+    const QKeySequence delete_shortcut(QStringLiteral("Ctrl+Alt+D"));
+    {
+        QSettings settings;
+        settings.beginGroup(QStringLiteral("ImageEditor/KeyboardShortcuts"));
+        settings.setValue(QStringLiteral("selectShapesToolAction"), select_shortcut.toString());
+        settings.setValue(QStringLiteral("deleteSelectedShapeAction"), delete_shortcut.toString());
+        settings.endGroup();
+        settings.sync();
+    }
+
+    image_editor::ImageEditorWindow reopened;
+    auto* select_action = reopened.findChild<QAction*>(QStringLiteral("selectShapesToolAction"));
+    auto* delete_action = reopened.findChild<QAction*>(QStringLiteral("deleteSelectedShapeAction"));
+    if (select_action == nullptr || delete_action == nullptr ||
+        select_action->text() != QStringLiteral("Select") ||
+        delete_action->text() != QStringLiteral("Delete Selected Objects") ||
+        select_action->shortcut() != select_shortcut ||
+        delete_action->shortcut() != delete_shortcut) {
+        std::cerr << "The renamed Select and Delete actions did not retain saved shortcuts.\n";
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
@@ -59,6 +278,8 @@ int main(int argc, char* argv[]) {
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, temporary.path());
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, temporary.path());
+
+    if (!testGeneralCanvasSelection()) return 1;
 
     image_editor::ImageEditorWindow window;
     window.show();
@@ -103,6 +324,8 @@ int main(int argc, char* argv[]) {
         settings_menu->title() != QStringLiteral("Settings") ||
         paint_tool_action->shortcut() != QKeySequence(Qt::Key_B) ||
         eraser_tool_action->shortcut() != QKeySequence(Qt::Key_E) ||
+        select_shapes_tool_action->text() != QStringLiteral("Select") ||
+        delete_shape_action->text() != QStringLiteral("Delete Selected Objects") ||
         paint_tool_action->isChecked() || paint_tool_action->isEnabled() ||
         eraser_tool_action->isChecked() || eraser_tool_action->isEnabled() ||
         !shapes_tool_action->shortcut().isEmpty() ||
@@ -1092,6 +1315,8 @@ int main(int argc, char* argv[]) {
         QStringLiteral("shapesToolButton"));
     auto* linked_select_shapes_button = linked_window.findChild<QToolButton*>(
         QStringLiteral("selectShapesToolButton"));
+    auto* delete_objects_button = linked_window.findChild<QPushButton*>(
+        QStringLiteral("deleteSelectedShapeButton"));
     auto* shape_options_action = linked_window.findChild<QAction*>(
         QStringLiteral("shapeOptionsAction"));
     auto* shape_kind = linked_window.findChild<QComboBox*>(
@@ -1110,6 +1335,10 @@ int main(int argc, char* argv[]) {
         QStringLiteral("imageLayerList"));
     if (linked_shapes_action == nullptr || linked_select_shapes_action == nullptr ||
         linked_shapes_button == nullptr || linked_select_shapes_button == nullptr ||
+        delete_objects_button == nullptr ||
+        linked_select_shapes_action->text() != QStringLiteral("Select") ||
+        linked_select_shapes_button->toolTip() != QStringLiteral("Select objects") ||
+        delete_objects_button->text() != QStringLiteral("Delete Selected Objects") ||
         shape_options_action == nullptr || shape_kind == nullptr || shape_stroke == nullptr ||
         shape_fill == nullptr || shape_width == nullptr || shape_stroke_color == nullptr ||
         shape_fill_color == nullptr || linked_layer_list == nullptr) {
@@ -1186,7 +1415,7 @@ int main(int argc, char* argv[]) {
     QCoreApplication::processEvents();
     if (!linked_select_shapes_button->isChecked() || linked_shapes_button->isChecked() ||
         shape_kind->isEnabled()) {
-        std::cerr << "Shapes and Select Shapes were not mutually exclusive.\n";
+        std::cerr << "Shapes and Select were not mutually exclusive.\n";
         return 1;
     }
     linked_layer_list->setCurrentRow(2);
@@ -1204,25 +1433,13 @@ int main(int argc, char* argv[]) {
     QTest::mouseMove(linked_canvas, moved_center);
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, moved_center);
     QCoreApplication::processEvents();
-    const QPoint moved_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(29, 12));
-    const QPoint resized_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(30, 10));
+    const QPoint moved_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(30, 13));
+    const QPoint resized_end = imagePoint(linked_canvas, QSize(32, 24), QPointF(31, 14));
     QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier, moved_end);
-    QTest::keyPress(linked_canvas, Qt::Key_Shift);
     QTest::mouseMove(linked_canvas, resized_end);
-    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::ShiftModifier, resized_end);
-    QTest::keyRelease(linked_canvas, Qt::Key_Shift);
+    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, resized_end);
     QCoreApplication::processEvents();
     shape_fill->setChecked(false);
-    QCoreApplication::processEvents();
-    const QPoint unfilled_body_start = imagePoint(
-        linked_canvas, QSize(32, 24), QPointF(25, 8));
-    const QPoint unfilled_body_end = imagePoint(
-        linked_canvas, QSize(32, 24), QPointF(26, 8));
-    QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier,
-                      unfilled_body_start);
-    QTest::mouseMove(linked_canvas, unfilled_body_end);
-    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier,
-                        unfilled_body_end);
     QCoreApplication::processEvents();
     linked_save_action->trigger();
     QCoreApplication::processEvents();
@@ -1247,13 +1464,13 @@ int main(int argc, char* argv[]) {
         .at(1).toObject().value("operations").toArray();
     const QJsonObject persisted_shape = shape_operations.isEmpty()
         ? QJsonObject{} : shape_operations.at(shape_operations.size() - 1).toObject();
-    if (shape_document_json.value("version").toInt() != 6 || shape_operations.isEmpty() ||
+    if (shape_document_json.value("version").toInt() != 7 || shape_operations.isEmpty() ||
         persisted_shape.value("kind").toString() != "shape" ||
-        qRound(persisted_shape.value("start_x").toDouble()) != 22 ||
-        qRound(persisted_shape.value("end_x").toDouble()) != 31 ||
+        qRound(persisted_shape.value("start_x").toDouble()) != 21 ||
+        qRound(persisted_shape.value("end_x").toDouble()) != 30 ||
         qRound(persisted_shape.value("end_y").toDouble()) != 13 ||
         persisted_shape.value("fill_enabled").toBool()) {
-        std::cerr << "Shape creation, Shift constraints, or style edits were not persisted in v6: version="
+        std::cerr << "Shape creation, aspect-preserving resize, or style edits were not persisted in v7: version="
                   << shape_document_json.value("version").toInt()
                   << " operations=" << shape_operations.size()
                   << " kind=" << persisted_shape.value("kind").toString().toStdString()
@@ -1268,7 +1485,7 @@ int main(int argc, char* argv[]) {
         QStringLiteral("deleteSelectedShapeAction"));
     if (linked_delete_shape_action == nullptr || linked_undo_action == nullptr ||
         !linked_delete_shape_action->isEnabled()) {
-        std::cerr << "The selected shape was not available to the Delete Selected Shape action.\n";
+        std::cerr << "The selected object was not available to Delete Selected Objects.\n";
         return 1;
     }
     linked_delete_shape_action->trigger();
@@ -1396,5 +1613,6 @@ int main(int argc, char* argv[]) {
         std::cerr << "An incompatible linked document was opened or published.\n";
         return 1;
     }
+    if (!testRenamedShortcutPersistence()) return 1;
     return 0;
 }

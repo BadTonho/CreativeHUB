@@ -17,10 +17,10 @@ rejected. Use **Reset All** to restore the defaults.
 | Redo | Qt standard Redo sequence (`Ctrl+Y` on Windows/Linux; `Cmd+Shift+Z` on macOS) |
 | Paint tool | `B` (toggle Paint on or off when an editable layer is available) |
 | Eraser tool | `E` (toggle Eraser on or off when an editable layer is available) |
-| Cancel crop selection or shape creation | `Esc` |
+| Cancel crop selection, shape creation, or object selection gesture | `Esc` |
 | Shapes tool | Unassigned by default |
-| Select Shapes tool | Unassigned by default |
-| Delete selected shape | Unassigned by default |
+| Select tool | Unassigned by default |
+| Delete selected objects | Unassigned by default |
 | Open editable document | Unassigned by default |
 | Relink source image | Unassigned by default |
 | Export image | Unassigned by default |
@@ -32,12 +32,14 @@ rejected. Use **Reset All** to restore the defaults.
 | Toggle Layers panel | Unassigned by default |
 
 Use the mouse wheel to zoom, the middle mouse button to pan, and the Crop
-Selection toolbar or Edit menu action to start a crop gesture. Select Shapes
-can select one visible shape from any editable layer, move it by dragging its
-body, or resize it using its endpoint handles. Hold Shift while creating or
-resizing to constrain rectangles and ellipses to squares/circles or align lines
-to 45-degree increments. Commands listed
-as unassigned can be given a shortcut in the settings dialog.
+Selection toolbar or Edit menu action to start a crop gesture. Select can pick
+paint strokes, eraser strokes, and shapes on visible editable layers. Click an
+object to select it; Shift-click toggles it in the selection. Drag on empty
+canvas to select every object whose visible geometry intersects the marquee.
+Drag a selected object to move the selection, or drag a corner handle to scale
+it with proportions preserved. Hold Alt during resize for independent
+horizontal and vertical scaling. Commands listed as unassigned can be given a
+shortcut in the settings dialog.
 
 With Paint or Eraser active and an editable layer selected, hold `Ctrl+Alt`,
 then press and drag the left mouse button over the image to resize the active
