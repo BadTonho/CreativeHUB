@@ -1,7 +1,7 @@
 # Image Editor Roadmap
 
-Status: **standalone minimum implemented; manual workflow user-confirmed;
-cross-platform acceptance in progress**.
+Status: **standalone minimum implemented; baseline manual workflow user-confirmed;
+export changes need manual validation; cross-platform acceptance in progress**.
 This roadmap covers the independent application under `apps/image-editor/`.
 The Video Editor handoff implementation already exists as a bounded prototype,
 but its acceptance is gated on passing the standalone manual and
@@ -48,7 +48,8 @@ of Motion Studio in the application sequence.
 - [x] Keep undo and redo in memory, preserve the original source, and support
   explicit relinking when the source path is unavailable.
 - [x] Export flattened PNG and JPEG images, preserving PNG transparency and
-  flattening JPEG output over white.
+  flattening JPEG output over a selectable background (white by default) with
+  configurable quality.
 - [x] Add local autosave snapshots, recovery, and bounded structured error
   logging.
 - [x] Add self-contained blank canvases with standard and custom dimensions,
@@ -59,9 +60,10 @@ of Motion Studio in the application sequence.
 - [x] Add canvas fit, zoom, pan, and drag-to-crop controls.
 - [-] Pass Release build and automated tests for documents, edits, relinking,
   export, recovery, logging, and the UI boundary.
-- [x] Complete the manual workflow in
+- [-] Complete the manual workflow in
   [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md), including a restart and
-  recovery check (user-confirmed; platform and run details were not recorded).
+  recovery check (the baseline workflow was user-confirmed; the export-options
+  and responsive-export changes still need manual validation).
 - [ ] Validate Windows packaging with PNG, JPEG, BMP, WebP, and TIFF plugins;
   then repeat build and interaction checks on macOS and Linux.
 

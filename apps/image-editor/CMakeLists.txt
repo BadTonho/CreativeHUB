@@ -5,6 +5,7 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets)
 
 add_library(creative-suite-image-editor-core STATIC
+    src/core/document/image_exporter.h
     src/core/document/image_document_store.cpp
     src/core/document/image_document_store.h
     src/core/document/image_document_session.cpp
@@ -32,6 +33,10 @@ add_executable(creative-suite-image-editor
     src/app/main.cpp
     src/ui/windows/image_editor_window.cpp
     src/ui/windows/image_editor_window.h
+    src/ui/windows/image_export_worker.cpp
+    src/ui/windows/image_export_worker.h
+    src/ui/dialogs/image_export_dialog.cpp
+    src/ui/dialogs/image_export_dialog.h
     src/ui/dialogs/new_canvas_dialog.cpp
     src/ui/dialogs/new_canvas_dialog.h
     src/ui/dialogs/shortcut_settings_dialog.cpp

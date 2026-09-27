@@ -19,7 +19,9 @@ run.
    background, and edits are unchanged. Confirm an unsaved canvas can be
    recovered after restarting the application.
 5. Export a transparent canvas to PNG and JPEG. Confirm PNG transparency is
-   retained and transparent JPEG pixels become white.
+   retained and JPEG uses quality 95 and a white background by default. Export
+   again with a custom JPEG background and low and high quality values. Confirm
+   the selected options are remembered after restarting the application.
 6. Open PNG, JPEG, BMP, WebP, and TIFF examples. Confirm each is decoded and
    its dimensions are shown. If a format fails, check that the Qt Image Formats
    plugins are present in the deployed `imageformats` directory.
@@ -80,8 +82,8 @@ run.
    result is unchanged. Compare the original source file before and after to
    verify it was not overwritten.
 10. Export painted and erased content to PNG and JPEG. Confirm paint strokes
-    are included and erased pixels reveal the lower visible layer,
-    PNG retains alpha, and transparent JPEG pixels become white.
+    are included and erased pixels reveal the lower visible layer, PNG retains
+    alpha, and JPEG uses the selected opaque background for transparent pixels.
 11. In the right-side Layers dock, confirm a new image or canvas has a locked
     Background and a selected transparent Layer 1. Paint on Layer 1 and verify
     the Background remains unchanged. Confirm each row shows an isolated
@@ -111,12 +113,20 @@ run.
 14. Try a corrupt image, an invalid `.cimg`, a read-only destination, and an
    unsupported export extension. Confirm the UI reports the failure and a
    structured entry is written to the local Image Editor log.
+15. Export a representative large layered image. Confirm rendering and encoding
+    run without freezing the editor. Cancel during rendering and during JPEG
+    encoding; during encoding, wait for the current codec call to finish and
+    confirm the temporary output is discarded. Repeat with an existing
+    destination and confirm its contents remain unchanged after cancellation.
 
 ### Recorded standalone validation
 
 - [x] User confirms the standalone workflow above was validated for the current
-  implementation, including the restart and recovery check. The platform, Qt
-  version, run date, and scenario-by-scenario results were not recorded.
+  baseline implementation, including the restart and recovery check. The
+  platform, Qt version, run date, and scenario-by-scenario results were not
+  recorded.
+- [ ] Validate the JPEG options and responsive export steps added after that
+  confirmation.
 - [ ] Cross-platform packaging and interaction checks below still need
   platform-specific records.
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "image_exporter.h"
 #include "image_document_store.h"
 
 #include <QHash>
@@ -21,6 +22,10 @@ public:
 
     [[nodiscard]] bool saveDocument(QString document_path = {}, QString* error = nullptr);
     [[nodiscard]] bool exportImage(const QString& output_path, QString* error = nullptr) const;
+    [[nodiscard]] bool exportImage(const QString& output_path,
+                                   const ImageExportOptions& options,
+                                   QString* error = nullptr) const;
+    [[nodiscard]] ImageExportSnapshot exportSnapshot() const;
 
     [[nodiscard]] bool applyCrop(const QRect& crop, QString* error = nullptr);
     [[nodiscard]] bool applyPaintStroke(const QVector<QPointF>& points,

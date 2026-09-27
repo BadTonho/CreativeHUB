@@ -956,6 +956,88 @@ void testExportAndFormatPlugins(const QString& root) {
     require(!jpeg.isNull() && jpeg.pixelColor(30, 30).red() > 245 &&
                 jpeg.pixelColor(30, 30).green() > 245 && jpeg.pixelColor(30, 30).blue() > 245,
             QStringLiteral("JPEG export did not flatten transparency over white."));
+
+    image_editor::ImageExportOptions custom_options;
+    custom_options.jpeg_quality = 95;
+    custom_options.jpeg_background = QColor(35, 120, 210);
+    const QString custom_matte_path = root + QStringLiteral("/custom-matte.jpg");
+    require(session.exportImage(custom_matte_path, custom_options, &error), error);
+    const QImage custom_matte(custom_matte_path);
+    const QColor matte_pixel = custom_matte.pixelColor(28, 28);
+    require(!custom_matte.isNull() && std::abs(matte_pixel.red() - 35) < 10 &&
+                std::abs(matte_pixel.green() - 120) < 10 &&
+                std::abs(matte_pixel.blue() - 210) < 10,
+            QStringLiteral("JPEG transparency was not flattened over the selected color."));
+
+    custom_options.jpeg_quality = 100;
+    const QString high_quality_path = root + QStringLiteral("/custom-matte-high.jpg");
+    require(session.exportImage(high_quality_path, custom_options, &error), error);
+    require(!QImage(high_quality_path).isNull(),
+            QStringLiteral("JPEG quality 100 did not produce a decodable image."));
+
+    custom_options.jpeg_quality = 0;
+    const QString low_quality_path = root + QStringLiteral("/custom-matte-low-quality.jpg");
+    require(session.exportImage(low_quality_path, custom_options, &error), error);
+    require(!QImage(low_quality_path).isNull(),
+            QStringLiteral("JPEG quality 0 did not produce a decodable image."));
+
+    custom_options.jpeg_quality = -1;
+    require(!session.exportImage(root + QStringLiteral("/invalid-quality.jpg"),
+                                 custom_options, &error) && !error.isEmpty(),
+            QStringLiteral("An out-of-range JPEG quality was accepted."));
+    custom_options.jpeg_quality = 95;
+    custom_options.jpeg_background = QColor(35, 120, 210, 128);
+    require(!session.exportImage(root + QStringLiteral("/translucent-matte.jpg"),
+                                 custom_options, &error) && !error.isEmpty(),
+            QStringLiteral("A translucent JPEG background color was accepted."));
+
+    auto snapshot = session.exportSnapshot();
+    const QVector<QPointF> later_stroke{QPointF(20.0, 20.0)};
+    require(session.applyPaintStroke(later_stroke, QColor(20, 80, 240), 6, &error), error);
+    const QString snapshot_path = root + QStringLiteral("/captured-snapshot.png");
+    const auto snapshot_result = image_editor::exportImageSnapshot(
+        snapshot, snapshot_path);
+    const QImage snapshot_image(snapshot_path);
+    require(snapshot_result.status == image_editor::ImageExportStatus::Succeeded &&
+                snapshot_image.pixelColor(20, 20).alpha() == 0 &&
+                session.renderedImage().pixelColor(20, 20).alpha() > 0,
+            QStringLiteral("An export snapshot changed when the live document was edited."));
+
+    std::atomic_bool cancelled{false};
+    const QString cancelled_render_path = root + QStringLiteral("/cancelled-render.png");
+    const auto render_cancel = image_editor::exportImageSnapshot(
+        snapshot, cancelled_render_path, {}, &cancelled,
+        [&cancelled](image_editor::ImageExportPhase phase) {
+            if (phase == image_editor::ImageExportPhase::Rendering) {
+                cancelled.store(true, std::memory_order_relaxed);
+            }
+        });
+    require(render_cancel.status == image_editor::ImageExportStatus::Cancelled &&
+                !QFileInfo::exists(cancelled_render_path),
+            QStringLiteral("Cancellation during rendering created an output file."));
+
+    const QString preserved_path = root + QStringLiteral("/cancelled-finalize.jpg");
+    QFile previous_output(preserved_path);
+    require(previous_output.open(QIODevice::WriteOnly),
+            QStringLiteral("Could not create the pre-existing export destination."));
+    const QByteArray previous_bytes = QByteArrayLiteral("previous destination contents");
+    require(previous_output.write(previous_bytes) == previous_bytes.size(),
+            QStringLiteral("Could not seed the pre-existing export destination."));
+    previous_output.close();
+    cancelled.store(false, std::memory_order_relaxed);
+    const auto finalize_cancel = image_editor::exportImageSnapshot(
+        snapshot, preserved_path, {}, &cancelled,
+        [&cancelled](image_editor::ImageExportPhase phase) {
+            if (phase == image_editor::ImageExportPhase::Finalizing) {
+                cancelled.store(true, std::memory_order_relaxed);
+            }
+        });
+    QFile preserved_output(preserved_path);
+    require(finalize_cancel.status == image_editor::ImageExportStatus::Cancelled &&
+                preserved_output.open(QIODevice::ReadOnly) &&
+                preserved_output.readAll() == previous_bytes,
+            QStringLiteral("Cancellation before commit replaced an existing destination."));
+
     require(!session.exportImage(root + QStringLiteral("/export.bmp"), &error),
             QStringLiteral("Unsupported export format was accepted."));
     require(!session.exportImage(root + QStringLiteral("/missing-dir/export.png"), &error),

@@ -2,6 +2,8 @@
 
 #include "image_canvas.h"
 #include "image_document_store.h"
+#include "image_export_dialog.h"
+#include "image_export_worker.h"
 #include "new_canvas_dialog.h"
 #include "shortcut_settings_dialog.h"
 #include "tool_sidebar.h"
@@ -31,6 +33,7 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QThread>
 #include <QToolBar>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -38,6 +41,7 @@
 #include <QWidgetAction>
 
 #include <memory>
+#include <atomic>
 
 namespace image_editor {
 namespace {
@@ -72,6 +76,51 @@ bool sameLinkedPath(const QString& left, const QString& right) {
 #else
     return normalizedLinkedPath(left) == normalizedLinkedPath(right);
 #endif
+}
+
+ImageExportOptions loadJpegExportPreferences(bool* read_succeeded,
+                                            QString* settings_path) {
+    ImageExportOptions options;
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("ImageEditor/Export"));
+
+    bool quality_is_integer = false;
+    const int stored_quality = settings.value(
+        QStringLiteral("jpegQuality"), options.jpeg_quality).toInt(&quality_is_integer);
+    if (quality_is_integer && stored_quality >= 0 && stored_quality <= 100) {
+        options.jpeg_quality = stored_quality;
+    }
+    const QColor stored_background(settings.value(
+        QStringLiteral("jpegBackground"),
+        options.jpeg_background.name(QColor::HexArgb)).toString());
+    if (stored_background.isValid() && stored_background.alpha() == 255) {
+        options.jpeg_background = stored_background;
+    }
+
+    settings.endGroup();
+    if (read_succeeded != nullptr) {
+        *read_succeeded = settings.status() == QSettings::NoError;
+    }
+    if (settings_path != nullptr) *settings_path = settings.fileName();
+    return options;
+}
+
+bool saveJpegExportPreferences(const ImageExportOptions& options,
+                               QString* error,
+                               QString* settings_path) {
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("ImageEditor/Export"));
+    settings.setValue(QStringLiteral("jpegQuality"), options.jpeg_quality);
+    settings.setValue(QStringLiteral("jpegBackground"),
+                      options.jpeg_background.name(QColor::HexArgb));
+    settings.endGroup();
+    settings.sync();
+    if (settings_path != nullptr) *settings_path = settings.fileName();
+    if (settings.status() == QSettings::NoError) return true;
+    if (error != nullptr) {
+        *error = QStringLiteral("JPEG export preferences could not be saved.");
+    }
+    return false;
 }
 
 } // namespace
@@ -905,9 +954,77 @@ void ImageEditorWindow::exportImage() {
         output += selected_filter.startsWith(QStringLiteral("JPEG"), Qt::CaseInsensitive)
             ? QStringLiteral(".jpg") : QStringLiteral(".png");
     }
-    QString error;
-    if (!session_.exportImage(output, &error)) {
-        reportError(QStringLiteral("export_image"), error, output);
+
+    ImageExportOptions options;
+    const QString suffix = QFileInfo(output).suffix().toLower();
+    if (suffix == QStringLiteral("jpg") || suffix == QStringLiteral("jpeg")) {
+        bool preferences_read = false;
+        QString preferences_path;
+        options = loadJpegExportPreferences(&preferences_read, &preferences_path);
+        if (!preferences_read) {
+            const QString cause = QStringLiteral(
+                "JPEG export preferences could not be read; default values are in use.");
+            logger_.logError(QStringLiteral("load_export_preferences"), cause,
+                             preferences_path);
+            statusBar()->showMessage(cause, 5000);
+        }
+
+        JpegExportOptionsDialog options_dialog(options, this);
+        if (options_dialog.exec() != QDialog::Accepted) return;
+        options = options_dialog.options();
+
+        QString preferences_error;
+        if (!saveJpegExportPreferences(options, &preferences_error, &preferences_path)) {
+            logger_.logError(QStringLiteral("save_export_preferences"),
+                             preferences_error, preferences_path);
+            QMessageBox::warning(this, QStringLiteral("Image Editor"),
+                                 preferences_error + QStringLiteral(
+                                     " This export will continue with the selected options."));
+        }
+    }
+
+    const ImageExportSnapshot snapshot = session_.exportSnapshot();
+    auto cancellation_requested = std::make_shared<std::atomic_bool>(false);
+    QThread worker_thread;
+    auto* worker = new ImageExportWorker(
+        snapshot, output, options, cancellation_requested);
+    worker->moveToThread(&worker_thread);
+
+    ImageExportProgressDialog progress_dialog(this);
+    bool succeeded = false;
+    bool cancelled = false;
+    QString export_error;
+    connect(&worker_thread, &QThread::started,
+            worker, &ImageExportWorker::run);
+    connect(worker, &ImageExportWorker::phaseChanged,
+            &progress_dialog, &ImageExportProgressDialog::setPhaseText);
+    connect(&progress_dialog, &ImageExportProgressDialog::cancelRequested,
+            this, [cancellation_requested]() {
+                cancellation_requested->store(true, std::memory_order_relaxed);
+            });
+    connect(worker, &ImageExportWorker::finished, this,
+            [&progress_dialog, &succeeded, &cancelled, &export_error](
+                bool completed, bool was_cancelled, const QString& error) {
+                succeeded = completed;
+                cancelled = was_cancelled;
+                export_error = error;
+                progress_dialog.finish();
+            });
+    connect(worker, &ImageExportWorker::finished,
+            &worker_thread, &QThread::quit, Qt::DirectConnection);
+    connect(&worker_thread, &QThread::finished,
+            worker, &QObject::deleteLater);
+
+    worker_thread.start();
+    progress_dialog.exec();
+    worker_thread.wait();
+
+    if (cancelled) {
+        statusBar()->showMessage(QStringLiteral("Image export cancelled"), 3000);
+        return;
+    }
+    if (!succeeded) {
+        reportError(QStringLiteral("export_image"), export_error, output);
         return;
     }
     statusBar()->showMessage(QStringLiteral("Image exported"), 3000);

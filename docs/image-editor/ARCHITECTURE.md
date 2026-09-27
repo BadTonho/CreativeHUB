@@ -37,6 +37,17 @@ persistence, and recovery.
   5 adds layer-local eraser strokes. The reader continues to accept versions
   1–4. Its data format is specified in
   [`FORMAT.md`](FORMAT.md).
+- `ImageExportSnapshot` captures only the current source image and document
+  data; its implicitly shared image and layer buffers exclude undo history and
+  thumbnail caches. Standalone PNG/JPEG exports render this immutable snapshot
+  and write it on a worker thread. JPEG quality (0–100, default 95) and an
+  opaque background for transparency (default white) are local application
+  preferences, not `.cimg` data. PNG preserves alpha. A modal progress dialog
+  keeps the document stable while export runs; cancellation is checked during
+  rendering and before the atomic output commit. Qt's image writer cannot be
+  interrupted during its blocking encode call, so cancellation requested in
+  that phase discards the temporary output after encoding returns. Linked image
+  publication continues to use its synchronous PNG path and default options.
 - `RecoveryStore` writes a local snapshot every 60 seconds while a dirty
   document with a renderable base is open. Unsaved canvases use a persisted
   session identity so they remain recoverable without a source path. On the

@@ -13,6 +13,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include <atomic>
 #include <utility>
 
 namespace image_editor {
@@ -77,9 +78,14 @@ QImage eraseStroke(QImage image, const ImageEraseStroke& stroke) {
 
 QImage applyOperations(QImage image,
                        const QVector<ImageOperation>& operations,
-                       bool fixed_canvas) {
+                       bool fixed_canvas,
+                       const std::atomic_bool* cancellation_requested = nullptr) {
     const QSize canvas_size = image.size();
     for (const auto& operation : operations) {
+        if (cancellation_requested != nullptr &&
+            cancellation_requested->load(std::memory_order_relaxed)) {
+            return {};
+        }
         switch (operation.kind) {
         case OperationKind::Crop:
             if (!fixed_canvas) {
@@ -127,6 +133,57 @@ QImage applyOperations(QImage image,
         }
     }
     return image;
+}
+
+bool exportWasCancelled(const std::atomic_bool* cancellation_requested) {
+    return cancellation_requested != nullptr &&
+        cancellation_requested->load(std::memory_order_relaxed);
+}
+
+QImage renderComposite(const QImage& source_image,
+                       const ImageDocumentData& document,
+                       const std::atomic_bool* cancellation_requested = nullptr) {
+    if (source_image.isNull() || exportWasCancelled(cancellation_requested)) return {};
+
+    QImage background = applyOperations(
+        source_image, document.operations, false, cancellation_requested);
+    if (background.isNull() || exportWasCancelled(cancellation_requested)) return {};
+
+    const QSize size = background.size();
+    QImage composite = !document.layers.isEmpty() && document.layers.front().visible
+        ? background.convertToFormat(QImage::Format_ARGB32)
+        : QImage(size, QImage::Format_ARGB32);
+    if (composite.isNull()) return {};
+    if (document.layers.isEmpty() || !document.layers.front().visible) {
+        composite.fill(Qt::transparent);
+    }
+
+    QPainter painter(&composite);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    for (qsizetype index = 1; index < document.layers.size(); ++index) {
+        if (exportWasCancelled(cancellation_requested)) {
+            painter.end();
+            return {};
+        }
+        const auto& layer = document.layers.at(index);
+        if (!layer.visible || layer.opacity == 0) continue;
+        QImage pixels(size, QImage::Format_ARGB32_Premultiplied);
+        if (pixels.isNull()) {
+            painter.end();
+            return {};
+        }
+        pixels.fill(Qt::transparent);
+        pixels = applyOperations(
+            std::move(pixels), layer.operations, true, cancellation_requested);
+        if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
+            painter.end();
+            return {};
+        }
+        painter.setOpacity(layer.opacity / 100.0);
+        painter.drawImage(0, 0, pixels);
+    }
+    painter.end();
+    return exportWasCancelled(cancellation_requested) ? QImage{} : composite;
 }
 
 QImage renderLayerThumbnail(QImage image,
@@ -427,47 +484,104 @@ bool ImageDocumentSession::saveDocument(QString document_path, QString* error) {
     return true;
 }
 
-bool ImageDocumentSession::exportImage(const QString& output_path, QString* error) const {
-    if (!hasSource()) {
-        assignError(error, QStringLiteral("Open or relink an image before exporting."));
-        return false;
+ImageExportResult exportImageSnapshot(
+    const ImageExportSnapshot& snapshot,
+    const QString& output_path,
+    const ImageExportOptions& options,
+    const std::atomic_bool* cancellation_requested,
+    const ImageExportProgressCallback& progress) {
+    const auto failed = [](const QString& cause) {
+        return ImageExportResult{ImageExportStatus::Failed, cause};
+    };
+    if (snapshot.source_image.isNull()) {
+        return failed(QStringLiteral("Open or relink an image before exporting."));
     }
     const QString suffix = QFileInfo(output_path).suffix().toLower();
     QByteArray format;
     if (suffix == "png") format = "png";
     else if (suffix == "jpg" || suffix == "jpeg") format = "jpeg";
     else {
-        assignError(error, QStringLiteral("Export supports PNG and JPEG files."));
-        return false;
+        return failed(QStringLiteral("Export supports PNG and JPEG files."));
     }
 
-    QImage rendered = renderedImage();
+    if (format == "jpeg" && (options.jpeg_quality < 0 || options.jpeg_quality > 100)) {
+        return failed(QStringLiteral("JPEG quality must be between 0 and 100."));
+    }
+    if (format == "jpeg" &&
+        (!options.jpeg_background.isValid() || options.jpeg_background.alpha() != 255)) {
+        return failed(QStringLiteral("Choose an opaque background color for JPEG export."));
+    }
+    if (exportWasCancelled(cancellation_requested)) {
+        return {ImageExportStatus::Cancelled, {}};
+    }
+    if (progress) progress(ImageExportPhase::Rendering);
+
+    QImage rendered = renderComposite(
+        snapshot.source_image, snapshot.document, cancellation_requested);
+    if (exportWasCancelled(cancellation_requested)) {
+        return {ImageExportStatus::Cancelled, {}};
+    }
+    if (rendered.isNull()) {
+        return failed(QStringLiteral("The image could not be rendered for export."));
+    }
+
     if (format == "jpeg") {
         QImage flattened(rendered.size(), QImage::Format_RGB32);
-        flattened.fill(Qt::white);
+        if (flattened.isNull()) {
+            return failed(QStringLiteral("Not enough memory to prepare the JPEG image."));
+        }
+        flattened.fill(options.jpeg_background);
         QPainter painter(&flattened);
         painter.drawImage(0, 0, rendered);
         painter.end();
         rendered = std::move(flattened);
     }
 
+    if (exportWasCancelled(cancellation_requested)) {
+        return {ImageExportStatus::Cancelled, {}};
+    }
+    if (progress) progress(ImageExportPhase::Encoding);
+    if (exportWasCancelled(cancellation_requested)) {
+        return {ImageExportStatus::Cancelled, {}};
+    }
+
     QSaveFile output(output_path);
     if (!output.open(QIODevice::WriteOnly)) {
-        assignError(error, output.errorString());
-        return false;
+        return failed(output.errorString());
     }
     QImageWriter writer(&output, format);
-    if (format == "jpeg") writer.setQuality(95);
+    if (format == "jpeg") writer.setQuality(options.jpeg_quality);
     if (!writer.write(rendered)) {
-        assignError(error, writer.errorString());
+        const QString cause = writer.errorString();
         output.cancelWriting();
-        return false;
+        return failed(cause);
+    }
+    if (progress) progress(ImageExportPhase::Finalizing);
+    if (exportWasCancelled(cancellation_requested)) {
+        output.cancelWriting();
+        return {ImageExportStatus::Cancelled, {}};
     }
     if (!output.commit()) {
-        assignError(error, output.errorString());
-        return false;
+        return failed(output.errorString());
     }
-    return true;
+    return {ImageExportStatus::Succeeded, {}};
+}
+
+ImageExportSnapshot ImageDocumentSession::exportSnapshot() const {
+    return {source_image_, data_};
+}
+
+bool ImageDocumentSession::exportImage(const QString& output_path, QString* error) const {
+    return exportImage(output_path, ImageExportOptions{}, error);
+}
+
+bool ImageDocumentSession::exportImage(const QString& output_path,
+                                       const ImageExportOptions& options,
+                                       QString* error) const {
+    const ImageExportResult result = exportImageSnapshot(exportSnapshot(), output_path, options);
+    if (result.status == ImageExportStatus::Succeeded) return true;
+    if (result.status == ImageExportStatus::Failed) assignError(error, result.error);
+    return false;
 }
 
 QSize ImageDocumentSession::renderedSize() const {
@@ -480,29 +594,7 @@ QSize ImageDocumentSession::renderedSize() const {
 }
 
 QImage ImageDocumentSession::renderedImage() const {
-    if (!hasSource()) return {};
-    QImage background = applyOperations(source_image_, data_.operations, false);
-    const QSize size = background.size();
-    QImage composite = !data_.layers.isEmpty() && data_.layers.front().visible
-        ? background.convertToFormat(QImage::Format_ARGB32)
-        : QImage(size, QImage::Format_ARGB32);
-    if (composite.isNull()) return {};
-    if (data_.layers.isEmpty() || !data_.layers.front().visible) {
-        composite.fill(Qt::transparent);
-    }
-    QPainter painter(&composite);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-    for (qsizetype index = 1; index < data_.layers.size(); ++index) {
-        const auto& layer = data_.layers.at(index);
-        if (!layer.visible || layer.opacity == 0) continue;
-        QImage pixels(size, QImage::Format_ARGB32_Premultiplied);
-        pixels.fill(Qt::transparent);
-        pixels = applyOperations(std::move(pixels), layer.operations, true);
-        painter.setOpacity(layer.opacity / 100.0);
-        painter.drawImage(0, 0, pixels);
-    }
-    painter.end();
-    return composite;
+    return renderComposite(source_image_, data_);
 }
 
 QImage ImageDocumentSession::renderedImageWithEraseStroke(

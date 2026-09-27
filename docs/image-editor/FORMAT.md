@@ -112,8 +112,15 @@ layer-local eraser strokes. Saving any supported version writes version 5.
 Undo and redo history are in memory and are not stored in `.cimg`. A save writes
 to a temporary file and atomically replaces the destination. Export is a
 separate flattened raster file: visible layers are composited with their
-opacity; PNG preserves alpha; JPEG uses quality 95 and flattens transparent
-pixels over white.
+opacity; PNG preserves alpha; JPEG quality is configurable from 0 through 100
+and defaults to 95. JPEG transparency is flattened over a selectable opaque
+background color that defaults to white. The last accepted JPEG quality and
+background color are stored in local application settings and are not included
+in `.cimg`. Export writes through `QSaveFile`, so failed or cancelled exports
+do not replace the destination with a partial image. The Image Editor renders
+and encodes an immutable document snapshot on a worker; cancellation during the
+Qt image writer's blocking encode is honored before the temporary file is
+committed.
 
 Recovery snapshots use a separate `creative-suite-image-recovery` JSON wrapper
 with the document payload, intended `.cimg` destination, and a session identity
