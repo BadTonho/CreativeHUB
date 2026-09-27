@@ -1,6 +1,9 @@
 #include "playback_transition_plan.h"
 
+#include "../timeline/timeline_frame_rate.h"
+
 #include <algorithm>
+#include <limits>
 
 namespace playback::detail {
 
@@ -95,6 +98,69 @@ void applyTransitionRequests(
             }
         }
     }
+}
+
+std::optional<TransitionPrerollTarget> nextTransitionPrerollTarget(
+    std::span<const CompositionSessionRef> sessions,
+    std::span<const CompositionTransitionSpec> transitions,
+    std::int64_t global_frame,
+    std::int64_t lookahead_frames) {
+    if (global_frame < 0 || lookahead_frames <= 0) return std::nullopt;
+
+    std::optional<TransitionPrerollTarget> target;
+    for (const auto& transition : transitions) {
+        if (transition.kind != timeline::TransitionKind::CrossDissolve ||
+            transition.duration_frames <= 0 ||
+            transition.boundary_frame < transition.duration_frames) {
+            continue;
+        }
+
+        const auto transition_start =
+            transition.boundary_frame - transition.duration_frames;
+        if (transition_start <= global_frame ||
+            transition_start - global_frame > lookahead_frames) {
+            continue;
+        }
+
+        const CompositionSessionRef* incoming = nullptr;
+        for (const auto& session : sessions) {
+            if (session.spec == nullptr ||
+                session.spec->track_index != transition.track_index ||
+                session.spec->clip_index != transition.to_clip_index) {
+                continue;
+            }
+            if (incoming == nullptr || session.session_index < incoming->session_index) {
+                incoming = &session;
+            }
+        }
+        if (incoming == nullptr ||
+            incoming->spec->kind != timeline::ClipKind::Video ||
+            incoming->spec->source_path.isEmpty() ||
+            incoming->spec->source_start_frame < 0 ||
+            incoming->spec->timeline_start_frame != transition_start) {
+            continue;
+        }
+
+        const auto initial_source_offset = timeline::sourceFrameOffsetForTimelineFrame(
+            0,
+            incoming->spec->frame_rate,
+            incoming->spec->timeline_frame_rate,
+            incoming->spec->source_duration_frames);
+        if (!initial_source_offset.has_value() ||
+            incoming->spec->source_start_frame >
+                std::numeric_limits<std::int64_t>::max() - *initial_source_offset) {
+            continue;
+        }
+
+        if (!target.has_value() ||
+            transition_start < target->transition_start_frame) {
+            target = TransitionPrerollTarget{
+                incoming->session_index,
+                transition_start,
+                incoming->spec->source_start_frame + *initial_source_offset};
+        }
+    }
+    return target;
 }
 
 } // namespace playback::detail

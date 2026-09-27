@@ -476,6 +476,54 @@ void validateTransitionPlan() {
                 request_for(duplicate_requests, 1) != nullptr &&
                 request_for(duplicate_requests, 3) == nullptr,
             "Transition endpoints no longer use the first worker session.");
+
+    playback::CompositionLayerSpec preroll_outgoing;
+    preroll_outgoing.source_path = QStringLiteral("outgoing.mp4");
+    preroll_outgoing.kind = timeline::ClipKind::Video;
+    preroll_outgoing.track_index = 0;
+    preroll_outgoing.clip_index = 0;
+    preroll_outgoing.segment_frame_count = 60;
+    preroll_outgoing.timeline_frame_rate = {24, 1};
+    playback::CompositionLayerSpec preroll_incoming = preroll_outgoing;
+    preroll_incoming.source_path = QStringLiteral("incoming.mp4");
+    preroll_incoming.timeline_start_frame = 50;
+    preroll_incoming.source_start_frame = 23;
+    preroll_incoming.clip_index = 1;
+    preroll_incoming.source_duration_frames = 180;
+    const std::array<CompositionSessionRef, 2> preroll_sessions{{
+        {&preroll_outgoing, 0}, {&preroll_incoming, 1}}};
+    const playback::CompositionTransitionSpec preroll_dissolve{
+        0, 0, 1, 60, 10, timeline::TransitionKind::CrossDissolve};
+    const auto preroll_target = playback::detail::nextTransitionPrerollTarget(
+        preroll_sessions, std::span(&preroll_dissolve, 1), 40, 10);
+    require(preroll_target.has_value() &&
+                preroll_target->session_index == 1 &&
+                preroll_target->transition_start_frame == 50 &&
+                preroll_target->source_frame == 23,
+            "The next video Cross Dissolve did not resolve its incoming source frame.");
+    require(!playback::detail::nextTransitionPrerollTarget(
+                 preroll_sessions, std::span(&preroll_dissolve, 1), 40, 9)
+                 .has_value() &&
+                !playback::detail::nextTransitionPrerollTarget(
+                     preroll_sessions, std::span(&preroll_dissolve, 1), 50, 10)
+                     .has_value(),
+            "Transition preroll crossed its lookahead or started after the dissolve began.");
+    const playback::CompositionTransitionSpec preroll_fade{
+        0, 0, 1, 60, 10, timeline::TransitionKind::FadeToBlack};
+    require(!playback::detail::nextTransitionPrerollTarget(
+                 preroll_sessions, std::span(&preroll_fade, 1), 40, 10)
+                 .has_value(),
+            "Fade to Black incorrectly scheduled a video Cross Dissolve preroll.");
+    preroll_incoming.kind = timeline::ClipKind::Text;
+    const std::array<CompositionSessionRef, 2> text_preroll_sessions{{
+        {&preroll_outgoing, 0}, {&preroll_incoming, 1}}};
+    require(!playback::detail::nextTransitionPrerollTarget(
+                 text_preroll_sessions,
+                 std::span(&preroll_dissolve, 1),
+                 40,
+                 10)
+                 .has_value(),
+            "A non-video incoming layer incorrectly scheduled decoder preroll.");
 }
 
 void validatePlaybackDecodeGapPolicy() {
@@ -611,6 +659,155 @@ void validateCompositionTransitions(
     require(black_pixel[0] == 0 && black_pixel[1] == 0 &&
                 black_pixel[2] == 0 && black_pixel[3] == 255,
             "Fade to black did not produce an opaque black junction frame.");
+}
+
+void validateTransitionPrerollPlayback(const std::filesystem::path& path) {
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true);
+    metrics.reset();
+
+    playback::PlaybackWorker worker;
+    QEventLoop wait_loop;
+    bool reached_first_dissolve_frame = false;
+    bool playback_error = false;
+    int emitted_frame_count = 0;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&worker, &wait_loop, &reached_first_dissolve_frame,
+         &emitted_frame_count](media::VideoFramePtr frame, qint64 frame_index,
+                               quint64, quint64) {
+            if (frame == nullptr) return;
+            ++emitted_frame_count;
+            if (frame_index < 24) return;
+            reached_first_dissolve_frame = true;
+            worker.pause();
+            wait_loop.quit();
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackError,
+        [&wait_loop, &playback_error](const QString&, qint64, quint64) {
+            playback_error = true;
+            wait_loop.quit();
+        });
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::playbackFinished,
+        [&wait_loop](quint64, bool) { wait_loop.quit(); });
+
+    playback::CompositionLayerSpec outgoing;
+    outgoing.source_path = toQString(path);
+    outgoing.frame_rate = 30.0;
+    outgoing.timeline_frame_rate = {24, 1};
+    outgoing.timeline_start_frame = 0;
+    outgoing.segment_frame_count = 34;
+    outgoing.source_start_frame = 0;
+    outgoing.source_duration_frames = 1000;
+    outgoing.track_index = 0;
+    outgoing.clip_index = 0;
+
+    playback::CompositionLayerSpec incoming = outgoing;
+    incoming.timeline_start_frame = 24;
+    incoming.segment_frame_count = 30;
+    incoming.source_start_frame = 23;
+    incoming.clip_index = 1;
+
+    worker.setPreviewQuality(playback::PreviewQuality::Quarter);
+    worker.setComposition(
+        {outgoing, incoming},
+        {playback::CompositionTransitionSpec{
+            0, 0, 1, 34, 10, timeline::TransitionKind::CrossDissolve}},
+        711);
+    worker.setActiveCompositionClip(0, 0, 0);
+    worker.play();
+    worker.pause();
+
+    // Replace the composition while the first background preparation may still
+    // be running. The new trim point must receive its own prepared decoder.
+    incoming.source_start_frame = 29;
+    worker.setComposition(
+        {outgoing, incoming},
+        {playback::CompositionTransitionSpec{
+            0, 0, 1, 34, 10, timeline::TransitionKind::CrossDissolve}},
+        712);
+    worker.setActiveCompositionClip(0, 0, 0);
+    metrics.reset();
+    worker.play();
+
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(
+        &timeout, &QTimer::timeout, &wait_loop, &QEventLoop::quit);
+    timeout.start(5000);
+    wait_loop.exec();
+
+    require(!playback_error,
+            "Transition preroll playback reported an error.");
+    require(reached_first_dissolve_frame && emitted_frame_count >= 10,
+            "Playback did not reach the incoming Cross Dissolve frame.");
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    require(snapshot.decoded_cache_hits >= 1,
+            "The incoming dissolve frame was not reused from the preroll decoder cache.");
+
+    // Starting at the first overlap frame is intentionally too late for the
+    // one-second lookahead. The regular composition decoder must still produce
+    // the frame without waiting for a preroll task.
+    playback::PlaybackWorker fallback_worker;
+    bool fallback_error = false;
+    bool fallback_frame_received = false;
+    bool fallback_playing = false;
+    qint64 fallback_frame_index = -1;
+    QObject::connect(
+        &fallback_worker,
+        &playback::PlaybackWorker::playbackStateChanged,
+        [&fallback_playing](bool playing, quint64) {
+            fallback_playing = playing;
+        });
+    QObject::connect(
+        &fallback_worker,
+        &playback::PlaybackWorker::frameReady,
+        [&fallback_worker, &wait_loop, &fallback_playing,
+         &fallback_frame_received,
+         &fallback_frame_index](media::VideoFramePtr frame,
+                                qint64 frame_index, quint64, quint64) {
+            if (!fallback_playing || frame == nullptr) return;
+            fallback_frame_received = true;
+            fallback_frame_index = frame_index;
+            fallback_worker.pause();
+            wait_loop.quit();
+        });
+    QObject::connect(
+        &fallback_worker,
+        &playback::PlaybackWorker::playbackError,
+        [&wait_loop, &fallback_error](const QString&, qint64, quint64) {
+            fallback_error = true;
+            wait_loop.quit();
+        });
+
+    metrics.reset();
+    fallback_worker.setPreviewQuality(playback::PreviewQuality::Quarter);
+    fallback_worker.setComposition(
+        {outgoing, incoming},
+        {playback::CompositionTransitionSpec{
+            0, 0, 1, 34, 10, timeline::TransitionKind::CrossDissolve}},
+        713);
+    fallback_worker.setActiveCompositionClip(0, 0, 0);
+    fallback_worker.play();
+    fallback_worker.pause();
+    fallback_worker.renderCompositionFrame(24, 24, 713);
+    fallback_worker.play();
+
+    QTimer fallback_timeout;
+    fallback_timeout.setSingleShot(true);
+    QObject::connect(
+        &fallback_timeout, &QTimer::timeout, &wait_loop, &QEventLoop::quit);
+    fallback_timeout.start(3000);
+    wait_loop.exec();
+    require(!fallback_error && fallback_frame_received &&
+                fallback_frame_index >= 24,
+            "Normal decoding did not continue from inside the dissolve when preroll was unavailable.");
+    metrics.setEnabled(false);
 }
 
 void validateCompositionSourceRateMapping(
@@ -1659,6 +1856,8 @@ int main(int argc, char* argv[]) {
             validateSeekCoalescing(application, std::filesystem::path(argv[1]));
             validateSegmentRange(application, std::filesystem::path(argv[1]));
             validateCompositionTransitions(std::filesystem::path(argv[1]));
+            validateTransitionPrerollPlayback(
+                std::filesystem::path(argv[1]));
             validateCompositionSourceRateMapping(std::filesystem::path(argv[1]));
             validateCompositionPlayback(application, std::filesystem::path(argv[1]));
             validateCompositionReuseAcrossMediaActivation(

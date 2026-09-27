@@ -669,9 +669,12 @@ std::optional<VideoFramePtr> VideoPlaybackSession::decode_frame_at(
         if (cancelled()) return std::nullopt;
 
         if (const auto cached = takeCachedFrame(*impl_, frame_index); cached != nullptr) {
+            const bool decoder_is_already_at_frame =
+                !impl_->decoder_position_invalid &&
+                impl_->current_frame_index == frame_index;
             impl_->current_frame_index = frame_index;
             impl_->end_reached = false;
-            impl_->decoder_position_invalid = true;
+            impl_->decoder_position_invalid = !decoder_is_already_at_frame;
             return cached;
         }
 

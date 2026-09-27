@@ -75,6 +75,18 @@ transition-held-frame requests retain their existing behavior. The cache is
 intentionally per playback session so memory usage does not grow with project
 duration.
 
+During playback, the worker looks one Timeline second ahead for the next video
+Cross Dissolve. It opens one temporary decoder session and decodes the incoming
+clip's first source frame in the background. If the composition is still
+current and the overlap has not begun, the worker adopts that already-positioned
+session for the clip. The decoded frame remains in that session's bounded cache;
+consuming a cached frame at the decoder's current position preserves sequential
+decoding for the following frame. Only one preroll task runs at a time, so the
+extra decoder and frame are temporary. If preparation is late, canceled, or
+fails, playback uses the normal decoder path and keeps the existing composed
+frame behavior. Fade to Black, still images, and text do not use this video
+preroll.
+
 Composition is split into two worker-side stages. The first stage collects
 ordered decoded layers and their evaluated transforms in a backend-neutral
 representation. The second stage passes that representation to the current

@@ -346,6 +346,28 @@ void validateLongSeekDecode(
                 session->take_cache_hit_count() == 0,
             "Long seek decode cached an intermediate frame.");
 
+    auto aligned_cache_session = media::VideoPlaybackSession::open(path);
+    const auto aligned_target = aligned_cache_session->decode_frame_at(target_frame);
+    require(aligned_target.has_value() && *aligned_target != nullptr &&
+                aligned_cache_session->current_frame_index() == target_frame,
+            "The decoder could not prepare an aligned target frame.");
+    const auto reused_aligned_target =
+        aligned_cache_session->decode_frame_at(target_frame);
+    require(reused_aligned_target.has_value() &&
+                *reused_aligned_target == *aligned_target &&
+                aligned_cache_session->take_cache_hit_count() >= 1,
+            "The prepared target frame was not reused from the frame cache.");
+    media::ForwardDecodeDiagnostics aligned_forward_diagnostics;
+    const auto aligned_next = aligned_cache_session->decode_forward_to(
+        next_frame, {}, &aligned_forward_diagnostics);
+    require(aligned_next.has_value() && *aligned_next != nullptr &&
+                (*aligned_next)->rgba_pixels == reference_next->rgba_pixels &&
+                aligned_forward_diagnostics.completed &&
+                aligned_forward_diagnostics.starting_frame == target_frame &&
+                aligned_forward_diagnostics.requested_frame == next_frame &&
+                aligned_forward_diagnostics.discarded_intermediate_frames == 0,
+            "Reusing an aligned cached frame invalidated sequential decoder continuation.");
+
     auto cancelled_session = media::VideoPlaybackSession::open(path);
     require(cancelled_session->decode_next_frame().has_value(),
             "The long-seek cancellation test could not initialize its decoder.");

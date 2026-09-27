@@ -14,8 +14,10 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
+#include <limits>
 #include <string>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
 
 namespace playback {
@@ -106,6 +108,11 @@ PlaybackWorker::PlaybackWorker(QObject* parent)
 
 PlaybackWorker::~PlaybackWorker() {
     if (timer_ != nullptr) timer_->stop();
+    cancelTransitionPreroll();
+    if (transition_preroll_thread_.joinable()) {
+        transition_preroll_thread_.join();
+    }
+    transition_preroll_state_.reset();
     disableAudioOutput();
     audio_session_.reset();
     session_.reset();
@@ -319,6 +326,7 @@ void PlaybackWorker::play() {
             rendering::PreviewPerformanceMetrics::instance().setPlaybackActive(true);
             emit playbackStateChanged(true, generation_);
         }
+        updateTransitionPreroll();
         scheduleNextPlaybackTick();
     } catch (const media::MediaError& error) {
         reportFailure(error, "play");
@@ -341,6 +349,10 @@ void PlaybackWorker::pause() {
 
 void PlaybackWorker::stop() {
     pause();
+    cancelTransitionPreroll();
+    last_transition_preroll_session_index_ =
+        std::numeric_limits<std::size_t>::max();
+    last_transition_preroll_start_frame_ = -1;
     if (audio_output_ != nullptr) audio_output_->stop();
     audio_position_valid_ = false;
     pending_audio_bytes_.clear();
@@ -396,6 +408,17 @@ void PlaybackWorker::setComposition(
     quint64 generation) {
     if (generation < generation_) return;
     generation_ = generation;
+
+    cancelTransitionPreroll();
+    if (composition_revision_ == std::numeric_limits<quint64>::max()) {
+        composition_revision_ = 1;
+    } else {
+        ++composition_revision_;
+    }
+    last_transition_preroll_session_index_ =
+        std::numeric_limits<std::size_t>::max();
+    last_transition_preroll_start_frame_ = -1;
+    collectTransitionPreroll();
 
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     rendering::PreviewPerformanceScope setup_timing(
@@ -639,6 +662,10 @@ void PlaybackWorker::renderCompositionFrame(
     generation_ = generation;
     try {
         current_timeline_frame_ = global_frame;
+        if (transition_preroll_state_ != nullptr &&
+            global_frame >= transition_preroll_state_->transition_start_frame) {
+            cancelTransitionPreroll();
+        }
         composition_position_initialized_ = true;
         if (composition_enabled_ && segment_frame_count_ > 0) {
             current_frame_index_ = std::clamp<std::int64_t>(
@@ -1066,6 +1093,8 @@ void PlaybackWorker::processPendingSeek() {
 void PlaybackWorker::decodeTick() {
     if (!playing_) return;
 
+    collectTransitionPreroll();
+
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     const auto now = Clock::now();
     metrics.recordPlaybackTick();
@@ -1135,6 +1164,7 @@ void PlaybackWorker::decodeTick() {
             }
             recordPacingCatchup(metrics, pacing_decision);
             current_timeline_frame_ = target_frame;
+            updateTransitionPreroll();
             current_frame_index_ = std::clamp<std::int64_t>(
                 current_timeline_frame_ - primary_timeline_start_frame_,
                 0,
@@ -1498,8 +1528,293 @@ void PlaybackWorker::scheduleNextPlaybackTick() {
     timer_->start(static_cast<int>(delay.count()));
 }
 
+void PlaybackWorker::cancelTransitionPreroll() noexcept {
+    if (transition_preroll_state_ != nullptr) {
+        transition_preroll_state_->cancel_requested.store(
+            true, std::memory_order_release);
+    }
+}
+
+void PlaybackWorker::collectTransitionPreroll() {
+    const auto state = transition_preroll_state_;
+    if (state == nullptr ||
+        !state->finished.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (transition_preroll_thread_.joinable()) {
+        transition_preroll_thread_.join();
+    }
+
+    std::optional<TransitionPrerollResult> result;
+    {
+        std::lock_guard lock(state->result_mutex);
+        result = std::move(state->result);
+    }
+    transition_preroll_state_.reset();
+    if (!result.has_value()) return;
+    if (result->cancelled ||
+        state->cancel_requested.load(std::memory_order_acquire)) {
+        if (result->composition_revision == composition_revision_) {
+            last_transition_preroll_session_index_ =
+                std::numeric_limits<std::size_t>::max();
+            last_transition_preroll_start_frame_ = -1;
+        }
+        return;
+    }
+
+    const bool composition_matches = composition_enabled_ &&
+        result->composition_revision == composition_revision_ &&
+        current_timeline_frame_ < result->transition_start_frame &&
+        result->session_index < composition_sessions_.size();
+    if (!composition_matches) {
+        if (result->composition_revision == composition_revision_ &&
+            current_timeline_frame_ >= result->transition_start_frame) {
+            last_transition_preroll_session_index_ =
+                std::numeric_limits<std::size_t>::max();
+            last_transition_preroll_start_frame_ = -1;
+        }
+        return;
+    }
+
+    auto& composition = composition_sessions_[result->session_index];
+    std::filesystem::path current_source_path;
+    try {
+        current_source_path = composition.spec.source_path.isEmpty()
+            ? std::filesystem::path{}
+            : QFileInfo(composition.spec.source_path).filesystemFilePath();
+    } catch (const std::exception& error) {
+        try {
+            logging::Context context{
+                {"path", safePathForLog(result->source_path)},
+                {"track_index", std::to_string(result->track_index)},
+                {"clip_index", std::to_string(result->clip_index)},
+                {"transition_start_frame",
+                 std::to_string(result->transition_start_frame)},
+                {"source_frame", std::to_string(result->source_frame)}};
+            logging::Logger::instance().log(
+                logging::Level::Warning,
+                "playback",
+                "transition_preroll_endpoint_check",
+                error.what(),
+                context);
+        } catch (...) {
+        }
+        return;
+    }
+    const bool endpoint_matches =
+        composition.spec.kind == timeline::ClipKind::Video &&
+        composition.spec.track_index == result->track_index &&
+        composition.spec.clip_index == result->clip_index &&
+        composition.spec.source_start_frame == result->source_frame &&
+        current_source_path == result->source_path;
+    if (!endpoint_matches) return;
+
+    if (result->session == nullptr ||
+        result->session->current_frame_index() != result->source_frame) {
+        if (result->error_message.empty()) {
+            result->error_message =
+                "The incoming transition frame was not prepared by its decoder.";
+        }
+    } else {
+        composition.session = std::move(result->session);
+        return;
+    }
+
+    try {
+        logging::Context context{
+            {"path", safePathForLog(result->source_path)},
+            {"track_index", std::to_string(result->track_index)},
+            {"clip_index", std::to_string(result->clip_index)},
+            {"transition_start_frame",
+             std::to_string(result->transition_start_frame)},
+            {"source_frame", std::to_string(result->source_frame)},
+            {"composition_revision",
+             std::to_string(result->composition_revision)}};
+        if (current_timeline_frame_ >= 0) {
+            appendTimelinePositionContext(
+                context, current_timeline_frame_, timeline_frame_rate_);
+        }
+        if (result->error_code >= 0) {
+            context.emplace_back("error_code", std::to_string(result->error_code));
+        }
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "playback",
+            "transition_preroll_fallback",
+            result->error_message.empty()
+                ? "The incoming Cross Dissolve decoder was not prepared in time."
+                : result->error_message,
+            context);
+    } catch (...) {
+    }
+}
+
+void PlaybackWorker::updateTransitionPreroll() {
+    collectTransitionPreroll();
+    if (!playing_ || !composition_enabled_ || current_timeline_frame_ < 0) {
+        return;
+    }
+
+    if (transition_preroll_state_ != nullptr) {
+        if (transition_preroll_state_->finished.load(std::memory_order_acquire)) {
+            collectTransitionPreroll();
+        } else {
+            if (transition_preroll_state_->composition_revision !=
+                    composition_revision_ ||
+                current_timeline_frame_ >=
+                    transition_preroll_state_->transition_start_frame) {
+                // Once playback reaches the dissolve, avoid competing with the
+                // normal decoder path. It remains the correctness-preserving fallback.
+                transition_preroll_state_->cancel_requested.store(
+                    true, std::memory_order_release);
+            }
+            return;
+        }
+    }
+    if (transition_preroll_state_ != nullptr) return;
+    if (transition_preroll_thread_.joinable()) {
+        transition_preroll_thread_.join();
+    }
+
+    std::int64_t lookahead_frames = 1;
+    if (timeline::validFrameRate(timeline_frame_rate_)) {
+        const auto numerator = timeline_frame_rate_.numerator;
+        const auto denominator = timeline_frame_rate_.denominator;
+        lookahead_frames = std::max<std::int64_t>(
+            1,
+            numerator / denominator + (numerator % denominator == 0 ? 0 : 1));
+    }
+
+    std::vector<detail::CompositionSessionRef> sessions;
+    sessions.reserve(composition_sessions_.size());
+    for (std::size_t index = 0; index < composition_sessions_.size(); ++index) {
+        sessions.push_back(detail::CompositionSessionRef{
+            &composition_sessions_[index].spec, index});
+    }
+    const auto target = detail::nextTransitionPrerollTarget(
+        sessions,
+        std::span<const CompositionTransitionSpec>(
+            composition_transitions_.constData(),
+            static_cast<std::size_t>(composition_transitions_.size())),
+        current_timeline_frame_,
+        lookahead_frames);
+    if (!target.has_value() || target->session_index >= composition_sessions_.size()) {
+        return;
+    }
+    if (last_transition_preroll_session_index_ == target->session_index &&
+        last_transition_preroll_start_frame_ == target->transition_start_frame) {
+        return;
+    }
+
+    const auto& incoming = composition_sessions_[target->session_index];
+    if (incoming.session != nullptr &&
+        incoming.session->current_frame_index() == target->source_frame) {
+        return;
+    }
+
+    TransitionPrerollResult request;
+    request.composition_revision = composition_revision_;
+    request.session_index = target->session_index;
+    request.track_index = incoming.spec.track_index;
+    request.clip_index = incoming.spec.clip_index;
+    request.transition_start_frame = target->transition_start_frame;
+    request.source_frame = target->source_frame;
+    try {
+        request.source_path = QFileInfo(incoming.spec.source_path).filesystemFilePath();
+    } catch (const std::exception& error) {
+        last_transition_preroll_session_index_ = target->session_index;
+        last_transition_preroll_start_frame_ = target->transition_start_frame;
+        try {
+            logging::Logger::instance().log(
+                logging::Level::Warning,
+                "playback",
+                "transition_preroll_path",
+                error.what(),
+                {{"track_index", std::to_string(incoming.spec.track_index)},
+                 {"clip_index", std::to_string(incoming.spec.clip_index)},
+                 {"transition_start_frame",
+                  std::to_string(target->transition_start_frame)},
+                 {"source_frame", std::to_string(target->source_frame)}});
+        } catch (...) {
+        }
+        return;
+    }
+
+    auto state = std::make_shared<TransitionPrerollState>();
+    state->composition_revision = composition_revision_;
+    state->transition_start_frame = target->transition_start_frame;
+    transition_preroll_state_ = state;
+    last_transition_preroll_session_index_ = target->session_index;
+    last_transition_preroll_start_frame_ = target->transition_start_frame;
+    try {
+        transition_preroll_thread_ = std::thread(
+            [state, request = std::move(request)]() mutable {
+                auto result = std::move(request);
+                try {
+                    result.session = openVideoPlaybackSession(result.source_path);
+                    const auto should_cancel = [state]() {
+                        return state->cancel_requested.load(
+                            std::memory_order_acquire);
+                    };
+                    const auto prepared = result.session->decode_frame_at(
+                        result.source_frame, should_cancel);
+                    if (should_cancel()) {
+                        result.cancelled = true;
+                        result.session.reset();
+                    } else if (!prepared.has_value() || *prepared == nullptr) {
+                        result.error_message =
+                            "The incoming Cross Dissolve source frame could not be decoded.";
+                        result.session.reset();
+                    }
+                } catch (const media::MediaError& error) {
+                    result.error_message = error.what();
+                    result.error_code = error.error_code().value_or(-1);
+                    result.session.reset();
+                } catch (const std::exception& error) {
+                    result.error_message = error.what();
+                    result.session.reset();
+                } catch (...) {
+                    result.error_message =
+                        "An unknown error occurred while preparing a Cross Dissolve.";
+                    result.session.reset();
+                }
+
+                if (state->cancel_requested.load(std::memory_order_acquire)) {
+                    result.cancelled = true;
+                    result.session.reset();
+                }
+
+                {
+                    std::lock_guard lock(state->result_mutex);
+                    state->result = std::move(result);
+                }
+                state->finished.store(true, std::memory_order_release);
+            });
+    } catch (const std::system_error& error) {
+        transition_preroll_state_.reset();
+        try {
+            logging::Logger::instance().log(
+                logging::Level::Warning,
+                "playback",
+                "transition_preroll_start",
+                error.what(),
+                {{"track_index", std::to_string(incoming.spec.track_index)},
+                 {"clip_index", std::to_string(incoming.spec.clip_index)},
+                 {"transition_start_frame",
+                  std::to_string(target->transition_start_frame)},
+                 {"source_frame", std::to_string(target->source_frame)}});
+        } catch (...) {
+        }
+    }
+}
+
 void PlaybackWorker::finishPlayback() {
     if (timer_ != nullptr) timer_->stop();
+    cancelTransitionPreroll();
+    last_transition_preroll_session_index_ =
+        std::numeric_limits<std::size_t>::max();
+    last_transition_preroll_start_frame_ = -1;
     if (audio_output_ != nullptr) audio_output_->stop();
     resetPlaybackClock();
     rendering::PreviewPerformanceMetrics::instance().setPlaybackActive(false);

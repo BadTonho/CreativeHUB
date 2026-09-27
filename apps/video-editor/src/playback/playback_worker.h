@@ -24,7 +24,10 @@
 #include <filesystem>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <string>
+#include <thread>
 #include <vector>
 
 class QTimer;
@@ -210,6 +213,9 @@ private:
     [[nodiscard]] bool isSourceFrameInRange(std::int64_t source_frame) const noexcept;
     [[nodiscard]] bool isSeekCurrent(quint64 sequence) const noexcept;
     void scheduleNextPlaybackTick();
+    void updateTransitionPreroll();
+    void collectTransitionPreroll();
+    void cancelTransitionPreroll() noexcept;
     void startPlaybackClock() noexcept;
     void resetPlaybackClock() noexcept;
 
@@ -256,9 +262,36 @@ private:
         rendering::AlphaCoveragePtr cached_text_alpha_coverage;
         rendering::PreparedAlphaCoverageGeometryPtr cached_text_geometry;
     };
+    struct TransitionPrerollResult {
+        quint64 composition_revision = 0;
+        std::size_t session_index = 0;
+        qint64 track_index = -1;
+        qint64 clip_index = -1;
+        qint64 transition_start_frame = 0;
+        qint64 source_frame = 0;
+        std::filesystem::path source_path;
+        std::unique_ptr<media::VideoPlaybackSession> session;
+        std::string error_message;
+        qint64 error_code = -1;
+        bool cancelled = false;
+    };
+    struct TransitionPrerollState {
+        quint64 composition_revision = 0;
+        qint64 transition_start_frame = 0;
+        std::atomic_bool cancel_requested{false};
+        std::atomic_bool finished{false};
+        std::mutex result_mutex;
+        std::optional<TransitionPrerollResult> result;
+    };
     QVector<CompositionLayerSpec> composition_specs_;
     QVector<CompositionTransitionSpec> composition_transitions_;
     std::vector<CompositionSession> composition_sessions_;
+    std::shared_ptr<TransitionPrerollState> transition_preroll_state_;
+    std::thread transition_preroll_thread_;
+    std::size_t last_transition_preroll_session_index_ =
+        std::numeric_limits<std::size_t>::max();
+    qint64 last_transition_preroll_start_frame_ = -1;
+    quint64 composition_revision_ = 0;
     rendering::FrameCompositionTimings composition_timings_scratch_;
     bool composition_enabled_ = false;
     std::int64_t primary_timeline_start_frame_ = 0;
