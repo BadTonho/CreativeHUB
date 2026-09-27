@@ -12,11 +12,13 @@ macOS, and Linux.
 
 ## Applications
 
-| Application | Status | Purpose |
-| --- | --- | --- |
-| [Video Editor](docs/video-editor/ROADMAP.md) | Active development | Multitrack video and audio editing, compositing, and export. |
-| [Image Editor](docs/image-editor/ROADMAP.md) | Beta 0.1.2 | Layered raster editing with `.cimg` documents and PNG/JPEG export. |
-| [Motion Studio](docs/motion-editor/ROADMAP.md) | Planned parallel track | Motion design, animation, and advanced compositing. |
+| Icon | Application | Status | Purpose |
+| --- | --- | --- | --- |
+| <img src="docs/assets/app-icons/video-editor.png" alt="Temporary Video Editor icon" width="56"> | [Video Editor](docs/video-editor/ROADMAP.md) | Active development | Multitrack video and audio editing, compositing, and export. |
+| <img src="docs/assets/app-icons/image-editor.png" alt="Temporary Image Editor icon" width="56"> | [Image Editor](docs/image-editor/ROADMAP.md) | Beta 0.1.2 | Layered raster editing with `.cimg` documents and PNG/JPEG export. |
+| <img src="docs/assets/app-icons/motion-studio.png" alt="Temporary Motion Studio icon" width="56"> | [Motion Studio](docs/motion-editor/ROADMAP.md) | Planned parallel track | Motion design, animation, and advanced compositing. |
+
+The icons above are temporary placeholders.
 
 The three tracks may be developed in parallel. Video Editor stability remains a
 priority. Cross-application work depends on validated interfaces and regression
