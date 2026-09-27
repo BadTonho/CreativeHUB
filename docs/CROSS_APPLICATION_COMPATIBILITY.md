@@ -98,10 +98,12 @@ uses its current supported output in the timeline. The linked document keeps
 its own native editing model and history. The source media remains available
 and is not silently overwritten by an editor handoff.
 
-The intended experience is for the Video Editor to reflect changes promptly
-while the linked document is being edited. Deliver this in stages: first
-refresh after each successful save, then evaluate unsaved live previews if
-that workflow justifies the added runtime coordination.
+For Motion Studio, the agreed first usable workflow is standalone composition
+creation and rendered video export. The linked workflow below is deferred until
+after that scope and the required contracts are validated. When implemented,
+the initial host refresh follows a successful save. Unsaved live previews are
+deferred and require a separate demonstrated use case because they add runtime
+coordination, resource-lifetime rules, and stale-frame handling.
 
 ### Image document workflow
 
@@ -133,14 +135,16 @@ that workflow justifies the added runtime coordination.
 
 ### Motion composition workflow
 
-- From a supported timeline clip, the user can open or create a linked
-  composition in Motion Studio.
-- From a Media Pool item, the user can create a composition based on that
-  resource. The composition's duration, frame rate, canvas, and dependency
-  behavior must be explicit before it is inserted into the timeline.
-- Saving a supported composition makes its new saved revision available to
-  the Video Editor, which refreshes the clip output and invalidates dependent
-  render-cache entries.
+- **Deferred until after the standalone Motion Studio MVP.** From a supported
+  timeline clip, the user can open or create a linked composition in Motion
+  Studio. From a Media Pool item, the user can create a composition based on
+  that resource.
+- Before insertion, the composition's duration, frame rate, canvas, and media
+  dependency behavior must be explicit.
+- Saving a supported composition publishes a new saved revision to the Video
+  Editor, which refreshes the corresponding output and invalidates dependent
+  render-cache entries. The native Motion Studio document remains separate
+  from the `.csp` project and source media is not overwritten.
 
 These workflows share a handoff contract, but image documents and motion
 compositions have different semantics and should keep distinct native formats
@@ -148,8 +152,9 @@ and adapters.
 
 ### Update and conflict behavior
 
-For the initial integration, the Video Editor polls output size and modification
-time and refreshes after a linked document is saved. The Image Editor compares
+For the initial linked integration, the Video Editor refreshes after a linked
+document is saved; implementation details such as polling output size and
+modification time remain subject to validation. The Image Editor compares
 the linked document's saved SHA-256 fingerprint and serializes linked writers
 with a lock file. Streaming unsaved preview frames between running applications
 is a later capability because it requires

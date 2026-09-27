@@ -1,9 +1,10 @@
 # Motion Studio Roadmap
 
 Status: **provisional**. This roadmap describes the future Motion Studio work
-area stored under `apps/motion-editor/`. The folders are placeholders; the
-application is not wired into CMake and no final architecture or technology
-choices have been made.
+area stored under `apps/motion-editor/`. Its initial product scope and
+readiness are documented in [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md).
+The folders are placeholders; the application is not wired into CMake and no
+final architecture or technology choices have been made.
 
 Motion Studio may be developed in parallel with the Video Editor and Image
 Editor on an independent track. Cross-application integrations still depend on
@@ -24,27 +25,30 @@ technically clear.
   module boundaries.
 - Validate performance, memory use, startup time, licenses, and all three
   target operating systems before recording technical decisions as final.
-- Keep this roadmap provisional until user workflows and the first release
-  scope are agreed.
+- Keep this roadmap provisional while technical choices and later release
+  gates remain unvalidated.
 
 ## Milestones
 
 ### 0. Scope and readiness
 
-- [ ] Define the intended users, primary workflows, and the first Motion Studio
+- [x] Define the intended users, primary workflows, and the first Motion Studio
   release boundary.
-- [ ] Define how Motion Studio compositions are opened, referenced, and
-  updated from Video Editor projects.
-- [ ] Map the existing Video Editor document, media, rendering, keyframe,
+- [x] Define the later linked workflow for opening, referencing, and updating
+  Motion Studio compositions from Video Editor projects.
+- [x] Map the existing Video Editor document, media, rendering, keyframe,
   history, and recovery capabilities to the services Motion Studio needs.
-- [ ] Identify the smallest shared libraries justified by a second real
-  consumer; document their APIs and ownership rules.
-- [ ] Define project-format compatibility, versioning, and migration rules for
-  compositions and cross-application references.
+- [x] Identify candidate shared capabilities; document their API
+  responsibilities, ownership rules, and extraction gates without creating
+  libraries or public code APIs before both consumers validate the contract.
+- [x] Define native format separation, versioning, migration, and
+  cross-application reference compatibility rules.
 
-**Exit criteria:** the MVP and application boundary are documented and
-required shared services are identified. The Video Editor foundation remains a
-stability priority; Image Editor milestones do not block this readiness work.
+**Exit criteria:** the MVP and application boundary, later handoff, capability
+ownership and extraction gates, and format compatibility policy are documented
+in [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md). The Video Editor
+foundation remains a stability priority; Image Editor milestones do not block
+this readiness work.
 
 ### 1. Technical validation
 
@@ -79,11 +83,11 @@ composition without losing its layer or timing data.
 
 - [ ] Add keyframes and editable property curves with documented interpolation
   behavior.
-- [ ] Add animated masks, advanced text and shape layers, and chained effects
-  in measured, testable increments.
-- [ ] Add nested compositions after their ownership, caching, and invalidation
-  behavior are defined.
-- [ ] Profile representative compositions and address measured bottlenecks.
+- [ ] Support ordered text, vector-shape, raster-image, and video layers with
+  basic 2D transforms and a simple effect set.
+- [ ] Complete the standalone save/reopen, preview, and rendered-video
+  workflows and profile representative compositions.
+- [ ] Address measured bottlenecks before expanding the MVP scope.
 
 **Exit criteria:** the agreed MVP workflows pass regression coverage and
 manual visual checks, including save/reopen, recovery, and heavy-composition
@@ -105,9 +109,10 @@ gate.
 
 ### 5. Future research
 
-- [ ] Revisit particles, 3D features, and node-based workflows only after the
-  core motion workflows meet their performance targets and a clear use case
-  justifies their added complexity.
+- [ ] Revisit animated masks, chained effects, nested compositions, particles,
+  3D features, and node-based workflows only after the core 2D motion workflows
+  meet their performance targets and a clear use case justifies their added
+  complexity.
 
 ## Status legend
 
