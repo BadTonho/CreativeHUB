@@ -40,6 +40,13 @@ jobs:
         shell: bash
         run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
+      - name: Install Linux FFmpeg build tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends nasm
+
       - name: Configure on Windows
         if: runner.os == 'Windows'
         shell: pwsh
