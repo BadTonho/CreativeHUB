@@ -196,9 +196,13 @@ run.
    empty group and confirm no subgroup is created; it appears above its parent
    group in the root.
 2. Select two or more contiguous sibling raster layers with Ctrl-click and
-   Shift-click, then choose **Group Selected**. Confirm the action is disabled
-   for a non-contiguous selection, Background, mixed groups, or layers with
-   different parents. Confirm child order and appearance do not change.
+   Shift-click, then right-click one of the selected layers. Confirm the
+   selection is preserved and **Group Selected** is enabled. Right-click an
+   unselected layer and confirm it becomes the only selection. Confirm
+   **Group Selected** is disabled for a non-contiguous selection, Background,
+   mixed groups, or layers with different parents. Use the context action and
+   confirm child order and appearance do not change. Right-click a group and
+   confirm **Ungroup** and **Delete Group** are available and work as expected.
 3. Drag a raster layer into an existing group, out to the root, and between
    siblings. Confirm groups cannot be nested, Background stays at the root
    bottom, and reordering updates the composite in the same visual order.

@@ -9,6 +9,7 @@
 #include <QColorDialog>
 #include <QComboBox>
 #include <QCursor>
+#include <QContextMenuEvent>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
@@ -147,6 +148,155 @@ bool testLayerGroupsUi(const QString& directory) {
     delete_button->click();
     QCoreApplication::processEvents();
     return layerRowCount(tree) == 3 && layerRowItem(tree, 0)->text(0) == QStringLiteral("Group 1");
+}
+
+bool testLayerGroupContextMenu(const QString& directory) {
+    const auto fail = [](const char* stage) {
+        std::cerr << "Layer context menu check failed: " << stage << ".\n";
+        return false;
+    };
+    const QString source_path = directory + QStringLiteral("/group-context-source.png");
+    QImage source(64, 48, QImage::Format_ARGB32);
+    source.fill(Qt::transparent);
+    if (!source.save(source_path, "PNG")) return fail("create source image");
+
+    image_editor::ImageEditorWindow window;
+    window.show();
+    if (!window.openImagePath(source_path)) return fail("open source image");
+    QCoreApplication::processEvents();
+    auto* tree = window.findChild<QTreeWidget*>(QStringLiteral("imageLayerTree"));
+    auto* add_button = window.findChild<QToolButton*>(QStringLiteral("addImageLayerButton"));
+    auto* menu = window.findChild<QMenu*>(QStringLiteral("imageLayerContextMenu"));
+    if (tree == nullptr || add_button == nullptr || menu == nullptr) {
+        return fail("find panel controls");
+    }
+    auto* group_action = menu->findChild<QAction*>(
+        QStringLiteral("groupSelectedLayersContextAction"));
+    auto* ungroup_action = menu->findChild<QAction*>(
+        QStringLiteral("ungroupLayerGroupContextAction"));
+    auto* delete_group_action = menu->findChild<QAction*>(
+        QStringLiteral("deleteLayerGroupContextAction"));
+    if (group_action == nullptr || ungroup_action == nullptr || delete_group_action == nullptr) {
+        return fail("find menu actions");
+    }
+
+    add_button->click();
+    add_button->click();
+    QCoreApplication::processEvents();
+    if (layerRowCount(tree) != 4) return fail("create test layers");
+
+    struct MenuState {
+        bool group_visible = false;
+        bool group_enabled = false;
+        bool ungroup_visible = false;
+        bool delete_group_visible = false;
+        int selected_count = 0;
+    };
+    const auto invoke_context_menu = [&](int row,
+                                        const QString& trigger_object_name,
+                                        MenuState* state) {
+        QTreeWidgetItem* item = layerRowItem(tree, row);
+        if (item == nullptr) return fail("find context row");
+        const QRect rect = tree->visualItemRect(item);
+        if (!rect.isValid()) return fail("get context row geometry");
+        bool opened = false;
+        const auto connection = QObject::connect(menu, &QMenu::aboutToShow, &window,
+            [&]() {
+                opened = true;
+                if (state != nullptr) {
+                    state->group_visible = group_action->isVisible();
+                    state->group_enabled = group_action->isEnabled();
+                    state->ungroup_visible = ungroup_action->isVisible();
+                    state->delete_group_visible = delete_group_action->isVisible();
+                    state->selected_count = tree->selectedItems().size();
+                }
+                QAction* trigger = trigger_object_name.isEmpty()
+                    ? nullptr : menu->findChild<QAction*>(trigger_object_name);
+                QTimer::singleShot(0, menu, [menu, trigger]() {
+                    if (trigger != nullptr && trigger->isVisible() && trigger->isEnabled()) {
+                        trigger->trigger();
+                    }
+                    menu->close();
+                });
+            });
+        const QPoint point(rect.left() + 100, rect.center().y());
+        QContextMenuEvent context_event(QContextMenuEvent::Mouse, point,
+                                        tree->viewport()->mapToGlobal(point));
+        QApplication::sendEvent(tree->viewport(), &context_event);
+        QObject::disconnect(connection);
+        if (!opened) std::cerr << "Layer context menu did not open for row " << row << ".\n";
+        return opened;
+    };
+    const auto click_row = [tree](int row, Qt::KeyboardModifiers modifiers) {
+        QTreeWidgetItem* item = layerRowItem(tree, row);
+        if (item == nullptr) return;
+        const QRect rect = tree->visualItemRect(item);
+        QTest::mouseClick(tree->viewport(), Qt::LeftButton, modifiers,
+                          QPoint(rect.left() + 100, rect.center().y()));
+    };
+
+    click_row(0, Qt::NoModifier);
+    click_row(3, Qt::ControlModifier);
+    QCoreApplication::processEvents();
+    MenuState background_selection;
+    if (tree->selectedItems().size() != 2 ||
+        !invoke_context_menu(0, {}, &background_selection) ||
+        !background_selection.group_visible || background_selection.group_enabled ||
+        background_selection.selected_count != 2) return fail("disable Background grouping");
+
+    click_row(0, Qt::NoModifier);
+    click_row(2, Qt::ControlModifier);
+    QCoreApplication::processEvents();
+    if (tree->selectedItems().size() != 2) return fail("create non-contiguous selection");
+    MenuState non_contiguous;
+    if (!invoke_context_menu(0, {}, &non_contiguous) ||
+        !non_contiguous.group_visible || non_contiguous.group_enabled ||
+        non_contiguous.selected_count != 2) return fail("disable non-contiguous grouping");
+
+    MenuState right_clicked_unselected;
+    if (!invoke_context_menu(1, {}, &right_clicked_unselected) ||
+        !right_clicked_unselected.group_visible || right_clicked_unselected.group_enabled ||
+        right_clicked_unselected.selected_count != 1 ||
+        tree->currentItem() != layerRowItem(tree, 1)) return fail("select unselected context row");
+
+    click_row(0, Qt::NoModifier);
+    click_row(1, Qt::ControlModifier);
+    QCoreApplication::processEvents();
+    MenuState valid_selection;
+    if (!invoke_context_menu(0, QStringLiteral("groupSelectedLayersContextAction"),
+                             &valid_selection) ||
+        !valid_selection.group_visible || !valid_selection.group_enabled ||
+        valid_selection.selected_count != 2 || layerRowCount(tree) != 3 ||
+        layerRowItem(tree, 0)->childCount() != 2) return fail("group from context menu");
+
+    click_row(1, Qt::NoModifier);
+    click_row(0, Qt::ControlModifier);
+    MenuState mixed_selection;
+    if (!invoke_context_menu(1, {}, &mixed_selection) ||
+        !mixed_selection.group_visible || mixed_selection.group_enabled ||
+        mixed_selection.selected_count != 2) return fail("disable grouping mixed layer/group selection");
+
+    MenuState group_actions;
+    if (!invoke_context_menu(0, QStringLiteral("ungroupLayerGroupContextAction"),
+                             &group_actions) ||
+        group_actions.group_visible || !group_actions.ungroup_visible ||
+        !group_actions.delete_group_visible || layerRowCount(tree) != 4) {
+        return fail("ungroup from context menu");
+    }
+
+    click_row(0, Qt::NoModifier);
+    click_row(1, Qt::ControlModifier);
+    MenuState regrouped;
+    if (!invoke_context_menu(0, QStringLiteral("groupSelectedLayersContextAction"),
+                             &regrouped) || layerRowCount(tree) != 3) {
+        return fail("regroup from context menu");
+    }
+    MenuState deleted;
+    if (!invoke_context_menu(0, QStringLiteral("deleteLayerGroupContextAction"), &deleted) ||
+        !deleted.delete_group_visible || layerRowCount(tree) != 2) {
+        return fail("delete group from context menu");
+    }
+    return true;
 }
 
 } // namespace
@@ -385,6 +535,10 @@ int main(int argc, char* argv[]) {
     if (!testGeneralCanvasSelection()) return 1;
     if (!testLayerGroupsUi(temporary.path())) {
         std::cerr << "Layer group panel actions, multi-selection, or hierarchy failed.\n";
+        return 1;
+    }
+    if (!testLayerGroupContextMenu(temporary.path())) {
+        std::cerr << "Layer group context menu, selection rules, or actions failed.\n";
         return 1;
     }
 

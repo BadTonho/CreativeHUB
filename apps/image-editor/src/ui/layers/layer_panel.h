@@ -8,6 +8,7 @@
 
 class QEvent;
 class QLabel;
+class QMenu;
 class QObject;
 class QPushButton;
 class QSlider;
@@ -64,6 +65,7 @@ private:
 
     QPushButton* quick_export_button_ = nullptr;
     QTreeWidget* layer_tree_ = nullptr;
+    QMenu* layer_context_menu_ = nullptr;
     QLabel* edit_hint_ = nullptr;
     QSlider* opacity_slider_ = nullptr;
     QToolButton* add_button_ = nullptr;

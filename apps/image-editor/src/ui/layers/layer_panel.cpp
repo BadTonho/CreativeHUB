@@ -8,6 +8,7 @@
 #include <QEvent>
 #include <QFontMetrics>
 #include <QHBoxLayout>
+#include <QItemSelectionModel>
 #include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
@@ -227,7 +228,20 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     layer_tree_->setAcceptDrops(true);
     layer_tree_->setDropIndicatorShown(true);
     layer_tree_->setDragDropMode(QAbstractItemView::InternalMove);
+    layer_tree_->setContextMenuPolicy(Qt::CustomContextMenu);
     layout->addWidget(layer_tree_, 1);
+
+    layer_context_menu_ = new QMenu(this);
+    layer_context_menu_->setObjectName(QStringLiteral("imageLayerContextMenu"));
+    QAction* group_context_action = layer_context_menu_->addAction(
+        QStringLiteral("Group Selected"));
+    group_context_action->setObjectName(QStringLiteral("groupSelectedLayersContextAction"));
+    QAction* ungroup_context_action = layer_context_menu_->addAction(
+        QStringLiteral("Ungroup"));
+    ungroup_context_action->setObjectName(QStringLiteral("ungroupLayerGroupContextAction"));
+    QAction* delete_group_context_action = layer_context_menu_->addAction(
+        QStringLiteral("Delete Group"));
+    delete_group_context_action->setObjectName(QStringLiteral("deleteLayerGroupContextAction"));
 
     edit_hint_ = new QLabel(this);
     edit_hint_->setObjectName(QStringLiteral("layerEditingHint"));
@@ -310,6 +324,28 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
             });
     connect(layer_tree_, &QTreeWidget::itemSelectionChanged, this,
             [this]() { updateControls(); });
+    connect(layer_tree_, &QTreeWidget::customContextMenuRequested, this,
+            [this, group_context_action, ungroup_context_action,
+             delete_group_context_action](const QPoint& position) {
+                QTreeWidgetItem* item = layer_tree_->itemAt(position);
+                if (item == nullptr) return;
+
+                if (item->isSelected()) {
+                    layer_tree_->setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
+                } else {
+                    layer_tree_->setCurrentItem(item, 0,
+                        QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+                }
+
+                const bool is_group = item->data(0, kGroupRole).toBool();
+                group_context_action->setVisible(!is_group);
+                group_context_action->setEnabled(!is_group && canGroupSelectedLayers());
+                ungroup_context_action->setVisible(is_group);
+                delete_group_context_action->setVisible(is_group);
+                ungroup_context_action->setEnabled(is_group);
+                delete_group_context_action->setEnabled(is_group);
+                layer_context_menu_->exec(layer_tree_->viewport()->mapToGlobal(position));
+            });
     connect(layer_tree_, &QTreeWidget::itemChanged, this,
             [this](QTreeWidgetItem* item, int column) {
                 if (refreshing_ || item == nullptr || column != 0 ||
@@ -327,12 +363,20 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
         QStringList ids;
         if (canGroupSelectedLayers(&ids)) emit groupSelectedLayersRequested(ids);
     });
+    connect(group_context_action, &QAction::triggered, this, [this]() {
+        QStringList ids;
+        if (canGroupSelectedLayers(&ids)) emit groupSelectedLayersRequested(ids);
+    });
     connect(delete_button_, &QToolButton::clicked, this, [this]() {
         if (selectedItemIsGroup()) emit deleteGroupRequested(selectedItemId());
         else emit deleteLayerRequested(selectedItemId());
     });
     connect(ungroup_button_, &QToolButton::clicked, this,
             [this]() { emit ungroupRequested(selectedItemId()); });
+    connect(ungroup_context_action, &QAction::triggered, this,
+            [this]() { emit ungroupRequested(selectedItemId()); });
+    connect(delete_group_context_action, &QAction::triggered, this,
+            [this]() { emit deleteGroupRequested(selectedItemId()); });
     connect(rename_button_, &QToolButton::clicked, this, [this]() {
         auto* item = layer_tree_->currentItem();
         if (item != nullptr && !item->data(0, kBackgroundRole).toBool()) {
