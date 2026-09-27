@@ -1,95 +1,52 @@
 # Creative Suite (Working Title)
 
-> **Project name:** Temporary. A permanent identity will be decided in a future milestone.
+> The project name is temporary; a permanent name will be chosen later.
 
-An open-source, lightweight, cross-platform creative suite designed for professional work, responsive performance, and local workflows.
+An open-source desktop suite for video editing, raster image editing, and motion
+design. The project prioritizes responsive local workflows and targets Windows,
+macOS, and Linux.
 
----
+**Jump to:** [Applications](#applications) | [Build](#build-from-source) |
+[Tests](#regression-tests) | [Documentation](#documentation-and-contribution) |
+[License](#license)
 
-## 1. Project Vision & Proposal
+## Applications
 
-This project aims to deliver a **modular, responsive, and native desktop suite** that prioritizes user freedom, performance, low memory use, and local project control across **Windows, macOS, and Linux**.
+| Application | Status | Purpose |
+| --- | --- | --- |
+| [Video Editor](docs/video-editor/ROADMAP.md) | Active development | Multitrack video and audio editing, compositing, and export. |
+| [Image Editor](docs/image-editor/ROADMAP.md) | Beta 0.1.2 | Layered raster editing with `.cimg` documents and PNG/JPEG export. |
+| [Motion Studio](docs/motion-editor/ROADMAP.md) | Planned parallel track | Motion design, animation, and advanced compositing. |
 
-The suite provides focused applications for video, image, and motion workflows, supported by reusable libraries:
+The three tracks may be developed in parallel. Video Editor stability remains a
+priority. Cross-application work depends on validated interfaces and regression
+coverage in both the producer and consumer applications.
 
-```
-+-------------------------------------------------------------------+
-|                     Shared Core Libraries                         |
-|  (Document Model, Media Decoder, Timeline, Composition, Audio,    |
-|               GPU Rendering, Plugin Host, Undo/Redo)              |
-+-------------------+-----------------------+-----------------------+
-                    |                       |
-           +--------v--------+     +--------v--------+
-           |  Video Editor   |     |  Motion Studio  |
-           | (Video Editing) |     | (Motion/VFX)    |
-           +-----------------+     +-----------------+
-                    |
-           +--------v--------+
-           |  Image Editor   |
-           | (Raster Editing)|
-           +-----------------+
-```
+### Current work
 
-### Planned Applications
+- **Video Editor:** the desktop shell, multitrack timeline, FFmpeg playback,
+  audio mixing, transforms, keyframes, transitions, text overlays, and `.csp`
+  project persistence are implemented. See the [Video Editor roadmap](docs/video-editor/ROADMAP.md).
+- **Image Editor:** Windows users have confirmed the current Release workflow,
+  including layers and groups, editable shapes, object selection, save/reopen,
+  and export. Windows packaging and linked-image acceptance remain in progress;
+  macOS and Linux validation is deferred. See the [Image Editor roadmap](docs/image-editor/ROADMAP.md).
+- **Motion Studio:** its roadmap and scope are provisional; the application is
+  not yet a CMake build target. See the [Motion Studio roadmap](docs/motion-editor/ROADMAP.md).
 
-1. **Video Editor** *(In Active Development)*:
-   - Audiovisual editing with a responsive multi-track workflow for assembling footage, grading color, editing audio, adding text and effects, and exporting finished work.
-   - Core capabilities: multi-track timeline editing, cutting, blade splitting, transitions, text overlays/captions, transform keyframes, synchronized audio playback, and export.
-2. **Image Editor** *(Independent development track)*:
-   - Open one raster image, crop and transform it non-destructively, save an editable `.cimg` document, and export PNG or JPEG.
-   - Within this track, validate the standalone minimum before accepting linked-image compatibility with the Video Editor and the first editing release.
-3. **Motion Studio** *(Planned - Parallel development track)*:
-   - A dedicated application for motion design, advanced compositing, and visual effects.
-   - Core capabilities: complex animation curves, bezier keyframes, animated vector masks, nested compositions, chained effects, and shape layers.
+## Project principles
 
-The three application tracks may be developed in parallel. Keep Video Editor
-stability as a priority, and gate cross-application integration on validated
-contracts and regression coverage in both the producer and consumer.
+- Native desktop applications with local-first workflows.
+- Shared libraries only where multiple applications have a stable, validated
+  use for the same capability.
+- Cross-platform support, efficient media handling, structured logs, and
+  automated regression coverage.
 
 ---
 
-## 2. Core Principles
+## Build from Source
 
-- **100% Open Source**: Transparent development with open file formats (`.csp`), no vendor lock-in, and zero compulsory online accounts.
-- **Lightweight & High Performance**: Minimal startup time, low memory footprint, responsive UI, and hardware-accelerated processing.
-- **Cross-Platform Native**: Built from day one to run identically on Windows, macOS, and Linux with native desktop integration.
-- **Modular Monorepo**: Shared core libraries eliminate duplicated decoding, rendering, or composition logic across suite applications.
-- **Robustness & Diagnostics**: Bounded caches, actionable structured diagnostic logging, and strict automated regression testing for every feature.
-
----
-
-## 3. Current Implementation Status
-
-Development is currently centered on the **Video Editor** MVP under [`apps/video-editor`](apps/video-editor), built with **C++20**, **Qt 6 Widgets**, and **FFmpeg**:
-
-- [x] **Workspace & Shell**: Dockable panels (Media Browser, Timeline, Preview Player, Inspector) with flexible desktop layouts.
-- [x] **Multi-Track Timeline**:
-  - Multiple video tracks with stable identifiers and positional drops.
-  - Multi-clip timeline with gaps, cross-track overlap, direct clip selection, and track management.
-  - Clip manipulation: move between tracks with `Alt + Drag`, single-frame nudging (`Ctrl + Left/Right`).
-  - Precision editing: playhead splitting, persistent Blade Tool, edge trimming, and clip deletion.
-- [x] **Media Engine & Playback**:
-  - FFmpeg metadata probing and decoding (supporting common video/audio containers).
-  - Fast seeking with keyframe navigation, bounded LRU frame cache, and temporal fallback.
-  - Synchronized audio playback with per-clip and per-track gain and mute controls.
-  - Provisional Qt OpenGL video preview with CPU fallback and worker-thread frame stepping.
-- [x] **Compositing & Effects**:
-  - Layer transforms: normalized 2D position, scale, rotation, and opacity.
-  - Linear keyframing for all transform properties with real-time worker-thread composition.
-  - Built-in transitions: Cross Dissolve and Fade to Black with Inspector duration controls.
-  - Text & caption overlays: customizable text clips with font, size, color, alignment, and transform animations.
-- [x] **Project Persistence & Safety**:
-  - Versioned `.csp` project file format with automatic migration from versions 1 through 7 to version 8.
-  - Multi-level Undo / Redo history for editing actions.
-  - Local structured diagnostic logging for troubleshooting.
-
-*Refer to [`docs/video-editor/architecture/SCOPE.md`](docs/video-editor/architecture/SCOPE.md) and [`docs/video-editor/ROADMAP.md`](docs/video-editor/ROADMAP.md) for detailed progress and future milestones.*
-
----
-
-## 4. Getting Started
-
-### Prerequisites
+### Requirements
 
 - **CMake** (version 3.24 or newer)
 - **C++20 compliant compiler** (MSVC 2022 on Windows, GCC 11+ on Linux, or Clang 14+ on macOS)
@@ -97,7 +54,7 @@ Development is currently centered on the **Video Editor** MVP under [`apps/video
 - **FFmpeg** (libraries: `avformat`, `avcodec`, `avutil`, `swscale`, `swresample`)
 - **vcpkg** (recommended for automatic dependency management)
 
-### Building from Source
+### Configure and build
 
 1. **Clone the repository:**
    ```bash
@@ -106,14 +63,20 @@ Development is currently centered on the **Video Editor** MVP under [`apps/video
    cd <repository-folder>
    ```
 
-2. **Configure with CMake using vcpkg:**
+2. **Configure with CMake and vcpkg:**
    ```bash
-   cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=[path-to-vcpkg]/scripts/buildsystems/vcpkg.cmake
+   cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
    ```
+   Replace `/path/to/vcpkg` with the location of your vcpkg checkout. On
+   Windows, use forward slashes in the path, for example `C:/dev/vcpkg`.
 
-3. **Build the project:**
+3. **Build the application you want:**
    ```bash
-   cmake --build build --config Release
+   # Video Editor
+   cmake --build build --config Release --target creative-suite-video-editor
+
+   # Image Editor
+   cmake --build build --config Release --target creative-suite-image-editor
    ```
 
 4. **Run the Video Editor:**
@@ -141,9 +104,11 @@ Development is currently centered on the **Video Editor** MVP under [`apps/video
    open build/apps/image-editor/creative-suite-image-editor.app
    ```
 
+Motion Studio is not a CMake build target yet.
+
 ---
 
-## 5. Running Regression Tests
+## Regression Tests
 
 The project enforces automated regression test coverage for all application logic and module boundaries.
 
@@ -161,7 +126,7 @@ For testing practices, refer to [`docs/video-editor/REGRESSION_TESTING.md`](docs
 
 ---
 
-## 6. Keyboard Shortcuts
+## Keyboard Shortcuts
 
 A complete and continuously updated directory of all user-facing shortcuts is maintained in [`docs/video-editor/SHORTCUTS.md`](docs/video-editor/SHORTCUTS.md).
 
@@ -182,21 +147,21 @@ Common shortcuts in the Video Editor:
 
 ---
 
-## 7. Documentation & Contribution
+## Documentation and Contribution
 
 Before contributing, please read the project guidelines outlined in [`AGENTS.md`](AGENTS.md). All project documentation, commit notes, and code comments must be written in English.
 
-Key reference documents:
-- [Architecture Overview](docs/video-editor/ARCHITECTURE.md)
-- [Subsystem Architecture Boundaries](docs/video-editor/architecture/)
-- [Project Roadmap](docs/video-editor/ROADMAP.md)
-- [Motion Studio Roadmap](docs/motion-editor/ROADMAP.md)
-- [Image Editor Roadmap](docs/image-editor/ROADMAP.md)
-- [Technical Prototype Comparison](docs/video-editor/TECHNICAL_PROTOTYPE_COMPARISON.md)
+| Guide | What it covers |
+| --- | --- |
+| [Video Editor architecture](docs/video-editor/ARCHITECTURE.md) | Video Editor structure and modules. |
+| [Video Editor subsystem docs](docs/video-editor/architecture/) | Technical boundaries and subsystem behavior. |
+| [Video Editor roadmap](docs/video-editor/ROADMAP.md) | Current work and release gates. |
+| [Image Editor roadmap](docs/image-editor/ROADMAP.md) | Image Editor milestones and validation. |
+| [Motion Studio roadmap](docs/motion-editor/ROADMAP.md) | Provisional scope and technical milestones. |
+| [Cross-application compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md) | Shared interfaces and handoff contracts. |
+| [Technical prototype comparison](docs/video-editor/TECHNICAL_PROTOTYPE_COMPARISON.md) | Language and technology evaluation. |
 
----
-
-## 8. License
+## License
 
 This project is licensed under the **GNU General Public License v3.0 or later (GPL-3.0-or-later)**. See the [`LICENSE`](LICENSE) file for the full license text.
 
