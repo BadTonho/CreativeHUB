@@ -13,12 +13,13 @@ reuse a library without sharing project files, and they can exchange a linked
 document without sharing their entire editing workflow.
 
 The Image Editor standalone minimum was developed first. Its manual and
-packaging checks are the current gate. The Video Editor linked-image
-implementation already exists as a bounded prototype, but compatibility
-acceptance follows the standalone exit criteria; the prototype should remain
-stable until that gate passes. The Image Editor's first editing release
-remains ahead of Motion Studio. This is a sequencing direction; technical
-contracts in this proposal remain provisional.
+packaging checks are the current gate for accepting the linked-image workflow.
+The Video Editor linked-image implementation already exists as a bounded
+prototype and should remain stable until that gate passes. This is an
+acceptance dependency within the Image Editor track, not a required development
+sequence between applications. The Video Editor, Image Editor, and Motion
+Studio may be developed in parallel; technical contracts in this proposal
+remain provisional.
 
 The initial Video Editor to Image Editor handoff is now implemented as a
 bounded prototype. A user confirmed the basic linked edit/save workflow and
@@ -200,24 +201,27 @@ Before making this direction final, prototype and document:
    and compositions;
 6. building and running the handoff workflow on Windows, macOS, and Linux.
 
-## Suggested Sequence
+## Coordination Guidance
 
 1. Maintain a capability ownership matrix for the applications.
-2. Specify and validate the composition contract inside the Video Editor.
-3. Build and validate the standalone Image Editor minimum before adding
-   cross-application behavior.
-4. After the standalone editor is usable, validate the linked raster handoff
-   with a bounded Video Editor compatibility prototype.
-5. Extract only the proven capabilities used by both applications into
-   focused libraries.
-6. Complete and validate the Image Editor's first editing release, then start
-   the Motion Studio foundation and validate composition handoff as part of
-   its integration.
+2. Develop the three application tracks in parallel while keeping Video Editor
+   stability a priority.
+3. Within the Image Editor track, require standalone acceptance before
+   accepting linked-image compatibility; the existing prototype may remain
+   bounded while that work proceeds.
+4. Define and validate Video Editor and Motion Studio composition contracts
+   before relying on them for cross-application handoff.
+5. Extract only proven capabilities used by multiple applications into
+   focused libraries with stable APIs.
+6. Validate each handoff with regression coverage in both producer and
+   consumer applications.
 7. Review advanced Image Editor expansion separately against project capacity.
 
-This sequence keeps shared libraries aligned with real consumers, gives each
+This coordination keeps shared libraries aligned with real consumers, gives each
 document type a suitable contract, and avoids duplicating media, rendering,
-or animation engines without a documented technical reason.
+or animation engines without a documented technical reason. Parallel
+development does not remove acceptance gates for dependencies within an
+application or between producer and consumer applications.
 
 OpenFX may be evaluated later for third-party effect-plugin interoperability.
 A plugin host API is distinct from the internal APIs and linked-document

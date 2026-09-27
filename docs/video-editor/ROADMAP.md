@@ -6,8 +6,9 @@ later expansion. Update it when implementation, scope, or a decision changes.
 
 ## Current direction
 
-- The Video Editor remains the first application and its stability remains a
-  priority.
+- The Video Editor is an active application track and its stability remains a
+  priority. The Image Editor and Motion Studio may be developed in parallel
+  on independent tracks.
 - Continue Video Editor development in C++20 with Qt 6 and FFmpeg. This is the
   current working direction and remains provisional; no final project-wide
   language decision is recorded.
@@ -25,10 +26,11 @@ later expansion. Update it when implementation, scope, or a decision changes.
   frame. Keep this implementation until profiling or a concrete
   second backend justifies a broader renderer abstraction. See the
   [rendering boundary](architecture/RENDERING.md).
-- The Image Editor follows the Video Editor foundation. Its standalone
-  acceptance gate comes before acceptance of the linked-image workflow; its
-  first editing release comes before Motion Studio. Track those milestones in
-  the [Image Editor roadmap](../image-editor/ROADMAP.md) and
+- The Image Editor's standalone acceptance gate comes before acceptance of
+  its linked-image workflow. Motion Studio development may proceed in
+  parallel; cross-application integration remains gated on stable contracts
+  and producer/consumer validation. Track the independent milestones in the
+  [Image Editor roadmap](../image-editor/ROADMAP.md) and
   [Motion Studio roadmap](../motion-editor/ROADMAP.md).
 
 ## Status legend
@@ -158,11 +160,12 @@ projects save and recover under the defined workload; supported platform
 builds and packages pass their release checks; dependency and licensing
 records are complete.
 
-## 4. Image Editor integration and application sequence
+## 4. Image Editor and Motion Studio coordination
 
 The Video Editor already contains the initial linked-image implementation.
 Its broader acceptance is tracked in the Image Editor roadmap and is gated by
-the standalone Image Editor acceptance criteria.
+the standalone Image Editor acceptance criteria. This gate applies within the
+Image Editor track; Motion Studio development may continue in parallel.
 
 - [x] Implement shared Media Pool links and isolated timeline image variants,
   persisted in `.csp` v10 with compatibility for versions 1 through 9.
@@ -175,8 +178,9 @@ the standalone Image Editor acceptance criteria.
 - [ ] After the standalone gate passes, complete linked-image validation for
   repeated opens, multiple uses, variants, transparency, large images,
   save/reopen, conflicts, and Windows, macOS, and Linux.
-- [ ] Complete the Image Editor's first editing release before starting Motion
-  Studio. See its Milestone 3 exit criteria.
+- [ ] Coordinate the Image Editor first editing release and Motion Studio
+  foundation as parallel tracks. Gate their shared services and handoff on
+  stable contracts and producer/consumer regression coverage.
 
 The existing handoff prototype and its full contract are documented in the
 [cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).

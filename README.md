@@ -35,12 +35,16 @@ The suite provides focused applications for video, image, and motion workflows, 
 1. **Video Editor** *(In Active Development)*:
    - Audiovisual editing with a responsive multi-track workflow for assembling footage, grading color, editing audio, adding text and effects, and exporting finished work.
    - Core capabilities: multi-track timeline editing, cutting, blade splitting, transitions, text overlays/captions, transform keyframes, synchronized audio playback, and export.
-2. **Image Editor** *(Standalone minimum under development)*:
+2. **Image Editor** *(Independent development track)*:
    - Open one raster image, crop and transform it non-destructively, save an editable `.cimg` document, and export PNG or JPEG.
-   - Build the standalone minimum first; linked-image compatibility with the Video Editor follows before the first editing release.
-3. **Motion Studio** *(Planned - Following the Image Editor's first editing release)*:
+   - Within this track, validate the standalone minimum before accepting linked-image compatibility with the Video Editor and the first editing release.
+3. **Motion Studio** *(Planned - Parallel development track)*:
    - A dedicated application for motion design, advanced compositing, and visual effects.
    - Core capabilities: complex animation curves, bezier keyframes, animated vector masks, nested compositions, chained effects, and shape layers.
+
+The three application tracks may be developed in parallel. Keep Video Editor
+stability as a priority, and gate cross-application integration on validated
+contracts and regression coverage in both the producer and consumer.
 
 ---
 

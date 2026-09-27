@@ -43,12 +43,13 @@ A separate application for motion design and advanced compositing:
 
 ### Image Editor
 
-The Image Editor is part of the product vision. After the Video Editor
-foundation, the Image Editor is the next application stage, ahead of Motion
-Studio. Build and validate its standalone minimum editor first; then add the
-linked-image compatibility workflow with the Video Editor before the first
-editing release milestone. Keep Video Editor stability as a priority and revisit
-scope if work would compromise it.
+The Image Editor is part of the product vision. The Video Editor, Image Editor,
+and Motion Studio may be developed in parallel on independent tracks. Keep Video
+Editor stability as a priority and revisit scope if work would compromise it.
+Within the Image Editor track, build and validate the standalone minimum before
+accepting the linked-image compatibility workflow and first editing release.
+Gate cross-application integration on validated contracts and producer/consumer
+regression coverage.
 
 ## 3. Mandatory Principles
 
@@ -235,10 +236,11 @@ Do not commit or push automatically. These actions require explicit user authori
 - The target platforms are Windows, macOS, and Linux.
 - The planned applications are the Video Editor, Image Editor, and Motion
   Studio.
-- The Video Editor remains first; the Image Editor is the next application
-  stage, ahead of Motion Studio. Its standalone minimum editor precedes the
-  linked-image compatibility prototype and first editing release.
+- The Video Editor, Image Editor, and Motion Studio may be developed in
+  parallel on independent tracks. Preserve Video Editor stability as a
+  priority. Within the Image Editor track, its standalone minimum precedes
+  linked-image compatibility acceptance and the first editing release.
 - The architecture must remain in a single repository.
-- The application sequence after the Video Editor foundation is the standalone
-  Image Editor minimum, linked-image compatibility, the first editing release,
-  and then the Motion Studio foundation.
+- Cross-application features depend on validated interfaces and producer/
+  consumer regression coverage; they do not impose a single development order
+  on the three application tracks.

@@ -6,9 +6,9 @@ macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.2**.
 This roadmap covers the independent application under `apps/image-editor/`.
 The Video Editor handoff implementation already exists as a bounded prototype,
-but its acceptance is gated on passing the standalone manual and
-cross-platform packaging checks in Milestone 1. The Image Editor remains ahead
-of Motion Studio in the application sequence.
+but its acceptance is gated on passing the standalone manual and Windows
+packaging checks in Milestone 1. This gate orders Image Editor acceptance
+milestones; the three application tracks may be developed in parallel.
 
 ## Principles
 
@@ -133,8 +133,9 @@ separate from this release.
   workflow.
 
 **Exit criteria:** the first release workflows pass automated regression
-coverage and manual visual validation on supported platforms. Begin the Motion
-Studio foundation after this milestone passes.
+coverage and manual visual validation on supported platforms. Motion Studio
+may proceed on a parallel track; cross-application integration depends on
+validated contracts and producer/consumer regression coverage.
 
 ### 4. Future expansion
 

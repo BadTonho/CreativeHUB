@@ -5,18 +5,19 @@ area stored under `apps/motion-editor/`. The folders are placeholders; the
 application is not wired into CMake and no final architecture or technology
 choices have been made.
 
-Motion Studio follows the Video Editor foundation and Image Editor Milestone 3
-(first editing release). The Image Editor's standalone minimum and linked-image
-compatibility milestones come first. Motion Studio focuses on advanced motion
-design and compositing, while the applications share media, rendering,
-animation, and project services when those boundaries are technically clear.
+Motion Studio may be developed in parallel with the Video Editor and Image
+Editor on an independent track. Cross-application integrations still depend on
+stable contracts and validated producer/consumer behavior. Motion Studio
+focuses on advanced motion design and compositing, while the applications share
+media, rendering, animation, and project services when those boundaries are
+technically clear.
 
 ## Principles
 
-- Do not delay the Video Editor foundation by developing Motion Studio in
-  parallel from the beginning.
-- Start the Motion Studio foundation after Image Editor Milestone 3 reaches
-  its documented exit criteria.
+- Keep Video Editor stability as a priority while developing Motion Studio in
+  parallel with the other application tracks.
+- Scope early Motion Studio work so it can proceed independently of unfinished
+  Image Editor milestones; gate shared services and handoffs on stable APIs.
 - Reuse shared media, rendering, animation, caching, and recovery services
   instead of building duplicate engines.
 - Keep video frames and GPU resources shared or referenced efficiently across
@@ -41,9 +42,9 @@ animation, and project services when those boundaries are technically clear.
 - [ ] Define project-format compatibility, versioning, and migration rules for
   compositions and cross-application references.
 
-**Exit criteria:** the MVP and application boundary are documented, required
-shared services are identified, the Video Editor foundation is stable, and
-Image Editor Milestone 3 has passed its exit criteria.
+**Exit criteria:** the MVP and application boundary are documented and
+required shared services are identified. The Video Editor foundation remains a
+stability priority; Image Editor milestones do not block this readiness work.
 
 ### 1. Technical validation
 
