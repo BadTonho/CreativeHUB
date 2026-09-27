@@ -112,6 +112,14 @@ run.
    unsupported export extension. Confirm the UI reports the failure and a
    structured entry is written to the local Image Editor log.
 
+### Recorded standalone validation
+
+- [x] User confirms the standalone workflow above was validated for the current
+  implementation, including the restart and recovery check. The platform, Qt
+  version, run date, and scenario-by-scenario results were not recorded.
+- [ ] Cross-platform packaging and interaction checks below still need
+  platform-specific records.
+
 ## Platform checks
 
 Repeat the standalone workflow on Windows, macOS, and Linux. Verify that the

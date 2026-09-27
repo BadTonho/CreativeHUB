@@ -1,6 +1,7 @@
 # Image Editor Roadmap
 
-Status: **standalone minimum implemented; standalone acceptance in progress**.
+Status: **standalone minimum implemented; manual workflow user-confirmed;
+cross-platform acceptance in progress**.
 This roadmap covers the independent application under `apps/image-editor/`.
 The Video Editor handoff implementation already exists as a bounded prototype,
 but its acceptance is gated on passing the standalone manual and
@@ -58,9 +59,9 @@ of Motion Studio in the application sequence.
 - [x] Add canvas fit, zoom, pan, and drag-to-crop controls.
 - [-] Pass Release build and automated tests for documents, edits, relinking,
   export, recovery, logging, and the UI boundary.
-- [ ] Complete the manual workflow in
+- [x] Complete the manual workflow in
   [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md), including a restart and
-  recovery check.
+  recovery check (user-confirmed; platform and run details were not recorded).
 - [ ] Validate Windows packaging with PNG, JPEG, BMP, WebP, and TIFF plugins;
   then repeat build and interaction checks on macOS and Linux.
 
