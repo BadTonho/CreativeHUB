@@ -132,6 +132,30 @@ QString operationObjectId(const ImageOperation& operation) {
     }
 }
 
+const ImageLayerData* findLayer(const ImageDocumentData& document, const QString& id) {
+    const auto found = std::find_if(document.layers.cbegin(), document.layers.cend(),
+        [&id](const ImageLayerData& layer) { return layer.id == id; });
+    return found == document.layers.cend() ? nullptr : &*found;
+}
+
+ImageLayerData* findLayer(ImageDocumentData& document, const QString& id) {
+    const auto found = std::find_if(document.layers.begin(), document.layers.end(),
+        [&id](const ImageLayerData& layer) { return layer.id == id; });
+    return found == document.layers.end() ? nullptr : &*found;
+}
+
+const ImageGroupData* findGroup(const ImageDocumentData& document, const QString& id) {
+    const auto found = std::find_if(document.groups.cbegin(), document.groups.cend(),
+        [&id](const ImageGroupData& group) { return group.id == id; });
+    return found == document.groups.cend() ? nullptr : &*found;
+}
+
+ImageGroupData* findGroup(ImageDocumentData& document, const QString& id) {
+    const auto found = std::find_if(document.groups.begin(), document.groups.end(),
+        [&id](const ImageGroupData& group) { return group.id == id; });
+    return found == document.groups.end() ? nullptr : &*found;
+}
+
 void transformObjectGeometry(ImageOperation* operation,
                              const ImageOperation& transform,
                              const QSize& canvas_size,
@@ -228,6 +252,74 @@ bool exportWasCancelled(const std::atomic_bool* cancellation_requested) {
         cancellation_requested->load(std::memory_order_relaxed);
 }
 
+QImage renderGroup(const ImageDocumentData& document,
+                   const ImageGroupData& group,
+                   const QSize& size,
+                   const std::atomic_bool* cancellation_requested,
+                   const QStringList& excluded_object_ids);
+
+QImage renderRasterLayer(const ImageLayerData& layer,
+                         const QSize& size,
+                         const std::atomic_bool* cancellation_requested,
+                         const QStringList& excluded_object_ids) {
+    if (exportWasCancelled(cancellation_requested)) return {};
+    QImage pixels(size, QImage::Format_ARGB32_Premultiplied);
+    if (pixels.isNull()) return {};
+    pixels.fill(Qt::transparent);
+    QVector<ImageOperation> operations = layer.operations;
+    if (!excluded_object_ids.isEmpty()) {
+        operations.erase(std::remove_if(operations.begin(), operations.end(),
+            [&excluded_object_ids](const ImageOperation& operation) {
+                return excluded_object_ids.contains(operationObjectId(operation));
+            }), operations.end());
+    }
+    return applyOperations(std::move(pixels), operations, true, cancellation_requested);
+}
+
+QImage renderGroup(const ImageDocumentData& document,
+                   const ImageGroupData& group,
+                   const QSize& size,
+                   const std::atomic_bool* cancellation_requested,
+                   const QStringList& excluded_object_ids) {
+    QImage composite(size, QImage::Format_ARGB32_Premultiplied);
+    if (composite.isNull()) return {};
+    composite.fill(Qt::transparent);
+    if (!group.visible || group.opacity == 0 || exportWasCancelled(cancellation_requested)) {
+        return composite;
+    }
+    QPainter painter(&composite);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    for (const QString& layer_id : group.layer_ids) {
+        if (exportWasCancelled(cancellation_requested)) {
+            painter.end();
+            return {};
+        }
+        const auto* layer = findLayer(document, layer_id);
+        if (layer == nullptr || !layer->visible || layer->opacity == 0) continue;
+        QImage pixels = renderRasterLayer(
+            *layer, size, cancellation_requested, excluded_object_ids);
+        if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
+            painter.end();
+            return {};
+        }
+        painter.setOpacity(layer->opacity / 100.0);
+        painter.drawImage(0, 0, pixels);
+    }
+    painter.end();
+    QImage transformed = applyOperations(
+        std::move(composite), group.operations, true, cancellation_requested);
+    if (transformed.isNull() || exportWasCancelled(cancellation_requested)) return {};
+    if (group.opacity == 100) return transformed;
+    QImage result(size, QImage::Format_ARGB32_Premultiplied);
+    if (result.isNull()) return {};
+    result.fill(Qt::transparent);
+    QPainter opacity_painter(&result);
+    opacity_painter.setOpacity(group.opacity / 100.0);
+    opacity_painter.drawImage(0, 0, transformed);
+    opacity_painter.end();
+    return result;
+}
+
 QImage renderComposite(const QImage& source_image,
                        const ImageDocumentData& document,
                        const std::atomic_bool* cancellation_requested = nullptr,
@@ -239,43 +331,43 @@ QImage renderComposite(const QImage& source_image,
     if (background.isNull() || exportWasCancelled(cancellation_requested)) return {};
 
     const QSize size = background.size();
-    QImage composite = !document.layers.isEmpty() && document.layers.front().visible
+    const auto* background_layer = document.layers.isEmpty()
+        ? nullptr : &document.layers.front();
+    QImage composite = background_layer != nullptr && background_layer->visible
         ? background.convertToFormat(QImage::Format_ARGB32)
         : QImage(size, QImage::Format_ARGB32);
     if (composite.isNull()) return {};
-    if (document.layers.isEmpty() || !document.layers.front().visible) {
+    if (background_layer == nullptr || !background_layer->visible) {
         composite.fill(Qt::transparent);
     }
 
     QPainter painter(&composite);
     painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-    for (qsizetype index = 1; index < document.layers.size(); ++index) {
+    for (qsizetype index = 1; index < document.root_stack.size(); ++index) {
         if (exportWasCancelled(cancellation_requested)) {
             painter.end();
             return {};
         }
-        const auto& layer = document.layers.at(index);
-        if (!layer.visible || layer.opacity == 0) continue;
-        QImage pixels(size, QImage::Format_ARGB32_Premultiplied);
-        if (pixels.isNull()) {
-            painter.end();
-            return {};
+        const auto& item = document.root_stack.at(index);
+        qreal opacity = 1.0;
+        QImage pixels;
+        if (item.group) {
+            const auto* group = findGroup(document, item.id);
+            if (group == nullptr || !group->visible || group->opacity == 0) continue;
+            pixels = renderGroup(document, *group, size,
+                                 cancellation_requested, excluded_object_ids);
+        } else {
+            const auto* layer = findLayer(document, item.id);
+            if (layer == nullptr || !layer->visible || layer->opacity == 0) continue;
+            opacity = layer->opacity / 100.0;
+            pixels = renderRasterLayer(
+                *layer, size, cancellation_requested, excluded_object_ids);
         }
-        pixels.fill(Qt::transparent);
-        QVector<ImageOperation> operations = layer.operations;
-        if (!excluded_object_ids.isEmpty()) {
-            operations.erase(std::remove_if(operations.begin(), operations.end(),
-                [&excluded_object_ids](const ImageOperation& operation) {
-                    return excluded_object_ids.contains(operationObjectId(operation));
-                }), operations.end());
-        }
-        pixels = applyOperations(
-            std::move(pixels), operations, true, cancellation_requested);
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
             painter.end();
             return {};
         }
-        painter.setOpacity(layer.opacity / 100.0);
+        painter.setOpacity(opacity);
         painter.drawImage(0, 0, pixels);
     }
     painter.end();
@@ -307,7 +399,13 @@ QImage renderSelectedLayer(const QImage& source_image,
     QImage rendered(size, QImage::Format_ARGB32_Premultiplied);
     if (rendered.isNull()) return {};
     rendered.fill(Qt::transparent);
-    if (!selected->visible || selected->opacity <= 0) return rendered;
+    const ImageLayerData& selected_layer = *selected;
+    const ImageGroupData* parent_group = selected_layer.parent_group_id.isEmpty()
+        ? nullptr : findGroup(document, selected_layer.parent_group_id);
+    if (!selected_layer.visible || selected_layer.opacity <= 0 ||
+        (parent_group != nullptr && (!parent_group->visible || parent_group->opacity <= 0))) {
+        return rendered;
+    }
 
     QImage pixels;
     if (selected->background) {
@@ -317,17 +415,40 @@ QImage renderSelectedLayer(const QImage& source_image,
         pixels = QImage(size, QImage::Format_ARGB32_Premultiplied);
         if (pixels.isNull()) return {};
         pixels.fill(Qt::transparent);
-        pixels = applyOperations(
-            std::move(pixels), selected->operations, true, cancellation_requested);
+        pixels = renderRasterLayer(selected_layer, size,
+                                   cancellation_requested, {});
+        if (parent_group != nullptr) {
+            pixels = applyOperations(std::move(pixels), parent_group->operations,
+                                     true, cancellation_requested);
+        }
     }
     if (pixels.isNull() || exportWasCancelled(cancellation_requested)) return {};
 
     QPainter painter(&rendered);
     painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-    painter.setOpacity(selected->opacity / 100.0);
+    const qreal group_opacity = parent_group == nullptr ? 1.0 : parent_group->opacity / 100.0;
+    painter.setOpacity((selected_layer.opacity / 100.0) * group_opacity);
     painter.drawImage(0, 0, pixels);
     painter.end();
     return exportWasCancelled(cancellation_requested) ? QImage{} : rendered;
+}
+
+QImage renderSelectedGroup(const QImage& source_image,
+                           const ImageDocumentData& document,
+                           const QString& selected_group_id,
+                           const std::atomic_bool* cancellation_requested = nullptr) {
+    if (source_image.isNull() || selected_group_id.isEmpty() ||
+        exportWasCancelled(cancellation_requested)) return {};
+    const auto* group = findGroup(document, selected_group_id);
+    if (group == nullptr) return {};
+    QSize size = source_image.size();
+    for (const auto& operation : document.operations) {
+        if (exportWasCancelled(cancellation_requested)) return {};
+        if (operation.kind == OperationKind::Crop) size = operation.crop.size();
+        else if (operation.kind == OperationKind::Rotate) size.transpose();
+    }
+    if (!size.isValid() || size.isEmpty()) return {};
+    return renderGroup(document, *group, size, cancellation_requested, {});
 }
 
 QImage renderLayerThumbnail(QImage image,
@@ -440,6 +561,8 @@ bool ImageDocumentSession::createCanvas(const QSize& size,
     baseline_canvas_background_ = background;
     baseline_operations_.clear();
     baseline_layers_ = data_.layers;
+    baseline_groups_ = data_.groups;
+    baseline_root_stack_ = data_.root_stack;
     force_dirty_ = true;
     undo_stack_.clear();
     redo_stack_.clear();
@@ -486,6 +609,8 @@ bool ImageDocumentSession::openImage(const QString& source_path, QString* error)
     baseline_canvas_background_ = data_.canvas_background;
     baseline_operations_.clear();
     baseline_layers_ = data_.layers;
+    baseline_groups_ = data_.groups;
+    baseline_root_stack_ = data_.root_stack;
     force_dirty_ = false;
     undo_stack_.clear();
     redo_stack_.clear();
@@ -519,6 +644,7 @@ bool ImageDocumentSession::openDocument(const QString& document_path, QString* e
     data_ = std::move(candidate);
     source_image_ = std::move(decoded);
     selected_layer_id_.clear();
+    selected_group_id_.clear();
     for (auto it = data_.layers.crbegin(); it != data_.layers.crend(); ++it) {
         if (!it->background) {
             selected_layer_id_ = it->id;
@@ -536,6 +662,8 @@ bool ImageDocumentSession::openDocument(const QString& document_path, QString* e
     baseline_canvas_background_ = data_.canvas_background;
     baseline_operations_ = data_.operations;
     baseline_layers_ = data_.layers;
+    baseline_groups_ = data_.groups;
+    baseline_root_stack_ = data_.root_stack;
     force_dirty_ = false;
     undo_stack_.clear();
     redo_stack_.clear();
@@ -569,6 +697,7 @@ bool ImageDocumentSession::restoreRecovery(const QString& recovery_path, QString
     data_ = std::move(recovery.document);
     source_image_ = std::move(decoded);
     selected_layer_id_.clear();
+    selected_group_id_.clear();
     for (auto it = data_.layers.crbegin(); it != data_.layers.crend(); ++it) {
         if (!it->background) {
             selected_layer_id_ = it->id;
@@ -589,6 +718,8 @@ bool ImageDocumentSession::restoreRecovery(const QString& recovery_path, QString
     baseline_canvas_background_ = data_.canvas_background;
     baseline_operations_.clear();
     baseline_layers_ = data_.layers;
+    baseline_groups_ = data_.groups;
+    baseline_root_stack_ = data_.root_stack;
     force_dirty_ = true;
     undo_stack_.clear();
     redo_stack_.clear();
@@ -632,6 +763,8 @@ bool ImageDocumentSession::saveDocument(QString document_path, QString* error) {
     baseline_canvas_background_ = data_.canvas_background;
     baseline_operations_ = data_.operations;
     baseline_layers_ = data_.layers;
+    baseline_groups_ = data_.groups;
+    baseline_root_stack_ = data_.root_stack;
     force_dirty_ = false;
     return true;
 }
@@ -664,7 +797,8 @@ ImageExportResult exportImageSnapshot(
         return failed(QStringLiteral("Choose an opaque background color for JPEG export."));
     }
     if (options.scope != ImageExportScope::Composite &&
-        options.scope != ImageExportScope::SelectedLayer) {
+        options.scope != ImageExportScope::SelectedLayer &&
+        options.scope != ImageExportScope::SelectedGroup) {
         return failed(QStringLiteral("The requested image export scope is invalid."));
     }
     if (options.scope == ImageExportScope::SelectedLayer &&
@@ -674,16 +808,26 @@ ImageExportResult exportImageSnapshot(
                      })) {
         return failed(QStringLiteral("The selected layer is unavailable for export."));
     }
+    if (options.scope == ImageExportScope::SelectedGroup &&
+        findGroup(snapshot.document, snapshot.selected_group_id) == nullptr) {
+        return failed(QStringLiteral("The selected group is unavailable for export."));
+    }
     if (exportWasCancelled(cancellation_requested)) {
         return {ImageExportStatus::Cancelled, {}};
     }
     if (progress) progress(ImageExportPhase::Rendering);
 
-    QImage rendered = options.scope == ImageExportScope::SelectedLayer
-        ? renderSelectedLayer(snapshot.source_image, snapshot.document,
-                              snapshot.selected_layer_id, cancellation_requested)
-        : renderComposite(snapshot.source_image, snapshot.document,
-                          cancellation_requested);
+    QImage rendered;
+    if (options.scope == ImageExportScope::SelectedLayer) {
+        rendered = renderSelectedLayer(snapshot.source_image, snapshot.document,
+                                       snapshot.selected_layer_id, cancellation_requested);
+    } else if (options.scope == ImageExportScope::SelectedGroup) {
+        rendered = renderSelectedGroup(snapshot.source_image, snapshot.document,
+                                       snapshot.selected_group_id, cancellation_requested);
+    } else {
+        rendered = renderComposite(snapshot.source_image, snapshot.document,
+                                   cancellation_requested);
+    }
     if (exportWasCancelled(cancellation_requested)) {
         return {ImageExportStatus::Cancelled, {}};
     }
@@ -734,7 +878,7 @@ ImageExportResult exportImageSnapshot(
 }
 
 ImageExportSnapshot ImageDocumentSession::exportSnapshot() const {
-    return {source_image_, data_, selected_layer_id_};
+    return {source_image_, data_, selected_layer_id_, selected_group_id_};
 }
 
 bool ImageDocumentSession::exportImage(const QString& output_path, QString* error) const {
@@ -788,7 +932,11 @@ QVector<ImageObjectPlacement> ImageDocumentSession::visibleObjects() const {
     const QSize size = renderedSize();
     for (qsizetype layer_index = data_.layers.size(); layer_index > 1; --layer_index) {
         const auto& layer = data_.layers.at(layer_index - 1);
-        if (!layer.visible || layer.opacity == 0) continue;
+        if (!effectiveLayerVisible(layer)) continue;
+        const auto* parent_group = layer.parent_group_id.isEmpty()
+            ? nullptr : findGroup(data_, layer.parent_group_id);
+        const int effective_opacity = parent_group == nullptr
+            ? layer.opacity : qRound(layer.opacity * parent_group->opacity / 100.0);
         for (qsizetype index = layer.operations.size(); index > 0; --index) {
             const auto& operation = layer.operations.at(index - 1);
             if (operation.kind != OperationKind::PaintStroke &&
@@ -797,10 +945,15 @@ QVector<ImageObjectPlacement> ImageDocumentSession::visibleObjects() const {
             ImageObjectPlacement placement;
             placement.operation = operation;
             placement.layer_id = layer.id;
-            placement.layer_opacity = layer.opacity;
+            placement.layer_opacity = effective_opacity;
             for (qsizetype suffix = index; suffix < layer.operations.size(); ++suffix) {
                 const auto& later = layer.operations.at(suffix);
                 transformObjectGeometry(&placement.operation, later, size);
+            }
+            if (parent_group != nullptr) {
+                for (const auto& group_operation : parent_group->operations) {
+                    transformObjectGeometry(&placement.operation, group_operation, size);
+                }
             }
             result.append(std::move(placement));
         }
@@ -833,7 +986,7 @@ bool ImageDocumentSession::updateObjectsRendered(
         qsizetype operation_index = -1;
         for (qsizetype candidate_layer = 1; candidate_layer < data_.layers.size(); ++candidate_layer) {
             const auto& layer = data_.layers.at(candidate_layer);
-            if (layer.id != placement.layer_id || !layer.visible || layer.opacity == 0) continue;
+            if (layer.id != placement.layer_id || !effectiveLayerVisible(layer)) continue;
             for (qsizetype candidate_operation = 0;
                  candidate_operation < layer.operations.size(); ++candidate_operation) {
                 const auto& operation = layer.operations.at(candidate_operation);
@@ -853,6 +1006,14 @@ bool ImageDocumentSession::updateObjectsRendered(
 
         const auto& layer = data_.layers.at(layer_index);
         ImageOperation stored = placement.operation;
+        const auto* parent_group = layer.parent_group_id.isEmpty()
+            ? nullptr : findGroup(data_, layer.parent_group_id);
+        if (parent_group != nullptr) {
+            for (qsizetype suffix = parent_group->operations.size(); suffix > 0; --suffix) {
+                transformObjectGeometry(&stored,
+                    parent_group->operations.at(suffix - 1), size, true);
+            }
+        }
         for (qsizetype suffix = layer.operations.size(); suffix > operation_index + 1; --suffix) {
             transformObjectGeometry(&stored, layer.operations.at(suffix - 1), size, true);
         }
@@ -1007,35 +1168,15 @@ QImage ImageDocumentSession::renderedImageWithEraseStroke(
         }
     }
 
-    QImage background = applyOperations(source_image_, data_.operations, false);
-    QImage composite = !data_.layers.isEmpty() && data_.layers.front().visible
-        ? background.convertToFormat(QImage::Format_ARGB32)
-        : QImage(size, QImage::Format_ARGB32);
-    if (composite.isNull()) return {};
-    if (data_.layers.isEmpty() || !data_.layers.front().visible) {
-        composite.fill(Qt::transparent);
+    ImageDocumentData preview_document = data_;
+    if (auto* selected = findLayer(preview_document, selected_layer_id_)) {
+        ImageOperation preview;
+        preview.kind = OperationKind::EraseStroke;
+        preview.erase_stroke.points = points;
+        preview.erase_stroke.diameter = diameter;
+        selected->operations.append(std::move(preview));
     }
-    QPainter painter(&composite);
-    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-    for (qsizetype index = 1; index < data_.layers.size(); ++index) {
-        const auto& layer = data_.layers.at(index);
-        if (!layer.visible || layer.opacity == 0) continue;
-        QImage pixels(size, QImage::Format_ARGB32_Premultiplied);
-        pixels.fill(Qt::transparent);
-        QVector<ImageOperation> operations = layer.operations;
-        if (layer.id == selected_layer_id_) {
-            ImageOperation preview;
-            preview.kind = OperationKind::EraseStroke;
-            preview.erase_stroke.points = points;
-            preview.erase_stroke.diameter = diameter;
-            operations.append(std::move(preview));
-        }
-        pixels = applyOperations(std::move(pixels), operations, true);
-        painter.setOpacity(layer.opacity / 100.0);
-        painter.drawImage(0, 0, pixels);
-    }
-    painter.end();
-    return composite;
+    return renderComposite(source_image_, preview_document);
 }
 
 QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
@@ -1085,6 +1226,13 @@ QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
         if (!thumbnails.contains(cached.key())) cached = layer_thumbnail_cache_.erase(cached);
         else ++cached;
     }
+    for (const auto& group : data_.groups) {
+        const QImage rendered_group = renderGroup(
+            data_, group, canvas_size, nullptr, {});
+        thumbnails.insert(group.id, rendered_group.isNull()
+            ? QImage{} : rendered_group.scaled(
+                maximum_size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    }
     return thumbnails;
 }
 
@@ -1092,6 +1240,12 @@ bool ImageDocumentSession::applyCrop(const QRect& crop, QString* error) {
     if (!hasSource()) {
         assignError(error, QStringLiteral("Open or relink an image before cropping."));
         return false;
+    }
+    if (selectedGroupIsActive()) {
+        ImageOperation operation;
+        operation.kind = OperationKind::Crop;
+        operation.crop = crop;
+        return applySelectedGroupTransform(operation, error);
     }
     if (!selectedLayerIsEditable()) {
         assignError(error, QStringLiteral("Select an editable layer before cropping."));
@@ -1207,9 +1361,9 @@ QString ImageDocumentSession::addShape(ImageShapeData shape, QString* error) {
         assignError(error, QStringLiteral("Open or relink an image before creating a shape."));
         return {};
     }
-    if (data_.layers.size() >= ImageDocumentStore::kMaximumLayers) {
+    if (totalStackItemCount() >= ImageDocumentStore::kMaximumLayers) {
         assignError(error, QStringLiteral(
-            "The document has reached the maximum of 512 layers."));
+            "The document has reached the maximum of 512 stack items."));
         return {};
     }
     if (shape.id.isEmpty()) shape.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -1228,10 +1382,15 @@ QString ImageDocumentSession::addShape(ImageShapeData shape, QString* error) {
     int suffix = 1;
     QString layer_name;
     const auto nameExists = [this](const QString& candidate) {
-        return std::any_of(data_.layers.cbegin(), data_.layers.cend(),
+        const bool layer_match = std::any_of(data_.layers.cbegin(), data_.layers.cend(),
             [&candidate](const ImageLayerData& layer) {
                 return layer.name.compare(candidate, Qt::CaseInsensitive) == 0;
             });
+        const bool group_match = std::any_of(data_.groups.cbegin(), data_.groups.cend(),
+            [&candidate](const ImageGroupData& group) {
+                return group.name.compare(candidate, Qt::CaseInsensitive) == 0;
+            });
+        return layer_match || group_match;
     };
     do {
         layer_name = QStringLiteral("Shape %1").arg(suffix++);
@@ -1240,17 +1399,48 @@ QString ImageDocumentSession::addShape(ImageShapeData shape, QString* error) {
     ImageLayerData shape_layer;
     shape_layer.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     shape_layer.name = layer_name;
+    const QString parent_group_id = selected_group_id_.isEmpty()
+        ? parentGroupForLayer(selected_layer_id_) : QString{};
+    shape_layer.parent_group_id = parent_group_id;
     ImageOperation operation;
     operation.kind = OperationKind::Shape;
     operation.shape = std::move(shape);
 
-    const qsizetype selected_index = layerIndex(selected_layer_id_);
-    const qsizetype insertion_index = selected_index < 0
-        ? data_.layers.size() : selected_index + 1;
     pushEdit();
-    data_.layers.insert(insertion_index, std::move(shape_layer));
-    selected_layer_id_ = data_.layers.at(insertion_index).id;
-    data_.layers[insertion_index].operations.append(std::move(operation));
+    if (!parent_group_id.isEmpty()) {
+        auto* parent = findGroup(data_, parent_group_id);
+        const qsizetype selected_index = parent->layer_ids.indexOf(selected_layer_id_);
+        parent->layer_ids.insert(selected_index < 0 ? parent->layer_ids.size()
+                                                   : selected_index + 1,
+                                 shape_layer.id);
+    } else {
+        qsizetype insertion_index = data_.root_stack.size();
+        if (!selected_group_id_.isEmpty()) {
+            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
+                if (data_.root_stack.at(index).group &&
+                    data_.root_stack.at(index).id == selected_group_id_) {
+                    insertion_index = index + 1;
+                    break;
+                }
+            }
+        } else {
+            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
+                if (!data_.root_stack.at(index).group &&
+                    data_.root_stack.at(index).id == selected_layer_id_) {
+                    insertion_index = index + 1;
+                    break;
+                }
+            }
+        }
+        data_.root_stack.insert(insertion_index, {shape_layer.id, false});
+    }
+    const QString new_layer_id = shape_layer.id;
+    data_.layers.append(std::move(shape_layer));
+    auto* new_layer = findLayer(data_, new_layer_id);
+    new_layer->operations.append(std::move(operation));
+    selected_layer_id_ = new_layer_id;
+    selected_group_id_.clear();
+    rebuildLayerOrder();
     layer_thumbnail_cache_.clear();
     return shape_id;
 }
@@ -1286,6 +1476,17 @@ bool ImageDocumentSession::updateShapeRendered(const ImageShapeData& rendered_sh
             const auto& operation = layer.operations.at(index);
             if (operation.kind != OperationKind::Shape ||
                 operation.shape.id != rendered_shape.id) continue;
+            if (!layer.parent_group_id.isEmpty()) {
+                const auto* parent_group = findGroup(data_, layer.parent_group_id);
+                if (parent_group != nullptr) {
+                    for (qsizetype suffix = parent_group->operations.size(); suffix > 0; --suffix) {
+                        stored_shape.start = transformShapePoint(stored_shape.start,
+                            parent_group->operations.at(suffix - 1), size, true);
+                        stored_shape.end = transformShapePoint(stored_shape.end,
+                            parent_group->operations.at(suffix - 1), size, true);
+                    }
+                }
+            }
             for (qsizetype suffix = layer.operations.size(); suffix > index + 1; --suffix) {
                 const auto& later = layer.operations.at(suffix - 1);
                 stored_shape.start = transformShapePoint(stored_shape.start, later, size, true);
@@ -1332,12 +1533,19 @@ bool ImageDocumentSession::findShape(const QString& shape_id,
 }
 
 QString ImageDocumentSession::addLayer() {
-    if (!hasDocument() || data_.layers.size() >= ImageDocumentStore::kMaximumLayers) return {};
+    if (!hasDocument() || totalStackItemCount() >= ImageDocumentStore::kMaximumLayers) return {};
     int suffix = 1;
     QString name;
     const auto nameExists = [this](const QString& candidate) {
-        return std::any_of(data_.layers.cbegin(), data_.layers.cend(),
-            [&candidate](const ImageLayerData& layer) { return layer.name == candidate; });
+        const auto layer_match = std::any_of(data_.layers.cbegin(), data_.layers.cend(),
+            [&candidate](const ImageLayerData& layer) {
+                return layer.name.compare(candidate, Qt::CaseInsensitive) == 0;
+            });
+        const auto group_match = std::any_of(data_.groups.cbegin(), data_.groups.cend(),
+            [&candidate](const ImageGroupData& group) {
+                return group.name.compare(candidate, Qt::CaseInsensitive) == 0;
+            });
+        return layer_match || group_match;
     };
     do {
         name = QStringLiteral("Layer %1").arg(suffix++);
@@ -1345,25 +1553,69 @@ QString ImageDocumentSession::addLayer() {
     ImageLayerData layer;
     layer.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     layer.name = name;
-    const qsizetype selected_index = layerIndex(selected_layer_id_);
-    const qsizetype insertion_index = selected_index < 0
-        ? data_.layers.size() : selected_index + 1;
+    const QString parent_group_id = selected_group_id_.isEmpty()
+        ? parentGroupForLayer(selected_layer_id_) : QString{};
+    layer.parent_group_id = parent_group_id;
     pushEdit();
-    data_.layers.insert(insertion_index, layer);
+    if (!parent_group_id.isEmpty()) {
+        auto* parent = findGroup(data_, parent_group_id);
+        const qsizetype selected_index = parent->layer_ids.indexOf(selected_layer_id_);
+        parent->layer_ids.insert(selected_index < 0 ? parent->layer_ids.size()
+                                                   : selected_index + 1,
+                                 layer.id);
+    } else {
+        qsizetype insertion_index = data_.root_stack.size();
+        if (!selected_group_id_.isEmpty()) {
+            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
+                if (data_.root_stack.at(index).group &&
+                    data_.root_stack.at(index).id == selected_group_id_) {
+                    insertion_index = index + 1;
+                    break;
+                }
+            }
+        } else {
+            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
+                if (!data_.root_stack.at(index).group &&
+                    data_.root_stack.at(index).id == selected_layer_id_) {
+                    insertion_index = index + 1;
+                    break;
+                }
+            }
+        }
+        data_.root_stack.insert(insertion_index, {layer.id, false});
+    }
+    data_.layers.append(layer);
     selected_layer_id_ = layer.id;
+    selected_group_id_.clear();
+    rebuildLayerOrder();
+    layer_thumbnail_cache_.clear();
     return layer.id;
 }
 
 bool ImageDocumentSession::deleteLayer(const QString& layer_id) {
     const qsizetype index = layerIndex(layer_id);
     if (index <= 0) return false;
+    const QString parent_group_id = data_.layers.at(index).parent_group_id;
     pushEdit();
     const bool selected = selected_layer_id_ == layer_id;
+    if (parent_group_id.isEmpty()) {
+        for (qsizetype item = 0; item < data_.root_stack.size(); ++item) {
+            if (!data_.root_stack.at(item).group && data_.root_stack.at(item).id == layer_id) {
+                data_.root_stack.removeAt(item);
+                break;
+            }
+        }
+    } else if (auto* parent = findGroup(data_, parent_group_id)) {
+        parent->layer_ids.removeAll(layer_id);
+    }
     data_.layers.removeAt(index);
     if (selected) {
         const qsizetype replacement = std::min(index, data_.layers.size() - 1);
         selected_layer_id_ = data_.layers.at(replacement).id;
+        selected_group_id_.clear();
     }
+    rebuildLayerOrder();
+    layer_thumbnail_cache_.clear();
     return true;
 }
 
@@ -1387,13 +1639,7 @@ bool ImageDocumentSession::renameLayer(const QString& layer_id,
 }
 
 bool ImageDocumentSession::moveLayer(const QString& layer_id, int direction) {
-    const qsizetype index = layerIndex(layer_id);
-    if (index <= 0 || (direction != -1 && direction != 1)) return false;
-    const qsizetype target = index + direction;
-    if (target <= 0 || target >= data_.layers.size()) return false;
-    pushEdit();
-    data_.layers.swapItemsAt(index, target);
-    return true;
+    return moveStackItemBy(layer_id, false, direction);
 }
 
 bool ImageDocumentSession::setLayerVisible(const QString& layer_id, bool visible) {
@@ -1413,6 +1659,334 @@ bool ImageDocumentSession::setLayerOpacity(const QString& layer_id, int opacity)
     return true;
 }
 
+QString ImageDocumentSession::addGroup(QString* error) {
+    if (error != nullptr) error->clear();
+    if (!hasDocument() || totalStackItemCount() >= ImageDocumentStore::kMaximumLayers) {
+        assignError(error, QStringLiteral("The document has reached the maximum of 512 stack items."));
+        return {};
+    }
+    int suffix = 1;
+    QString name;
+    const auto name_exists = [this](const QString& candidate) {
+        return std::any_of(data_.layers.cbegin(), data_.layers.cend(),
+            [&candidate](const ImageLayerData& layer) {
+                return layer.name.compare(candidate, Qt::CaseInsensitive) == 0;
+            }) || std::any_of(data_.groups.cbegin(), data_.groups.cend(),
+            [&candidate](const ImageGroupData& group) {
+                return group.name.compare(candidate, Qt::CaseInsensitive) == 0;
+            });
+    };
+    do { name = QStringLiteral("Group %1").arg(suffix++); } while (name_exists(name));
+
+    ImageGroupData group;
+    group.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    group.name = name;
+    qsizetype insertion_index = data_.root_stack.size();
+    if (!selected_group_id_.isEmpty()) {
+        for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
+            if (data_.root_stack.at(index).group &&
+                data_.root_stack.at(index).id == selected_group_id_) {
+                insertion_index = index + 1;
+                break;
+            }
+        }
+    } else if (!selected_layer_id_.isEmpty()) {
+        const QString selected_parent = parentGroupForLayer(selected_layer_id_);
+        for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
+            const auto& item = data_.root_stack.at(index);
+            const bool selected_root_layer = selected_parent.isEmpty() && !item.group &&
+                item.id == selected_layer_id_;
+            const bool selected_parent_group = !selected_parent.isEmpty() && item.group &&
+                item.id == selected_parent;
+            if (selected_root_layer || selected_parent_group) {
+                insertion_index = index + 1;
+                break;
+            }
+        }
+    }
+    const QString id = group.id;
+    pushEdit();
+    data_.groups.append(std::move(group));
+    data_.root_stack.insert(insertion_index, {id, true});
+    selected_layer_id_.clear();
+    selected_group_id_ = id;
+    layer_thumbnail_cache_.clear();
+    return id;
+}
+
+QString ImageDocumentSession::groupLayers(const QStringList& layer_ids, QString* error) {
+    if (error != nullptr) error->clear();
+    if (layer_ids.size() < 2 || !selected_group_id_.isEmpty()) {
+        assignError(error, QStringLiteral("Select at least two contiguous root layers to group."));
+        return {};
+    }
+    QSet<QString> requested;
+    for (const auto& id : layer_ids) {
+        const auto* layer = findLayer(data_, id);
+        if (layer == nullptr || layer->background || !layer->parent_group_id.isEmpty() ||
+            requested.contains(id)) {
+            assignError(error, QStringLiteral("Only distinct root raster layers can be grouped."));
+            return {};
+        }
+        requested.insert(id);
+    }
+    QVector<qsizetype> positions;
+    for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
+        if (!data_.root_stack.at(index).group && requested.contains(data_.root_stack.at(index).id)) {
+            positions.append(index);
+        }
+    }
+    std::sort(positions.begin(), positions.end());
+    if (positions.size() != requested.size() ||
+        positions.back() - positions.front() + 1 != positions.size()) {
+        assignError(error, QStringLiteral("Group Selected requires contiguous sibling layers."));
+        return {};
+    }
+    if (totalStackItemCount() >= ImageDocumentStore::kMaximumLayers) {
+        assignError(error, QStringLiteral("The document has reached the maximum of 512 stack items."));
+        return {};
+    }
+    int suffix = 1;
+    QString name;
+    const auto name_exists = [this](const QString& candidate) {
+        return std::any_of(data_.layers.cbegin(), data_.layers.cend(),
+            [&candidate](const ImageLayerData& layer) {
+                return layer.name.compare(candidate, Qt::CaseInsensitive) == 0;
+            }) || std::any_of(data_.groups.cbegin(), data_.groups.cend(),
+            [&candidate](const ImageGroupData& group) {
+                return group.name.compare(candidate, Qt::CaseInsensitive) == 0;
+            });
+    };
+    do { name = QStringLiteral("Group %1").arg(suffix++); } while (name_exists(name));
+
+    ImageGroupData group;
+    group.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    group.name = name;
+    for (qsizetype index = positions.front(); index <= positions.back(); ++index) {
+        group.layer_ids.append(data_.root_stack.at(index).id);
+    }
+    const QString group_id = group.id;
+    pushEdit();
+    for (const auto& child_id : group.layer_ids) {
+        if (auto* child = findLayer(data_, child_id)) child->parent_group_id = group_id;
+    }
+    for (qsizetype index = positions.back(); index >= positions.front(); --index) {
+        data_.root_stack.removeAt(index);
+    }
+    data_.root_stack.insert(positions.front(), {group_id, true});
+    data_.groups.append(std::move(group));
+    selected_layer_id_.clear();
+    selected_group_id_ = group_id;
+    rebuildLayerOrder();
+    layer_thumbnail_cache_.clear();
+    return group_id;
+}
+
+bool ImageDocumentSession::ungroup(const QString& group_id) {
+    const qsizetype index = groupIndex(group_id);
+    if (index < 0) return false;
+    const auto root_item = std::find_if(data_.root_stack.cbegin(), data_.root_stack.cend(),
+        [&group_id](const ImageStackItemData& item) { return item.group && item.id == group_id; });
+    if (root_item == data_.root_stack.cend()) return false;
+    const qsizetype root_index = std::distance(data_.root_stack.cbegin(), root_item);
+    const QStringList children = data_.groups.at(index).layer_ids;
+    pushEdit();
+    data_.root_stack.removeAt(root_index);
+    for (qsizetype child_index = 0; child_index < children.size(); ++child_index) {
+        const QString child_id = children.at(child_index);
+        data_.root_stack.insert(root_index + child_index, {child_id, false});
+        if (auto* child = findLayer(data_, child_id)) child->parent_group_id.clear();
+    }
+    data_.groups.removeAt(index);
+    if (selected_group_id_ == group_id) {
+        selected_group_id_.clear();
+        selected_layer_id_ = children.isEmpty()
+            ? (data_.layers.isEmpty() ? QString{} : data_.layers.back().id)
+            : children.back();
+    }
+    rebuildLayerOrder();
+    layer_thumbnail_cache_.clear();
+    return true;
+}
+
+bool ImageDocumentSession::deleteGroup(const QString& group_id) {
+    const qsizetype index = groupIndex(group_id);
+    if (index < 0) return false;
+    const auto root_item = std::find_if(data_.root_stack.cbegin(), data_.root_stack.cend(),
+        [&group_id](const ImageStackItemData& item) { return item.group && item.id == group_id; });
+    if (root_item == data_.root_stack.cend()) return false;
+    const qsizetype root_index = std::distance(data_.root_stack.cbegin(), root_item);
+    const QStringList children = data_.groups.at(index).layer_ids;
+    const QString previous_selection = selected_layer_id_;
+    pushEdit();
+    data_.root_stack.removeAt(root_index);
+    for (const QString& child_id : children) {
+        const qsizetype child_index = layerIndex(child_id);
+        if (child_index > 0) data_.layers.removeAt(child_index);
+    }
+    data_.groups.removeAt(index);
+    if (selected_group_id_ == group_id || children.contains(previous_selection)) {
+        selected_group_id_.clear();
+        selected_layer_id_ = data_.layers.isEmpty()
+            ? QString{} : data_.layers.back().id;
+    }
+    rebuildLayerOrder();
+    layer_thumbnail_cache_.clear();
+    return true;
+}
+
+bool ImageDocumentSession::renameGroup(const QString& group_id,
+                                       const QString& name,
+                                       QString* error) {
+    if (error != nullptr) error->clear();
+    auto* group = findGroup(data_, group_id);
+    if (group == nullptr) return false;
+    const QString clean_name = name.trimmed();
+    if (clean_name.isEmpty() || clean_name.size() > ImageDocumentStore::kMaximumLayerNameLength) {
+        assignError(error, QStringLiteral("Group names must contain between 1 and 128 characters."));
+        return false;
+    }
+    if (group->name == clean_name) return false;
+    pushEdit();
+    group = findGroup(data_, group_id);
+    group->name = clean_name;
+    return true;
+}
+
+bool ImageDocumentSession::setGroupVisible(const QString& group_id, bool visible) {
+    auto* group = findGroup(data_, group_id);
+    if (group == nullptr || group->visible == visible) return false;
+    pushEdit();
+    group = findGroup(data_, group_id);
+    group->visible = visible;
+    return true;
+}
+
+bool ImageDocumentSession::setGroupOpacity(const QString& group_id, int opacity) {
+    auto* group = findGroup(data_, group_id);
+    if (group == nullptr || opacity < 0 || opacity > 100 || group->opacity == opacity) return false;
+    if (!opacity_edit_active_) pushEdit();
+    group = findGroup(data_, group_id);
+    group->opacity = opacity;
+    return true;
+}
+
+bool ImageDocumentSession::moveStackItem(const QString& item_id,
+                                         bool is_group,
+                                         const QString& target_group_id,
+                                         qsizetype insertion_index) {
+    if (is_group) {
+        if (!target_group_id.isEmpty() || groupIndex(item_id) < 0) return false;
+        qsizetype source_index = -1;
+        for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
+            if (data_.root_stack.at(index).group && data_.root_stack.at(index).id == item_id) {
+                source_index = index;
+                break;
+            }
+        }
+        if (source_index < 0) return false;
+        const qsizetype bounded_index = std::clamp(insertion_index,
+            qsizetype{1}, static_cast<qsizetype>(data_.root_stack.size()));
+        if (bounded_index == source_index || bounded_index == source_index + 1) return false;
+        pushEdit();
+        data_.root_stack.removeAt(source_index);
+        const qsizetype adjusted = bounded_index > source_index
+            ? bounded_index - 1 : bounded_index;
+        data_.root_stack.insert(adjusted, {item_id, true});
+    } else {
+        const qsizetype layer_index = layerIndex(item_id);
+        if (layer_index <= 0) return false;
+        const QString source_group_id = data_.layers.at(layer_index).parent_group_id;
+        if (!target_group_id.isEmpty() && groupIndex(target_group_id) < 0) return false;
+
+        const auto source_position = [&]() -> qsizetype {
+            if (source_group_id.isEmpty()) {
+                for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
+                    if (!data_.root_stack.at(index).group &&
+                        data_.root_stack.at(index).id == item_id) return index;
+                }
+            } else if (const auto* group = findGroup(data_, source_group_id)) {
+                return group->layer_ids.indexOf(item_id);
+            }
+            return -1;
+        }();
+        if (source_position < 0) return false;
+
+        qsizetype target_count = 0;
+        if (target_group_id.isEmpty()) target_count = data_.root_stack.size();
+        else target_count = findGroup(data_, target_group_id)->layer_ids.size();
+        qsizetype bounded_index = std::clamp(insertion_index, qsizetype{0}, target_count);
+        if (target_group_id.isEmpty()) bounded_index = std::max(qsizetype{1}, bounded_index);
+        if (source_group_id == target_group_id && bounded_index > source_position) {
+            --bounded_index;
+        }
+        if (source_group_id == target_group_id && bounded_index == source_position) return false;
+
+        pushEdit();
+        if (source_group_id.isEmpty()) {
+            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
+                if (!data_.root_stack.at(index).group && data_.root_stack.at(index).id == item_id) {
+                    data_.root_stack.removeAt(index);
+                    break;
+                }
+            }
+        } else {
+            findGroup(data_, source_group_id)->layer_ids.removeAll(item_id);
+        }
+        auto* layer = findLayer(data_, item_id);
+        layer->parent_group_id = target_group_id;
+        if (target_group_id.isEmpty()) {
+            data_.root_stack.insert(bounded_index, {item_id, false});
+        } else {
+            findGroup(data_, target_group_id)->layer_ids.insert(bounded_index, item_id);
+        }
+    }
+    rebuildLayerOrder();
+    layer_thumbnail_cache_.clear();
+    return true;
+}
+
+bool ImageDocumentSession::moveStackItemBy(const QString& item_id,
+                                           bool is_group,
+                                           int direction) {
+    if (direction != -1 && direction != 1) return false;
+    if (is_group) {
+        qsizetype index = -1;
+        for (qsizetype candidate = 1; candidate < data_.root_stack.size(); ++candidate) {
+            if (data_.root_stack.at(candidate).group &&
+                data_.root_stack.at(candidate).id == item_id) {
+                index = candidate;
+                break;
+            }
+        }
+        if (index < 0) return false;
+        const qsizetype target = index + direction;
+        if (target <= 0 || target >= data_.root_stack.size()) return false;
+        return moveStackItem(item_id, true, {}, target + (direction > 0 ? 1 : 0));
+    }
+    const qsizetype index = layerIndex(item_id);
+    if (index <= 0) return false;
+    const QString parent_id = data_.layers.at(index).parent_group_id;
+    qsizetype position = -1;
+    qsizetype count = 0;
+    if (parent_id.isEmpty()) {
+        count = data_.root_stack.size();
+        for (qsizetype candidate = 1; candidate < count; ++candidate) {
+            if (!data_.root_stack.at(candidate).group &&
+                data_.root_stack.at(candidate).id == item_id) position = candidate;
+        }
+    } else {
+        const auto* group = findGroup(data_, parent_id);
+        if (group == nullptr) return false;
+        count = group->layer_ids.size();
+        position = group->layer_ids.indexOf(item_id);
+    }
+    if (position < 0 || position + direction < (parent_id.isEmpty() ? 1 : 0) ||
+        position + direction >= count) return false;
+    return moveStackItem(item_id, false, parent_id,
+                         position + direction + (direction > 0 ? 1 : 0));
+}
+
 void ImageDocumentSession::beginLayerOpacityEdit() {
     if (opacity_edit_active_) return;
     opacity_edit_snapshot_ = data_;
@@ -1423,14 +1997,25 @@ void ImageDocumentSession::endLayerOpacityEdit() {
     if (!opacity_edit_active_) return;
     opacity_edit_active_ = false;
     if (opacity_edit_snapshot_ != data_) {
-        recordEditSnapshot(std::move(opacity_edit_snapshot_), selected_layer_id_);
+        recordEditSnapshot(std::move(opacity_edit_snapshot_), selected_layer_id_,
+                           selected_group_id_);
     }
     opacity_edit_snapshot_ = {};
 }
 
 bool ImageDocumentSession::selectLayer(const QString& layer_id) {
-    if (layerIndex(layer_id) < 0 || selected_layer_id_ == layer_id) return false;
+    if (layerIndex(layer_id) < 0 ||
+        (selected_layer_id_ == layer_id && selected_group_id_.isEmpty())) return false;
     selected_layer_id_ = layer_id;
+    selected_group_id_.clear();
+    return true;
+}
+
+bool ImageDocumentSession::selectGroup(const QString& group_id) {
+    if (groupIndex(group_id) < 0 ||
+        (selected_group_id_ == group_id && selected_layer_id_.isEmpty())) return false;
+    selected_layer_id_.clear();
+    selected_group_id_ = group_id;
     return true;
 }
 
@@ -1443,7 +2028,53 @@ qsizetype ImageDocumentSession::layerIndex(const QString& layer_id) const noexce
 
 bool ImageDocumentSession::selectedLayerIsEditable() const noexcept {
     const qsizetype index = layerIndex(selected_layer_id_);
-    return index > 0 && index < data_.layers.size();
+    return selected_group_id_.isEmpty() && index > 0 && index < data_.layers.size();
+}
+
+bool ImageDocumentSession::selectedGroupIsActive() const noexcept {
+    return groupIndex(selected_group_id_) >= 0;
+}
+
+qsizetype ImageDocumentSession::totalStackItemCount() const noexcept {
+    return data_.layers.size() + data_.groups.size();
+}
+
+qsizetype ImageDocumentSession::groupIndex(const QString& group_id) const noexcept {
+    for (qsizetype index = 0; index < data_.groups.size(); ++index) {
+        if (data_.groups.at(index).id == group_id) return index;
+    }
+    return -1;
+}
+
+QString ImageDocumentSession::parentGroupForLayer(const QString& layer_id) const {
+    const auto* layer = findLayer(data_, layer_id);
+    return layer == nullptr ? QString{} : layer->parent_group_id;
+}
+
+bool ImageDocumentSession::effectiveLayerVisible(const ImageLayerData& layer) const {
+    if (!layer.visible || layer.opacity <= 0) return false;
+    if (layer.parent_group_id.isEmpty()) return true;
+    const auto* group = findGroup(data_, layer.parent_group_id);
+    return group != nullptr && group->visible && group->opacity > 0;
+}
+
+void ImageDocumentSession::rebuildLayerOrder() {
+    QVector<ImageLayerData> ordered;
+    ordered.reserve(data_.layers.size());
+    const auto append_layer = [this, &ordered](const QString& id) {
+        const auto* layer = findLayer(data_, id);
+        if (layer != nullptr) ordered.append(*layer);
+    };
+    for (const auto& item : data_.root_stack) {
+        if (!item.group) {
+            append_layer(item.id);
+            continue;
+        }
+        const auto* group = findGroup(data_, item.id);
+        if (group == nullptr) continue;
+        for (const auto& layer_id : group->layer_ids) append_layer(layer_id);
+    }
+    data_.layers = std::move(ordered);
 }
 
 void ImageDocumentSession::initializeDefaultLayers() {
@@ -1455,40 +2086,87 @@ void ImageDocumentSession::initializeDefaultLayers() {
     first_layer.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     first_layer.name = QStringLiteral("Layer 1");
     data_.layers = {background, first_layer};
+    data_.root_stack = {{background.id, false}, {first_layer.id, false}};
+    data_.groups.clear();
     selected_layer_id_ = first_layer.id;
+    selected_group_id_.clear();
 }
 
 void ImageDocumentSession::recordEditSnapshot(ImageDocumentData before,
-                                              QString selected_layer_id) {
-    undo_stack_.append({std::move(before), std::move(selected_layer_id)});
+                                              QString selected_layer_id,
+                                              QString selected_group_id) {
+    undo_stack_.append({std::move(before), std::move(selected_layer_id),
+                        std::move(selected_group_id)});
     if (undo_stack_.size() > kMaximumHistoryEntries) undo_stack_.removeFirst();
     redo_stack_.clear();
 }
 
 void ImageDocumentSession::pushEdit() {
     endLayerOpacityEdit();
-    recordEditSnapshot(data_, selected_layer_id_);
+    recordEditSnapshot(data_, selected_layer_id_, selected_group_id_);
+}
+
+bool ImageDocumentSession::applySelectedGroupTransform(const ImageOperation& operation,
+                                                       QString* error) {
+    if (error != nullptr) error->clear();
+    auto* group = findGroup(data_, selected_group_id_);
+    if (group == nullptr || (operation.kind != OperationKind::Crop &&
+        operation.kind != OperationKind::Rotate &&
+        operation.kind != OperationKind::FlipHorizontal &&
+        operation.kind != OperationKind::FlipVertical)) {
+        assignError(error, QStringLiteral("Select a group to apply a group transform."));
+        return false;
+    }
+    ImageOperation checked = operation;
+    if (checked.kind == OperationKind::Crop) {
+        checked.crop = checked.crop.normalized().intersected(
+            QRect(QPoint(0, 0), renderedSize()));
+        if (checked.crop.isEmpty()) {
+            assignError(error, QStringLiteral("The crop area is empty."));
+            return false;
+        }
+    }
+    pushEdit();
+    findGroup(data_, selected_group_id_)->operations.append(std::move(checked));
+    layer_thumbnail_cache_.clear();
+    return true;
 }
 
 void ImageDocumentSession::rotateLeft() {
+    if (selectedGroupIsActive()) {
+        static_cast<void>(applySelectedGroupTransform({OperationKind::Rotate, {}, -1}));
+        return;
+    }
     if (!selectedLayerIsEditable()) return;
     pushEdit();
     data_.layers[layerIndex(selected_layer_id_)].operations.append({OperationKind::Rotate, {}, -1});
 }
 
 void ImageDocumentSession::rotateRight() {
+    if (selectedGroupIsActive()) {
+        static_cast<void>(applySelectedGroupTransform({OperationKind::Rotate, {}, 1}));
+        return;
+    }
     if (!selectedLayerIsEditable()) return;
     pushEdit();
     data_.layers[layerIndex(selected_layer_id_)].operations.append({OperationKind::Rotate, {}, 1});
 }
 
 void ImageDocumentSession::flipHorizontal() {
+    if (selectedGroupIsActive()) {
+        static_cast<void>(applySelectedGroupTransform({OperationKind::FlipHorizontal, {}, 0}));
+        return;
+    }
     if (!selectedLayerIsEditable()) return;
     pushEdit();
     data_.layers[layerIndex(selected_layer_id_)].operations.append({OperationKind::FlipHorizontal, {}, 0});
 }
 
 void ImageDocumentSession::flipVertical() {
+    if (selectedGroupIsActive()) {
+        static_cast<void>(applySelectedGroupTransform({OperationKind::FlipVertical, {}, 0}));
+        return;
+    }
     if (!selectedLayerIsEditable()) return;
     pushEdit();
     data_.layers[layerIndex(selected_layer_id_)].operations.append({OperationKind::FlipVertical, {}, 0});
@@ -1497,35 +2175,30 @@ void ImageDocumentSession::flipVertical() {
 bool ImageDocumentSession::undo() {
     endLayerOpacityEdit();
     if (undo_stack_.isEmpty()) return false;
-    redo_stack_.append({data_, selected_layer_id_});
+    redo_stack_.append({data_, selected_layer_id_, selected_group_id_});
     const auto previous = undo_stack_.takeLast();
     data_ = previous.document;
-    if (layerIndex(selected_layer_id_) < 0) {
-        selected_layer_id_ = layerIndex(previous.selected_layer_id) >= 0
-            ? previous.selected_layer_id
-            : (data_.layers.isEmpty() ? QString{} : data_.layers.back().id);
-    }
+    selected_group_id_ = groupIndex(previous.selected_group_id) >= 0
+        ? previous.selected_group_id : QString{};
+    selected_layer_id_ = selected_group_id_.isEmpty() && layerIndex(previous.selected_layer_id) >= 0
+        ? previous.selected_layer_id
+        : (selected_group_id_.isEmpty() && !data_.layers.isEmpty()
+            ? data_.layers.back().id : QString{});
     return true;
 }
 
 bool ImageDocumentSession::redo() {
     endLayerOpacityEdit();
     if (redo_stack_.isEmpty()) return false;
-    undo_stack_.append({data_, selected_layer_id_});
+    undo_stack_.append({data_, selected_layer_id_, selected_group_id_});
     const auto next = redo_stack_.takeLast();
-    const bool restores_recorded_selection = layerIndex(next.selected_layer_id) < 0 &&
-        std::any_of(next.document.layers.cbegin(), next.document.layers.cend(),
-            [&next](const ImageLayerData& layer) {
-                return layer.id == next.selected_layer_id;
-            });
     data_ = next.document;
-    if (restores_recorded_selection) {
-        selected_layer_id_ = next.selected_layer_id;
-    } else if (layerIndex(selected_layer_id_) < 0) {
-        selected_layer_id_ = layerIndex(next.selected_layer_id) >= 0
-            ? next.selected_layer_id
-            : (data_.layers.isEmpty() ? QString{} : data_.layers.back().id);
-    }
+    selected_group_id_ = groupIndex(next.selected_group_id) >= 0
+        ? next.selected_group_id : QString{};
+    selected_layer_id_ = selected_group_id_.isEmpty() && layerIndex(next.selected_layer_id) >= 0
+        ? next.selected_layer_id
+        : (selected_group_id_.isEmpty() && !data_.layers.isEmpty()
+            ? data_.layers.back().id : QString{});
     return true;
 }
 
@@ -1533,7 +2206,8 @@ bool ImageDocumentSession::isDirty() const noexcept {
     return force_dirty_ || data_.source_path != baseline_source_path_ ||
         data_.source_size != baseline_source_size_ || data_.base_kind != baseline_base_kind_ ||
         data_.canvas_background != baseline_canvas_background_ ||
-        data_.operations != baseline_operations_ || data_.layers != baseline_layers_;
+        data_.operations != baseline_operations_ || data_.layers != baseline_layers_ ||
+        data_.groups != baseline_groups_ || data_.root_stack != baseline_root_stack_;
 }
 
 } // namespace image_editor

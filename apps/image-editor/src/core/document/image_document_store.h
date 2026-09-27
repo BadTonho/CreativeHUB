@@ -90,12 +90,32 @@ struct ImageObjectPlacement {
 struct ImageLayerData {
     QString id;
     QString name;
+    QString parent_group_id;
     bool background = false;
     bool visible = true;
     int opacity = 100;
     QVector<ImageOperation> operations;
 
     bool operator==(const ImageLayerData&) const = default;
+};
+
+struct ImageGroupData {
+    QString id;
+    QString name;
+    bool visible = true;
+    int opacity = 100;
+    QVector<ImageOperation> operations;
+    // Child layer IDs are ordered bottom-to-top. Groups cannot contain groups.
+    QStringList layer_ids;
+
+    bool operator==(const ImageGroupData&) const = default;
+};
+
+struct ImageStackItemData {
+    QString id;
+    bool group = false;
+
+    bool operator==(const ImageStackItemData&) const = default;
 };
 
 struct ImageDocumentData {
@@ -105,8 +125,12 @@ struct ImageDocumentData {
     QColor canvas_background = QColor(0, 0, 0, 0);
     // Version 1-3 edits remain in this sequence and render as Background content.
     QVector<ImageOperation> operations;
-    // Ordered bottom-to-top. The first entry is the locked Background layer.
+    // Raster layers are stored bottom-to-top in flattened tree order. Background
+    // is always first; the hierarchy and root stacking order live below.
     QVector<ImageLayerData> layers;
+    QVector<ImageGroupData> groups;
+    // Root stack ordered bottom-to-top. Group children are stored by group ID.
+    QVector<ImageStackItemData> root_stack;
 
     bool operator==(const ImageDocumentData&) const = default;
 };

@@ -32,6 +32,7 @@
 #include <QScreen>
 #include <QSettings>
 #include <QTableWidget>
+#include <QTreeWidget>
 #include <QSlider>
 #include <QSpinBox>
 #include <QToolBar>
@@ -47,6 +48,108 @@
 #include <QUuid>
 
 #include <iostream>
+
+namespace {
+
+int layerRowCount(const QTreeWidget* tree) {
+    return tree->topLevelItemCount();
+}
+
+QTreeWidgetItem* layerRowItem(QTreeWidget* tree, int row) {
+    return tree->topLevelItem(row);
+}
+
+int currentLayerRow(const QTreeWidget* tree) {
+    return tree->indexOfTopLevelItem(tree->currentItem());
+}
+
+void setCurrentLayerRow(QTreeWidget* tree, int row) {
+    tree->setCurrentItem(tree->topLevelItem(row));
+}
+
+bool testLayerGroupsUi(const QString& directory) {
+    const QString source_path = directory + QStringLiteral("/group-ui-source.png");
+    QImage source(64, 48, QImage::Format_ARGB32);
+    source.fill(Qt::transparent);
+    if (!source.save(source_path, "PNG")) return false;
+
+    image_editor::ImageEditorWindow window;
+    window.show();
+    if (!window.openImagePath(source_path)) return false;
+    QCoreApplication::processEvents();
+    auto* tree = window.findChild<QTreeWidget*>(QStringLiteral("imageLayerTree"));
+    auto* add_button = window.findChild<QToolButton*>(QStringLiteral("addImageLayerButton"));
+    auto* group_button = window.findChild<QToolButton*>(
+        QStringLiteral("groupSelectedLayersButton"));
+    auto* delete_button = window.findChild<QToolButton*>(QStringLiteral("deleteImageLayerButton"));
+    auto* ungroup_button = window.findChild<QToolButton*>(
+        QStringLiteral("ungroupImageLayersButton"));
+    auto* opacity = window.findChild<QSlider*>(QStringLiteral("imageLayerOpacitySlider"));
+    auto* add_group_action = window.findChild<QAction*>(QStringLiteral("addImageGroupAction"));
+    if (tree == nullptr || add_button == nullptr || group_button == nullptr ||
+        delete_button == nullptr || ungroup_button == nullptr || opacity == nullptr ||
+        add_group_action == nullptr || layerRowCount(tree) != 2) return false;
+
+    add_group_action->trigger();
+    QCoreApplication::processEvents();
+    if (layerRowCount(tree) != 3 || tree->currentItem() == nullptr ||
+        tree->currentItem()->text(0) != QStringLiteral("Group 1") ||
+        !tree->currentItem()->data(0, Qt::UserRole + 2).toBool()) return false;
+
+    add_button->click();
+    add_button->click();
+    QCoreApplication::processEvents();
+    if (layerRowCount(tree) != 5 || layerRowItem(tree, 0)->text(0) != QStringLiteral("Layer 3") ||
+        layerRowItem(tree, 1)->text(0) != QStringLiteral("Layer 2")) return false;
+
+    const QRect top_row = tree->visualItemRect(layerRowItem(tree, 0));
+    const QRect next_row = tree->visualItemRect(layerRowItem(tree, 1));
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      QPoint(top_row.left() + 100, top_row.center().y()));
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::ControlModifier,
+                      QPoint(next_row.left() + 100, next_row.center().y()));
+    QCoreApplication::processEvents();
+    if (!group_button->isEnabled() || tree->selectedItems().size() != 2) return false;
+    group_button->click();
+    QCoreApplication::processEvents();
+    if (layerRowCount(tree) != 4 || layerRowItem(tree, 0)->text(0) != QStringLiteral("Group 2") ||
+        layerRowItem(tree, 0)->childCount() != 2) return false;
+
+    opacity->setValue(55);
+    QCoreApplication::processEvents();
+    if (opacity->value() != 55) return false;
+    const QRect group_row = tree->visualItemRect(layerRowItem(tree, 0));
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      QPoint(group_row.right() - 17, group_row.center().y()));
+    QCoreApplication::processEvents();
+    if (!layerRowItem(tree, 0)->data(0, Qt::AccessibleDescriptionRole).toString()
+             .contains(QStringLiteral("Hidden"))) return false;
+
+    setCurrentLayerRow(tree, 0);
+    ungroup_button->click();
+    QCoreApplication::processEvents();
+    if (layerRowCount(tree) != 5 || layerRowItem(tree, 0)->text(0) != QStringLiteral("Layer 3") ||
+        layerRowItem(tree, 1)->text(0) != QStringLiteral("Layer 2")) return false;
+
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      QPoint(tree->visualItemRect(layerRowItem(tree, 0)).left() + 100,
+                             tree->visualItemRect(layerRowItem(tree, 0)).center().y()));
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::ControlModifier,
+                      QPoint(tree->visualItemRect(layerRowItem(tree, 1)).left() + 100,
+                             tree->visualItemRect(layerRowItem(tree, 1)).center().y()));
+    QCoreApplication::processEvents();
+    if (!group_button->isEnabled()) return false;
+    group_button->click();
+    QCoreApplication::processEvents();
+    if (tree->currentItem() == nullptr || tree->currentItem()->text(0) != QStringLiteral("Group 2")) {
+        return false;
+    }
+    delete_button->click();
+    QCoreApplication::processEvents();
+    return layerRowCount(tree) == 3 && layerRowItem(tree, 0)->text(0) == QStringLiteral("Group 1");
+}
+
+} // namespace
 
 bool testGeneralCanvasSelection() {
     image_editor::ImageCanvas canvas;
@@ -280,6 +383,10 @@ int main(int argc, char* argv[]) {
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, temporary.path());
 
     if (!testGeneralCanvasSelection()) return 1;
+    if (!testLayerGroupsUi(temporary.path())) {
+        std::cerr << "Layer group panel actions, multi-selection, or hierarchy failed.\n";
+        return 1;
+    }
 
     image_editor::ImageEditorWindow window;
     window.show();
@@ -554,19 +661,19 @@ int main(int argc, char* argv[]) {
 
     auto* layers_dock = window.findChild<QDockWidget*>(
         QStringLiteral("imageEditorLayersDock"));
-    auto* layer_list = window.findChild<QListWidget*>(QStringLiteral("imageLayerList"));
+    auto* layer_list = window.findChild<QTreeWidget*>(QStringLiteral("imageLayerTree"));
     if (layers_dock == nullptr || layer_list == nullptr || !layers_dock->isVisible() ||
         window.dockWidgetArea(layers_dock) != Qt::RightDockWidgetArea ||
-        layer_list->count() != 2 || layer_list->item(0)->text() != QStringLiteral("Layer 1") ||
-        layer_list->item(1)->text() != QStringLiteral("Background") ||
-        layer_list->currentRow() != 0) {
+        layerRowCount(layer_list) != 2 || layerRowItem(layer_list, 0)->text(0) != QStringLiteral("Layer 1") ||
+        layerRowItem(layer_list, 1)->text(0) != QStringLiteral("Background") ||
+        currentLayerRow(layer_list) != 0) {
         std::cerr << "The right-side layer dock did not show the default selected layer stack.\n";
         return 1;
     }
     const QImage editable_thumbnail =
-        layer_list->item(0)->data(Qt::UserRole + 4).value<QImage>();
+        layerRowItem(layer_list, 0)->data(0, Qt::UserRole + 5).value<QImage>();
     const QImage background_thumbnail =
-        layer_list->item(1)->data(Qt::UserRole + 4).value<QImage>();
+        layerRowItem(layer_list, 1)->data(0, Qt::UserRole + 5).value<QImage>();
     if (editable_thumbnail.isNull() || background_thumbnail.isNull() ||
         editable_thumbnail.width() > image_editor::LayerPanel::kThumbnailWidth ||
         editable_thumbnail.height() > image_editor::LayerPanel::kThumbnailHeight ||
@@ -581,7 +688,7 @@ int main(int argc, char* argv[]) {
         QPainter painter(&rendered_layer_list);
         layer_list->viewport()->render(&painter);
     }
-    const QRect editable_row = layer_list->visualItemRect(layer_list->item(0));
+    const QRect editable_row = layer_list->visualItemRect(layerRowItem(layer_list, 0));
     if (rendered_layer_list.pixelColor(editable_row.left() + 8, editable_row.top() + 6) !=
             QColor(205, 208, 214) ||
         rendered_layer_list.pixelColor(editable_row.left() + 16, editable_row.top() + 6) !=
@@ -589,23 +696,23 @@ int main(int argc, char* argv[]) {
         std::cerr << "Layer transparency checkerboard colors do not match the canvas.\n";
         return 1;
     }
-    const QRect background_row = layer_list->visualItemRect(layer_list->item(1));
+    const QRect background_row = layer_list->visualItemRect(layerRowItem(layer_list, 1));
     QTest::mouseClick(layer_list->viewport(), Qt::LeftButton, Qt::NoModifier,
                       QPoint(background_row.right() - 17, background_row.center().y()));
     QCoreApplication::processEvents();
-    if (layer_list->currentRow() != 0 ||
-        !layer_list->item(1)->data(Qt::AccessibleDescriptionRole).toString()
+    if (currentLayerRow(layer_list) != 0 ||
+        !layerRowItem(layer_list, 1)->data(0, Qt::AccessibleDescriptionRole).toString()
              .contains(QStringLiteral("Hidden"))) {
         std::cerr << "The right-side eye control did not hide Background independently of selection.\n";
         return 1;
     }
-    const QRect hidden_background_row = layer_list->visualItemRect(layer_list->item(1));
+    const QRect hidden_background_row = layer_list->visualItemRect(layerRowItem(layer_list, 1));
     QTest::mouseClick(layer_list->viewport(), Qt::LeftButton, Qt::NoModifier,
                       QPoint(hidden_background_row.right() - 17,
                              hidden_background_row.center().y()));
     QCoreApplication::processEvents();
-    if (layer_list->currentRow() != 0 ||
-        !layer_list->item(1)->data(Qt::AccessibleDescriptionRole).toString()
+    if (currentLayerRow(layer_list) != 0 ||
+        !layerRowItem(layer_list, 1)->data(0, Qt::AccessibleDescriptionRole).toString()
              .contains(QStringLiteral("Visible"))) {
         std::cerr << "The right-side eye control did not restore Background visibility.\n";
         return 1;
@@ -618,7 +725,7 @@ int main(int argc, char* argv[]) {
     visibility_undo_action->trigger();
     visibility_undo_action->trigger();
     if (window.windowTitle().startsWith('*') || visibility_undo_action->isEnabled() ||
-        layer_list->item(1)->data(Qt::AccessibleDescriptionRole).toString()
+        layerRowItem(layer_list, 1)->data(0, Qt::AccessibleDescriptionRole).toString()
             .contains(QStringLiteral("Hidden"))) {
         std::cerr << "Undo did not restore the visibility baseline after the eye-button check.\n";
         return 1;
@@ -644,7 +751,7 @@ int main(int argc, char* argv[]) {
     auto* paint_tool_button = window.findChild<QToolButton*>(QStringLiteral("paintToolButton"));
     auto* layer_edit_hint = window.findChild<QLabel*>(QStringLiteral("layerEditingHint"));
     const QString title_before_layer_selection = window.windowTitle();
-    layer_list->setCurrentRow(1);
+    setCurrentLayerRow(layer_list, 1);
     QCoreApplication::processEvents();
     if (paint_tool_button == nullptr || layer_edit_hint == nullptr ||
         paint_tool_button->isEnabled() || rotate_action->isEnabled() ||
@@ -662,7 +769,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "The Paint shortcut activated while Background was selected.\n";
         return 1;
     }
-    layer_list->setCurrentRow(0);
+    setCurrentLayerRow(layer_list, 0);
     QCoreApplication::processEvents();
     if (!paint_tool_button->isEnabled() || !rotate_action->isEnabled() ||
         !paint_tool_action->isEnabled() || !eraser_tool_action->isEnabled()) {
@@ -1202,21 +1309,21 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     add_layer_button->click();
-    if (layer_list->count() != 3 || layer_list->currentItem() == nullptr ||
-        layer_list->currentItem()->text() != QStringLiteral("Layer 2")) {
+    if (layerRowCount(layer_list) != 3 || layer_list->currentItem() == nullptr ||
+        layer_list->currentItem()->text(0) != QStringLiteral("Layer 2")) {
         std::cerr << "The layer panel did not add and select a new layer.\n";
         return 1;
     }
-    layer_list->currentItem()->setText(QStringLiteral("Overlay"));
+    layer_list->currentItem()->setText(0, QStringLiteral("Overlay"));
     QCoreApplication::processEvents();
     if (layer_list->currentItem() == nullptr ||
-        layer_list->currentItem()->text() != QStringLiteral("Overlay")) {
+        layer_list->currentItem()->text(0) != QStringLiteral("Overlay")) {
         std::cerr << "Inline layer renaming did not update the selected layer.\n";
         return 1;
     }
     move_layer_down_button->click();
-    if (layer_list->currentRow() != 1 ||
-        layer_list->currentItem()->text() != QStringLiteral("Overlay")) {
+    if (currentLayerRow(layer_list) != 1 ||
+        layer_list->currentItem()->text(0) != QStringLiteral("Overlay")) {
         std::cerr << "Layer reordering did not preserve selection and order.\n";
         return 1;
     }
@@ -1226,12 +1333,12 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     delete_layer_button->click();
-    if (layer_list->count() != 2 || layer_list->currentItem() == nullptr ||
-        layer_list->currentItem()->text() != QStringLiteral("Layer 1")) {
+    if (layerRowCount(layer_list) != 2 || layer_list->currentItem() == nullptr ||
+        layer_list->currentItem()->text(0) != QStringLiteral("Layer 1")) {
         std::cerr << "Deleting a layer did not select the adjacent editable layer.\n";
         return 1;
     }
-    layer_list->setCurrentRow(1);
+    setCurrentLayerRow(layer_list, 1);
     QCoreApplication::processEvents();
     if (paint_button->isEnabled() || eraser_button->isEnabled() ||
         !shapes_button->isEnabled() || !shapes_tool_action->isEnabled() ||
@@ -1261,23 +1368,23 @@ int main(int argc, char* argv[]) {
     QTest::mouseMove(canvas, background_shape_end);
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, background_shape_end);
     QCoreApplication::processEvents();
-    if (layer_list->count() != 3 || layer_list->currentRow() != 1 ||
+    if (layerRowCount(layer_list) != 3 || currentLayerRow(layer_list) != 1 ||
         layer_list->currentItem() == nullptr ||
-        layer_list->currentItem()->text() != QStringLiteral("Shape 1")) {
+        layer_list->currentItem()->text(0) != QStringLiteral("Shape 1")) {
         std::cerr << "Drawing with Background selected did not insert Shape 1 above it.\n";
         return 1;
     }
     undo_action->trigger();
-    if (layer_list->count() != 2 || layer_list->currentRow() != 1 ||
+    if (layerRowCount(layer_list) != 2 || currentLayerRow(layer_list) != 1 ||
         layer_list->currentItem() == nullptr ||
-        layer_list->currentItem()->text() != QStringLiteral("Background")) {
+        layer_list->currentItem()->text(0) != QStringLiteral("Background")) {
         std::cerr << "Undo did not remove the new shape layer and restore Background selection.\n";
         return 1;
     }
     redo_action->trigger();
-    if (layer_list->count() != 3 || layer_list->currentRow() != 1 ||
+    if (layerRowCount(layer_list) != 3 || currentLayerRow(layer_list) != 1 ||
         layer_list->currentItem() == nullptr ||
-        layer_list->currentItem()->text() != QStringLiteral("Shape 1")) {
+        layer_list->currentItem()->text(0) != QStringLiteral("Shape 1")) {
         std::cerr << "Redo did not restore the shape layer and its selection.\n";
         return 1;
     }
@@ -1383,8 +1490,8 @@ int main(int argc, char* argv[]) {
         QStringLiteral("shapeStrokeColorButton"));
     auto* shape_fill_color = linked_window.findChild<QPushButton*>(
         QStringLiteral("shapeFillColorButton"));
-    auto* linked_layer_list = linked_window.findChild<QListWidget*>(
-        QStringLiteral("imageLayerList"));
+    auto* linked_layer_list = linked_window.findChild<QTreeWidget*>(
+        QStringLiteral("imageLayerTree"));
     auto* linked_tool_sidebar = linked_window.findChild<image_editor::ToolSidebar*>(
         QStringLiteral("imageEditorToolSidebar"));
     const QImage selection_icon_24 = linked_select_shapes_button == nullptr
@@ -1528,9 +1635,9 @@ int main(int argc, char* argv[]) {
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::ShiftModifier, shape_end);
     QTest::keyRelease(linked_canvas, Qt::Key_Shift);
     QCoreApplication::processEvents();
-    if (linked_layer_list->count() != 3 || linked_layer_list->currentRow() != 0 ||
+    if (layerRowCount(linked_layer_list) != 3 || currentLayerRow(linked_layer_list) != 0 ||
         linked_layer_list->currentItem() == nullptr ||
-        linked_layer_list->currentItem()->text() != QStringLiteral("Shape 1")) {
+        linked_layer_list->currentItem()->text(0) != QStringLiteral("Shape 1")) {
         std::cerr << "The first shape did not create and select its own Shape 1 layer.\n";
         return 1;
     }
@@ -1546,15 +1653,15 @@ int main(int argc, char* argv[]) {
     QTest::mouseMove(linked_canvas, ellipse_end);
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, ellipse_end);
     QCoreApplication::processEvents();
-    if (linked_layer_list->count() != 5 || linked_layer_list->currentRow() != 0 ||
+    if (layerRowCount(linked_layer_list) != 5 || currentLayerRow(linked_layer_list) != 0 ||
         linked_layer_list->currentItem() == nullptr ||
-        linked_layer_list->currentItem()->text() != QStringLiteral("Shape 2")) {
+        linked_layer_list->currentItem()->text(0) != QStringLiteral("Shape 2")) {
         std::cerr << "The ellipse did not create and select its own Shape 2 layer.\n";
         return 1;
     }
     auto* linked_eraser_action = linked_window.findChild<QAction*>(
         QStringLiteral("eraserToolAction"));
-    linked_layer_list->setCurrentRow(linked_layer_list->count() - 1);
+    setCurrentLayerRow(linked_layer_list, layerRowCount(linked_layer_list) - 1);
     QCoreApplication::processEvents();
     if (linked_eraser_action == nullptr || linked_paint_action->isEnabled() ||
         linked_eraser_action->isEnabled() || !linked_shapes_action->isEnabled() ||
@@ -1571,9 +1678,9 @@ int main(int argc, char* argv[]) {
     QTest::mouseMove(linked_canvas, background_line_end);
     QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier, background_line_end);
     QCoreApplication::processEvents();
-    if (linked_layer_list->count() != 6 || linked_layer_list->currentRow() != 4 ||
+    if (layerRowCount(linked_layer_list) != 6 || currentLayerRow(linked_layer_list) != 4 ||
         linked_layer_list->currentItem() == nullptr ||
-        linked_layer_list->currentItem()->text() != QStringLiteral("Shape 3")) {
+        linked_layer_list->currentItem()->text(0) != QStringLiteral("Shape 3")) {
         std::cerr << "Drawing with Background selected did not add a Shape 3 layer above it.\n";
         return 1;
     }
@@ -1586,12 +1693,12 @@ int main(int argc, char* argv[]) {
         std::cerr << "Shapes and Selection were not mutually exclusive.\n";
         return 1;
     }
-    linked_layer_list->setCurrentRow(2);
+    setCurrentLayerRow(linked_layer_list, 2);
     QCoreApplication::processEvents();
     const QPoint ellipse_center = imagePoint(linked_canvas, QSize(32, 24), QPointF(21, 18));
     QTest::mouseClick(linked_canvas, Qt::LeftButton, Qt::NoModifier, ellipse_center);
     QCoreApplication::processEvents();
-    if (linked_layer_list->currentRow() != 0) {
+    if (currentLayerRow(linked_layer_list) != 0) {
         std::cerr << "Selecting a shape on another visible layer did not activate its layer.\n";
         return 1;
     }
@@ -1644,13 +1751,13 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    if (shape_document_json.value("version").toInt() != 7 ||
+    if (shape_document_json.value("version").toInt() != 8 ||
         persisted_shape_layer.isEmpty() ||
         !persisted_shape_layer.value("name").toString().startsWith("Shape ") ||
         persisted_shape_layer.value("operations").toArray().size() != 1 ||
         persisted_shape.value("kind").toString() != "shape" ||
         persisted_shape.value("fill_enabled").toBool()) {
-        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in v7: version="
+        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in v8: version="
                   << shape_document_json.value("version").toInt()
                   << " operations=" << persisted_shape_layer.value("operations").toArray().size()
                   << " layer=" << persisted_shape_layer.value("name").toString().toStdString()

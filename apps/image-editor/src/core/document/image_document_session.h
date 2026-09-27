@@ -63,6 +63,25 @@ public:
     [[nodiscard]] bool moveLayer(const QString& layer_id, int direction);
     [[nodiscard]] bool setLayerVisible(const QString& layer_id, bool visible);
     [[nodiscard]] bool setLayerOpacity(const QString& layer_id, int opacity);
+    [[nodiscard]] QString addGroup(QString* error = nullptr);
+    [[nodiscard]] QString groupLayers(const QStringList& layer_ids,
+                                      QString* error = nullptr);
+    [[nodiscard]] bool ungroup(const QString& group_id);
+    [[nodiscard]] bool deleteGroup(const QString& group_id);
+    [[nodiscard]] bool renameGroup(const QString& group_id,
+                                   const QString& name,
+                                   QString* error = nullptr);
+    [[nodiscard]] bool setGroupVisible(const QString& group_id, bool visible);
+    [[nodiscard]] bool setGroupOpacity(const QString& group_id, int opacity);
+    [[nodiscard]] bool moveStackItem(const QString& item_id,
+                                     bool is_group,
+                                     const QString& target_group_id,
+                                     qsizetype insertion_index);
+    [[nodiscard]] bool moveStackItemBy(const QString& item_id, bool is_group, int direction);
+    [[nodiscard]] bool selectGroup(const QString& group_id);
+    [[nodiscard]] bool selectedGroupIsActive() const noexcept;
+    [[nodiscard]] bool applySelectedGroupTransform(const ImageOperation& operation,
+                                                   QString* error = nullptr);
     void beginLayerOpacityEdit();
     void endLayerOpacityEdit();
     [[nodiscard]] bool selectLayer(const QString& layer_id);
@@ -92,12 +111,14 @@ public:
     [[nodiscard]] QString recoverySessionId() const { return recovery_session_id_; }
     [[nodiscard]] const ImageDocumentData& data() const noexcept { return data_; }
     [[nodiscard]] QString selectedLayerId() const { return selected_layer_id_; }
+    [[nodiscard]] QString selectedGroupId() const { return selected_group_id_; }
     [[nodiscard]] bool selectedLayerIsEditable() const noexcept;
 
 private:
     struct EditSnapshot {
         ImageDocumentData document;
         QString selected_layer_id;
+        QString selected_group_id;
     };
 
     struct LayerThumbnailCacheEntry {
@@ -112,7 +133,14 @@ private:
     void initializeDefaultLayers();
     [[nodiscard]] qsizetype layerIndex(const QString& layer_id) const noexcept;
     void pushEdit();
-    void recordEditSnapshot(ImageDocumentData before, QString selected_layer_id);
+    void recordEditSnapshot(ImageDocumentData before,
+                            QString selected_layer_id,
+                            QString selected_group_id = {});
+    [[nodiscard]] qsizetype totalStackItemCount() const noexcept;
+    void rebuildLayerOrder();
+    [[nodiscard]] qsizetype groupIndex(const QString& group_id) const noexcept;
+    [[nodiscard]] QString parentGroupForLayer(const QString& layer_id) const;
+    [[nodiscard]] bool effectiveLayerVisible(const ImageLayerData& layer) const;
     [[nodiscard]] bool loadSource(const QString& path, QImage* image, QString* error) const;
     [[nodiscard]] QSize renderedSize() const;
 
@@ -121,12 +149,15 @@ private:
     QString document_path_;
     QString recovery_session_id_;
     QString selected_layer_id_;
+    QString selected_group_id_;
     QString baseline_source_path_;
     QSize baseline_source_size_;
     ImageBaseKind baseline_base_kind_ = ImageBaseKind::SourceImage;
     QColor baseline_canvas_background_ = QColor(0, 0, 0, 0);
     QVector<ImageOperation> baseline_operations_;
     QVector<ImageLayerData> baseline_layers_;
+    QVector<ImageGroupData> baseline_groups_;
+    QVector<ImageStackItemData> baseline_root_stack_;
     bool force_dirty_ = false;
     QVector<EditSnapshot> undo_stack_;
     QVector<EditSnapshot> redo_stack_;

@@ -11,6 +11,7 @@
 #include <QSet>
 #include <QUuid>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -24,7 +25,8 @@ constexpr int kLayerDocumentVersion = 4;
 constexpr int kEraseDocumentVersion = 5;
 constexpr int kShapeDocumentVersion = 6;
 constexpr int kObjectIdentityDocumentVersion = 7;
-constexpr int kDocumentVersion = 7;
+constexpr int kLayerGroupsDocumentVersion = 8;
+constexpr int kDocumentVersion = 8;
 constexpr int kRecoveryVersion = 1;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr auto kRecoveryFormat = "creative-suite-image-recovery";
@@ -366,13 +368,15 @@ bool isValidLayerId(const QString& id) {
 bool validateLayers(const ImageDocumentData& document,
                     QSet<QString>& object_ids,
                     QString* error) {
+    const qsizetype item_count = document.layers.size() + document.groups.size();
     if (document.layers.isEmpty() ||
-        document.layers.size() > ImageDocumentStore::kMaximumLayers ||
-        !document.layers.front().background) {
+        item_count > ImageDocumentStore::kMaximumLayers ||
+        !document.layers.front().background || document.root_stack.isEmpty()) {
         assignError(error, QStringLiteral("The document layer stack is invalid."));
         return false;
     }
     QSet<QString> ids;
+    QSet<QString> group_ids;
     const QSize canvas_size = sizeAfterOperations(document.source_size, document.operations);
     qsizetype background_count = 0;
     for (qsizetype index = 0; index < document.layers.size(); ++index) {
@@ -414,9 +418,101 @@ bool validateLayers(const ImageDocumentData& document,
             object_ids.insert(id);
         }
     }
+    for (const auto& group : document.groups) {
+        const QString normalized_id = group.id.toLower();
+        if (!isValidLayerId(group.id) || ids.contains(normalized_id)) {
+            assignError(error, QStringLiteral("The document contains an invalid or duplicate group ID."));
+            return false;
+        }
+        ids.insert(normalized_id);
+        group_ids.insert(normalized_id);
+    }
     if (background_count != 1) {
         assignError(error, QStringLiteral("The document must contain exactly one Background layer."));
         return false;
+    }
+
+    QSet<QString> rooted;
+    for (qsizetype index = 0; index < document.root_stack.size(); ++index) {
+        const auto& item = document.root_stack.at(index);
+        const QString normalized_id = item.id.toLower();
+        if (item.group) {
+            if (!group_ids.contains(normalized_id) || rooted.contains(normalized_id)) {
+                assignError(error, QStringLiteral("The document root stack is invalid."));
+                return false;
+            }
+        } else {
+            const auto layer = std::find_if(document.layers.cbegin(), document.layers.cend(),
+                [&normalized_id](const ImageLayerData& candidate) {
+                    return candidate.id.toLower() == normalized_id;
+                });
+            if (layer == document.layers.cend() || !layer->parent_group_id.isEmpty() ||
+                rooted.contains(normalized_id) || (index == 0) != layer->background) {
+                assignError(error, QStringLiteral("The document root stack is invalid."));
+                return false;
+            }
+        }
+        rooted.insert(normalized_id);
+    }
+    if (document.root_stack.front().group ||
+        document.root_stack.front().id != document.layers.front().id ||
+        rooted.size() != document.groups.size() +
+            std::count_if(document.layers.cbegin(), document.layers.cend(),
+                [](const ImageLayerData& layer) { return layer.parent_group_id.isEmpty(); })) {
+        assignError(error, QStringLiteral("The document root stack is incomplete."));
+        return false;
+    }
+
+    QSet<QString> child_ids;
+    for (const auto& group : document.groups) {
+        const QString normalized_id = group.id.toLower();
+        if (group.name.trimmed().isEmpty() ||
+            group.name.size() > ImageDocumentStore::kMaximumLayerNameLength ||
+            group.opacity < 0 || group.opacity > 100) {
+            assignError(error, QStringLiteral("A document group has invalid properties."));
+            return false;
+        }
+        if (group.operations.size() > ImageDocumentStore::kMaximumOperations) {
+            assignError(error, QStringLiteral("A document group has too many operations."));
+            return false;
+        }
+        for (const auto& operation : group.operations) {
+            if (operation.kind != OperationKind::Crop && operation.kind != OperationKind::Rotate &&
+                operation.kind != OperationKind::FlipHorizontal &&
+                operation.kind != OperationKind::FlipVertical) {
+                assignError(error, QStringLiteral("A group contains an unsupported operation."));
+                return false;
+            }
+        }
+        QSize group_size = canvas_size;
+        QVector<ImageOperation> validated_group_operations;
+        if (!decodeOperations(encodeOperations(group.operations), kDocumentVersion,
+                             &group_size, true, &validated_group_operations, error)) {
+            return false;
+        }
+        for (const QString& child_id : group.layer_ids) {
+            const QString child_key = child_id.toLower();
+            const auto child = std::find_if(document.layers.cbegin(), document.layers.cend(),
+                [&child_key](const ImageLayerData& layer) {
+                    return layer.id.toLower() == child_key;
+                });
+            if (child == document.layers.cend() || child->background ||
+                child->parent_group_id.toLower() != normalized_id ||
+                child_ids.contains(child_key)) {
+                assignError(error, QStringLiteral("A group contains an invalid child layer."));
+                return false;
+            }
+            child_ids.insert(child_key);
+        }
+    }
+    for (const auto& layer : document.layers) {
+        if (layer.background) continue;
+        if (!layer.parent_group_id.isEmpty() &&
+            (!group_ids.contains(layer.parent_group_id.toLower()) ||
+             !child_ids.contains(layer.id.toLower()))) {
+            assignError(error, QStringLiteral("A layer has an invalid group parent."));
+            return false;
+        }
     }
     return true;
 }
@@ -486,8 +582,7 @@ QJsonObject encodeDocument(const ImageDocumentData& document,
     root.insert("version", kDocumentVersion);
     root.insert("base", base);
     root.insert("operations", encodeOperations(document.operations));
-    QJsonArray layers;
-    for (const auto& layer : document.layers) {
+    const auto encode_layer = [](const ImageLayerData& layer) {
         QJsonObject encoded;
         encoded.insert("id", layer.id);
         encoded.insert("name", layer.name);
@@ -495,7 +590,34 @@ QJsonObject encodeDocument(const ImageDocumentData& document,
         encoded.insert("visible", layer.visible);
         encoded.insert("opacity", layer.opacity);
         encoded.insert("operations", encodeOperations(layer.operations));
-        layers.append(encoded);
+        return encoded;
+    };
+    QJsonArray layers;
+    for (const auto& item : document.root_stack) {
+        if (!item.group) {
+            const auto layer = std::find_if(document.layers.cbegin(), document.layers.cend(),
+                [&item](const ImageLayerData& value) { return value.id == item.id; });
+            if (layer != document.layers.cend()) layers.append(encode_layer(*layer));
+            continue;
+        }
+        const auto group = std::find_if(document.groups.cbegin(), document.groups.cend(),
+            [&item](const ImageGroupData& value) { return value.id == item.id; });
+        if (group == document.groups.cend()) continue;
+        QJsonObject encoded_group;
+        encoded_group.insert("id", group->id);
+        encoded_group.insert("name", group->name);
+        encoded_group.insert("kind", "group");
+        encoded_group.insert("visible", group->visible);
+        encoded_group.insert("opacity", group->opacity);
+        encoded_group.insert("operations", encodeOperations(group->operations));
+        QJsonArray children;
+        for (const auto& child_id : group->layer_ids) {
+            const auto child = std::find_if(document.layers.cbegin(), document.layers.cend(),
+                [&child_id](const ImageLayerData& value) { return value.id == child_id; });
+            if (child != document.layers.cend()) children.append(encode_layer(*child));
+        }
+        encoded_group.insert("children", children);
+        layers.append(encoded_group);
     }
     root.insert("layers", layers);
     return root;
@@ -576,8 +698,11 @@ bool decodeDocument(const QJsonObject& root,
         const QSize layer_canvas_size = current_size;
         const auto layer_array = encoded_layers.toArray();
         decoded.layers.reserve(layer_array.size());
-        for (qsizetype index = 0; index < layer_array.size(); ++index) {
-            const auto encoded_value = layer_array.at(index);
+        qsizetype stack_item_count = 0;
+        const auto decode_raster_layer = [&layer_canvas_size, version, error](
+            const QJsonValue& encoded_value,
+            const QString& parent_group_id,
+            ImageLayerData* layer) {
             if (!encoded_value.isObject()) {
                 assignError(error, QStringLiteral("The document contains an invalid layer."));
                 return false;
@@ -590,22 +715,73 @@ bool decodeDocument(const QJsonObject& root,
                 assignError(error, QStringLiteral("A document layer has invalid properties."));
                 return false;
             }
-            ImageLayerData layer;
-            layer.id = encoded.value("id").toString();
-            layer.name = encoded.value("name").toString();
-            layer.background = kind == QStringLiteral("background");
-            layer.visible = encoded.value("visible").toBool();
-            layer.opacity = opacity;
+            layer->id = encoded.value("id").toString();
+            layer->name = encoded.value("name").toString();
+            layer->parent_group_id = parent_group_id;
+            layer->background = kind == QStringLiteral("background");
+            layer->visible = encoded.value("visible").toBool();
+            layer->opacity = opacity;
             if (kind != QStringLiteral("background") && kind != QStringLiteral("raster")) {
                 assignError(error, QStringLiteral("The document contains an unsupported layer type."));
                 return false;
             }
             QSize layer_size = layer_canvas_size;
             if (!decodeOperations(encoded.value("operations"), version,
-                                  &layer_size, true, &layer.operations, error)) {
+                                  &layer_size, true, &layer->operations, error)) {
                 return false;
             }
-            decoded.layers.append(std::move(layer));
+            return true;
+        };
+        for (const auto& encoded_value : layer_array) {
+            if (++stack_item_count > ImageDocumentStore::kMaximumLayers ||
+                !encoded_value.isObject()) {
+                assignError(error, QStringLiteral("The document layer stack is invalid."));
+                return false;
+            }
+            const auto encoded = encoded_value.toObject();
+            const QString kind = encoded.value("kind").toString();
+            if (version >= kLayerGroupsDocumentVersion && kind == QStringLiteral("group")) {
+                int opacity = -1;
+                if (!isInteger(encoded.value("opacity"), &opacity) ||
+                    !encoded.value("visible").isBool() ||
+                    !encoded.value("children").isArray()) {
+                    assignError(error, QStringLiteral("A document group has invalid properties."));
+                    return false;
+                }
+                ImageGroupData group;
+                group.id = encoded.value("id").toString();
+                group.name = encoded.value("name").toString();
+                group.visible = encoded.value("visible").toBool();
+                group.opacity = opacity;
+                QSize group_size = layer_canvas_size;
+                if (!decodeOperations(encoded.value("operations"), version,
+                                      &group_size, true, &group.operations, error)) {
+                    return false;
+                }
+                const auto children = encoded.value("children").toArray();
+                for (const auto& child_value : children) {
+                    if (++stack_item_count > ImageDocumentStore::kMaximumLayers) {
+                        assignError(error, QStringLiteral("The document exceeds the 512-item layer limit."));
+                        return false;
+                    }
+                    ImageLayerData child;
+                    if (!decode_raster_layer(child_value, group.id, &child) || child.background) {
+                        if (error != nullptr && error->isEmpty()) {
+                            assignError(error, QStringLiteral("Groups can contain editable raster layers only."));
+                        }
+                        return false;
+                    }
+                    group.layer_ids.append(child.id);
+                    decoded.layers.append(std::move(child));
+                }
+                decoded.root_stack.append({group.id, true});
+                decoded.groups.append(std::move(group));
+            } else {
+                ImageLayerData layer;
+                if (!decode_raster_layer(encoded_value, {}, &layer)) return false;
+                decoded.root_stack.append({layer.id, false});
+                decoded.layers.append(std::move(layer));
+            }
         }
     } else {
         ImageLayerData background;
@@ -616,6 +792,7 @@ bool decodeDocument(const QJsonObject& root,
         first_layer.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         first_layer.name = QStringLiteral("Layer 1");
         decoded.layers = {background, first_layer};
+        decoded.root_stack = {{background.id, false}, {first_layer.id, false}};
     }
 
     if (!validateDocument(decoded, error)) return false;

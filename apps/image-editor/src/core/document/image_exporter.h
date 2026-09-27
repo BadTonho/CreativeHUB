@@ -13,7 +13,8 @@ namespace image_editor {
 
 enum class ImageExportScope {
     Composite,
-    SelectedLayer
+    SelectedLayer,
+    SelectedGroup
 };
 
 struct ImageExportOptions {
@@ -26,6 +27,7 @@ struct ImageExportSnapshot {
     QImage source_image;
     ImageDocumentData document;
     QString selected_layer_id;
+    QString selected_group_id;
 };
 
 enum class ImageExportPhase {

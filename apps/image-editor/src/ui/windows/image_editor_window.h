@@ -57,6 +57,7 @@ private:
     void loadShortcutPreferences();
     void openShortcutSettings();
     void updateToolOptions();
+    void updateSelectionContext();
     void updateView(bool preserveCanvasView = false);
     void deactivateCanvasTools();
     void createNewCanvas();

@@ -22,6 +22,7 @@
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QTreeWidget>
 #include <QTimer>
 #include <QSignalSpy>
 
@@ -137,8 +138,8 @@ int main(int argc, char* argv[]) {
     image_editor::ImageEditorWindow first_window;
     auto* quick_export_button = first_window.findChild<QPushButton*>(
         QStringLiteral("quickExportLayerButton"));
-    auto* layer_list = first_window.findChild<QListWidget*>(
-        QStringLiteral("imageLayerList"));
+    auto* layer_list = first_window.findChild<QTreeWidget*>(
+        QStringLiteral("imageLayerTree"));
     auto* layer_panel = first_window.findChild<QWidget*>(
         QStringLiteral("imageEditorLayerPanel"));
     if (quick_export_button == nullptr || layer_list == nullptr || layer_panel == nullptr ||

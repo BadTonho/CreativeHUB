@@ -15,6 +15,8 @@
 #include <QTemporaryDir>
 #include <QUuid>
 
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -45,6 +47,21 @@ QImage sampleImage() {
 bool writeImage(const QString& path, const QImage& image, const QByteArray& format = "png") {
     QImageWriter writer(path, format);
     return writer.write(image);
+}
+
+bool visuallyEquivalent(const QImage& left, const QImage& right, int tolerance = 2) {
+    if (left.size() != right.size()) return false;
+    for (int y = 0; y < left.height(); ++y) {
+        for (int x = 0; x < left.width(); ++x) {
+            const QColor a = left.pixelColor(x, y);
+            const QColor b = right.pixelColor(x, y);
+            if (std::abs(a.red() - b.red()) > tolerance ||
+                std::abs(a.green() - b.green()) > tolerance ||
+                std::abs(a.blue() - b.blue()) > tolerance ||
+                std::abs(a.alpha() - b.alpha()) > tolerance) return false;
+        }
+    }
+    return true;
 }
 
 void testDocumentEditingAndUndoRedo(const QString& root) {
@@ -173,9 +190,9 @@ void testCanvasCreationPersistenceAndRecovery(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The saved canvas document could not be read."));
     const auto document_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(document_json.value("version").toInt() == 7 &&
+    require(document_json.value("version").toInt() == 8 &&
                 document_json.value("base").toObject().value("kind").toString() == "canvas",
-            QStringLiteral("Canvas save did not use the version 7 layered representation."));
+            QStringLiteral("Canvas save did not use the version 8 grouped-layer representation."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -258,8 +275,8 @@ void testLegacyVersionOneDocument(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 1 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 7,
-            QStringLiteral("Saving a version 1 document did not upgrade it to version 7."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 8,
+            QStringLiteral("Saving a version 1 document did not upgrade it to version 8."));
 }
 
 void testVersionTwoDocumentCompatibility(const QString& root) {
@@ -292,8 +309,8 @@ void testVersionTwoDocumentCompatibility(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 2 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 7,
-            QStringLiteral("Saving a version 2 document did not upgrade it to version 7."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 8,
+            QStringLiteral("Saving a version 2 document did not upgrade it to version 8."));
 
     base.remove("path");
     base.insert("kind", "canvas");
@@ -365,8 +382,8 @@ void testVersionThreeMigrationToBackground(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The migrated version 3 document could not be reopened."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 7,
-            QStringLiteral("Saving a version 3 document did not upgrade it to version 7."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 8,
+            QStringLiteral("Saving a version 3 document did not upgrade it to version 8."));
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(path, &error) && reopened.renderedImage() == original_render,
             QStringLiteral("Upgrading a version 3 document changed its visible pixels."));
@@ -455,10 +472,10 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     const int serialized_maximum_diameter = maximum_brush_json.value("layers").toArray()
         .at(1).toObject().value("operations").toArray()
         .at(0).toObject().value("diameter").toInt();
-    require(maximum_brush_json.value("version").toInt() == 7 &&
+    require(maximum_brush_json.value("version").toInt() == 8 &&
                 serialized_maximum_diameter ==
                     image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter,
-            QStringLiteral("The 1024 px paint diameter was not saved in version 7."));
+            QStringLiteral("The 1024 px paint diameter was not saved in version 8."));
     image_editor::ImageDocumentSession reopened_maximum_brush;
     require(reopened_maximum_brush.openDocument(maximum_brush_path, &error), error);
     require(reopened_maximum_brush.data() == maximum_brush_session.data() &&
@@ -478,11 +495,11 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The painted document could not be read."));
     const QJsonObject saved_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(saved_json.value("version").toInt() == 7 &&
+    require(saved_json.value("version").toInt() == 8 &&
                 saved_json.value("layers").toArray().at(1).toObject()
                     .value("operations").toArray().at(0).toObject()
                     .value("kind").toString() == "paint_stroke",
-            QStringLiteral("Paint was not serialized in the version 7 layer operations."));
+            QStringLiteral("Paint was not serialized in the version 8 layer operations."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -623,10 +640,10 @@ void testEraseStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     const QJsonObject maximum_json = QJsonDocument::fromJson(maximum_file.readAll()).object();
     const auto operations = maximum_json.value("layers").toArray().at(1).toObject()
         .value("operations").toArray();
-    require(maximum_json.value("version").toInt() == 7 && operations.size() == 2 &&
+    require(maximum_json.value("version").toInt() == 8 && operations.size() == 2 &&
                 operations.at(1).toObject().value("kind").toString() == "erase_stroke" &&
                 operations.at(1).toObject().value("diameter").toInt() == 1024,
-            QStringLiteral("A maximum-size erase stroke was not serialized as version 7."));
+            QStringLiteral("A maximum-size erase stroke was not serialized as version 8."));
     QJsonObject version_four_with_erase = maximum_json;
     version_four_with_erase.insert("version", 4);
     const QString invalid_v4_path = root + QStringLiteral("/version-four-erase.cimg");
@@ -835,7 +852,7 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     require(session.saveDocument(document_path, &error), error);
     QFile document_file(document_path);
     require(document_file.open(QIODevice::ReadOnly),
-            QStringLiteral("The version 7 shape document could not be read."));
+            QStringLiteral("The version 8 shape document could not be read."));
     QJsonObject document_json = QJsonDocument::fromJson(document_file.readAll()).object();
     document_file.close();
     const auto saved_layers = document_json.value("layers").toArray();
@@ -843,17 +860,17 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
         saved_layers.cbegin(), saved_layers.cend(), [&rectangle_layer](const QJsonValue& value) {
             return value.toObject().value("id").toString() == rectangle_layer;
         });
-    require(document_json.value("version").toInt() == 7 &&
+    require(document_json.value("version").toInt() == 8 &&
                 saved_rectangle_layer != saved_layers.cend() &&
                 (*saved_rectangle_layer).toObject().value("name").toString() == "Shape 1" &&
                 (*saved_rectangle_layer).toObject().value("operations").toArray().size() == 1 &&
                 (*saved_rectangle_layer).toObject().value("operations").toArray().at(0)
                     .toObject().value("kind").toString() == "shape",
-            QStringLiteral("Shapes were not stored in individual v7 layer operation sequences."));
+            QStringLiteral("Shapes were not stored in individual v8 layer operation sequences."));
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error) &&
                 reopened.data() == session.data() && reopened.renderedImage() == session.renderedImage(),
-            QStringLiteral("Editable shapes did not round-trip through the v7 document."));
+            QStringLiteral("Editable shapes did not round-trip through the v8 document."));
 
     QJsonObject version_five = document_json;
     version_five.insert("version", 5);
@@ -949,13 +966,13 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     image_editor::ImageDocumentSession recovered;
     require(recovered.restoreRecovery(snapshot_path, &error) &&
                 recovered.data() == session.data() && recovered.renderedImage() == session.renderedImage(),
-            QStringLiteral("Recovery did not preserve version 7 shape operations."));
+            QStringLiteral("Recovery did not preserve version 8 shape operations."));
     QFile recovery_file(snapshot_path);
     require(recovery_file.open(QIODevice::ReadOnly),
             QStringLiteral("The shape recovery wrapper could not be read."));
     const QJsonObject recovery_json = QJsonDocument::fromJson(recovery_file.readAll()).object();
     require(recovery_json.value("version").toInt() == 1 &&
-                recovery_json.value("document").toObject().value("version").toInt() == 7,
+                recovery_json.value("document").toObject().value("version").toInt() == 8,
             QStringLiteral("Shape recovery changed the recovery wrapper version."));
 
     image_editor::ImageDocumentSession transformed;
@@ -1166,14 +1183,24 @@ void testGeneralObjectOperations(const QString& root) {
             QStringLiteral("Deleting a mixed multi-selection was not one undoable edit."));
     require(session.undo(), QStringLiteral("Could not restore objects before v7 persistence."));
 
+    const QString v8_path = root + QStringLiteral("/general-objects-v8.cimg");
+    require(session.saveDocument(v8_path, &error), error);
+    QFile v8_file(v8_path);
+    require(v8_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the v8 object document."));
+    const QJsonObject v8 = QJsonDocument::fromJson(v8_file.readAll()).object();
+    v8_file.close();
+    require(v8.value("version").toInt() == 8,
+            QStringLiteral("The document did not migrate to cimg v8."));
+    QJsonObject v7 = v8;
+    v7.insert("version", 7);
     const QString v7_path = root + QStringLiteral("/general-objects-v7.cimg");
-    require(session.saveDocument(v7_path, &error), error);
     QFile v7_file(v7_path);
-    require(v7_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the v7 object document."));
-    QJsonObject v7 = QJsonDocument::fromJson(v7_file.readAll()).object();
+    require(v7_file.open(QIODevice::WriteOnly), QStringLiteral("Could not create a v7 fixture."));
+    v7_file.write(QJsonDocument(v7).toJson());
     v7_file.close();
-    require(v7.value("version").toInt() == 7,
-            QStringLiteral("The document did not migrate to cimg v7."));
+    image_editor::ImageDocumentSession migrated_v7;
+    require(migrated_v7.openDocument(v7_path, &error) &&
+                migrated_v7.renderedImage() == session.renderedImage(), error);
     const auto layer_array = v7.value("layers").toArray();
     const auto operation_array = layer_array.at(1).toObject().value("operations").toArray();
     bool paint_id_persisted = false;
@@ -1187,7 +1214,7 @@ void testGeneralObjectOperations(const QString& root) {
         }
     }
     require(paint_id_persisted && erase_id_persisted,
-            QStringLiteral("Cimg v7 did not persist paint and eraser object IDs."));
+            QStringLiteral("Cimg v7 compatibility did not preserve paint and eraser object IDs."));
 
     v7.insert("version", 6);
     auto migrated_layers = v7.value("layers").toArray();
@@ -1227,8 +1254,8 @@ void testGeneralObjectOperations(const QString& root) {
     require(migrated.saveDocument(v6_path, &error), error);
     QFile resaved_v6(v6_path);
     require(resaved_v6.open(QIODevice::ReadOnly) &&
-                QJsonDocument::fromJson(resaved_v6.readAll()).object().value("version").toInt() == 7,
-            QStringLiteral("Saving a v6 document did not upgrade it to v7."));
+                QJsonDocument::fromJson(resaved_v6.readAll()).object().value("version").toInt() == 8,
+            QStringLiteral("Saving a v6 document did not upgrade it to v8."));
 }
 
 void testLayerManagementTransformsAndOpacity(const QString& root) {
@@ -1575,6 +1602,214 @@ void testExportAndFormatPlugins(const QString& root) {
     }
 }
 
+void testLayerGroups(const QString& root) {
+    image_editor::ImageDocumentSession session;
+    QString error;
+    require(session.createCanvas(QSize(20, 16), QColor(0, 0, 0, 0), &error), error);
+    const QString background_id = session.data().layers.front().id;
+    const QString bottom_layer = session.selectedLayerId();
+    require(session.applyPaintStroke(
+                {QPointF(4, 4), QPointF(7, 7)}, QColor(240, 20, 10), 3, &error), error);
+    const QString top_layer = session.addLayer();
+    require(!top_layer.isEmpty() && session.applyPaintStroke(
+                {QPointF(4, 4), QPointF(13, 7)}, QColor(15, 40, 240), 3, &error), error);
+    const QImage before_grouping = session.renderedImage();
+
+    const QString group_id = session.groupLayers({bottom_layer, top_layer}, &error);
+    const QImage after_grouping = session.renderedImage();
+    bool group_composition_equal = before_grouping.size() == after_grouping.size();
+    int maximum_channel_difference = 0;
+    for (int y = 0; group_composition_equal && y < before_grouping.height(); ++y) {
+        for (int x = 0; x < before_grouping.width(); ++x) {
+            const QColor before = before_grouping.pixelColor(x, y);
+            const QColor after = after_grouping.pixelColor(x, y);
+            const int difference = std::max({std::abs(before.red() - after.red()),
+                std::abs(before.green() - after.green()),
+                std::abs(before.blue() - after.blue()),
+                std::abs(before.alpha() - after.alpha())});
+            maximum_channel_difference = std::max(maximum_channel_difference, difference);
+            if (difference > 2) group_composition_equal = false;
+        }
+    }
+    require(!group_id.isEmpty() && session.data().root_stack.size() == 2 &&
+                session.data().root_stack.at(0).id == background_id &&
+                session.data().root_stack.at(1).group &&
+                session.data().groups.size() == 1 &&
+                session.data().groups.front().layer_ids == QStringList{bottom_layer, top_layer} &&
+                session.data().layers.at(1).parent_group_id == group_id &&
+                session.data().layers.at(2).parent_group_id == group_id &&
+                session.selectedGroupId() == group_id && session.selectedGroupIsActive() &&
+                group_composition_equal,
+            QStringLiteral("Grouping contiguous sibling layers changed their order or composition "
+                           "(root=%1, bg=%2, group=%3, children=%4, parents=%5/%6, selected=%7, "
+                           "active=%8, render=%9).")
+                .arg(session.data().root_stack.size())
+                .arg(!session.data().root_stack.isEmpty() &&
+                     session.data().root_stack.front().id == background_id)
+                .arg(session.data().root_stack.size() > 1 &&
+                     session.data().root_stack.at(1).group)
+                .arg(session.data().groups.isEmpty() ? QStringLiteral("missing")
+                    : session.data().groups.front().layer_ids.join(','))
+                .arg(session.data().layers.size() > 1 &&
+                     session.data().layers.at(1).parent_group_id == group_id)
+                .arg(session.data().layers.size() > 2 &&
+                     session.data().layers.at(2).parent_group_id == group_id)
+                .arg(session.selectedGroupId() == group_id)
+                .arg(session.selectedGroupIsActive())
+                .arg(group_composition_equal)
+                .append(QStringLiteral(" maximum channel delta=%1.")
+                    .arg(maximum_channel_difference)));
+
+    require(session.setGroupOpacity(group_id, 50),
+            QStringLiteral("The group opacity could not be changed."));
+    const QColor overlap = session.renderedImage().pixelColor(4, 4);
+    require(overlap.alpha() >= 120 && overlap.alpha() <= 136 && overlap.blue() > overlap.red(),
+            QStringLiteral("Group opacity was not applied once to the overlapping child composite."));
+    require(session.setLayerVisible(bottom_layer, false) &&
+                session.renderedImage().pixelColor(7, 7).alpha() == 0 &&
+                session.renderedImage().pixelColor(13, 7).alpha() > 0,
+            QStringLiteral("Child visibility did not affect only that layer."));
+    require(session.setLayerVisible(bottom_layer, true),
+            QStringLiteral("The hidden group child could not be restored."));
+
+    image_editor::ImageExportOptions group_options;
+    group_options.scope = image_editor::ImageExportScope::SelectedGroup;
+    const QString group_export_path = root + QStringLiteral("/selected-group.png");
+    require(session.exportImage(group_export_path, group_options, &error), error);
+    const QImage group_export(group_export_path);
+    require(group_export.size() == QSize(20, 16) &&
+                group_export.pixelColor(4, 4).alpha() >= 120 &&
+                group_export.pixelColor(7, 7).alpha() > 0 &&
+                group_export.pixelColor(0, 0).alpha() == 0,
+            QStringLiteral("Quick Export of a group omitted its children or included Background."));
+
+    const QImage before_group_crop = session.renderedImage();
+    require(session.applyCrop(QRect(0, 0, 9, 10), &error), error);
+    require(session.renderedImage().size() == QSize(20, 16) &&
+                session.renderedImage().pixelColor(13, 7).alpha() == 0,
+            QStringLiteral("Group crop did not clip the composed children on the fixed canvas."));
+    require(session.undo() && session.renderedImage() == before_group_crop,
+            QStringLiteral("Group crop Undo failed."));
+
+    // Exercise the other group transforms and their history against a saved visual baseline.
+    const QImage before_transforms = session.renderedImage();
+    session.rotateRight();
+    require(session.renderedImage() != before_transforms &&
+                session.renderedImage().size() == QSize(20, 16) && session.undo() &&
+                session.renderedImage() == before_transforms,
+            QStringLiteral("Group rotation did not transform and restore the combined content."));
+    session.flipHorizontal();
+    require(session.renderedImage() != before_transforms && session.undo() &&
+                session.renderedImage() == before_transforms,
+            QStringLiteral("Group flip did not transform and restore the combined content."));
+    session.flipVertical();
+    require(session.renderedImage() != before_transforms && session.undo() &&
+                session.renderedImage() == before_transforms,
+            QStringLiteral("Group vertical flip did not transform and restore the combined content."));
+
+    require(session.setGroupVisible(group_id, false) &&
+                session.renderedImage().pixelColor(4, 4).alpha() == 0 &&
+                session.setGroupVisible(group_id, true),
+            QStringLiteral("Group visibility did not hide and restore all its children."));
+    require(session.undo() && session.data().groups.front().visible == false && session.redo() &&
+                session.data().groups.front().visible == true,
+            QStringLiteral("Group visibility did not participate in Undo/Redo."));
+
+    // Clear group opacity and transforms before checking ungroup preservation.
+    require(session.setGroupOpacity(group_id, 100),
+            QStringLiteral("Group opacity could not be restored before ungrouping."));
+    const QImage before_ungroup = session.renderedImage();
+    require(session.ungroup(group_id) && session.data().groups.isEmpty() &&
+                session.data().root_stack.size() == 3 &&
+                session.data().root_stack.at(1).id == bottom_layer &&
+                session.data().root_stack.at(2).id == top_layer &&
+                visuallyEquivalent(session.renderedImage(), before_ungroup) &&
+                session.undo() && session.data().groups.size() == 1 &&
+                visuallyEquivalent(session.renderedImage(), before_ungroup),
+            QStringLiteral("Ungroup did not preserve the child order, appearance, and history."));
+
+    require(session.deleteGroup(group_id) && session.data().layers.size() == 1 &&
+                session.undo() && session.data().layers.size() == 3 &&
+                session.data().groups.size() == 1,
+            QStringLiteral("Deleting a group and restoring it with Undo did not include its children."));
+
+    image_editor::ImageDocumentSession structure;
+    require(structure.createCanvas(QSize(12, 10), Qt::transparent, &error), error);
+    const QString first = structure.selectedLayerId();
+    const QString second = structure.addLayer();
+    require(!second.isEmpty(), QStringLiteral("Could not create sibling layers for group validation."));
+    const QString third = structure.addLayer();
+    require(!third.isEmpty(), QStringLiteral("Could not create a non-contiguous sibling layer."));
+    const auto before_rejected_grouping = structure.data();
+    const bool undo_before_rejected_grouping = structure.canUndo();
+    require(structure.groupLayers({first, third}, &error).isEmpty() &&
+                structure.data() == before_rejected_grouping &&
+                structure.canUndo() == undo_before_rejected_grouping,
+            QStringLiteral("Non-contiguous Group Selected changed document or history."));
+    const QString group = structure.groupLayers({first, second}, &error);
+    require(!group.isEmpty(), error);
+    require(structure.selectLayer(second), QStringLiteral("Could not select a child layer."));
+    const QString child_added = structure.addLayer();
+    require(!child_added.isEmpty() &&
+                structure.data().groups.front().layer_ids == QStringList{first, second, child_added},
+            QStringLiteral("Adding a layer while a group child was selected did not insert inside that group."));
+    const QString new_group = structure.addGroup(&error);
+    require(!new_group.isEmpty() && structure.data().root_stack.size() == 4 &&
+                structure.data().root_stack.at(2).group &&
+                structure.data().root_stack.at(2).id == new_group &&
+                structure.data().root_stack.at(3).id == third,
+            QStringLiteral("Creating a group while a child was selected created a nested group."));
+    require(structure.selectGroup(group), QStringLiteral("Could not reselect the filled group."));
+    const QString root_layer = structure.addLayer();
+    require(!root_layer.isEmpty() && structure.data().layers.back().parent_group_id.isEmpty() &&
+                structure.data().root_stack.at(2).id == root_layer,
+            QStringLiteral("Adding a layer while a group was selected did not insert at the root."));
+
+    const QString v8_path = root + QStringLiteral("/groups-v8.cimg");
+    require(structure.saveDocument(v8_path, &error), error);
+    QFile v8_file(v8_path);
+    require(v8_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the v8 group document."));
+    const QJsonObject v8_json = QJsonDocument::fromJson(v8_file.readAll()).object();
+    require(v8_json.value("version").toInt() == 8 &&
+                v8_json.value("layers").toArray().size() == structure.data().root_stack.size(),
+            QStringLiteral("Group save did not write the v8 ordered stack."));
+    image_editor::ImageDocumentSession reopened;
+    require(reopened.openDocument(v8_path, &error) &&
+                reopened.data() == structure.data() &&
+                reopened.renderedImage() == structure.renderedImage(), error);
+
+    image_editor::RecoveryStore recovery(root + QStringLiteral("/group-recovery"));
+    require(structure.setGroupOpacity(group, 80),
+            QStringLiteral("Could not dirty the group document before recovery."));
+    require(recovery.save(structure, &error), error);
+    QFile recovery_file(recovery.pathFor(structure));
+    require(recovery_file.open(QIODevice::ReadOnly),
+            QStringLiteral("The group recovery snapshot could not be read."));
+    const QJsonObject recovery_json = QJsonDocument::fromJson(recovery_file.readAll()).object();
+    require(recovery_json.value("version").toInt() == 1 &&
+                recovery_json.value("document").toObject().value("version").toInt() == 8,
+            QStringLiteral("Group recovery changed its wrapper version or lost the v8 payload."));
+
+    image_editor::ImageDocumentData invalid = structure.data();
+    invalid.groups.front().layer_ids.append(invalid.layers.front().id);
+    require(!image_editor::ImageDocumentStore::saveDocument(
+                root + QStringLiteral("/invalid-group.cimg"), invalid, &error) && !error.isEmpty(),
+            QStringLiteral("A group containing Background was accepted by the document validator."));
+
+    image_editor::ImageDocumentSession at_limit;
+    require(at_limit.createCanvas(QSize(4, 4), Qt::transparent, &error), error);
+    for (qsizetype index = at_limit.data().layers.size();
+         index < image_editor::ImageDocumentStore::kMaximumLayers; ++index) {
+        require(!at_limit.addGroup(&error).isEmpty(), error);
+    }
+    const auto full_stack = at_limit.data();
+    const QString full_stack_selection = at_limit.selectedGroupId();
+    require(at_limit.addGroup(&error).isEmpty() && !error.isEmpty() &&
+                at_limit.data() == full_stack &&
+                at_limit.selectedGroupId() == full_stack_selection,
+            QStringLiteral("The 512-item group limit changed the document or selection."));
+}
+
 void testSelectedLayerExport(const QString& root) {
     image_editor::ImageDocumentSession session;
     QString error;
@@ -1804,6 +2039,7 @@ int main(int argc, char* argv[]) {
         testCropNoOpAndInvalidOperations(root);
         testGeneralObjectOperations(root);
         testLayerManagementTransformsAndOpacity(root);
+        testLayerGroups(root);
         testMissingSourceAndRelink(root);
         testExportAndFormatPlugins(root);
         testSelectedLayerExport(root);

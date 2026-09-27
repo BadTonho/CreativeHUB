@@ -187,14 +187,48 @@ run.
    In linked mode, save a document containing shapes and confirm the published
    PNG contains them and refreshes in the Video Editor.
 
+### Layer groups
+
+1. In the Layers panel, use the Add menu to create an empty group. Confirm it
+   appears at the correct root position, can be renamed, and can be collapsed
+   and expanded. Create a group while a group is selected and confirm it is
+   inserted above the selected group. With a child layer selected, create an
+   empty group and confirm no subgroup is created; it appears above its parent
+   group in the root.
+2. Select two or more contiguous sibling raster layers with Ctrl-click and
+   Shift-click, then choose **Group Selected**. Confirm the action is disabled
+   for a non-contiguous selection, Background, mixed groups, or layers with
+   different parents. Confirm child order and appearance do not change.
+3. Drag a raster layer into an existing group, out to the root, and between
+   siblings. Confirm groups cannot be nested, Background stays at the root
+   bottom, and reordering updates the composite in the same visual order.
+4. Put overlapping opaque marks on two child layers and set the group opacity
+   below 100%. Confirm the overlap receives group opacity once instead of each
+   child being faded independently. Toggle group visibility and each child
+   visibility; confirm these controls remain independent. Apply group crop,
+   rotation, and flips and confirm they affect the combined content while the
+   canvas dimensions stay fixed.
+5. Select a group and use Quick Export as PNG and JPEG. Confirm the full canvas
+   contains the group's children only and respects group visibility, opacity,
+   and transforms. Confirm the group thumbnail shows the combined result.
+6. Ungroup and confirm child order and appearance are preserved. Group them
+   again, delete the group, and use Undo/Redo to verify the group and children
+   are removed or restored together. Save and reopen `.cimg`; verify empty and
+   filled groups, parent relationships, root/child order, properties, and
+   transforms persist. Save a recovery snapshot and confirm its wrapper version
+   stays unchanged while its document payload is v8.
+7. In linked mode, save a composition with grouped layers and confirm the
+   published PNG contains the same flattened result in the Video Editor.
+
 ### Recorded standalone validation
 
 - [x] User confirms the standalone workflow above was validated for the current
   baseline implementation, including the restart and recovery check. The
   platform, Qt version, run date, and scenario-by-scenario results were not
   recorded.
-- [ ] Validate the JPEG options, responsive export, selected-layer Quick
-  Export, and editable-shape steps added after that confirmation.
+- [ ] Validate the JPEG options, responsive export, selected-item Quick
+  Export, editable-shape, general selection, and layer-group steps added after
+  that confirmation.
 - [ ] Cross-platform packaging and interaction checks below still need
   platform-specific records.
 

@@ -203,10 +203,10 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
                 selected_object_ids_ = object_ids;
                 const bool layer_changed = !layer_id.isEmpty() && session_.selectLayer(layer_id);
                 if (layer_changed) {
-                    layer_panel_->setLayers(session_.data().layers,
-                        session_.selectedLayerId(), session_.renderedLayerThumbnails(QSize(
+                    layer_panel_->setDocument(session_.data(), session_.selectedLayerId(),
+                        session_.selectedGroupId(), session_.renderedLayerThumbnails(QSize(
                             LayerPanel::kThumbnailWidth, LayerPanel::kThumbnailHeight)));
-                    tool_sidebar_->setPaintingAllowed(session_.selectedLayerIsEditable());
+                    updateSelectionContext();
                 }
                 for (const auto& placement : session_.visibleObjects()) {
                     if (!selected_object_ids_.contains(
@@ -251,7 +251,10 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             tool_sidebar_->activeTool() != ToolSidebar::Tool::Shapes) {
             deactivateCanvasTools();
         }
-        updateView(true);
+        updateSelectionContext();
+    });
+    connect(layer_panel_, &LayerPanel::groupSelected, this, [this](const QString& id) {
+        if (session_.selectGroup(id)) updateSelectionContext();
     });
     connect(layer_panel_, &LayerPanel::layerVisibilityChanged, this,
             [this](const QString& id, bool visible) {
@@ -261,6 +264,19 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             [this](const QString& id, const QString& name) {
                 QString error;
                 if (session_.renameLayer(id, name, &error)) updateView(true);
+                else {
+                    updateView(true);
+                    if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
+                }
+            });
+    connect(layer_panel_, &LayerPanel::groupVisibilityChanged, this,
+            [this](const QString& id, bool visible) {
+                if (session_.setGroupVisible(id, visible)) updateView(true);
+            });
+    connect(layer_panel_, &LayerPanel::groupRenamed, this,
+            [this](const QString& id, const QString& name) {
+                QString error;
+                if (session_.renameGroup(id, name, &error)) updateView(true);
                 else {
                     updateView(true);
                     if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
@@ -276,6 +292,26 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Layer added"), 1800);
     });
+    connect(layer_panel_, &LayerPanel::addGroupRequested, this, [this]() {
+        QString error;
+        const QString id = session_.addGroup(&error);
+        if (id.isEmpty()) {
+            if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
+            return;
+        }
+        updateView(true);
+        statusBar()->showMessage(QStringLiteral("Group added"), 1800);
+    });
+    connect(layer_panel_, &LayerPanel::groupSelectedLayersRequested, this,
+            [this](const QStringList& ids) {
+                QString error;
+                if (session_.groupLayers(ids, &error).isEmpty()) {
+                    if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
+                    return;
+                }
+                updateView(true);
+                statusBar()->showMessage(QStringLiteral("Layers grouped"), 1800);
+            });
     connect(layer_panel_, &LayerPanel::deleteLayerRequested, this,
             [this](const QString& id) {
                 if (!session_.deleteLayer(id)) return;
@@ -286,15 +322,30 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
                 }
                 updateView(true);
             });
-    connect(layer_panel_, &LayerPanel::moveLayerRequested, this,
-            [this](const QString& id, int direction) {
-                if (session_.moveLayer(id, direction)) updateView(true);
+    connect(layer_panel_, &LayerPanel::deleteGroupRequested, this,
+            [this](const QString& id) {
+                if (!session_.deleteGroup(id)) return;
+                selected_object_ids_.clear();
+                updateView(true);
+            });
+    connect(layer_panel_, &LayerPanel::ungroupRequested, this,
+            [this](const QString& id) {
+                if (session_.ungroup(id)) updateView(true);
+            });
+    connect(layer_panel_, &LayerPanel::moveStackItemRequested, this,
+            [this](const QString& id, bool is_group, const QString& target_group_id,
+                   qsizetype insertion_index) {
+                if (session_.moveStackItem(id, is_group, target_group_id, insertion_index)) {
+                    updateView(true);
+                }
             });
     connect(layer_panel_, &LayerPanel::opacityEditStarted, this,
             [this]() { session_.beginLayerOpacityEdit(); });
-    connect(layer_panel_, &LayerPanel::layerOpacityChanged, this,
-            [this](const QString& id, int opacity) {
-                if (session_.setLayerOpacity(id, opacity)) updateView(true);
+    connect(layer_panel_, &LayerPanel::stackOpacityChanged, this,
+            [this](const QString& id, bool is_group, int opacity) {
+                const bool changed = is_group ? session_.setGroupOpacity(id, opacity)
+                                              : session_.setLayerOpacity(id, opacity);
+                if (changed) updateView(true);
             });
     connect(layer_panel_, &LayerPanel::opacityEditFinished, this, [this]() {
         session_.endLayerOpacityEdit();
@@ -722,7 +773,8 @@ void ImageEditorWindow::applyShapeStyleToSelection(bool include_kind) {
 }
 
 void ImageEditorWindow::handleShapeCreated(const ImageShapeData& shape) {
-    if (session_.data().layers.size() >= ImageDocumentStore::kMaximumLayers) {
+    if (session_.data().layers.size() + session_.data().groups.size() >=
+        ImageDocumentStore::kMaximumLayers) {
         statusBar()->showMessage(
             QStringLiteral("Cannot create a shape: the 512-layer limit has been reached."),
             4000);
@@ -1127,8 +1179,8 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     tool_sidebar_->setDocumentAvailable(session_.hasSource());
     tool_sidebar_->setPaintingAllowed(session_.hasSource() &&
                                       session_.selectedLayerIsEditable());
-    layer_panel_->setLayers(session_.data().layers, session_.selectedLayerId(),
-                            session_.renderedLayerThumbnails(QSize(
+    layer_panel_->setDocument(session_.data(), session_.selectedLayerId(),
+                            session_.selectedGroupId(), session_.renderedLayerThumbnails(QSize(
                                 LayerPanel::kThumbnailWidth,
                                 LayerPanel::kThumbnailHeight)));
     updateObjectPlacements();
@@ -1142,21 +1194,7 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     quick_export_action_->setEnabled(session_.hasSource());
     layer_panel_->setQuickExportEnabled(session_.hasSource());
     relink_action_->setEnabled(session_.sourceIsMissing());
-    const bool selected_layer_editable = session_.hasSource() &&
-        session_.selectedLayerIsEditable();
-    crop_action_->setEnabled(selected_layer_editable);
-    rotate_left_action_->setEnabled(selected_layer_editable);
-    rotate_right_action_->setEnabled(selected_layer_editable);
-    flip_horizontal_action_->setEnabled(selected_layer_editable);
-    flip_vertical_action_->setEnabled(selected_layer_editable);
-    fit_action_->setEnabled(session_.hasSource());
-    cancel_crop_action_->setEnabled(crop_action_->isChecked() && selected_layer_editable);
-    paint_tool_action_->setEnabled(selected_layer_editable);
-    eraser_tool_action_->setEnabled(selected_layer_editable);
-    shapes_tool_action_->setEnabled(session_.hasSource());
-    select_tool_action_->setEnabled(session_.hasSource());
-    delete_objects_action_->setEnabled(!selected_object_ids_.isEmpty() &&
-        tool_sidebar_->activeTool() == ToolSidebar::Tool::Select);
+    updateSelectionContext();
 
     QString title = QStringLiteral("Image Editor");
     if (!session_.documentPath().isEmpty()) {
@@ -1179,6 +1217,42 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     status_label_->setText(QStringLiteral("%1 × %2 px  |  %3%")
         .arg(size.width()).arg(size.height())
         .arg(static_cast<int>(canvas_->zoomFactor() * 100.0)));
+}
+
+void ImageEditorWindow::updateSelectionContext() {
+    if (tool_sidebar_ == nullptr || !session_.hasSource()) {
+        if (tool_sidebar_ != nullptr) tool_sidebar_->setPaintingAllowed(false);
+        if (crop_action_ != nullptr) crop_action_->setEnabled(false);
+        if (rotate_left_action_ != nullptr) rotate_left_action_->setEnabled(false);
+        if (rotate_right_action_ != nullptr) rotate_right_action_->setEnabled(false);
+        if (flip_horizontal_action_ != nullptr) flip_horizontal_action_->setEnabled(false);
+        if (flip_vertical_action_ != nullptr) flip_vertical_action_->setEnabled(false);
+        if (cancel_crop_action_ != nullptr) cancel_crop_action_->setEnabled(false);
+        if (paint_tool_action_ != nullptr) paint_tool_action_->setEnabled(false);
+        if (eraser_tool_action_ != nullptr) eraser_tool_action_->setEnabled(false);
+        if (shapes_tool_action_ != nullptr) shapes_tool_action_->setEnabled(false);
+        if (select_tool_action_ != nullptr) select_tool_action_->setEnabled(false);
+        if (delete_objects_action_ != nullptr) delete_objects_action_->setEnabled(false);
+        return;
+    }
+    const bool selected_layer_editable = session_.selectedLayerIsEditable();
+    const bool selected_item_transformable = selected_layer_editable ||
+        session_.selectedGroupIsActive();
+    tool_sidebar_->setPaintingAllowed(selected_layer_editable);
+    crop_action_->setEnabled(selected_item_transformable);
+    rotate_left_action_->setEnabled(selected_item_transformable);
+    rotate_right_action_->setEnabled(selected_item_transformable);
+    flip_horizontal_action_->setEnabled(selected_item_transformable);
+    flip_vertical_action_->setEnabled(selected_item_transformable);
+    fit_action_->setEnabled(true);
+    cancel_crop_action_->setEnabled(crop_action_->isChecked() && selected_item_transformable);
+    paint_tool_action_->setEnabled(selected_layer_editable);
+    eraser_tool_action_->setEnabled(selected_layer_editable);
+    shapes_tool_action_->setEnabled(true);
+    select_tool_action_->setEnabled(true);
+    delete_objects_action_->setEnabled(!selected_object_ids_.isEmpty() &&
+        tool_sidebar_->activeTool() == ToolSidebar::Tool::Select);
+    updateToolOptions();
 }
 
 void ImageEditorWindow::createNewCanvas() {
@@ -1471,7 +1545,9 @@ void ImageEditorWindow::exportImage(bool quick_export) {
         }
     }
     options.scope = quick_export
-        ? ImageExportScope::SelectedLayer : ImageExportScope::Composite;
+        ? (session_.selectedGroupIsActive() ? ImageExportScope::SelectedGroup
+                                            : ImageExportScope::SelectedLayer)
+        : ImageExportScope::Composite;
 
     const ImageExportSnapshot snapshot = session_.exportSnapshot();
     auto cancellation_requested = std::make_shared<std::atomic_bool>(false);

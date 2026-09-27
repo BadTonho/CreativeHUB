@@ -23,26 +23,30 @@ persistence, and recovery.
 
 - `ImageDocumentSession` owns either a decoded, linked source image or a
   self-contained canvas base, the locked Background, editable raster layers,
-  and the active layer identity. Layer visibility, opacity, order, names,
-  painting, and transforms are document edits with undo/redo. The active layer
-  selection is session state and does not make the document dirty.
+  one-level groups, and the active layer or group identity. Layer and group
+  visibility, opacity, order, names, transforms, and group membership are
+  document edits with undo/redo. The active selection is session state and
+  does not make the document dirty.
 - Version 1–3 operation sequences remain attached to Background so legacy
   documents render unchanged. New layer operations render on the fixed canvas;
   layer crops clear pixels outside the selected rectangle, while rotations and
-  flips clip to the canvas bounds. The renderer composites visible layers from
-  bottom to top. Export and recovery use that same composition; linked source
-  files remain unchanged.
+  flips clip to the canvas bounds. The renderer composites visible items from
+  bottom to top. A group composites its children first, applies crop, rotation,
+  and flips to the combined pixels, then applies group opacity once. Export and
+  recovery use that same composition; linked source files remain unchanged.
 - `ImageDocumentStore` reads and atomically writes versioned `.cimg` documents
   and recovery snapshots. Version 4 stores layer UUIDs and properties; version
   5 adds layer-local eraser strokes; version 6 adds editable shape operations;
-  version 7 adds stable UUIDs to paint and eraser strokes. The reader continues
-  to accept versions 1–6 and generates in-memory IDs for older strokes. Its
-  data format is specified in [`FORMAT.md`](FORMAT.md).
+  version 7 adds stable UUIDs to paint and eraser strokes; version 8 adds
+  one-level groups. The reader continues to accept versions 1–7 and generates
+  in-memory IDs for older strokes. Its data format is specified in
+  [`FORMAT.md`](FORMAT.md).
 - `ImageExportSnapshot` captures the current source image, document data, and
-  selected layer ID; its implicitly shared image and layer buffers exclude undo
-  history and thumbnail caches. The default composite scope renders all visible
-  layers. **Quick Export** uses the selected-layer scope, preserves the full
-  canvas bounds, and applies that layer's visibility and opacity; selecting
+  selected layer and group IDs; its implicitly shared image and document
+  buffers exclude undo history and thumbnail caches. The default composite
+  scope renders all visible layers and groups. **Quick Export** uses the
+  selected layer or group scope and preserves the full canvas bounds; selected
+  groups include their visibility, opacity, and transforms. Selecting
   Background exports the base image with its document operations. Standalone
   PNG/JPEG exports render this immutable snapshot and write it on a worker
   thread. Quick Export reuses the saved JPEG quality (0–100, default 95) and
@@ -53,9 +57,15 @@ persistence, and recovery.
   cancellation requested in that phase discards the temporary output after
   encoding returns. Linked image publication continues to use its synchronous
   composite PNG path and default options.
-- The Layers dock places a **Quick Export** button above the layer list. It
-  invokes the same selected-layer export action as **File > Quick Export** and
-  stays disabled until an image is open.
+- The Layers dock is a tree with Ctrl/Shift multi-selection, collapsed groups,
+  visibility controls, and drag reordering or reparenting. **Group Selected**
+  accepts only contiguous sibling raster layers. Add Group creates an empty
+  group. Ungroup preserves its children; Delete removes the group and children
+  as one undoable edit. Background remains fixed at the root bottom, and
+  subgroups are rejected. Group opacity is applied once to its composite.
+- The Layers dock places a **Quick Export** button above the tree. It invokes
+  the same selected-item export action as **File > Quick Export** and stays
+  disabled until an image is open.
 - `RecoveryStore` writes a local snapshot every 60 seconds while a dirty
   document with a renderable base is open. Unsaved canvases use a persisted
   session identity so they remain recoverable without a source path. On the
@@ -109,23 +119,32 @@ persistence, and recovery.
   above the selected layer, including Background; the new layer contains only
   that shape. Shape creation and layer insertion are one Undo/Redo edit. Shapes
   remains available with Background selected, while Paint and Eraser require
-  an editable layer. Stroke and fill controls edit all selected shapes.
+  an editable layer. When a child layer is selected, a new shape is inserted
+  inside that group. When a group is selected, it is inserted at the root above
+  the group. Stroke and fill controls edit all selected shapes.
   Paint and Eraser sizes are independent and start at 12 px. Shape defaults are
   Rectangle, enabled stroke and fill using the current Paint color, and a 2 px
   stroke. Shape options are session-only and are not stored in `.cimg`. The
   Eraser-only Preview option starts off and is session state, not document data.
   The sidebar tools and crop action cannot be active at the same time.
 - `LayerPanel` is hosted by a resizable, dockable right-side `QDockWidget`. It
-  presents the stack top-to-bottom with an isolated, aspect-fitted thumbnail
-  on the left, the layer name, and an eye visibility button on the right.
+  presents the stack as a top-to-bottom tree with groups, Ctrl/Shift
+  multi-selection, and drag reordering or reparenting. Group Selected accepts
+  only contiguous sibling raster layers. Ungroup preserves children; Delete
+  removes a group and its children together. Groups cannot nest, and group
+  thumbnails show the transformed composite. Each raster row has an isolated,
+  aspect-fitted thumbnail on the left, the layer name, and an eye visibility
+  button on the right.
   Thumbnails use the canvas checkerboard colors behind transparent pixels and
   remain visible when a layer is hidden or has zero opacity. The session
   renders operations at thumbnail resolution and caches small per-layer
   previews by source and content, so selection and visibility changes do not
-  rerender them. Background
-  remains fixed at the bottom, with visibility as its only editable property.
+  rerender them. Background remains fixed at the root bottom, with visibility
+  as its only editable property.
   Selecting Background disables Paint, Eraser, and layer transforms. Its hint
   explains that Shapes creates a separate editable layer for each object.
+  Selecting a group enables its opacity and transforms; a selected child layer
+  receives new layers and shapes inside its group.
   Shapes and Selection remain available; shapes created with Background
   selected are inserted immediately above it. Opacity slider drags are grouped
   into one undo entry.
@@ -152,7 +171,7 @@ persistence, and recovery.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 7; host links live in the Video Editor's
+  The `.cimg` schema is version 8; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message

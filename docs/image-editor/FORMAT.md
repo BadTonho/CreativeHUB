@@ -1,10 +1,10 @@
 # Image Editor Document Format
 
-Status: **provisional version 7**. The `.cimg` extension is temporary until a
+Status: **provisional version 8**. The `.cimg` extension is temporary until a
 later format review. Version 4 added editable raster layers; version 5 adds
 eraser strokes; version 6 adds editable line, rectangle, and ellipse shapes;
-version 7 adds stable IDs to paint and eraser strokes. Versions 1 through 6
-remain readable.
+version 7 adds stable IDs to paint and eraser strokes; version 8 adds
+one-level layer groups. Versions 1 through 7 remain readable.
 
 ## Document contents
 
@@ -13,7 +13,7 @@ A `.cimg` file is UTF-8 JSON with these top-level fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite-image-document`. |
-| `version` | integer | Current version is `7`. |
+| `version` | integer | Current version is `8`. |
 | `base` | object | A linked source image or a self-contained canvas. |
 | `operations` | array | Version 1–3 edits retained as Background content. |
 | `layers` | array | Version 4 and later layer stack ordered bottom-to-top. |
@@ -32,18 +32,28 @@ without an external raster file. Canvas dimensions must be positive, at most
 
 ## Layer stack
 
-Version 4 and later store every layer's stable UUID, name, type, visibility,
-opacity, and ordered operations. There must be exactly one `background` layer at index
-zero. It is named `Background`, has 100% opacity, and has no layer operations;
-its pixels come from the base and the top-level legacy `operations` array.
-Other layers use `kind: "raster"`, have opacity from 0 through 100, and may be
-empty. Names are non-empty and at most 128 characters. IDs must be unique
-canonical UUIDs. The stack is composited from bottom to top.
+Versions 4 through 7 store a flat layer array ordered bottom-to-top. Version 8
+stores the same order as a tree: root entries and group children are each
+ordered bottom-to-top. Raster entries retain their stable UUID, name,
+visibility, opacity, and ordered operations. There must be exactly one
+`background` layer at the bottom of the root stack. It is named `Background`,
+has 100% opacity, and has no layer operations; its pixels come from the base
+and the top-level legacy `operations` array. Other layers use `kind: "raster"`,
+have opacity from 0 through 100, and may be empty. IDs are unique canonical
+UUIDs. The 512-item limit counts Background, raster layers, and groups.
+
+A version 8 root entry may instead use `kind: "group"`. A group has a stable
+UUID, a non-empty name, visibility, opacity from 0 through 100, ordered
+transform operations, and a `children` array of raster layers. Empty groups are
+valid; groups cannot contain Background or other groups. Group visibility
+hides all children without changing their individual visibility. Children are
+composited in order, crop/rotation/flip operations are applied to their
+combined pixels, and group opacity is applied once to that result.
 
 ```json
 {
   "format": "creative-suite-image-document",
-  "version": 7,
+  "version": 8,
   "base": {
     "kind": "canvas",
     "width": 1920,
@@ -79,18 +89,25 @@ layers remain. New documents start with `Background` and a transparent
 deleted, painted, transformed, or given a different opacity.
 
 When a user draws a shape, the editor stores it in a new editable raster layer
-named `Shape N`, inserted immediately above the selected layer. This also works
-with Background selected; Background itself remains locked. Each generated
-shape layer contains only the new shape, so its visibility, opacity, and
-Quick Export output can be controlled independently. This uses the existing
-layer structure and does not change the `.cimg` version or migrate shapes
-already stored in other layers.
+named `Shape N`, inserted immediately above the selected layer or inside its
+selected group. When a group is selected, the shape layer is inserted in the
+root directly above it. Background remains locked. Each generated shape layer
+contains only the new shape, so its visibility, opacity, and Quick Export
+output can be controlled independently.
+
+The editor can create empty groups or group selected contiguous sibling raster
+layers. Ungroup removes the group and preserves children in place; deleting a
+group removes it and all of its children as one undoable edit. Dragging can
+reorder root items or move raster layers into or out of groups. Groups cannot
+be nested. If a raster layer inside a group is selected when an empty group is
+created, the new group is inserted in the root directly above the containing
+group to preserve the one-level rule.
 
 ## Operations
 
 The top-level `operations` array preserves the ordered, non-destructive edits
 from versions 1–3 and renders them as part of `Background`. This keeps old
-documents visually unchanged when they are opened and later saved as version 7.
+documents visually unchanged when they are opened and later saved as version 8.
 New edits are stored in the selected raster layer's `operations` array.
 
 Each layer operation is evaluated on the fixed document canvas. Crop keeps the
@@ -105,8 +122,9 @@ it clears alpha in its raster layer with antialiased edges. It has no color
 field and reveals visible content in lower layers. Version 6 adds a `shape`
 operation to editable layer sequences. Shape operations retain their position
 among paint, erase, crop, rotate, and flip operations. Version 7 gives every
-paint and erase stroke a stable canonical UUID in its `id` field. Object IDs
-are unique across paint, erase, and shape operations.
+paint and erase stroke a stable canonical UUID in its `id` field. Version 8
+adds the group tree without changing operation IDs. Object IDs are unique
+across paint, erase, and shape operations.
 
 ```json
 {
@@ -151,8 +169,8 @@ Version 1 uses the legacy `source` object. Version 2 adds canvas bases. Version
 layer-local eraser strokes. Version 6 adds editable shapes to layer operations.
 Version 7 adds IDs to paint and eraser operations. When reading versions 1–6,
 the loader generates in-memory IDs for operations that do not contain them;
-the next save writes those IDs in version 7. Saving any supported version
-writes version 7.
+the next save writes those IDs in version 8. Versions 1 through 7 remain
+visually compatible. Saving any supported version writes version 8.
 
 Undo and redo history are in memory and are not stored in `.cimg`. A save writes
 to a temporary file and atomically replaces the destination. Export is a
@@ -168,15 +186,17 @@ Qt image writer's blocking encode is honored before the temporary file is
 committed. **Quick Export** writes only the selected layer at the current
 canvas dimensions, respecting its visibility and opacity; a hidden selected
 layer therefore produces a transparent PNG or a JPEG filled with the saved
-matte color. Selecting Background exports the base image and its document-level
-operations without the editable layers. The save dialog chooses PNG or JPEG;
-Quick Export uses saved JPEG options without showing the options dialog.
+matte color. Selecting a group exports its composed children with the group's
+visibility, opacity, and transforms. Selecting Background exports the base
+image and its document-level operations without the editable layers. The save
+dialog chooses PNG or JPEG; Quick Export uses saved JPEG options without
+showing the options dialog.
 
 Recovery snapshots use a separate `creative-suite-image-recovery` JSON wrapper
 with the document payload, intended `.cimg` destination, and a session identity
 for unsaved canvases. Recovery wrapper version 1 accepts document payloads in
-versions 1 through 7. Autosave and recovery preserve layer order, properties,
-IDs, and operations.
+versions 1 through 8. Autosave and recovery preserve root order, group
+children, properties, IDs, and operations.
 
 Unsupported versions, invalid layer stacks, and invalid operation data are
 rejected without replacing the currently open document.

@@ -1,7 +1,7 @@
 # Image Editor Roadmap
 
 Status: **standalone minimum implemented; baseline manual workflow user-confirmed;
-export, editable shapes, and general object selection need manual validation;
+export, editable shapes, general object selection, and layer groups need manual validation;
 cross-platform acceptance in progress**.
 Current application version: **Beta 0.1.1**.
 This roadmap covers the independent application under `apps/image-editor/`.
@@ -16,9 +16,10 @@ of Motion Studio in the application sequence.
   Editor as a separate executable.
 - Preserve linked source images; store editable document operations in a
   versioned format.
-- Keep the current standalone scope to one raster document with a Background
-  and editable raster layers. Defer masks, retouching, color adjustment, and
-  effect systems until they are justified by validated workflows.
+- Keep the current standalone scope to one raster document with a Background,
+  editable raster layers, and one-level layer groups. Defer masks, retouching,
+  color adjustment, and effect systems until they are justified by validated
+  workflows.
 - Use Qt image I/O and deploy the plugins required for the documented input
   formats. Track Qt Image Formats and its codec notices for distribution.
 - Keep compatibility with the Video Editor as an independently testable
@@ -63,20 +64,24 @@ of Motion Studio in the application sequence.
 - [x] Add editable line, rectangle, and ellipse operations with creation,
   selection across visible layers, movement, resizing, style editing, deletion,
   Undo/Redo, and `.cimg` v6 persistence while retaining v1–v5 compatibility.
-  New shapes each receive a dedicated `Shape N` layer using the existing v7
+  New shapes each receive a dedicated `Shape N` layer using the existing
   layer structure; Background can be the insertion anchor without becoming
   editable.
 - [x] Add general multi-selection for paint, eraser, and shape operations,
   including marquee selection, grouped movement and scaling, and `.cimg` v7
   persistent object IDs while retaining visual compatibility with v1–v6.
+- [x] Add one-level layer groups with multi-selection, reordering and
+  reparenting, combined transforms, single-pass group opacity, group Quick
+  Export, undoable grouping/ungrouping/deletion, and `.cimg` v8 persistence
+  while retaining v1-v7 compatibility.
 - [x] Add canvas fit, zoom, pan, and drag-to-crop controls.
 - [x] Pass Release build and automated tests for documents, edits, relinking,
   export, recovery, logging, and the UI boundary.
 - [-] Complete the manual workflow in
   [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md), including a restart and
   recovery check (the baseline workflow was user-confirmed; export options,
-  responsive export, selected-layer Quick Export, editable shapes, and general
-  object selection still need manual validation).
+  responsive export, selected-item Quick Export, editable shapes, general
+  object selection, and layer groups still need manual validation).
 - [ ] Validate Windows packaging with PNG, JPEG, BMP, WebP, and TIFF plugins;
   then repeat build and interaction checks on macOS and Linux.
 
