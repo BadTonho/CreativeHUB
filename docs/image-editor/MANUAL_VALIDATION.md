@@ -21,7 +21,12 @@ run.
 5. Export a transparent canvas to PNG and JPEG. Confirm PNG transparency is
    retained and JPEG uses quality 95 and a white background by default. Export
    again with a custom JPEG background and low and high quality values. Confirm
-   the selected options are remembered after restarting the application.
+   the selected options are remembered after restarting the application. Use
+   **File > Quick Export** to save the selected editable layer as PNG and JPEG.
+   Confirm it preserves canvas dimensions and transparency without showing JPEG
+   options, and that Quick JPEG uses the saved quality and background. Repeat
+   with Background selected and with the editable layer hidden; confirm other
+   layers are excluded and the hidden layer exports transparent.
 6. Open PNG, JPEG, BMP, WebP, and TIFF examples. Confirm each is decoded and
    its dimensions are shown. If a format fails, check that the Qt Image Formats
    plugins are present in the deployed `imageformats` directory.
@@ -125,8 +130,8 @@ run.
   baseline implementation, including the restart and recovery check. The
   platform, Qt version, run date, and scenario-by-scenario results were not
   recorded.
-- [ ] Validate the JPEG options and responsive export steps added after that
-  confirmation.
+- [ ] Validate the JPEG options, responsive export, and selected-layer Quick
+  Export steps added after that confirmation.
 - [ ] Cross-platform packaging and interaction checks below still need
   platform-specific records.
 

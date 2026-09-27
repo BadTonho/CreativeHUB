@@ -11,14 +11,21 @@
 
 namespace image_editor {
 
+enum class ImageExportScope {
+    Composite,
+    SelectedLayer
+};
+
 struct ImageExportOptions {
     int jpeg_quality = 95;
     QColor jpeg_background = Qt::white;
+    ImageExportScope scope = ImageExportScope::Composite;
 };
 
 struct ImageExportSnapshot {
     QImage source_image;
     ImageDocumentData document;
+    QString selected_layer_id;
 };
 
 enum class ImageExportPhase {

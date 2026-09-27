@@ -1052,6 +1052,77 @@ void testExportAndFormatPlugins(const QString& root) {
     }
 }
 
+void testSelectedLayerExport(const QString& root) {
+    image_editor::ImageDocumentSession session;
+    QString error;
+    require(session.createCanvas(QSize(12, 8), QColor(18, 28, 38), &error), error);
+    const QString background_id = session.data().layers.front().id;
+    const QString selected_id = session.selectedLayerId();
+    require(session.applyPaintStroke({QPointF(4, 4)}, QColor(230, 35, 20), 3, &error), error);
+
+    const QString composite_path = root + QStringLiteral("/quick-export-composite.png");
+    require(session.exportImage(composite_path, &error), error);
+    const QImage composite(composite_path);
+    require(composite.size() == QSize(12, 8) &&
+                composite.pixelColor(0, 0).alpha() == 255 &&
+                composite.pixelColor(4, 4).red() > 200,
+            QStringLiteral("The default export scope no longer composites all layers."));
+
+    image_editor::ImageExportOptions options;
+    options.scope = image_editor::ImageExportScope::SelectedLayer;
+    const QString layer_path = root + QStringLiteral("/quick-export-selected.png");
+    require(session.exportImage(layer_path, options, &error), error);
+    const QImage selected(layer_path);
+    require(selected.size() == QSize(12, 8) &&
+                selected.pixelColor(4, 4).red() > 200 &&
+                selected.pixelColor(0, 0).alpha() == 0,
+            QStringLiteral("Selected-layer export included Background or changed the canvas bounds."));
+
+    require(session.setLayerOpacity(selected_id, 50),
+            QStringLiteral("The selected layer opacity could not be changed for export."));
+    const QString opacity_path = root + QStringLiteral("/quick-export-opacity.png");
+    require(session.exportImage(opacity_path, options, &error), error);
+    const QColor half_opacity = QImage(opacity_path).pixelColor(4, 4);
+    require(half_opacity.alpha() >= 120 && half_opacity.alpha() <= 136,
+            QStringLiteral("Selected-layer export ignored layer opacity."));
+
+    require(session.setLayerVisible(selected_id, false),
+            QStringLiteral("The selected layer could not be hidden for export."));
+    const QString hidden_path = root + QStringLiteral("/quick-export-hidden.png");
+    require(session.exportImage(hidden_path, options, &error), error);
+    const QImage hidden(hidden_path);
+    require(hidden.size() == QSize(12, 8) && hidden.pixelColor(4, 4).alpha() == 0 &&
+                hidden.pixelColor(0, 0).alpha() == 0,
+            QStringLiteral("A hidden selected layer was not exported as a transparent canvas."));
+
+    auto background_snapshot = session.exportSnapshot();
+    background_snapshot.selected_layer_id = background_id;
+    image_editor::ImageOperation base_mark;
+    base_mark.kind = image_editor::OperationKind::PaintStroke;
+    base_mark.paint_stroke.points = {QPointF(8, 2)};
+    base_mark.paint_stroke.color = QColor(20, 210, 60);
+    base_mark.paint_stroke.diameter = 3;
+    background_snapshot.document.operations.append(base_mark);
+    const QString background_path = root + QStringLiteral("/quick-export-background.png");
+    const auto background_result = image_editor::exportImageSnapshot(
+        background_snapshot, background_path, options);
+    const QImage background(background_path);
+    require(background_result.status == image_editor::ImageExportStatus::Succeeded &&
+                background.size() == QSize(12, 8) &&
+                background.pixelColor(0, 0).red() == 18 &&
+                background.pixelColor(8, 2).green() > 180 &&
+                background.pixelColor(4, 4).red() == 18,
+            QStringLiteral("Background export omitted base operations or included another layer."));
+
+    auto invalid_snapshot = session.exportSnapshot();
+    invalid_snapshot.selected_layer_id = QStringLiteral("missing-layer");
+    const auto invalid_result = image_editor::exportImageSnapshot(
+        invalid_snapshot, root + QStringLiteral("/quick-export-invalid.png"), options);
+    require(invalid_result.status == image_editor::ImageExportStatus::Failed &&
+                !invalid_result.error.isEmpty(),
+            QStringLiteral("Selected-layer export accepted a missing layer ID."));
+}
+
 void testRecoveryAndLogging(const QString& root) {
     const QString source_path = root + QStringLiteral("/recover.png");
     require(writeImage(source_path, sampleImage()), QStringLiteral("Could not create recovery source."));
@@ -1210,6 +1281,7 @@ int main(int argc, char* argv[]) {
         testLayerManagementTransformsAndOpacity(root);
         testMissingSourceAndRelink(root);
         testExportAndFormatPlugins(root);
+        testSelectedLayerExport(root);
         testRecoveryAndLogging(root);
         testInvalidDocument(root);
     } catch (const std::exception& error) {

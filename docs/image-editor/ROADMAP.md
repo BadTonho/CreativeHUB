@@ -49,7 +49,8 @@ of Motion Studio in the application sequence.
   explicit relinking when the source path is unavailable.
 - [x] Export flattened PNG and JPEG images, preserving PNG transparency and
   flattening JPEG output over a selectable background (white by default) with
-  configurable quality.
+  configurable quality. Add Quick Export for only the selected layer, retaining
+  canvas bounds and respecting visibility and opacity.
 - [x] Add local autosave snapshots, recovery, and bounded structured error
   logging.
 - [x] Add self-contained blank canvases with standard and custom dimensions,
@@ -62,8 +63,9 @@ of Motion Studio in the application sequence.
   export, recovery, logging, and the UI boundary.
 - [-] Complete the manual workflow in
   [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md), including a restart and
-  recovery check (the baseline workflow was user-confirmed; the export-options
-  and responsive-export changes still need manual validation).
+  recovery check (the baseline workflow was user-confirmed; the export-options,
+  responsive-export, and selected-layer Quick Export changes still need manual
+  validation).
 - [ ] Validate Windows packaging with PNG, JPEG, BMP, WebP, and TIFF plugins;
   then repeat build and interaction checks on macOS and Linux.
 

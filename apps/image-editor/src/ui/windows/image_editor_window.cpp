@@ -401,6 +401,8 @@ void ImageEditorWindow::createActions() {
         QStringLiteral("Save Document As..."), QKeySequence::SaveAs, [this]() { saveDocumentAs(); });
     export_action_ = makeAction(
         QStringLiteral("Export Image..."), {}, [this]() { exportImage(); });
+    quick_export_action_ = makeAction(
+        QStringLiteral("Quick Export..."), {}, [this]() { exportImage(true); });
     auto* quit_action = makeAction(
         QStringLiteral("Quit"), QKeySequence::Quit, [this]() { close(); });
 
@@ -467,6 +469,7 @@ void ImageEditorWindow::createActions() {
     save_action_->setObjectName(QStringLiteral("saveDocumentAction"));
     save_as_action_->setObjectName(QStringLiteral("saveDocumentAsAction"));
     export_action_->setObjectName(QStringLiteral("exportImageAction"));
+    quick_export_action_->setObjectName(QStringLiteral("quickExportImageAction"));
     quit_action->setObjectName(QStringLiteral("quitAction"));
     rotate_left_action_->setObjectName(QStringLiteral("rotateLeftAction"));
     flip_horizontal_action_->setObjectName(QStringLiteral("flipHorizontalAction"));
@@ -480,6 +483,7 @@ void ImageEditorWindow::createActions() {
     registerShortcutAction(save_action_, QKeySequence::Save);
     registerShortcutAction(save_as_action_, QKeySequence::SaveAs);
     registerShortcutAction(export_action_, {});
+    registerShortcutAction(quick_export_action_, {});
     registerShortcutAction(quit_action, QKeySequence::Quit);
     registerShortcutAction(undo_action_, QKeySequence::Undo);
     registerShortcutAction(redo_action_, QKeySequence::Redo);
@@ -523,6 +527,7 @@ void ImageEditorWindow::createActions() {
     file_menu->addAction(save_action_);
     file_menu->addAction(save_as_action_);
     file_menu->addAction(export_action_);
+    file_menu->addAction(quick_export_action_);
     file_menu->addSeparator();
     file_menu->addAction(quit_action);
 
@@ -660,6 +665,7 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     save_action_->setEnabled(session_.hasSource());
     save_as_action_->setEnabled(session_.hasSource());
     export_action_->setEnabled(session_.hasSource());
+    quick_export_action_->setEnabled(session_.hasSource());
     relink_action_->setEnabled(session_.sourceIsMissing());
     const bool selected_layer_editable = session_.hasSource() &&
         session_.selectedLayerIsEditable();
@@ -942,10 +948,11 @@ void ImageEditorWindow::saveDocumentAs() {
     static_cast<void>(saveToPath(path));
 }
 
-void ImageEditorWindow::exportImage() {
+void ImageEditorWindow::exportImage(bool quick_export) {
     QString selected_filter;
     const QString path = QFileDialog::getSaveFileName(
-        this, QStringLiteral("Export Flattened Image"), {},
+        this, quick_export ? QStringLiteral("Quick Export Selected Layer")
+                           : QStringLiteral("Export Flattened Image"), {},
         QStringLiteral("PNG image (*.png);;JPEG image (*.jpg *.jpeg)"),
         &selected_filter);
     if (path.isEmpty()) return;
@@ -969,19 +976,23 @@ void ImageEditorWindow::exportImage() {
             statusBar()->showMessage(cause, 5000);
         }
 
-        JpegExportOptionsDialog options_dialog(options, this);
-        if (options_dialog.exec() != QDialog::Accepted) return;
-        options = options_dialog.options();
+        if (!quick_export) {
+            JpegExportOptionsDialog options_dialog(options, this);
+            if (options_dialog.exec() != QDialog::Accepted) return;
+            options = options_dialog.options();
 
-        QString preferences_error;
-        if (!saveJpegExportPreferences(options, &preferences_error, &preferences_path)) {
-            logger_.logError(QStringLiteral("save_export_preferences"),
-                             preferences_error, preferences_path);
-            QMessageBox::warning(this, QStringLiteral("Image Editor"),
-                                 preferences_error + QStringLiteral(
-                                     " This export will continue with the selected options."));
+            QString preferences_error;
+            if (!saveJpegExportPreferences(options, &preferences_error, &preferences_path)) {
+                logger_.logError(QStringLiteral("save_export_preferences"),
+                                 preferences_error, preferences_path);
+                QMessageBox::warning(this, QStringLiteral("Image Editor"),
+                                     preferences_error + QStringLiteral(
+                                         " This export will continue with the selected options."));
+            }
         }
     }
+    options.scope = quick_export
+        ? ImageExportScope::SelectedLayer : ImageExportScope::Composite;
 
     const ImageExportSnapshot snapshot = session_.exportSnapshot();
     auto cancellation_requested = std::make_shared<std::atomic_bool>(false);

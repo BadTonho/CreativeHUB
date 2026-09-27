@@ -186,6 +186,54 @@ QImage renderComposite(const QImage& source_image,
     return exportWasCancelled(cancellation_requested) ? QImage{} : composite;
 }
 
+QImage renderSelectedLayer(const QImage& source_image,
+                           const ImageDocumentData& document,
+                           const QString& selected_layer_id,
+                           const std::atomic_bool* cancellation_requested = nullptr) {
+    if (source_image.isNull() || selected_layer_id.isEmpty() ||
+        exportWasCancelled(cancellation_requested)) return {};
+
+    const auto selected = std::find_if(
+        document.layers.cbegin(), document.layers.cend(),
+        [&selected_layer_id](const ImageLayerData& layer) {
+            return layer.id == selected_layer_id;
+        });
+    if (selected == document.layers.cend()) return {};
+
+    QSize size = source_image.size();
+    for (const auto& operation : document.operations) {
+        if (exportWasCancelled(cancellation_requested)) return {};
+        if (operation.kind == OperationKind::Crop) size = operation.crop.size();
+        else if (operation.kind == OperationKind::Rotate) size.transpose();
+    }
+    if (!size.isValid() || size.isEmpty()) return {};
+
+    QImage rendered(size, QImage::Format_ARGB32_Premultiplied);
+    if (rendered.isNull()) return {};
+    rendered.fill(Qt::transparent);
+    if (!selected->visible || selected->opacity <= 0) return rendered;
+
+    QImage pixels;
+    if (selected->background) {
+        pixels = applyOperations(
+            source_image, document.operations, false, cancellation_requested);
+    } else {
+        pixels = QImage(size, QImage::Format_ARGB32_Premultiplied);
+        if (pixels.isNull()) return {};
+        pixels.fill(Qt::transparent);
+        pixels = applyOperations(
+            std::move(pixels), selected->operations, true, cancellation_requested);
+    }
+    if (pixels.isNull() || exportWasCancelled(cancellation_requested)) return {};
+
+    QPainter painter(&rendered);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    painter.setOpacity(selected->opacity / 100.0);
+    painter.drawImage(0, 0, pixels);
+    painter.end();
+    return exportWasCancelled(cancellation_requested) ? QImage{} : rendered;
+}
+
 QImage renderLayerThumbnail(QImage image,
                             QSize virtual_size,
                             const QVector<ImageOperation>& operations,
@@ -511,13 +559,27 @@ ImageExportResult exportImageSnapshot(
         (!options.jpeg_background.isValid() || options.jpeg_background.alpha() != 255)) {
         return failed(QStringLiteral("Choose an opaque background color for JPEG export."));
     }
+    if (options.scope != ImageExportScope::Composite &&
+        options.scope != ImageExportScope::SelectedLayer) {
+        return failed(QStringLiteral("The requested image export scope is invalid."));
+    }
+    if (options.scope == ImageExportScope::SelectedLayer &&
+        std::none_of(snapshot.document.layers.cbegin(), snapshot.document.layers.cend(),
+                     [&snapshot](const ImageLayerData& layer) {
+                         return layer.id == snapshot.selected_layer_id;
+                     })) {
+        return failed(QStringLiteral("The selected layer is unavailable for export."));
+    }
     if (exportWasCancelled(cancellation_requested)) {
         return {ImageExportStatus::Cancelled, {}};
     }
     if (progress) progress(ImageExportPhase::Rendering);
 
-    QImage rendered = renderComposite(
-        snapshot.source_image, snapshot.document, cancellation_requested);
+    QImage rendered = options.scope == ImageExportScope::SelectedLayer
+        ? renderSelectedLayer(snapshot.source_image, snapshot.document,
+                              snapshot.selected_layer_id, cancellation_requested)
+        : renderComposite(snapshot.source_image, snapshot.document,
+                          cancellation_requested);
     if (exportWasCancelled(cancellation_requested)) {
         return {ImageExportStatus::Cancelled, {}};
     }
@@ -568,7 +630,7 @@ ImageExportResult exportImageSnapshot(
 }
 
 ImageExportSnapshot ImageDocumentSession::exportSnapshot() const {
-    return {source_image_, data_};
+    return {source_image_, data_, selected_layer_id_};
 }
 
 bool ImageDocumentSession::exportImage(const QString& output_path, QString* error) const {

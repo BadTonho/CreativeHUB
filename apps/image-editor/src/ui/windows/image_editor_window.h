@@ -59,7 +59,7 @@ private:
     void relinkSource();
     void saveDocument();
     void saveDocumentAs();
-    void exportImage();
+    void exportImage(bool quick_export = false);
     void maybeOfferRecovery();
     [[nodiscard]] bool confirmDiscardOrSave();
     [[nodiscard]] bool saveToPath(QString path = {});
@@ -95,6 +95,7 @@ private:
     QAction* save_action_ = nullptr;
     QAction* save_as_action_ = nullptr;
     QAction* export_action_ = nullptr;
+    QAction* quick_export_action_ = nullptr;
     QAction* open_image_action_ = nullptr;
     QAction* open_document_action_ = nullptr;
     QAction* undo_action_ = nullptr;

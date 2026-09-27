@@ -37,17 +37,21 @@ persistence, and recovery.
   5 adds layer-local eraser strokes. The reader continues to accept versions
   1–4. Its data format is specified in
   [`FORMAT.md`](FORMAT.md).
-- `ImageExportSnapshot` captures only the current source image and document
-  data; its implicitly shared image and layer buffers exclude undo history and
-  thumbnail caches. Standalone PNG/JPEG exports render this immutable snapshot
-  and write it on a worker thread. JPEG quality (0–100, default 95) and an
-  opaque background for transparency (default white) are local application
-  preferences, not `.cimg` data. PNG preserves alpha. A modal progress dialog
-  keeps the document stable while export runs; cancellation is checked during
-  rendering and before the atomic output commit. Qt's image writer cannot be
-  interrupted during its blocking encode call, so cancellation requested in
-  that phase discards the temporary output after encoding returns. Linked image
-  publication continues to use its synchronous PNG path and default options.
+- `ImageExportSnapshot` captures the current source image, document data, and
+  selected layer ID; its implicitly shared image and layer buffers exclude undo
+  history and thumbnail caches. The default composite scope renders all visible
+  layers. **Quick Export** uses the selected-layer scope, preserves the full
+  canvas bounds, and applies that layer's visibility and opacity; selecting
+  Background exports the base image with its document operations. Standalone
+  PNG/JPEG exports render this immutable snapshot and write it on a worker
+  thread. Quick Export reuses the saved JPEG quality (0–100, default 95) and
+  opaque matte (default white) without opening the options dialog. PNG preserves
+  alpha. A modal progress dialog keeps the document stable while export runs;
+  cancellation is checked during rendering and before the atomic output commit.
+  Qt's image writer cannot be interrupted during its blocking encode call, so
+  cancellation requested in that phase discards the temporary output after
+  encoding returns. Linked image publication continues to use its synchronous
+  composite PNG path and default options.
 - `RecoveryStore` writes a local snapshot every 60 seconds while a dirty
   document with a renderable base is open. Unsaved canvases use a persisted
   session identity so they remain recoverable without a source path. On the

@@ -11,6 +11,8 @@
 #include <QFileDialog>
 #include <QImage>
 #include <QLabel>
+#include <QMenu>
+#include <QMenuBar>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSettings>
@@ -29,12 +31,13 @@
 
 namespace {
 
-bool driveJpegExport(image_editor::ImageEditorWindow& window,
-                     const QString& output_path,
-                     const std::function<bool(image_editor::JpegExportOptionsDialog*)>&
-                         options_interaction,
-                     bool* options_were_seen,
-                     bool* progress_was_seen = nullptr) {
+bool driveExportAction(
+    image_editor::ImageEditorWindow& window,
+    const QString& output_path,
+    const std::function<bool(image_editor::JpegExportOptionsDialog*)>& options_interaction,
+    bool* options_were_seen,
+    bool* progress_was_seen = nullptr,
+    const QString& action_object_name = QStringLiteral("exportImageAction")) {
     bool file_dialog_was_seen = false;
     bool interaction_failed = false;
     QString last_modal_type;
@@ -83,7 +86,7 @@ bool driveJpegExport(image_editor::ImageEditorWindow& window,
 
     poll.start();
     watchdog.start(10000);
-    if (auto* action = window.findChild<QAction*>(QStringLiteral("exportImageAction"))) {
+    if (auto* action = window.findChild<QAction*>(action_object_name)) {
         action->trigger();
     } else {
         interaction_failed = true;
@@ -125,7 +128,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     bool first_options_seen = false;
-    const bool first_export_completed = driveJpegExport(
+    const bool first_export_completed = driveExportAction(
         first_window, first_output,
         [expected_background](image_editor::JpegExportOptionsDialog* dialog) {
             if (dialog->findChild<QSlider*>(QStringLiteral("jpegQualitySlider")) == nullptr ||
@@ -168,10 +171,26 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    QAction* quick_export_action = first_window.findChild<QAction*>(
+        QStringLiteral("quickExportImageAction"));
+    bool quick_export_is_in_file_menu = false;
+    for (QAction* menu_entry : first_window.menuBar()->actions()) {
+        if (menu_entry->text() == QStringLiteral("File") && menu_entry->menu() != nullptr) {
+            quick_export_is_in_file_menu =
+                menu_entry->menu()->actions().contains(quick_export_action);
+            break;
+        }
+    }
+    if (quick_export_action == nullptr || !quick_export_action->isEnabled() ||
+        !quick_export_action->shortcut().isEmpty() || !quick_export_is_in_file_menu) {
+        std::cerr << "Quick Export was not registered for an open image.\n";
+        return 1;
+    }
+
     const QString png_output = temporary.filePath(QStringLiteral("transparent-export.png"));
     bool png_options_seen = false;
     bool png_progress_seen = false;
-    const bool png_export_completed = driveJpegExport(
+    const bool png_export_completed = driveExportAction(
         first_window, png_output,
         [&png_options_seen](image_editor::JpegExportOptionsDialog*) {
             png_options_seen = true;
@@ -184,11 +203,50 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    const QString quick_png_output = temporary.filePath(QStringLiteral("quick-layer.png"));
+    bool quick_png_options_seen = false;
+    bool quick_png_progress_seen = false;
+    const bool quick_png_completed = driveExportAction(
+        first_window, quick_png_output,
+        [&quick_png_options_seen](image_editor::JpegExportOptionsDialog*) {
+            quick_png_options_seen = true;
+            return false;
+        }, &quick_png_options_seen, &quick_png_progress_seen,
+        QStringLiteral("quickExportImageAction"));
+    const QImage quick_png(quick_png_output);
+    if (!quick_png_completed || !quick_png_progress_seen || quick_png_options_seen ||
+        quick_png.isNull() || quick_png.size() != source.size() ||
+        quick_png.pixelColor(16, 16).alpha() != 0) {
+        std::cerr << "Quick PNG export included the background or opened JPEG options.\n";
+        return 1;
+    }
+
+    const QString quick_jpeg_output = temporary.filePath(QStringLiteral("quick-layer.jpg"));
+    bool quick_jpeg_options_seen = false;
+    bool quick_jpeg_progress_seen = false;
+    const bool quick_jpeg_completed = driveExportAction(
+        first_window, quick_jpeg_output,
+        [&quick_jpeg_options_seen](image_editor::JpegExportOptionsDialog*) {
+            quick_jpeg_options_seen = true;
+            return false;
+        }, &quick_jpeg_options_seen, &quick_jpeg_progress_seen,
+        QStringLiteral("quickExportImageAction"));
+    const QImage quick_jpeg(quick_jpeg_output);
+    const QColor quick_jpeg_matte = quick_jpeg.pixelColor(16, 16);
+    if (!quick_jpeg_completed || !quick_jpeg_progress_seen || quick_jpeg_options_seen ||
+        quick_jpeg.isNull() ||
+        std::abs(quick_jpeg_matte.red() - expected_background.red()) >= 12 ||
+        std::abs(quick_jpeg_matte.green() - expected_background.green()) >= 12 ||
+        std::abs(quick_jpeg_matte.blue() - expected_background.blue()) >= 12) {
+        std::cerr << "Quick JPEG export did not reuse saved settings without an options dialog.\n";
+        return 1;
+    }
+
     const QString cancelled_output = temporary.filePath(QStringLiteral("cancelled.jpg"));
     image_editor::ImageEditorWindow second_window;
     if (!second_window.openImagePath(source_path)) return 1;
     bool persisted_options_seen = false;
-    const bool second_flow_completed = driveJpegExport(
+    const bool second_flow_completed = driveExportAction(
         second_window, cancelled_output,
         [&persisted_options_seen, expected_background](
             image_editor::JpegExportOptionsDialog* dialog) {

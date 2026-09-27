@@ -21,6 +21,7 @@ rejected. Use **Reset All** to restore the defaults.
 | Open editable document | Unassigned by default |
 | Relink source image | Unassigned by default |
 | Export image | Unassigned by default |
+| Quick export selected layer | Unassigned by default |
 | Crop selection | Unassigned by default |
 | Rotate left or right | Unassigned by default |
 | Flip horizontally or vertically | Unassigned by default |

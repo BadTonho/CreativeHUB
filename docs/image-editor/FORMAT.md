@@ -120,7 +120,12 @@ in `.cimg`. Export writes through `QSaveFile`, so failed or cancelled exports
 do not replace the destination with a partial image. The Image Editor renders
 and encodes an immutable document snapshot on a worker; cancellation during the
 Qt image writer's blocking encode is honored before the temporary file is
-committed.
+committed. **Quick Export** writes only the selected layer at the current
+canvas dimensions, respecting its visibility and opacity; a hidden selected
+layer therefore produces a transparent PNG or a JPEG filled with the saved
+matte color. Selecting Background exports the base image and its document-level
+operations without the editable layers. The save dialog chooses PNG or JPEG;
+Quick Export uses saved JPEG options without showing the options dialog.
 
 Recovery snapshots use a separate `creative-suite-image-recovery` JSON wrapper
 with the document payload, intended `.cimg` destination, and a session identity
