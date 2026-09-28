@@ -16,12 +16,12 @@ macOS, and Linux.
 | --- | --- | --- | --- |
 | <img src="docs/assets/app-icons/video-editor.png" alt="Temporary Video Editor icon" width="56"> | [Video Editor](docs/video-editor/ROADMAP.md) | Active development | Multitrack video and audio editing, compositing, and export. |
 | <img src="docs/assets/app-icons/image-editor.png" alt="Temporary Image Editor icon" width="56"> | [Image Editor](docs/image-editor/ROADMAP.md) | Beta 0.1.2 | Layered raster editing with `.cimg` documents and PNG/JPEG export. |
-| <img src="docs/assets/app-icons/motion-studio.png" alt="Temporary Motion Studio icon" width="56"> | [Motion Studio](docs/motion-editor/ROADMAP.md) | Planned parallel track | Motion design, animation, and advanced compositing. |
+| <img src="docs/assets/app-icons/motion-studio.png" alt="Temporary Motion Studio icon" width="56"> | [Motion Studio](docs/motion-editor/ROADMAP.md) | Foundation in progress | Motion design, animation, and advanced compositing. |
 
 The icons above are temporary placeholders. PNG icons are bundled into the
 Video and Image Editors for their runtime windows; Windows executable icons
-use generated multi-resolution `.ico` files. The Motion Studio icon is ready
-for a future executable target.
+use generated multi-resolution `.ico` files. The Motion Studio icon is not yet
+bundled into its executable.
 
 The three tracks may be developed in parallel. Video Editor stability remains a
 priority. Cross-application work depends on validated interfaces and regression
@@ -36,10 +36,11 @@ coverage in both the producer and consumer applications.
   including layers and groups, editable shapes, object selection, save/reopen,
   and export. Windows packaging and linked-image acceptance remain in progress;
   macOS and Linux validation is deferred. See the [Image Editor roadmap](docs/image-editor/ROADMAP.md).
-- **Motion Studio:** its initial scope is documented, while technical choices
-  remain provisional; its application is not yet a CMake build target. Focused
-  media, animation, composition, and diagnostics libraries are now built as
-  separate CMake targets for reuse. See the [scope and readiness guide](docs/motion-editor/SCOPE_AND_READINESS.md),
+- **Motion Studio:** its standalone Qt shell and in-memory composition/layer
+  model are in progress; C++ and Qt 6 remain provisional choices. It links the
+  shared animation library and builds without the Video or Image Editor targets.
+  Persistence, viewer, timeline, media import, and export remain open. See the
+  [scope and readiness guide](docs/motion-editor/SCOPE_AND_READINESS.md),
   [reuse plan](docs/motion-editor/REUSE_PLAN.md), and
   [Motion Studio roadmap](docs/motion-editor/ROADMAP.md).
 
@@ -86,6 +87,15 @@ coverage in both the producer and consumer applications.
 
    # Image Editor
    cmake --build build --config Release --target creative-suite-image-editor
+
+   # Motion Studio
+   cmake --build build --config Release --target creative-suite-motion-editor
+   ```
+
+   To configure Motion Studio as the only application target:
+   ```bash
+   cmake -S . -B build-motion -DBUILD_VIDEO_EDITOR=OFF -DBUILD_IMAGE_EDITOR=OFF -DBUILD_MOTION_EDITOR=ON
+   cmake --build build-motion --config Release --target creative-suite-motion-editor
    ```
 
 4. **Run the Video Editor:**
@@ -113,7 +123,18 @@ coverage in both the producer and consumer applications.
    open build/apps/image-editor/creative-suite-image-editor.app
    ```
 
-Motion Studio is not a CMake build target yet.
+6. **Run Motion Studio:**
+   ```powershell
+   # On Windows:
+   .\build\apps\motion-editor\Release\creative-suite-motion-editor.exe
+   ```
+   ```bash
+   # On Linux:
+   ./build/apps/motion-editor/creative-suite-motion-editor
+
+   # On macOS:
+   open build/apps/motion-editor/creative-suite-motion-editor.app
+   ```
 
 ---
 

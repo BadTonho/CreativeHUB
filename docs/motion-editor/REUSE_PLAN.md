@@ -1,9 +1,11 @@
 # Motion Studio Reuse Plan
 
-**Status:** provisional implementation. Motion Studio remains a standalone
-application track and is not yet a CMake application target. Shared libraries
-are compiled into each consuming application; neither application requires
-the other to be installed or running.
+**Status:** provisional implementation. Motion Studio now has a standalone
+CMake application target and an in-memory composition/layer model. Its core
+links only Qt Widgets and `creative-suite::animation`; it does not link either
+other application. Shared libraries are compiled into each consuming
+application, so neither application requires the other to be installed or
+running.
 
 ## Application ownership
 
@@ -124,5 +126,7 @@ and document boundaries as well.
 - Do not introduce a dependency from Motion Studio to the Video Editor
   executable, installation, or application target.
 
-The standalone Motion Studio build and create/save/reopen/export workflow remain
-pending until its application technology and implementation are selected.
+The initial standalone Motion Studio target is implemented with provisional
+C++ and Qt 6 choices. Persistence and the create/save/reopen/export workflow
+remain pending; the native file format and final application technology are
+not selected.

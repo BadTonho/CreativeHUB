@@ -14,6 +14,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(BUILD_VIDEO_EDITOR "Build the Video Editor application" ON)
 option(BUILD_IMAGE_EDITOR "Build the standalone Image Editor application" ON)
+option(BUILD_MOTION_EDITOR "Build the standalone Motion Studio application" ON)
 
 add_subdirectory(libs)
 
@@ -23,4 +24,8 @@ endif()
 
 if(BUILD_IMAGE_EDITOR)
     add_subdirectory(apps/image-editor)
+endif()
+
+if(BUILD_MOTION_EDITOR)
+    add_subdirectory(apps/motion-editor)
 endif()

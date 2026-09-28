@@ -1,9 +1,10 @@
 # Motion Studio Scope and Readiness
 
-Status: **provisional product scope; Milestone 0 complete**. This document
-records the agreed starting scope for Motion Studio. It does not select a
-renderer, programming language, native file extension, codec, or implementation
-architecture.
+Status: **provisional product scope; Milestone 0 complete**. A standalone
+Motion Studio shell and in-memory composition/layer model have started using
+provisional C++ and Qt 6. This document records the agreed starting scope; it
+does not finalize a renderer, programming language, native file extension,
+codec, or implementation architecture.
 
 ## Intended Users and Workflows
 
@@ -89,10 +90,11 @@ provide a recoverable reference if a linked document or dependency is missing.
 The approved reuse direction and its current implementation are recorded in
 [REUSE_PLAN.md](REUSE_PLAN.md). The transform/keyframe evaluator and raster
 frame compositor now have focused, Qt-independent CMake targets under
-`libs/`. The Video Editor uses compatibility headers and retains
-timeline-specific keyframe split and trim operations. These APIs remain
-provisional until Motion Studio consumes them and has regression coverage at
-its own application boundary.
+`libs/`. The initial Motion Studio document model consumes the shared animation
+types and has model-level regression coverage; the raster compositor is not
+yet consumed. The Video Editor uses compatibility headers and retains
+timeline-specific keyframe split and trim operations. Shared contracts remain
+provisional until both consumers have appropriate regression coverage.
 
 The RGBA frame model, FFmpeg playback session, and logger are now focused
 shared targets. Each application links the targets it needs into its own build
@@ -100,7 +102,9 @@ and package; it does not load or launch another editor. The Video Editor
 supplies preview-metric recording through an observer adapter; Motion Studio
 can use the decoder without that observer. UI, timeline workflows, project
 adapters, import/export controllers, and application history remain local to
-each application.
+each application. Motion Studio currently links the animation library only;
+other shared capabilities will be added when its implemented workflows use
+them.
 
 Any composition contract must define coordinate units and transforms, pixel
 format and color/alpha assumptions, resource lifetime and thread requirements,
@@ -137,8 +141,9 @@ For Motion Studio, the existing neutral video decoder, RGBA frame model,
 transform evaluator, and raster compositor are reuse candidates. The Qt
 preview, Video Editor timeline worker, still-image import path, and text
 rasterizer remain application-specific until an independent shared contract
-is justified. Motion Studio still needs its own document and timeline, image
-and text/shape layer workflows, effects, and standalone persistence/export.
+is justified. Motion Studio now has its own in-memory document and layer model;
+it still needs a viewer, timeline, image and text/shape workflows, effects, and
+standalone persistence/export.
 See [REUSE_PLAN.md](REUSE_PLAN.md) for the provisional shared API contracts.
 
 ## Native Format and Compatibility Policy

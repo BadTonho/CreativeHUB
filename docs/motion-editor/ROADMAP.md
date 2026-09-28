@@ -1,11 +1,11 @@
 # Motion Studio Roadmap
 
-Status: **provisional**. This roadmap describes the future Motion Studio work
-area stored under `apps/motion-editor/`. Its initial product scope and
-readiness are documented in [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md).
-The Motion Studio application folders are placeholders; the application is
-not wired into CMake and no final language, renderer, or codec choices have
-been made. The initial focused reuse libraries are tracked separately in
+Status: **provisional; implementation started**. The standalone Motion Studio
+shell and in-memory composition/layer model are wired into CMake under
+`apps/motion-editor/`. Its initial product scope and readiness are documented
+in [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md). C++ and Qt 6 are provisional
+implementation choices; no final language, renderer, or codec choices have
+been made. Focused reuse libraries are tracked separately in
 [REUSE_PLAN.md](REUSE_PLAN.md).
 
 Motion Studio may be developed in parallel with the Video Editor and Image
@@ -82,14 +82,21 @@ the Motion Studio implementation choices are finalized.
 
 ### 2. Composition foundation
 
-- [ ] Create the composition document and layer model using shared core
-  services where appropriate.
+- [x] Create the in-memory composition document and ordered layer model using
+  the shared animation types for transforms and keyframes. Canvas dimensions
+  must be explicitly provided; the standalone window starts without a
+  composition.
 - [ ] Add a composition viewer, layer ordering, basic transforms, and timeline
-  navigation.
+  navigation. The model supports layer ordering and transform data; viewer and
+  timeline interaction remain open.
 - [ ] Add project save/load, versioned formats, undo/redo, autosave, and
   recovery for the first supported composition workflow.
 - [ ] Add actionable local error logging and automated tests for document,
   rendering, and application boundaries.
+
+The in-memory document/layer model has unit coverage. The empty application
+shell passed its offscreen startup test and a manual Windows launch/close check.
+These checks do not cover a composition viewer, timeline, or persistence.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or timing data.
