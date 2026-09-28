@@ -29,6 +29,7 @@
 #include <QLineEdit>
 #include <QCoreApplication>
 #include <QPointer>
+#include <QProgressDialog>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
@@ -284,11 +285,14 @@ int main(int argc, char* argv[])
             "the workspace connects media, timeline layers, and transform inspection");
     require(action(window, "motion-import-media-action")->isEnabled(),
             "File import is enabled for an open composition");
-    QTimer::singleShot(0, [] {
+    QTimer::singleShot(0, [&window] {
         auto* file_dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
         require(file_dialog != nullptr && file_dialog->testOption(QFileDialog::DontUseNativeDialog)
                     && file_dialog->fileMode() == QFileDialog::ExistingFiles,
                 "media import opens the non-native multiple-file picker");
+        require(window.findChild<QProgressDialog*>(
+                    QStringLiteral("motion-media-import-progress")) == nullptr,
+                "import progress is not created while choosing media");
         require(!file_dialog->nameFilters().join(QLatin1Char(' ')).contains(QStringLiteral("*.gif"),
                                                                                Qt::CaseInsensitive),
                 "animated GIF is excluded from the supported import filters");
@@ -297,11 +301,14 @@ int main(int argc, char* argv[])
     action(window, "motion-import-media-action")->trigger();
     require(window.mediaPoolWidget()->library().empty(),
             "cancelling the media picker leaves the pool unchanged");
-    QTimer::singleShot(0, [] {
+    QTimer::singleShot(0, [&window] {
         auto* file_dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
         require(file_dialog != nullptr &&
                     file_dialog->objectName() == QStringLiteral("motion-import-media-dialog"),
                 "the Media Pool import button opens the shared file picker");
+        require(window.findChild<QProgressDialog*>(
+                    QStringLiteral("motion-media-import-progress")) == nullptr,
+                "the Media Pool picker opens before any import progress dialog");
         file_dialog->reject();
     });
     findWidget<QPushButton>(&window, "motion-media-import-button")->click();
@@ -309,6 +316,35 @@ int main(int argc, char* argv[])
             "cancelling either import entry point keeps the pool unchanged");
 
     auto* pool = window.mediaPoolWidget();
+    pool->importFiles({});
+    require(pool->findChild<QProgressDialog*>(
+                QStringLiteral("motion-media-import-progress")) == nullptr,
+            "an empty import request does not create an import progress dialog");
+
+    QTimer::singleShot(0, [&window, image_path] {
+        auto* file_dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+        require(file_dialog != nullptr,
+                "the media picker remains active until a source is selected");
+        require(window.findChild<QProgressDialog*>(
+                    QStringLiteral("motion-media-import-progress")) == nullptr,
+                "choosing media does not start background import before accepting the picker");
+        file_dialog->selectFile(pathToQString(image_path));
+        auto* picker_buttons = file_dialog->findChild<QDialogButtonBox*>();
+        require(picker_buttons != nullptr &&
+                    picker_buttons->button(QDialogButtonBox::Open) != nullptr,
+                "the media picker exposes its Open button");
+        picker_buttons->button(QDialogButtonBox::Open)->click();
+    });
+    findWidget<QPushButton>(&window, "motion-media-import-button")->click();
+    auto* import_progress = findWidget<QProgressDialog>(
+        &window, "motion-media-import-progress");
+    require(import_progress->isVisible(),
+            "accepting selected media starts its progress dialog after the picker closes");
+    require(waitFor([&] { return pool->library().size() == 1; }),
+            "a file selected in the Media Pool picker is imported");
+    require(!import_progress->isVisible(),
+            "the import progress dialog closes when the selected media is processed");
+
     pool->importFiles({image_path, video_path});
     require(waitFor([&] { return pool->library().size() == 2; }),
             "Motion Studio imports a still image and a video through the shared importer");
