@@ -1,12 +1,17 @@
 #include "new_composition_dialog.h"
 
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QIntValidator>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QRegularExpression>
+#include <QRegularExpressionValidator>
+#include <QVariant>
 #include <QVBoxLayout>
 
+#include <cstdint>
 #include <limits>
 
 namespace motion::ui {
@@ -31,6 +36,33 @@ NewCompositionDialog::NewCompositionDialog(QWidget* parent)
     height_edit_->setValidator(new QIntValidator(1, std::numeric_limits<int>::max(), height_edit_));
     height_edit_->setPlaceholderText(QStringLiteral("Enter height"));
     form->addRow(QStringLiteral("Height (px)"), height_edit_);
+
+    frame_rate_combo_ = new QComboBox(this);
+    frame_rate_combo_->setObjectName(QStringLiteral("motion-frame-rate"));
+    frame_rate_combo_->addItem(QStringLiteral("Select frame rate"));
+    for (const auto frame_rate : model::supportedFrameRates()) {
+        const QString label = QStringLiteral("%1 fps")
+            .arg(QString::number(frame_rate.asDouble(), 'g', 6));
+        frame_rate_combo_->addItem(label);
+        const int index = frame_rate_combo_->count() - 1;
+        frame_rate_combo_->setItemData(
+            index,
+            QVariant::fromValue<qlonglong>(frame_rate.numerator),
+            Qt::UserRole);
+        frame_rate_combo_->setItemData(
+            index,
+            QVariant::fromValue<qlonglong>(frame_rate.denominator),
+            Qt::UserRole + 1);
+    }
+    form->addRow(QStringLiteral("Frame rate"), frame_rate_combo_);
+
+    duration_edit_ = new QLineEdit(this);
+    duration_edit_->setObjectName(QStringLiteral("motion-duration-frames"));
+    duration_edit_->setMaxLength(19);
+    duration_edit_->setValidator(new QRegularExpressionValidator(
+        QRegularExpression(QStringLiteral("[0-9]{0,19}")), duration_edit_));
+    duration_edit_->setPlaceholderText(QStringLiteral("Enter frame count"));
+    form->addRow(QStringLiteral("Duration (frames)"), duration_edit_);
     layout->addLayout(form);
 
     buttons_ = new QDialogButtonBox(
@@ -46,6 +78,10 @@ NewCompositionDialog::NewCompositionDialog(QWidget* parent)
 
     connect(width_edit_, &QLineEdit::textChanged, this, [this] { updateCreateEnabled(); });
     connect(height_edit_, &QLineEdit::textChanged, this, [this] { updateCreateEnabled(); });
+    connect(frame_rate_combo_, &QComboBox::currentIndexChanged, this, [this] {
+        updateCreateEnabled();
+    });
+    connect(duration_edit_, &QLineEdit::textChanged, this, [this] { updateCreateEnabled(); });
     connect(buttons_, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons_, &QDialogButtonBox::rejected, this, &QDialog::reject);
 }
@@ -62,9 +98,33 @@ std::optional<model::CanvasSize> NewCompositionDialog::canvasSize() const noexce
     return model::CanvasSize{width, height};
 }
 
+std::optional<model::CompositionSettings> NewCompositionDialog::compositionSettings() const noexcept
+{
+    const auto canvas = canvasSize();
+    if (!canvas.has_value() || frame_rate_combo_->currentIndex() <= 0) {
+        return std::nullopt;
+    }
+
+    bool duration_ok = false;
+    const auto duration_frames = duration_edit_->text().toLongLong(&duration_ok);
+    if (!duration_ok || duration_frames <= 0) {
+        return std::nullopt;
+    }
+
+    const int index = frame_rate_combo_->currentIndex();
+    const model::FrameRate frame_rate{
+        frame_rate_combo_->itemData(index, Qt::UserRole).toLongLong(),
+        frame_rate_combo_->itemData(index, Qt::UserRole + 1).toLongLong()};
+    if (!model::isSupportedFrameRate(frame_rate)) {
+        return std::nullopt;
+    }
+
+    return model::CompositionSettings{*canvas, frame_rate, duration_frames};
+}
+
 void NewCompositionDialog::updateCreateEnabled()
 {
-    buttons_->button(QDialogButtonBox::Ok)->setEnabled(canvasSize().has_value());
+    buttons_->button(QDialogButtonBox::Ok)->setEnabled(compositionSettings().has_value());
 }
 
 } // namespace motion::ui

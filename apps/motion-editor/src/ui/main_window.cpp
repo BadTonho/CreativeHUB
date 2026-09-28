@@ -2,6 +2,7 @@
 
 #include "composition_viewer.h"
 #include "new_composition_dialog.h"
+#include "timeline_navigator.h"
 
 #include <QAction>
 #include <QAbstractItemView>
@@ -105,22 +106,31 @@ void MainWindow::createNewComposition()
         return;
     }
 
-    const auto canvas_size = dialog.canvasSize();
-    if (!canvas_size.has_value()) {
+    const auto settings = dialog.compositionSettings();
+    if (!settings.has_value()) {
         return;
     }
 
-    document_.emplace(canvas_size->width, canvas_size->height);
+    document_.emplace(
+        settings->canvas_size.width,
+        settings->canvas_size.height,
+        settings->frame_rate,
+        settings->duration_frames);
     selected_layer_id_.reset();
     if (workspace_ == nullptr) {
         createWorkspace();
     }
+    timeline_->setCompositionTiming(settings->frame_rate, settings->duration_frames);
     refreshLayerList();
 }
 
 void MainWindow::createWorkspace()
 {
-    workspace_ = new QSplitter(Qt::Horizontal, this);
+    composition_splitter_ = new QSplitter(Qt::Vertical, this);
+    composition_splitter_->setObjectName(QStringLiteral("motion-composition-splitter"));
+    composition_splitter_->setChildrenCollapsible(false);
+
+    workspace_ = new QSplitter(Qt::Horizontal, composition_splitter_);
     workspace_->setObjectName(QStringLiteral("motion-workspace"));
     workspace_->setChildrenCollapsible(false);
 
@@ -226,6 +236,8 @@ void MainWindow::createWorkspace()
     }
     transform_panel_->setEnabled(false);
 
+    timeline_ = new TimelineNavigator(composition_splitter_);
+
     workspace_->addWidget(layer_panel);
     workspace_->addWidget(viewer_);
     workspace_->addWidget(transform_panel_);
@@ -233,7 +245,12 @@ void MainWindow::createWorkspace()
     workspace_->setStretchFactor(1, 1);
     workspace_->setStretchFactor(2, 0);
     workspace_->setSizes({240, 680, 280});
-    setCentralWidget(workspace_);
+    composition_splitter_->addWidget(workspace_);
+    composition_splitter_->addWidget(timeline_);
+    composition_splitter_->setStretchFactor(0, 1);
+    composition_splitter_->setStretchFactor(1, 0);
+    composition_splitter_->setSizes({570, 150});
+    setCentralWidget(composition_splitter_);
     empty_state_ = nullptr;
     resize(1200, 760);
 

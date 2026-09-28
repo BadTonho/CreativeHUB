@@ -8,6 +8,22 @@
 namespace motion::model {
 namespace {
 
+constexpr std::array<FrameRate, 13> kSupportedFrameRates{{
+    {24000, 1001},
+    {24, 1},
+    {25, 1},
+    {30000, 1001},
+    {30, 1},
+    {48, 1},
+    {50, 1},
+    {60000, 1001},
+    {60, 1},
+    {100, 1},
+    {120000, 1001},
+    {120, 1},
+    {240, 1},
+}};
+
 bool validLayerKind(LayerKind kind) noexcept
 {
     switch (kind) {
@@ -22,17 +38,50 @@ bool validLayerKind(LayerKind kind) noexcept
 
 } // namespace
 
-CompositionDocument::CompositionDocument(int canvas_width, int canvas_height)
+const std::array<FrameRate, 13>& supportedFrameRates() noexcept
+{
+    return kSupportedFrameRates;
+}
+
+bool isSupportedFrameRate(FrameRate frame_rate) noexcept
+{
+    return std::find(kSupportedFrameRates.begin(), kSupportedFrameRates.end(), frame_rate)
+        != kSupportedFrameRates.end();
+}
+
+CompositionDocument::CompositionDocument(
+    int canvas_width,
+    int canvas_height,
+    FrameRate frame_rate,
+    std::int64_t duration_frames)
     : canvas_size_{canvas_width, canvas_height}
+    , frame_rate_(frame_rate)
+    , duration_frames_(duration_frames)
 {
     if (canvas_width <= 0 || canvas_height <= 0) {
         throw std::invalid_argument("Composition canvas dimensions must be positive");
+    }
+    if (!isSupportedFrameRate(frame_rate)) {
+        throw std::invalid_argument("Composition frame rate is not supported");
+    }
+    if (duration_frames <= 0) {
+        throw std::invalid_argument("Composition duration must be positive");
     }
 }
 
 CanvasSize CompositionDocument::canvasSize() const noexcept
 {
     return canvas_size_;
+}
+
+FrameRate CompositionDocument::frameRate() const noexcept
+{
+    return frame_rate_;
+}
+
+std::int64_t CompositionDocument::durationFrames() const noexcept
+{
+    return duration_frames_;
 }
 
 const std::vector<CompositionLayer>& CompositionDocument::layers() const noexcept

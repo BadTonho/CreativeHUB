@@ -90,18 +90,26 @@ the Motion Studio implementation choices are finalized.
   visibility and ordering controls, and a base-transform inspector. The viewer
   shows the canvas and selected layer anchor only; it does not render layer
   content.
-- [ ] Add timeline navigation and keyframe interaction.
+- [x] Add explicit composition timing and a navigation-only timeline with a
+  frame ruler, playhead seeking, and single-frame stepping.
+- [ ] Add keyframe editing interactions to the timeline.
 - [ ] Add project save/load, versioned formats, undo/redo, autosave, and
   recovery for the first supported composition workflow.
 - [ ] Add actionable local error logging and automated tests for document,
   rendering, and application boundaries.
 
-The in-memory document/layer model has unit coverage. The empty application
-shell passed its offscreen startup test and a manual Windows launch/close check.
-The composition workspace has offscreen UI regression coverage. Manual Windows
-validation remains: create a canvas, add and reorder layers, change visibility
-and transforms, resize the viewer, and close the application. Timeline
-navigation, layer-content rendering, and persistence remain open.
+The in-memory document/layer model has unit coverage, including explicit frame
+rate and duration metadata. The empty application shell passed its offscreen
+startup test and a manual Windows launch/close check. The composition workspace
+and navigation-only timeline have offscreen UI regression coverage. Frame
+rates are stored as exact rational values from the supported common-rate list;
+duration is a positive frame count, and the playhead is bounded to
+`0..duration_frames-1`. The ruler displays frame indices. Playback, SMPTE/drop-
+frame timecode, and keyframe evaluation are not part of this navigation slice.
+Manual Windows validation remains: create a composition with explicit canvas
+and timing values, add and reorder layers, change visibility and transforms,
+seek and step frames, resize the viewer and timeline, and close the application.
+Keyframe editing, layer-content rendering, and persistence remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or timing data.

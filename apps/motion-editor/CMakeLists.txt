@@ -14,6 +14,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/main_window.h
     src/ui/new_composition_dialog.cpp
     src/ui/new_composition_dialog.h
+    src/ui/timeline_navigator.cpp
+    src/ui/timeline_navigator.h
 )
 target_include_directories(creative-suite-motion-editor-core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src

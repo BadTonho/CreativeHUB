@@ -19,6 +19,7 @@ class QWidget;
 namespace motion::ui {
 
 class CompositionViewer;
+class TimelineNavigator;
 
 class MainWindow final : public QMainWindow {
 public:
@@ -47,6 +48,7 @@ private:
     std::optional<model::CompositionDocument> document_;
     std::optional<model::LayerId> selected_layer_id_;
     QLabel* empty_state_ = nullptr;
+    QSplitter* composition_splitter_ = nullptr;
     QSplitter* workspace_ = nullptr;
     QListWidget* layer_list_ = nullptr;
     QToolButton* add_layer_button_ = nullptr;
@@ -55,6 +57,7 @@ private:
     QPushButton* move_back_button_ = nullptr;
     QWidget* transform_panel_ = nullptr;
     CompositionViewer* viewer_ = nullptr;
+    TimelineNavigator* timeline_ = nullptr;
     std::array<QLineEdit*, 5> transform_fields_{};
 };
 
