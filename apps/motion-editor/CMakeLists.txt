@@ -20,6 +20,7 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/preview_renderer.h
     src/ui/timeline_navigator.cpp
     src/ui/timeline_navigator.h
+    src/ui/timeline_navigator_math.h
 )
 target_include_directories(creative-suite-motion-editor-core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src

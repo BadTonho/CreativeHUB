@@ -97,6 +97,10 @@ the Motion Studio implementation choices are finalized.
 - [x] Add an explicit exact frame rate and a navigation-only timeline with a
   frame ruler, playhead seeking, and single-frame stepping. Composition
   duration is not fixed during creation.
+- [x] Add Motion Studio-owned discrete timeline zoom from 25% to 51,200%,
+  defaulting to 100%, with playhead anchoring, visible controls, Ctrl+wheel,
+  horizontal navigation, shared ruler/layer frame mapping, and adaptive ruler
+  ticks. Zoom changes view state only and does not alter composition timing.
 - [x] Add an in-memory Media Pool for video and still images, backed by the
   shared media catalog and import processing. Include hierarchical bins,
   cached thumbnails, list and thumbnail views, renaming, offline marking and
@@ -128,10 +132,11 @@ manual Windows launch/close check. The centered empty-state New Composition
 button uses the File menu's creation flow and has offscreen UI regression
 coverage. Opening a composition preserves the current window state and geometry;
 the app starts maximized unless the user restores it. The canvas viewer,
-navigation ruler, layer rows, drag/drop, transforms, and preview have offscreen
-coverage. The shared media catalog and importer, plus the Motion Studio Media
-Pool, have regression coverage for video and still-image imports, first-frame
-thumbnails, bins, renaming, offline restoration, view modes, selection details,
+navigation ruler, timeline zoom and scrolling, layer rows, drag/drop, transforms,
+and preview have offscreen coverage. The shared media catalog and importer,
+plus the Motion Studio Media Pool, have regression coverage for video and
+still-image imports, first-frame thumbnails, bins, renaming, offline
+restoration, view modes, selection details,
 and clearing on composition replacement. The Video Editor retains its
 project-media and linked-image regressions.
 
@@ -140,10 +145,16 @@ list. Creating a composition does not ask for or set its duration. The ruler
 starts with a one-hour navigation range, calculated from the selected exact
 frame rate; fractional rates round the frame count up. This range is not a
 composition end. Seeking and frame stepping stay within the current range.
-Dragging the playhead beyond the ruler's right edge extends the range by one
-hour once per drag and lands the playhead at the new end; another extension
-requires a new drag gesture. The range saturates at the non-negative signed
-64-bit frame limit.
+At 100%, one hour fits in the timeline. Zoom uses the Video Editor's discrete
+levels from 25% to 51,200%, preserves the playhead's screen position, and
+scrolls horizontally when the current range no longer fits. The ruler and layer
+rows share the same viewport mapping; ruler tick spacing adapts to the visible
+frame range. Zoom and scroll are UI state, reset when a new composition is
+created, and are not persisted. Dragging past the actual range end extends it
+by one hour once per gesture and moves the playhead to the new end; scroll to
+the end first if it is offscreen. A drag at the visible viewport edge does not
+extend a range whose end is still offscreen. The range saturates at the signed
+64-bit frame limit, starting at zero.
 
 Image and video layers reference canonical Media Pool paths, and repeated uses
 of one source receive distinct layer IDs. Still images last
@@ -172,10 +183,13 @@ one-hour navigation range, stepping, and separate drag extensions; import
 images and videos, organize bins, switch pool views, and restore offline items;
 drag media to empty space and existing rows; verify snapping and front-to-back
 order; select, move, hide, resize, and remove layers; edit transforms; seek
-through image and video previews; resize the viewer, Media Pool, inspector, and
-timeline; replace the composition and confirm the pool resets; then close the
-application. Keyframe editing, document persistence, undo/redo, and export
-remain open.
+through image and video previews; exercise zoom buttons, slider, and Ctrl+wheel;
+confirm the playhead stays anchored, scroll horizontally to inspect aligned
+ruler and layer positions, move and resize clips at multiple zoom levels, and
+extend the range only at its actual end, scrolling there if it is offscreen;
+resize the viewer, Media Pool, inspector, and timeline; replace the composition and confirm the
+pool resets; then close the application. Keyframe editing, document
+persistence, undo/redo, and export remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.

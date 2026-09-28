@@ -1,4 +1,5 @@
 #include "timeline_navigator.h"
+#include "timeline_navigator_math.h"
 
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -8,9 +9,14 @@
 #include <QPainter>
 #include <QPolygon>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSizePolicy>
+#include <QSlider>
+#include <QWheelEvent>
 #include <QVBoxLayout>
+#include <QSignalBlocker>
 
 #include <algorithm>
 #include <cmath>
@@ -71,6 +77,132 @@ std::int64_t initialVisibleEndFrame(model::FrameRate frame_rate) noexcept
     return framesPerHour(frame_rate) - 1;
 }
 
+struct TimelineViewMapping {
+    int width = 0;
+    int header_width = 0;
+    std::int64_t range_end_frame = 0;
+    std::int64_t start_frame = 0;
+    std::int64_t frames_per_view = 1;
+
+    [[nodiscard]] int axisLeft() const noexcept
+    {
+        return rulerAxisLeft(width, header_width);
+    }
+
+    [[nodiscard]] int axisRight() const noexcept
+    {
+        return rulerAxisRight(width);
+    }
+
+    [[nodiscard]] int axisWidth() const noexcept
+    {
+        return std::max(0, axisRight() - axisLeft());
+    }
+
+    [[nodiscard]] std::int64_t viewEndFrame() const noexcept
+    {
+        const auto bounded_start = std::clamp(start_frame, std::int64_t{0}, range_end_frame);
+        const auto last_offset = std::max<std::int64_t>(0, frames_per_view - 1);
+        return std::min(range_end_frame,
+            detail::saturatingFrameAdd(bounded_start, last_offset));
+    }
+
+    [[nodiscard]] std::int64_t frameAtX(int x) const noexcept
+    {
+        const auto bounded_start = std::clamp(start_frame, std::int64_t{0}, range_end_frame);
+        const int left = axisLeft();
+        const int span = axisWidth();
+        if (span <= 0 || x <= left || frames_per_view <= 1) {
+            return bounded_start;
+        }
+        const auto available = range_end_frame - bounded_start;
+        if (x >= axisRight()) {
+            return std::min(range_end_frame, viewEndFrame());
+        }
+        const long double fraction = static_cast<long double>(x - left) /
+            static_cast<long double>(span);
+        const long double offset_value = std::floor(
+            fraction * static_cast<long double>(frames_per_view - 1) + 0.5L);
+        if (offset_value >= static_cast<long double>(available)) {
+            return range_end_frame;
+        }
+        const auto offset = static_cast<std::int64_t>(offset_value);
+        return bounded_start + offset;
+    }
+
+    [[nodiscard]] int xForFrame(std::int64_t frame) const noexcept
+    {
+        const int left = axisLeft();
+        const int span = axisWidth();
+        if (span <= 0 || frames_per_view <= 1) {
+            return left;
+        }
+        const auto bounded = std::clamp(frame, std::int64_t{0}, range_end_frame);
+        if (bounded <= start_frame) {
+            return left;
+        }
+        if (bounded - start_frame >= frames_per_view - 1) {
+            return axisRight();
+        }
+        const auto offset = bounded - start_frame;
+        const long double fraction = static_cast<long double>(offset) /
+            static_cast<long double>(frames_per_view - 1);
+        return left + static_cast<int>(std::llround(fraction * span));
+    }
+};
+
+std::int64_t rulerTickStep(
+    std::int64_t frames_per_view,
+    int axis_width,
+    int label_digits) noexcept
+{
+    if (frames_per_view <= 1 || axis_width <= 0) {
+        return 1;
+    }
+    const int minimum_tick_spacing = std::max(112, label_digits * 8 + 32);
+    const long double target = std::max(1.0L,
+        static_cast<long double>(frames_per_view - 1) * minimum_tick_spacing /
+            static_cast<long double>(axis_width));
+    const long double decade = std::pow(10.0L, std::floor(std::log10(target)));
+    const long double scaled = target / decade;
+    const long double factor = scaled <= 1.0L ? 1.0L
+        : scaled <= 2.0L ? 2.0L
+        : scaled <= 5.0L ? 5.0L : 10.0L;
+    const long double step = std::max(1.0L, factor * decade);
+    if (step >= static_cast<long double>(kMaximumFrame)) {
+        return kMaximumFrame;
+    }
+    return static_cast<std::int64_t>(std::ceil(step));
+}
+
+std::int64_t firstTickAtOrAfter(std::int64_t start, std::int64_t step) noexcept
+{
+    if (step <= 1) {
+        return start;
+    }
+    const auto remainder = start % step;
+    if (remainder == 0) {
+        return start;
+    }
+    const auto increment = step - remainder;
+    return detail::saturatingFrameAdd(start, increment);
+}
+
+std::int64_t roundedFrameClamped(long double value, std::int64_t maximum) noexcept
+{
+    if (value <= 0.0L) {
+        return 0;
+    }
+    if (value >= static_cast<long double>(maximum)) {
+        return maximum;
+    }
+    const auto rounded = std::round(value);
+    if (rounded >= static_cast<long double>(maximum)) {
+        return maximum;
+    }
+    return static_cast<std::int64_t>(rounded);
+}
+
 struct LayerRow {
     model::LayerId id = 0;
     model::LayerKind kind = model::LayerKind::Image;
@@ -104,10 +236,15 @@ public:
         update();
     }
 
-    void setRange(std::int64_t end_frame, std::int64_t current_frame)
+    void setViewState(std::int64_t end_frame,
+                      std::int64_t current_frame,
+                      std::int64_t start_frame,
+                      std::int64_t frames_per_view)
     {
         visible_end_frame_ = std::max<std::int64_t>(0, end_frame);
         current_frame_ = std::clamp(current_frame, std::int64_t{0}, visible_end_frame_);
+        view_start_frame_ = std::clamp(start_frame, std::int64_t{0}, visible_end_frame_);
+        frames_per_view_ = std::max<std::int64_t>(1, frames_per_view);
         update();
     }
 
@@ -124,8 +261,18 @@ public:
     std::function<void(model::LayerId, std::size_t)> layer_reorder;
     std::function<void(model::LayerId, bool)> layer_visibility;
     std::function<void(model::LayerId)> layer_remove;
+    std::function<void(int)> zoom_step_requested;
+    std::function<void(int)> viewport_width_changed;
 
 protected:
+    void resizeEvent(QResizeEvent* event) override
+    {
+        QWidget::resizeEvent(event);
+        if (viewport_width_changed) {
+            viewport_width_changed(event->size().width());
+        }
+    }
+
     QSize sizeHint() const override
     {
         return {520, std::max(kTimelineRowHeight,
@@ -171,42 +318,50 @@ protected:
                              Qt::AlignLeft | Qt::AlignVCenter,
                              row.name.isEmpty() ? QStringLiteral("Media Layer") : row.name);
 
-            const int clip_left = xForFrame(row.start_frame);
             const auto end_frame = row.start_frame > kMaximumFrame - row.duration_frames
                 ? kMaximumFrame : row.start_frame + row.duration_frames;
-            const int clip_right = std::max(clip_left + 2, xForFrame(end_frame));
-            const QRect clip_rect(clip_left, top + 5,
-                                  std::max(2, clip_right - clip_left),
-                                  kTimelineRowHeight - 10);
-            QColor clip_color = row.kind == model::LayerKind::Image
-                ? QColor(54, 115, 160) : QColor(57, 132, 101);
-            if (!row.visible) clip_color = clip_color.darker(190);
-            painter.setPen(QPen(selected ? QColor(255, 183, 54) : clip_color.lighter(125),
-                                selected ? 2 : 1));
-            painter.setBrush(clip_color);
-            painter.drawRoundedRect(clip_rect, 3, 3);
-            painter.setPen(QColor(245, 247, 250));
-            painter.drawText(clip_rect.adjusted(6, 0, -8, 0),
-                             Qt::AlignLeft | Qt::AlignVCenter, row.name);
+            const auto mapping = viewMapping();
+            if (end_frame >= view_start_frame_ && row.start_frame <= mapping.viewEndFrame()) {
+                const int clip_left = mapping.xForFrame(row.start_frame);
+                const int clip_right = std::max(clip_left + 2, mapping.xForFrame(end_frame));
+                const QRect clip_rect(clip_left, top + 5,
+                                      std::max(2, clip_right - clip_left),
+                                      kTimelineRowHeight - 10);
+                QColor clip_color = row.kind == model::LayerKind::Image
+                    ? QColor(54, 115, 160) : QColor(57, 132, 101);
+                if (!row.visible) clip_color = clip_color.darker(190);
+                painter.setPen(QPen(selected ? QColor(255, 183, 54) : clip_color.lighter(125),
+                                    selected ? 2 : 1));
+                painter.setBrush(clip_color);
+                painter.drawRoundedRect(clip_rect, 3, 3);
+                painter.setPen(QColor(245, 247, 250));
+                painter.drawText(clip_rect.adjusted(6, 0, -8, 0),
+                                 Qt::AlignLeft | Qt::AlignVCenter, row.name);
 
-            if (interaction_layer_id_ == row.id && interaction_mode_ != InteractionMode::None) {
-                const auto preview_start = interaction_mode_ == InteractionMode::Move
-                    ? preview_value_ : row.start_frame;
-                const auto preview_duration = interaction_mode_ == InteractionMode::Resize
-                    ? preview_value_ : row.duration_frames;
-                const int preview_left = xForFrame(preview_start);
-                const int preview_right = std::max(
-                    preview_left + 2, xForFrame(preview_start + preview_duration));
-                painter.setPen(QPen(QColor(255, 183, 54), 2, Qt::DashLine));
-                painter.setBrush(QColor(255, 183, 54, 55));
-                painter.drawRoundedRect(QRect(preview_left, top + 3,
-                    std::max(2, preview_right - preview_left), kTimelineRowHeight - 6), 3, 3);
+                if (interaction_layer_id_ == row.id && interaction_mode_ != InteractionMode::None) {
+                    const auto preview_start = interaction_mode_ == InteractionMode::Move
+                        ? preview_value_ : row.start_frame;
+                    const auto preview_duration = interaction_mode_ == InteractionMode::Resize
+                        ? preview_value_ : row.duration_frames;
+                    const auto preview_end = preview_start > kMaximumFrame - preview_duration
+                        ? kMaximumFrame : preview_start + preview_duration;
+                    const int preview_left = mapping.xForFrame(preview_start);
+                    const int preview_right = std::max(
+                        preview_left + 2, mapping.xForFrame(preview_end));
+                    painter.setPen(QPen(QColor(255, 183, 54), 2, Qt::DashLine));
+                    painter.setBrush(QColor(255, 183, 54, 55));
+                    painter.drawRoundedRect(QRect(preview_left, top + 3,
+                        std::max(2, preview_right - preview_left), kTimelineRowHeight - 6), 3, 3);
+                }
             }
         }
 
-        const int playhead_x = xForFrame(current_frame_);
-        painter.setPen(QPen(QColor(255, 183, 54), 1));
-        painter.drawLine(playhead_x, 0, playhead_x, height());
+        const auto mapping = viewMapping();
+        if (current_frame_ >= view_start_frame_ && current_frame_ <= mapping.viewEndFrame()) {
+            const int playhead_x = mapping.xForFrame(current_frame_);
+            painter.setPen(QPen(QColor(255, 183, 54), 1));
+            painter.drawLine(playhead_x, 0, playhead_x, height());
+        }
 
         if (drag_preview_active_) {
             const int row = rowAtY(drag_preview_y_);
@@ -242,8 +397,10 @@ protected:
             interaction_mode_ = InteractionMode::Reorder;
             target_row_ = row_index;
         } else {
-            const int right = xForFrame(row.start_frame + row.duration_frames);
-            const int left = xForFrame(row.start_frame);
+            const auto end_frame = row.start_frame > kMaximumFrame - row.duration_frames
+                ? kMaximumFrame : row.start_frame + row.duration_frames;
+            const int right = viewMapping().xForFrame(end_frame);
+            const int left = viewMapping().xForFrame(row.start_frame);
             const int visible_right = std::max(left + 2, right);
             if (press_position_.x() < left || press_position_.x() > visible_right) {
                 event->accept();
@@ -294,8 +451,10 @@ protected:
             const int row_index = rowAtY(y);
             if (row_index >= 0 && x >= kTimelineHeaderWidth) {
                 const auto& row = rows_[static_cast<std::size_t>(row_index)];
-                const int left = xForFrame(row.start_frame);
-                const int right = xForFrame(row.start_frame + row.duration_frames);
+                const auto end_frame = row.start_frame > kMaximumFrame - row.duration_frames
+                    ? kMaximumFrame : row.start_frame + row.duration_frames;
+                const int left = viewMapping().xForFrame(row.start_frame);
+                const int right = viewMapping().xForFrame(end_frame);
                 const int visible_right = std::max(left + 2, right);
                 if (x < left || x > visible_right) {
                     unsetCursor();
@@ -337,6 +496,20 @@ protected:
         event->accept();
     }
 
+    void wheelEvent(QWheelEvent* event) override
+    {
+        if (event->modifiers().testFlag(Qt::ControlModifier)) {
+            const int delta = event->angleDelta().y() != 0
+                ? event->angleDelta().y() : event->pixelDelta().y();
+            if (delta != 0 && zoom_step_requested) {
+                zoom_step_requested(delta > 0 ? 1 : -1);
+                event->accept();
+                return;
+            }
+        }
+        event->ignore();
+    }
+
     void keyPressEvent(QKeyEvent* event) override
     {
         if (event->key() == Qt::Key_Delete && selected_layer_id_ != 0 && layer_remove) {
@@ -353,7 +526,7 @@ protected:
             event->acceptProposedAction();
             drag_preview_active_ = true;
             const int x = event->position().toPoint().x();
-            drag_preview_x_ = xForFrame(snappedFrame(frameAtX(x), 0));
+            drag_preview_x_ = viewMapping().xForFrame(snappedFrame(frameAtX(x), 0));
             drag_preview_y_ = event->position().toPoint().y();
             update();
             return;
@@ -368,7 +541,7 @@ protected:
             return;
         }
         const auto frame = snappedFrame(frameAtX(event->position().toPoint().x()), 0);
-        drag_preview_x_ = xForFrame(frame);
+        drag_preview_x_ = viewMapping().xForFrame(frame);
         drag_preview_y_ = event->position().toPoint().y();
         drag_preview_active_ = true;
         update();
@@ -419,40 +592,15 @@ private:
         return found == rows_.end() ? nullptr : &*found;
     }
 
-    [[nodiscard]] int axisLeft() const noexcept
+    [[nodiscard]] TimelineViewMapping viewMapping() const noexcept
     {
-        return rulerAxisLeft(width(), kTimelineHeaderWidth);
-    }
-
-    [[nodiscard]] int axisRight() const noexcept
-    {
-        return rulerAxisRight(width());
+        return {width(), kTimelineHeaderWidth, visible_end_frame_,
+                view_start_frame_, frames_per_view_};
     }
 
     [[nodiscard]] std::int64_t frameAtX(int x) const noexcept
     {
-        if (visible_end_frame_ <= 0) return 0;
-        const int left = axisLeft();
-        const int right = axisRight();
-        const int span = right - left;
-        if (span <= 0 || x <= left) return 0;
-        if (x >= right) return visible_end_frame_;
-        const long double fraction = static_cast<long double>(x - left) / span;
-        const long double result = std::floor(
-            fraction * static_cast<long double>(visible_end_frame_) + 0.5L);
-        return std::clamp<std::int64_t>(
-            static_cast<std::int64_t>(result), 0, visible_end_frame_);
-    }
-
-    [[nodiscard]] int xForFrame(std::int64_t frame) const noexcept
-    {
-        const int left = axisLeft();
-        const int span = std::max(0, axisRight() - left);
-        if (span == 0 || visible_end_frame_ == 0) return left;
-        const auto bounded = std::clamp(frame, std::int64_t{0}, visible_end_frame_);
-        const long double fraction = static_cast<long double>(bounded) /
-            static_cast<long double>(visible_end_frame_);
-        return left + static_cast<int>(std::llround(fraction * span));
+        return viewMapping().frameAtX(x);
     }
 
     [[nodiscard]] std::int64_t snappedFrame(
@@ -460,11 +608,12 @@ private:
         model::LayerId excluded) const noexcept
     {
         frame = std::clamp(frame, std::int64_t{0}, visible_end_frame_);
-        const int span = std::max(1, axisRight() - axisLeft());
+        const auto mapping = viewMapping();
+        const int span = std::max(1, mapping.axisWidth());
         const auto threshold = std::max<std::int64_t>(1,
             static_cast<std::int64_t>(std::ceil(
                 static_cast<long double>(kTimelineSnapTolerancePixels) *
-                static_cast<long double>(visible_end_frame_) / span)));
+                static_cast<long double>(frames_per_view_ - 1) / span)));
         auto snapped = frame;
         auto best_distance = std::numeric_limits<std::int64_t>::max();
         const auto consider = [&](std::int64_t candidate) {
@@ -488,6 +637,8 @@ private:
     std::vector<LayerRow> rows_;
     std::int64_t visible_end_frame_ = 0;
     std::int64_t current_frame_ = 0;
+    std::int64_t view_start_frame_ = 0;
+    std::int64_t frames_per_view_ = 1;
     model::LayerId selected_layer_id_ = 0;
     InteractionMode interaction_mode_ = InteractionMode::None;
     model::LayerId interaction_layer_id_ = 0;
@@ -511,21 +662,32 @@ TimelineRuler::TimelineRuler(QWidget* parent)
     setCursor(Qt::PointingHandCursor);
 }
 
-void TimelineRuler::setVisibleEndFrame(std::int64_t frame)
-{
-    visible_end_frame_ = std::max<std::int64_t>(0, frame);
-    update();
-}
-
 void TimelineRuler::setHeaderWidth(int width)
 {
     header_width_ = std::max(0, width);
     update();
 }
 
-void TimelineRuler::setCurrentFrame(std::int64_t frame) noexcept
+void TimelineRuler::setMappingWidth(int width)
 {
-    current_frame_ = std::max<std::int64_t>(0, frame);
+    mapping_width_ = std::max(0, width);
+    update();
+}
+
+int TimelineRuler::mappingWidth() const noexcept
+{
+    return mapping_width_ > 0 ? mapping_width_ : width();
+}
+
+void TimelineRuler::setViewState(std::int64_t end_frame,
+                                 std::int64_t current_frame,
+                                 std::int64_t start_frame,
+                                 std::int64_t frames_per_view)
+{
+    visible_end_frame_ = std::max<std::int64_t>(0, end_frame);
+    current_frame_ = std::clamp(current_frame, std::int64_t{0}, visible_end_frame_);
+    view_start_frame_ = std::clamp(start_frame, std::int64_t{0}, visible_end_frame_);
+    frames_per_view_ = std::max<std::int64_t>(1, frames_per_view);
     update();
 }
 
@@ -535,27 +697,34 @@ void TimelineRuler::paintEvent(QPaintEvent*)
     painter.fillRect(rect(), QColor(35, 39, 46));
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    const int axis_left = rulerAxisLeft(width(), header_width_);
-    const int axis_right = std::max(axis_left, rulerAxisRight(width()));
+    const TimelineViewMapping mapping{
+        mappingWidth(), header_width_, visible_end_frame_, view_start_frame_, frames_per_view_};
+    const int axis_left = mapping.axisLeft();
+    const int axis_right = mapping.axisRight();
     const int axis_y = 48;
     const int label_y = 17;
-    const int axis_width = std::max(0, axis_right - axis_left);
-    const auto last_frame = visible_end_frame_;
 
     painter.setPen(QPen(QColor(110, 118, 129), 1));
     painter.drawLine(axis_left, axis_y, axis_right, axis_y);
 
-    const int label_digits = QString::number(static_cast<qlonglong>(last_frame)).size();
-    const int minimum_tick_spacing = std::max(112, label_digits * 8 + 32);
-    const int divisions = last_frame == 0 || axis_width <= 0
-        ? 0
-        : std::clamp(axis_width / minimum_tick_spacing, 1, 8);
-    for (int division = 0; division <= divisions; ++division) {
-        const long double fraction = divisions == 0
-            ? 0.0L
-            : static_cast<long double>(division) / static_cast<long double>(divisions);
-        const int x = axis_left + static_cast<int>(std::llround(fraction * axis_width));
-        const auto frame = frameAtX(x);
+    const auto view_end = mapping.viewEndFrame();
+    const int first_visible_label_digits = QString::number(
+        static_cast<qlonglong>(view_start_frame_)).size();
+    const int last_visible_label_digits = QString::number(
+        static_cast<qlonglong>(view_end)).size();
+    const auto tick_step = rulerTickStep(frames_per_view_, mapping.axisWidth(),
+        std::max(first_visible_label_digits, last_visible_label_digits));
+    auto tick = firstTickAtOrAfter(view_start_frame_, tick_step);
+    if (view_start_frame_ <= view_end && tick > view_end) {
+        tick = view_start_frame_;
+    }
+    int previous_tick_x = std::numeric_limits<int>::min();
+    const auto drawTick = [&](std::int64_t frame) {
+        const int x = mapping.xForFrame(frame);
+        if (x == previous_tick_x) {
+            return;
+        }
+        previous_tick_x = x;
         painter.drawLine(x, axis_y - 5, x, axis_y + 5);
         painter.setPen(QColor(196, 201, 208));
         painter.drawText(
@@ -563,17 +732,32 @@ void TimelineRuler::paintEvent(QPaintEvent*)
             Qt::AlignHCenter | Qt::AlignVCenter,
             QString::number(static_cast<qlonglong>(frame)));
         painter.setPen(QPen(QColor(110, 118, 129), 1));
+    };
+    if (view_start_frame_ <= view_end && view_start_frame_ % tick_step != 0) {
+        drawTick(view_start_frame_);
+    }
+    for (auto frame = tick; frame <= view_end;) {
+        drawTick(frame);
+        if (frame > kMaximumFrame - tick_step) {
+            break;
+        }
+        frame += tick_step;
+    }
+    if (view_end > view_start_frame_ && view_end % tick_step != 0) {
+        drawTick(view_end);
     }
 
-    const int playhead_x = xForFrame(current_frame_);
-    painter.setPen(QPen(QColor(255, 183, 54), 2));
-    painter.drawLine(playhead_x, 10, playhead_x, height() - 8);
-    painter.setBrush(QColor(255, 183, 54));
-    painter.setPen(Qt::NoPen);
-    QPolygon marker;
-    marker << QPoint(playhead_x - 6, 8) << QPoint(playhead_x + 6, 8)
-           << QPoint(playhead_x, 17);
-    painter.drawPolygon(marker);
+    if (current_frame_ >= view_start_frame_ && current_frame_ <= view_end) {
+        const int playhead_x = mapping.xForFrame(current_frame_);
+        painter.setPen(QPen(QColor(255, 183, 54), 2));
+        painter.drawLine(playhead_x, 10, playhead_x, height() - 8);
+        painter.setBrush(QColor(255, 183, 54));
+        painter.setPen(Qt::NoPen);
+        QPolygon marker;
+        marker << QPoint(playhead_x - 6, 8) << QPoint(playhead_x + 6, 8)
+               << QPoint(playhead_x, 17);
+        painter.drawPolygon(marker);
+    }
 }
 
 void TimelineRuler::mousePressEvent(QMouseEvent* event)
@@ -601,15 +785,7 @@ void TimelineRuler::mouseMoveEvent(QMouseEvent* event)
         return;
     }
     last_mouse_x_ = mouse_x;
-    if (mouse_x >= width()) {
-        if (!range_extended_during_drag_) {
-            range_extended_during_drag_ = true;
-            emit extendRangeRequested();
-            emit seekRequested(static_cast<qint64>(frameAtX(mouse_x)));
-        }
-    } else {
-        emit seekRequested(static_cast<qint64>(frameAtX(mouse_x)));
-    }
+    handleDragX(mouse_x);
     event->accept();
 }
 
@@ -620,15 +796,7 @@ void TimelineRuler::mouseReleaseEvent(QMouseEvent* event)
         const int mouse_x = event->position().toPoint().x();
         if (mouse_x != last_mouse_x_) {
             last_mouse_x_ = mouse_x;
-            if (mouse_x >= width()) {
-                if (!range_extended_during_drag_) {
-                    range_extended_during_drag_ = true;
-                    emit extendRangeRequested();
-                    emit seekRequested(static_cast<qint64>(frameAtX(mouse_x)));
-                }
-            } else {
-                emit seekRequested(static_cast<qint64>(frameAtX(mouse_x)));
-            }
+            handleDragX(mouse_x);
         }
         last_mouse_x_ = -1;
         range_extended_during_drag_ = false;
@@ -638,46 +806,48 @@ void TimelineRuler::mouseReleaseEvent(QMouseEvent* event)
     QWidget::mouseReleaseEvent(event);
 }
 
+void TimelineRuler::wheelEvent(QWheelEvent* event)
+{
+    if (event->modifiers().testFlag(Qt::ControlModifier)) {
+        const int delta = event->angleDelta().y() != 0
+            ? event->angleDelta().y() : event->pixelDelta().y();
+        if (delta != 0) {
+            emit zoomStepRequested(delta > 0 ? 1 : -1);
+            event->accept();
+            return;
+        }
+    }
+    event->ignore();
+}
+
 std::int64_t TimelineRuler::frameAtX(int x) const noexcept
 {
-    const auto last_frame = visible_end_frame_;
-    if (last_frame == 0) {
-        return 0;
-    }
-
-    const int axis_left = rulerAxisLeft(width(), header_width_);
-    const int axis_right = std::max(axis_left, rulerAxisRight(width()));
-    const int axis_width = axis_right - axis_left;
-    if (axis_width <= 0 || x <= axis_left) {
-        return 0;
-    }
-    if (x >= axis_right) {
-        return last_frame;
-    }
-
-    const long double fraction = static_cast<long double>(x - axis_left)
-        / static_cast<long double>(axis_width);
-    const long double rounded = std::floor(
-        fraction * static_cast<long double>(last_frame) + 0.5L);
-    if (rounded >= static_cast<long double>(last_frame)) {
-        return last_frame;
-    }
-    return std::max<std::int64_t>(0, static_cast<std::int64_t>(rounded));
+    return TimelineViewMapping{
+        mappingWidth(), header_width_, visible_end_frame_, view_start_frame_, frames_per_view_
+    }.frameAtX(x);
 }
 
 int TimelineRuler::xForFrame(std::int64_t frame) const noexcept
 {
-    const int axis_left = rulerAxisLeft(width(), header_width_);
-    const int axis_right = std::max(axis_left, rulerAxisRight(width()));
-    const int axis_width = axis_right - axis_left;
-    const auto last_frame = visible_end_frame_;
-    if (axis_width <= 0 || last_frame == 0) {
-        return axis_left;
-    }
+    return TimelineViewMapping{
+        mappingWidth(), header_width_, visible_end_frame_, view_start_frame_, frames_per_view_
+    }.xForFrame(frame);
+}
 
-    const long double fraction = static_cast<long double>(frame)
-        / static_cast<long double>(last_frame);
-    return axis_left + static_cast<int>(std::llround(fraction * axis_width));
+void TimelineRuler::handleDragX(int x)
+{
+    const TimelineViewMapping mapping{
+        mappingWidth(), header_width_, visible_end_frame_, view_start_frame_, frames_per_view_};
+    const bool view_at_range_end = mapping.viewEndFrame() >= visible_end_frame_;
+    const int range_end_x = mapping.xForFrame(visible_end_frame_);
+    if (view_at_range_end && x > range_end_x) {
+        if (!range_extended_during_drag_) {
+            range_extended_during_drag_ = true;
+            emit extendRangeRequested();
+        }
+        return;
+    }
+    emit seekRequested(static_cast<qint64>(frameAtX(x)));
 }
 
 TimelineNavigator::TimelineNavigator(QWidget* parent)
@@ -697,12 +867,33 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     previous_frame_button_->setObjectName(QStringLiteral("motion-timeline-previous-frame"));
     frame_label_ = new QLabel(this);
     frame_label_->setObjectName(QStringLiteral("motion-timeline-frame-readout"));
+    zoom_out_button_ = new QPushButton(QStringLiteral("−"), this);
+    zoom_out_button_->setObjectName(QStringLiteral("motion-timeline-zoom-out"));
+    zoom_out_button_->setToolTip(QStringLiteral("Zoom out"));
+    zoom_slider_ = new QSlider(Qt::Horizontal, this);
+    zoom_slider_->setObjectName(QStringLiteral("motion-timeline-zoom-slider"));
+    zoom_slider_->setRange(0, static_cast<int>(detail::kTimelineZoomLevels.size()) - 1);
+    zoom_slider_->setValue(detail::kTimelineZoomDefaultIndex);
+    zoom_slider_->setFixedWidth(150);
+    zoom_slider_->setToolTip(QStringLiteral("Timeline zoom"));
+    zoom_level_label_ = new QLabel(this);
+    zoom_level_label_->setObjectName(QStringLiteral("motion-timeline-zoom-level"));
+    zoom_level_label_->setMinimumWidth(52);
+    zoom_level_label_->setAlignment(Qt::AlignCenter);
+    zoom_in_button_ = new QPushButton(QStringLiteral("+"), this);
+    zoom_in_button_->setObjectName(QStringLiteral("motion-timeline-zoom-in"));
+    zoom_in_button_->setToolTip(QStringLiteral("Zoom in"));
     frame_rate_label_ = new QLabel(this);
     frame_rate_label_->setObjectName(QStringLiteral("motion-timeline-frame-rate"));
     next_frame_button_ = new QPushButton(QStringLiteral("Next frame"), this);
     next_frame_button_->setObjectName(QStringLiteral("motion-timeline-next-frame"));
     controls->addWidget(previous_frame_button_);
     controls->addWidget(frame_label_);
+    controls->addStretch(1);
+    controls->addWidget(zoom_out_button_);
+    controls->addWidget(zoom_slider_);
+    controls->addWidget(zoom_level_label_);
+    controls->addWidget(zoom_in_button_);
     controls->addStretch(1);
     controls->addWidget(frame_rate_label_);
     controls->addWidget(next_frame_button_);
@@ -711,8 +902,9 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     ruler_ = new TimelineRuler(this);
     ruler_->setHeaderWidth(kTimelineHeaderWidth);
     ruler_->setToolTip(QStringLiteral(
-        "Starts with one hour. Drag beyond the right edge to extend by one hour per drag. "
-        "This range is not the composition end."));
+        "At 100%, the initial one-hour range fits the timeline. Use Ctrl+wheel or the zoom "
+        "controls to change scale. Drag past the actual range end to extend by one hour per "
+        "gesture; scroll to the end first if it is offscreen. This range is not the composition end."));
     layout->addWidget(ruler_);
 
     layer_scroll_area_ = new QScrollArea(this);
@@ -723,6 +915,12 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     layer_rows_ = new LayerRowsWidget(layer_scroll_area_);
     layer_scroll_area_->setWidget(layer_rows_);
     layout->addWidget(layer_scroll_area_, 1);
+
+    horizontal_scroll_bar_ = new QScrollBar(Qt::Horizontal, this);
+    horizontal_scroll_bar_->setObjectName(QStringLiteral("motion-timeline-horizontal-scroll"));
+    horizontal_scroll_bar_->setRange(0, detail::kTimelineScrollResolution);
+    horizontal_scroll_bar_->setPageStep(detail::kTimelineScrollResolution);
+    layout->addWidget(horizontal_scroll_bar_);
 
     connect(previous_frame_button_, &QPushButton::clicked, this, [this] {
         seekToFrame(current_frame_ - (current_frame_ > 0 ? 1 : 0));
@@ -738,7 +936,36 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     connect(ruler_, &TimelineRuler::extendRangeRequested, this, [this] {
         extendViewByOneHour();
     });
+    connect(ruler_, &TimelineRuler::zoomStepRequested, this, [this](int direction) {
+        applyZoomLevel(zoom_level_index_ + (direction > 0 ? 1 : -1));
+    });
+    static_cast<LayerRowsWidget*>(layer_rows_)->zoom_step_requested = [this](int direction) {
+        applyZoomLevel(zoom_level_index_ + direction);
+    };
+    static_cast<LayerRowsWidget*>(layer_rows_)->viewport_width_changed = [this](int width) {
+        ruler_->setMappingWidth(width);
+    };
+    connect(zoom_slider_, &QSlider::valueChanged, this, [this](int index) {
+        applyZoomLevel(index);
+    });
+    connect(zoom_out_button_, &QPushButton::clicked, this, [this] {
+        applyZoomLevel(zoom_level_index_ - 1);
+    });
+    connect(zoom_in_button_, &QPushButton::clicked, this, [this] {
+        applyZoomLevel(zoom_level_index_ + 1);
+    });
+    connect(horizontal_scroll_bar_, &QScrollBar::valueChanged, this, [this](int value) {
+        const auto maximum_start = maximumViewStartFrame();
+        const long double fraction = static_cast<long double>(value) /
+            static_cast<long double>(detail::kTimelineScrollResolution);
+        view_start_frame_ = roundedFrameClamped(
+            fraction * static_cast<long double>(maximum_start), maximum_start);
+        updateViewWidgets();
+    });
 
+    frames_per_view_ = calculateFramesPerView();
+    updateHorizontalScrollBar();
+    updateViewWidgets();
     updateControls();
 }
 
@@ -748,9 +975,12 @@ void TimelineNavigator::setCompositionTiming(
     frame_rate_ = frame_rate;
     current_frame_ = 0;
     visible_end_frame_ = initialVisibleEndFrame(frame_rate);
-    ruler_->setVisibleEndFrame(visible_end_frame_);
-    ruler_->setCurrentFrame(current_frame_);
-    static_cast<LayerRowsWidget*>(layer_rows_)->setRange(visible_end_frame_, current_frame_);
+    zoom_level_index_ = detail::kTimelineZoomDefaultIndex;
+    zoom_factor_ = detail::kTimelineZoomLevels[static_cast<std::size_t>(zoom_level_index_)];
+    frames_per_view_ = calculateFramesPerView();
+    view_start_frame_ = 0;
+    updateHorizontalScrollBar();
+    updateViewWidgets();
     updateControls();
 }
 
@@ -769,6 +999,44 @@ std::int64_t TimelineNavigator::visibleEndFrame() const noexcept
     return visible_end_frame_;
 }
 
+double TimelineNavigator::zoomFactor() const noexcept
+{
+    return zoom_factor_;
+}
+
+int TimelineNavigator::zoomLevelIndex() const noexcept
+{
+    return zoom_level_index_;
+}
+
+std::int64_t TimelineNavigator::viewStartFrame() const noexcept
+{
+    return view_start_frame_;
+}
+
+std::int64_t TimelineNavigator::framesPerView() const noexcept
+{
+    return frames_per_view_;
+}
+
+int TimelineNavigator::frameToViewportX(std::int64_t frame) const noexcept
+{
+    if (ruler_ == nullptr) {
+        return 0;
+    }
+    return TimelineViewMapping{ruler_->mappingWidth(), kTimelineHeaderWidth, visible_end_frame_,
+        view_start_frame_, frames_per_view_}.xForFrame(frame);
+}
+
+std::int64_t TimelineNavigator::frameAtViewportX(int x) const noexcept
+{
+    if (ruler_ == nullptr) {
+        return 0;
+    }
+    return TimelineViewMapping{ruler_->mappingWidth(), kTimelineHeaderWidth, visible_end_frame_,
+        view_start_frame_, frames_per_view_}.frameAtX(x);
+}
+
 void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& layers)
 {
     std::vector<LayerRow> rows;
@@ -785,7 +1053,7 @@ void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& la
     }
     auto* row_widget = static_cast<LayerRowsWidget*>(layer_rows_);
     row_widget->setRows(std::move(rows));
-    row_widget->setRange(visible_end_frame_, current_frame_);
+    updateViewWidgets();
 }
 
 void TimelineNavigator::setSelectedLayerId(model::LayerId id)
@@ -843,24 +1111,153 @@ void TimelineNavigator::seekToFrame(std::int64_t frame)
     }
 
     current_frame_ = bounded_frame;
-    ruler_->setCurrentFrame(current_frame_);
-    static_cast<LayerRowsWidget*>(layer_rows_)->setRange(visible_end_frame_, current_frame_);
+    ensureCurrentFrameVisible();
+    updateViewWidgets();
     updateControls();
     emit currentFrameChanged(static_cast<qint64>(current_frame_));
 }
 
 void TimelineNavigator::extendViewByOneHour() noexcept
 {
-    const auto remaining_frames = kMaximumFrame - visible_end_frame_;
-    const auto extension_frames = std::min(framesPerHour(frame_rate_), remaining_frames);
-    if (extension_frames == 0) {
+    const auto extended_end = detail::saturatingFrameAdd(
+        visible_end_frame_, framesPerHour(frame_rate_));
+    if (extended_end == visible_end_frame_) {
         return;
     }
 
-    visible_end_frame_ += extension_frames;
-    ruler_->setVisibleEndFrame(visible_end_frame_);
-    static_cast<LayerRowsWidget*>(layer_rows_)->setRange(visible_end_frame_, current_frame_);
+    visible_end_frame_ = extended_end;
+    current_frame_ = visible_end_frame_;
+    updateHorizontalScrollBar();
+    setViewStartFrame(maximumViewStartFrame());
+    updateViewWidgets();
     updateControls();
+    emit currentFrameChanged(static_cast<qint64>(current_frame_));
+}
+
+void TimelineNavigator::applyZoomLevel(int index)
+{
+    const int last_index = static_cast<int>(detail::kTimelineZoomLevels.size()) - 1;
+    const int bounded_index = std::clamp(index, 0, last_index);
+    const auto next_factor = detail::kTimelineZoomLevels[
+        static_cast<std::size_t>(bounded_index)];
+    if (bounded_index == zoom_level_index_ && next_factor == zoom_factor_) {
+        updateControls();
+        return;
+    }
+
+    const TimelineViewMapping old_mapping{
+        ruler_->mappingWidth(), kTimelineHeaderWidth, visible_end_frame_,
+        view_start_frame_, frames_per_view_};
+    const bool playhead_visible = current_frame_ >= view_start_frame_ &&
+        current_frame_ <= old_mapping.viewEndFrame();
+    const int anchor_x = playhead_visible
+        ? old_mapping.xForFrame(current_frame_)
+        : old_mapping.axisLeft() + old_mapping.axisWidth() / 2;
+    const int axis_width = std::max(1, old_mapping.axisWidth());
+    const long double anchor_fraction = std::clamp(
+        static_cast<long double>(anchor_x - old_mapping.axisLeft()) /
+            static_cast<long double>(axis_width),
+        0.0L, 1.0L);
+
+    zoom_level_index_ = bounded_index;
+    zoom_factor_ = next_factor;
+    frames_per_view_ = calculateFramesPerView();
+    const long double frame_offset = anchor_fraction *
+        static_cast<long double>(std::max<std::int64_t>(0, frames_per_view_ - 1));
+    const long double requested_start =
+        static_cast<long double>(current_frame_) - frame_offset;
+    const auto maximum_start = maximumViewStartFrame();
+    const auto new_start = roundedFrameClamped(
+        std::clamp(requested_start, 0.0L, static_cast<long double>(maximum_start)),
+        maximum_start);
+    updateHorizontalScrollBar();
+    setViewStartFrame(new_start);
+    updateControls();
+}
+
+void TimelineNavigator::updateHorizontalScrollBar()
+{
+    if (horizontal_scroll_bar_ == nullptr) {
+        return;
+    }
+    const auto maximum_start = maximumViewStartFrame();
+    const long double total_frames = static_cast<long double>(visible_end_frame_) + 1.0L;
+    const long double page_fraction = total_frames > 0.0L
+        ? static_cast<long double>(frames_per_view_) / total_frames : 1.0L;
+    const int page_step = std::clamp(static_cast<int>(std::llround(
+        page_fraction * detail::kTimelineScrollResolution)),
+        1, detail::kTimelineScrollResolution);
+    const int value = maximum_start == 0 ? 0 : static_cast<int>(std::llround(
+        static_cast<long double>(std::clamp(view_start_frame_, std::int64_t{0}, maximum_start)) /
+        static_cast<long double>(maximum_start) * detail::kTimelineScrollResolution));
+    const QSignalBlocker blocker(horizontal_scroll_bar_);
+    horizontal_scroll_bar_->setRange(0, detail::kTimelineScrollResolution);
+    horizontal_scroll_bar_->setPageStep(page_step);
+    horizontal_scroll_bar_->setSingleStep(std::max(1, page_step / 10));
+    horizontal_scroll_bar_->setEnabled(maximum_start > 0);
+    horizontal_scroll_bar_->setValue(value);
+    const long double fraction = static_cast<long double>(value) /
+        detail::kTimelineScrollResolution;
+    view_start_frame_ = roundedFrameClamped(
+        fraction * static_cast<long double>(maximum_start), maximum_start);
+}
+
+void TimelineNavigator::setViewStartFrame(std::int64_t frame)
+{
+    const auto maximum_start = maximumViewStartFrame();
+    const auto bounded = std::clamp(frame, std::int64_t{0}, maximum_start);
+    const int value = maximum_start == 0 ? 0 : static_cast<int>(std::llround(
+        static_cast<long double>(bounded) / static_cast<long double>(maximum_start) *
+        detail::kTimelineScrollResolution));
+    const QSignalBlocker blocker(horizontal_scroll_bar_);
+    horizontal_scroll_bar_->setValue(value);
+    const long double fraction = static_cast<long double>(value) /
+        detail::kTimelineScrollResolution;
+    view_start_frame_ = roundedFrameClamped(
+        fraction * static_cast<long double>(maximum_start), maximum_start);
+    updateViewWidgets();
+}
+
+void TimelineNavigator::updateViewWidgets()
+{
+    if (ruler_ == nullptr || layer_rows_ == nullptr) {
+        return;
+    }
+    ruler_->setViewState(
+        visible_end_frame_, current_frame_, view_start_frame_, frames_per_view_);
+    static_cast<LayerRowsWidget*>(layer_rows_)->setViewState(
+        visible_end_frame_, current_frame_, view_start_frame_, frames_per_view_);
+}
+
+void TimelineNavigator::ensureCurrentFrameVisible()
+{
+    const TimelineViewMapping mapping{
+        ruler_->mappingWidth(), kTimelineHeaderWidth, visible_end_frame_,
+        view_start_frame_, frames_per_view_};
+    if (current_frame_ >= view_start_frame_ && current_frame_ <= mapping.viewEndFrame()) {
+        return;
+    }
+    const auto centered_offset = std::max<std::int64_t>(0, (frames_per_view_ - 1) / 2);
+    const auto desired_start = current_frame_ > centered_offset
+        ? current_frame_ - centered_offset : 0;
+    setViewStartFrame(std::min(desired_start, maximumViewStartFrame()));
+}
+
+std::int64_t TimelineNavigator::maximumViewStartFrame() const noexcept
+{
+    const auto last_visible_offset = std::max<std::int64_t>(0, frames_per_view_ - 1);
+    return visible_end_frame_ >= last_visible_offset
+        ? visible_end_frame_ - last_visible_offset : 0;
+}
+
+std::int64_t TimelineNavigator::calculateFramesPerView() const noexcept
+{
+    const long double raw = std::ceil(
+        static_cast<long double>(framesPerHour(frame_rate_)) /
+        static_cast<long double>(zoom_factor_));
+    return std::max<std::int64_t>(1,
+        raw >= static_cast<long double>(kMaximumFrame)
+            ? kMaximumFrame : static_cast<std::int64_t>(raw));
 }
 
 void TimelineNavigator::updateControls()
@@ -870,6 +1267,13 @@ void TimelineNavigator::updateControls()
     frame_rate_label_->setText(QStringLiteral("FPS: %1").arg(formatFrameRate(frame_rate_)));
     previous_frame_button_->setEnabled(current_frame_ > 0);
     next_frame_button_->setEnabled(current_frame_ < visible_end_frame_);
+    zoom_out_button_->setEnabled(zoom_level_index_ > 0);
+    zoom_in_button_->setEnabled(
+        zoom_level_index_ < static_cast<int>(detail::kTimelineZoomLevels.size()) - 1);
+    zoom_level_label_->setText(QStringLiteral("%1%")
+        .arg(static_cast<int>(std::lround(zoom_factor_ * 100.0))));
+    const QSignalBlocker blocker(zoom_slider_);
+    zoom_slider_->setValue(zoom_level_index_);
 }
 
 } // namespace motion::ui

@@ -17,6 +17,18 @@ playback controls, export jobs, and user interface. Its existing
 application APIs remain behind adapters when a lower-level capability is
 shared.
 
+### Timeline zoom interaction
+
+Motion Studio adapts the Video Editor's discrete zoom levels, playhead-anchored
+zoom behavior, and adaptive ruler spacing. The levels and behavior are
+implemented in Motion Studio's own timeline UI; no Video Editor timeline class,
+model, or project setting is linked. A shared viewport mapping drives the
+Motion Studio ruler and layer rows, while a bounded horizontal scrollbar
+navigates the signed 64-bit frame range without allocating a timeline-sized
+widget. Zoom defaults to 100%, where the initial one-hour navigation range
+fits, and resets when a new composition is created. It remains UI state until
+Motion Studio persistence is designed.
+
 ## Shared library candidates
 
 | Library | Current boundary | Motion Studio use |

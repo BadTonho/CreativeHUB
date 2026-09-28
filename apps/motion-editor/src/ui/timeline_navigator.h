@@ -14,6 +14,9 @@ class QLabel;
 class QPushButton;
 class QMouseEvent;
 class QScrollArea;
+class QScrollBar;
+class QSlider;
+class QWheelEvent;
 
 namespace motion::ui {
 
@@ -24,27 +27,37 @@ public:
     explicit TimelineRuler(QWidget* parent = nullptr);
 
     void setHeaderWidth(int width);
-    void setVisibleEndFrame(std::int64_t frame);
-    void setCurrentFrame(std::int64_t frame) noexcept;
+    void setMappingWidth(int width);
+    [[nodiscard]] int mappingWidth() const noexcept;
+    void setViewState(std::int64_t end_frame,
+                      std::int64_t current_frame,
+                      std::int64_t start_frame,
+                      std::int64_t frames_per_view);
 
 signals:
     void seekRequested(qint64 frame);
     void extendRangeRequested();
+    void zoomStepRequested(int direction);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
 
 private:
     [[nodiscard]] std::int64_t frameAtX(int x) const noexcept;
     [[nodiscard]] int xForFrame(std::int64_t frame) const noexcept;
+    void handleDragX(int x);
 
     std::int64_t visible_end_frame_ = 0;
     std::int64_t current_frame_ = 0;
+    std::int64_t view_start_frame_ = 0;
+    std::int64_t frames_per_view_ = 1;
     int last_mouse_x_ = -1;
     int header_width_ = 0;
+    int mapping_width_ = 0;
     bool dragging_ = false;
     bool range_extended_during_drag_ = false;
 };
@@ -61,6 +74,12 @@ public:
     void setSelectedLayerId(model::LayerId id);
     [[nodiscard]] std::int64_t currentFrame() const noexcept;
     [[nodiscard]] std::int64_t visibleEndFrame() const noexcept;
+    [[nodiscard]] double zoomFactor() const noexcept;
+    [[nodiscard]] int zoomLevelIndex() const noexcept;
+    [[nodiscard]] std::int64_t viewStartFrame() const noexcept;
+    [[nodiscard]] std::int64_t framesPerView() const noexcept;
+    [[nodiscard]] int frameToViewportX(std::int64_t frame) const noexcept;
+    [[nodiscard]] std::int64_t frameAtViewportX(int x) const noexcept;
 
     void setMediaDropHandler(
         std::function<void(const std::filesystem::path&,
@@ -83,18 +102,34 @@ signals:
 private:
     void seekToFrame(std::int64_t frame);
     void extendViewByOneHour() noexcept;
+    void applyZoomLevel(int index);
+    void updateHorizontalScrollBar();
+    void setViewStartFrame(std::int64_t frame);
+    void updateViewWidgets();
+    void ensureCurrentFrameVisible();
+    [[nodiscard]] std::int64_t maximumViewStartFrame() const noexcept;
+    [[nodiscard]] std::int64_t calculateFramesPerView() const noexcept;
     void updateControls();
 
     model::FrameRate frame_rate_{};
     std::int64_t visible_end_frame_ = 0;
     std::int64_t current_frame_ = 0;
+    std::int64_t view_start_frame_ = 0;
+    std::int64_t frames_per_view_ = 1;
+    double zoom_factor_ = 1.0;
+    int zoom_level_index_ = 3;
     QPushButton* previous_frame_button_ = nullptr;
     QPushButton* next_frame_button_ = nullptr;
+    QPushButton* zoom_out_button_ = nullptr;
+    QPushButton* zoom_in_button_ = nullptr;
+    QSlider* zoom_slider_ = nullptr;
+    QLabel* zoom_level_label_ = nullptr;
     QLabel* frame_label_ = nullptr;
     QLabel* frame_rate_label_ = nullptr;
     TimelineRuler* ruler_ = nullptr;
     QWidget* layer_rows_ = nullptr;
     QScrollArea* layer_scroll_area_ = nullptr;
+    QScrollBar* horizontal_scroll_bar_ = nullptr;
 };
 
 } // namespace motion::ui
