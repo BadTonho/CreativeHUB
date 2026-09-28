@@ -10,15 +10,21 @@
 #include <functional>
 #include <vector>
 
+class QComboBox;
 class QLabel;
-class QPushButton;
 class QMouseEvent;
+class QPushButton;
 class QScrollArea;
 class QScrollBar;
 class QSlider;
 class QWheelEvent;
 
 namespace motion::ui {
+
+enum class TimelineDisplayMode : std::uint8_t {
+    Time,
+    Frames,
+};
 
 class TimelineRuler final : public QWidget {
     Q_OBJECT
@@ -32,7 +38,9 @@ public:
     void setViewState(std::int64_t end_frame,
                       std::int64_t current_frame,
                       std::int64_t start_frame,
-                      std::int64_t frames_per_view);
+                      std::int64_t frames_per_view,
+                      model::FrameRate frame_rate,
+                      TimelineDisplayMode display_mode);
 
 signals:
     void seekRequested(qint64 frame);
@@ -55,6 +63,8 @@ private:
     std::int64_t current_frame_ = 0;
     std::int64_t view_start_frame_ = 0;
     std::int64_t frames_per_view_ = 1;
+    model::FrameRate frame_rate_{};
+    TimelineDisplayMode display_mode_ = TimelineDisplayMode::Time;
     int last_mouse_x_ = -1;
     int header_width_ = 0;
     int mapping_width_ = 0;
@@ -118,12 +128,14 @@ private:
     std::int64_t frames_per_view_ = 1;
     double zoom_factor_ = 1.0;
     int zoom_level_index_ = 3;
+    TimelineDisplayMode display_mode_ = TimelineDisplayMode::Time;
     QPushButton* previous_frame_button_ = nullptr;
     QPushButton* next_frame_button_ = nullptr;
     QPushButton* zoom_out_button_ = nullptr;
     QPushButton* zoom_in_button_ = nullptr;
     QSlider* zoom_slider_ = nullptr;
     QLabel* zoom_level_label_ = nullptr;
+    QComboBox* display_mode_combo_ = nullptr;
     QLabel* frame_label_ = nullptr;
     QLabel* frame_rate_label_ = nullptr;
     TimelineRuler* ruler_ = nullptr;

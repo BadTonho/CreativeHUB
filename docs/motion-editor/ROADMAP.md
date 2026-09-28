@@ -101,6 +101,9 @@ the Motion Studio implementation choices are finalized.
   defaulting to 100%, with playhead anchoring, visible controls, Ctrl+wheel,
   horizontal navigation, shared ruler/layer frame mapping, and adaptive ruler
   ticks. Zoom changes view state only and does not alter composition timing.
+- [x] Add a Time / Frames display selector for ruler ticks and the playhead
+  readout. Time is the default and uses elapsed `HH:MM:SS.mmm` calculated from
+  the exact composition frame rate; navigation and editing remain frame-based.
 - [x] Add an in-memory Media Pool for video and still images, backed by the
   shared media catalog and import processing. Include hierarchical bins,
   cached thumbnails, list and thumbnail views, renaming, offline marking and
@@ -133,9 +136,9 @@ button uses the File menu's creation flow and has offscreen UI regression
 coverage. Opening a composition preserves the current window state and geometry;
 the app starts maximized unless the user restores it. The canvas viewer,
 navigation ruler, timeline zoom and scrolling, layer rows, drag/drop, transforms,
-and preview have offscreen coverage. The shared media catalog and importer,
-plus the Motion Studio Media Pool, have regression coverage for video and
-still-image imports, first-frame thumbnails, bins, renaming, offline
+time/frame display, and preview have offscreen coverage. The shared media catalog
+and importer, plus the Motion Studio Media Pool, have regression coverage for
+video and still-image imports, first-frame thumbnails, bins, renaming, offline
 restoration, view modes, selection details,
 and clearing on composition replacement. The Video Editor retains its
 project-media and linked-image regressions.
@@ -149,8 +152,12 @@ At 100%, one hour fits in the timeline. Zoom uses the Video Editor's discrete
 levels from 25% to 51,200%, preserves the playhead's screen position, and
 scrolls horizontally when the current range no longer fits. The ruler and layer
 rows share the same viewport mapping; ruler tick spacing adapts to the visible
-frame range. Zoom and scroll are UI state, reset when a new composition is
-created, and are not persisted. Dragging past the actual range end extends it
+frame range and the width of labels in the selected display mode. The timeline
+defaults to elapsed `HH:MM:SS.mmm` time calculated from the exact rational frame
+rate; **Frames** switches the ruler and playhead readout to frame numbers. This
+display selection does not affect frame-based navigation or editing and resets
+to **Time** for a new composition. Zoom, scroll, and display mode are UI state
+and are not persisted. Dragging past the actual range end extends it
 by one hour once per gesture and moves the playhead to the new end; scroll to
 the end first if it is offscreen. A drag at the visible viewport edge does not
 extend a range whose end is still offscreen. The range saturates at the signed
@@ -187,8 +194,11 @@ through image and video previews; exercise zoom buttons, slider, and Ctrl+wheel;
 confirm the playhead stays anchored, scroll horizontally to inspect aligned
 ruler and layer positions, move and resize clips at multiple zoom levels, and
 extend the range only at its actual end, scrolling there if it is offscreen;
-resize the viewer, Media Pool, inspector, and timeline; replace the composition and confirm the
-pool resets; then close the application. Keyframe editing, document
+resize the viewer, Media Pool, inspector, and timeline; replace the composition
+and confirm the pool resets; verify the timeline starts in Time mode, switch to
+Frames and back,
+and confirm the playhead and layer positions do not change; then close the
+application. Keyframe editing, document
 persistence, undo/redo, and export remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple

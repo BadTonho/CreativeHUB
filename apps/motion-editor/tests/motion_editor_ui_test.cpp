@@ -273,6 +273,10 @@ int main(int argc, char* argv[])
 
     frame_rate_range_check.setCompositionTiming({60, 1});
     const auto one_hour_end = frame_rate_range_check.visibleEndFrame();
+    auto* display_mode = findWidget<QComboBox>(
+        &frame_rate_range_check, "motion-timeline-display-mode");
+    auto* position_readout = findWidget<QLabel>(
+        &frame_rate_range_check, "motion-timeline-position-readout");
     auto* zoom_slider = findWidget<QSlider>(
         &frame_rate_range_check, "motion-timeline-zoom-slider");
     auto* zoom_out = findWidget<QPushButton>(
@@ -285,6 +289,43 @@ int main(int argc, char* argv[])
         &frame_rate_range_check, "motion-timeline-horizontal-scroll");
     auto* ruler_for_zoom = findWidget<motion::ui::TimelineRuler>(
         &frame_rate_range_check, "motion-timeline-ruler");
+    require(display_mode->count() == 2 && display_mode->itemText(0) == QStringLiteral("Time") &&
+                display_mode->itemText(1) == QStringLiteral("Frames") &&
+                display_mode->currentIndex() == 0 &&
+                position_readout->text() == QStringLiteral("00:00:00.000"),
+            "timeline time display is the initial mode and frames remains an available option");
+    frame_rate_range_check.setCompositionTiming({24, 1});
+    frame_rate_range_check.setCurrentFrame(1);
+    require(motion::ui::detail::formatElapsedTime(1, 24, 1) == "00:00:00.042" &&
+                motion::ui::detail::formatElapsedTime(24, 24, 1) == "00:00:01.000" &&
+                motion::ui::detail::formatElapsedTime(
+                    std::numeric_limits<std::int64_t>::max(), 24, 1) ==
+                    "106751991167300:38:45.292" &&
+                position_readout->text() == QStringLiteral("00:00:00.042"),
+            "integer frame rates format elapsed time exactly through the signed frame limit");
+    const auto frame_rate_check_frame_before_display_switch = frame_rate_range_check.currentFrame();
+    display_mode->setCurrentIndex(1);
+    require(position_readout->text() == QStringLiteral("Frame 1") &&
+                frame_rate_range_check.currentFrame() ==
+                    frame_rate_check_frame_before_display_switch,
+            "frame display changes the readout without seeking");
+    frame_rate_range_check.setCompositionTiming({30000, 1001});
+    frame_rate_range_check.setCurrentFrame(30);
+    require(display_mode->currentIndex() == 0 &&
+                motion::ui::detail::formatElapsedTime(30, 30000, 1001) == "00:00:01.001" &&
+                position_readout->text() == QStringLiteral("00:00:01.001"),
+            "fractional frame rates use exact rational timing and new compositions reset to Time");
+    display_mode->setCurrentIndex(1);
+    require(position_readout->text() == QStringLiteral("Frame 30"),
+            "the frame option retains the existing frame-number readout");
+    const auto narrow_label_ticks = motion::ui::detail::timelineRulerTickStep(
+        60 * 60 * 60, 1000, 80);
+    const auto wide_label_ticks = motion::ui::detail::timelineRulerTickStep(
+        60 * 60 * 60, 1000, 280);
+    require(wide_label_ticks > narrow_label_ticks,
+            "ruler ticks spread farther apart when the selected label format is wider");
+    frame_rate_range_check.setCompositionTiming({60, 1});
+
     require(frame_rate_range_check.zoomFactor() == 1.0 &&
                 frame_rate_range_check.framesPerView() == 60 * 60 * 60 &&
                 zoom_slider->value() == motion::ui::detail::kTimelineZoomDefaultIndex &&
@@ -412,6 +453,14 @@ int main(int argc, char* argv[])
     auto* timeline = findWidget<motion::ui::TimelineNavigator>(&window, "motion-timeline");
     auto* timeline_ruler = findWidget<motion::ui::TimelineRuler>(
         &window, "motion-timeline-ruler");
+    auto* timeline_display_mode = findWidget<QComboBox>(
+        &window, "motion-timeline-display-mode");
+    auto* timeline_position_readout = findWidget<QLabel>(
+        &window, "motion-timeline-position-readout");
+    auto* timeline_previous_button = findWidget<QPushButton>(
+        &window, "motion-timeline-previous-frame");
+    auto* timeline_next_button = findWidget<QPushButton>(
+        &window, "motion-timeline-next-frame");
     auto* timeline_zoom_slider = findWidget<QSlider>(
         &window, "motion-timeline-zoom-slider");
     auto* timeline_horizontal_scroll = findWidget<QScrollBar>(
@@ -423,8 +472,10 @@ int main(int argc, char* argv[])
     const auto initial_navigation_end = timeline->visibleEndFrame();
     require(timeline->zoomFactor() == 1.0 &&
                 initial_navigation_end == composition_hour_frames - 1 &&
+                timeline_display_mode->currentIndex() == 0 &&
+                timeline_position_readout->text() == QStringLiteral("00:00:00.000") &&
                 !timeline_horizontal_scroll->isEnabled(),
-            "a new composition opens at 100 percent with one hour in view");
+            "a new composition opens at 100 percent with one hour in view and Time display");
     dragPastTimelineEnd(timeline_ruler, timeline->frameToViewportX(initial_navigation_end));
     require(timeline->visibleEndFrame() == initial_navigation_end + composition_hour_frames &&
                 timeline->currentFrame() == timeline->visibleEndFrame() &&
@@ -638,6 +689,37 @@ int main(int argc, char* argv[])
     const auto layer_before_zoom = document->layers().front();
     require(layer_before_zoom.keyframes == creative_suite::animation::TransformKeyframes{},
             "the layer starts with no evaluated keyframes in the current workflow");
+
+    timeline->setCurrentFrame(123);
+    const auto frame_before_display_switch = timeline->currentFrame();
+    const auto view_start_before_display_switch = timeline->viewStartFrame();
+    const auto range_end_before_display_switch = timeline->visibleEndFrame();
+    const auto zoom_before_display_switch = timeline->zoomFactor();
+    timeline_display_mode->setCurrentIndex(1);
+    require(timeline_position_readout->text() == QStringLiteral("Frame 123") &&
+                timeline->currentFrame() == frame_before_display_switch &&
+                timeline->viewStartFrame() == view_start_before_display_switch &&
+                timeline->visibleEndFrame() == range_end_before_display_switch &&
+                timeline->zoomFactor() == zoom_before_display_switch &&
+                document->layers().front().timeline_start_frame ==
+                    layer_before_zoom.timeline_start_frame &&
+                document->layers().front().duration_frames == layer_before_zoom.duration_frames &&
+                document->layers().front().transform == layer_before_zoom.transform &&
+                document->layers().front().keyframes == layer_before_zoom.keyframes,
+            "switching to Frames changes presentation only");
+    timeline_next_button->click();
+    require(timeline->currentFrame() == 124 &&
+                timeline_position_readout->text() == QStringLiteral("Frame 124"),
+            "Next frame continues stepping by one frame in Frames mode");
+    timeline_previous_button->click();
+    timeline_display_mode->setCurrentIndex(0);
+    require(timeline->currentFrame() == 123 &&
+                timeline_position_readout->text() == QStringLiteral("00:00:05.125"),
+            "Time mode displays elapsed time at the composition rate");
+    require(document->layers().front().transform == layer_before_zoom.transform &&
+                document->layers().front().keyframes == layer_before_zoom.keyframes,
+            "display mode changes leave layer transforms and keyframes unchanged");
+
     const auto frame_before_zoom_ui = timeline->currentFrame();
     timeline_zoom_slider->setValue(21);
     timeline_horizontal_scroll->setValue(motion::ui::detail::kTimelineScrollResolution);
@@ -807,6 +889,7 @@ int main(int argc, char* argv[])
     require(pool->library().items()[restored_index].display_name == "Poster renamed",
             "restoring an offline source preserves its Media Pool label");
 
+    timeline_display_mode->setCurrentIndex(1);
     QTimer::singleShot(0, [] {
         auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
         require(prompt != nullptr, "replacement prompt is shown");
@@ -817,8 +900,10 @@ int main(int argc, char* argv[])
     require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{1920, 1080} &&
                 window.compositionDocument()->frameRate() == motion::model::FrameRate{30000, 1001},
             "replacement creates a new composition with the selected exact frame rate");
-    require(pool->library().empty() && media_list->count() == 0 && timeline->currentFrame() == 0,
-            "replacing a composition clears its in-memory Media Pool and resets navigation");
+    require(pool->library().empty() && media_list->count() == 0 && timeline->currentFrame() == 0 &&
+                timeline_display_mode->currentIndex() == 0 &&
+                timeline_position_readout->text() == QStringLiteral("00:00:00.000"),
+            "replacing a composition clears its Media Pool, resets navigation, and restores Time display");
 
     std::cout << "Motion Studio Media Pool UI tests passed.\n";
     return EXIT_SUCCESS;

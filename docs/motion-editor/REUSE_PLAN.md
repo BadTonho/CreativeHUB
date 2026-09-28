@@ -29,6 +29,13 @@ widget. Zoom defaults to 100%, where the initial one-hour navigation range
 fits, and resets when a new composition is created. It remains UI state until
 Motion Studio persistence is designed.
 
+Timeline positions remain frame-based internally. Motion Studio defaults to a
+Time display that formats ruler ticks and the playhead readout as elapsed
+`HH:MM:SS.mmm` using the exact composition frame rate; the Frames option shows
+the existing integer frame labels. Label spacing follows the rendered label
+width. This presentation state resets to Time for a new composition and does
+not depend on Video Editor timecode types or APIs.
+
 ## Shared library candidates
 
 | Library | Current boundary | Motion Studio use |

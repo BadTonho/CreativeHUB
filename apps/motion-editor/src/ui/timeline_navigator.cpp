@@ -1,6 +1,8 @@
 #include "timeline_navigator.h"
 #include "timeline_navigator_math.h"
 
+#include <QComboBox>
+#include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
@@ -62,6 +64,18 @@ QString utf8Text(const std::string& value)
 QString formatFrameRate(model::FrameRate frame_rate)
 {
     return QString::number(frame_rate.asDouble(), 'g', 6);
+}
+
+QString formatTimelinePosition(
+    std::int64_t frame,
+    model::FrameRate frame_rate,
+    TimelineDisplayMode display_mode)
+{
+    if (display_mode == TimelineDisplayMode::Frames) {
+        return QString::number(static_cast<qlonglong>(frame));
+    }
+    return utf8Text(detail::formatElapsedTime(
+        frame, frame_rate.numerator, frame_rate.denominator));
 }
 
 std::int64_t framesPerHour(model::FrameRate frame_rate) noexcept
@@ -150,30 +164,6 @@ struct TimelineViewMapping {
         return left + static_cast<int>(std::llround(fraction * span));
     }
 };
-
-std::int64_t rulerTickStep(
-    std::int64_t frames_per_view,
-    int axis_width,
-    int label_digits) noexcept
-{
-    if (frames_per_view <= 1 || axis_width <= 0) {
-        return 1;
-    }
-    const int minimum_tick_spacing = std::max(112, label_digits * 8 + 32);
-    const long double target = std::max(1.0L,
-        static_cast<long double>(frames_per_view - 1) * minimum_tick_spacing /
-            static_cast<long double>(axis_width));
-    const long double decade = std::pow(10.0L, std::floor(std::log10(target)));
-    const long double scaled = target / decade;
-    const long double factor = scaled <= 1.0L ? 1.0L
-        : scaled <= 2.0L ? 2.0L
-        : scaled <= 5.0L ? 5.0L : 10.0L;
-    const long double step = std::max(1.0L, factor * decade);
-    if (step >= static_cast<long double>(kMaximumFrame)) {
-        return kMaximumFrame;
-    }
-    return static_cast<std::int64_t>(std::ceil(step));
-}
 
 std::int64_t firstTickAtOrAfter(std::int64_t start, std::int64_t step) noexcept
 {
@@ -682,12 +672,16 @@ int TimelineRuler::mappingWidth() const noexcept
 void TimelineRuler::setViewState(std::int64_t end_frame,
                                  std::int64_t current_frame,
                                  std::int64_t start_frame,
-                                 std::int64_t frames_per_view)
+                                 std::int64_t frames_per_view,
+                                 model::FrameRate frame_rate,
+                                 TimelineDisplayMode display_mode)
 {
     visible_end_frame_ = std::max<std::int64_t>(0, end_frame);
     current_frame_ = std::clamp(current_frame, std::int64_t{0}, visible_end_frame_);
     view_start_frame_ = std::clamp(start_frame, std::int64_t{0}, visible_end_frame_);
     frames_per_view_ = std::max<std::int64_t>(1, frames_per_view);
+    frame_rate_ = frame_rate;
+    display_mode_ = display_mode;
     update();
 }
 
@@ -708,12 +702,15 @@ void TimelineRuler::paintEvent(QPaintEvent*)
     painter.drawLine(axis_left, axis_y, axis_right, axis_y);
 
     const auto view_end = mapping.viewEndFrame();
-    const int first_visible_label_digits = QString::number(
-        static_cast<qlonglong>(view_start_frame_)).size();
-    const int last_visible_label_digits = QString::number(
-        static_cast<qlonglong>(view_end)).size();
-    const auto tick_step = rulerTickStep(frames_per_view_, mapping.axisWidth(),
-        std::max(first_visible_label_digits, last_visible_label_digits));
+    const QFontMetrics font_metrics(painter.font());
+    const int label_width = std::max(
+        font_metrics.horizontalAdvance(formatTimelinePosition(
+            view_start_frame_, frame_rate_, display_mode_)),
+        font_metrics.horizontalAdvance(formatTimelinePosition(
+            view_end, frame_rate_, display_mode_))) + 12;
+    const int label_box_width = std::max(96, label_width);
+    const auto tick_step = detail::timelineRulerTickStep(
+        frames_per_view_, mapping.axisWidth(), label_width);
     auto tick = firstTickAtOrAfter(view_start_frame_, tick_step);
     if (view_start_frame_ <= view_end && tick > view_end) {
         tick = view_start_frame_;
@@ -727,10 +724,11 @@ void TimelineRuler::paintEvent(QPaintEvent*)
         previous_tick_x = x;
         painter.drawLine(x, axis_y - 5, x, axis_y + 5);
         painter.setPen(QColor(196, 201, 208));
+        const auto label = formatTimelinePosition(frame, frame_rate_, display_mode_);
         painter.drawText(
-            QRect(x - 48, label_y, 96, 18),
+            QRect(x - label_box_width / 2, label_y, label_box_width, 18),
             Qt::AlignHCenter | Qt::AlignVCenter,
-            QString::number(static_cast<qlonglong>(frame)));
+            label);
         painter.setPen(QPen(QColor(110, 118, 129), 1));
     };
     if (view_start_frame_ <= view_end && view_start_frame_ % tick_step != 0) {
@@ -865,8 +863,15 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     controls->setContentsMargins(0, 0, 0, 0);
     previous_frame_button_ = new QPushButton(QStringLiteral("Previous frame"), this);
     previous_frame_button_->setObjectName(QStringLiteral("motion-timeline-previous-frame"));
+    display_mode_combo_ = new QComboBox(this);
+    display_mode_combo_->setObjectName(QStringLiteral("motion-timeline-display-mode"));
+    display_mode_combo_->addItem(QStringLiteral("Time"),
+        static_cast<int>(TimelineDisplayMode::Time));
+    display_mode_combo_->addItem(QStringLiteral("Frames"),
+        static_cast<int>(TimelineDisplayMode::Frames));
+    display_mode_combo_->setToolTip(QStringLiteral("Timeline ruler and playhead display"));
     frame_label_ = new QLabel(this);
-    frame_label_->setObjectName(QStringLiteral("motion-timeline-frame-readout"));
+    frame_label_->setObjectName(QStringLiteral("motion-timeline-position-readout"));
     zoom_out_button_ = new QPushButton(QStringLiteral("−"), this);
     zoom_out_button_->setObjectName(QStringLiteral("motion-timeline-zoom-out"));
     zoom_out_button_->setToolTip(QStringLiteral("Zoom out"));
@@ -888,6 +893,7 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     next_frame_button_ = new QPushButton(QStringLiteral("Next frame"), this);
     next_frame_button_->setObjectName(QStringLiteral("motion-timeline-next-frame"));
     controls->addWidget(previous_frame_button_);
+    controls->addWidget(display_mode_combo_);
     controls->addWidget(frame_label_);
     controls->addStretch(1);
     controls->addWidget(zoom_out_button_);
@@ -930,6 +936,13 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
             seekToFrame(current_frame_ + 1);
         }
     });
+    connect(display_mode_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
+        this, [this](int index) {
+            display_mode_ = index == static_cast<int>(TimelineDisplayMode::Frames)
+                ? TimelineDisplayMode::Frames : TimelineDisplayMode::Time;
+            updateViewWidgets();
+            updateControls();
+        });
     connect(ruler_, &TimelineRuler::seekRequested, this, [this](qint64 frame) {
         seekToFrame(static_cast<std::int64_t>(frame));
     });
@@ -974,6 +987,11 @@ void TimelineNavigator::setCompositionTiming(
 {
     frame_rate_ = frame_rate;
     current_frame_ = 0;
+    display_mode_ = TimelineDisplayMode::Time;
+    {
+        const QSignalBlocker blocker(display_mode_combo_);
+        display_mode_combo_->setCurrentIndex(static_cast<int>(display_mode_));
+    }
     visible_end_frame_ = initialVisibleEndFrame(frame_rate);
     zoom_level_index_ = detail::kTimelineZoomDefaultIndex;
     zoom_factor_ = detail::kTimelineZoomLevels[static_cast<std::size_t>(zoom_level_index_)];
@@ -1224,7 +1242,8 @@ void TimelineNavigator::updateViewWidgets()
         return;
     }
     ruler_->setViewState(
-        visible_end_frame_, current_frame_, view_start_frame_, frames_per_view_);
+        visible_end_frame_, current_frame_, view_start_frame_, frames_per_view_,
+        frame_rate_, display_mode_);
     static_cast<LayerRowsWidget*>(layer_rows_)->setViewState(
         visible_end_frame_, current_frame_, view_start_frame_, frames_per_view_);
 }
@@ -1262,8 +1281,9 @@ std::int64_t TimelineNavigator::calculateFramesPerView() const noexcept
 
 void TimelineNavigator::updateControls()
 {
-    frame_label_->setText(QStringLiteral("Frame %1")
-        .arg(static_cast<qlonglong>(current_frame_)));
+    frame_label_->setText(display_mode_ == TimelineDisplayMode::Frames
+        ? QStringLiteral("Frame %1").arg(static_cast<qlonglong>(current_frame_))
+        : formatTimelinePosition(current_frame_, frame_rate_, display_mode_));
     frame_rate_label_->setText(QStringLiteral("FPS: %1").arg(formatFrameRate(frame_rate_)));
     previous_frame_button_->setEnabled(current_frame_ > 0);
     next_frame_button_->setEnabled(current_frame_ < visible_end_frame_);
