@@ -86,9 +86,11 @@ the Motion Studio implementation choices are finalized.
   the shared animation types for transforms and keyframes. Canvas dimensions
   must be explicitly provided; the standalone window starts without a
   composition.
-- [ ] Add a composition viewer, layer ordering, basic transforms, and timeline
-  navigation. The model supports layer ordering and transform data; viewer and
-  timeline interaction remain open.
+- [x] Add an in-memory composition viewer, front-to-back layer list, layer
+  visibility and ordering controls, and a base-transform inspector. The viewer
+  shows the canvas and selected layer anchor only; it does not render layer
+  content.
+- [ ] Add timeline navigation and keyframe interaction.
 - [ ] Add project save/load, versioned formats, undo/redo, autosave, and
   recovery for the first supported composition workflow.
 - [ ] Add actionable local error logging and automated tests for document,
@@ -96,7 +98,10 @@ the Motion Studio implementation choices are finalized.
 
 The in-memory document/layer model has unit coverage. The empty application
 shell passed its offscreen startup test and a manual Windows launch/close check.
-These checks do not cover a composition viewer, timeline, or persistence.
+The composition workspace has offscreen UI regression coverage. Manual Windows
+validation remains: create a canvas, add and reorder layers, change visibility
+and transforms, resize the viewer, and close the application. Timeline
+navigation, layer-content rendering, and persistence remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or timing data.

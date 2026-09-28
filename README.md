@@ -37,9 +37,11 @@ coverage in both the producer and consumer applications.
   and export. Windows packaging and linked-image acceptance remain in progress;
   macOS and Linux validation is deferred. See the [Image Editor roadmap](docs/image-editor/ROADMAP.md).
 - **Motion Studio:** its standalone Qt shell and in-memory composition/layer
-  model are in progress; C++ and Qt 6 remain provisional choices. It links the
-  shared animation library and builds without the Video or Image Editor targets.
-  Persistence, viewer, timeline, media import, and export remain open. See the
+  workspace are in progress; the viewer shows the canvas and selected-layer
+  guide, while layer-content rendering remains open. C++ and Qt 6 remain
+  provisional choices. It links the shared animation library and builds without
+  the Video or Image Editor targets. Timeline, persistence, media import, and
+  export remain open. See the
   [scope and readiness guide](docs/motion-editor/SCOPE_AND_READINESS.md),
   [reuse plan](docs/motion-editor/REUSE_PLAN.md), and
   [Motion Studio roadmap](docs/motion-editor/ROADMAP.md).

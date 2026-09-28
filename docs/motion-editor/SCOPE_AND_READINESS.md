@@ -2,9 +2,11 @@
 
 Status: **provisional product scope; Milestone 0 complete**. A standalone
 Motion Studio shell and in-memory composition/layer model have started using
-provisional C++ and Qt 6. This document records the agreed starting scope; it
-does not finalize a renderer, programming language, native file extension,
-codec, or implementation architecture.
+provisional C++ and Qt 6. Its initial workspace can create in-memory canvases,
+manage layer records, and edit base transforms; the viewer draws the canvas and
+a selected-layer anchor guide, not layer content. This document records the
+agreed starting scope; it does not finalize a renderer, programming language,
+native file extension, codec, or implementation architecture.
 
 ## Intended Users and Workflows
 
@@ -141,9 +143,10 @@ For Motion Studio, the existing neutral video decoder, RGBA frame model,
 transform evaluator, and raster compositor are reuse candidates. The Qt
 preview, Video Editor timeline worker, still-image import path, and text
 rasterizer remain application-specific until an independent shared contract
-is justified. Motion Studio now has its own in-memory document and layer model;
-it still needs a viewer, timeline, image and text/shape workflows, effects, and
-standalone persistence/export.
+is justified. Motion Studio now has its own in-memory document and layer model,
+a canvas-and-guide viewer, layer controls, and a base-transform inspector. It
+still needs timeline interaction, layer-content rendering, image and
+text/shape workflows, effects, and standalone persistence/export.
 See [REUSE_PLAN.md](REUSE_PLAN.md) for the provisional shared API contracts.
 
 ## Native Format and Compatibility Policy

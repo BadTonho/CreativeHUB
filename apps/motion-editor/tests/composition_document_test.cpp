@@ -88,6 +88,12 @@ int main()
         "invalid property value is rejected");
     require(!document.setLayerKeyframe(9999, TransformProperty::Opacity, 0, 0.5),
         "keyframe cannot be set on an unknown layer");
+    const auto stored_keyframes = document.layers()[2].keyframes;
+    transform.position_x = 0.8;
+    require(document.setLayerTransform(middle, transform),
+        "base transform can change after keyframes are present");
+    require(document.layers()[2].keyframes == stored_keyframes,
+        "changing the base transform leaves keyframes untouched");
 
     require(document.removeLayer(back), "existing layer can be removed");
     require(!document.removeLayer(back), "removed layer cannot be removed again");
