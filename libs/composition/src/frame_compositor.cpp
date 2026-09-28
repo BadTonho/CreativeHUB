@@ -1,0 +1,817 @@
+#include <creative_suite/composition/frame_compositor.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <memory>
+#include <new>
+
+namespace creative_suite::composition {
+namespace {
+
+struct Color {
+    double red = 0.0;
+    double green = 0.0;
+    double blue = 0.0;
+    double alpha = 0.0;
+};
+
+Color sampleNearest(const media::RgbaFrame& frame, double x, double y) noexcept {
+    if (frame.width <= 0 || frame.height <= 0 || frame.stride < frame.width * 4 ||
+        frame.rgba_pixels.size() < static_cast<std::size_t>(frame.stride) * frame.height) {
+        return {};
+    }
+    const auto source_x = std::clamp(
+        static_cast<int>(std::floor(x)), 0, frame.width - 1);
+    const auto source_y = std::clamp(
+        static_cast<int>(std::floor(y)), 0, frame.height - 1);
+    const auto* pixel = frame.rgba_pixels.data() +
+        static_cast<std::size_t>(source_y) * frame.stride +
+        static_cast<std::size_t>(source_x) * 4;
+    return Color{
+        pixel[0] / 255.0,
+        pixel[1] / 255.0,
+        pixel[2] / 255.0,
+        pixel[3] / 255.0};
+}
+
+void blend(std::uint8_t* destination, const Color& source) noexcept {
+    const double source_alpha = std::clamp(source.alpha, 0.0, 1.0);
+    if (source_alpha <= 0.0) return;
+    if (source_alpha >= 1.0) {
+        destination[0] = static_cast<std::uint8_t>(std::lround(
+            std::clamp(source.red, 0.0, 1.0) * 255.0));
+        destination[1] = static_cast<std::uint8_t>(std::lround(
+            std::clamp(source.green, 0.0, 1.0) * 255.0));
+        destination[2] = static_cast<std::uint8_t>(std::lround(
+            std::clamp(source.blue, 0.0, 1.0) * 255.0));
+        destination[3] = 255;
+        return;
+    }
+    const double destination_alpha = destination[3] / 255.0;
+    const double output_alpha = source_alpha + destination_alpha * (1.0 - source_alpha);
+    if (output_alpha <= 0.0) return;
+    const auto output = [source_alpha, destination_alpha, output_alpha](double source_value,
+                                                                         double destination_value) {
+        return (source_value * source_alpha +
+                destination_value * destination_alpha * (1.0 - source_alpha)) /
+            output_alpha;
+    };
+    destination[0] = static_cast<std::uint8_t>(std::lround(std::clamp(output(
+        source.red, destination[0] / 255.0), 0.0, 1.0) * 255.0));
+    destination[1] = static_cast<std::uint8_t>(std::lround(std::clamp(output(
+        source.green, destination[1] / 255.0), 0.0, 1.0) * 255.0));
+    destination[2] = static_cast<std::uint8_t>(std::lround(std::clamp(output(
+        source.blue, destination[2] / 255.0), 0.0, 1.0) * 255.0));
+    destination[3] = static_cast<std::uint8_t>(std::lround(output_alpha * 255.0));
+}
+
+void blendOverOpaqueDestination(
+    std::uint8_t* destination,
+    const Color& source) noexcept {
+    const double source_alpha = std::clamp(source.alpha, 0.0, 1.0);
+    if (source_alpha <= 0.0) return;
+    if (source_alpha >= 1.0) {
+        destination[0] = static_cast<std::uint8_t>(std::lround(
+            std::clamp(source.red, 0.0, 1.0) * 255.0));
+        destination[1] = static_cast<std::uint8_t>(std::lround(
+            std::clamp(source.green, 0.0, 1.0) * 255.0));
+        destination[2] = static_cast<std::uint8_t>(std::lround(
+            std::clamp(source.blue, 0.0, 1.0) * 255.0));
+        destination[3] = 255;
+        return;
+    }
+
+    // The output starts opaque and every compositor path preserves that
+    // invariant. Keep the original calculation as a fallback for any floating
+    // point edge case where the opaque destination would not produce alpha 1.
+    const double output_alpha = source_alpha + (1.0 - source_alpha);
+    if (output_alpha != 1.0) {
+        blend(destination, source);
+        return;
+    }
+
+    const double inverse_source_alpha = 1.0 - source_alpha;
+    const auto output = [source_alpha, inverse_source_alpha](
+                            double source_value,
+                            std::uint8_t destination_value) {
+        return source_value * source_alpha +
+            (destination_value / 255.0) * inverse_source_alpha;
+    };
+    destination[0] = static_cast<std::uint8_t>(std::lround(std::clamp(output(
+        source.red, destination[0]), 0.0, 1.0) * 255.0));
+    destination[1] = static_cast<std::uint8_t>(std::lround(std::clamp(output(
+        source.green, destination[1]), 0.0, 1.0) * 255.0));
+    destination[2] = static_cast<std::uint8_t>(std::lround(std::clamp(output(
+        source.blue, destination[2]), 0.0, 1.0) * 255.0));
+    destination[3] = 255;
+}
+
+std::uint64_t elapsedNanoseconds(
+    std::chrono::steady_clock::time_point started) noexcept;
+
+class OpaqueSourceBlendLookup final {
+    using Clock = std::chrono::steady_clock;
+
+public:
+    explicit OpaqueSourceBlendLookup(CompositionLayerTimings* timings) noexcept
+        : timings_(timings) {}
+
+    [[nodiscard]] bool tryBlend(
+        std::uint8_t* destination,
+        const std::uint8_t* source,
+        double opacity) noexcept {
+        if (source[3] != 255 || opacity <= 0.0 || opacity >= 1.0) return false;
+        if (!initialized_) initialize(opacity);
+        if (!usable_) return false;
+
+        for (std::size_t channel = 0; channel < 3; ++channel) {
+            const auto index =
+                (static_cast<std::size_t>(source[channel]) << 8U) |
+                static_cast<std::size_t>(destination[channel]);
+            destination[channel] = values_[index];
+        }
+        destination[3] = 255;
+        if (timings_ != nullptr) ++timings_->blend_lookup_pixel_count;
+        return true;
+    }
+
+private:
+    void initialize(double opacity) noexcept {
+        initialized_ = true;
+        const auto build_started =
+            timings_ != nullptr ? Clock::now() : Clock::time_point{};
+        const double source_alpha = std::clamp(opacity, 0.0, 1.0);
+        const double output_alpha = source_alpha + (1.0 - source_alpha);
+        if (output_alpha == 1.0) {
+            values_.reset(new (std::nothrow) std::uint8_t[256U * 256U]);
+            if (values_) {
+                const double inverse_source_alpha = 1.0 - source_alpha;
+                for (std::size_t source = 0; source < 256; ++source) {
+                    const double source_value = static_cast<double>(source) / 255.0;
+                    for (std::size_t destination = 0; destination < 256; ++destination) {
+                        const double output = source_value * source_alpha +
+                            (static_cast<double>(destination) / 255.0) *
+                                inverse_source_alpha;
+                        values_[(source << 8U) | destination] =
+                            static_cast<std::uint8_t>(std::lround(
+                                std::clamp(output, 0.0, 1.0) * 255.0));
+                    }
+                }
+                usable_ = true;
+            }
+        }
+        if (timings_ != nullptr) {
+            timings_->blend_lookup_build_nanoseconds +=
+                elapsedNanoseconds(build_started);
+            timings_->blend_lookup_built = usable_;
+        }
+    }
+
+    std::unique_ptr<std::uint8_t[]> values_;
+    CompositionLayerTimings* timings_ = nullptr;
+    bool initialized_ = false;
+    bool usable_ = false;
+};
+
+bool isOpaqueFrame(
+    const media::RgbaFrame& frame,
+    bool* alpha_check_performed = nullptr) noexcept {
+    if (alpha_check_performed != nullptr) *alpha_check_performed = false;
+    if (frame.width <= 0 || frame.height <= 0 || frame.stride < frame.width * 4 ||
+        frame.rgba_pixels.size() < static_cast<std::size_t>(frame.stride) * frame.height) {
+        return false;
+    }
+    if (alpha_check_performed != nullptr) *alpha_check_performed = true;
+    for (int y = 0; y < frame.height; ++y) {
+        const auto* row = frame.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * frame.stride;
+        for (int x = 0; x < frame.width; ++x) {
+            if (row[static_cast<std::size_t>(x) * 4 + 3] != 255) return false;
+        }
+    }
+    return true;
+}
+
+using PixelRange = PreparedPixelRange;
+
+std::optional<PixelRange> axisAlignedPixelRange(
+    double center,
+    double displayed_size,
+    int limit) noexcept {
+    if (displayed_size <= 0.0 || limit <= 0) return std::nullopt;
+    const auto first = std::ceil(center - displayed_size * 0.5 - 0.5);
+    const auto last = std::floor(center + displayed_size * 0.5 - 0.5);
+    if (first > last || last < 0.0 || first > static_cast<double>(limit - 1)) {
+        return std::nullopt;
+    }
+    return PixelRange{
+        static_cast<int>(std::clamp(first, 0.0, static_cast<double>(limit - 1))),
+        static_cast<int>(std::clamp(last, 0.0, static_cast<double>(limit - 1)))};
+}
+
+std::vector<int> buildSourceLookup(
+    int begin,
+    int end,
+    double center,
+    double displayed_size,
+    int source_size) {
+    std::vector<int> lookup;
+    if (begin > end || displayed_size <= 0.0 || source_size <= 0) return lookup;
+    lookup.reserve(static_cast<std::size_t>(end - begin + 1));
+    for (int destination = begin; destination <= end; ++destination) {
+        const double source =
+            ((static_cast<double>(destination) + 0.5 - center) / displayed_size + 0.5) *
+            static_cast<double>(source_size);
+        lookup.push_back(std::clamp(
+            static_cast<int>(std::floor(source)), 0, source_size - 1));
+    }
+    return lookup;
+}
+
+std::uint64_t elapsedNanoseconds(
+    std::chrono::steady_clock::time_point started) noexcept {
+    const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - started).count();
+    return elapsed <= 0 ? 0U : static_cast<std::uint64_t>(elapsed);
+}
+
+void populatePreparedAlphaCoverageGeometry(
+    int canvas_width,
+    int canvas_height,
+    const CompositionLayer& layer,
+    PreparedAlphaCoverageGeometry& geometry) {
+    const auto& frame = *layer.frame;
+    const auto& coverage = *layer.alpha_coverage;
+    geometry.source_width = frame.width;
+    geometry.source_height = frame.height;
+    geometry.source_stride = frame.stride;
+    geometry.canvas_width = canvas_width;
+    geometry.canvas_height = canvas_height;
+    geometry.position_x = layer.transform.position_x;
+    geometry.position_y = layer.transform.position_y;
+    geometry.scale = layer.transform.scale;
+    geometry.alpha_coverage = layer.alpha_coverage;
+    geometry.horizontal_begin = 0;
+    geometry.vertical_begin = 0;
+    geometry.vertical_end = -1;
+    geometry.has_visible_pixels = false;
+    geometry.source_x_lookup.clear();
+    geometry.source_y_lookup.clear();
+    geometry.mapped_rows.clear();
+
+    const double fit = std::min(
+        static_cast<double>(canvas_width) / frame.width,
+        static_cast<double>(canvas_height) / frame.height);
+    const double displayed_width = frame.width * fit * layer.transform.scale;
+    const double displayed_height = frame.height * fit * layer.transform.scale;
+    if (displayed_width <= 0.0 || displayed_height <= 0.0) return;
+
+    const double center_x = layer.transform.position_x * canvas_width;
+    const double center_y = layer.transform.position_y * canvas_height;
+    const auto horizontal = axisAlignedPixelRange(
+        center_x, displayed_width, canvas_width);
+    const auto vertical = axisAlignedPixelRange(
+        center_y, displayed_height, canvas_height);
+    if (!horizontal.has_value() || !vertical.has_value()) return;
+
+    geometry.horizontal_begin = horizontal->begin;
+    geometry.vertical_begin = vertical->begin;
+    geometry.vertical_end = vertical->end;
+    geometry.source_x_lookup = buildSourceLookup(
+        horizontal->begin,
+        horizontal->end,
+        center_x,
+        displayed_width,
+        frame.width);
+    geometry.source_y_lookup = buildSourceLookup(
+        vertical->begin,
+        vertical->end,
+        center_y,
+        displayed_height,
+        frame.height);
+    if (geometry.source_x_lookup.empty() || geometry.source_y_lookup.empty()) {
+        return;
+    }
+
+    geometry.mapped_rows.resize(coverage.rows.size());
+    bool has_mapped_pixels = false;
+    for (std::size_t source_y = 0; source_y < coverage.rows.size(); ++source_y) {
+        for (const auto& span : coverage.rows[source_y]) {
+            const auto first = std::lower_bound(
+                geometry.source_x_lookup.begin(),
+                geometry.source_x_lookup.end(),
+                span.begin);
+            const auto last = std::lower_bound(
+                geometry.source_x_lookup.begin(),
+                geometry.source_x_lookup.end(),
+                span.end);
+            if (first == last) continue;
+            geometry.mapped_rows[source_y].push_back(PixelRange{
+                horizontal->begin + static_cast<int>(
+                    first - geometry.source_x_lookup.begin()),
+                horizontal->begin + static_cast<int>(
+                    last - geometry.source_x_lookup.begin()) - 1});
+            has_mapped_pixels = true;
+        }
+    }
+    geometry.has_visible_pixels = has_mapped_pixels;
+}
+
+void composeAlphaCoverageLayer(
+    media::RgbaFrame& output,
+    const CompositionLayer& layer,
+    CompositionLayerTimings* timings) {
+    using Clock = std::chrono::steady_clock;
+    const auto setup_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+    const auto& frame = *layer.frame;
+    const auto& coverage = *layer.alpha_coverage;
+    if (layer.transform.opacity <= 0.0 || coverage.rows.empty()) {
+        if (timings != nullptr) {
+            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+        }
+        return;
+    }
+    const bool copy_opaque_source_pixels = layer.transform.opacity == 1.0;
+    OpaqueSourceBlendLookup opaque_source_blend_lookup(timings);
+
+    const PreparedAlphaCoverageGeometry* geometry = nullptr;
+    PreparedAlphaCoverageGeometry unprepared_geometry;
+    if (layer.prepared_alpha_geometry != nullptr &&
+        layer.prepared_alpha_geometry->matches(
+            output.width, output.height, layer)) {
+        geometry = layer.prepared_alpha_geometry.get();
+        if (timings != nullptr) timings->prepared_alpha_geometry_used = true;
+    } else {
+        populatePreparedAlphaCoverageGeometry(
+            output.width, output.height, layer, unprepared_geometry);
+        geometry = &unprepared_geometry;
+    }
+
+    if (timings != nullptr) {
+        timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+    }
+    if (geometry == nullptr || !geometry->has_visible_pixels) return;
+    const auto raster_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+
+    for (int block_begin = geometry->vertical_begin;;) {
+        const int block_end = block_begin +
+            std::min(15, geometry->vertical_end - block_begin);
+        const auto block_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+        std::uint64_t block_lookup_pixel_count = 0;
+        for (int destination_y = block_begin;
+             destination_y <= block_end;
+             ++destination_y) {
+            const auto source_y = geometry->source_y_lookup[
+                static_cast<std::size_t>(destination_y - geometry->vertical_begin)];
+            if (source_y < 0 ||
+                source_y >= static_cast<int>(geometry->mapped_rows.size())) continue;
+            const auto* source_row = frame.rgba_pixels.data() +
+                static_cast<std::size_t>(source_y) * frame.stride;
+            for (const auto& range :
+                 geometry->mapped_rows[static_cast<std::size_t>(source_y)]) {
+                for (int destination_x = range.begin;
+                     destination_x <= range.end;
+                     ++destination_x) {
+                    const auto source_x = geometry->source_x_lookup[
+                        static_cast<std::size_t>(
+                            destination_x - geometry->horizontal_begin)];
+                    const auto* source_pixel = source_row +
+                        static_cast<std::size_t>(source_x) * 4;
+                    auto* destination = output.rgba_pixels.data() +
+                        static_cast<std::size_t>(destination_y) * output.stride +
+                        static_cast<std::size_t>(destination_x) * 4;
+                    if (copy_opaque_source_pixels && source_pixel[3] == 255) {
+                        std::memcpy(destination, source_pixel, 4);
+                        continue;
+                    }
+                    if (opaque_source_blend_lookup.tryBlend(
+                            destination, source_pixel, layer.transform.opacity)) {
+                        ++block_lookup_pixel_count;
+                        continue;
+                    }
+                    auto color = Color{
+                        source_pixel[0] / 255.0,
+                        source_pixel[1] / 255.0,
+                        source_pixel[2] / 255.0,
+                        source_pixel[3] / 255.0};
+                    color.alpha *= layer.transform.opacity;
+                    blendOverOpaqueDestination(destination, color);
+                }
+            }
+        }
+        if (timings != nullptr && block_lookup_pixel_count > 0) {
+            timings->blend_lookup_active_block_nanoseconds +=
+                elapsedNanoseconds(block_started);
+            ++timings->blend_lookup_active_block_count;
+        }
+        if (block_end == geometry->vertical_end) break;
+        block_begin = block_end + 1;
+    }
+    if (timings != nullptr) {
+        timings->raster_blend_nanoseconds += elapsedNanoseconds(raster_started);
+    }
+}
+
+void composeAxisAlignedLayer(
+    media::RgbaFrame& output,
+    const CompositionLayer& layer,
+    CompositionLayerTimings* timings) {
+    using Clock = std::chrono::steady_clock;
+    const auto setup_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+    const auto& frame = *layer.frame;
+    const bool copy_opaque_source_pixels = layer.transform.opacity == 1.0;
+    OpaqueSourceBlendLookup opaque_source_blend_lookup(timings);
+    const double fit = std::min(
+        static_cast<double>(output.width) / frame.width,
+        static_cast<double>(output.height) / frame.height);
+    const double displayed_width = frame.width * fit * layer.transform.scale;
+    const double displayed_height = frame.height * fit * layer.transform.scale;
+    if (displayed_width <= 0.0 || displayed_height <= 0.0) {
+        if (timings != nullptr) {
+            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+        }
+        return;
+    }
+
+    const double center_x = layer.transform.position_x * output.width;
+    const double center_y = layer.transform.position_y * output.height;
+    const auto horizontal = axisAlignedPixelRange(
+        center_x, displayed_width, output.width);
+    const auto vertical = axisAlignedPixelRange(
+        center_y, displayed_height, output.height);
+    if (!horizontal.has_value() || !vertical.has_value()) {
+        if (timings != nullptr) {
+            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+        }
+        return;
+    }
+
+    const auto source_x_lookup = buildSourceLookup(
+        horizontal->begin,
+        horizontal->end,
+        center_x,
+        displayed_width,
+        frame.width);
+    const auto source_y_lookup = buildSourceLookup(
+        vertical->begin,
+        vertical->end,
+        center_y,
+        displayed_height,
+        frame.height);
+    if (source_x_lookup.empty() || source_y_lookup.empty()) {
+        if (timings != nullptr) {
+            timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+        }
+        return;
+    }
+
+    if (timings != nullptr) {
+        timings->setup_nanoseconds += elapsedNanoseconds(setup_started);
+    }
+    const auto raster_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+
+    for (int block_begin = vertical->begin;;) {
+        const int block_end = block_begin +
+            std::min(15, vertical->end - block_begin);
+        const auto block_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+        std::uint64_t block_lookup_pixel_count = 0;
+        for (int destination_y = block_begin;
+             destination_y <= block_end;
+             ++destination_y) {
+            const auto source_y = source_y_lookup[
+                static_cast<std::size_t>(destination_y - vertical->begin)];
+            const auto* source_row = frame.rgba_pixels.data() +
+                static_cast<std::size_t>(source_y) * frame.stride;
+            auto* destination = output.rgba_pixels.data() +
+                static_cast<std::size_t>(destination_y) * output.stride +
+                static_cast<std::size_t>(horizontal->begin) * 4;
+            for (const auto source_x : source_x_lookup) {
+                const auto* source_pixel = source_row +
+                    static_cast<std::size_t>(source_x) * 4;
+                if (copy_opaque_source_pixels && source_pixel[3] == 255) {
+                    std::memcpy(destination, source_pixel, 4);
+                    destination += 4;
+                    continue;
+                }
+                if (opaque_source_blend_lookup.tryBlend(
+                        destination, source_pixel, layer.transform.opacity)) {
+                    ++block_lookup_pixel_count;
+                    destination += 4;
+                    continue;
+                }
+                auto color = Color{
+                    source_pixel[0] / 255.0,
+                    source_pixel[1] / 255.0,
+                    source_pixel[2] / 255.0,
+                    source_pixel[3] / 255.0};
+                color.alpha *= layer.transform.opacity;
+                blendOverOpaqueDestination(destination, color);
+                destination += 4;
+            }
+        }
+        if (timings != nullptr && block_lookup_pixel_count > 0) {
+            timings->blend_lookup_active_block_nanoseconds +=
+                elapsedNanoseconds(block_started);
+            ++timings->blend_lookup_active_block_count;
+        }
+        if (block_end == vertical->end) break;
+        block_begin = block_end + 1;
+    }
+    if (timings != nullptr) {
+        timings->raster_blend_nanoseconds += elapsedNanoseconds(raster_started);
+    }
+}
+
+} // namespace
+
+bool PreparedAlphaCoverageGeometry::matches(
+    int target_canvas_width,
+    int target_canvas_height,
+    const CompositionLayer& layer) const noexcept {
+    if (layer.frame == nullptr || layer.alpha_coverage == nullptr) return false;
+    const auto& frame = *layer.frame;
+    const auto& transform = layer.transform;
+    return canvas_width == target_canvas_width &&
+        canvas_height == target_canvas_height &&
+        source_width == frame.width &&
+        source_height == frame.height &&
+        source_stride == frame.stride &&
+        alpha_coverage.get() == layer.alpha_coverage.get() &&
+        transform.rotation_degrees == 0.0 &&
+        position_x == transform.position_x &&
+        position_y == transform.position_y &&
+        scale == transform.scale;
+}
+
+AlphaCoveragePtr FrameCompositor::buildAlphaCoverage(
+    const media::RgbaFrame& frame) {
+    if (frame.width <= 0 || frame.height <= 0 ||
+        frame.stride < frame.width * 4 ||
+        frame.rgba_pixels.size() < static_cast<std::size_t>(frame.stride) * frame.height) {
+        return nullptr;
+    }
+
+    auto coverage = std::make_shared<AlphaCoverage>();
+    coverage->width = frame.width;
+    coverage->height = frame.height;
+    coverage->rows.resize(static_cast<std::size_t>(frame.height));
+    for (int y = 0; y < frame.height; ++y) {
+        const auto* row = frame.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * frame.stride;
+        auto& spans = coverage->rows[static_cast<std::size_t>(y)];
+        int span_begin = -1;
+        for (int x = 0; x < frame.width; ++x) {
+            const bool visible = row[static_cast<std::size_t>(x) * 4 + 3] != 0;
+            if (visible && span_begin < 0) {
+                span_begin = x;
+            } else if (!visible && span_begin >= 0) {
+                spans.push_back(AlphaSpan{span_begin, x});
+                span_begin = -1;
+            }
+        }
+        if (span_begin >= 0) spans.push_back(AlphaSpan{span_begin, frame.width});
+    }
+    return coverage;
+}
+
+bool FrameCompositor::canUseAlphaCoverageFastPath(
+    const CompositionLayer& layer) noexcept {
+    return layer.frame != nullptr &&
+        layer.alpha_coverage != nullptr &&
+        animation::validTransform(layer.transform) &&
+        layer.transform.rotation_degrees == 0.0 &&
+        layer.frame->width > 0 &&
+        layer.frame->height > 0 &&
+        layer.frame->stride >= layer.frame->width * 4 &&
+        layer.frame->rgba_pixels.size() >=
+            static_cast<std::size_t>(layer.frame->stride) * layer.frame->height &&
+        layer.alpha_coverage->width == layer.frame->width &&
+        layer.alpha_coverage->height == layer.frame->height &&
+        layer.alpha_coverage->rows.size() ==
+            static_cast<std::size_t>(layer.frame->height);
+}
+
+PreparedAlphaCoverageGeometryPtr FrameCompositor::prepareAlphaCoverageGeometry(
+    int canvas_width,
+    int canvas_height,
+    const CompositionLayer& layer,
+    const PreparedAlphaCoverageGeometryPtr& previous) {
+    if (canvas_width <= 0 || canvas_height <= 0 ||
+        !canUseAlphaCoverageFastPath(layer) || layer.alpha_coverage->rows.empty()) {
+        return {};
+    }
+    if (previous != nullptr &&
+        previous->matches(canvas_width, canvas_height, layer)) {
+        return previous;
+    }
+
+    auto prepared = std::make_shared<PreparedAlphaCoverageGeometry>();
+    populatePreparedAlphaCoverageGeometry(
+        canvas_width, canvas_height, layer, *prepared);
+    return prepared;
+}
+
+std::optional<media::RgbaFrame> FrameCompositor::compose(
+    int width,
+    int height,
+    const std::vector<CompositionLayer>& layers,
+    FrameCompositionTimings* timings) {
+    if (width <= 0 || height <= 0) return std::nullopt;
+    if (static_cast<std::size_t>(width) >
+            std::numeric_limits<std::size_t>::max() / static_cast<std::size_t>(height) / 4) {
+        return std::nullopt;
+    }
+
+    media::RgbaFrame output;
+    output.width = width;
+    output.height = height;
+    output.stride = width * 4;
+    using Clock = std::chrono::steady_clock;
+    if (timings != nullptr) {
+        timings->canvas_width = width;
+        timings->canvas_height = height;
+        timings->layer_list_setup_nanoseconds = 0;
+        timings->output_buffer_create_nanoseconds = 0;
+        timings->output_background_fill_nanoseconds = 0;
+        timings->layers.resize(layers.size());
+        std::fill(
+            timings->layers.begin(),
+            timings->layers.end(),
+            CompositionLayerTimings{});
+    }
+    const auto output_create_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+    output.rgba_pixels.assign(
+        static_cast<std::size_t>(output.stride) * output.height, 0);
+    if (timings != nullptr) {
+        timings->output_buffer_create_nanoseconds =
+            elapsedNanoseconds(output_create_started);
+    }
+    const auto background_fill_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+    for (std::size_t index = 3; index < output.rgba_pixels.size(); index += 4) {
+        output.rgba_pixels[index] = 255;
+    }
+    if (timings != nullptr) {
+        timings->output_background_fill_nanoseconds =
+            elapsedNanoseconds(background_fill_started);
+    }
+    for (std::size_t layer_index = 0; layer_index < layers.size(); ++layer_index) {
+        auto* layer_timings = timings != nullptr
+            ? &timings->layers[layer_index]
+            : nullptr;
+        const auto layer_started = layer_timings != nullptr
+            ? Clock::now()
+            : Clock::time_point{};
+        const auto record_layer_elapsed = [&]() {
+            if (layer_timings == nullptr) return;
+            layer_timings->setup_nanoseconds += elapsedNanoseconds(layer_started);
+        };
+        const auto& layer = layers[layer_index];
+        if (layer.frame == nullptr || !animation::validTransform(layer.transform) ||
+            layer.frame->width <= 0 || layer.frame->height <= 0) {
+            record_layer_elapsed();
+            continue;
+        }
+
+        FullFrameCopyEligibility copy_eligibility;
+        copy_eligibility.source_dimensions_match =
+            layer.frame->width == width && layer.frame->height == height;
+        copy_eligibility.source_stride_matches =
+            layer.frame->stride == output.stride;
+        copy_eligibility.position_x_centered =
+            layer.transform.position_x == 0.5;
+        copy_eligibility.position_y_centered =
+            layer.transform.position_y == 0.5;
+        copy_eligibility.scale_is_one = layer.transform.scale == 1.0;
+        copy_eligibility.rotation_is_zero =
+            layer.transform.rotation_degrees == 0.0;
+        copy_eligibility.opacity_is_one = layer.transform.opacity == 1.0;
+        const bool copy_geometry_and_transform_match =
+            copy_eligibility.source_dimensions_match &&
+            copy_eligibility.source_stride_matches &&
+            copy_eligibility.position_x_centered &&
+            copy_eligibility.position_y_centered &&
+            copy_eligibility.scale_is_one &&
+            copy_eligibility.rotation_is_zero &&
+            copy_eligibility.opacity_is_one;
+        if (copy_geometry_and_transform_match) {
+            // Reuse this result for both branch selection and the bounded slow-frame
+            // diagnostic. Do not rescan the source pixels when emitting metrics.
+            copy_eligibility.source_pixels_opaque = isOpaqueFrame(
+                *layer.frame,
+                &copy_eligibility.alpha_check_performed);
+        }
+        if (layer_timings != nullptr) {
+            layer_timings->full_frame_copy_eligibility = copy_eligibility;
+        }
+        if (copy_geometry_and_transform_match &&
+            copy_eligibility.source_pixels_opaque) {
+            if (layer_timings != nullptr) {
+                layer_timings->raster_path = CompositionRasterPath::FullFrameCopy;
+            }
+            record_layer_elapsed();
+            const auto copy_started = layer_timings != nullptr
+                ? Clock::now()
+                : Clock::time_point{};
+            std::memcpy(
+                output.rgba_pixels.data(),
+                layer.frame->rgba_pixels.data(),
+                output.rgba_pixels.size());
+            if (layer_timings != nullptr) {
+                layer_timings->fast_path_copy_nanoseconds =
+                    elapsedNanoseconds(copy_started);
+            }
+            continue;
+        }
+        if (canUseAlphaCoverageFastPath(layer)) {
+            if (layer_timings != nullptr) {
+                layer_timings->raster_path = CompositionRasterPath::AlphaCoverage;
+            }
+            record_layer_elapsed();
+            composeAlphaCoverageLayer(output, layer, layer_timings);
+            continue;
+        }
+        const auto& frame = *layer.frame;
+        const auto maximum_size = std::numeric_limits<std::size_t>::max();
+        const bool width_stride_is_representable =
+            static_cast<std::size_t>(frame.width) <= maximum_size / 4;
+        const auto minimum_stride = width_stride_is_representable
+            ? static_cast<std::size_t>(frame.width) * 4
+            : maximum_size;
+        const auto stride = frame.stride > 0
+            ? static_cast<std::size_t>(frame.stride)
+            : 0U;
+        const bool has_valid_rgba_storage = width_stride_is_representable &&
+            stride >= minimum_stride &&
+            static_cast<std::size_t>(frame.height) <= maximum_size / stride &&
+            frame.rgba_pixels.size() >= stride * static_cast<std::size_t>(frame.height);
+        if (layer.transform.rotation_degrees == 0.0 && has_valid_rgba_storage) {
+            if (layer_timings != nullptr) {
+                layer_timings->raster_path = CompositionRasterPath::AxisAligned;
+            }
+            record_layer_elapsed();
+            composeAxisAlignedLayer(output, layer, layer_timings);
+            continue;
+        }
+        if (layer_timings != nullptr) {
+            layer_timings->raster_path = layer.transform.rotation_degrees == 0.0
+                ? CompositionRasterPath::GeneralFallback
+                : CompositionRasterPath::Rotated;
+        }
+        const double fit = std::min(
+            static_cast<double>(width) / frame.width,
+            static_cast<double>(height) / frame.height);
+        const double displayed_width = frame.width * fit * layer.transform.scale;
+        const double displayed_height = frame.height * fit * layer.transform.scale;
+        if (displayed_width <= 0.0 || displayed_height <= 0.0) {
+            record_layer_elapsed();
+            continue;
+        }
+        const double center_x = layer.transform.position_x * width;
+        const double center_y = layer.transform.position_y * height;
+        const double angle = layer.transform.rotation_degrees * 3.14159265358979323846 / 180.0;
+        const double cosine = std::cos(angle);
+        const double sine = std::sin(angle);
+        const double radius = std::hypot(displayed_width, displayed_height) * 0.5;
+        const auto left = std::max(0, static_cast<int>(std::floor(center_x - radius - 1.0)));
+        const auto right = std::min(width - 1, static_cast<int>(std::ceil(center_x + radius + 1.0)));
+        const auto top = std::max(0, static_cast<int>(std::floor(center_y - radius - 1.0)));
+        const auto bottom = std::min(height - 1, static_cast<int>(std::ceil(center_y + radius + 1.0)));
+        record_layer_elapsed();
+        const auto raster_started = layer_timings != nullptr
+            ? Clock::now()
+            : Clock::time_point{};
+        for (int y = top; y <= bottom; ++y) {
+            for (int x = left; x <= right; ++x) {
+                const double dx = x + 0.5 - center_x;
+                const double dy = y + 0.5 - center_y;
+                const double unrotated_x = cosine * dx + sine * dy;
+                const double unrotated_y = -sine * dx + cosine * dy;
+                if (std::abs(unrotated_x) > displayed_width * 0.5 ||
+                    std::abs(unrotated_y) > displayed_height * 0.5) {
+                    continue;
+                }
+                const double source_x =
+                    (unrotated_x / displayed_width + 0.5) * frame.width;
+                const double source_y =
+                    (unrotated_y / displayed_height + 0.5) * frame.height;
+                auto color = sampleNearest(frame, source_x, source_y);
+                color.alpha *= layer.transform.opacity;
+                auto* destination = output.rgba_pixels.data() +
+                    static_cast<std::size_t>(y) * output.stride +
+                    static_cast<std::size_t>(x) * 4;
+                blend(destination, color);
+            }
+        }
+        if (layer_timings != nullptr) {
+            layer_timings->raster_blend_nanoseconds =
+                elapsedNanoseconds(raster_started);
+        }
+    }
+    return output;
+}
+
+} // namespace creative_suite::composition

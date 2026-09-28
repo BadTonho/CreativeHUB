@@ -1,15 +1,14 @@
 #pragma once
 
+#include "video_frame.h"
+#include <creative_suite/media/media_error.h>
+
 #include <cstdint>
 #include <filesystem>
 #include <optional>
-#include <stdexcept>
 #include <string>
-#include <utility>
 
 namespace media {
-
-struct VideoFrame;
 
 enum class MediaKind {
     Video,
@@ -47,17 +46,6 @@ struct VideoMetadata {
     std::optional<AudioMetadata> audio;
 };
 
-class MediaError final : public std::runtime_error {
-public:
-    explicit MediaError(std::string message, std::optional<int> error_code = std::nullopt)
-        : std::runtime_error(std::move(message)), error_code_(error_code) {}
-
-    [[nodiscard]] std::optional<int> error_code() const noexcept {
-        return error_code_;
-    }
-
-private:
-    std::optional<int> error_code_;
-};
+using MediaError = creative_suite::media::MediaError;
 
 } // namespace media

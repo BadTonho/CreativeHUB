@@ -3,8 +3,10 @@
 Status: **provisional**. This roadmap describes the future Motion Studio work
 area stored under `apps/motion-editor/`. Its initial product scope and
 readiness are documented in [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md).
-The folders are placeholders; the application is not wired into CMake and no
-final architecture or technology choices have been made.
+The Motion Studio application folders are placeholders; the application is
+not wired into CMake and no final language, renderer, or codec choices have
+been made. The initial focused reuse libraries are tracked separately in
+[REUSE_PLAN.md](REUSE_PLAN.md).
 
 Motion Studio may be developed in parallel with the Video Editor and Image
 Editor on an independent track. Cross-application integrations still depend on
@@ -39,8 +41,9 @@ technically clear.
 - [x] Map the existing Video Editor document, media, rendering, keyframe,
   history, and recovery capabilities to the services Motion Studio needs.
 - [x] Identify candidate shared capabilities; document their API
-  responsibilities, ownership rules, and extraction gates without creating
-  libraries or public code APIs before both consumers validate the contract.
+  responsibilities, ownership rules, and extraction gates. Implementations
+  are tracked separately, with shared contracts remaining provisional until
+  both consumers validate them.
 - [x] Define native format separation, versioning, migration, and
   cross-application reference compatibility rules.
 
@@ -52,26 +55,27 @@ this readiness work.
 
 ### 1. Technical validation and gap audit
 
-- [ ] Audit the existing C++ SDL3 vertical slice and the Video Editor's Qt 6,
-  FFmpeg, CPU composition, and OpenGL presentation path against the Motion
-  Studio MVP. Record evidence that transfers and gaps that remain.
+- [ ] Audit the Video Editor's Qt 6, FFmpeg, CPU composition, and OpenGL
+  presentation path against the Motion Studio MVP. Record evidence that
+  transfers and gaps that remain.
+- [ ] Validate the provisional animation and composition library contracts
+  against the Motion Studio layer and curve workflows; preserve Video Editor
+  regression coverage at the shared-library boundary.
+- [x] Extract the FFmpeg playback session behind a neutral observer boundary;
+  preserve Video Editor preview metrics in an application adapter.
 - [ ] Revalidate the applicable existing paths on Windows, macOS, and Linux;
   record GPU runtime support separately from GPU presentation of CPU-composed
   frames.
 - [ ] Measure startup, memory, timeline/seek response, preview latency, and
   render performance for representative small, medium, and heavy compositions;
   document targets and any unmet limits.
-- [ ] Create a narrow, isolated spike only when an important Motion-specific
-  gap cannot be answered from the existing implementations. Do not build a
-  second generic video prototype or restart the Rust/C++ comparison by default.
 - [ ] Record dependency and asset licenses, output profile/codec findings, and
   alternatives needed to resolve the identified gaps before choosing a
   renderer or other technology.
 
 **Exit criteria:** existing evidence, Motion-specific gaps, cross-platform
-results, performance targets, and remaining alternatives are documented. Any
-new spike is limited to an unresolved requirement; a second implementation is
-not required when existing code provides sufficient evidence.
+results, performance targets, and remaining alternatives are documented before
+the Motion Studio implementation choices are finalized.
 
 ### 2. Composition foundation
 

@@ -76,28 +76,36 @@ provide a recoverable reference if a linked document or dependency is missing.
 
 | Capability | Current Video Editor location and behavior | Motion Studio readiness direction |
 | --- | --- | --- |
-| Media and decoding | `apps/video-editor/src/media/`; FFmpeg video decoding and raster-image decoding are application services. | Reuse compatible low-level decoding only after source/resource semantics and ownership are documented; keep import UI and workflow local. |
-| Composition and preview | `apps/video-editor/src/playback/` and `src/rendering/`; worker-side CPU composition, frame compositor, and a provisional OpenGL preview surface. | Candidate composition boundary; document coordinate, pixel, alpha, lifetime, thread, and error contracts before extraction. GPU per-layer composition is not an existing capability. |
-| Transforms and animation | `apps/video-editor/src/timeline/`; normalized 2D position, scale, rotation, opacity, and linear per-clip keyframes. | Candidate shared animation evaluation; Motion Studio curves and property editing remain application-specific until a shared contract is proven. |
+| Media and decoding | `apps/video-editor/src/media/`; FFmpeg video playback is implemented in `libs/media/` behind a neutral observer. Raster-image decoding remains a Video Editor service. | Reuse FFmpeg video decoding and the RGBA frame model. Motion Studio still needs its own raster-image decoding path or a separately validated shared one; keep import UI, media organization, and composition timing local to each application. |
+| Composition and preview | `apps/video-editor/src/playback/` and `src/rendering/`; worker-side CPU composition, frame compositor, and a provisional OpenGL preview surface. | The CPU raster compositor is in `libs/composition/`; document coordinates, pixel format, alpha, lifetime, thread, and error behavior before treating its API as stable. GPU per-layer composition is not an existing capability. |
+| Transforms and animation | `apps/video-editor/src/timeline/`; normalized 2D position, scale, rotation, opacity, and linear per-clip keyframes. | The transform evaluator is in `libs/animation/`; Motion Studio owns curve editing and property controls. |
 | Timeline and history | Timeline model, commands, and bounded undo/redo are application-specific. | Motion Studio owns its composition timeline and editing history; share lower-level behavior only where a second real consumer uses the same contract. |
 | Project persistence | `apps/video-editor/src/project/`; versioned `.csp` format currently at version 12, with migrations for supported earlier versions. | Keep a separate versioned Motion Studio native document and adapter. Do not reuse `.csp` as the native composition format. |
 | Autosave and recovery | `src/project/autosave_manager.*` and application coordination provide autosave snapshots and recovery. | Motion Studio must provide equivalent workflow-specific recovery; extract lower-level services only after ownership and boundary tests are clear. |
-| Diagnostics | `apps/video-editor/src/logging/`; local structured diagnostic logging. | Motion Studio must log actionable failures locally without secrets or unnecessary personal data. A shared logging library is not required by this scope. |
+| Diagnostics | Structured local logging is implemented in `libs/diagnostics/`; each application selects its own log directory. | Reuse the service with a Motion Studio-specific application identifier and context. |
 
 ### Candidate shared capabilities
 
-Composition operations and keyframe/curve evaluation are the smallest current
-candidates for shared libraries because both the Video Editor and Motion
-Studio have a documented use for them. Keep current implementations in their
-application boundaries while contracts are validated. Extract focused
-libraries under `libs/` only after one implementation serves both applications
-through the same documented API and regression coverage exercises the shared
-behavior and each application boundary. Keep UI, timeline workflows, project
-adapters, and application history outside those libraries.
+The approved reuse direction and its current implementation are recorded in
+[REUSE_PLAN.md](REUSE_PLAN.md). The transform/keyframe evaluator and raster
+frame compositor now have focused, Qt-independent CMake targets under
+`libs/`. The Video Editor uses compatibility headers and retains
+timeline-specific keyframe split and trim operations. These APIs remain
+provisional until Motion Studio consumes them and has regression coverage at
+its own application boundary.
+
+The RGBA frame model, FFmpeg playback session, and logger are now focused
+shared targets. Each application links the targets it needs into its own build
+and package; it does not load or launch another editor. The Video Editor
+supplies preview-metric recording through an observer adapter; Motion Studio
+can use the decoder without that observer. UI, timeline workflows, project
+adapters, import/export controllers, and application history remain local to
+each application.
 
 Any composition contract must define coordinate units and transforms, pixel
 format and color/alpha assumptions, resource lifetime and thread requirements,
-error context, and serialization compatibility when applicable. Keyframe and
+error context, and serialization compatibility when applicable. The current
+frame type defines RGBA8 storage and stride but no color space. Keyframe and
 curve evaluation remains a separate capability from composition.
 
 ## Native Format and Compatibility Policy
@@ -118,26 +126,18 @@ curve evaluation remains a separate capability from composition.
 
 ## Deferred Technical Decisions
 
-Milestone 1 starts by reusing evidence already in the repository. The C++ SDL3
-vertical slice covers one-video decoding, playback and seeking, a basic
-timeline, GPU texture presentation, and a simple grayscale effect. Its Windows
-Release build passed, but SDL3 GPU runtime initialization is blocked in the
-recorded host; macOS and Linux remain unvalidated. It is a technical reference,
-not a selected Motion Studio renderer.
+Milestone 1 starts by validating the Video Editor's existing Qt 6 and FFmpeg
+media path, worker-side CPU composition, and Qt OpenGL presentation of the
+composed frame. It supports video, text, raster images, basic transforms, and
+linear keyframes. OpenGL presents the completed frame; layer composition itself
+runs on the CPU.
 
-The Video Editor provides a second, distinct reference: Qt 6 and FFmpeg media
-handling, worker-side CPU layer composition, and Qt OpenGL presentation of the
-final composed frame. This already supports video, text, raster images, basic
-transforms, and linear keyframes. Its OpenGL presentation does not mean that
-layer composition runs on the GPU.
-
-First compare these existing capabilities with the MVP and record what evidence
-transfers and what gaps remain. Revalidate existing paths across Windows,
-macOS, and Linux, and measure startup, memory, timeline/seek response, preview
-latency, and rendering for small, medium, and heavy compositions. Add a narrow,
-isolated spike only for a Motion-specific requirement the existing code cannot
-validate; do not create another generic prototype or restart the full
-Rust/C++ comparison by default. Record dependency and asset licenses, output
-profile/codec findings, measurable resource and responsiveness targets, and
-remaining alternatives. No final language or renderer choice is made by this
-document.
+Compare those capabilities with the Motion Studio MVP and record which
+contracts transfer and which gaps remain. In particular, validate the gaps in
+still-image decoding, vector-shape rasterization, editable curves, effects, and
+the standalone project workflow. Revalidate the applicable Video Editor paths
+across Windows, macOS, and Linux, and measure startup, memory, timeline/seek
+response, preview latency, and rendering for representative small, medium, and
+heavy compositions. Record dependency licenses, output-profile and codec
+findings, measurable resource and responsiveness targets, and alternatives.
+No final language or renderer choice is made by this document.

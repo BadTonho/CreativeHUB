@@ -3,6 +3,13 @@ set(VIDEO_EDITOR_TEST_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 set(REFERENCE_VIDEO "${PROJECT_SOURCE_DIR}/prototypes/testdata/reference.mkv")
 find_package(Threads REQUIRED)
 
+link_libraries(
+    creative-suite::animation
+    creative-suite::composition
+    creative-suite::diagnostics
+    creative-suite::media-frame
+)
+
 macro(preserve_video_editor_test_working_directory)
     get_property(VIDEO_EDITOR_GROUP_TESTS DIRECTORY PROPERTY TESTS)
     if(VIDEO_EDITOR_GROUP_TESTS)

@@ -18,10 +18,6 @@ namespace application {
 class EditorSession;
 }
 
-namespace media {
-struct VideoFrame;
-}
-
 namespace timeline {
 
 using TrackId = std::uint64_t;

@@ -1,18 +1,10 @@
 #pragma once
 
-#include <cstdint>
-#include <memory>
-#include <vector>
+#include <creative_suite/media/video_frame.h>
 
 namespace media {
 
-struct VideoFrame {
-    int width = 0;
-    int height = 0;
-    int stride = 0;
-    std::vector<std::uint8_t> rgba_pixels;
-};
-
-using VideoFramePtr = std::shared_ptr<const VideoFrame>;
+using VideoFrame = creative_suite::media::RgbaFrame;
+using VideoFramePtr = creative_suite::media::RgbaFramePtr;
 
 } // namespace media

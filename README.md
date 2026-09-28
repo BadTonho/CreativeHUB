@@ -37,8 +37,10 @@ coverage in both the producer and consumer applications.
   and export. Windows packaging and linked-image acceptance remain in progress;
   macOS and Linux validation is deferred. See the [Image Editor roadmap](docs/image-editor/ROADMAP.md).
 - **Motion Studio:** its initial scope is documented, while technical choices
-  remain provisional; the application is not yet a CMake build target. See the
-  [scope and readiness guide](docs/motion-editor/SCOPE_AND_READINESS.md) and
+  remain provisional; its application is not yet a CMake build target. Focused
+  media, animation, composition, and diagnostics libraries are now built as
+  separate CMake targets for reuse. See the [scope and readiness guide](docs/motion-editor/SCOPE_AND_READINESS.md),
+  [reuse plan](docs/motion-editor/REUSE_PLAN.md), and
   [Motion Studio roadmap](docs/motion-editor/ROADMAP.md).
 
 ## Project principles
@@ -165,6 +167,7 @@ Before contributing, please read the project guidelines outlined in [`AGENTS.md`
 | [Video Editor roadmap](docs/video-editor/ROADMAP.md) | Current work and release gates. |
 | [Image Editor roadmap](docs/image-editor/ROADMAP.md) | Image Editor milestones and validation. |
 | [Motion Studio scope and readiness](docs/motion-editor/SCOPE_AND_READINESS.md) | Initial users, MVP boundary, capability ownership, and compatibility policy. |
+| [Motion Studio reuse plan](docs/motion-editor/REUSE_PLAN.md) | Shared library boundaries and application ownership. |
 | [Motion Studio roadmap](docs/motion-editor/ROADMAP.md) | Provisional scope and technical milestones. |
 | [Cross-application compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md) | Shared interfaces and handoff contracts. |
 | [Technical prototype comparison](docs/video-editor/TECHNICAL_PROTOTYPE_COMPARISON.md) | Language and technology evaluation. |

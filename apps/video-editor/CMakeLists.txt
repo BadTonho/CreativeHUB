@@ -192,6 +192,11 @@ target_link_libraries(creative-suite-main-editor-core PUBLIC
     Qt6::OpenGL
     Qt6::OpenGLWidgets
     ${FFMPEG_LIBRARIES}
+    creative-suite::animation
+    creative-suite::composition
+    creative-suite::diagnostics
+    creative-suite::media-frame
+    creative-suite::video-media
 )
 
 if(WIN32)

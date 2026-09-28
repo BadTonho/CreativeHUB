@@ -15,6 +15,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_VIDEO_EDITOR "Build the Video Editor application" ON)
 option(BUILD_IMAGE_EDITOR "Build the standalone Image Editor application" ON)
 
+add_subdirectory(libs)
+
 if(BUILD_VIDEO_EDITOR)
     add_subdirectory(apps/video-editor)
 endif()

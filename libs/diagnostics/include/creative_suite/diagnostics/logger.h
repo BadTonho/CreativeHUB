@@ -1,0 +1,78 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+namespace creative_suite::diagnostics {
+
+enum class Level {
+    Debug,
+    Info,
+    Warning,
+    Error,
+    Fatal,
+};
+
+using Context = std::vector<std::pair<std::string, std::string>>;
+
+[[nodiscard]] std::uint64_t current_thread_id() noexcept;
+
+struct Options {
+    std::size_t max_file_size_bytes = 5U * 1024U * 1024U;
+    std::size_t max_file_count = 3U;
+#ifdef NDEBUG
+    Level minimum_level = Level::Info;
+#else
+    Level minimum_level = Level::Debug;
+#endif
+};
+
+class Logger final {
+public:
+    Logger();
+    Logger(const Logger&) = delete;
+    Logger& operator=(const Logger&) = delete;
+
+    bool initialize(const std::filesystem::path& directory,
+                    Options options = {}) noexcept;
+    bool initialize_default(Options options = {}) noexcept;
+    // Uses an application-specific platform log directory. The identifier
+    // must be a safe, simple application name; unsafe values are rejected.
+    bool initialize_default(
+        std::string_view application_id,
+        Options options = {}) noexcept;
+
+    void log(Level level,
+             std::string_view subsystem,
+             std::string_view operation,
+             std::string_view message,
+             const Context& context = {}) noexcept;
+
+    [[nodiscard]] bool is_initialized() const noexcept;
+    [[nodiscard]] std::filesystem::path log_directory() const;
+    [[nodiscard]] std::filesystem::path log_path() const;
+
+    static Logger& instance() noexcept;
+
+private:
+    bool initializeWithFallback(
+        const std::filesystem::path& directory,
+        Options options,
+        const std::filesystem::path& fallback_directory) noexcept;
+
+    mutable std::mutex mutex_;
+    std::filesystem::path directory_;
+    Options options_;
+    std::string process_instance_id_;
+    bool initialized_ = false;
+};
+
+[[nodiscard]] std::string_view level_name(Level level) noexcept;
+
+} // namespace creative_suite::diagnostics

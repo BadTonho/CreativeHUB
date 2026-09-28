@@ -52,11 +52,12 @@ behavior.
 
 ## First Shared Capability to Validate
 
-Start with a small composition operation: a layer with a source, transform,
-opacity, optional mask, and a defined compositing result. The Video Editor
-already has composition-related code, including a backend-neutral composition
-stage and a CPU frame compositor. Use those existing boundaries to prototype a
-stable API before moving code into a shared library.
+Start with small, application-independent capabilities. The Video Editor's
+RGBA frame model, FFmpeg playback session, CPU compositor, transform evaluator,
+and structured logger now have focused CMake targets under `libs/`. The media,
+composition, and animation APIs remain provisional until Motion Studio consumes
+them and has regression coverage at its own application boundary. The libraries
+do not include application timeline, document, or UI types.
 
 The API contract should document:
 
@@ -72,17 +73,19 @@ can adopt it according to their needs.
 ## Extraction Criteria and Build Shape
 
 Keep a capability application-local while the Video Editor is its only
-consumer. Extract it into a focused library under `libs/` when a second
-application has a real use case and the API can serve both without
-application-specific conditions.
+consumer. The approved Motion Studio scope provides a second planned consumer
+for decoding, frame transport, transform evaluation, and raster composition.
+These library APIs are provisional until Motion Studio consumes them and
+boundary coverage exists in both applications.
 
 Use CMake library targets and link each consuming application to the required
 targets. Prefer focused modules such as `composition` or `animation` over a
-catch-all core target. Choose static or shared linkage based on deployment and
-plugin requirements; runtime-loaded libraries are not required merely to
-share code among applications in one build.
+catch-all core target. The current targets are static libraries linked into
+each consuming application, so each application is packaged independently;
+runtime-loaded libraries are not required to share code in one repository.
 
-Before extraction, confirm that:
+Before treating an extracted capability as a stable shared contract, confirm
+that:
 
 1. one implementation owns the behavior;
 2. both consumers use the same documented contract;

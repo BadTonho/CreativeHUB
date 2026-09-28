@@ -1,76 +1,22 @@
 #pragma once
 
-#include <cstdint>
-#include <vector>
+#include <creative_suite/animation/animation.h>
 
 namespace timeline {
 
-enum class TransformProperty {
-    PositionX,
-    PositionY,
-    Scale,
-    Rotation,
-    Opacity,
-};
+using creative_suite::animation::Keyframe;
+using creative_suite::animation::Transform2D;
+using creative_suite::animation::TransformKeyframes;
+using creative_suite::animation::TransformProperty;
+using creative_suite::animation::evaluateProperty;
+using creative_suite::animation::evaluateTransform;
+using creative_suite::animation::keyframesFor;
+using creative_suite::animation::removeKeyframe;
+using creative_suite::animation::setKeyframe;
+using creative_suite::animation::validKeyframeValue;
+using creative_suite::animation::validTransform;
 
-struct Transform2D {
-    double position_x = 0.5;
-    double position_y = 0.5;
-    double scale = 1.0;
-    double rotation_degrees = 0.0;
-    double opacity = 1.0;
-
-    friend bool operator==(const Transform2D&, const Transform2D&) = default;
-};
-
-struct Keyframe {
-    std::int64_t frame = 0;
-    double value = 0.0;
-
-    friend bool operator==(const Keyframe&, const Keyframe&) = default;
-};
-
-struct TransformKeyframes {
-    std::vector<Keyframe> position_x;
-    std::vector<Keyframe> position_y;
-    std::vector<Keyframe> scale;
-    std::vector<Keyframe> rotation;
-    std::vector<Keyframe> opacity;
-
-    friend bool operator==(const TransformKeyframes&, const TransformKeyframes&) = default;
-};
-
-[[nodiscard]] bool validTransform(const Transform2D& transform) noexcept;
-[[nodiscard]] bool validKeyframeValue(
-    TransformProperty property,
-    double value) noexcept;
-
-[[nodiscard]] double evaluateProperty(
-    const Transform2D& base,
-    const TransformKeyframes& keyframes,
-    TransformProperty property,
-    std::int64_t local_frame) noexcept;
-
-[[nodiscard]] Transform2D evaluateTransform(
-    const Transform2D& base,
-    const TransformKeyframes& keyframes,
-    std::int64_t local_frame) noexcept;
-
-[[nodiscard]] bool setKeyframe(
-    TransformKeyframes& keyframes,
-    TransformProperty property,
-    std::int64_t local_frame,
-    double value) noexcept;
-
-[[nodiscard]] bool removeKeyframe(
-    TransformKeyframes& keyframes,
-    TransformProperty property,
-    std::int64_t local_frame) noexcept;
-
-[[nodiscard]] const std::vector<Keyframe>& keyframesFor(
-    const TransformKeyframes& keyframes,
-    TransformProperty property) noexcept;
-
+// Clip splitting and trimming are Video Editor timeline operations.
 [[nodiscard]] TransformKeyframes splitKeyframes(
     const Transform2D& base,
     const TransformKeyframes& keyframes,

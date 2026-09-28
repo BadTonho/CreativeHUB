@@ -45,6 +45,10 @@ int main() {
     const auto directory = uniqueTestDirectory();
 
     try {
+        logging::Logger invalid_application_logger;
+        require(!invalid_application_logger.initialize_default("../motion-studio"),
+                "Logger accepted an unsafe application identifier.");
+
         logging::Logger logger;
         logging::Options options;
         options.max_file_size_bytes = 256;

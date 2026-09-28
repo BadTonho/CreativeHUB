@@ -27,6 +27,7 @@ target_link_directories(creative-suite-main-editor-video-decoder-tests PRIVATE
 
 target_link_libraries(creative-suite-main-editor-video-decoder-tests PRIVATE
     Qt6::Gui
+    creative-suite::video-media
     ${FFMPEG_LIBRARIES}
 )
 

@@ -1,0 +1,819 @@
+#include <creative_suite/media/video_playback.h>
+#include <creative_suite/diagnostics/logger.h>
+
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libavutil/error.h>
+#include <libswscale/swscale.h>
+}
+
+#include <cstddef>
+#include <cmath>
+#include <chrono>
+#include <deque>
+#include <filesystem>
+#include <limits>
+#include <memory>
+#include <string>
+#include <system_error>
+#include <utility>
+
+namespace creative_suite::media {
+namespace {
+
+struct FormatContextDeleter {
+    void operator()(AVFormatContext* context) const noexcept {
+        if (context != nullptr) avformat_close_input(&context);
+    }
+};
+
+struct CodecContextDeleter {
+    void operator()(AVCodecContext* context) const noexcept {
+        if (context != nullptr) avcodec_free_context(&context);
+    }
+};
+
+struct PacketDeleter {
+    void operator()(AVPacket* packet) const noexcept {
+        if (packet != nullptr) av_packet_free(&packet);
+    }
+};
+
+struct FrameDeleter {
+    void operator()(AVFrame* frame) const noexcept {
+        if (frame != nullptr) av_frame_free(&frame);
+    }
+};
+
+struct SwsContextDeleter {
+    void operator()(SwsContext* context) const noexcept {
+        if (context != nullptr) sws_freeContext(context);
+    }
+};
+
+using FormatContextPtr = std::unique_ptr<AVFormatContext, FormatContextDeleter>;
+using CodecContextPtr = std::unique_ptr<AVCodecContext, CodecContextDeleter>;
+using PacketPtr = std::unique_ptr<AVPacket, PacketDeleter>;
+using FramePtr = std::unique_ptr<AVFrame, FrameDeleter>;
+using SwsContextPtr = std::unique_ptr<SwsContext, SwsContextDeleter>;
+
+class OptionalDurationAccumulator final {
+public:
+    explicit OptionalDurationAccumulator(std::uint64_t* destination) noexcept
+        : destination_(destination),
+          started_(destination != nullptr ? Clock::now() : Clock::time_point{}) {}
+
+    ~OptionalDurationAccumulator() {
+        if (destination_ == nullptr) return;
+        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            Clock::now() - started_).count();
+        if (elapsed > 0) *destination_ += static_cast<std::uint64_t>(elapsed);
+    }
+
+    OptionalDurationAccumulator(const OptionalDurationAccumulator&) = delete;
+    OptionalDurationAccumulator& operator=(const OptionalDurationAccumulator&) = delete;
+
+private:
+    using Clock = std::chrono::steady_clock;
+    std::uint64_t* destination_ = nullptr;
+    Clock::time_point started_{};
+};
+
+class ObserverTimingScope final {
+    using Clock = std::chrono::steady_clock;
+
+public:
+    ObserverTimingScope(
+        DecodeObserver* observer,
+        DecodeTimingStage stage) noexcept
+        : observer_(observer), stage_(stage) {
+        if (observer_ == nullptr || !observer_->is_enabled()) return;
+        enabled_ = true;
+        started_ = Clock::now();
+    }
+
+    ~ObserverTimingScope() {
+        if (!enabled_) return;
+        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            Clock::now() - started_).count();
+        observer_->record_timing(
+            stage_,
+            elapsed > 0 ? static_cast<std::uint64_t>(elapsed) : 0);
+    }
+
+    ObserverTimingScope(const ObserverTimingScope&) = delete;
+    ObserverTimingScope& operator=(const ObserverTimingScope&) = delete;
+
+private:
+    DecodeObserver* observer_ = nullptr;
+    DecodeTimingStage stage_ = DecodeTimingStage::PacketIo;
+    Clock::time_point started_{};
+    bool enabled_ = false;
+};
+
+std::string toUtf8(const std::filesystem::path& path) {
+    const auto value = path.u8string();
+    return std::string(reinterpret_cast<const char*>(value.data()), value.size());
+}
+
+std::string safePathForLog(const std::filesystem::path& path) noexcept {
+    try {
+        return toUtf8(path);
+    } catch (...) {
+        return "<unavailable>";
+    }
+}
+
+std::string ffmpegError(int result) {
+    char message[AV_ERROR_MAX_STRING_SIZE]{};
+    if (av_strerror(result, message, sizeof(message)) == 0) return message;
+    return "Unknown FFmpeg error (" + std::to_string(result) + ")";
+}
+
+[[noreturn]] void throwFfmpegError(int result, const std::string& operation) {
+    throw MediaError(operation + ": " + ffmpegError(result), result);
+}
+
+void validateInputFile(const std::filesystem::path& source_path) {
+    if (source_path.empty()) throw MediaError("Media path is empty.");
+
+    std::error_code file_error;
+    if (!std::filesystem::is_regular_file(source_path, file_error) || file_error) {
+        const auto code = file_error ? std::optional<int>(file_error.value()) : std::nullopt;
+        throw MediaError("Input is not a readable regular file: " + toUtf8(source_path), code);
+    }
+}
+
+VideoFramePtr copyRgbaFrame(
+    const AVFrame& frame,
+    SwsContextPtr& scaler,
+    DecodeObserver* observer) {
+    if (frame.width <= 0 || frame.height <= 0) {
+        throw MediaError("Decoded video frame has invalid dimensions.");
+    }
+
+    const auto width = static_cast<std::size_t>(frame.width);
+    const auto height = static_cast<std::size_t>(frame.height);
+    constexpr std::size_t bytes_per_pixel = 4;
+    if (width > std::numeric_limits<std::size_t>::max() / bytes_per_pixel ||
+        width * bytes_per_pixel > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        throw MediaError("Decoded video frame is too large.");
+    }
+
+    const std::size_t stride = width * bytes_per_pixel;
+    if (height > std::numeric_limits<std::size_t>::max() / stride) {
+        throw MediaError("Decoded video frame is too large.");
+    }
+
+    auto result = std::make_shared<VideoFrame>();
+    result->width = frame.width;
+    result->height = frame.height;
+    result->stride = static_cast<int>(stride);
+    result->rgba_pixels.resize(stride * height);
+
+    ObserverTimingScope conversion_timing(
+        observer,
+        DecodeTimingStage::PixelConversion);
+    auto* cached_scaler = sws_getCachedContext(
+        scaler.release(),
+        frame.width,
+        frame.height,
+        static_cast<AVPixelFormat>(frame.format),
+        frame.width,
+        frame.height,
+        AV_PIX_FMT_RGBA,
+        SWS_BILINEAR,
+        nullptr,
+        nullptr,
+        nullptr);
+    if (cached_scaler == nullptr) {
+        throw MediaError("Could not create the video color conversion context.");
+    }
+    scaler.reset(cached_scaler);
+
+    std::uint8_t* destination_data[4] = {result->rgba_pixels.data(), nullptr, nullptr, nullptr};
+    int destination_linesize[4] = {result->stride, 0, 0, 0};
+    const int scaled_height = sws_scale(
+        scaler.get(),
+        frame.data,
+        frame.linesize,
+        0,
+        frame.height,
+        destination_data,
+        destination_linesize);
+    if (scaled_height != frame.height) {
+        throw MediaError("Could not convert the decoded video frame to RGBA.");
+    }
+
+    return result;
+}
+
+bool isValidRational(AVRational value) noexcept {
+    return value.num > 0 && value.den > 0;
+}
+
+std::optional<std::int64_t> timestampForFrame(
+    std::int64_t frame_index,
+    AVRational frame_rate,
+    AVRational time_base,
+    std::int64_t stream_start_time) {
+    if (frame_index < 0 || !isValidRational(frame_rate) || !isValidRational(time_base) ||
+        stream_start_time == AV_NOPTS_VALUE) {
+        return std::nullopt;
+    }
+
+    const auto relative_timestamp = av_rescale_q(
+        frame_index,
+        AVRational{frame_rate.den, frame_rate.num},
+        time_base);
+    if (relative_timestamp > 0 &&
+        stream_start_time > std::numeric_limits<std::int64_t>::max() - relative_timestamp) {
+        return std::nullopt;
+    }
+    if (relative_timestamp < 0 &&
+        stream_start_time < std::numeric_limits<std::int64_t>::min() - relative_timestamp) {
+        return std::nullopt;
+    }
+    return stream_start_time + relative_timestamp;
+}
+
+std::optional<std::int64_t> frameIndexForTimestamp(
+    std::int64_t timestamp,
+    AVRational frame_rate,
+    AVRational time_base,
+    std::int64_t stream_start_time) {
+    if (timestamp == AV_NOPTS_VALUE || !isValidRational(frame_rate) ||
+        !isValidRational(time_base) || stream_start_time == AV_NOPTS_VALUE) {
+        return std::nullopt;
+    }
+
+    const long double relative_timestamp =
+        static_cast<long double>(timestamp) -
+        static_cast<long double>(stream_start_time);
+    const long double seconds = relative_timestamp * av_q2d(time_base);
+    const long double frame_position = seconds * av_q2d(frame_rate);
+    if (!std::isfinite(static_cast<double>(frame_position)) || frame_position < 0.0L ||
+        frame_position > static_cast<long double>(std::numeric_limits<std::int64_t>::max())) {
+        return std::nullopt;
+    }
+
+    return static_cast<std::int64_t>(std::llround(frame_position));
+}
+
+void logFailure(const std::filesystem::path& source_path,
+                const char* operation,
+                const media::MediaError& error) noexcept {
+    try {
+        diagnostics::Context context{{"path", safePathForLog(source_path)}};
+        if (error.error_code().has_value()) {
+            context.emplace_back("error_code", std::to_string(*error.error_code()));
+        }
+        diagnostics::Logger::instance().log(
+            diagnostics::Level::Error,
+            "media",
+            operation,
+            error.what(),
+            context);
+    } catch (...) {
+        // Preserve the original media error even if diagnostic context allocation fails.
+    }
+}
+
+void logFailure(const std::filesystem::path& source_path,
+                const char* operation,
+                const std::exception& error) noexcept {
+    try {
+        diagnostics::Logger::instance().log(
+            diagnostics::Level::Error,
+            "media",
+            operation,
+            error.what(),
+            {{"path", safePathForLog(source_path)}});
+    } catch (...) {
+        // Preserve the original exception even if diagnostic context allocation fails.
+    }
+}
+
+} // namespace
+
+struct VideoPlaybackSession::Impl {
+    struct CachedFrame {
+        std::int64_t frame_index = -1;
+        VideoFramePtr frame;
+    };
+
+    std::filesystem::path source_path;
+    DecodeObserver* observer = nullptr;
+    FormatContextPtr format;
+    CodecContextPtr decoder;
+    PacketPtr packet;
+    FramePtr frame;
+    int stream_index = -1;
+    AVRational stream_time_base{0, 1};
+    AVRational frame_rate{0, 1};
+    std::int64_t stream_start_time = AV_NOPTS_VALUE;
+    bool flush_sent = false;
+    bool end_reached = false;
+    bool decoder_position_invalid = false;
+    bool cache_decoded_frames = true;
+    std::int64_t current_frame_index = -1;
+    std::int64_t last_decoded_timestamp = AV_NOPTS_VALUE;
+    std::deque<CachedFrame> frame_cache;
+    SwsContextPtr scaler;
+    std::size_t cached_bytes = 0;
+    std::uint64_t cache_hit_count = 0;
+};
+
+constexpr std::size_t max_cached_frames = 8;
+constexpr std::size_t max_cached_bytes = 64U * 1024U * 1024U;
+
+void VideoPlaybackSession::cacheFrame(
+    VideoPlaybackSession::Impl& impl,
+    std::int64_t frame_index,
+    const VideoFramePtr& frame) {
+    if (frame == nullptr) return;
+
+    for (auto iterator = impl.frame_cache.begin(); iterator != impl.frame_cache.end(); ++iterator) {
+        if (iterator->frame_index != frame_index) continue;
+        impl.cached_bytes -= iterator->frame != nullptr ? iterator->frame->rgba_pixels.size() : 0;
+        impl.frame_cache.erase(iterator);
+        break;
+    }
+
+    impl.cached_bytes += frame->rgba_pixels.size();
+    impl.frame_cache.push_back({frame_index, frame});
+
+    while (impl.frame_cache.size() > 1 &&
+           (impl.frame_cache.size() > max_cached_frames || impl.cached_bytes > max_cached_bytes)) {
+        const auto& oldest = impl.frame_cache.front();
+        if (oldest.frame != nullptr) impl.cached_bytes -= oldest.frame->rgba_pixels.size();
+        impl.frame_cache.pop_front();
+    }
+}
+
+VideoFramePtr VideoPlaybackSession::takeCachedFrame(
+    VideoPlaybackSession::Impl& impl,
+    std::int64_t frame_index) {
+    for (auto iterator = impl.frame_cache.begin(); iterator != impl.frame_cache.end(); ++iterator) {
+        if (iterator->frame_index != frame_index) continue;
+        ++impl.cache_hit_count;
+        auto frame = iterator->frame;
+        auto entry = std::move(*iterator);
+        impl.frame_cache.erase(iterator);
+        impl.frame_cache.push_back(std::move(entry));
+        return frame;
+    }
+    return nullptr;
+}
+
+void VideoPlaybackSession::resetDecoderPosition(VideoPlaybackSession::Impl& impl) {
+    avcodec_flush_buffers(impl.decoder.get());
+    av_packet_unref(impl.packet.get());
+    av_frame_unref(impl.frame.get());
+    impl.flush_sent = false;
+    impl.end_reached = false;
+    impl.decoder_position_invalid = false;
+    impl.cache_decoded_frames = true;
+    impl.current_frame_index = -1;
+    impl.last_decoded_timestamp = AV_NOPTS_VALUE;
+}
+
+bool VideoPlaybackSession::seekToTimestamp(
+    VideoPlaybackSession::Impl& impl,
+    std::int64_t frame_index) {
+    const auto timestamp = timestampForFrame(
+        frame_index,
+        impl.frame_rate,
+        impl.stream_time_base,
+        impl.stream_start_time);
+    if (!timestamp.has_value()) return false;
+
+    const int seek_result = avformat_seek_file(
+        impl.format.get(),
+        impl.stream_index,
+        std::numeric_limits<std::int64_t>::min(),
+        *timestamp,
+        *timestamp,
+        AVSEEK_FLAG_BACKWARD);
+    if (seek_result < 0) return false;
+
+    resetDecoderPosition(impl);
+    return true;
+}
+
+VideoPlaybackSession::VideoPlaybackSession(std::unique_ptr<Impl> impl)
+    : impl_(std::move(impl)) {}
+
+VideoPlaybackSession::~VideoPlaybackSession() = default;
+
+VideoPlaybackSession::VideoPlaybackSession(VideoPlaybackSession&&) noexcept = default;
+
+VideoPlaybackSession& VideoPlaybackSession::operator=(VideoPlaybackSession&&) noexcept = default;
+
+std::unique_ptr<VideoPlaybackSession> VideoPlaybackSession::open(
+    const std::filesystem::path& source_path,
+    DecodeObserver* observer) {
+    try {
+        return std::unique_ptr<VideoPlaybackSession>(
+            new VideoPlaybackSession(openImpl(source_path, observer)));
+    } catch (const MediaError& error) {
+        logFailure(source_path, "playback_open", error);
+        throw;
+    } catch (const std::exception& error) {
+        logFailure(source_path, "playback_open", error);
+        throw;
+    }
+}
+
+std::unique_ptr<VideoPlaybackSession::Impl> VideoPlaybackSession::openImpl(
+    const std::filesystem::path& source_path,
+    DecodeObserver* observer) {
+    validateInputFile(source_path);
+
+    auto impl = std::make_unique<Impl>();
+    impl->source_path = source_path;
+    impl->observer = observer;
+
+    AVFormatContext* raw_format = nullptr;
+    const std::string input_path = toUtf8(source_path);
+    const int open_result = avformat_open_input(&raw_format, input_path.c_str(), nullptr, nullptr);
+    if (open_result < 0) {
+        if (raw_format != nullptr) avformat_close_input(&raw_format);
+        throwFfmpegError(open_result, "Opening media for playback");
+    }
+    impl->format.reset(raw_format);
+
+    const int stream_info_result = avformat_find_stream_info(impl->format.get(), nullptr);
+    if (stream_info_result < 0) {
+        throwFfmpegError(stream_info_result, "Reading media stream information for playback");
+    }
+
+    const AVCodec* codec = nullptr;
+    impl->stream_index = av_find_best_stream(
+        impl->format.get(), AVMEDIA_TYPE_VIDEO, -1, -1, &codec, 0);
+    if (impl->stream_index < 0 || codec == nullptr) {
+        throw MediaError("No supported video stream was found for playback.", impl->stream_index);
+    }
+
+    AVStream* stream = impl->format->streams[impl->stream_index];
+    if (stream == nullptr || stream->codecpar == nullptr) {
+        throw MediaError("The video stream has no codec parameters for playback.");
+    }
+
+    impl->stream_time_base = stream->time_base;
+    impl->stream_start_time = stream->start_time;
+    impl->frame_rate = av_guess_frame_rate(impl->format.get(), stream, nullptr);
+
+    impl->decoder.reset(avcodec_alloc_context3(codec));
+    if (!impl->decoder) throw MediaError("Could not allocate the video decoder context.");
+
+    const int parameters_result = avcodec_parameters_to_context(
+        impl->decoder.get(), stream->codecpar);
+    if (parameters_result < 0) {
+        throwFfmpegError(parameters_result, "Reading video codec parameters for playback");
+    }
+
+    const int decoder_result = avcodec_open2(impl->decoder.get(), codec, nullptr);
+    if (decoder_result < 0) throwFfmpegError(decoder_result, "Opening video decoder for playback");
+
+    impl->packet.reset(av_packet_alloc());
+    if (!impl->packet) throw MediaError("Could not allocate a video packet.");
+
+    impl->frame.reset(av_frame_alloc());
+    if (!impl->frame) throw MediaError("Could not allocate a decoded video frame.");
+
+    return impl;
+}
+
+bool VideoPlaybackSession::decodeRawNextFrame(
+    Impl& impl,
+    ForwardDecodeDiagnostics* diagnostics) {
+    if (impl.end_reached) return false;
+
+    while (true) {
+        if (!impl.flush_sent) {
+            while (true) {
+                OptionalDurationAccumulator packet_duration(
+                    diagnostics != nullptr
+                        ? &diagnostics->packet_io_nanoseconds
+                        : nullptr);
+                ObserverTimingScope packet_timing(
+                    impl.observer,
+                    DecodeTimingStage::PacketIo);
+                const int read_result = av_read_frame(impl.format.get(), impl.packet.get());
+                if (read_result == AVERROR_EOF) {
+                    const int flush_result = avcodec_send_packet(impl.decoder.get(), nullptr);
+                    impl.flush_sent = true;
+                    if (flush_result < 0 && flush_result != AVERROR_EOF) {
+                        throwFfmpegError(flush_result, "Flushing video decoder");
+                    }
+                    break;
+                }
+                if (read_result < 0) {
+                    throwFfmpegError(read_result, "Reading video packet for playback");
+                }
+
+                if (impl.packet->stream_index != impl.stream_index) {
+                    av_packet_unref(impl.packet.get());
+                    continue;
+                }
+
+                const int send_result = avcodec_send_packet(impl.decoder.get(), impl.packet.get());
+                av_packet_unref(impl.packet.get());
+                if (send_result < 0 && send_result != AVERROR(EAGAIN)) {
+                    throwFfmpegError(send_result, "Sending video packet to decoder");
+                }
+                break;
+            }
+        }
+
+        ObserverTimingScope receive_timing(
+            impl.observer,
+            DecodeTimingStage::DecoderReceive);
+        int receive_result = 0;
+        {
+            OptionalDurationAccumulator receive_duration(
+                diagnostics != nullptr
+                    ? &diagnostics->decoder_receive_nanoseconds
+                    : nullptr);
+            receive_result = avcodec_receive_frame(
+                impl.decoder.get(), impl.frame.get());
+        }
+        if (receive_result == 0) {
+            ++impl.current_frame_index;
+            impl.last_decoded_timestamp = impl.frame->best_effort_timestamp;
+            return true;
+        }
+        if (receive_result == AVERROR(EAGAIN)) {
+            if (impl.flush_sent) {
+                impl.end_reached = true;
+                return false;
+            }
+            continue;
+        }
+        if (receive_result == AVERROR_EOF) {
+            impl.end_reached = true;
+            return false;
+        }
+        throwFfmpegError(receive_result, "Receiving decoded video frame");
+    }
+}
+
+bool VideoPlaybackSession::decodeNextFrame(
+    Impl& impl,
+    VideoFramePtr* output_frame,
+    ForwardDecodeDiagnostics* diagnostics) {
+    if (!decodeRawNextFrame(impl, diagnostics)) return false;
+
+    if (output_frame == nullptr) {
+        if (impl.observer != nullptr) impl.observer->record_discarded_frame();
+        return true;
+    }
+
+    VideoFramePtr decoded_frame;
+    {
+        OptionalDurationAccumulator conversion_duration(
+            diagnostics != nullptr
+                ? &diagnostics->target_pixel_conversion_nanoseconds
+                : nullptr);
+        decoded_frame = copyRgbaFrame(*impl.frame, impl.scaler, impl.observer);
+    }
+    if (impl.cache_decoded_frames) {
+        VideoPlaybackSession::cacheFrame(
+            impl,
+            impl.current_frame_index,
+            decoded_frame);
+    }
+    *output_frame = std::move(decoded_frame);
+    return true;
+}
+
+bool VideoPlaybackSession::discardNextFrame(
+    Impl& impl,
+    ForwardDecodeDiagnostics* diagnostics) {
+    return decodeNextFrame(impl, nullptr, diagnostics);
+}
+
+std::optional<VideoFramePtr> VideoPlaybackSession::decode_next_frame() {
+    try {
+        if (impl_->decoder_position_invalid && impl_->current_frame_index >= 0) {
+            return decode_frame_at(impl_->current_frame_index + 1);
+        }
+        VideoFramePtr frame;
+        if (!decodeNextFrame(*impl_, &frame)) return std::nullopt;
+        return frame;
+    } catch (const MediaError& error) {
+        logFailure(impl_->source_path, "playback_decode", error);
+        throw;
+    } catch (const std::exception& error) {
+        logFailure(impl_->source_path, "playback_decode", error);
+        throw;
+    }
+}
+
+std::optional<VideoFramePtr> VideoPlaybackSession::decode_forward_to(
+    std::int64_t frame_index,
+    const CancellationPredicate& should_cancel,
+    ForwardDecodeDiagnostics* diagnostics) {
+    if (diagnostics != nullptr) *diagnostics = {};
+    auto* collected_diagnostics = diagnostics;
+    if (collected_diagnostics != nullptr) {
+        collected_diagnostics->collected = true;
+        collected_diagnostics->attempted = true;
+        collected_diagnostics->starting_frame = impl_->current_frame_index;
+        collected_diagnostics->requested_frame = frame_index;
+    }
+    OptionalDurationAccumulator elapsed_duration(
+        collected_diagnostics != nullptr
+            ? &collected_diagnostics->elapsed_nanoseconds
+            : nullptr);
+    try {
+        if (frame_index < 0) {
+            throw MediaError("The requested frame index is negative.");
+        }
+        if (impl_->decoder_position_invalid || impl_->current_frame_index < 0 ||
+            frame_index <= impl_->current_frame_index) {
+            return std::nullopt;
+        }
+
+        const auto cancelled = [&should_cancel]() {
+            return should_cancel && should_cancel();
+        };
+        while (impl_->current_frame_index < frame_index - 1) {
+            if (cancelled()) {
+                if (collected_diagnostics != nullptr) {
+                    collected_diagnostics->cancelled = true;
+                }
+                return std::nullopt;
+            }
+            if (!discardNextFrame(*impl_, collected_diagnostics)) {
+                return std::nullopt;
+            }
+            if (collected_diagnostics != nullptr) {
+                ++collected_diagnostics->discarded_intermediate_frames;
+            }
+        }
+        if (cancelled()) {
+            if (collected_diagnostics != nullptr) {
+                collected_diagnostics->cancelled = true;
+            }
+            return std::nullopt;
+        }
+
+        VideoFramePtr frame;
+        if (!decodeNextFrame(*impl_, &frame, collected_diagnostics) ||
+            impl_->current_frame_index != frame_index) {
+            return std::nullopt;
+        }
+        if (collected_diagnostics != nullptr) {
+            collected_diagnostics->completed = true;
+        }
+        return frame;
+    } catch (const MediaError& error) {
+        logFailure(impl_->source_path, "playback_forward_decode", error);
+        throw;
+    } catch (const std::exception& error) {
+        logFailure(impl_->source_path, "playback_forward_decode", error);
+        throw;
+    }
+}
+
+std::optional<VideoFramePtr> VideoPlaybackSession::decode_frame_at(std::int64_t frame_index) {
+    return decode_frame_at(frame_index, {});
+}
+
+std::optional<VideoFramePtr> VideoPlaybackSession::decode_frame_at(
+    std::int64_t frame_index,
+    const CancellationPredicate& should_cancel) {
+    try {
+        if (frame_index < 0) {
+            throw MediaError("The requested frame index is negative.");
+        }
+
+        const auto cancelled = [&should_cancel]() {
+            return should_cancel && should_cancel();
+        };
+
+        if (cancelled()) return std::nullopt;
+
+        if (const auto cached = takeCachedFrame(*impl_, frame_index); cached != nullptr) {
+            const bool decoder_is_already_at_frame =
+                !impl_->decoder_position_invalid &&
+                impl_->current_frame_index == frame_index;
+            impl_->current_frame_index = frame_index;
+            impl_->end_reached = false;
+            impl_->decoder_position_invalid = !decoder_is_already_at_frame;
+            return cached;
+        }
+
+        if (!impl_->decoder_position_invalid &&
+            frame_index == impl_->current_frame_index + 1) {
+            VideoFramePtr frame;
+            if (!decodeNextFrame(*impl_, &frame) ||
+                impl_->current_frame_index != frame_index) {
+                return std::nullopt;
+            }
+            return frame;
+        }
+
+        const auto decodeFromBeginning = [&]() -> std::optional<VideoFramePtr> {
+            reset();
+            std::optional<VideoFramePtr> frame;
+            for (std::int64_t index = 0; index <= frame_index; ++index) {
+                if (cancelled()) return std::nullopt;
+                VideoFramePtr decoded_frame;
+                if (!decodeNextFrame(*impl_, &decoded_frame)) return std::nullopt;
+                frame = std::move(decoded_frame);
+            }
+            return frame;
+        };
+
+        if (!seekToTimestamp(*impl_, frame_index)) {
+            if (!impl_->decoder_position_invalid && !impl_->end_reached &&
+                impl_->current_frame_index >= 0 &&
+                frame_index > impl_->current_frame_index) {
+                return decode_forward_to(frame_index, cancelled);
+            }
+            return decodeFromBeginning();
+        }
+
+        impl_->cache_decoded_frames = false;
+        const auto fallbackToBeginning = [&]() {
+            impl_->cache_decoded_frames = true;
+            return decodeFromBeginning();
+        };
+
+        while (true) {
+            if (cancelled()) {
+                impl_->cache_decoded_frames = true;
+                return std::nullopt;
+            }
+
+            if (!decodeRawNextFrame(*impl_)) {
+                impl_->cache_decoded_frames = true;
+                return std::nullopt;
+            }
+
+            const auto decoded_index = frameIndexForTimestamp(
+                impl_->last_decoded_timestamp,
+                impl_->frame_rate,
+                impl_->stream_time_base,
+                impl_->stream_start_time);
+            if (!decoded_index.has_value() || *decoded_index > frame_index) {
+                return fallbackToBeginning();
+            }
+
+            impl_->current_frame_index = *decoded_index;
+            if (*decoded_index == frame_index) {
+                auto frame = copyRgbaFrame(
+                    *impl_->frame, impl_->scaler, impl_->observer);
+                cacheFrame(*impl_, *decoded_index, frame);
+                impl_->cache_decoded_frames = true;
+                impl_->decoder_position_invalid = false;
+                return frame;
+            }
+            if (impl_->observer != nullptr) {
+                impl_->observer->record_discarded_frame();
+            }
+        }
+    } catch (const MediaError& error) {
+        impl_->cache_decoded_frames = true;
+        logFailure(impl_->source_path, "playback_seek", error);
+        throw;
+    } catch (const std::exception& error) {
+        impl_->cache_decoded_frames = true;
+        logFailure(impl_->source_path, "playback_seek", error);
+        throw;
+    }
+}
+
+std::uint64_t VideoPlaybackSession::take_cache_hit_count() noexcept {
+    const auto count = impl_->cache_hit_count;
+    impl_->cache_hit_count = 0;
+    return count;
+}
+
+VideoPlaybackSession::CacheSnapshot
+VideoPlaybackSession::cache_snapshot() const noexcept {
+    if (impl_ == nullptr) return {};
+    return CacheSnapshot{
+        static_cast<std::uint64_t>(impl_->frame_cache.size()),
+        static_cast<std::uint64_t>(impl_->cached_bytes)};
+}
+
+void VideoPlaybackSession::reset() {
+    const auto source_path = impl_->source_path;
+    auto* observer = impl_ != nullptr ? impl_->observer : nullptr;
+    impl_ = openImpl(source_path, observer);
+}
+
+std::int64_t VideoPlaybackSession::current_frame_index() const noexcept {
+    return impl_->current_frame_index;
+}
+
+bool VideoPlaybackSession::at_end() const noexcept {
+    return impl_->end_reached;
+}
+
+} // namespace creative_suite::media
