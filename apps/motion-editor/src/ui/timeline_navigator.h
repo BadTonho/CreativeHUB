@@ -23,6 +23,7 @@ public:
 
 signals:
     void seekRequested(qint64 frame);
+    void extendRangeRequested();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -34,10 +35,11 @@ private:
     [[nodiscard]] std::int64_t frameAtX(int x) const noexcept;
     [[nodiscard]] int xForFrame(std::int64_t frame) const noexcept;
 
-    std::int64_t visible_end_frame_ = 239;
+    std::int64_t visible_end_frame_ = 0;
     std::int64_t current_frame_ = 0;
     int last_mouse_x_ = -1;
     bool dragging_ = false;
+    bool range_extended_during_drag_ = false;
 };
 
 class TimelineNavigator final : public QWidget {
@@ -56,11 +58,11 @@ signals:
 
 private:
     void seekToFrame(std::int64_t frame);
-    void extendViewToInclude(std::int64_t frame) noexcept;
+    void extendViewByOneHour() noexcept;
     void updateControls();
 
     model::FrameRate frame_rate_{};
-    std::int64_t visible_end_frame_ = 239;
+    std::int64_t visible_end_frame_ = 0;
     std::int64_t current_frame_ = 0;
     QPushButton* previous_frame_button_ = nullptr;
     QPushButton* next_frame_button_ = nullptr;

@@ -110,19 +110,23 @@ The composition workspace and navigation-only timeline also have offscreen UI
 regression coverage. Frame
 rates are stored as exact rational values from the supported common-rate list.
 Creating a composition does not ask for or set its duration. The ruler starts
-with an approximately ten-second navigation view based on the selected frame
-rate and expands as the playhead reaches its edge; this view is not a
-composition end. The playhead starts at frame 0 and can advance through the
-non-negative signed 64-bit frame range. Playback, export-range selection,
-SMPTE/drop-frame timecode, and keyframe evaluation are not part of this
-navigation slice. Manual Windows validation remains: verify the centered empty-
-state button opens composition creation and disappears after creation; verify a
-composition opens while maximized, then restore the window and verify another
-composition preserves the restored size; create a composition with explicit
-canvas and frame-rate values, add and reorder layers, change visibility and
-transforms, seek and step beyond the initial ruler view, resize the viewer and
-timeline, and close the application. Keyframe editing, layer-content rendering,
-and persistence remain open.
+with a one-hour navigation range, calculated from the selected exact frame
+rate; fractional rates round the frame count up. This range is not a composition
+end. Seeking and frame stepping stay within the current range. Dragging the
+playhead beyond the ruler's right edge extends the range by one hour once per
+drag and lands the playhead at the new end; another extension requires a new
+drag gesture. The range saturates at the non-negative signed 64-bit frame limit.
+Playback, export-range selection, SMPTE/drop-frame timecode, and keyframe
+evaluation are not part of this navigation slice. Manual Windows validation
+remains: verify the centered empty-state button opens composition creation and
+disappears after creation; verify a composition opens while maximized, then
+restore the window and verify another composition preserves the restored size;
+create a composition with explicit canvas and frame-rate values, confirm the
+one-hour initial timeline range, seek and step within it, drag beyond the right
+edge and verify one-hour extension only once per gesture, add and reorder
+layers, change visibility and transforms, resize the viewer and timeline, and
+close the application. Keyframe editing, layer-content rendering, and
+persistence remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.

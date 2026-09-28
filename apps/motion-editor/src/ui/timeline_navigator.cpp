@@ -18,18 +18,24 @@ namespace {
 
 constexpr int kRulerHorizontalPadding = 20;
 constexpr std::int64_t kMaximumFrame = std::numeric_limits<std::int64_t>::max();
+constexpr std::int64_t kSecondsPerHour = 60 * 60;
 
 QString formatFrameRate(model::FrameRate frame_rate)
 {
     return QString::number(frame_rate.asDouble(), 'g', 6);
 }
 
+std::int64_t framesPerHour(model::FrameRate frame_rate) noexcept
+{
+    const auto hour_frames_numerator = frame_rate.numerator * kSecondsPerHour;
+    const auto frame_count = (hour_frames_numerator + frame_rate.denominator - 1)
+        / frame_rate.denominator;
+    return std::max<std::int64_t>(1, frame_count);
+}
+
 std::int64_t initialVisibleEndFrame(model::FrameRate frame_rate) noexcept
 {
-    const auto ten_seconds_numerator = frame_rate.numerator * 10;
-    const auto frame_count = (ten_seconds_numerator + frame_rate.denominator - 1)
-        / frame_rate.denominator;
-    return std::max<std::int64_t>(1, frame_count) - 1;
+    return framesPerHour(frame_rate) - 1;
 }
 
 } // namespace
@@ -109,6 +115,7 @@ void TimelineRuler::mousePressEvent(QMouseEvent* event)
         return;
     }
     dragging_ = true;
+    range_extended_during_drag_ = false;
     last_mouse_x_ = event->position().toPoint().x();
     emit seekRequested(static_cast<qint64>(frameAtX(last_mouse_x_)));
     event->accept();
@@ -121,8 +128,18 @@ void TimelineRuler::mouseMoveEvent(QMouseEvent* event)
         return;
     }
     const int mouse_x = event->position().toPoint().x();
-    if (mouse_x != last_mouse_x_) {
-        last_mouse_x_ = mouse_x;
+    if (mouse_x == last_mouse_x_) {
+        event->accept();
+        return;
+    }
+    last_mouse_x_ = mouse_x;
+    if (mouse_x >= width()) {
+        if (!range_extended_during_drag_) {
+            range_extended_during_drag_ = true;
+            emit extendRangeRequested();
+            emit seekRequested(static_cast<qint64>(frameAtX(mouse_x)));
+        }
+    } else {
         emit seekRequested(static_cast<qint64>(frameAtX(mouse_x)));
     }
     event->accept();
@@ -135,9 +152,18 @@ void TimelineRuler::mouseReleaseEvent(QMouseEvent* event)
         const int mouse_x = event->position().toPoint().x();
         if (mouse_x != last_mouse_x_) {
             last_mouse_x_ = mouse_x;
-            emit seekRequested(static_cast<qint64>(frameAtX(mouse_x)));
+            if (mouse_x >= width()) {
+                if (!range_extended_during_drag_) {
+                    range_extended_during_drag_ = true;
+                    emit extendRangeRequested();
+                    emit seekRequested(static_cast<qint64>(frameAtX(mouse_x)));
+                }
+            } else {
+                emit seekRequested(static_cast<qint64>(frameAtX(mouse_x)));
+            }
         }
         last_mouse_x_ = -1;
+        range_extended_during_drag_ = false;
         event->accept();
         return;
     }
@@ -216,17 +242,23 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
 
     ruler_ = new TimelineRuler(this);
     ruler_->setToolTip(QStringLiteral(
-        "Open-ended navigation range. It expands as you advance and is not a composition end."));
+        "Starts with one hour. Drag beyond the right edge to extend by one hour per drag. "
+        "This range is not the composition end."));
     layout->addWidget(ruler_, 1);
 
     connect(previous_frame_button_, &QPushButton::clicked, this, [this] {
         seekToFrame(current_frame_ - (current_frame_ > 0 ? 1 : 0));
     });
     connect(next_frame_button_, &QPushButton::clicked, this, [this] {
-        seekToFrame(current_frame_ + (current_frame_ < kMaximumFrame ? 1 : 0));
+        if (current_frame_ < visible_end_frame_) {
+            seekToFrame(current_frame_ + 1);
+        }
     });
     connect(ruler_, &TimelineRuler::seekRequested, this, [this](qint64 frame) {
         seekToFrame(static_cast<std::int64_t>(frame));
+    });
+    connect(ruler_, &TimelineRuler::extendRangeRequested, this, [this] {
+        extendViewByOneHour();
     });
 
     updateControls();
@@ -260,29 +292,28 @@ std::int64_t TimelineNavigator::visibleEndFrame() const noexcept
 
 void TimelineNavigator::seekToFrame(std::int64_t frame)
 {
-    const auto bounded_frame = std::max<std::int64_t>(0, frame);
+    const auto bounded_frame = std::clamp(frame, std::int64_t{0}, visible_end_frame_);
     if (bounded_frame == current_frame_) {
         return;
     }
 
     current_frame_ = bounded_frame;
-    extendViewToInclude(current_frame_);
     ruler_->setCurrentFrame(current_frame_);
     updateControls();
     emit currentFrameChanged(static_cast<qint64>(current_frame_));
 }
 
-void TimelineNavigator::extendViewToInclude(std::int64_t frame) noexcept
+void TimelineNavigator::extendViewByOneHour() noexcept
 {
-    while (frame >= visible_end_frame_ && visible_end_frame_ < kMaximumFrame) {
-        const auto visible_frame_count = visible_end_frame_ + 1;
-        if (visible_frame_count > kMaximumFrame - visible_end_frame_) {
-            visible_end_frame_ = kMaximumFrame;
-        } else {
-            visible_end_frame_ += visible_frame_count;
-        }
+    const auto remaining_frames = kMaximumFrame - visible_end_frame_;
+    const auto extension_frames = std::min(framesPerHour(frame_rate_), remaining_frames);
+    if (extension_frames == 0) {
+        return;
     }
+
+    visible_end_frame_ += extension_frames;
     ruler_->setVisibleEndFrame(visible_end_frame_);
+    updateControls();
 }
 
 void TimelineNavigator::updateControls()
@@ -291,7 +322,7 @@ void TimelineNavigator::updateControls()
         .arg(static_cast<qlonglong>(current_frame_)));
     frame_rate_label_->setText(QStringLiteral("FPS: %1").arg(formatFrameRate(frame_rate_)));
     previous_frame_button_->setEnabled(current_frame_ > 0);
-    next_frame_button_->setEnabled(current_frame_ < kMaximumFrame);
+    next_frame_button_->setEnabled(current_frame_ < visible_end_frame_);
 }
 
 } // namespace motion::ui

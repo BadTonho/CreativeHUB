@@ -114,6 +114,18 @@ int main(int argc, char* argv[])
 {
     QApplication application(argc, argv);
 
+    motion::ui::TimelineNavigator frame_rate_range_check;
+    frame_rate_range_check.setCompositionTiming({24, 1});
+    require(frame_rate_range_check.visibleEndFrame() == 24 * 60 * 60 - 1,
+        "24 fps starts with a one-hour range");
+    frame_rate_range_check.setCompositionTiming({60, 1});
+    require(frame_rate_range_check.visibleEndFrame() == 60 * 60 * 60 - 1,
+        "60 fps starts with a one-hour range");
+    frame_rate_range_check.setCompositionTiming({30000, 1001});
+    const std::int64_t fractional_hour_frames = (30000 * 60 * 60 + 1001 - 1) / 1001;
+    require(frame_rate_range_check.visibleEndFrame() == fractional_hour_frames - 1,
+        "fractional frame rates use their exact rational value for one-hour ranges");
+
     motion::ui::CompositionViewer viewer;
     viewer.resize(400, 300);
     viewer.setComposition({100, 50}, QPointF(0.5, 0.5));
@@ -243,9 +255,11 @@ int main(int argc, char* argv[])
     auto* previous_frame = findWidget<QPushButton>(timeline, "motion-timeline-previous-frame");
     auto* next_frame = findWidget<QPushButton>(timeline, "motion-timeline-next-frame");
     auto* ruler = findWidget<QWidget>(timeline, "motion-timeline-ruler");
-    require(timeline->currentFrame() == 0 && timeline->visibleEndFrame() == 239
+    constexpr std::int64_t frames_per_hour_at_24_fps = 24 * 60 * 60;
+    constexpr std::int64_t first_hour_end_frame = frames_per_hour_at_24_fps - 1;
+    require(timeline->currentFrame() == 0 && timeline->visibleEndFrame() == first_hour_end_frame
             && !previous_frame->isEnabled() && next_frame->isEnabled(),
-        "timeline starts at frame zero with an initial navigation view, not a composition end");
+        "timeline starts at frame zero with a one-hour navigation range");
 
     next_frame->click();
     next_frame->click();
@@ -259,26 +273,62 @@ int main(int argc, char* argv[])
     sendMouseEvent(
         ruler, QEvent::MouseButtonRelease, ruler->width() / 2,
         Qt::LeftButton, Qt::NoButton);
-    require(timeline->currentFrame() == 120,
-        "clicking the ruler seeks to its corresponding composition frame");
+    require(timeline->currentFrame() == frames_per_hour_at_24_fps / 2,
+        "clicking the ruler seeks within the current one-hour range");
 
-    sendMouseEvent(ruler, QEvent::MouseButtonPress, 0, Qt::LeftButton, Qt::LeftButton);
     sendMouseEvent(
-        ruler, QEvent::MouseMove, ruler->width(), Qt::NoButton, Qt::LeftButton);
+        ruler, QEvent::MouseButtonPress, ruler->width() - 1,
+        Qt::LeftButton, Qt::LeftButton);
     sendMouseEvent(
-        ruler, QEvent::MouseButtonRelease, ruler->width(), Qt::LeftButton, Qt::NoButton);
-    require(timeline->currentFrame() == 239 && timeline->visibleEndFrame() == 479
-            && next_frame->isEnabled() && previous_frame->isEnabled(),
-        "dragging to the view edge seeks and expands the range without ending the composition");
+        ruler, QEvent::MouseButtonRelease, ruler->width() - 1,
+        Qt::LeftButton, Qt::NoButton);
+    require(timeline->currentFrame() == first_hour_end_frame
+            && timeline->visibleEndFrame() == first_hour_end_frame,
+        "seeking to the last pixel clamps at one hour without extending the range");
+
+    sendMouseEvent(
+        ruler, QEvent::MouseButtonPress, ruler->width() - 1,
+        Qt::LeftButton, Qt::LeftButton);
+    sendMouseEvent(
+        ruler, QEvent::MouseMove, ruler->width() + 10, Qt::NoButton, Qt::LeftButton);
+    sendMouseEvent(
+        ruler, QEvent::MouseMove, ruler->width() + 100, Qt::NoButton, Qt::LeftButton);
+    sendMouseEvent(
+        ruler, QEvent::MouseMove, ruler->width() + 500, Qt::NoButton, Qt::LeftButton);
+    sendMouseEvent(
+        ruler, QEvent::MouseButtonRelease, ruler->width() + 500,
+        Qt::LeftButton, Qt::NoButton);
+    constexpr std::int64_t second_hour_end_frame = frames_per_hour_at_24_fps * 2 - 1;
+    require(timeline->currentFrame() == second_hour_end_frame
+            && timeline->visibleEndFrame() == second_hour_end_frame
+            && !next_frame->isEnabled() && previous_frame->isEnabled(),
+        "one drag beyond the ruler adds exactly one hour and lands at the new end");
+
     next_frame->click();
-    require(timeline->currentFrame() == 240,
-        "frame stepping continues past the previous view edge");
+    require(timeline->currentFrame() == second_hour_end_frame,
+        "frame stepping cannot pass the current range end");
+    previous_frame->click();
+    next_frame->click();
+    require(timeline->currentFrame() == second_hour_end_frame,
+        "frame stepping works up to the extended range boundary");
+
     sendMouseEvent(
-        ruler, QEvent::MouseButtonPress, ruler->width(), Qt::LeftButton, Qt::LeftButton);
+        ruler, QEvent::MouseButtonPress, ruler->width() - 1,
+        Qt::LeftButton, Qt::LeftButton);
     sendMouseEvent(
-        ruler, QEvent::MouseButtonRelease, ruler->width(), Qt::LeftButton, Qt::NoButton);
-    require(timeline->currentFrame() == 479 && timeline->visibleEndFrame() == 959,
-        "seeking to the expanded view edge expands the navigation range again");
+        ruler, QEvent::MouseMove, ruler->width() + 10, Qt::NoButton, Qt::LeftButton);
+    sendMouseEvent(
+        ruler, QEvent::MouseButtonRelease, ruler->width() + 10,
+        Qt::LeftButton, Qt::NoButton);
+    constexpr std::int64_t third_hour_end_frame = frames_per_hour_at_24_fps * 3 - 1;
+    require(timeline->currentFrame() == third_hour_end_frame
+            && timeline->visibleEndFrame() == third_hour_end_frame,
+        "a separate drag extends the navigation range by one more hour");
+
+    timeline->setCurrentFrame(third_hour_end_frame + 10);
+    require(timeline->currentFrame() == third_hour_end_frame,
+        "programmatic seeking clamps to the current navigation range");
+
     sendMouseEvent(ruler, QEvent::MouseButtonPress, 0, Qt::LeftButton, Qt::LeftButton);
     sendMouseEvent(ruler, QEvent::MouseButtonRelease, 0, Qt::LeftButton, Qt::NoButton);
     previous_frame->click();
@@ -333,9 +383,9 @@ int main(int argc, char* argv[])
             && window.compositionDocument()->layers().empty()
             && !window.selectedLayerId().has_value(),
         "confirmed replacement creates a clean composition without requiring an end frame");
-    require(timeline->currentFrame() == 0 && timeline->visibleEndFrame() == 299
+    require(timeline->currentFrame() == 0 && timeline->visibleEndFrame() == 107892
             && !previous_frame->isEnabled() && next_frame->isEnabled(),
-        "a new composition resets navigation and derives its initial view from the selected rate");
+        "a new composition resets navigation to one hour at its selected fractional rate");
 
     action(window, "motion-add-video-layer-action")->trigger();
     require(window.compositionDocument()->layers().size() == 1
