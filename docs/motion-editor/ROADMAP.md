@@ -89,7 +89,8 @@ the Motion Studio implementation choices are finalized.
 - [x] Add an in-memory composition viewer, front-to-back layer list, layer
   visibility and ordering controls, and a base-transform inspector. The viewer
   shows the canvas and selected layer anchor only; it does not render layer
-  content.
+  content. The empty state offers a centered New Composition button alongside
+  the existing File menu action.
 - [x] Add an explicit exact frame rate and a navigation-only timeline with a
   frame ruler, playhead seeking, and single-frame stepping. Composition
   duration is not fixed during creation.
@@ -101,8 +102,10 @@ the Motion Studio implementation choices are finalized.
 
 The in-memory document/layer model has unit coverage, including the explicit
 canvas and exact frame rate. The empty application shell passed its offscreen
-startup test and a manual Windows launch/close check. The composition workspace
-and navigation-only timeline have offscreen UI regression coverage. Frame
+startup test and a manual Windows launch/close check. The centered empty-state
+New Composition button uses the File menu's existing creation flow and has
+offscreen UI regression coverage. The composition workspace and navigation-only
+timeline also have offscreen UI regression coverage. Frame
 rates are stored as exact rational values from the supported common-rate list.
 Creating a composition does not ask for or set its duration. The ruler starts
 with an approximately ten-second navigation view based on the selected frame
@@ -110,11 +113,12 @@ rate and expands as the playhead reaches its edge; this view is not a
 composition end. The playhead starts at frame 0 and can advance through the
 non-negative signed 64-bit frame range. Playback, export-range selection,
 SMPTE/drop-frame timecode, and keyframe evaluation are not part of this
-navigation slice. Manual Windows validation remains: create a composition with
-explicit canvas and frame-rate values, add and reorder layers, change visibility
-and transforms, seek and step beyond the initial ruler view, resize the viewer
-and timeline, and close the application. Keyframe editing, layer-content
-rendering, and persistence remain open.
+navigation slice. Manual Windows validation remains: verify the centered empty-
+state button opens composition creation and disappears after creation; create
+a composition with explicit canvas and frame-rate values, add and reorder
+layers, change visibility and transforms, seek and step beyond the initial
+ruler view, resize the viewer and timeline, and close the application. Keyframe
+editing, layer-content rendering, and persistence remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.

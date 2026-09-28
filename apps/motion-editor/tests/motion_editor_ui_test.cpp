@@ -15,6 +15,7 @@
 #include <QListWidgetItem>
 #include <QMouseEvent>
 #include <QMessageBox>
+#include <QPointer>
 #include <QPushButton>
 #include <QTimer>
 #include <QWidget>
@@ -65,18 +66,6 @@ void completeCompositionDialog(
 QAction* action(MainWindow& window, const char* object_name)
 {
     return findWidget<QAction>(&window, object_name);
-}
-
-void createComposition(
-    MainWindow& window,
-    int width,
-    int height,
-    int frame_rate_index)
-{
-    QTimer::singleShot(0, [=] {
-        completeCompositionDialog(width, height, frame_rate_index);
-    });
-    action(window, "motion-new-composition-action")->trigger();
 }
 
 void sendMouseEvent(
@@ -169,14 +158,24 @@ int main(int argc, char* argv[])
     motion::ui::MainWindow window;
     require(window.compositionDocument() == nullptr,
         "Motion Studio starts without creating a composition");
-    createComposition(window, 640, 360, 2);
-    require(window.compositionDocument() != nullptr
-            && window.compositionDocument()->canvasSize() == motion::model::CanvasSize{640, 360},
-        "new composition is stored in the window");
-    require(window.compositionDocument()->frameRate() == motion::model::FrameRate{24, 1},
-        "new composition stores its explicit frame rate without requiring an end frame");
     window.show();
     application.processEvents();
+    QPointer<QPushButton> empty_state_button = findWidget<QPushButton>(
+        &window, "motion-empty-new-composition-button");
+    require(empty_state_button->text() == QStringLiteral("New Composition...")
+            && empty_state_button->isVisible(),
+        "empty state displays the centered New Composition button");
+    QTimer::singleShot(0, [] { completeCompositionDialog(640, 360, 2); });
+    empty_state_button->click();
+    require(window.compositionDocument() != nullptr
+            && window.compositionDocument()->canvasSize() == motion::model::CanvasSize{640, 360},
+        "the empty-state button opens the existing dialog and creates a composition");
+    require(window.compositionDocument()->frameRate() == motion::model::FrameRate{24, 1},
+        "new composition stores its explicit frame rate without requiring an end frame");
+    application.processEvents();
+    require(window.centralWidget()->objectName() == QStringLiteral("motion-composition-splitter")
+            && (empty_state_button.isNull() || !empty_state_button->isVisible()),
+        "creating a composition replaces the empty state and hides its button");
 
     action(window, "motion-add-shape-layer-action")->trigger();
     action(window, "motion-add-text-layer-action")->trigger();

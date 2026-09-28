@@ -63,10 +63,25 @@ MainWindow::MainWindow(QWidget* parent)
     setWindowTitle(QStringLiteral("Motion Studio"));
     setWindowState(windowState() | Qt::WindowMaximized);
 
-    empty_state_ = new QLabel(QStringLiteral("No composition open"), this);
+    auto* empty_state_container = new QWidget(this);
+    empty_state_container->setObjectName(QStringLiteral("motion-empty-state-container"));
+    auto* empty_state_layout = new QVBoxLayout(empty_state_container);
+    empty_state_layout->setContentsMargins(16, 16, 16, 16);
+    empty_state_layout->setSpacing(10);
+    empty_state_layout->addStretch(1);
+
+    empty_state_ = new QLabel(QStringLiteral("No composition open"), empty_state_container);
     empty_state_->setObjectName(QStringLiteral("motion-empty-state"));
     empty_state_->setAlignment(Qt::AlignCenter);
-    setCentralWidget(empty_state_);
+    empty_state_layout->addWidget(empty_state_, 0, Qt::AlignHCenter);
+
+    auto* empty_state_new_composition_button = new QPushButton(
+        QStringLiteral("New Composition..."), empty_state_container);
+    empty_state_new_composition_button->setObjectName(
+        QStringLiteral("motion-empty-new-composition-button"));
+    empty_state_layout->addWidget(empty_state_new_composition_button, 0, Qt::AlignHCenter);
+    empty_state_layout->addStretch(1);
+    setCentralWidget(empty_state_container);
 
     QMenu* file_menu = menuBar()->addMenu(QStringLiteral("File"));
     QAction* new_composition_action = file_menu->addAction(QStringLiteral("New Composition..."));
@@ -74,6 +89,8 @@ MainWindow::MainWindow(QWidget* parent)
     connect(new_composition_action, &QAction::triggered, this, [this] {
         createNewComposition();
     });
+    connect(empty_state_new_composition_button, &QPushButton::clicked,
+        new_composition_action, &QAction::trigger);
 }
 
 const model::CompositionDocument* MainWindow::compositionDocument() const noexcept
