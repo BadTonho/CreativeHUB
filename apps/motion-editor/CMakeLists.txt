@@ -16,6 +16,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/media_pool_widget.h
     src/ui/new_composition_dialog.cpp
     src/ui/new_composition_dialog.h
+    src/ui/preview_renderer.cpp
+    src/ui/preview_renderer.h
     src/ui/timeline_navigator.cpp
     src/ui/timeline_navigator.h
 )
@@ -24,7 +26,10 @@ target_include_directories(creative-suite-motion-editor-core PUBLIC
 )
 target_link_libraries(creative-suite-motion-editor-core PUBLIC
     creative-suite::animation
+    creative-suite::composition
+    creative-suite::diagnostics
     creative-suite::media-assets
+    creative-suite::video-media
     Qt6::Widgets
 )
 target_compile_features(creative-suite-motion-editor-core PUBLIC cxx_std_20)

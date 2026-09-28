@@ -13,6 +13,7 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QMenu>
+#include <QMimeData>
 #include <QMetaObject>
 #include <QPixmap>
 #include <QPointer>
@@ -44,6 +45,7 @@ using creative_suite::media::MediaLibrary;
 
 constexpr int kPathRole = Qt::UserRole + 1;
 constexpr int kAllMediaRole = Qt::UserRole + 2;
+const QString kMotionMediaMimeType = QStringLiteral("application/x-creative-suite-motion-media");
 
 QString pathText(const std::filesystem::path& path)
 {
@@ -97,6 +99,32 @@ QPixmap thumbnailFor(const MediaItem& item, bool large)
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation);
 }
+
+class DraggableMediaListWidget final : public QListWidget {
+public:
+    using QListWidget::QListWidget;
+
+protected:
+    QStringList mimeTypes() const override
+    {
+        return {kMotionMediaMimeType};
+    }
+
+    QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override
+    {
+        auto* payload = new QMimeData();
+        if (!items.empty() && items.front() != nullptr) {
+            payload->setData(kMotionMediaMimeType,
+                             items.front()->data(kPathRole).toString().toUtf8());
+        }
+        return payload;
+    }
+
+    void startDrag(Qt::DropActions) override
+    {
+        QListWidget::startDrag(Qt::CopyAction);
+    }
+};
 
 } // namespace
 
@@ -193,9 +221,10 @@ MediaPoolWidget::MediaPoolWidget(QWidget* parent)
     bins_tree_->setContextMenuPolicy(Qt::CustomContextMenu);
     layout->addWidget(bins_tree_, 1);
 
-    media_list_ = new QListWidget(this);
+    media_list_ = new DraggableMediaListWidget(this);
     media_list_->setObjectName(QStringLiteral("motion-media-items"));
     media_list_->setSelectionMode(QAbstractItemView::SingleSelection);
+    media_list_->setDragEnabled(true);
     media_list_->setContextMenuPolicy(Qt::CustomContextMenu);
     media_list_->setEditTriggers(QAbstractItemView::EditKeyPressed |
                                  QAbstractItemView::SelectedClicked);
@@ -267,6 +296,21 @@ const MediaItem* MediaPoolWidget::selectedMedia() const noexcept
     return index < library_.size() ? &library_.items()[index] : nullptr;
 }
 
+creative_suite::media::RgbaFramePtr MediaPoolWidget::sharedFirstFrameForPath(
+    const std::filesystem::path& path) const
+{
+    const auto canonical = MediaLibrary::canonicalPath(path);
+    const auto cached = shared_frame_cache_.find(canonical);
+    if (cached != shared_frame_cache_.end()) return cached->second;
+    const auto index = library_.indexForPath(canonical);
+    if (index >= library_.size()) return {};
+    const auto& frame = library_.items()[index].first_frame;
+    if (frame.width <= 0 || frame.height <= 0 || frame.rgba_pixels.empty()) return {};
+    auto shared = std::make_shared<const creative_suite::media::VideoFrame>(frame);
+    shared_frame_cache_.emplace(canonical, shared);
+    return shared;
+}
+
 void MediaPoolWidget::setImportRequestedHandler(std::function<void()> handler)
 {
     import_requested_handler_ = std::move(handler);
@@ -284,6 +328,7 @@ void MediaPoolWidget::clear()
     ++import_generation_;
     progress_->hide();
     library_.clear();
+    shared_frame_cache_.clear();
     refresh();
     status_label_->setText(QStringLiteral("No media imported"));
 }
@@ -638,6 +683,7 @@ void MediaPoolWidget::finishImport(
                             ? std::to_string(*file.error_code) : std::string{}}});
         }
     }
+    if (imported > 0) shared_frame_cache_.clear();
     cancel_requested_.reset();
     progress_->hide();
     refresh(!last_imported.isEmpty() ? last_imported : selection);

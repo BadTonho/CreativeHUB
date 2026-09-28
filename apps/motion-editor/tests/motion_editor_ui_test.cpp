@@ -1,4 +1,5 @@
 #include "ui/main_window.h"
+#include "ui/composition_viewer.h"
 #include "ui/media_pool_widget.h"
 #include "ui/new_composition_dialog.h"
 #include "ui/timeline_navigator.h"
@@ -7,16 +8,22 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QDoubleSpinBox>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFileDialog>
 #include <QImage>
 #include <QInputDialog>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QListWidget>
 #include <QListView>
 #include <QMenu>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QLineEdit>
@@ -140,6 +147,60 @@ void setInputDialogText(const QString& text)
     });
 }
 
+QString pathToQString(const std::filesystem::path& path);
+
+void deliverMediaDrop(QWidget* target, const std::filesystem::path& path,
+                      const QPoint& position, bool check_preview)
+{
+    const auto before = target->grab().toImage();
+    QMimeData payload;
+    payload.setData(QStringLiteral("application/x-creative-suite-motion-media"),
+                    pathToQString(path).toUtf8());
+    QDragEnterEvent enter(position, Qt::CopyAction, &payload,
+                          Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(target, &enter);
+    require(enter.isAccepted(), "timeline accepts dragged Media Pool entries");
+    QDragMoveEvent move(position, Qt::CopyAction, &payload,
+                        Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(target, &move);
+    require(move.isAccepted(), "timeline tracks a media drag preview");
+    if (check_preview) {
+        QCoreApplication::processEvents();
+        require(target->grab().toImage() != before,
+                "timeline draws a drag preview before inserting media");
+    }
+    QDropEvent drop(QPointF(position), Qt::CopyAction, &payload,
+                    Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(target, &drop);
+    require(drop.isAccepted(), "timeline accepts the media drop");
+}
+
+void sendMouseClick(QWidget* target, const QPoint& position)
+{
+    const QPointF point(position);
+    QMouseEvent press(QEvent::MouseButtonPress, point, point, point, Qt::LeftButton,
+                      Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(target, &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, point, point, point, Qt::LeftButton,
+                        Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(target, &release);
+}
+
+void sendMouseDrag(QWidget* target, const QPoint& from, const QPoint& to)
+{
+    const QPointF from_point(from);
+    const QPointF to_point(to);
+    QMouseEvent press(QEvent::MouseButtonPress, from_point, from_point, from_point,
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(target, &press);
+    QMouseEvent move(QEvent::MouseMove, to_point, to_point, to_point, Qt::NoButton,
+                     Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(target, &move);
+    QMouseEvent release(QEvent::MouseButtonRelease, to_point, to_point, to_point,
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(target, &release);
+}
+
 std::filesystem::path pathFromQString(const QString& value)
 {
     const auto bytes = value.toUtf8();
@@ -216,10 +277,11 @@ int main(int argc, char* argv[])
             "a new composition starts with an empty Media Pool");
     require(findWidget<QWidget>(&window, "motion-media-pool") != nullptr &&
                 findWidget<QWidget>(&window, "motion-media-details") != nullptr &&
+                findWidget<QWidget>(&window, "motion-timeline-layer-rows") != nullptr &&
+                findWidget<QWidget>(&window, "motion-transform-inspector") != nullptr &&
                 window.findChild<QWidget*>(QStringLiteral("motion-layer-list")) == nullptr &&
-                window.findChild<QWidget*>(QStringLiteral("motion-add-layer-button")) == nullptr &&
-                window.findChild<QWidget*>(QStringLiteral("motion-transform-inspector")) == nullptr,
-            "the workspace shows media panels and defers layer controls");
+                window.findChild<QWidget*>(QStringLiteral("motion-add-layer-button")) == nullptr,
+            "the workspace connects media, timeline layers, and transform inspection");
     require(action(window, "motion-import-media-action")->isEnabled(),
             "File import is enabled for an open composition");
     QTimer::singleShot(0, [] {
@@ -266,6 +328,110 @@ int main(int argc, char* argv[])
                 video_entry->first_frame.width > 0 && video_entry->first_frame.height > 0,
             "image and video entries have decoded, cached first-frame thumbnails");
 
+    auto* timeline = findWidget<motion::ui::TimelineNavigator>(&window, "motion-timeline");
+    auto* layer_rows = findWidget<QWidget>(&window, "motion-timeline-layer-rows");
+    require(layer_rows->acceptDrops(), "timeline layer rows accept Media Pool drops");
+    const auto image_catalog_path = image_entry->metadata.source_path;
+    const auto video_catalog_path = video_entry->metadata.source_path;
+    timeline->setCurrentFrame(0);
+    deliverMediaDrop(layer_rows, image_catalog_path, QPoint(205, 15), true);
+    require(window.compositionDocument()->layers().size() == 1 &&
+                window.compositionDocument()->layers().front().kind == motion::model::LayerKind::Image &&
+                window.compositionDocument()->layers().front().timeline_start_frame == 0 &&
+                window.compositionDocument()->layers().front().duration_frames == 120,
+            "dropping a still onto empty timeline space creates a five-second layer at frame zero");
+    auto* viewer = static_cast<motion::ui::CompositionViewer*>(
+        findWidget<QWidget>(&window, "motion-composition-viewer"));
+    require(waitFor([&] {
+        const auto frame = viewer->renderedFrame();
+        return frame != nullptr && frame->width == 640 && frame->height == 360;
+    }), "the shared compositor presents a still-image layer on the canvas");
+    const auto still_preview = viewer->renderedFrame();
+    const auto still_center = static_cast<std::size_t>(180 * still_preview->stride + 320 * 4);
+    require(still_preview->rgba_pixels[still_center] == 20 &&
+                still_preview->rgba_pixels[still_center + 1] == 140 &&
+                still_preview->rgba_pixels[still_center + 2] == 210,
+            "the image preview preserves imported RGBA pixels through composition");
+    sendMouseDrag(layer_rows, QPoint(500, 15), QPoint(600, 15));
+    require(window.compositionDocument()->layers().front().timeline_start_frame == 0 &&
+                window.compositionDocument()->layers().front().duration_frames == 120,
+            "dragging empty row space does not move or resize its clip");
+    const auto frame_before_selecting = timeline->currentFrame();
+    sendMouseClick(layer_rows, QPoint(60, 15));
+    require(timeline->currentFrame() == frame_before_selecting,
+            "selecting a timeline layer leaves the playhead unchanged");
+    auto* position_x = findWidget<QDoubleSpinBox>(&window, "motion-transform-position-x");
+    position_x->setValue(0.25);
+    require(window.compositionDocument()->layers().front().transform.position_x == 0.25,
+            "the transform inspector edits the selected layer base transform");
+
+    deliverMediaDrop(layer_rows, video_catalog_path, QPoint(205, 15), false);
+    const auto after_video_drop = window.compositionDocument()->layers();
+    require(after_video_drop.size() == 2 &&
+                after_video_drop.back().kind == motion::model::LayerKind::Video &&
+                after_video_drop.back().timeline_start_frame == 120,
+            "dropping media on an existing row creates a distinct layer above it");
+    const auto image_preview_frame = viewer->renderedFrame();
+    require(timeline->currentFrame() == frame_before_selecting,
+            "dropping media does not move the playhead");
+    timeline->setCurrentFrame(120);
+    require(waitFor([&] {
+        const auto frame = viewer->renderedFrame();
+        return frame != nullptr && frame != image_preview_frame &&
+               frame->width == 640 && frame->height == 360;
+    }),
+            "video frame decoding runs asynchronously for the composition preview");
+    const auto video_preview_frame = viewer->renderedFrame();
+    timeline->setCurrentFrame(0);
+    timeline->setCurrentFrame(120);
+    timeline->setCurrentFrame(0);
+    require(waitFor([&] {
+        const auto frame = viewer->renderedFrame();
+        return frame != nullptr && frame != video_preview_frame &&
+               frame->width == 640 && frame->height == 360;
+    }), "rapid timeline seeks settle on the newest composition preview");
+    const auto settled_preview = viewer->renderedFrame();
+    const auto settled_center = static_cast<std::size_t>(
+        180 * settled_preview->stride + 320 * 4);
+    require(settled_preview->rgba_pixels[settled_center] == 20 &&
+                settled_preview->rgba_pixels[settled_center + 1] == 140 &&
+                settled_preview->rgba_pixels[settled_center + 2] == 210,
+            "a stale video seek cannot replace the final still-image seek result");
+    const auto frame_before_layer_operations = timeline->currentFrame();
+    const auto video_layer_id = window.compositionDocument()->layers().back().id;
+    sendMouseDrag(layer_rows, QPoint(60, 15), QPoint(60, 49));
+    require(window.compositionDocument()->layers().front().id == video_layer_id,
+            "dragging a layer header reorders front-to-back timeline rows");
+    sendMouseClick(layer_rows, QPoint(15, 15));
+    require(!window.compositionDocument()->layers().back().visible,
+            "the timeline visibility control hides its layer");
+    require(timeline->currentFrame() == frame_before_layer_operations,
+            "adding, selecting, and reordering layers preserve the playhead frame");
+
+    const auto image_layer_id = window.compositionDocument()->layers().back().id;
+    sendMouseDrag(layer_rows, QPoint(200, 15), QPoint(225, 15));
+    const auto moved_image = std::find_if(window.compositionDocument()->layers().begin(),
+        window.compositionDocument()->layers().end(), [image_layer_id](const auto& layer) {
+            return layer.id == image_layer_id;
+        });
+    require(moved_image != window.compositionDocument()->layers().end() &&
+                moved_image->timeline_start_frame > 0,
+            "dragging a clip body moves its composition start frame");
+    sendMouseDrag(layer_rows, QPoint(202, 49), QPoint(196, 49));
+    const auto shortened_video = std::find_if(window.compositionDocument()->layers().begin(),
+        window.compositionDocument()->layers().end(), [video_layer_id](const auto& layer) {
+            return layer.id == video_layer_id;
+        });
+    require(shortened_video != window.compositionDocument()->layers().end() &&
+                shortened_video->duration_frames == 1,
+            "dragging a video clip's right edge shortens it within its source duration");
+    sendMouseClick(layer_rows, QPoint(60, 49));
+    QKeyEvent remove_key(QEvent::KeyPress, Qt::Key_Delete, Qt::NoModifier);
+    QApplication::sendEvent(layer_rows, &remove_key);
+    require(window.compositionDocument()->layers().size() == 1 &&
+                window.compositionDocument()->layers().front().id == image_layer_id,
+            "Delete removes the selected timeline layer");
+
     auto* all_media = findWidget<QTreeWidget>(&window, "motion-media-bins")->topLevelItem(0);
     auto* bins_tree = findWidget<QTreeWidget>(&window, "motion-media-bins");
     bins_tree->setCurrentItem(all_media);
@@ -278,7 +444,6 @@ int main(int argc, char* argv[])
                 details_resolution->text() == QStringLiteral("48 × 32") &&
                 !media_list->currentItem()->icon().isNull(),
             "selecting an image updates its metadata details and cached thumbnail");
-    auto* timeline = findWidget<motion::ui::TimelineNavigator>(&window, "motion-timeline");
     timeline->setCurrentFrame(123);
     const auto canvas_before_selecting = window.compositionDocument()->canvasSize();
     media_list->setCurrentRow(1);
@@ -320,9 +485,9 @@ int main(int argc, char* argv[])
     const auto image_row_path = image_row->data(Qt::UserRole + 1).toString();
     chooseActionOnNextMenu(QStringLiteral("Footage/Day 1"));
     requestContextMenu(media_list, media_list->visualItemRect(image_row).center());
-    const auto image_catalog_path = pathFromQString(image_row_path);
+    const auto renamed_image_path = pathFromQString(image_row_path);
     require(waitFor([&] {
-        const auto index = pool->library().indexForPath(image_catalog_path);
+        const auto index = pool->library().indexForPath(renamed_image_path);
         return index < pool->library().size() &&
             pool->library().items()[index].bin_path == "Footage/Day 1";
     }), "the media context menu can move an item into a nested bin");

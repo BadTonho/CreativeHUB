@@ -8,6 +8,18 @@ target_compile_features(creative-suite-motion-editor-document-tests PRIVATE cxx_
 add_test(NAME creative-suite-motion-editor-document
     COMMAND creative-suite-motion-editor-document-tests)
 
+add_executable(creative-suite-motion-editor-preview-tests
+    preview_renderer_test.cpp
+)
+target_link_libraries(creative-suite-motion-editor-preview-tests PRIVATE
+    creative-suite-motion-editor-core
+    Qt6::Core
+)
+target_compile_features(creative-suite-motion-editor-preview-tests PRIVATE cxx_std_20)
+add_test(NAME creative-suite-motion-editor-preview
+    COMMAND creative-suite-motion-editor-preview-tests)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor-preview-tests)
+
 add_executable(creative-suite-motion-editor-startup-tests
     motion_editor_startup_test.cpp
 )
@@ -43,10 +55,12 @@ set_tests_properties(creative-suite-motion-editor-ui PROPERTIES
 
 if(MSVC)
     target_compile_options(creative-suite-motion-editor-document-tests PRIVATE /W4 /permissive-)
+    target_compile_options(creative-suite-motion-editor-preview-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-startup-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE /W4 /permissive-)
 else()
     target_compile_options(creative-suite-motion-editor-document-tests PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(creative-suite-motion-editor-preview-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-startup-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()

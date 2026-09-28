@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace motion::ui {
@@ -34,7 +35,25 @@ void CompositionViewer::setComposition(
 {
     canvas_size_ = canvas_size;
     selected_layer_anchor_ = std::move(selected_layer_anchor);
+    rendered_frame_.reset();
     update();
+}
+
+void CompositionViewer::setRenderedFrame(creative_suite::media::RgbaFramePtr frame)
+{
+    rendered_frame_ = std::move(frame);
+    update();
+}
+
+void CompositionViewer::setSelectedLayerAnchor(std::optional<QPointF> selected_layer_anchor)
+{
+    selected_layer_anchor_ = std::move(selected_layer_anchor);
+    update();
+}
+
+creative_suite::media::RgbaFramePtr CompositionViewer::renderedFrame() const noexcept
+{
+    return rendered_frame_;
 }
 
 void CompositionViewer::paintEvent(QPaintEvent* event)
@@ -69,6 +88,20 @@ void CompositionViewer::paintEvent(QPaintEvent* event)
     painter.setPen(Qt::NoPen);
     painter.setBrush(kCanvasColor);
     painter.drawRect(canvas_rect);
+    if (rendered_frame_ != nullptr && rendered_frame_->width > 0 &&
+        rendered_frame_->width <= std::numeric_limits<int>::max() / 4 &&
+        rendered_frame_->height > 0 && rendered_frame_->stride >= rendered_frame_->width * 4 &&
+        rendered_frame_->rgba_pixels.size() >=
+            static_cast<std::size_t>(rendered_frame_->stride) *
+                static_cast<std::size_t>(rendered_frame_->height)) {
+        const QImage frame_image(
+            rendered_frame_->rgba_pixels.data(),
+            rendered_frame_->width,
+            rendered_frame_->height,
+            rendered_frame_->stride,
+            QImage::Format_RGBA8888);
+        painter.drawImage(canvas_rect, frame_image);
+    }
     painter.setPen(QPen(kCanvasBorderColor, 1.0));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(canvas_rect);

@@ -1,8 +1,9 @@
 # Motion Studio Roadmap
 
 Status: **provisional; implementation started**. The standalone Motion Studio
-shell, in-memory composition/layer model, navigation timeline, and Media Pool
-are wired into CMake under `apps/motion-editor/`. Its initial product scope and readiness are documented
+shell, in-memory composition/layer model, navigation timeline, Media Pool,
+raster clip layers, and CPU preview are wired into CMake under
+`apps/motion-editor/`. Its initial product scope and readiness are documented
 in [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md). C++ and Qt 6 are provisional
 implementation choices; no final language, renderer, or codec choices have
 been made. Focused reuse libraries are tracked separately in
@@ -64,8 +65,9 @@ this readiness work.
   audit; GPU runtime and cross-platform support remain pending validation.
 - [x] Document provisional animation and composition contracts against the
   Motion Studio layer and curve workflows; preserve Video Editor regression
-  coverage at the shared-library boundary. Contracts remain provisional until
-  Motion Studio has consumer-side regression coverage.
+  coverage at the shared-library boundary. Motion Studio now has consumer-side
+  model and preview coverage; the contracts remain provisional pending
+  cross-platform and manual visual validation.
 - [x] Extract the FFmpeg playback session behind a neutral observer boundary;
   preserve Video Editor preview metrics in an application adapter.
 - [ ] Revalidate the applicable existing paths on Windows, macOS, and Linux;
@@ -88,9 +90,10 @@ the Motion Studio implementation choices are finalized.
   the shared animation types for transforms and keyframes. Canvas dimensions
   must be explicitly provided; the standalone window starts without a
   composition.
-- [x] Add an in-memory canvas viewer. The viewer displays the canvas without
-  rendering layer content. The empty state offers a centered New Composition
-  button alongside the existing File menu action.
+- [x] Add an in-memory canvas viewer with worker-thread preview for visible
+  still-image and video layers. Text and shape content are not rasterized yet.
+  The empty state offers a centered New Composition button alongside the
+  existing File menu action.
 - [x] Add an explicit exact frame rate and a navigation-only timeline with a
   frame ruler, playhead seeking, and single-frame stepping. Composition
   duration is not fixed during creation.
@@ -98,51 +101,79 @@ the Motion Studio implementation choices are finalized.
   shared media catalog and import processing. Include hierarchical bins,
   cached thumbnails, list and thumbnail views, renaming, offline marking and
   restoration, and a selected-media details panel. The pool clears when a new
-  composition replaces the current one. Media remains in the pool; timeline
-  insertion is deferred.
-- [ ] Add clip and layer controls to the composition timeline. The current
-  layer model remains available, but the workspace temporarily defers its
-  layer-list and transform-inspector controls.
+  composition replaces the current one.
+- [x] Connect Media Pool image and video items to independent visual timeline
+  layers. Support drop-to-insert, front-to-back row ordering, 8-pixel snapping,
+  selection, time movement, row reordering, visibility, removal, and right-edge
+  duration editing. Still images start at five seconds using the exact
+  composition rate; videos use their identified source duration.
+- [x] Restore the selected layer's base-transform inspector and render active
+  raster layers with the shared CPU compositor. Decode video frames on a
+  worker, coalesce rapid seeks, and ignore stale preview generations. Keyframes
+  remain stored but are not edited or evaluated.
 - [ ] Add keyframe editing interactions to the timeline.
 - [ ] Add project save/load, versioned formats, undo/redo, autosave, and
   recovery for the first supported composition workflow.
-- [ ] Add actionable local error logging and automated tests for document,
-  rendering, and application boundaries.
+- [-] Extend actionable local error logging and automated coverage for the
+  remaining document, rendering, and application boundaries. Media insertion
+  and preview failures are logged; persistence and export failures are not
+  implemented yet.
 
-The in-memory document/layer model has unit coverage, including the explicit
-canvas and exact frame rate. The empty application shell passed its offscreen
-startup test and a manual Windows launch/close check. The centered empty-state
-New Composition button uses the File menu's existing creation flow and has
-offscreen UI regression coverage. Opening a composition preserves the current
-window state and geometry; the app starts maximized unless the user restores it.
-The canvas viewer and navigation-only timeline also have offscreen UI
-regression coverage. The shared media catalog and import processor, plus the
-Motion Studio Media Pool, have regression coverage for video and still-image
-imports, first-frame thumbnails, bins, renaming, offline restoration, view
-modes, selection details, and clearing on composition replacement. The Video
-Editor retains its project-media and linked-image regressions. Frame
-rates are stored as exact rational values from the supported common-rate list.
-Creating a composition does not ask for or set its duration. The ruler starts
-with a one-hour navigation range, calculated from the selected exact frame
-rate; fractional rates round the frame count up. This range is not a composition
-end. Seeking and frame stepping stay within the current range. Dragging the
-playhead beyond the ruler's right edge extends the range by one hour once per
-drag and lands the playhead at the new end; another extension requires a new
-drag gesture. The range saturates at the non-negative signed 64-bit frame limit.
-Playback, export-range selection, SMPTE/drop-frame timecode, and keyframe
-evaluation are not part of this navigation slice. Manual Windows validation
-remains: verify the centered empty-state button opens composition creation and
-disappears after creation; verify a composition opens while maximized, then
-restore the window and verify another composition preserves the restored size;
-create a composition with explicit canvas and frame-rate values, confirm the
-one-hour initial timeline range, seek and step within it, drag beyond the right
-edge and verify one-hour extension only once per gesture; import multiple video
-and image files; create and rename nested bins; move and select media; switch
-list and thumbnail views; mark an item offline and restore it; confirm media
-selection leaves the canvas and playhead unchanged; resize the viewer, Media
-Pool, details panel, and timeline; replace the composition and confirm the pool
-resets; then close the application. Keyframe editing, timeline insertion,
-layer controls, layer-content rendering, and persistence remain open.
+The in-memory document/layer model has unit coverage, including explicit canvas
+size, exact frame rate, media paths, layer order, timing, movement, and duration
+limits. The empty application shell passed its offscreen startup test and a
+manual Windows launch/close check. The centered empty-state New Composition
+button uses the File menu's creation flow and has offscreen UI regression
+coverage. Opening a composition preserves the current window state and geometry;
+the app starts maximized unless the user restores it. The canvas viewer,
+navigation ruler, layer rows, drag/drop, transforms, and preview have offscreen
+coverage. The shared media catalog and importer, plus the Motion Studio Media
+Pool, have regression coverage for video and still-image imports, first-frame
+thumbnails, bins, renaming, offline restoration, view modes, selection details,
+and clearing on composition replacement. The Video Editor retains its
+project-media and linked-image regressions.
+
+Frame rates are stored as exact rational values from the supported common-rate
+list. Creating a composition does not ask for or set its duration. The ruler
+starts with a one-hour navigation range, calculated from the selected exact
+frame rate; fractional rates round the frame count up. This range is not a
+composition end. Seeking and frame stepping stay within the current range.
+Dragging the playhead beyond the ruler's right edge extends the range by one
+hour once per drag and lands the playhead at the new end; another extension
+requires a new drag gesture. The range saturates at the non-negative signed
+64-bit frame limit.
+
+Image and video layers reference canonical Media Pool paths, and repeated uses
+of one source receive distinct layer IDs. Still images last
+`ceil(5 * composition FPS)` frames. Video insertion requires a positive source
+frame rate plus either a positive frame count or positive duration; its full
+source length is converted to composition frames. Rows display front-to-back
+while the document stores layers back-to-front. Dropping on a row inserts above
+it; dropping in empty space inserts at the top. The eight-pixel snap tolerance
+considers frame zero and other layer starts and ends. Stills may be extended;
+videos may be shortened and restored up to their source duration. Selection,
+insertion, reordering, visibility, and seeking do not alter layer transforms or
+keyframes.
+
+The current preview displays the cached still-image frame or decodes the nearest
+video frame using the shared `VideoPlaybackSession`, then composites visible
+layers back-to-front with `FrameCompositor`. Decode and composition work runs
+off the UI thread. Newer seek requests supersede queued work, stale generations
+are ignored, and decode errors are logged with source path context without
+stopping the worker. Preview is CPU-only and omits text, shape, audio,
+continuous-playback, source-in-point, and keyframe evaluation.
+
+Manual Windows validation remains pending: verify the centered empty-state
+button opens composition creation and disappears after creation; confirm a
+composition opens maximized and preserves a restored window size; confirm the
+one-hour navigation range, stepping, and separate drag extensions; import
+images and videos, organize bins, switch pool views, and restore offline items;
+drag media to empty space and existing rows; verify snapping and front-to-back
+order; select, move, hide, resize, and remove layers; edit transforms; seek
+through image and video previews; resize the viewer, Media Pool, inspector, and
+timeline; replace the composition and confirm the pool resets; then close the
+application. Keyframe editing, document persistence, undo/redo, and export
+remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.

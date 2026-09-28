@@ -2,14 +2,16 @@
 
 Status: **provisional product scope; Milestone 0 complete**. A standalone
 Motion Studio shell and in-memory composition/layer model have started using
-provisional C++ and Qt 6. Its workspace can create in-memory canvases and has
-a navigation-only timeline and an application-owned Media Pool. The pool can
-import video and still images, organize them in bins, and show cached previews
-and metadata. Layer records remain in the document model, but layer controls
-are temporarily deferred from the interface; the canvas does not render media
-content. This document records the
-agreed starting scope; it does not finalize a renderer, programming language,
-native file extension, codec, or implementation architecture.
+provisional C++ and Qt 6. Its workspace creates in-memory canvases and has an
+application-owned Media Pool connected to timeline rows for image and video
+layers. The timeline supports clip insertion, movement, reordering, visibility,
+removal, and duration edits; the selected layer's base transform is editable.
+The canvas previews active raster layers through the shared CPU compositor and
+decodes video away from the UI thread. Keyframes are not evaluated or edited,
+and text/shape content is not rendered. Persistence and export are still open.
+This document records the agreed starting scope; it does not finalize a
+renderer, programming language, native file extension, codec, or implementation
+architecture.
 
 ## Intended Users and Workflows
 
@@ -144,14 +146,15 @@ cross-platform support, and measured performance remain open validation work.
 
 For Motion Studio, the existing neutral video decoder, shared media catalog,
 still-image decoder, RGBA frame model, transform evaluator, and raster
-compositor are reuse candidates. The Qt preview, Video Editor timeline worker,
-text rasterizer, and application-specific project adapters remain outside the
-shared media boundary. Motion Studio now has its own in-memory document/layer
-model, canvas viewer, and navigation-only timeline. Layer editing controls are
-deferred while the Media Pool handles source organization; placing media on
-the timeline, layer-content rendering, effects, and standalone persistence and
-export remain open.
-See [REUSE_PLAN.md](REUSE_PLAN.md) for the provisional shared API contracts.
+compositor are reused directly. The Qt preview, Motion Studio timeline worker,
+text rasterizer, and application-specific project adapters remain application-
+owned. Motion Studio has its own in-memory document/layer model, canvas viewer,
+and timeline rows linked to Media Pool sources. Image and video content render
+in the preview; text and shapes, keyframe evaluation, effects, and standalone
+persistence and export remain open. The one-hour ruler range controls
+navigation only and does not define the composition's duration. See
+[ROADMAP.md](ROADMAP.md) and [REUSE_PLAN.md](REUSE_PLAN.md) for current
+implementation details and provisional shared API contracts.
 
 ## Native Format and Compatibility Policy
 

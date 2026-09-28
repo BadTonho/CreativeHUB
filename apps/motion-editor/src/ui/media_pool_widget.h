@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -32,6 +33,8 @@ public:
     [[nodiscard]] const creative_suite::media::MediaLibrary& library() const noexcept;
     [[nodiscard]] QListWidget* mediaListWidget() const noexcept;
     [[nodiscard]] const creative_suite::media::MediaItem* selectedMedia() const noexcept;
+    [[nodiscard]] creative_suite::media::RgbaFramePtr sharedFirstFrameForPath(
+        const std::filesystem::path& path) const;
     void setImportRequestedHandler(std::function<void()> handler);
     void setSelectionChangedHandler(std::function<void()> handler);
     void clear();
@@ -59,6 +62,8 @@ private:
     void restoreSelectedMedia();
     void setThumbnailMode(bool enabled);
     creative_suite::media::MediaLibrary library_;
+    mutable std::map<std::filesystem::path, creative_suite::media::RgbaFramePtr>
+        shared_frame_cache_;
     std::shared_ptr<std::atomic_bool> cancel_requested_;
     QProgressDialog* progress_ = nullptr;
     QLabel* status_label_ = nullptr;

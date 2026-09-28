@@ -1,10 +1,12 @@
 #pragma once
 
 #include <creative_suite/animation/animation.h>
+#include <creative_suite/media/video_metadata.h>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -57,9 +59,24 @@ struct CompositionLayer {
     LayerId id;
     LayerKind kind;
     std::string name;
+    std::filesystem::path source_path;
+    std::int64_t timeline_start_frame = 0;
+    std::int64_t duration_frames = 0;
+    std::int64_t source_frame_count = 0;
+    std::int64_t source_duration_frames = 0;
+    std::int64_t maximum_timeline_duration_frames = 0;
+    double source_frame_rate = 0.0;
     bool visible = true;
     creative_suite::animation::Transform2D transform;
     creative_suite::animation::TransformKeyframes keyframes;
+};
+
+enum class AddMediaLayerResult {
+    Added,
+    InvalidKind,
+    InvalidPath,
+    InvalidPosition,
+    InvalidTimingMetadata,
 };
 
 // An in-memory document model. Layer order is back-to-front; the last layer is
@@ -77,9 +94,19 @@ public:
     [[nodiscard]] const std::vector<CompositionLayer>& layers() const noexcept;
 
     [[nodiscard]] LayerId addLayer(LayerKind kind, std::string name);
+    [[nodiscard]] AddMediaLayerResult addMediaLayer(
+        const creative_suite::media::VideoMetadata& metadata,
+        std::int64_t timeline_start_frame,
+        LayerId* added_id = nullptr);
     [[nodiscard]] bool removeLayer(LayerId id) noexcept;
     // Moves the layer to its final index in the back-to-front layer order.
     [[nodiscard]] bool moveLayer(LayerId id, std::size_t final_index) noexcept;
+    [[nodiscard]] bool moveLayerInTimeline(
+        LayerId id,
+        std::int64_t timeline_start_frame) noexcept;
+    [[nodiscard]] bool resizeLayerDuration(
+        LayerId id,
+        std::int64_t duration_frames) noexcept;
     [[nodiscard]] bool setLayerName(LayerId id, std::string name);
     [[nodiscard]] bool setLayerVisible(LayerId id, bool visible) noexcept;
     [[nodiscard]] bool setLayerTransform(

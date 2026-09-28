@@ -1,7 +1,11 @@
 #include "composition_document.h"
 
+#include <creative_suite/media/media_library.h>
+
 #include <algorithm>
+#include <cmath>
 #include <iterator>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -34,6 +38,22 @@ bool validLayerKind(LayerKind kind) noexcept
         return true;
     }
     return false;
+}
+
+std::optional<std::int64_t> checkedCeiling(long double value) noexcept
+{
+    const auto exclusive_max = std::ldexp(1.0L, 63);
+    if (!std::isfinite(value) || value <= 0.0L || value >= exclusive_max) {
+        return std::nullopt;
+    }
+    const auto rounded = std::ceil(value);
+    if (rounded >= exclusive_max) return std::nullopt;
+    return std::max<std::int64_t>(1, static_cast<std::int64_t>(rounded));
+}
+
+bool validPositiveFinite(const std::optional<double>& value) noexcept
+{
+    return value.has_value() && std::isfinite(*value) && *value > 0.0;
 }
 
 } // namespace
@@ -94,6 +114,83 @@ LayerId CompositionDocument::addLayer(LayerKind kind, std::string name)
     return id;
 }
 
+AddMediaLayerResult CompositionDocument::addMediaLayer(
+    const creative_suite::media::VideoMetadata& metadata,
+    std::int64_t timeline_start_frame,
+    LayerId* added_id)
+{
+    using creative_suite::media::MediaKind;
+    using creative_suite::media::MediaLibrary;
+
+    if (metadata.kind != MediaKind::Video && metadata.kind != MediaKind::Image) {
+        return AddMediaLayerResult::InvalidKind;
+    }
+    if (metadata.source_path.empty()) return AddMediaLayerResult::InvalidPath;
+    if (timeline_start_frame < 0) return AddMediaLayerResult::InvalidPosition;
+
+    const bool is_image = metadata.kind == MediaKind::Image;
+    std::int64_t source_frames = 1;
+    double source_rate = frame_rate_.asDouble();
+    std::int64_t duration_frames = 0;
+
+    if (is_image) {
+        const auto image_duration = checkedCeiling(
+            5.0L * static_cast<long double>(frame_rate_.numerator) /
+            static_cast<long double>(frame_rate_.denominator));
+        if (!image_duration.has_value()) return AddMediaLayerResult::InvalidTimingMetadata;
+        duration_frames = *image_duration;
+    } else {
+        if (!validPositiveFinite(metadata.frame_rate)) {
+            return AddMediaLayerResult::InvalidTimingMetadata;
+        }
+        source_rate = *metadata.frame_rate;
+
+        if (metadata.frame_count.has_value() && *metadata.frame_count > 0) {
+            source_frames = *metadata.frame_count;
+        } else if (validPositiveFinite(metadata.duration_seconds)) {
+            const auto estimated_source_frames = checkedCeiling(
+                static_cast<long double>(*metadata.duration_seconds) * source_rate);
+            if (!estimated_source_frames.has_value()) {
+                return AddMediaLayerResult::InvalidTimingMetadata;
+            }
+            source_frames = *estimated_source_frames;
+        } else {
+            return AddMediaLayerResult::InvalidTimingMetadata;
+        }
+
+        const auto timeline_duration = checkedCeiling(
+            static_cast<long double>(source_frames) *
+            static_cast<long double>(frame_rate_.numerator) /
+            (static_cast<long double>(frame_rate_.denominator) * source_rate));
+        if (!timeline_duration.has_value()) {
+            return AddMediaLayerResult::InvalidTimingMetadata;
+        }
+        duration_frames = *timeline_duration;
+    }
+
+    if (duration_frames > std::numeric_limits<std::int64_t>::max() - timeline_start_frame) {
+        return AddMediaLayerResult::InvalidPosition;
+    }
+
+    const auto layer_name = metadata.display_name.empty()
+        ? metadata.source_path.stem().string()
+        : metadata.display_name;
+    const auto id = addLayer(is_image ? LayerKind::Image : LayerKind::Video, layer_name);
+    auto* layer = findLayer(id);
+    if (layer == nullptr) return AddMediaLayerResult::InvalidKind;
+    layer->source_path = MediaLibrary::canonicalPath(metadata.source_path);
+    layer->timeline_start_frame = timeline_start_frame;
+    layer->duration_frames = duration_frames;
+    layer->source_frame_count = source_frames;
+    layer->source_frame_rate = source_rate;
+    if (!is_image) {
+        layer->source_duration_frames = source_frames;
+        layer->maximum_timeline_duration_frames = duration_frames;
+    }
+    if (added_id != nullptr) *added_id = id;
+    return AddMediaLayerResult::Added;
+}
+
 bool CompositionDocument::removeLayer(LayerId id) noexcept
 {
     const auto layer = std::find_if(layers_.begin(), layers_.end(), [id](const auto& item) {
@@ -123,6 +220,37 @@ bool CompositionDocument::moveLayer(LayerId id, std::size_t final_index) noexcep
     CompositionLayer moved = std::move(*layer);
     layers_.erase(layer);
     layers_.insert(layers_.begin() + static_cast<std::ptrdiff_t>(final_index), std::move(moved));
+    return true;
+}
+
+bool CompositionDocument::moveLayerInTimeline(
+    LayerId id,
+    std::int64_t timeline_start_frame) noexcept
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || timeline_start_frame < 0 || layer->duration_frames <= 0 ||
+        layer->duration_frames >
+            std::numeric_limits<std::int64_t>::max() - timeline_start_frame) {
+        return false;
+    }
+    layer->timeline_start_frame = timeline_start_frame;
+    return true;
+}
+
+bool CompositionDocument::resizeLayerDuration(
+    LayerId id,
+    std::int64_t duration_frames) noexcept
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || duration_frames <= 0 ||
+        duration_frames > std::numeric_limits<std::int64_t>::max() -
+            layer->timeline_start_frame ||
+        (layer->kind == LayerKind::Video &&
+         (layer->maximum_timeline_duration_frames <= 0 ||
+          duration_frames > layer->maximum_timeline_duration_frames))) {
+        return false;
+    }
+    layer->duration_frames = duration_frames;
     return true;
 }
 

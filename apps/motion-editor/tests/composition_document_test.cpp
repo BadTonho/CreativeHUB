@@ -1,7 +1,11 @@
 #include "model/composition_document.h"
 
+#include <creative_suite/media/media_library.h>
+
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 
 namespace {
@@ -58,6 +62,104 @@ int main()
             && !isSupportedFrameRate(FrameRate{25, 1000}),
         "the supported common rates preserve exact fractional values");
     require(document.layers().empty(), "new document starts without layers");
+
+    using creative_suite::media::MediaKind;
+    using creative_suite::media::VideoMetadata;
+    CompositionDocument media_document(1920, 1080, fractional_rate);
+    VideoMetadata image_metadata;
+    image_metadata.kind = MediaKind::Image;
+    image_metadata.source_path = std::filesystem::temp_directory_path() / "motion-poster.png";
+    image_metadata.display_name = "Poster";
+    LayerId image_layer = 0;
+    const auto image_result = media_document.addMediaLayer(image_metadata, 12, &image_layer);
+    require(image_result == AddMediaLayerResult::Added,
+            "a still image becomes a timed media layer");
+    require(image_layer != 0, "the new image layer receives an ID");
+    require(media_document.layers().size() == 1, "one still creates one layer occurrence");
+    require(media_document.layers().back().timeline_start_frame == 12 &&
+                media_document.layers().back().duration_frames == 120,
+            "stills last five seconds at the fractional composition frame rate");
+    require(media_document.layers().back().source_path ==
+                creative_suite::media::MediaLibrary::canonicalPath(image_metadata.source_path),
+            "media layers retain the canonical source path");
+
+    CompositionDocument integer_rate_document(640, 360, FrameRate{24, 1});
+    LayerId integer_image_layer = 0;
+    require(integer_rate_document.addMediaLayer(image_metadata, 0, &integer_image_layer) ==
+                AddMediaLayerResult::Added &&
+                integer_rate_document.layers().front().duration_frames == 120,
+            "five-second still duration is exact at an integer frame rate");
+    CompositionDocument fractional_rate_document(640, 360, FrameRate{30000, 1001});
+    LayerId fractional_image_layer = 0;
+    require(fractional_rate_document.addMediaLayer(image_metadata, 0, &fractional_image_layer) ==
+                AddMediaLayerResult::Added &&
+                fractional_rate_document.layers().front().duration_frames == 150,
+            "fractional still duration rounds up using exact rational composition timing");
+
+    VideoMetadata video_metadata;
+    video_metadata.kind = MediaKind::Video;
+    video_metadata.source_path = std::filesystem::temp_directory_path() / "motion-footage.mkv";
+    video_metadata.display_name = "Footage";
+    video_metadata.frame_rate = 30.0;
+    video_metadata.frame_count = 90;
+    LayerId video_layer = 0;
+    require(media_document.addMediaLayer(video_metadata, 240, &video_layer) ==
+                AddMediaLayerResult::Added,
+            "a video with source timing metadata becomes a timed layer");
+    require(video_layer != image_layer && media_document.layers().back().source_frame_count == 90 &&
+                media_document.layers().back().source_duration_frames == 90 &&
+                media_document.layers().back().duration_frames == 72 &&
+                media_document.layers().back().maximum_timeline_duration_frames == 72,
+            "video duration converts source frames to the exact composition rate");
+    LayerId repeated_video_layer = 0;
+    require(media_document.addMediaLayer(video_metadata, 0, &repeated_video_layer) ==
+                AddMediaLayerResult::Added && repeated_video_layer != video_layer &&
+                media_document.layers().size() == 3,
+            "each occurrence of one media path receives a distinct layer ID");
+
+    auto invalid_rate_video = video_metadata;
+    invalid_rate_video.frame_rate.reset();
+    require(media_document.addMediaLayer(invalid_rate_video, 0) ==
+                AddMediaLayerResult::InvalidTimingMetadata,
+            "video insertion rejects frame counts that cannot be converted without source fps");
+    auto invalid_duration_video = video_metadata;
+    invalid_duration_video.frame_count.reset();
+    invalid_duration_video.frame_rate = 30.0;
+    invalid_duration_video.duration_seconds = 0.0;
+    require(media_document.addMediaLayer(invalid_duration_video, 0) ==
+                AddMediaLayerResult::InvalidTimingMetadata,
+            "video insertion rejects non-positive timing metadata");
+    auto duration_only_video = video_metadata;
+    duration_only_video.frame_count.reset();
+    duration_only_video.duration_seconds = 2.1;
+    LayerId duration_only_id = 0;
+    require(media_document.addMediaLayer(duration_only_video, 0, &duration_only_id) ==
+                AddMediaLayerResult::Added &&
+                media_document.layers().back().source_frame_count == 63 &&
+                media_document.layers().back().duration_frames == 51,
+            "video duration can be estimated from valid seconds and source fps metadata");
+    require(media_document.addMediaLayer(image_metadata,
+                std::numeric_limits<std::int64_t>::max() - 1) ==
+                AddMediaLayerResult::InvalidPosition,
+            "timeline placement rejects an unrepresentable end frame");
+
+    require(media_document.moveLayerInTimeline(image_layer, 80) &&
+                media_document.layers().front().timeline_start_frame == 80,
+            "media layer start can be moved independently of its source");
+    require(!media_document.moveLayerInTimeline(image_layer,
+                std::numeric_limits<std::int64_t>::max() - 1),
+            "moving a layer cannot overflow its end frame");
+    require(media_document.resizeLayerDuration(image_layer, 600) &&
+                media_document.layers().front().duration_frames == 600,
+            "still image duration can be extended");
+    require(!media_document.resizeLayerDuration(image_layer, 0),
+            "layer duration must remain positive");
+    require(media_document.resizeLayerDuration(video_layer, 60) &&
+                !media_document.resizeLayerDuration(video_layer, 73),
+            "video duration can be shortened and restored only up to its source length");
+    require(media_document.moveLayer(repeated_video_layer, 0) &&
+                media_document.layers().front().id == repeated_video_layer,
+            "media layers can be reordered independently of timeline timing");
 
     const LayerId back = document.addLayer(LayerKind::Image, "Background image");
     const LayerId middle = document.addLayer(LayerKind::Shape, "Accent shape");
