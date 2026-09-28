@@ -15,10 +15,11 @@ int main(int argc, char* argv[])
 
     const auto* empty_state = window.findChild<QLabel*>(QStringLiteral("motion-empty-state"));
     if (!window.isVisible()
+        || !window.isMaximized()
         || window.windowTitle() != QStringLiteral("Motion Studio")
         || empty_state == nullptr
         || empty_state->text() != QStringLiteral("No composition open")) {
-        std::cerr << "Motion Studio did not start in its empty state.\n";
+        std::cerr << "Motion Studio did not start maximized in its empty state.\n";
         return EXIT_FAILURE;
     }
 

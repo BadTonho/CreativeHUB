@@ -61,6 +61,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
     setWindowTitle(QStringLiteral("Motion Studio"));
+    setWindowState(windowState() | Qt::WindowMaximized);
 
     empty_state_ = new QLabel(QStringLiteral("No composition open"), this);
     empty_state_->setObjectName(QStringLiteral("motion-empty-state"));
