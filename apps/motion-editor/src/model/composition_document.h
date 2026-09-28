@@ -42,7 +42,6 @@ struct FrameRate {
 struct CompositionSettings {
     CanvasSize canvas_size;
     FrameRate frame_rate;
-    std::int64_t duration_frames;
 
     friend bool operator==(const CompositionSettings&, const CompositionSettings&) = default;
 };
@@ -64,19 +63,17 @@ struct CompositionLayer {
 };
 
 // An in-memory document model. Layer order is back-to-front; the last layer is
-// composited on top. Canvas dimensions, a supported exact frame rate, and a
-// positive duration in frames are explicitly required.
+// composited on top. Canvas dimensions and a supported exact frame rate are
+// explicitly required; the composition has no fixed end frame.
 class CompositionDocument {
 public:
     CompositionDocument(
         int canvas_width,
         int canvas_height,
-        FrameRate frame_rate,
-        std::int64_t duration_frames);
+        FrameRate frame_rate);
 
     [[nodiscard]] CanvasSize canvasSize() const noexcept;
     [[nodiscard]] FrameRate frameRate() const noexcept;
-    [[nodiscard]] std::int64_t durationFrames() const noexcept;
     [[nodiscard]] const std::vector<CompositionLayer>& layers() const noexcept;
 
     [[nodiscard]] LayerId addLayer(LayerKind kind, std::string name);
@@ -99,7 +96,6 @@ private:
 
     CanvasSize canvas_size_;
     FrameRate frame_rate_;
-    std::int64_t duration_frames_;
     LayerId next_layer_id_ = 1;
     std::vector<CompositionLayer> layers_;
 };

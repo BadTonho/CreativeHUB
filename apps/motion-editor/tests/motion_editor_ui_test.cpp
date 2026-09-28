@@ -46,22 +46,19 @@ Widget* findWidget(QObject* parent, const char* object_name)
 void completeCompositionDialog(
     int width,
     int height,
-    int frame_rate_index,
-    const char* duration_frames)
+    int frame_rate_index)
 {
     QWidget* modal = QApplication::activeModalWidget();
     require(modal != nullptr, "composition dialog is active");
     auto* width_edit = findWidget<QLineEdit>(modal, "motion-canvas-width");
     auto* height_edit = findWidget<QLineEdit>(modal, "motion-canvas-height");
     auto* frame_rate = findWidget<QComboBox>(modal, "motion-frame-rate");
-    auto* duration = findWidget<QLineEdit>(modal, "motion-duration-frames");
     auto* buttons = findWidget<QDialogButtonBox>(modal, "motion-new-composition-buttons");
     width_edit->setText(QString::number(width));
     height_edit->setText(QString::number(height));
     frame_rate->setCurrentIndex(frame_rate_index);
-    duration->setText(QString::fromLatin1(duration_frames));
     require(buttons->button(QDialogButtonBox::Ok)->isEnabled(),
-        "valid canvas dimensions and timing enable Create");
+        "valid canvas dimensions and frame rate enable Create");
     buttons->button(QDialogButtonBox::Ok)->click();
 }
 
@@ -74,11 +71,10 @@ void createComposition(
     MainWindow& window,
     int width,
     int height,
-    int frame_rate_index,
-    const char* duration_frames)
+    int frame_rate_index)
 {
     QTimer::singleShot(0, [=] {
-        completeCompositionDialog(width, height, frame_rate_index, duration_frames);
+        completeCompositionDialog(width, height, frame_rate_index);
     });
     action(window, "motion-new-composition-action")->trigger();
 }
@@ -146,49 +142,39 @@ int main(int argc, char* argv[])
     auto* dialog_width = findWidget<QLineEdit>(&dialog, "motion-canvas-width");
     auto* dialog_height = findWidget<QLineEdit>(&dialog, "motion-canvas-height");
     auto* dialog_frame_rate = findWidget<QComboBox>(&dialog, "motion-frame-rate");
-    auto* dialog_duration = findWidget<QLineEdit>(&dialog, "motion-duration-frames");
     auto* dialog_buttons = findWidget<QDialogButtonBox>(&dialog, "motion-new-composition-buttons");
     require(dialog_width->text().isEmpty() && dialog_height->text().isEmpty()
-            && dialog_frame_rate->currentIndex() == 0 && dialog_duration->text().isEmpty(),
-        "new composition has no prefilled canvas dimensions or timing");
+            && dialog_frame_rate->currentIndex() == 0
+            && dialog.findChild<QObject*>(QStringLiteral("motion-duration-frames")) == nullptr,
+        "new composition has blank dimensions and frame rate, with no duration field");
     require(!dialog_buttons->button(QDialogButtonBox::Ok)->isEnabled(),
         "Create is disabled until all composition settings are entered");
     dialog_width->setText(QStringLiteral("0"));
     dialog_height->setText(QStringLiteral("720"));
-    dialog_frame_rate->setCurrentIndex(2);
-    dialog_duration->setText(QStringLiteral("240"));
     require(!dialog_buttons->button(QDialogButtonBox::Ok)->isEnabled(),
         "non-positive canvas dimensions do not enable Create");
     dialog_width->setText(QStringLiteral("1280"));
-    dialog_duration->setText(QStringLiteral("0"));
     require(!dialog_buttons->button(QDialogButtonBox::Ok)->isEnabled(),
-        "non-positive composition duration does not enable Create");
-    dialog_duration->setText(QStringLiteral("9223372036854775808"));
-    require(!dialog_buttons->button(QDialogButtonBox::Ok)->isEnabled(),
-        "duration values outside the signed 64-bit range are rejected");
-    dialog_duration->setText(QStringLiteral("9223372036854775807"));
+        "canvas dimensions alone do not require a fixed composition duration");
+    dialog_frame_rate->setCurrentIndex(2);
     require(dialog_buttons->button(QDialogButtonBox::Ok)->isEnabled(),
-        "the largest signed 64-bit duration is accepted");
-    dialog_duration->setText(QStringLiteral("240"));
-    require(dialog_buttons->button(QDialogButtonBox::Ok)->isEnabled(),
-        "positive explicit canvas and timing settings are accepted");
+        "explicit canvas dimensions and frame rate are accepted without a duration");
     dialog_buttons->button(QDialogButtonBox::Ok)->click();
     require(dialog.canvasSize() == motion::model::CanvasSize{1280, 720},
         "dialog returns the explicitly entered canvas size");
     require(dialog.compositionSettings() == motion::model::CompositionSettings{
-                {1280, 720}, {24, 1}, 240},
-        "dialog returns exact frame rate and frame-count duration");
+                {1280, 720}, {24, 1}},
+        "dialog returns the explicit canvas and exact frame rate");
 
     motion::ui::MainWindow window;
     require(window.compositionDocument() == nullptr,
         "Motion Studio starts without creating a composition");
-    createComposition(window, 640, 360, 2, "240");
+    createComposition(window, 640, 360, 2);
     require(window.compositionDocument() != nullptr
             && window.compositionDocument()->canvasSize() == motion::model::CanvasSize{640, 360},
         "new composition is stored in the window");
-    require(window.compositionDocument()->frameRate() == motion::model::FrameRate{24, 1}
-            && window.compositionDocument()->durationFrames() == 240,
-        "new composition stores its explicit frame rate and duration");
+    require(window.compositionDocument()->frameRate() == motion::model::FrameRate{24, 1},
+        "new composition stores its explicit frame rate without requiring an end frame");
     window.show();
     application.processEvents();
 
@@ -257,9 +243,9 @@ int main(int argc, char* argv[])
     auto* previous_frame = findWidget<QPushButton>(timeline, "motion-timeline-previous-frame");
     auto* next_frame = findWidget<QPushButton>(timeline, "motion-timeline-next-frame");
     auto* ruler = findWidget<QWidget>(timeline, "motion-timeline-ruler");
-    require(timeline->currentFrame() == 0 && !previous_frame->isEnabled()
-            && next_frame->isEnabled(),
-        "timeline starts at frame zero with navigation controls at their correct boundaries");
+    require(timeline->currentFrame() == 0 && timeline->visibleEndFrame() == 239
+            && !previous_frame->isEnabled() && next_frame->isEnabled(),
+        "timeline starts at frame zero with an initial navigation view, not a composition end");
 
     next_frame->click();
     next_frame->click();
@@ -281,12 +267,18 @@ int main(int argc, char* argv[])
         ruler, QEvent::MouseMove, ruler->width(), Qt::NoButton, Qt::LeftButton);
     sendMouseEvent(
         ruler, QEvent::MouseButtonRelease, ruler->width(), Qt::LeftButton, Qt::NoButton);
-    require(timeline->currentFrame() == 239 && !next_frame->isEnabled()
-            && previous_frame->isEnabled(),
-        "dragging the playhead seeks to the final frame and clamps at the duration boundary");
+    require(timeline->currentFrame() == 239 && timeline->visibleEndFrame() == 479
+            && next_frame->isEnabled() && previous_frame->isEnabled(),
+        "dragging to the view edge seeks and expands the range without ending the composition");
     next_frame->click();
-    require(timeline->currentFrame() == 239,
-        "frame stepping cannot move past the final composition frame");
+    require(timeline->currentFrame() == 240,
+        "frame stepping continues past the previous view edge");
+    sendMouseEvent(
+        ruler, QEvent::MouseButtonPress, ruler->width(), Qt::LeftButton, Qt::LeftButton);
+    sendMouseEvent(
+        ruler, QEvent::MouseButtonRelease, ruler->width(), Qt::LeftButton, Qt::NoButton);
+    require(timeline->currentFrame() == 479 && timeline->visibleEndFrame() == 959,
+        "seeking to the expanded view edge expands the navigation range again");
     sendMouseEvent(ruler, QEvent::MouseButtonPress, 0, Qt::LeftButton, Qt::LeftButton);
     sendMouseEvent(ruler, QEvent::MouseButtonRelease, 0, Qt::LeftButton, Qt::NoButton);
     previous_frame->click();
@@ -321,35 +313,29 @@ int main(int argc, char* argv[])
         require(prompt != nullptr, "replacement confirmation is shown");
         prompt->button(QMessageBox::No)->click();
     });
+    timeline->setCurrentFrame(7);
     action(window, "motion-new-composition-action")->trigger();
     require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{640, 360}
-            && window.compositionDocument()->layers().size() == 1,
-        "declining replacement preserves the current in-memory composition");
+            && window.compositionDocument()->layers().size() == 1
+            && timeline->currentFrame() == 7,
+        "declining replacement preserves the current composition and playhead");
 
     QTimer::singleShot(0, [] {
         auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
         require(prompt != nullptr, "replacement confirmation is shown before a new composition");
         prompt->button(QMessageBox::Yes)->click();
-        QTimer::singleShot(0, [] { completeCompositionDialog(1920, 1080, 4, "1"); });
+        QTimer::singleShot(0, [] { completeCompositionDialog(1920, 1080, 4); });
     });
+    timeline->setCurrentFrame(50);
     action(window, "motion-new-composition-action")->trigger();
     require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{1920, 1080}
             && window.compositionDocument()->frameRate() == motion::model::FrameRate{30000, 1001}
-            && window.compositionDocument()->durationFrames() == 1
             && window.compositionDocument()->layers().empty()
             && !window.selectedLayerId().has_value(),
-        "confirmed replacement creates a clean composition with explicit dimensions and timing");
-    require(timeline->currentFrame() == 0
-            && !previous_frame->isEnabled()
-            && !next_frame->isEnabled(),
-        "one-frame compositions keep the playhead at zero and disable both step controls");
-    timeline->setCurrentFrame(42);
-    sendMouseEvent(
-        ruler, QEvent::MouseButtonPress, ruler->width(), Qt::LeftButton, Qt::LeftButton);
-    sendMouseEvent(
-        ruler, QEvent::MouseButtonRelease, ruler->width(), Qt::LeftButton, Qt::NoButton);
-    require(timeline->currentFrame() == 0,
-        "one-frame compositions clamp every seek to frame zero");
+        "confirmed replacement creates a clean composition without requiring an end frame");
+    require(timeline->currentFrame() == 0 && timeline->visibleEndFrame() == 299
+            && !previous_frame->isEnabled() && next_frame->isEnabled(),
+        "a new composition resets navigation and derives its initial view from the selected rate");
 
     action(window, "motion-add-video-layer-action")->trigger();
     require(window.compositionDocument()->layers().size() == 1

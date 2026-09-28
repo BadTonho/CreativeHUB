@@ -11,15 +11,25 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace motion::ui {
 namespace {
 
 constexpr int kRulerHorizontalPadding = 20;
+constexpr std::int64_t kMaximumFrame = std::numeric_limits<std::int64_t>::max();
 
 QString formatFrameRate(model::FrameRate frame_rate)
 {
     return QString::number(frame_rate.asDouble(), 'g', 6);
+}
+
+std::int64_t initialVisibleEndFrame(model::FrameRate frame_rate) noexcept
+{
+    const auto ten_seconds_numerator = frame_rate.numerator * 10;
+    const auto frame_count = (ten_seconds_numerator + frame_rate.denominator - 1)
+        / frame_rate.denominator;
+    return std::max<std::int64_t>(1, frame_count) - 1;
 }
 
 } // namespace
@@ -33,17 +43,15 @@ TimelineRuler::TimelineRuler(QWidget* parent)
     setCursor(Qt::PointingHandCursor);
 }
 
-void TimelineRuler::setDuration(std::int64_t duration_frames)
+void TimelineRuler::setVisibleEndFrame(std::int64_t frame)
 {
-    duration_frames_ = duration_frames;
-    current_frame_ = 0;
+    visible_end_frame_ = std::max<std::int64_t>(0, frame);
     update();
 }
 
 void TimelineRuler::setCurrentFrame(std::int64_t frame) noexcept
 {
-    const auto last_frame = std::max<std::int64_t>(0, duration_frames_ - 1);
-    current_frame_ = std::clamp(frame, std::int64_t{0}, last_frame);
+    current_frame_ = std::max<std::int64_t>(0, frame);
     update();
 }
 
@@ -58,7 +66,7 @@ void TimelineRuler::paintEvent(QPaintEvent*)
     const int axis_y = 48;
     const int label_y = 17;
     const int axis_width = std::max(0, axis_right - axis_left);
-    const auto last_frame = std::max<std::int64_t>(0, duration_frames_ - 1);
+    const auto last_frame = visible_end_frame_;
 
     painter.setPen(QPen(QColor(110, 118, 129), 1));
     painter.drawLine(axis_left, axis_y, axis_right, axis_y);
@@ -101,7 +109,8 @@ void TimelineRuler::mousePressEvent(QMouseEvent* event)
         return;
     }
     dragging_ = true;
-    emit seekRequested(static_cast<qint64>(frameAtX(event->position().toPoint().x())));
+    last_mouse_x_ = event->position().toPoint().x();
+    emit seekRequested(static_cast<qint64>(frameAtX(last_mouse_x_)));
     event->accept();
 }
 
@@ -111,7 +120,11 @@ void TimelineRuler::mouseMoveEvent(QMouseEvent* event)
         QWidget::mouseMoveEvent(event);
         return;
     }
-    emit seekRequested(static_cast<qint64>(frameAtX(event->position().toPoint().x())));
+    const int mouse_x = event->position().toPoint().x();
+    if (mouse_x != last_mouse_x_) {
+        last_mouse_x_ = mouse_x;
+        emit seekRequested(static_cast<qint64>(frameAtX(mouse_x)));
+    }
     event->accept();
 }
 
@@ -119,7 +132,12 @@ void TimelineRuler::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton && dragging_) {
         dragging_ = false;
-        emit seekRequested(static_cast<qint64>(frameAtX(event->position().toPoint().x())));
+        const int mouse_x = event->position().toPoint().x();
+        if (mouse_x != last_mouse_x_) {
+            last_mouse_x_ = mouse_x;
+            emit seekRequested(static_cast<qint64>(frameAtX(mouse_x)));
+        }
+        last_mouse_x_ = -1;
         event->accept();
         return;
     }
@@ -128,7 +146,7 @@ void TimelineRuler::mouseReleaseEvent(QMouseEvent* event)
 
 std::int64_t TimelineRuler::frameAtX(int x) const noexcept
 {
-    const auto last_frame = std::max<std::int64_t>(0, duration_frames_ - 1);
+    const auto last_frame = visible_end_frame_;
     if (last_frame == 0) {
         return 0;
     }
@@ -158,7 +176,7 @@ int TimelineRuler::xForFrame(std::int64_t frame) const noexcept
     const int axis_left = std::min(kRulerHorizontalPadding, width() / 2);
     const int axis_right = std::max(axis_left, width() - kRulerHorizontalPadding);
     const int axis_width = axis_right - axis_left;
-    const auto last_frame = std::max<std::int64_t>(0, duration_frames_ - 1);
+    const auto last_frame = visible_end_frame_;
     if (axis_width <= 0 || last_frame == 0) {
         return axis_left;
     }
@@ -197,14 +215,15 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     layout->addLayout(controls);
 
     ruler_ = new TimelineRuler(this);
+    ruler_->setToolTip(QStringLiteral(
+        "Open-ended navigation range. It expands as you advance and is not a composition end."));
     layout->addWidget(ruler_, 1);
 
     connect(previous_frame_button_, &QPushButton::clicked, this, [this] {
         seekToFrame(current_frame_ - (current_frame_ > 0 ? 1 : 0));
     });
     connect(next_frame_button_, &QPushButton::clicked, this, [this] {
-        const auto last_frame = duration_frames_ - 1;
-        seekToFrame(current_frame_ + (current_frame_ < last_frame ? 1 : 0));
+        seekToFrame(current_frame_ + (current_frame_ < kMaximumFrame ? 1 : 0));
     });
     connect(ruler_, &TimelineRuler::seekRequested, this, [this](qint64 frame) {
         seekToFrame(static_cast<std::int64_t>(frame));
@@ -214,13 +233,12 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
 }
 
 void TimelineNavigator::setCompositionTiming(
-    model::FrameRate frame_rate,
-    std::int64_t duration_frames)
+    model::FrameRate frame_rate)
 {
     frame_rate_ = frame_rate;
-    duration_frames_ = duration_frames;
     current_frame_ = 0;
-    ruler_->setDuration(duration_frames);
+    visible_end_frame_ = initialVisibleEndFrame(frame_rate);
+    ruler_->setVisibleEndFrame(visible_end_frame_);
     ruler_->setCurrentFrame(current_frame_);
     updateControls();
 }
@@ -235,29 +253,45 @@ std::int64_t TimelineNavigator::currentFrame() const noexcept
     return current_frame_;
 }
 
+std::int64_t TimelineNavigator::visibleEndFrame() const noexcept
+{
+    return visible_end_frame_;
+}
+
 void TimelineNavigator::seekToFrame(std::int64_t frame)
 {
-    const auto last_frame = std::max<std::int64_t>(0, duration_frames_ - 1);
-    const auto bounded_frame = std::clamp(frame, std::int64_t{0}, last_frame);
+    const auto bounded_frame = std::max<std::int64_t>(0, frame);
     if (bounded_frame == current_frame_) {
         return;
     }
 
     current_frame_ = bounded_frame;
+    extendViewToInclude(current_frame_);
     ruler_->setCurrentFrame(current_frame_);
     updateControls();
     emit currentFrameChanged(static_cast<qint64>(current_frame_));
 }
 
+void TimelineNavigator::extendViewToInclude(std::int64_t frame) noexcept
+{
+    while (frame >= visible_end_frame_ && visible_end_frame_ < kMaximumFrame) {
+        const auto visible_frame_count = visible_end_frame_ + 1;
+        if (visible_frame_count > kMaximumFrame - visible_end_frame_) {
+            visible_end_frame_ = kMaximumFrame;
+        } else {
+            visible_end_frame_ += visible_frame_count;
+        }
+    }
+    ruler_->setVisibleEndFrame(visible_end_frame_);
+}
+
 void TimelineNavigator::updateControls()
 {
-    const auto last_frame = std::max<std::int64_t>(0, duration_frames_ - 1);
-    frame_label_->setText(QStringLiteral("Frame %1  |  %2 frames")
-        .arg(static_cast<qlonglong>(current_frame_))
-        .arg(static_cast<qlonglong>(duration_frames_)));
+    frame_label_->setText(QStringLiteral("Frame %1")
+        .arg(static_cast<qlonglong>(current_frame_)));
     frame_rate_label_->setText(QStringLiteral("FPS: %1").arg(formatFrameRate(frame_rate_)));
     previous_frame_button_->setEnabled(current_frame_ > 0);
-    next_frame_button_->setEnabled(current_frame_ < last_frame);
+    next_frame_button_->setEnabled(current_frame_ < kMaximumFrame);
 }
 
 } // namespace motion::ui

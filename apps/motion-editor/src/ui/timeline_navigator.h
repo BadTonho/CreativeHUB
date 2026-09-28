@@ -18,7 +18,7 @@ class TimelineRuler final : public QWidget {
 public:
     explicit TimelineRuler(QWidget* parent = nullptr);
 
-    void setDuration(std::int64_t duration_frames);
+    void setVisibleEndFrame(std::int64_t frame);
     void setCurrentFrame(std::int64_t frame) noexcept;
 
 signals:
@@ -34,8 +34,9 @@ private:
     [[nodiscard]] std::int64_t frameAtX(int x) const noexcept;
     [[nodiscard]] int xForFrame(std::int64_t frame) const noexcept;
 
-    std::int64_t duration_frames_ = 1;
+    std::int64_t visible_end_frame_ = 239;
     std::int64_t current_frame_ = 0;
+    int last_mouse_x_ = -1;
     bool dragging_ = false;
 };
 
@@ -45,19 +46,21 @@ class TimelineNavigator final : public QWidget {
 public:
     explicit TimelineNavigator(QWidget* parent = nullptr);
 
-    void setCompositionTiming(model::FrameRate frame_rate, std::int64_t duration_frames);
+    void setCompositionTiming(model::FrameRate frame_rate);
     void setCurrentFrame(std::int64_t frame);
     [[nodiscard]] std::int64_t currentFrame() const noexcept;
+    [[nodiscard]] std::int64_t visibleEndFrame() const noexcept;
 
 signals:
     void currentFrameChanged(qint64 frame);
 
 private:
     void seekToFrame(std::int64_t frame);
+    void extendViewToInclude(std::int64_t frame) noexcept;
     void updateControls();
 
     model::FrameRate frame_rate_{};
-    std::int64_t duration_frames_ = 1;
+    std::int64_t visible_end_frame_ = 239;
     std::int64_t current_frame_ = 0;
     QPushButton* previous_frame_button_ = nullptr;
     QPushButton* next_frame_button_ = nullptr;

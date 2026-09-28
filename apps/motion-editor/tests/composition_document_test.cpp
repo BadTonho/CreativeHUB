@@ -2,7 +2,6 @@
 
 #include <cstdlib>
 #include <iostream>
-#include <limits>
 #include <stdexcept>
 
 namespace {
@@ -35,41 +34,25 @@ int main()
 
     const FrameRate fractional_rate{24000, 1001};
     requireThrows([&] {
-        CompositionDocument document(0, 720, fractional_rate, 240);
+        CompositionDocument document(0, 720, fractional_rate);
     }, "zero canvas width is rejected");
     requireThrows([&] {
-        CompositionDocument document(1920, -1, fractional_rate, 240);
+        CompositionDocument document(1920, -1, fractional_rate);
     }, "negative canvas height is rejected");
     requireThrows([] {
-        CompositionDocument document(1920, 1080, FrameRate{0, 1}, 240);
+        CompositionDocument document(1920, 1080, FrameRate{0, 1});
     }, "non-positive frame-rate numerator is rejected");
     requireThrows([] {
-        CompositionDocument document(1920, 1080, FrameRate{30000, 0}, 240);
+        CompositionDocument document(1920, 1080, FrameRate{30000, 0});
     }, "non-positive frame-rate denominator is rejected");
     requireThrows([] {
-        CompositionDocument document(1920, 1080, FrameRate{2997, 100}, 240);
+        CompositionDocument document(1920, 1080, FrameRate{2997, 100});
     }, "unsupported custom frame rate is rejected");
-    requireThrows([&] {
-        CompositionDocument document(1920, 1080, fractional_rate, 0);
-    }, "zero composition duration is rejected");
-    requireThrows([&] {
-        CompositionDocument document(1920, 1080, fractional_rate, -1);
-    }, "negative composition duration is rejected");
 
-    CompositionDocument document(1920, 1080, fractional_rate, 240);
+    CompositionDocument document(1920, 1080, fractional_rate);
     require(document.canvasSize() == CanvasSize{1920, 1080}, "explicit canvas size is retained");
     require(document.frameRate() == fractional_rate,
         "the exact fractional frame rate is retained");
-    require(document.durationFrames() == 240,
-        "the explicit composition duration is retained in frames");
-    CompositionDocument maximum_duration_document(
-        1,
-        1,
-        fractional_rate,
-        std::numeric_limits<std::int64_t>::max());
-    require(maximum_duration_document.durationFrames()
-                == std::numeric_limits<std::int64_t>::max(),
-        "the largest signed 64-bit frame count is representable");
     require(supportedFrameRates().size() == 13
             && isSupportedFrameRate(FrameRate{30000, 1001})
             && !isSupportedFrameRate(FrameRate{25, 1000}),

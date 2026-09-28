@@ -114,13 +114,12 @@ void MainWindow::createNewComposition()
     document_.emplace(
         settings->canvas_size.width,
         settings->canvas_size.height,
-        settings->frame_rate,
-        settings->duration_frames);
+        settings->frame_rate);
     selected_layer_id_.reset();
     if (workspace_ == nullptr) {
         createWorkspace();
     }
-    timeline_->setCompositionTiming(settings->frame_rate, settings->duration_frames);
+    timeline_->setCompositionTiming(settings->frame_rate);
     refreshLayerList();
 }
 

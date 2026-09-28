@@ -90,29 +90,34 @@ the Motion Studio implementation choices are finalized.
   visibility and ordering controls, and a base-transform inspector. The viewer
   shows the canvas and selected layer anchor only; it does not render layer
   content.
-- [x] Add explicit composition timing and a navigation-only timeline with a
-  frame ruler, playhead seeking, and single-frame stepping.
+- [x] Add an explicit exact frame rate and a navigation-only timeline with a
+  frame ruler, playhead seeking, and single-frame stepping. Composition
+  duration is not fixed during creation.
 - [ ] Add keyframe editing interactions to the timeline.
 - [ ] Add project save/load, versioned formats, undo/redo, autosave, and
   recovery for the first supported composition workflow.
 - [ ] Add actionable local error logging and automated tests for document,
   rendering, and application boundaries.
 
-The in-memory document/layer model has unit coverage, including explicit frame
-rate and duration metadata. The empty application shell passed its offscreen
+The in-memory document/layer model has unit coverage, including the explicit
+canvas and exact frame rate. The empty application shell passed its offscreen
 startup test and a manual Windows launch/close check. The composition workspace
 and navigation-only timeline have offscreen UI regression coverage. Frame
-rates are stored as exact rational values from the supported common-rate list;
-duration is a positive frame count, and the playhead is bounded to
-`0..duration_frames-1`. The ruler displays frame indices. Playback, SMPTE/drop-
-frame timecode, and keyframe evaluation are not part of this navigation slice.
-Manual Windows validation remains: create a composition with explicit canvas
-and timing values, add and reorder layers, change visibility and transforms,
-seek and step frames, resize the viewer and timeline, and close the application.
-Keyframe editing, layer-content rendering, and persistence remain open.
+rates are stored as exact rational values from the supported common-rate list.
+Creating a composition does not ask for or set its duration. The ruler starts
+with an approximately ten-second navigation view based on the selected frame
+rate and expands as the playhead reaches its edge; this view is not a
+composition end. The playhead starts at frame 0 and can advance through the
+non-negative signed 64-bit frame range. Playback, export-range selection,
+SMPTE/drop-frame timecode, and keyframe evaluation are not part of this
+navigation slice. Manual Windows validation remains: create a composition with
+explicit canvas and frame-rate values, add and reorder layers, change visibility
+and transforms, seek and step beyond the initial ruler view, resize the viewer
+and timeline, and close the application. Keyframe editing, layer-content
+rendering, and persistence remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
-composition without losing its layer or timing data.
+composition without losing its layer or frame-rate data.
 
 ### 3. Motion design MVP
 

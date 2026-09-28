@@ -52,20 +52,15 @@ bool isSupportedFrameRate(FrameRate frame_rate) noexcept
 CompositionDocument::CompositionDocument(
     int canvas_width,
     int canvas_height,
-    FrameRate frame_rate,
-    std::int64_t duration_frames)
+    FrameRate frame_rate)
     : canvas_size_{canvas_width, canvas_height}
     , frame_rate_(frame_rate)
-    , duration_frames_(duration_frames)
 {
     if (canvas_width <= 0 || canvas_height <= 0) {
         throw std::invalid_argument("Composition canvas dimensions must be positive");
     }
     if (!isSupportedFrameRate(frame_rate)) {
         throw std::invalid_argument("Composition frame rate is not supported");
-    }
-    if (duration_frames <= 0) {
-        throw std::invalid_argument("Composition duration must be positive");
     }
 }
 
@@ -77,11 +72,6 @@ CanvasSize CompositionDocument::canvasSize() const noexcept
 FrameRate CompositionDocument::frameRate() const noexcept
 {
     return frame_rate_;
-}
-
-std::int64_t CompositionDocument::durationFrames() const noexcept
-{
-    return duration_frames_;
 }
 
 const std::vector<CompositionLayer>& CompositionDocument::layers() const noexcept

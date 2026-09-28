@@ -6,12 +6,9 @@
 #include <QIntValidator>
 #include <QLineEdit>
 #include <QPushButton>
-#include <QRegularExpression>
-#include <QRegularExpressionValidator>
 #include <QVariant>
 #include <QVBoxLayout>
 
-#include <cstdint>
 #include <limits>
 
 namespace motion::ui {
@@ -56,13 +53,6 @@ NewCompositionDialog::NewCompositionDialog(QWidget* parent)
     }
     form->addRow(QStringLiteral("Frame rate"), frame_rate_combo_);
 
-    duration_edit_ = new QLineEdit(this);
-    duration_edit_->setObjectName(QStringLiteral("motion-duration-frames"));
-    duration_edit_->setMaxLength(19);
-    duration_edit_->setValidator(new QRegularExpressionValidator(
-        QRegularExpression(QStringLiteral("[0-9]{0,19}")), duration_edit_));
-    duration_edit_->setPlaceholderText(QStringLiteral("Enter frame count"));
-    form->addRow(QStringLiteral("Duration (frames)"), duration_edit_);
     layout->addLayout(form);
 
     buttons_ = new QDialogButtonBox(
@@ -81,7 +71,6 @@ NewCompositionDialog::NewCompositionDialog(QWidget* parent)
     connect(frame_rate_combo_, &QComboBox::currentIndexChanged, this, [this] {
         updateCreateEnabled();
     });
-    connect(duration_edit_, &QLineEdit::textChanged, this, [this] { updateCreateEnabled(); });
     connect(buttons_, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons_, &QDialogButtonBox::rejected, this, &QDialog::reject);
 }
@@ -105,12 +94,6 @@ std::optional<model::CompositionSettings> NewCompositionDialog::compositionSetti
         return std::nullopt;
     }
 
-    bool duration_ok = false;
-    const auto duration_frames = duration_edit_->text().toLongLong(&duration_ok);
-    if (!duration_ok || duration_frames <= 0) {
-        return std::nullopt;
-    }
-
     const int index = frame_rate_combo_->currentIndex();
     const model::FrameRate frame_rate{
         frame_rate_combo_->itemData(index, Qt::UserRole).toLongLong(),
@@ -119,7 +102,7 @@ std::optional<model::CompositionSettings> NewCompositionDialog::compositionSetti
         return std::nullopt;
     }
 
-    return model::CompositionSettings{*canvas, frame_rate, duration_frames};
+    return model::CompositionSettings{*canvas, frame_rate};
 }
 
 void NewCompositionDialog::updateCreateEnabled()

@@ -25,7 +25,6 @@ private:
     QLineEdit* width_edit_ = nullptr;
     QLineEdit* height_edit_ = nullptr;
     QComboBox* frame_rate_combo_ = nullptr;
-    QLineEdit* duration_edit_ = nullptr;
     QDialogButtonBox* buttons_ = nullptr;
 };
 
