@@ -108,6 +108,39 @@ error context, and serialization compatibility when applicable. The current
 frame type defines RGBA8 storage and stride but no color space. Keyframe and
 curve evaluation remains a separate capability from composition.
 
+### Video Editor playback and preview path audit
+
+This audit follows the existing Video Editor implementation and its automated
+tests. It records source-level behavior; it does not claim that OpenGL works on
+every target GPU or that the path has met performance targets.
+
+| Stage | Existing implementation and evidence | Motion Studio direction |
+| --- | --- | --- |
+| Build dependencies | `apps/video-editor/CMakeLists.txt` requires Qt 6 Core, Widgets, OpenGL, and OpenGLWidgets plus FFmpeg AVCODEC, AVFORMAT, AVUTIL, SWRESAMPLE, and SWSCALE. Qt Multimedia is optional and used for audio output. | This describes the Video Editor build, not a final Motion Studio stack. Keep renderer and dependency decisions open until platform, license, and performance validation. |
+| Video decode and frames | `libs/media/src/video_playback.cpp` uses FFmpeg to decode video and convert frames to owned RGBA8 storage. `VideoPlaybackSession` is independent of Qt and can report optional decode timings through an observer. | `creative-suite::video-media` and `creative-suite::media-frame` are candidates for video layers, subject to Motion Studio consumer regression coverage. |
+| Timeline playback and CPU composition | `apps/video-editor/src/playback/playback_worker.cpp` selects and decodes timeline layers, rasterizes text, and calls the CPU `FrameCompositor`. The compositor returns the completed raster frame before preview presentation. | The shared raster compositor and animation evaluator are reusable candidates. Timeline scheduling, project data, and playback controls remain application-specific. |
+| Still images and text | `apps/video-editor/src/media/still_image_decoder.cpp` uses Qt `QImageReader` with an FFmpeg compatibility fallback. `apps/video-editor/src/rendering/text_renderer.cpp` rasterizes text through Qt `QPainter`. Both are Video Editor application services, not neutral shared APIs. | Motion Studio needs still-image and text rasterization in its own workflow or separately reviewed shared services. Vector-shape rasterization is not established by this path. |
+| Preview presentation | `OpenGLPreviewSurface` requests an OpenGL 3.2 Core context, uploads the already-composed RGBA frame as a texture, and draws it with a shader. GPU work presents the final frame; layer composition is CPU-side. `PreviewWidget` can use a CPU `QImage`/`QPixmap` path when GPU preview is disabled or fails. | Treat this Qt/OpenGL widget as Video Editor UI. It does not provide GPU layer composition or establish a Motion Studio renderer. |
+
+Existing regression tests cover the shared animation and composition
+libraries, Video Editor transform and text composition, playback-worker
+behavior, preview delivery, and preview metrics. The preview-widget test sets
+`CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1` and uses Qt's offscreen platform, so it
+exercises the CPU preview path and does not validate OpenGL context creation,
+GPU presentation, or driver support. The standalone FFmpeg playback test's
+valid-video decode and seek coverage is conditional on a reference-video
+argument; that prototype fixture is excluded from this audit run. Thus the
+successful decode path is mapped from source here, while GPU runtime behavior,
+cross-platform support, and measured performance remain open validation work.
+
+For Motion Studio, the existing neutral video decoder, RGBA frame model,
+transform evaluator, and raster compositor are reuse candidates. The Qt
+preview, Video Editor timeline worker, still-image import path, and text
+rasterizer remain application-specific until an independent shared contract
+is justified. Motion Studio still needs its own document and timeline, image
+and text/shape layer workflows, effects, and standalone persistence/export.
+See [REUSE_PLAN.md](REUSE_PLAN.md) for the provisional shared API contracts.
+
 ## Native Format and Compatibility Policy
 
 - Motion Studio uses a native document format distinct from the Video Editor's
@@ -126,18 +159,10 @@ curve evaluation remains a separate capability from composition.
 
 ## Deferred Technical Decisions
 
-Milestone 1 starts by validating the Video Editor's existing Qt 6 and FFmpeg
-media path, worker-side CPU composition, and Qt OpenGL presentation of the
-composed frame. It supports video, text, raster images, basic transforms, and
-linear keyframes. OpenGL presents the completed frame; layer composition itself
-runs on the CPU.
-
-Compare those capabilities with the Motion Studio MVP and record which
-contracts transfer and which gaps remain. In particular, validate the gaps in
-still-image decoding, vector-shape rasterization, editable curves, effects, and
-the standalone project workflow. Revalidate the applicable Video Editor paths
-across Windows, macOS, and Linux, and measure startup, memory, timeline/seek
-response, preview latency, and rendering for representative small, medium, and
-heavy compositions. Record dependency licenses, output-profile and codec
-findings, measurable resource and responsiveness targets, and alternatives.
-No final language or renderer choice is made by this document.
+The source-level Qt 6, FFmpeg, CPU-composition, and OpenGL-presentation audit is
+recorded above. Remaining Milestone 1 work is to revalidate applicable paths
+across Windows, macOS, and Linux; measure startup, memory, timeline/seek
+response, preview latency, and rendering for representative small, medium,
+and heavy compositions; and record dependency licenses, output-profile and
+codec findings, measurable resource and responsiveness targets, and
+alternatives. No final language or renderer choice is made by this document.

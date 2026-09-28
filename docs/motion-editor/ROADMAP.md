@@ -55,9 +55,11 @@ this readiness work.
 
 ### 1. Technical validation and gap audit
 
-- [ ] Audit the Video Editor's Qt 6, FFmpeg, CPU composition, and OpenGL
+- [x] Audit the Video Editor's Qt 6, FFmpeg, CPU composition, and OpenGL
   presentation path against the Motion Studio MVP. Record evidence that
-  transfers and gaps that remain.
+  transfers and gaps that remain in
+  [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md). This is a source-level
+  audit; GPU runtime and cross-platform support remain pending validation.
 - [x] Document provisional animation and composition contracts against the
   Motion Studio layer and curve workflows; preserve Video Editor regression
   coverage at the shared-library boundary. Contracts remain provisional until
