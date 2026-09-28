@@ -126,9 +126,13 @@ public:
             const CompositionLayer& layer,
             const PreparedAlphaCoverageGeometryPtr& previous = {});
 
-    // Source frames are fit to the canvas, then transformed around their
-    // centers. Layers blend back-to-front in vector order. The returned canvas
-    // is RGBA8 with an opaque black background; invalid inputs return nullopt.
+    // Source frames are aspect-fit to the canvas, then scaled and rotated about
+    // their centers. Sampling is nearest-neighbor. Layers blend source-over,
+    // back-to-front in vector order, over an opaque black RGBA8 background.
+    // Non-positive or unrepresentable canvas dimensions return nullopt.
+    // Layers with a null frame, non-positive source dimensions, invalid
+    // transforms, or unusable RGBA storage contribute no pixels. Allocation
+    // exceptions may propagate to callers.
     [[nodiscard]] static std::optional<media::RgbaFrame> compose(
         int width,
         int height,

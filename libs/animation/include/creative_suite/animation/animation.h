@@ -13,8 +13,10 @@ enum class TransformProperty {
     Opacity,
 };
 
-// Position is normalized to the composition canvas, scale must be positive,
-// rotation is in degrees, and opacity is in [0, 1].
+// Position uses normalized composition-canvas coordinates and may lie outside
+// [0, 1] to place a layer partly or fully off-canvas. Scale must be positive,
+// rotation is in degrees, and opacity is in [0, 1]. All transform values must
+// be finite.
 struct Transform2D {
     double position_x = 0.5;
     double position_y = 0.5;
@@ -26,7 +28,8 @@ struct Transform2D {
 };
 
 struct Keyframe {
-    // Frame numbers are local to the animated layer/property.
+    // Frame numbers are local to the animated layer/property and are
+    // non-negative when inserted through setKeyframe().
     std::int64_t frame = 0;
     double value = 0.0;
 
@@ -34,8 +37,9 @@ struct Keyframe {
 };
 
 struct TransformKeyframes {
-    // Keep each property list sorted by frame. setKeyframe maintains this
-    // order; evaluateProperty uses the first and last entries to clamp time.
+    // Each property list must have unique, ascending frame numbers.
+    // setKeyframe() inserts/replaces and sorts; direct edits must preserve this
+    // invariant. Evaluation clamps to the first and last keyframe.
     std::vector<Keyframe> position_x;
     std::vector<Keyframe> position_y;
     std::vector<Keyframe> scale;
@@ -56,8 +60,9 @@ struct TransformKeyframes {
     TransformProperty property,
     std::int64_t local_frame) noexcept;
 
-// Evaluation clamps to the endpoint values outside the keyframe range and
-// linearly interpolates between adjacent keyframes.
+// With no keyframes, evaluation returns the base value. Otherwise it clamps
+// to endpoint values and linearly interpolates between adjacent keyframes;
+// there is no easing or angular wraparound.
 [[nodiscard]] Transform2D evaluateTransform(
     const Transform2D& base,
     const TransformKeyframes& keyframes,

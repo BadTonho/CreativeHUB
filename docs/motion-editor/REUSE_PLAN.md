@@ -32,6 +32,61 @@ linkage is the current CMake build shape, so shared code is included in each
 application executable and deployment bundle rather than loaded from the
 other application's installation.
 
+## Provisional API contracts
+
+### Animation
+
+- Transform positions use normalized canvas coordinates. Finite positions may
+  lie outside `[0, 1]` to place a layer partly or fully off-canvas. Scale must
+  be finite and positive, rotation is finite degrees, and opacity is finite in
+  `[0, 1]`.
+- Keyframe frame numbers are local to a layer/property. `setKeyframe` rejects
+  negative frames and non-finite values, requires positive scale and opacity in
+  `[0, 1]`, and inserts or replaces a key at that frame while keeping the list
+  sorted. Callers editing the public vectors directly must preserve unique,
+  ascending frame numbers.
+- Evaluation returns the base value when a property has no keys, clamps to the
+  first or last key outside the keyed range, and linearly interpolates between
+  adjacent keys. It does not provide easing, Bezier curves, subframe sampling,
+  or angular wraparound.
+
+### Raster composition
+
+- Each source `RgbaFrame` owns RGBA8 pixels with byte stride and straight alpha;
+  a composition layer borrows the frame for the duration of the call. The
+  compositor performs no color-space conversion.
+- Each source is aspect-fit to the output canvas, then uniformly scaled and
+  rotated about its center. Position is normalized to canvas width and height;
+  nearest-neighbor sampling is used.
+- Layers are composited source-over in vector order, back-to-front. The output
+  is RGBA8 with an opaque black background, including when the layer list is
+  empty.
+- A non-positive canvas size, a width whose four-byte stride cannot fit in
+  `int`, or an output byte count that cannot be represented returns
+  `std::nullopt`. A layer with a null frame, non-positive source dimensions,
+  invalid transform, or unusable RGBA storage contributes no pixels. Standard
+  allocation exceptions may propagate to the caller.
+
+These are current Video Editor semantics and remain provisional for Motion
+Studio until it consumes the APIs and has consumer-side regression coverage.
+
+## Motion Studio gaps
+
+- `creative-suite::video-media` decodes video, not still images. Motion Studio
+  needs its own still-image decoding path or a separately reviewed shared
+  service.
+- The compositor accepts raster frames only. Motion Studio still needs text
+  and vector-shape rasterization, plus any effect processing in its own render
+  pipeline.
+- The shared animation evaluator is linear. Motion Studio's editable property
+  curves need richer interpolation behavior, whether in its own evaluator or a
+  later shared contract supported by both consumers.
+- The current compositor always returns an opaque black canvas. Transparent
+  composition/export and color management are not established by the current
+  Motion Studio MVP scope; revisit them only if that scope changes.
+- Composition documents, timelines, import organization, history, autosave,
+  recovery, save/reopen, and export remain Motion Studio responsibilities.
+
 ## Language boundary
 
 These extracted APIs currently use C++ types and CMake targets. That records

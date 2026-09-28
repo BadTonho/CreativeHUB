@@ -621,15 +621,22 @@ std::optional<media::RgbaFrame> FrameCompositor::compose(
     const std::vector<CompositionLayer>& layers,
     FrameCompositionTimings* timings) {
     if (width <= 0 || height <= 0) return std::nullopt;
-    if (static_cast<std::size_t>(width) >
-            std::numeric_limits<std::size_t>::max() / static_cast<std::size_t>(height) / 4) {
+    const auto max_size_t_value = std::numeric_limits<std::size_t>::max();
+    if (width > std::numeric_limits<int>::max() / 4 ||
+        static_cast<std::uintmax_t>(width) >
+            static_cast<std::uintmax_t>(max_size_t_value) / 4U) {
         return std::nullopt;
     }
+    const auto output_stride = static_cast<std::size_t>(width) * 4U;
+    const auto output_height = static_cast<std::size_t>(height);
+    if (output_stride > max_size_t_value / output_height) return std::nullopt;
+    const auto output_byte_count = output_stride * output_height;
 
     media::RgbaFrame output;
+    if (output_byte_count > output.rgba_pixels.max_size()) return std::nullopt;
     output.width = width;
     output.height = height;
-    output.stride = width * 4;
+    output.stride = static_cast<int>(output_stride);
     using Clock = std::chrono::steady_clock;
     if (timings != nullptr) {
         timings->canvas_width = width;
@@ -644,8 +651,7 @@ std::optional<media::RgbaFrame> FrameCompositor::compose(
             CompositionLayerTimings{});
     }
     const auto output_create_started = timings != nullptr ? Clock::now() : Clock::time_point{};
-    output.rgba_pixels.assign(
-        static_cast<std::size_t>(output.stride) * output.height, 0);
+    output.rgba_pixels.assign(output_byte_count, 0);
     if (timings != nullptr) {
         timings->output_buffer_create_nanoseconds =
             elapsedNanoseconds(output_create_started);

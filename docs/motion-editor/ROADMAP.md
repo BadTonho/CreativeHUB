@@ -58,9 +58,10 @@ this readiness work.
 - [ ] Audit the Video Editor's Qt 6, FFmpeg, CPU composition, and OpenGL
   presentation path against the Motion Studio MVP. Record evidence that
   transfers and gaps that remain.
-- [ ] Validate the provisional animation and composition library contracts
-  against the Motion Studio layer and curve workflows; preserve Video Editor
-  regression coverage at the shared-library boundary.
+- [x] Document provisional animation and composition contracts against the
+  Motion Studio layer and curve workflows; preserve Video Editor regression
+  coverage at the shared-library boundary. Contracts remain provisional until
+  Motion Studio has consumer-side regression coverage.
 - [x] Extract the FFmpeg playback session behind a neutral observer boundary;
   preserve Video Editor preview metrics in an application adapter.
 - [ ] Revalidate the applicable existing paths on Windows, macOS, and Linux;
