@@ -16,6 +16,7 @@
 #include <QScrollBar>
 #include <QSizePolicy>
 #include <QSlider>
+#include <QTimer>
 #include <QWheelEvent>
 #include <QVBoxLayout>
 #include <QSignalBlocker>
@@ -863,6 +864,13 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     controls->setContentsMargins(0, 0, 0, 0);
     previous_frame_button_ = new QPushButton(QStringLiteral("Previous frame"), this);
     previous_frame_button_->setObjectName(QStringLiteral("motion-timeline-previous-frame"));
+    play_pause_button_ = new QPushButton(QStringLiteral("Play"), this);
+    play_pause_button_->setObjectName(QStringLiteral("motion-timeline-play-pause"));
+    play_pause_button_->setToolTip(QStringLiteral("Play or pause the composition"));
+    loop_button_ = new QPushButton(QStringLiteral("Loop"), this);
+    loop_button_->setObjectName(QStringLiteral("motion-timeline-loop"));
+    loop_button_->setCheckable(true);
+    loop_button_->setToolTip(QStringLiteral("Restart playback from frame 0 at the end"));
     display_mode_combo_ = new QComboBox(this);
     display_mode_combo_->setObjectName(QStringLiteral("motion-timeline-display-mode"));
     display_mode_combo_->addItem(QStringLiteral("Time"),
@@ -893,6 +901,8 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     next_frame_button_ = new QPushButton(QStringLiteral("Next frame"), this);
     next_frame_button_->setObjectName(QStringLiteral("motion-timeline-next-frame"));
     controls->addWidget(previous_frame_button_);
+    controls->addWidget(play_pause_button_);
+    controls->addWidget(loop_button_);
     controls->addWidget(display_mode_combo_);
     controls->addWidget(frame_label_);
     controls->addStretch(1);
@@ -928,8 +938,20 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     horizontal_scroll_bar_->setPageStep(detail::kTimelineScrollResolution);
     layout->addWidget(horizontal_scroll_bar_);
 
+    playback_timer_ = new QTimer(this);
+    playback_timer_->setObjectName(QStringLiteral("motion-timeline-playback-timer"));
+    playback_timer_->setTimerType(Qt::PreciseTimer);
+    connect(playback_timer_, &QTimer::timeout, this, [this] { playbackTick(); });
+
     connect(previous_frame_button_, &QPushButton::clicked, this, [this] {
         seekToFrame(current_frame_ - (current_frame_ > 0 ? 1 : 0));
+    });
+    connect(play_pause_button_, &QPushButton::clicked, this, [this] {
+        if (playing_) pausePlayback();
+        else startPlayback();
+    });
+    connect(loop_button_, &QPushButton::toggled, this, [this](bool enabled) {
+        loop_enabled_ = enabled;
     });
     connect(next_frame_button_, &QPushButton::clicked, this, [this] {
         if (current_frame_ < visible_end_frame_) {
@@ -985,8 +1007,16 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
 void TimelineNavigator::setCompositionTiming(
     model::FrameRate frame_rate)
 {
+    pausePlayback(false);
     frame_rate_ = frame_rate;
     current_frame_ = 0;
+    playback_start_frame_ = 0;
+    playback_end_frame_exclusive_ = 0;
+    loop_enabled_ = false;
+    {
+        const QSignalBlocker blocker(loop_button_);
+        loop_button_->setChecked(false);
+    }
     display_mode_ = TimelineDisplayMode::Time;
     {
         const QSignalBlocker blocker(display_mode_combo_);
@@ -1010,6 +1040,16 @@ void TimelineNavigator::setCurrentFrame(std::int64_t frame)
 std::int64_t TimelineNavigator::currentFrame() const noexcept
 {
     return current_frame_;
+}
+
+bool TimelineNavigator::isPlaying() const noexcept
+{
+    return playing_;
+}
+
+bool TimelineNavigator::isLoopEnabled() const noexcept
+{
+    return loop_enabled_;
 }
 
 std::int64_t TimelineNavigator::visibleEndFrame() const noexcept
@@ -1059,6 +1099,8 @@ void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& la
 {
     std::vector<LayerRow> rows;
     rows.reserve(layers.size());
+    playback_end_frame_exclusive_ = 0;
+    const auto maximum_frame = std::numeric_limits<std::int64_t>::max();
     for (auto layer = layers.rbegin(); layer != layers.rend(); ++layer) {
         rows.push_back(LayerRow{
             layer->id,
@@ -1068,10 +1110,26 @@ void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& la
             layer->timeline_start_frame,
             layer->duration_frames,
             layer->maximum_timeline_duration_frames});
+        if (layer->timeline_start_frame >= 0 && layer->duration_frames > 0) {
+            const auto end_frame = layer->duration_frames >
+                    maximum_frame - layer->timeline_start_frame
+                ? maximum_frame
+                : layer->timeline_start_frame + layer->duration_frames;
+            playback_end_frame_exclusive_ = std::max(
+                playback_end_frame_exclusive_, end_frame);
+        }
     }
     auto* row_widget = static_cast<LayerRowsWidget*>(layer_rows_);
     row_widget->setRows(std::move(rows));
+    if (playing_ && (playback_end_frame_exclusive_ == 0 ||
+        current_frame_ >= playback_end_frame_exclusive_ - 1)) {
+        pausePlayback(false);
+        if (playback_end_frame_exclusive_ > 0) {
+            setPlayheadFrame(playback_end_frame_exclusive_ - 1);
+        }
+    }
     updateViewWidgets();
+    updateControls();
 }
 
 void TimelineNavigator::setSelectedLayerId(model::LayerId id)
@@ -1123,8 +1181,107 @@ void TimelineNavigator::setLayerRemoveHandler(
 
 void TimelineNavigator::seekToFrame(std::int64_t frame)
 {
+    if (playing_) pausePlayback(false);
     const auto bounded_frame = std::clamp(frame, std::int64_t{0}, visible_end_frame_);
+    setPlayheadFrame(bounded_frame);
+}
+
+void TimelineNavigator::startPlayback()
+{
+    if (playing_ || playback_end_frame_exclusive_ <= 0 ||
+        frame_rate_.numerator <= 0 || frame_rate_.denominator <= 0) {
+        updateControls();
+        return;
+    }
+
+    if (current_frame_ >= playback_end_frame_exclusive_ - 1) {
+        setPlayheadFrame(0);
+    }
+    playback_start_frame_ = current_frame_;
+    playback_clock_.start();
+    const auto frame_interval_ms = static_cast<int>(std::clamp(
+        std::ceil(1000.0L * static_cast<long double>(frame_rate_.denominator) /
+                  static_cast<long double>(frame_rate_.numerator)),
+        1.0L, static_cast<long double>(std::numeric_limits<int>::max())));
+    playing_ = true;
+    playback_timer_->start(frame_interval_ms);
+    updateControls();
+}
+
+void TimelineNavigator::pausePlayback(bool update_to_clock)
+{
+    if (!playing_) return;
+
+    const auto frame_before_pause = current_frame_;
+    std::int64_t target_frame = current_frame_;
+    if (update_to_clock && playback_end_frame_exclusive_ > 0) {
+        const auto elapsed_frames = detail::framesElapsedForNanoseconds(
+            playback_clock_.nsecsElapsed(),
+            frame_rate_.numerator,
+            frame_rate_.denominator);
+        if (loop_enabled_) {
+            target_frame = detail::loopFrameForElapsed(
+                playback_start_frame_, elapsed_frames, playback_end_frame_exclusive_);
+        } else {
+            const auto frames_until_end = playback_end_frame_exclusive_ - playback_start_frame_;
+            target_frame = elapsed_frames >= frames_until_end
+                ? playback_end_frame_exclusive_ - 1
+                : playback_start_frame_ + elapsed_frames;
+        }
+    }
+
+    playing_ = false;
+    playback_timer_->stop();
+    setPlayheadFrame(target_frame);
+    if (current_frame_ == frame_before_pause) {
+        // The active playback decode may still be in flight and will be
+        // discarded once playback stops. Request the frozen frame again even
+        // when the timer did not advance the playhead since its last tick.
+        emit currentFrameChanged(static_cast<qint64>(current_frame_));
+    }
+    updateControls();
+}
+
+void TimelineNavigator::playbackTick()
+{
+    if (!playing_ || playback_end_frame_exclusive_ <= 0) return;
+    const auto elapsed_frames = detail::framesElapsedForNanoseconds(
+        playback_clock_.nsecsElapsed(),
+        frame_rate_.numerator,
+        frame_rate_.denominator);
+
+    std::int64_t target_frame = 0;
+    bool reached_end = false;
+    if (loop_enabled_) {
+        target_frame = detail::loopFrameForElapsed(
+            playback_start_frame_, elapsed_frames, playback_end_frame_exclusive_);
+    } else {
+        const auto frames_until_end = playback_end_frame_exclusive_ - playback_start_frame_;
+        reached_end = elapsed_frames >= frames_until_end;
+        target_frame = reached_end
+            ? playback_end_frame_exclusive_ - 1
+            : playback_start_frame_ + elapsed_frames;
+    }
+
+    const auto frame_before_tick = current_frame_;
+    if (reached_end) {
+        playing_ = false;
+        playback_timer_->stop();
+    }
+    setPlayheadFrame(target_frame);
+    if (reached_end && current_frame_ == frame_before_tick) {
+        emit currentFrameChanged(static_cast<qint64>(current_frame_));
+    }
+    updateControls();
+}
+
+void TimelineNavigator::setPlayheadFrame(std::int64_t frame)
+{
+    const auto bounded_frame = std::max<std::int64_t>(0, frame);
+    ensureFrameInNavigationRange(bounded_frame);
     if (bounded_frame == current_frame_) {
+        updateViewWidgets();
+        updateControls();
         return;
     }
 
@@ -1135,8 +1292,18 @@ void TimelineNavigator::seekToFrame(std::int64_t frame)
     emit currentFrameChanged(static_cast<qint64>(current_frame_));
 }
 
+void TimelineNavigator::ensureFrameInNavigationRange(std::int64_t frame)
+{
+    const auto extended_end = detail::extendRangeEndToInclude(
+        visible_end_frame_, frame, framesPerHour(frame_rate_));
+    if (extended_end == visible_end_frame_) return;
+    visible_end_frame_ = extended_end;
+    updateHorizontalScrollBar();
+}
+
 void TimelineNavigator::extendViewByOneHour() noexcept
 {
+    if (playing_) pausePlayback(false);
     const auto extended_end = detail::saturatingFrameAdd(
         visible_end_frame_, framesPerHour(frame_rate_));
     if (extended_end == visible_end_frame_) {
@@ -1287,6 +1454,9 @@ void TimelineNavigator::updateControls()
     frame_rate_label_->setText(QStringLiteral("FPS: %1").arg(formatFrameRate(frame_rate_)));
     previous_frame_button_->setEnabled(current_frame_ > 0);
     next_frame_button_->setEnabled(current_frame_ < visible_end_frame_);
+    play_pause_button_->setText(playing_ ? QStringLiteral("Pause") : QStringLiteral("Play"));
+    play_pause_button_->setEnabled(playing_ || playback_end_frame_exclusive_ > 0);
+    loop_button_->setEnabled(playing_ || playback_end_frame_exclusive_ > 0);
     zoom_out_button_->setEnabled(zoom_level_index_ > 0);
     zoom_in_button_->setEnabled(
         zoom_level_index_ < static_cast<int>(detail::kTimelineZoomLevels.size()) - 1);

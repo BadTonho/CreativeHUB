@@ -258,7 +258,7 @@ void MainWindow::createWorkspace()
         requestPreview();
     });
     connect(timeline_, &TimelineNavigator::currentFrameChanged,
-            this, [this] { requestPreview(); });
+            this, [this] { requestPreview(timeline_ != nullptr && timeline_->isPlaying()); });
 
     workspace_->addWidget(media_pool_);
     workspace_->addWidget(viewer_);
@@ -277,9 +277,16 @@ void MainWindow::createWorkspace()
     empty_state_new_composition_button_ = nullptr;
 
     preview_renderer_ = std::make_unique<PreviewRenderer>(this,
-        [this](std::uint64_t generation, creative_suite::media::RgbaFramePtr frame) {
-            if (preview_renderer_ && generation == preview_renderer_->generation() &&
-                viewer_ != nullptr) {
+        [this](std::uint64_t generation,
+               PreviewRequestMode mode,
+               std::uint64_t cancellation_generation,
+               creative_suite::media::RgbaFramePtr frame) {
+            const bool may_present = preview_renderer_ &&
+                preview_renderer_->canPresentResult(
+                    generation, mode, cancellation_generation) &&
+                (mode != PreviewRequestMode::Playback ||
+                 (timeline_ != nullptr && timeline_->isPlaying()));
+            if (may_present && viewer_ != nullptr) {
                 viewer_->setRenderedFrame(std::move(frame));
             }
         });
@@ -455,7 +462,7 @@ void MainWindow::handleMediaDrop(const std::filesystem::path& path,
     requestPreview();
 }
 
-void MainWindow::requestPreview()
+void MainWindow::requestPreview(bool playback_tick)
 {
     if (!document_ || !preview_renderer_ || !media_pool_ || !timeline_) return;
     PreviewRequest request;
@@ -479,7 +486,9 @@ void MainWindow::requestPreview()
         }
         request.layers.push_back(std::move(snapshot));
     }
-    (void)preview_renderer_->submit(std::move(request));
+    (void)preview_renderer_->submit(
+        std::move(request),
+        playback_tick ? PreviewRequestMode::Playback : PreviewRequestMode::Interactive);
 }
 
 } // namespace motion::ui

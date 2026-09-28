@@ -119,4 +119,71 @@ inline constexpr int kTimelineScrollResolution = 1'000'000;
     return frame > maximum - increment ? maximum : frame + increment;
 }
 
+[[nodiscard]] inline std::int64_t framesElapsedForNanoseconds(
+    std::int64_t elapsed_nanoseconds,
+    std::int64_t frame_rate_numerator,
+    std::int64_t frame_rate_denominator) noexcept
+{
+    if (elapsed_nanoseconds <= 0 || frame_rate_numerator <= 0 ||
+        frame_rate_denominator <= 0) {
+        return 0;
+    }
+
+    constexpr std::int64_t nanoseconds_per_second = 1'000'000'000;
+    const auto maximum = std::numeric_limits<std::int64_t>::max();
+    if (frame_rate_denominator > maximum / nanoseconds_per_second) return maximum;
+
+    const auto whole_seconds = elapsed_nanoseconds / nanoseconds_per_second;
+    const auto remaining_nanoseconds = elapsed_nanoseconds % nanoseconds_per_second;
+    const auto grouped_seconds = whole_seconds / frame_rate_denominator;
+    if (grouped_seconds > maximum / frame_rate_numerator) return maximum;
+    auto frames = grouped_seconds * frame_rate_numerator;
+
+    const auto remainder_seconds = whole_seconds % frame_rate_denominator;
+    if (remainder_seconds >
+        (maximum - remaining_nanoseconds) / nanoseconds_per_second) {
+        return maximum;
+    }
+    const auto remainder_nanoseconds =
+        remainder_seconds * nanoseconds_per_second + remaining_nanoseconds;
+    if (remainder_nanoseconds > maximum / frame_rate_numerator) return maximum;
+    const auto fractional_frames = (remainder_nanoseconds * frame_rate_numerator) /
+        (frame_rate_denominator * nanoseconds_per_second);
+    return fractional_frames > maximum - frames ? maximum : frames + fractional_frames;
+}
+
+[[nodiscard]] inline std::int64_t extendRangeEndToInclude(
+    std::int64_t current_end_frame,
+    std::int64_t target_frame,
+    std::int64_t extension_frames) noexcept
+{
+    if (target_frame <= current_end_frame || extension_frames <= 0) {
+        return current_end_frame;
+    }
+
+    const auto distance = target_frame - current_end_frame;
+    const auto complete_extensions = distance / extension_frames;
+    const auto extension_count = complete_extensions +
+        (distance % extension_frames == 0 ? 0 : 1);
+    const auto maximum = std::numeric_limits<std::int64_t>::max();
+    const auto available_extensions = (maximum - current_end_frame) / extension_frames;
+    if (extension_count > available_extensions) return maximum;
+    return current_end_frame + extension_count * extension_frames;
+}
+
+[[nodiscard]] inline std::int64_t loopFrameForElapsed(
+    std::int64_t start_frame,
+    std::int64_t elapsed_frames,
+    std::int64_t end_frame_exclusive) noexcept
+{
+    if (end_frame_exclusive <= 0) return 0;
+    const auto bounded_start = std::clamp(
+        start_frame, std::int64_t{0}, end_frame_exclusive - 1);
+    const auto offset = std::max<std::int64_t>(0, elapsed_frames) % end_frame_exclusive;
+    const auto distance_to_wrap = end_frame_exclusive - offset;
+    return bounded_start >= distance_to_wrap
+        ? bounded_start - distance_to_wrap
+        : bounded_start + offset;
+}
+
 } // namespace motion::ui::detail

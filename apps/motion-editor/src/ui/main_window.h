@@ -44,7 +44,7 @@ private:
     void handleMediaDrop(const std::filesystem::path& path,
                          std::int64_t start_frame,
                          model::LayerId before_layer_id);
-    void requestPreview();
+    void requestPreview(bool playback_tick = false);
 
     std::optional<model::CompositionDocument> document_;
     QLabel* empty_state_ = nullptr;

@@ -396,7 +396,151 @@ int main(int argc, char* argv[])
     const auto maximum_frame = std::numeric_limits<std::int64_t>::max();
     require(motion::ui::detail::saturatingFrameAdd(maximum_frame - 2, 10) == maximum_frame,
             "range extension arithmetic saturates at the signed 64-bit frame limit");
+    require(motion::ui::detail::framesElapsedForNanoseconds(1'000'000'000, 24, 1) == 24 &&
+                motion::ui::detail::framesElapsedForNanoseconds(
+                    1'001'000'000, 30000, 1001) == 30 &&
+                motion::ui::detail::framesElapsedForNanoseconds(
+                    std::numeric_limits<std::int64_t>::max(), 120, 1) > 0,
+            "the playback clock maps monotonic nanoseconds to exact integer and fractional frames");
+    require(motion::ui::detail::loopFrameForElapsed(5, 5, 10) == 0 &&
+                motion::ui::detail::loopFrameForElapsed(7, 5, 10) == 2 &&
+                motion::ui::detail::extendRangeEndToInclude(9, 20, 10) == 29 &&
+                motion::ui::detail::extendRangeEndToInclude(59, maximum_frame, 60) ==
+                    maximum_frame,
+            "loop position and playback range extension stay bounded without overflow");
     frame_rate_range_check.hide();
+
+    motion::ui::TimelineNavigator playback_check;
+    playback_check.resize(1000, 280);
+    playback_check.show();
+    playback_check.setCompositionTiming({60, 1});
+    auto* playback_button = findWidget<QPushButton>(
+        &playback_check, "motion-timeline-play-pause");
+    auto* loop_button = findWidget<QPushButton>(
+        &playback_check, "motion-timeline-loop");
+    require(!playback_button->isEnabled() && !loop_button->isEnabled() &&
+                !loop_button->isChecked(),
+            "playback is unavailable without timeline layers and Loop defaults off");
+    motion::model::CompositionLayer playback_layer{};
+    playback_layer.id = 1;
+    playback_layer.kind = motion::model::LayerKind::Video;
+    playback_layer.name = "Playback fixture";
+    playback_layer.duration_frames = 8;
+    playback_check.setLayers({playback_layer});
+    int loop_wrap_count = 0;
+    QObject::connect(
+        &playback_check,
+        &motion::ui::TimelineNavigator::currentFrameChanged,
+        &playback_check,
+        [&loop_wrap_count](qint64 frame) {
+            if (frame == 0) ++loop_wrap_count;
+        });
+    require(playback_button->isEnabled() && loop_button->isEnabled(),
+            "adding a timed visual layer enables Play and Loop");
+
+    playback_check.setCurrentFrame(1);
+    playback_button->click();
+    require(playback_check.isPlaying() &&
+                playback_button->text() == QStringLiteral("Pause") &&
+                playback_check.currentFrame() == 1,
+            "Play starts from the current playhead and changes to Pause");
+    require(waitFor([&] { return playback_check.currentFrame() >= 3; }, 250),
+            "the exact-rate playback clock advances the playhead");
+    playback_button->click();
+    require(!playback_check.isPlaying() &&
+                playback_button->text() == QStringLiteral("Play"),
+            "Pause freezes playback and restores the Play label");
+    const auto paused_frame = playback_check.currentFrame();
+    QThread::msleep(30);
+    application.processEvents();
+    require(playback_check.currentFrame() == paused_frame,
+            "the playhead remains fixed while paused");
+
+    playback_button->click();
+    require(waitFor([&] { return playback_check.currentFrame() > paused_frame; }, 200),
+            "resuming advances from the paused frame");
+    if (playback_check.isPlaying()) playback_button->click();
+
+    playback_button->click();
+    playback_check.setCurrentFrame(2);
+    require(!playback_check.isPlaying() && playback_check.currentFrame() == 2,
+            "manual seeking pauses playback at the requested frame");
+    playback_check.setCurrentFrame(0);
+    playback_button->click();
+    require(waitFor([&] {
+        return !playback_check.isPlaying() && playback_check.currentFrame() == 7;
+    }, 250), "non-looping playback stops on the last frame of the furthest layer");
+    playback_button->click();
+    require(playback_check.isPlaying() && playback_check.currentFrame() == 0,
+            "Play at the end restarts from frame zero");
+    loop_button->setChecked(true);
+    require(playback_check.isLoopEnabled(), "the Loop control enables wraparound");
+    require(waitFor([&] {
+        return playback_check.isPlaying() && playback_check.currentFrame() >= 5;
+    }, 250), "looping playback reaches the end of its short test range");
+    const auto wraps_before_restart = loop_wrap_count;
+    require(waitFor([&] {
+        return playback_check.isPlaying() && loop_wrap_count > wraps_before_restart;
+    }, 250), "looping playback wraps to frame zero and continues");
+    loop_button->setChecked(false);
+    require(waitFor([&] {
+        return !playback_check.isPlaying() && playback_check.currentFrame() == 7;
+    }, 250), "turning Loop off makes playback stop on the final layer frame");
+    playback_check.setCompositionTiming({60, 1});
+    playback_check.setLayers({});
+    require(!playback_check.isPlaying() && !loop_button->isChecked() &&
+                !playback_button->isEnabled(),
+            "new composition timing stops playback, clears Loop, and disables Play without layers");
+    playback_check.hide();
+
+    motion::ui::TimelineNavigator pause_preview_check;
+    pause_preview_check.resize(1000, 280);
+    pause_preview_check.show();
+    pause_preview_check.setCompositionTiming({60, 1});
+    motion::model::CompositionLayer pause_preview_layer{};
+    pause_preview_layer.id = 3;
+    pause_preview_layer.kind = motion::model::LayerKind::Image;
+    pause_preview_layer.name = "Pause preview fixture";
+    pause_preview_layer.duration_frames = 10;
+    pause_preview_check.setLayers({pause_preview_layer});
+    int pause_preview_requests = 0;
+    QObject::connect(
+        &pause_preview_check,
+        &motion::ui::TimelineNavigator::currentFrameChanged,
+        &pause_preview_check,
+        [&pause_preview_requests](qint64) { ++pause_preview_requests; });
+    auto* pause_preview_button = findWidget<QPushButton>(
+        &pause_preview_check, "motion-timeline-play-pause");
+    pause_preview_button->click();
+    pause_preview_button->click();
+    require(!pause_preview_check.isPlaying() && pause_preview_check.currentFrame() == 0 &&
+                pause_preview_requests == 1,
+            "pausing requests a fresh preview even when the playhead did not advance");
+    pause_preview_check.hide();
+
+    motion::ui::TimelineNavigator extended_playback_check;
+    extended_playback_check.resize(1000, 280);
+    extended_playback_check.show();
+    extended_playback_check.setCompositionTiming({240, 1});
+    const auto playback_hour_frames = 240 * 60 * 60;
+    const auto playback_initial_end = extended_playback_check.visibleEndFrame();
+    motion::model::CompositionLayer long_playback_layer{};
+    long_playback_layer.id = 2;
+    long_playback_layer.kind = motion::model::LayerKind::Video;
+    long_playback_layer.name = "Long playback fixture";
+    long_playback_layer.duration_frames = playback_hour_frames + 100;
+    extended_playback_check.setLayers({long_playback_layer});
+    extended_playback_check.setCurrentFrame(playback_initial_end);
+    findWidget<QPushButton>(&extended_playback_check, "motion-timeline-play-pause")->click();
+    require(waitFor([&] {
+        return extended_playback_check.currentFrame() > playback_initial_end;
+    }, 250), "playback advances beyond the initial navigation range");
+    require(extended_playback_check.visibleEndFrame() ==
+                playback_initial_end + playback_hour_frames &&
+                extended_playback_check.viewStartFrame() > 0,
+            "playback extends the navigation range by an hour and follows the playhead");
+    findWidget<QPushButton>(&extended_playback_check, "motion-timeline-play-pause")->click();
+    extended_playback_check.hide();
 
     motion::ui::NewCompositionDialog dialog;
     auto* dialog_width = findWidget<QLineEdit>(&dialog, "motion-canvas-width");
@@ -635,6 +779,30 @@ int main(int argc, char* argv[])
     }),
             "video frame decoding runs asynchronously for the composition preview");
     const auto video_preview_frame = viewer->renderedFrame();
+    auto* main_play_pause = findWidget<QPushButton>(&window, "motion-timeline-play-pause");
+    auto* main_loop_button = findWidget<QPushButton>(&window, "motion-timeline-loop");
+    require(!main_loop_button->isChecked() &&
+                window.compositionDocument()->layers().back().duration_frames > 2,
+            "the imported video provides multiple frames and Loop begins disabled");
+    const auto playback_layers_before = window.compositionDocument()->layers();
+    main_play_pause->click();
+    require(waitFor([&] {
+        return timeline->currentFrame() > 120 &&
+               viewer->renderedFrame() != video_preview_frame;
+    }, 1500), "continuous playback decodes and presents advancing video frames");
+    main_play_pause->click();
+    const auto playback_layers_after = window.compositionDocument()->layers();
+    require(!timeline->isPlaying() &&
+                playback_layers_before.size() == playback_layers_after.size() &&
+                std::equal(playback_layers_before.begin(), playback_layers_before.end(),
+                    playback_layers_after.begin(), [](const auto& before, const auto& after) {
+                        return before.id == after.id &&
+                               before.timeline_start_frame == after.timeline_start_frame &&
+                               before.duration_frames == after.duration_frames &&
+                               before.transform == after.transform &&
+                               before.keyframes == after.keyframes;
+                    }),
+            "playing and pausing leaves the document's layer timing and transforms unchanged");
     timeline->setCurrentFrame(0);
     timeline->setCurrentFrame(120);
     timeline->setCurrentFrame(0);

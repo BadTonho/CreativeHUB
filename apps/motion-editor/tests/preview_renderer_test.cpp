@@ -10,6 +10,9 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -17,6 +20,7 @@
 #include <iterator>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -91,9 +95,14 @@ int main(int argc, char* argv[])
     creative_suite::media::RgbaFramePtr applied_frame;
     std::vector<std::pair<std::uint64_t, creative_suite::media::RgbaFramePtr>> results;
     motion::ui::PreviewRenderer renderer(&result_receiver,
-        [&](std::uint64_t generation, creative_suite::media::RgbaFramePtr frame) {
+        [&](std::uint64_t generation,
+            motion::ui::PreviewRequestMode mode,
+            std::uint64_t,
+            creative_suite::media::RgbaFramePtr frame) {
             results.emplace_back(generation, frame);
-            if (renderer_ptr != nullptr && generation == renderer_ptr->generation()) {
+            if (renderer_ptr != nullptr &&
+                mode == motion::ui::PreviewRequestMode::Interactive &&
+                generation == renderer_ptr->generation()) {
                 applied_generation = generation;
                 applied_frame = std::move(frame);
             }
@@ -141,6 +150,84 @@ int main(int argc, char* argv[])
                 applied_frame != nullptr,
             "preview rendering continues after an unavailable source file");
     renderer.stopAndWait();
+
+    QObject playback_receiver;
+    motion::ui::PreviewRenderer* playback_renderer_ptr = nullptr;
+    std::atomic<int> playback_slow_render_count{0};
+    std::atomic<bool> playback_was_cancelled{false};
+    std::uint64_t playback_applied_generation = 0;
+    creative_suite::media::RgbaFramePtr playback_applied_frame;
+    std::vector<std::uint8_t> playback_presented_colors;
+    motion::ui::PreviewRenderer playback_renderer(
+        &playback_receiver,
+        [&](std::uint64_t generation,
+            motion::ui::PreviewRequestMode mode,
+            std::uint64_t,
+            creative_suite::media::RgbaFramePtr frame) {
+            if (playback_renderer_ptr != nullptr &&
+                (mode == motion::ui::PreviewRequestMode::Playback ||
+                 generation == playback_renderer_ptr->generation())) {
+                playback_applied_generation = generation;
+                playback_applied_frame = std::move(frame);
+                if (playback_applied_frame != nullptr) {
+                    playback_presented_colors.push_back(
+                        playback_applied_frame->rgba_pixels[0]);
+                }
+            }
+        },
+        [&](const motion::ui::PreviewRequest& request,
+            const motion::ui::PreviewRenderer::CancellationPredicate& is_cancelled) {
+            const auto color = request.layers.front().still_frame->rgba_pixels[0];
+            if (color == 240 || color == 200) {
+                ++playback_slow_render_count;
+                for (int step = 0; step < 80; ++step) {
+                    if (is_cancelled()) {
+                        playback_was_cancelled = true;
+                        return creative_suite::media::RgbaFramePtr{};
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+            }
+            if (is_cancelled()) {
+                playback_was_cancelled = true;
+                return creative_suite::media::RgbaFramePtr{};
+            }
+            return solidFrame(color, 0, 0);
+        });
+    playback_renderer_ptr = &playback_renderer;
+
+    const auto first_playback_generation = playback_renderer.submit(
+        imageRequest(solidFrame(240, 0, 0)), motion::ui::PreviewRequestMode::Playback);
+    require(waitFor([&] { return playback_slow_render_count.load() == 1; }),
+            "a deliberately slow playback frame begins rendering");
+    (void)playback_renderer.submit(
+        imageRequest(solidFrame(120, 0, 0)), motion::ui::PreviewRequestMode::Playback);
+    const auto latest_playback_generation = playback_renderer.submit(
+        imageRequest(solidFrame(10, 0, 0)), motion::ui::PreviewRequestMode::Playback);
+    require(latest_playback_generation > first_playback_generation &&
+                waitFor([&] {
+                    return playback_applied_generation == latest_playback_generation;
+                }),
+            "playback coalesces queued frames and eventually renders the newest frame");
+    require(!playback_was_cancelled.load() && playback_applied_frame != nullptr &&
+                playback_applied_frame->rgba_pixels[0] == 10 &&
+                std::find(playback_presented_colors.begin(), playback_presented_colors.end(), 240) !=
+                    playback_presented_colors.end(),
+            "a completed playback frame can display while newer ticks coalesce to the latest frame");
+
+    const auto slow_playback_generation = playback_renderer.submit(
+        imageRequest(solidFrame(200, 0, 0)), motion::ui::PreviewRequestMode::Playback);
+    require(waitFor([&] { return playback_slow_render_count.load() == 2; }),
+            "a second slow playback frame begins rendering");
+    const auto interactive_generation = playback_renderer.submit(
+        imageRequest(solidFrame(30, 0, 0)), motion::ui::PreviewRequestMode::Interactive);
+    require(interactive_generation > slow_playback_generation &&
+                waitFor([&] { return playback_applied_generation == interactive_generation; }),
+            "an interactive seek supersedes active playback work");
+    require(playback_was_cancelled.load() && playback_applied_frame != nullptr &&
+                playback_applied_frame->rgba_pixels[0] == 30,
+            "manual preview requests can cancel playback work and present the seek result");
+    playback_renderer.stopAndWait();
 
     std::cout << "Motion Studio preview renderer tests passed.\n";
     return EXIT_SUCCESS;

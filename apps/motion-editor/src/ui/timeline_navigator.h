@@ -2,6 +2,7 @@
 
 #include "model/composition_document.h"
 
+#include <QElapsedTimer>
 #include <QWidget>
 
 #include <cstddef>
@@ -17,6 +18,7 @@ class QPushButton;
 class QScrollArea;
 class QScrollBar;
 class QSlider;
+class QTimer;
 class QWheelEvent;
 
 namespace motion::ui {
@@ -83,6 +85,8 @@ public:
     void setLayers(const std::vector<model::CompositionLayer>& layers);
     void setSelectedLayerId(model::LayerId id);
     [[nodiscard]] std::int64_t currentFrame() const noexcept;
+    [[nodiscard]] bool isPlaying() const noexcept;
+    [[nodiscard]] bool isLoopEnabled() const noexcept;
     [[nodiscard]] std::int64_t visibleEndFrame() const noexcept;
     [[nodiscard]] double zoomFactor() const noexcept;
     [[nodiscard]] int zoomLevelIndex() const noexcept;
@@ -111,6 +115,11 @@ signals:
 
 private:
     void seekToFrame(std::int64_t frame);
+    void startPlayback();
+    void pausePlayback(bool update_to_clock = true);
+    void playbackTick();
+    void setPlayheadFrame(std::int64_t frame);
+    void ensureFrameInNavigationRange(std::int64_t frame);
     void extendViewByOneHour() noexcept;
     void applyZoomLevel(int index);
     void updateHorizontalScrollBar();
@@ -131,6 +140,8 @@ private:
     TimelineDisplayMode display_mode_ = TimelineDisplayMode::Time;
     QPushButton* previous_frame_button_ = nullptr;
     QPushButton* next_frame_button_ = nullptr;
+    QPushButton* play_pause_button_ = nullptr;
+    QPushButton* loop_button_ = nullptr;
     QPushButton* zoom_out_button_ = nullptr;
     QPushButton* zoom_in_button_ = nullptr;
     QSlider* zoom_slider_ = nullptr;
@@ -142,6 +153,12 @@ private:
     QWidget* layer_rows_ = nullptr;
     QScrollArea* layer_scroll_area_ = nullptr;
     QScrollBar* horizontal_scroll_bar_ = nullptr;
+    QTimer* playback_timer_ = nullptr;
+    QElapsedTimer playback_clock_;
+    std::int64_t playback_start_frame_ = 0;
+    std::int64_t playback_end_frame_exclusive_ = 0;
+    bool playing_ = false;
+    bool loop_enabled_ = false;
 };
 
 } // namespace motion::ui

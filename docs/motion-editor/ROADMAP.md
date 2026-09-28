@@ -120,6 +120,11 @@ the Motion Studio implementation choices are finalized.
   raster layers with the shared CPU compositor. Decode video frames on a
   worker, coalesce rapid seeks, and ignore stale preview generations. Keyframes
   remain stored but are not edited or evaluated.
+- [x] Add Play/Pause and optional Loop controls for continuous visual preview.
+  Advance from a monotonic clock at the exact composition frame rate, stop at
+  the furthest layer end or loop to frame 0, and keep the playhead in view.
+  Playback decode requests coalesce without cancelling an in-flight playback
+  decode; manual seeks still supersede outdated preview work. Audio is omitted.
 - [ ] Add keyframe editing interactions to the timeline.
 - [ ] Add project save/load, versioned formats, undo/redo, autosave, and
   recovery for the first supported composition workflow.
@@ -175,13 +180,19 @@ videos may be shortened and restored up to their source duration. Selection,
 insertion, reordering, visibility, and seeking do not alter layer transforms or
 keyframes.
 
-The current preview displays the cached still-image frame or decodes the nearest
-video frame using the shared `VideoPlaybackSession`, then composites visible
-layers back-to-front with `FrameCompositor`. Decode and composition work runs
-off the UI thread. Newer seek requests supersede queued work, stale generations
-are ignored, and decode errors are logged with source path context without
-stopping the worker. Preview is CPU-only and omits text, shape, audio,
-continuous-playback, source-in-point, and keyframe evaluation.
+The preview displays cached still-image frames or decodes video frames using
+the shared `VideoPlaybackSession`, then composites visible layers back-to-front
+with `FrameCompositor`. Decode and composition work runs off the UI thread.
+Play/Pause follows the exact composition frame rate; Loop is off by default and
+restarts from frame 0 when enabled. Playback stops on the last frame of the
+furthest layer, including hidden layers, and pressing Play at the end restarts
+from frame 0. Manual seeking pauses playback. The monotonic clock remains on
+schedule when rendering falls behind; intermediate preview frames may be
+skipped. A completed frame from the current uninterrupted playback may still be
+presented; manual seeking or replacing the composition invalidates it. Playback
+extends the navigation range by one hour as needed and scrolls to keep the
+playhead visible. This does not set a composition duration. Preview remains
+CPU-only and omits text, shape, audio, source-in-point, and keyframe evaluation.
 
 Manual Windows validation remains pending: verify the centered empty-state
 button opens composition creation and disappears after creation; confirm a
@@ -196,10 +207,12 @@ ruler and layer positions, move and resize clips at multiple zoom levels, and
 extend the range only at its actual end, scrolling there if it is offscreen;
 resize the viewer, Media Pool, inspector, and timeline; replace the composition
 and confirm the pool resets; verify the timeline starts in Time mode, switch to
-Frames and back,
-and confirm the playhead and layer positions do not change; then close the
-application. Keyframe editing, document
-persistence, undo/redo, and export remain open.
+Frames and back, and confirm the playhead and layer positions do not change;
+play and pause a video and confirm a seek pauses it; enable Loop and confirm it
+restarts at frame 0, then disable Loop and confirm playback stops on the
+final layer frame and Play restarts from frame 0; verify playback scrolls and
+extends the navigation range for a long clip; then close the application. Keyframe editing,
+document persistence, undo/redo, and export remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.

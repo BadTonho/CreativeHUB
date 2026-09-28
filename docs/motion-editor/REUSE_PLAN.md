@@ -8,9 +8,10 @@ no dependency on either other application at runtime.
 ## Application ownership
 
 Motion Studio owns its native composition document and format, timeline,
-interface, import workflow, editing history, autosave, recovery, and export
-workflow. It does not use the Video Editor's .csp document, timeline model,
-effects interface, or OfflineExportRenderer.
+playback clock and Play/Pause/Loop controls, interface, import workflow, editing
+history, autosave, recovery, and export workflow. It does not use the Video
+Editor's .csp document, timeline model, effects interface, or
+OfflineExportRenderer.
 
 The Video Editor keeps its project, media organization, timeline editing,
 playback controls, export jobs, and user interface. Its existing
@@ -44,7 +45,7 @@ not depend on Video Editor timecode types or APIs.
 | creative-suite::animation | 2D transform data, keyframe storage, validation, and linear evaluation. It has no timeline or document dependency. | Baseline transform evaluation. Motion Studio owns curve editing and its animation timeline. |
 | creative-suite::composition | CPU composition of raster frames using shared transforms, opacity, and alpha coverage. It has no UI, timeline, or project dependency. | Motion Studio uses it to composite active image and video layers in document order. Text and vector shape rasterization remain app work. |
 | creative-suite::diagnostics | Structured local logging with caller-selected application log directories; the legacy no-argument default remains compatible with the Video Editor. | Reuse with a Motion Studio-specific application identifier and log directory. |
-| creative-suite::video-media | FFmpeg video playback session with a neutral optional DecodeObserver. It depends on FFmpeg and shared diagnostics, not preview UI. | Motion Studio keeps one playback session per source on its preview worker and decodes the source frame for the current timeline position. |
+| creative-suite::video-media | FFmpeg video playback session with a neutral optional DecodeObserver. It depends on FFmpeg and shared diagnostics, not preview UI. | Motion Studio keeps one playback session per source on its preview worker and decodes the source frame for the current timeline position. Its application-owned monotonic clock schedules composition frames; audio remains out of scope. |
 | creative-suite::media-assets | Neutral metadata, canonical-path media catalog, cached first frames, bins, online/offline state, video and still-image decoders, probes, and per-file import processing. The public API uses standard C++ types; its current decoders use FFmpeg and Qt Gui internally. Animated GIF import is rejected. | Populate Motion Studio's in-memory pool with video and still images while keeping its UI and document lifecycle application-owned. |
 
 Each application compiles and packages the shared targets it uses. No editor
@@ -121,10 +122,15 @@ validation.
   video durations can be shortened and restored up to the source length.
 - Preview decode and composition run on a worker thread. The worker coalesces
   pending seeks, keeps video decoder sessions on that worker, and drops stale
-  results by request generation. Decode failures include source path context in
-  the Motion Studio diagnostic log; a failed source does not stop later preview
-  requests. The current preview does not evaluate keyframes or render text,
-  shapes, audio, or continuous playback.
+  results by request generation. During playback it lets the active decode
+  finish while replacing the pending frame with the latest request, so rapid
+  ticks do not repeatedly cancel decoding. A completed frame from the current
+  uninterrupted playback may be presented even if newer ticks have arrived;
+  an interactive seek or composition replacement invalidates it. Decode
+  failures include source path context in the Motion Studio diagnostic log; a
+  failed source does not stop later preview requests. Playback uses the exact
+  composition rate, ends at the furthest layer out-point, and optionally loops
+  from frame 0. It does not evaluate keyframes or render text, shapes, or audio.
 
 ## Language boundary
 
