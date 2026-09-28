@@ -1,24 +1,12 @@
 #pragma once
 
-#include "video_frame.h"
-#include "video_metadata.h"
-
-#include <filesystem>
+#include <creative_suite/media/still_image_decoder.h>
 
 namespace media {
 
-inline constexpr double kStillImageFrameRate = 30.0;
-inline constexpr double kStillImageDurationSeconds = 5.0;
-inline constexpr std::int64_t kStillImageFrameCount = 150;
-
-class StillImageDecoder final {
-public:
-    [[nodiscard]] VideoMetadata probe(const std::filesystem::path& source_path) const;
-    [[nodiscard]] VideoFrame decode_first_frame(
-        const std::filesystem::path& source_path) const;
-
-    [[nodiscard]] static bool supportsPath(
-        const std::filesystem::path& source_path) noexcept;
-};
+using StillImageDecoder = creative_suite::media::StillImageDecoder;
+inline constexpr auto kStillImageFrameRate = creative_suite::media::kStillImageFrameRate;
+inline constexpr auto kStillImageDurationSeconds = creative_suite::media::kStillImageDurationSeconds;
+inline constexpr auto kStillImageFrameCount = creative_suite::media::kStillImageFrameCount;
 
 } // namespace media

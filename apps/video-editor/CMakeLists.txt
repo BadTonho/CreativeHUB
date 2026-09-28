@@ -78,22 +78,18 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/playback/audio_output.h
     src/logging/logger.cpp
     src/logging/logger.h
-    src/media/video_decoder.cpp
     src/media/video_decoder.h
     src/media/video_frame.h
-    src/media/still_image_decoder.cpp
     src/media/still_image_decoder.h
     src/media/audio_frame.h
     src/media/audio_playback.cpp
     src/media/audio_playback.h
     src/media/timeline_audio_mix.cpp
     src/media/timeline_audio_mix.h
-    src/media/media_library.cpp
     src/media/media_library.h
     src/media/video_metadata.h
     src/media/video_playback.cpp
     src/media/video_playback.h
-    src/media/video_probe.cpp
     src/media/video_probe.h
     src/project/project_document.h
     src/project/autosave_manager.cpp
@@ -197,6 +193,7 @@ target_link_libraries(creative-suite-main-editor-core PUBLIC
     creative-suite::diagnostics
     creative-suite::media-frame
     creative-suite::video-media
+    creative-suite::media-assets
 )
 
 if(WIN32)

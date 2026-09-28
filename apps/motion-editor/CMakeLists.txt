@@ -12,6 +12,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/composition_viewer.h
     src/ui/main_window.cpp
     src/ui/main_window.h
+    src/ui/media_pool_widget.cpp
+    src/ui/media_pool_widget.h
     src/ui/new_composition_dialog.cpp
     src/ui/new_composition_dialog.h
     src/ui/timeline_navigator.cpp
@@ -22,6 +24,7 @@ target_include_directories(creative-suite-motion-editor-core PUBLIC
 )
 target_link_libraries(creative-suite-motion-editor-core PUBLIC
     creative-suite::animation
+    creative-suite::media-assets
     Qt6::Widgets
 )
 target_compile_features(creative-suite-motion-editor-core PUBLIC cxx_std_20)
@@ -34,6 +37,7 @@ target_link_libraries(creative-suite-motion-editor PRIVATE
     Qt6::Widgets
 )
 target_compile_features(creative-suite-motion-editor PRIVATE cxx_std_20)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor)
 
 if(MSVC)
     target_compile_options(creative-suite-motion-editor-core PRIVATE /W4 /permissive-)

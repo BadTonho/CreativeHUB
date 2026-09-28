@@ -897,9 +897,9 @@ void MainWindow::refreshLinkedImageTargets() {
     };
 
     for (const auto& item : media_controller_.library().items()) {
-        if (item.metadata.kind == media::MediaKind::Image &&
-            item.image_editor_link.has_value()) {
-            add_target(*item.image_editor_link, item.metadata.source_path,
+        const auto image_link = editor_session_.imageEditorLinkForPath(item.metadata.source_path);
+        if (item.metadata.kind == media::MediaKind::Image && image_link.has_value()) {
+            add_target(*image_link, item.metadata.source_path,
                        std::nullopt, true);
         }
     }
@@ -1120,7 +1120,8 @@ void MainWindow::editSelectedMediaInImageEditor() {
     if (!index.has_value()) return;
     const auto item = media_items_[*index];
     if (item.metadata.kind != media::MediaKind::Image) return;
-    auto link = item.image_editor_link.value_or(media::LinkedImageReference{});
+    const auto existing_link = editor_session_.imageEditorLinkForPath(item.metadata.source_path);
+    auto link = existing_link.value_or(media::LinkedImageReference{});
     if (link.id.empty()) {
         link.id = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
         const auto sidecar = imageEditorSidecarDirectory(item.metadata.source_path);
@@ -1139,7 +1140,7 @@ void MainWindow::editSelectedMediaInImageEditor() {
         return;
     }
     if (!launchLinkedImageEditor(link, item.metadata.source_path)) return;
-    if (!item.image_editor_link.has_value()) {
+    if (!existing_link.has_value()) {
         static_cast<void>(media_controller_.setImageEditorLink(
             item.metadata.source_path, link));
         updateProjectDirtyState();
@@ -1161,6 +1162,7 @@ void MainWindow::editTimelineImageClip(timeline::ClipId clip_id) {
         return;
     }
     const auto media_item = media_controller_.library().items()[media_index];
+    const auto shared_image_link = editor_session_.imageEditorLinkForPath(source_path);
     auto link = clip.image_editor_variant.value_or(media::LinkedImageReference{});
     if (link.id.empty()) {
         link.id = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
@@ -1183,12 +1185,12 @@ void MainWindow::editTimelineImageClip(timeline::ClipId clip_id) {
     const auto snapshot_path = link.document_path.parent_path() / "source.png";
     if (!QFileInfo::exists(pathToQString(snapshot_path))) {
         auto effective_source = source_path;
-        if (media_item.image_editor_link.has_value()) {
+        if (shared_image_link.has_value()) {
             std::error_code output_error;
             if (std::filesystem::is_regular_file(
-                    media_item.image_editor_link->published_output_path,
+                    shared_image_link->published_output_path,
                     output_error) && !output_error) {
-                effective_source = media_item.image_editor_link->published_output_path;
+                effective_source = shared_image_link->published_output_path;
             }
         }
         QString copy_error;
@@ -1238,8 +1240,10 @@ void MainWindow::showMediaContextMenu(const QPoint& position) {
     const auto media_index = from_media_list ? selectedMediaIndex() : std::nullopt;
     if (media_index.has_value()) {
         const auto& selected = media_items_[*media_index];
+        const auto selected_image_link = editor_session_.imageEditorLinkForPath(
+            selected.metadata.source_path);
         if (selected.metadata.kind == media::MediaKind::Image &&
-            (!selected.offline || selected.image_editor_link.has_value())) {
+            (!selected.offline || selected_image_link.has_value())) {
             menu.addSeparator();
             auto* edit_image = menu.addAction("Edit Image in Image Editor");
             connect(edit_image, &QAction::triggered,

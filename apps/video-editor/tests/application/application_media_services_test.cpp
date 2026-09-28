@@ -454,7 +454,8 @@ void testLinkedImageProjectOpenUsesSharedOutputAndClipVariant() {
     require(!media_item.offline && media_item.metadata.kind == media::MediaKind::Image &&
                 media_item.metadata.source_path ==
                     media::MediaLibrary::canonicalPath(missing_source) &&
-                media_item.image_editor_link == shared_link &&
+                prepared.prepared->image_editor_links.at(
+                    media::MediaLibrary::canonicalPath(missing_source)) == shared_link &&
                 framePixel(media_item.first_frame, 1, 1) == QColor(20, 220, 30, 255),
             "Project open did not use the shared output while preserving original media identity.");
     const auto& prepared_clip = prepared.prepared->timeline.tracks.front().clips.front();
@@ -596,7 +597,8 @@ void testLegacyTimelineRateMigrationAndOfflineReconnect() {
     application::EditorSession migrated_session;
     application::ProjectController migrated_controller(migrated_session);
     migrated_controller.commitPrepared(
-        std::move(prepared.media_library), std::move(prepared.timeline),
+        std::move(prepared.media_library), std::move(prepared.image_editor_links),
+        std::move(prepared.timeline),
         project_path, prepared.document);
     require(!migrated_controller.dirty(),
             "Opening a migrated v10 project marked the project dirty.");

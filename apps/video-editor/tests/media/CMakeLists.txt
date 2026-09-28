@@ -2,15 +2,11 @@ add_executable(creative-suite-main-editor-video-decoder-tests
     video_decoder_test.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/logging/logger.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/logging/logger.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/media/video_decoder.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/media/video_decoder.h
     ${VIDEO_EDITOR_SOURCE_DIR}/media/video_frame.h
     ${VIDEO_EDITOR_SOURCE_DIR}/media/video_metadata.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/media/still_image_decoder.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/media/still_image_decoder.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/media/video_probe.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/media/video_probe.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/media/video_playback.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/media/video_playback.h
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/preview_performance_metrics.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/rendering/preview_performance_metrics.h
@@ -28,6 +24,7 @@ target_link_directories(creative-suite-main-editor-video-decoder-tests PRIVATE
 target_link_libraries(creative-suite-main-editor-video-decoder-tests PRIVATE
     Qt6::Gui
     creative-suite::video-media
+    creative-suite::media-assets
     ${FFMPEG_LIBRARIES}
 )
 
@@ -58,7 +55,6 @@ endif()
 
 add_executable(creative-suite-main-editor-media-library-tests
     media_library_test.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/media/media_library.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/media/media_library.h
     ${VIDEO_EDITOR_SOURCE_DIR}/media/video_frame.h
     ${VIDEO_EDITOR_SOURCE_DIR}/media/video_metadata.h
@@ -69,6 +65,9 @@ target_include_directories(creative-suite-main-editor-media-library-tests PRIVAT
 )
 
 target_compile_features(creative-suite-main-editor-media-library-tests PRIVATE cxx_std_20)
+target_link_libraries(creative-suite-main-editor-media-library-tests PRIVATE
+    creative-suite::media-assets
+)
 
 if(MSVC)
     target_compile_options(creative-suite-main-editor-media-library-tests PRIVATE /W4 /permissive-)

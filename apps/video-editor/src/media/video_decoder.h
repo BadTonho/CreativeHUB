@@ -1,14 +1,8 @@
 #pragma once
 
-#include "video_frame.h"
-
-#include <filesystem>
+#include <creative_suite/media/video_decoder.h>
 
 namespace media {
-
-class VideoDecoder final {
-public:
-    VideoFrame decode_first_frame(const std::filesystem::path& source_path) const;
-};
+using VideoDecoder = creative_suite::media::VideoDecoder;
 
 } // namespace media

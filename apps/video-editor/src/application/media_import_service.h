@@ -2,25 +2,18 @@
 
 #include "media/media_library.h"
 
+#include <creative_suite/media/media_importer.h>
+
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
-#include <optional>
-#include <string>
 #include <vector>
 
 namespace application {
 
-enum class MediaImportFileStatus { Imported, Failed, Discarded };
-
-struct MediaImportFileResult {
-    std::filesystem::path path;
-    MediaImportFileStatus status = MediaImportFileStatus::Failed;
-    std::optional<media::MediaItem> item;
-    std::optional<int> error_code;
-    std::string cause;
-};
+using MediaImportFileStatus = creative_suite::media::MediaImportFileStatus;
+using MediaImportFileResult = creative_suite::media::MediaImportFileResult;
 
 struct MediaImportBatchResult {
     std::uint64_t work_id = 0;
@@ -32,11 +25,8 @@ struct MediaImportBatchResult {
 
 class MediaImportService final {
 public:
-    using Processor = std::function<media::MediaItem(const std::filesystem::path&)>;
-    using Progress = std::function<void(
-        std::size_t,
-        std::size_t,
-        const std::filesystem::path&)>;
+    using Processor = creative_suite::media::MediaImporter::Processor;
+    using Progress = creative_suite::media::MediaImporter::Progress;
 
     MediaImportService();
     explicit MediaImportService(Processor processor);
@@ -50,7 +40,7 @@ public:
         Progress progress = {}) const;
 
 private:
-    Processor processor_;
+    creative_suite::media::MediaImporter importer_;
 };
 
 } // namespace application

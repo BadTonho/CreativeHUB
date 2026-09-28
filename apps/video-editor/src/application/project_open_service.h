@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstddef>
 #include <filesystem>
+#include <map>
 #include <functional>
 #include <optional>
 #include <string>
@@ -27,6 +28,7 @@ struct ProjectOpenIssue {
 
 struct PreparedProject {
     media::MediaLibrary media_library;
+    std::map<std::filesystem::path, media::LinkedImageReference> image_editor_links;
     timeline::TimelineModel::Snapshot timeline;
     std::optional<std::filesystem::path> active_project_path;
     project::ProjectDocument document;

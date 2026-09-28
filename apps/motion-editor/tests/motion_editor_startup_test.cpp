@@ -24,7 +24,8 @@ int main(int argc, char* argv[])
         || empty_state->text() != QStringLiteral("No composition open")
         || new_composition_button == nullptr
         || new_composition_button->text() != QStringLiteral("New Composition...")
-        || !new_composition_button->isVisible()) {
+        || !new_composition_button->isVisible()
+        || window.findChild<QWidget*>(QStringLiteral("motion-media-pool")) != nullptr) {
         std::cerr << "Motion Studio did not start maximized in its empty state.\n";
         return EXIT_FAILURE;
     }

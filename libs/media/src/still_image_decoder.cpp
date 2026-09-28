@@ -1,8 +1,7 @@
-#include "still_image_decoder.h"
+#include <creative_suite/media/still_image_decoder.h>
 
-#include "../logging/logger.h"
-#include "video_decoder.h"
-#include "video_probe.h"
+#include <creative_suite/diagnostics/logger.h>
+#include <creative_suite/media/video_probe.h>
 
 #include <QImage>
 #include <QImageReader>
@@ -14,7 +13,7 @@
 #include <string>
 #include <system_error>
 
-namespace media {
+namespace creative_suite::media {
 namespace {
 
 QString pathToQString(const std::filesystem::path& path) {
@@ -133,8 +132,8 @@ VideoMetadata StillImageDecoder::probe(
         metadata.audio.reset();
         return metadata;
     } catch (const MediaError& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error,
+        diagnostics::Logger::instance().log(
+            diagnostics::Level::Error,
             "media",
             "image_probe",
             error.what(),
@@ -155,8 +154,8 @@ VideoFrame StillImageDecoder::decode_first_frame(
         // runtime Qt image plugin set lacks WebP or TIFF support.
         return VideoDecoder{}.decode_first_frame(source_path);
     } catch (const MediaError& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error,
+        diagnostics::Logger::instance().log(
+            diagnostics::Level::Error,
             "media",
             "image_decode_first_frame",
             error.what(),
@@ -165,4 +164,4 @@ VideoFrame StillImageDecoder::decode_first_frame(
     }
 }
 
-} // namespace media
+} // namespace creative_suite::media

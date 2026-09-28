@@ -36,7 +36,6 @@ add_executable(creative-suite-main-editor-timeline-command-service-tests
     ${VIDEO_EDITOR_SOURCE_DIR}/application/media_controller.h
     ${VIDEO_EDITOR_SOURCE_DIR}/application/timeline_command_service.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/application/timeline_command_service.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/media/media_library.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/media/media_library.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_clip_edge_command.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_clip_edge_command.h
@@ -52,7 +51,12 @@ target_include_directories(creative-suite-main-editor-timeline-command-service-t
     ${VIDEO_EDITOR_SOURCE_DIR}
 )
 
+target_link_libraries(creative-suite-main-editor-timeline-command-service-tests PRIVATE
+    creative-suite::media-assets
+)
+
 target_compile_features(creative-suite-main-editor-timeline-command-service-tests PRIVATE cxx_std_20)
+creative_suite_deploy_media_runtime(creative-suite-main-editor-timeline-command-service-tests)
 
 if(MSVC)
     target_compile_options(creative-suite-main-editor-timeline-command-service-tests PRIVATE /W4 /permissive-)

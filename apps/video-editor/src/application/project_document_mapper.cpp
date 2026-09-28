@@ -24,7 +24,8 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             item.bin_path,
             item.offline,
             item.metadata.kind};
-        project_media.image_editor_link = item.image_editor_link;
+        project_media.image_editor_link = session.imageEditorLinkForPath(
+            item.metadata.source_path);
         document.media.push_back(std::move(project_media));
     }
 

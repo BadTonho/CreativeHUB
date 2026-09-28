@@ -1,6 +1,6 @@
-#include "video_probe.h"
+#include <creative_suite/media/video_probe.h>
 
-#include "../logging/logger.h"
+#include <creative_suite/diagnostics/logger.h>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -15,7 +15,7 @@ extern "C" {
 #include <sstream>
 #include <utility>
 
-namespace media {
+namespace creative_suite::media {
 namespace {
 
 struct FormatContextDeleter {
@@ -179,12 +179,12 @@ VideoMetadata VideoProbe::probe(const std::filesystem::path& source_path) const 
         return metadata;
     } catch (const MediaError& error) {
         try {
-            logging::Context context{{"path", safePathForLog(source_path)}};
+            diagnostics::Context context{{"path", safePathForLog(source_path)}};
             if (error.error_code().has_value()) {
                 context.emplace_back("error_code", std::to_string(*error.error_code()));
             }
-            logging::Logger::instance().log(
-                logging::Level::Error,
+            diagnostics::Logger::instance().log(
+                diagnostics::Level::Error,
                 "media",
                 "probe",
                 error.what(),
@@ -195,8 +195,8 @@ VideoMetadata VideoProbe::probe(const std::filesystem::path& source_path) const 
         throw;
     } catch (const std::exception& error) {
         try {
-            logging::Logger::instance().log(
-                logging::Level::Error,
+            diagnostics::Logger::instance().log(
+                diagnostics::Level::Error,
                 "media",
                 "probe",
                 error.what(),
@@ -208,4 +208,4 @@ VideoMetadata VideoProbe::probe(const std::filesystem::path& source_path) const 
     }
 }
 
-} // namespace media
+} // namespace creative_suite::media

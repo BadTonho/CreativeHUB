@@ -1,12 +1,12 @@
-#include "media_library.h"
+#include <creative_suite/media/media_library.h>
 
-#include "video_frame.h"
+#include <creative_suite/media/video_frame.h>
 
 #include <algorithm>
 #include <cctype>
 #include <system_error>
 
-namespace media {
+namespace creative_suite::media {
 namespace {
 
 bool hasPrefix(std::string_view value, std::string_view prefix) {
@@ -163,18 +163,6 @@ MediaMutationResult MediaLibrary::markOffline(std::size_t index) {
     return MediaMutationResult::Changed;
 }
 
-MediaMutationResult MediaLibrary::setImageEditorLink(
-    const std::filesystem::path& path,
-    std::optional<LinkedImageReference> link) {
-    const auto index = indexForPath(path);
-    if (index >= items_.size() || items_[index].metadata.kind != MediaKind::Image) {
-        return MediaMutationResult::InvalidIndex;
-    }
-    if (items_[index].image_editor_link == link) return MediaMutationResult::NoChange;
-    items_[index].image_editor_link = std::move(link);
-    return MediaMutationResult::Changed;
-}
-
 MediaMutationResult MediaLibrary::refreshImagePresentation(
     const std::filesystem::path& path,
     VideoMetadata metadata,
@@ -255,4 +243,4 @@ void MediaLibrary::clear() noexcept {
     bins_.emplace_back(default_bin);
 }
 
-} // namespace media
+} // namespace creative_suite::media

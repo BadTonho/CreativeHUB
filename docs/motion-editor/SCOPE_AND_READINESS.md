@@ -2,9 +2,12 @@
 
 Status: **provisional product scope; Milestone 0 complete**. A standalone
 Motion Studio shell and in-memory composition/layer model have started using
-provisional C++ and Qt 6. Its initial workspace can create in-memory canvases,
-manage layer records, and edit base transforms; the viewer draws the canvas and
-a selected-layer anchor guide, not layer content. This document records the
+provisional C++ and Qt 6. Its workspace can create in-memory canvases and has
+a navigation-only timeline and an application-owned Media Pool. The pool can
+import video and still images, organize them in bins, and show cached previews
+and metadata. Layer records remain in the document model, but layer controls
+are temporarily deferred from the interface; the canvas does not render media
+content. This document records the
 agreed starting scope; it does not finalize a renderer, programming language,
 native file extension, codec, or implementation architecture.
 
@@ -79,7 +82,7 @@ provide a recoverable reference if a linked document or dependency is missing.
 
 | Capability | Current Video Editor location and behavior | Motion Studio readiness direction |
 | --- | --- | --- |
-| Media and decoding | `apps/video-editor/src/media/`; FFmpeg video playback is implemented in `libs/media/` behind a neutral observer. Raster-image decoding remains a Video Editor service. | Reuse FFmpeg video decoding and the RGBA frame model. Motion Studio still needs its own raster-image decoding path or a separately validated shared one; keep import UI, media organization, and composition timing local to each application. |
+| Media and decoding | `libs/media/` contains neutral metadata, an in-memory catalog, import processing, FFmpeg video probing/decoding, Qt-backed still-image decoding, and RGBA frames. Each editor owns its pool UI, worker lifecycle, and project/document integration. | Motion Studio already reuses the shared catalog and import processing in its own Media Pool. Imported items are in-memory and remain references to original files; the pool clears when replacing a composition. GIF import is unsupported. |
 | Composition and preview | `apps/video-editor/src/playback/` and `src/rendering/`; worker-side CPU composition, frame compositor, and a provisional OpenGL preview surface. | The CPU raster compositor is in `libs/composition/`; document coordinates, pixel format, alpha, lifetime, thread, and error behavior before treating its API as stable. GPU per-layer composition is not an existing capability. |
 | Transforms and animation | `apps/video-editor/src/timeline/`; normalized 2D position, scale, rotation, opacity, and linear per-clip keyframes. | The transform evaluator is in `libs/animation/`; Motion Studio owns curve editing and property controls. |
 | Timeline and history | Timeline model, commands, and bounded undo/redo are application-specific. | Motion Studio owns its composition timeline and editing history; share lower-level behavior only where a second real consumer uses the same contract. |
@@ -98,15 +101,15 @@ yet consumed. The Video Editor uses compatibility headers and retains
 timeline-specific keyframe split and trim operations. Shared contracts remain
 provisional until both consumers have appropriate regression coverage.
 
-The RGBA frame model, FFmpeg playback session, and logger are now focused
-shared targets. Each application links the targets it needs into its own build
-and package; it does not load or launch another editor. The Video Editor
-supplies preview-metric recording through an observer adapter; Motion Studio
-can use the decoder without that observer. UI, timeline workflows, project
-adapters, import/export controllers, and application history remain local to
-each application. Motion Studio currently links the animation library only;
-other shared capabilities will be added when its implemented workflows use
-them.
+The RGBA frame model, FFmpeg playback session, media catalog/import processor,
+video and still-image decoders, and logger are focused shared targets. Each
+application compiles and packages the targets it needs; it does not load or
+launch another editor. The Video Editor supplies preview-metric recording
+through an observer adapter. Motion Studio has its own import dialog, worker
+orchestration, Media Pool UI, bins presentation, details inspector, and
+composition lifecycle. Its pool is ephemeral until document persistence is
+implemented. Image Editor link references remain in the Video Editor's
+application-side project adapter rather than the shared media catalog.
 
 Any composition contract must define coordinate units and transforms, pixel
 format and color/alpha assumptions, resource lifetime and thread requirements,
@@ -125,7 +128,7 @@ every target GPU or that the path has met performance targets.
 | Build dependencies | `apps/video-editor/CMakeLists.txt` requires Qt 6 Core, Widgets, OpenGL, and OpenGLWidgets plus FFmpeg AVCODEC, AVFORMAT, AVUTIL, SWRESAMPLE, and SWSCALE. Qt Multimedia is optional and used for audio output. | This describes the Video Editor build, not a final Motion Studio stack. Keep renderer and dependency decisions open until platform, license, and performance validation. |
 | Video decode and frames | `libs/media/src/video_playback.cpp` uses FFmpeg to decode video and convert frames to owned RGBA8 storage. `VideoPlaybackSession` is independent of Qt and can report optional decode timings through an observer. | `creative-suite::video-media` and `creative-suite::media-frame` are candidates for video layers, subject to Motion Studio consumer regression coverage. |
 | Timeline playback and CPU composition | `apps/video-editor/src/playback/playback_worker.cpp` selects and decodes timeline layers, rasterizes text, and calls the CPU `FrameCompositor`. The compositor returns the completed raster frame before preview presentation. | The shared raster compositor and animation evaluator are reusable candidates. Timeline scheduling, project data, and playback controls remain application-specific. |
-| Still images and text | `apps/video-editor/src/media/still_image_decoder.cpp` uses Qt `QImageReader` with an FFmpeg compatibility fallback. `apps/video-editor/src/rendering/text_renderer.cpp` rasterizes text through Qt `QPainter`. Both are Video Editor application services, not neutral shared APIs. | Motion Studio needs still-image and text rasterization in its own workflow or separately reviewed shared services. Vector-shape rasterization is not established by this path. |
+| Still images and text | `libs/media/src/still_image_decoder.cpp` uses Qt `QImageReader` for static raster images and returns the shared RGBA frame type. `apps/video-editor/src/rendering/text_renderer.cpp` rasterizes text through Qt `QPainter`. | Motion Studio now uses the shared still-image decoder for import previews. Text rasterization remains application-specific work; vector-shape rasterization is not established by this path. |
 | Preview presentation | `OpenGLPreviewSurface` requests an OpenGL 3.2 Core context, uploads the already-composed RGBA frame as a texture, and draws it with a shader. GPU work presents the final frame; layer composition is CPU-side. `PreviewWidget` can use a CPU `QImage`/`QPixmap` path when GPU preview is disabled or fails. | Treat this Qt/OpenGL widget as Video Editor UI. It does not provide GPU layer composition or establish a Motion Studio renderer. |
 
 Existing regression tests cover the shared animation and composition
@@ -139,14 +142,15 @@ argument; that prototype fixture is excluded from this audit run. Thus the
 successful decode path is mapped from source here, while GPU runtime behavior,
 cross-platform support, and measured performance remain open validation work.
 
-For Motion Studio, the existing neutral video decoder, RGBA frame model,
-transform evaluator, and raster compositor are reuse candidates. The Qt
-preview, Video Editor timeline worker, still-image import path, and text
-rasterizer remain application-specific until an independent shared contract
-is justified. Motion Studio now has its own in-memory document and layer model,
-a canvas-and-guide viewer, layer controls, and a base-transform inspector. It
-still needs timeline interaction, layer-content rendering, image and
-text/shape workflows, effects, and standalone persistence/export.
+For Motion Studio, the existing neutral video decoder, shared media catalog,
+still-image decoder, RGBA frame model, transform evaluator, and raster
+compositor are reuse candidates. The Qt preview, Video Editor timeline worker,
+text rasterizer, and application-specific project adapters remain outside the
+shared media boundary. Motion Studio now has its own in-memory document/layer
+model, canvas viewer, and navigation-only timeline. Layer editing controls are
+deferred while the Media Pool handles source organization; placing media on
+the timeline, layer-content rendering, effects, and standalone persistence and
+export remain open.
 See [REUSE_PLAN.md](REUSE_PLAN.md) for the provisional shared API contracts.
 
 ## Native Format and Compatibility Policy

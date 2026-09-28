@@ -136,6 +136,7 @@ void ProjectController::reset() {
     session_.timeline_.restore(std::move(empty_timeline));
     session_.history_.clear();
     session_.media_library_.clear();
+    session_.image_editor_links_.clear();
     session_.selection_ = {};
     session_.project_path_.reset();
     project::ProjectDocument blank;
@@ -150,6 +151,7 @@ void ProjectController::reset() {
 
 void ProjectController::commitPrepared(
     media::MediaLibrary library,
+    std::map<std::filesystem::path, media::LinkedImageReference> image_editor_links,
     timeline::TimelineModel::Snapshot timeline,
     std::optional<std::filesystem::path> active_project_path,
     const project::ProjectDocument& loaded_document,
@@ -157,6 +159,7 @@ void ProjectController::commitPrepared(
     session_.timeline_.restore(std::move(timeline));
     session_.history_.clear();
     session_.media_library_ = std::move(library);
+    session_.image_editor_links_ = std::move(image_editor_links);
     session_.selection_ = {};
     session_.project_path_ = active_project_path.has_value()
         ? std::optional<std::filesystem::path>(canonicalProjectPath(*active_project_path))

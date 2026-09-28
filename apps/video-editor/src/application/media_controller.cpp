@@ -45,11 +45,11 @@ MediaCommandResult MediaController::commitImported(media::MediaItem item) {
     const auto index = session_.media_library_.indexForPath(canonical);
     if (index != session_.media_library_.size()) {
         auto& library = session_.media_library_;
-        if (!library.items_[index].offline) {
+        if (!library.items()[index].offline) {
             return apply(media::MediaMutationResult::Duplicate, canonical);
         }
         item.metadata.source_path = canonical;
-        item.metadata.display_name = library.items_[index].display_name;
+        item.metadata.display_name = library.items()[index].display_name;
         return apply(library.restore(index, std::move(item.metadata), std::move(item.first_frame)), canonical);
     }
 
@@ -90,7 +90,25 @@ MediaCommandResult MediaController::setImageEditorLink(
     const std::filesystem::path& path,
     std::optional<media::LinkedImageReference> link) {
     const auto canonical = media::MediaLibrary::canonicalPath(path);
-    return apply(session_.media_library_.setImageEditorLink(canonical, std::move(link)), canonical);
+    const auto index = session_.media_library_.indexForPath(canonical);
+    if (index >= session_.media_library_.size() ||
+        session_.media_library_.items()[index].metadata.kind != media::MediaKind::Image) {
+        return apply(media::MediaMutationResult::InvalidIndex, canonical);
+    }
+    const auto found = session_.image_editor_links_.find(canonical);
+    const std::optional<media::LinkedImageReference> existing =
+        found == session_.image_editor_links_.end()
+            ? std::nullopt
+            : std::optional<media::LinkedImageReference>(found->second);
+    if (existing == link) {
+        return apply(media::MediaMutationResult::NoChange, canonical);
+    }
+    if (link.has_value()) {
+        session_.image_editor_links_[canonical] = std::move(*link);
+    } else if (found != session_.image_editor_links_.end()) {
+        session_.image_editor_links_.erase(found);
+    }
+    return apply(media::MediaMutationResult::Changed, canonical);
 }
 
 MediaCommandResult MediaController::refreshImagePresentation(
@@ -147,10 +165,19 @@ MediaCommandResult MediaController::moveBin(
 
 void MediaController::replaceLibrary(media::MediaLibrary library) {
     session_.media_library_ = std::move(library);
+    for (auto link = session_.image_editor_links_.begin();
+         link != session_.image_editor_links_.end();) {
+        if (!session_.media_library_.contains(link->first)) {
+            link = session_.image_editor_links_.erase(link);
+        } else {
+            ++link;
+        }
+    }
 }
 
 void MediaController::clear() noexcept {
     session_.media_library_.clear();
+    session_.image_editor_links_.clear();
 }
 
 } // namespace application

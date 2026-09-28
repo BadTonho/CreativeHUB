@@ -176,6 +176,7 @@ ProjectOpenResult ProjectOpenService::prepare(
 
         auto normalized_document = document;
         media::MediaLibrary loaded_library;
+        std::map<std::filesystem::path, media::LinkedImageReference> loaded_image_editor_links;
         for (const auto& bin : document.bins) {
             if (bin == media::default_bin) continue;
             const auto created = loaded_library.createBin(bin);
@@ -249,9 +250,9 @@ ProjectOpenResult ProjectOpenService::prepare(
                         metadata.source_path);
                 }
                 if (project_media.image_editor_link.has_value()) {
-                    static_cast<void>(loaded_library.setImageEditorLink(
+                    loaded_image_editor_links.insert_or_assign(
                         metadata.source_path,
-                        project_media.image_editor_link));
+                        *project_media.image_editor_link);
                 }
             } else {
                 MediaImportService media_importer(
@@ -311,9 +312,9 @@ ProjectOpenResult ProjectOpenService::prepare(
                         project_media.source_path);
                 }
                 if (project_media.image_editor_link.has_value()) {
-                    static_cast<void>(loaded_library.setImageEditorLink(
-                        project_media.source_path,
-                        project_media.image_editor_link));
+                    loaded_image_editor_links.insert_or_assign(
+                        media::MediaLibrary::canonicalPath(project_media.source_path),
+                        *project_media.image_editor_link);
                 }
             }
             ++completed_steps;
@@ -582,6 +583,7 @@ ProjectOpenResult ProjectOpenService::prepare(
         }
         PreparedProject prepared;
         prepared.media_library = std::move(loaded_library);
+        prepared.image_editor_links = std::move(loaded_image_editor_links);
         prepared.timeline = std::move(snapshot);
         prepared.active_project_path = active_project_path.has_value()
             ? std::optional<std::filesystem::path>(

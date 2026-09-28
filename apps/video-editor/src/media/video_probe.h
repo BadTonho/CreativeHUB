@@ -1,12 +1,8 @@
 #pragma once
 
-#include "video_metadata.h"
+#include <creative_suite/media/video_probe.h>
 
 namespace media {
-
-class VideoProbe final {
-public:
-    VideoMetadata probe(const std::filesystem::path& source_path) const;
-};
+using VideoProbe = creative_suite::media::VideoProbe;
 
 } // namespace media

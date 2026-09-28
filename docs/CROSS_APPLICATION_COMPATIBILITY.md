@@ -54,10 +54,12 @@ behavior.
 
 Start with small, application-independent capabilities. The Video Editor's
 RGBA frame model, FFmpeg playback session, CPU compositor, transform evaluator,
-and structured logger now have focused CMake targets under `libs/`. The media,
-composition, and animation APIs remain provisional until Motion Studio consumes
-them and has regression coverage at its own application boundary. The libraries
-do not include application timeline, document, or UI types.
+structured logger, media catalog, probes, decoders, and per-file import
+processor have focused CMake targets under `libs/`. Motion Studio now consumes
+the shared media asset library in its own Media Pool, and Video Editor media
+and `.csp` regressions cover the application adapter boundary. These APIs
+remain provisional until both consumers have appropriate regression coverage.
+The libraries do not include application timeline, document, or UI types.
 
 The API contract should document:
 
@@ -73,10 +75,10 @@ can adopt it according to their needs.
 ## Extraction Criteria and Build Shape
 
 Keep a capability application-local while the Video Editor is its only
-consumer. The approved Motion Studio scope provides a second planned consumer
-for decoding, frame transport, transform evaluation, and raster composition.
-These library APIs are provisional until Motion Studio consumes them and
-boundary coverage exists in both applications.
+consumer. Motion Studio now reuses the media asset catalog and decoders while
+keeping its import dialog, worker orchestration, pool presentation, and
+composition lifecycle application-owned. The library APIs remain provisional
+until both consumers have regression coverage at their application boundaries.
 
 Use CMake library targets and link each consuming application to the required
 targets. Prefer focused modules such as `composition` or `animation` over a
@@ -94,6 +96,11 @@ that:
 4. application UI and workflow decisions remain outside the library.
 
 ## Linked Editing Between Applications
+
+The shared media catalog contains neutral metadata and original file paths.
+Image Editor link identities, companion document paths, published outputs,
+and revision handling remain in a Video Editor-owned sidecar and `.csp`
+adapter. They are not part of the Media Pool API consumed by Motion Studio.
 
 The proposed workflow uses a separately saved, editable document linked from
 the Video Editor. The Video Editor keeps a stable reference to that document and

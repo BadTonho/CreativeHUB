@@ -5,13 +5,17 @@ target_include_directories(creative-suite-media-frame INTERFACE
 )
 target_compile_features(creative-suite-media-frame INTERFACE cxx_std_20)
 
+set(_build_shared_media_default OFF)
+if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
+    set(_build_shared_media_default ON)
+endif()
 option(BUILD_VIDEO_MEDIA_LIBRARY
-    "Build the standalone FFmpeg video playback library"
-    ${BUILD_VIDEO_EDITOR}
+    "Build the shared video playback and media asset libraries"
+    ${_build_shared_media_default}
 )
-if(BUILD_VIDEO_EDITOR AND NOT BUILD_VIDEO_MEDIA_LIBRARY)
+if((BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR) AND NOT BUILD_VIDEO_MEDIA_LIBRARY)
     message(FATAL_ERROR
-        "The Video Editor requires BUILD_VIDEO_MEDIA_LIBRARY to remain enabled.")
+        "The Video Editor and Motion Studio require BUILD_VIDEO_MEDIA_LIBRARY to remain enabled.")
 endif()
 
 add_library(creative-suite-animation STATIC

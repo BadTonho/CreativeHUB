@@ -2,15 +2,19 @@
 
 Status: **provisional**.
 
-The first media module is application-local under
-`apps/video-editor/src/media/`. It uses FFmpeg's `libavformat`, `libavcodec`,
-`libavutil`, `libswscale`, and `libswresample` APIs to inspect and decode local
-video, while `QImageReader` handles supported raster still images.
+The neutral media asset layer is shared source under `libs/media/`, compiled
+into each application that uses it. It exposes standard C++ metadata, a
+canonical-path catalog, cached first frames, bins, online/offline state,
+video and still-image decoders, probes, and per-file import processing. The
+public API does not depend on an application document or UI. Internally, video
+processing uses FFmpeg and still-image decoding uses Qt's `QImageReader`.
+Import dialogs, background task ownership, project persistence, and pool UI
+remain application-specific.
 
 ## Responsibilities
 
-- `VideoMetadata` and `VideoProbe` use standard C++ types and do not expose Qt
-  types.
+- `VideoMetadata`, `VideoProbe`, `MediaLibrary`, and `MediaImporter` use
+  standard C++ types and do not expose Qt types.
 - `VideoProbe` owns FFmpeg format and codec contexts through RAII and translates
   FFmpeg failures into `MediaError`.
 - `VideoDecoder` decodes the first frame and converts it to RGBA8.
@@ -39,6 +43,13 @@ It owns audio FFmpeg resources through RAII and emits owned PCM chunks. The
 Qt `QAudioSink` adapter is created and written only on the playback worker
 thread; no Qt audio object crosses into the media module.
 
+Motion Studio compiles the same media asset library into its standalone
+executable. Its Media Pool has its own UI, asynchronous task orchestration,
+selection details, and composition lifecycle. Items reference original files
+and keep cached first frames; pool state is in memory and is cleared when a
+composition is replaced. Importing media does not create a timeline clip in
+this slice.
+
 Still images are represented by `MediaKind::Image`. They use a synthetic
 default timing of 30 FPS for five seconds (150 frames), have no audio stream,
 and reuse the decoded first frame for every timeline frame. Animated GIF files
@@ -48,10 +59,16 @@ FFmpeg or audio playback session.
 
 ## Image Editor links
 
+Image Editor links are Video Editor project-integration data. They remain in a
+Video Editor-owned sidecar and `.csp` adapter and are not fields in the shared
+media catalog API.
+
 Version 10 `.csp` image media may reference a companion `.cimg` document and a
 published PNG. The source image remains the canonical Media Pool identity;
-`MediaLibrary` keeps the link on that item and updates its metadata and
-thumbnail when a new output is decoded. Project open prefers an existing
+the Video Editor application session keeps the link in an application-owned
+sidecar keyed by that canonical path, outside the shared `MediaLibrary`, and
+updates the shared catalog's metadata and thumbnail when a new output is
+decoded. Project open prefers an existing
 published output and falls back to the original source if that output cannot
 be decoded. Missing source and output files remain offline media.
 
@@ -72,10 +89,12 @@ implemented.
 
 ## Import and drag-and-drop
 
-The first import flow supports multiple local files selected through the file
-dialog. Video files and PNG, JPEG, BMP, WebP, and TIFF still images can be
-imported in one operation; valid files are retained when another selected file
-fails, duplicates are ignored, and animated GIFs are rejected with a summary.
+The shared import processor accepts multiple local paths, reports progress and
+per-file errors, supports cancellation between files, and retains successes
+when another selected file fails. Supported video files and PNG, JPEG, BMP,
+WebP, and TIFF still images can be selected by the application import dialogs;
+duplicates are ignored and animated GIFs are rejected. Each application owns
+the dialog, thread/task lifecycle, result logging, and user-facing summary.
 The Media Browser can drag an already imported item to the Timeline through the
 UI-only MIME type `application/x-creative-suite-media-path`. The Main Window
 resolves that canonical path back to imported metadata. Dragging does not

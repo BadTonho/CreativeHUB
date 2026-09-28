@@ -18,6 +18,7 @@ target_link_libraries(creative-suite-motion-editor-startup-tests PRIVATE
 target_compile_features(creative-suite-motion-editor-startup-tests PRIVATE cxx_std_20)
 add_test(NAME creative-suite-motion-editor-startup
     COMMAND creative-suite-motion-editor-startup-tests)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor-startup-tests)
 set_tests_properties(creative-suite-motion-editor-startup PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
@@ -30,8 +31,12 @@ target_link_libraries(creative-suite-motion-editor-ui-tests PRIVATE
     Qt6::Widgets
 )
 target_compile_features(creative-suite-motion-editor-ui-tests PRIVATE cxx_std_20)
+target_compile_definitions(creative-suite-motion-editor-ui-tests PRIVATE
+    MOTION_EDITOR_TEST_MEDIA_DIR="${PROJECT_SOURCE_DIR}/prototypes/testdata"
+)
 add_test(NAME creative-suite-motion-editor-ui
     COMMAND creative-suite-motion-editor-ui-tests)
+creative_suite_deploy_media_runtime(creative-suite-motion-editor-ui-tests)
 set_tests_properties(creative-suite-motion-editor-ui PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )

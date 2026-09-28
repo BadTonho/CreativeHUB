@@ -8,6 +8,7 @@
 #include "timeline/timeline_model.h"
 
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -38,6 +39,8 @@ public:
     [[nodiscard]] const std::vector<ImportedMedia>& mediaItems() const noexcept;
     [[nodiscard]] const std::vector<std::string>& binPaths() const noexcept;
     [[nodiscard]] const media::MediaLibrary& mediaLibrary() const noexcept;
+    [[nodiscard]] std::optional<media::LinkedImageReference> imageEditorLinkForPath(
+        const std::filesystem::path& path) const;
 
     [[nodiscard]] const EditorSelection& selection() const noexcept;
     [[nodiscard]] EditorSelection& selectionForUi() noexcept;
@@ -68,6 +71,7 @@ private:
     timeline::TimelineModel timeline_;
     timeline::TimelineHistory history_;
     media::MediaLibrary media_library_;
+    std::map<std::filesystem::path, media::LinkedImageReference> image_editor_links_;
     EditorSelection selection_;
     std::optional<std::filesystem::path> project_path_;
     std::optional<project::ProjectDocument> saved_project_document_;

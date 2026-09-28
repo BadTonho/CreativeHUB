@@ -4,7 +4,13 @@ Status: **provisional**. This boundary is the Stage 5 implementation recorded in
 
 ## Ownership and responsibilities
 
-`application::EditorSession` owns the active timeline model and history, the single `media::MediaLibrary`, stable timeline selection, playhead, project path, saved baseline, and dirty state. Widgets, presentation indexes, dialogs, progress UI, and playback-worker state remain in `MainWindow`.
+`application::EditorSession` owns the active timeline model and history, one
+`creative-suite::media::MediaLibrary` instance through the Video Editor's
+compatibility namespace, Video Editor-only linked-image references, stable
+timeline selection, playhead, project path, saved baseline, and dirty state.
+The neutral catalog implementation is in `libs/media/`; widgets,
+presentation indexes, dialogs, progress UI, and playback-worker state remain
+in `MainWindow`.
 
 `application::ProjectController` maps the session to a persisted document, updates dirty state, saves, runs synchronous autosave, exposes recovery snapshots, resets the session, and commits a fully prepared project. `application::ProjectDocumentMapper` translates between runtime session state and `project::ProjectDocument`.
 
@@ -14,7 +20,7 @@ The project codec keeps `project::load` and `project::save` as the compatibility
 
 ## Background import
 
-`application::MediaImportService` processes a batch sequentially and returns a typed result per file. The UI uses a dedicated one-thread `QThreadPool`; the worker receives only paths, cancellation state, and generation values, then posts its result to the UI queue. It never reads widgets or `EditorSession`.
+`application::MediaImportService` adapts the shared `creative-suite::media::MediaImporter`, adds Video Editor work and project-generation IDs, and returns a typed result per file. The UI uses a dedicated one-thread `QThreadPool`; the worker receives only paths, cancellation state, and generation values, then posts its result to the UI queue. It never reads widgets or `EditorSession`.
 
 An individual failure does not stop later files. Cancellation keeps completed files, discards the result of the active file after its processing call returns, and does not start later files. Results include work ID, project generation, and selection generation. The application drops results from a replaced project and only auto-selects an imported item when the captured selection generation still matches; a valid completed item can still enter the library when the user changed selection during import.
 

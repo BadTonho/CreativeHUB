@@ -26,6 +26,15 @@ const media::MediaLibrary& EditorSession::mediaLibrary() const noexcept {
     return media_library_;
 }
 
+std::optional<media::LinkedImageReference> EditorSession::imageEditorLinkForPath(
+    const std::filesystem::path& path) const {
+    const auto canonical = media::MediaLibrary::canonicalPath(path);
+    const auto found = image_editor_links_.find(canonical);
+    return found == image_editor_links_.end()
+        ? std::nullopt
+        : std::optional<media::LinkedImageReference>(found->second);
+}
+
 const EditorSelection& EditorSession::selection() const noexcept {
     return selection_;
 }
