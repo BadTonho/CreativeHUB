@@ -174,8 +174,9 @@ int main(int argc, char* argv[])
         "new composition stores its explicit frame rate without requiring an end frame");
     application.processEvents();
     require(window.centralWidget()->objectName() == QStringLiteral("motion-composition-splitter")
+            && window.isMaximized()
             && (empty_state_button.isNull() || !empty_state_button->isVisible()),
-        "creating a composition replaces the empty state and hides its button");
+        "creating a composition replaces the empty state and preserves maximization");
 
     action(window, "motion-add-shape-layer-action")->trigger();
     action(window, "motion-add-text-layer-action")->trigger();
@@ -340,6 +341,25 @@ int main(int argc, char* argv[])
     require(window.compositionDocument()->layers().size() == 1
             && window.compositionDocument()->layers().front().kind == motion::model::LayerKind::Video,
         "the video layer action creates the requested kind");
+
+    motion::ui::MainWindow restored_window;
+    restored_window.show();
+    application.processEvents();
+    restored_window.showNormal();
+    application.processEvents();
+    require(!restored_window.isMaximized(),
+        "the test can restore Motion Studio before creating a composition");
+    const auto restored_window_geometry = restored_window.geometry();
+    QTimer::singleShot(0, [] { completeCompositionDialog(800, 600, 2); });
+    action(restored_window, "motion-new-composition-action")->trigger();
+    application.processEvents();
+    require(restored_window.compositionDocument() != nullptr,
+        "composition is created in the manually restored window");
+    require(!restored_window.isMaximized(),
+        "creating a composition preserves the manually restored window state");
+    require(restored_window.geometry() == restored_window_geometry,
+        "creating a composition preserves the manually restored window geometry");
+    restored_window.close();
 
     std::cout << "Motion Studio editing UI tests passed.\n";
     return EXIT_SUCCESS;

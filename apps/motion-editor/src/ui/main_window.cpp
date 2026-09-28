@@ -143,6 +143,10 @@ void MainWindow::createNewComposition()
 
 void MainWindow::createWorkspace()
 {
+    const bool was_maximized = isMaximized();
+    const bool was_full_screen = isFullScreen();
+    const auto previous_geometry = geometry();
+
     composition_splitter_ = new QSplitter(Qt::Vertical, this);
     composition_splitter_->setObjectName(QStringLiteral("motion-composition-splitter"));
     composition_splitter_->setChildrenCollapsible(false);
@@ -269,7 +273,9 @@ void MainWindow::createWorkspace()
     composition_splitter_->setSizes({570, 150});
     setCentralWidget(composition_splitter_);
     empty_state_ = nullptr;
-    resize(1200, 760);
+    if (!was_maximized && !was_full_screen) {
+        setGeometry(previous_geometry);
+    }
 
     connect(layer_list_, &QListWidget::currentRowChanged, this, [this](int row) {
         selectLayerAtRow(row);

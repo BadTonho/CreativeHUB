@@ -24,7 +24,7 @@ CompositionViewer::CompositionViewer(QWidget* parent)
     : QWidget(parent)
 {
     setObjectName(QStringLiteral("motion-composition-viewer"));
-    setMinimumSize(320, 240);
+    setMinimumSize(180, 240);
     setAutoFillBackground(false);
 }
 
