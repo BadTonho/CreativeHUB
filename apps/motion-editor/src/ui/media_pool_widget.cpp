@@ -258,17 +258,6 @@ MediaPoolWidget::MediaPoolWidget(QWidget* parent)
     connect(bins_tree_, &QTreeWidget::currentItemChanged, this,
             [this](QTreeWidgetItem*, QTreeWidgetItem*) { refreshMedia(); });
 
-    progress_ = new QProgressDialog(QStringLiteral("Importing media..."),
-                                    QStringLiteral("Cancel"), 0, 0, this);
-    progress_->setObjectName(QStringLiteral("motion-media-import-progress"));
-    progress_->setWindowTitle(QStringLiteral("Import Media"));
-    progress_->setWindowModality(Qt::WindowModal);
-    progress_->setMinimumDuration(250);
-    progress_->hide();
-    connect(progress_, &QProgressDialog::canceled, this, [this] {
-        if (cancel_requested_) cancel_requested_->store(true, std::memory_order_relaxed);
-    });
-
     refresh();
 }
 
@@ -326,7 +315,7 @@ void MediaPoolWidget::clear()
     if (cancel_requested_) cancel_requested_->store(true, std::memory_order_relaxed);
     cancel_requested_.reset();
     ++import_generation_;
-    progress_->hide();
+    if (progress_ != nullptr) progress_->hide();
     library_.clear();
     shared_frame_cache_.clear();
     refresh();
@@ -335,7 +324,21 @@ void MediaPoolWidget::clear()
 
 void MediaPoolWidget::importFiles(std::vector<std::filesystem::path> paths)
 {
+    std::erase_if(paths, [](const auto& path) { return path.empty(); });
     if (paths.empty() || cancel_requested_) return;
+
+    if (progress_ == nullptr) {
+        progress_ = new QProgressDialog(QStringLiteral("Importing media..."),
+                                        QStringLiteral("Cancel"), 0, 0, this);
+        progress_->setObjectName(QStringLiteral("motion-media-import-progress"));
+        progress_->setWindowTitle(QStringLiteral("Import Media"));
+        progress_->setWindowModality(Qt::WindowModal);
+        progress_->setMinimumDuration(250);
+        connect(progress_, &QProgressDialog::canceled, this, [this] {
+            if (cancel_requested_) cancel_requested_->store(true, std::memory_order_relaxed);
+        });
+    }
+
     cancel_requested_ = std::make_shared<std::atomic_bool>(false);
     const auto generation = ++import_generation_;
     progress_->setRange(0, static_cast<int>(std::min<std::size_t>(
@@ -685,7 +688,7 @@ void MediaPoolWidget::finishImport(
     }
     if (imported > 0) shared_frame_cache_.clear();
     cancel_requested_.reset();
-    progress_->hide();
+    if (progress_ != nullptr) progress_->hide();
     refresh(!last_imported.isEmpty() ? last_imported : selection);
     status_label_->setText(QStringLiteral("Imported %1; %2 failed; %3 duplicates%4.")
         .arg(imported).arg(failed).arg(duplicates)

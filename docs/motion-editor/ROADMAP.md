@@ -101,7 +101,9 @@ the Motion Studio implementation choices are finalized.
   shared media catalog and import processing. Include hierarchical bins,
   cached thumbnails, list and thumbnail views, renaming, offline marking and
   restoration, and a selected-media details panel. The pool clears when a new
-  composition replaces the current one.
+  composition replaces the current one. Its import progress dialog is created
+  only when a non-empty import request starts, so an empty pool does not open it
+  during startup or workspace creation.
 - [x] Connect Media Pool image and video items to independent visual timeline
   layers. Support drop-to-insert, front-to-back row ordering, 8-pixel snapping,
   selection, time movement, row reordering, visibility, removal, and right-edge
