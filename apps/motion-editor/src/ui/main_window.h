@@ -2,6 +2,8 @@
 
 #include "model/composition_document.h"
 
+#include <creative_suite/shortcuts/shortcut_manager.h>
+
 #include <QMainWindow>
 
 #include <array>
@@ -35,6 +37,7 @@ public:
 private:
     void createNewComposition();
     void createWorkspace();
+    void openShortcutSettings();
     void openMedia();
     void updateMediaDetails();
     void refreshTimeline();
@@ -49,7 +52,15 @@ private:
     std::optional<model::CompositionDocument> document_;
     QLabel* empty_state_ = nullptr;
     QPushButton* empty_state_new_composition_button_ = nullptr;
+    QAction* new_composition_action_ = nullptr;
     QAction* import_media_action_ = nullptr;
+    QAction* settings_action_ = nullptr;
+    QAction* play_pause_action_ = nullptr;
+    QAction* previous_frame_action_ = nullptr;
+    QAction* next_frame_action_ = nullptr;
+    QAction* loop_action_ = nullptr;
+    QAction* zoom_in_action_ = nullptr;
+    QAction* zoom_out_action_ = nullptr;
     QSplitter* composition_splitter_ = nullptr;
     QSplitter* workspace_ = nullptr;
     MediaPoolWidget* media_pool_ = nullptr;
@@ -60,6 +71,8 @@ private:
     std::array<QDoubleSpinBox*, 5> transform_fields_{};
     TimelineNavigator* timeline_ = nullptr;
     std::unique_ptr<PreviewRenderer> preview_renderer_;
+    creative_suite::shortcuts::ShortcutManager shortcut_manager_{
+        QStringLiteral("MotionStudio/KeyboardShortcuts")};
     model::LayerId selected_layer_id_ = 0;
 };
 

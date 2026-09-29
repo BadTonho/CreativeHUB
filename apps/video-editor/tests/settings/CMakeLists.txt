@@ -2,7 +2,6 @@ add_executable(creative-suite-main-editor-settings-dialog-tests
     settings_dialog_test.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/settings_dialog.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/settings_dialog.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/settings/shortcut_manager.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/shortcut_manager.h
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/user_preferences.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/user_preferences.h
@@ -14,6 +13,7 @@ target_include_directories(creative-suite-main-editor-settings-dialog-tests PRIV
 
 target_link_libraries(creative-suite-main-editor-settings-dialog-tests PRIVATE
     Qt6::Widgets
+    creative-suite::shortcuts
 )
 
 target_compile_features(creative-suite-main-editor-settings-dialog-tests PRIVATE cxx_std_20)
@@ -49,10 +49,8 @@ if(WIN32)
         COMMAND "${QT_DEPLOY_TOOL}"
             --no-translations
             --no-compiler-runtime
+            --include-plugins qoffscreen
             "$<TARGET_FILE:creative-suite-main-editor-settings-dialog-tests>"
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${QT_BIN_DIR}/../plugins/platforms/qoffscreen.dll"
-            "$<TARGET_FILE_DIR:creative-suite-main-editor-settings-dialog-tests>/platforms"
         VERBATIM
     )
 endif()
@@ -69,7 +67,6 @@ find_package(Qt6 CONFIG REQUIRED COMPONENTS Test)
 
 add_executable(creative-suite-main-editor-shortcut-manager-tests
     shortcut_manager_test.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/settings/shortcut_manager.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/settings/shortcut_manager.h
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/functions/function_palette.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/functions/function_palette.h
@@ -82,6 +79,7 @@ target_include_directories(creative-suite-main-editor-shortcut-manager-tests PRI
 target_link_libraries(creative-suite-main-editor-shortcut-manager-tests PRIVATE
     Qt6::Widgets
     Qt6::Test
+    creative-suite::shortcuts
 )
 
 target_compile_features(creative-suite-main-editor-shortcut-manager-tests PRIVATE cxx_std_20)
@@ -117,10 +115,8 @@ if(WIN32)
         COMMAND "${QT_DEPLOY_TOOL}"
             --no-translations
             --no-compiler-runtime
+            --include-plugins qoffscreen
             "$<TARGET_FILE:creative-suite-main-editor-shortcut-manager-tests>"
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${QT_BIN_DIR}/../plugins/platforms/qoffscreen.dll"
-            "$<TARGET_FILE_DIR:creative-suite-main-editor-shortcut-manager-tests>/platforms"
         VERBATIM
     )
 endif()

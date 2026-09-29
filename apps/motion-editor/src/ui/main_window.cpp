@@ -4,12 +4,14 @@
 #include "media_pool_widget.h"
 #include "new_composition_dialog.h"
 #include "preview_renderer.h"
+#include "shortcut_settings_dialog.h"
 #include "timeline_navigator.h"
 
 #include <creative_suite/diagnostics/logger.h>
 
 #include <QAction>
 #include <QApplication>
+#include <QKeySequence>
 #include <QDoubleSpinBox>
 #include <QDialog>
 #include <QFileDialog>
@@ -83,17 +85,89 @@ MainWindow::MainWindow(QWidget* parent)
     setCentralWidget(empty_state_container);
 
     QMenu* file_menu = menuBar()->addMenu(QStringLiteral("File"));
-    QAction* new_composition_action = file_menu->addAction(QStringLiteral("New Composition..."));
-    new_composition_action->setObjectName(QStringLiteral("motion-new-composition-action"));
-    connect(new_composition_action, &QAction::triggered, this, [this] {
+    new_composition_action_ = file_menu->addAction(QStringLiteral("New Composition..."));
+    new_composition_action_->setObjectName(QStringLiteral("motion-new-composition-action"));
+    new_composition_action_->setShortcut(QKeySequence::New);
+    new_composition_action_->setShortcutContext(Qt::WindowShortcut);
+    addAction(new_composition_action_);
+    shortcut_manager_.registerAction(
+        QStringLiteral("file.new_composition"), QStringLiteral("New Composition"),
+        new_composition_action_);
+    connect(new_composition_action_, &QAction::triggered, this, [this] {
         createNewComposition();
     });
     connect(empty_state_new_composition_button_, &QPushButton::clicked,
-            new_composition_action, &QAction::trigger);
+            new_composition_action_, &QAction::trigger);
     import_media_action_ = file_menu->addAction(QStringLiteral("Import Media..."));
     import_media_action_->setObjectName(QStringLiteral("motion-import-media-action"));
     import_media_action_->setEnabled(false);
+    const auto import_sequence =
+#if defined(Q_OS_MACOS)
+        QKeySequence(Qt::META | Qt::Key_I);
+#else
+        QKeySequence(Qt::CTRL | Qt::Key_I);
+#endif
+    import_media_action_->setShortcut(import_sequence);
+    import_media_action_->setShortcutContext(Qt::WindowShortcut);
+    addAction(import_media_action_);
+    shortcut_manager_.registerAction(
+        QStringLiteral("media.import"), QStringLiteral("Import Media"),
+        import_media_action_);
     connect(import_media_action_, &QAction::triggered, this, [this] { openMedia(); });
+
+    auto* settings_menu = menuBar()->addMenu(QStringLiteral("Settings"));
+    settings_action_ = settings_menu->addAction(QStringLiteral("Keyboard Shortcuts..."));
+    settings_action_->setObjectName(QStringLiteral("motion-shortcut-settings-action"));
+    connect(settings_action_, &QAction::triggered,
+            this, [this] { openShortcutSettings(); });
+
+    const auto register_timeline_action = [this](
+        QAction*& action, const QString& object_name, const QString& id,
+        const QString& label, const QKeySequence& default_sequence) {
+        action = new QAction(label, this);
+        action->setObjectName(object_name);
+        action->setShortcut(default_sequence);
+        action->setShortcutContext(Qt::WindowShortcut);
+        addAction(action);
+        shortcut_manager_.registerAction(id, label, action);
+    };
+    register_timeline_action(
+        play_pause_action_, QStringLiteral("motion-play-pause-action"),
+        QStringLiteral("timeline.play_pause"), QStringLiteral("Play/Pause"),
+        QKeySequence(Qt::Key_Space));
+    register_timeline_action(
+        previous_frame_action_, QStringLiteral("motion-previous-frame-action"),
+        QStringLiteral("timeline.previous_frame"), QStringLiteral("Previous frame"),
+        QKeySequence(Qt::Key_Left));
+    register_timeline_action(
+        next_frame_action_, QStringLiteral("motion-next-frame-action"),
+        QStringLiteral("timeline.next_frame"), QStringLiteral("Next frame"),
+        QKeySequence(Qt::Key_Right));
+    register_timeline_action(
+        loop_action_, QStringLiteral("motion-loop-action"),
+        QStringLiteral("timeline.toggle_loop"), QStringLiteral("Loop"), QKeySequence{});
+    loop_action_->setCheckable(true);
+    register_timeline_action(
+        zoom_in_action_, QStringLiteral("motion-zoom-in-action"),
+        QStringLiteral("timeline.zoom_in"), QStringLiteral("Zoom In"), QKeySequence{});
+    register_timeline_action(
+        zoom_out_action_, QStringLiteral("motion-zoom-out-action"),
+        QStringLiteral("timeline.zoom_out"), QStringLiteral("Zoom Out"), QKeySequence{});
+    previous_frame_action_->setEnabled(false);
+    next_frame_action_->setEnabled(false);
+    play_pause_action_->setEnabled(false);
+    loop_action_->setEnabled(false);
+    zoom_in_action_->setEnabled(false);
+    zoom_out_action_->setEnabled(false);
+
+    QString shortcut_error;
+    if (!shortcut_manager_.load(&shortcut_error)) {
+        const auto detail = shortcut_error.toStdString();
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Error,
+            "motion_settings", "load_shortcuts", detail,
+            {{"settings_group", shortcut_manager_.settingsGroup().toStdString()}});
+    }
 }
 
 MainWindow::~MainWindow()
@@ -148,6 +222,24 @@ void MainWindow::createNewComposition()
     inspector_tabs_->setCurrentWidget(media_details_);
     syncTransformInspector();
     requestPreview();
+}
+
+void MainWindow::openShortcutSettings()
+{
+    ShortcutSettingsDialog dialog(shortcut_manager_.entries(), this);
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    QString error;
+    if (!shortcut_manager_.applyShortcuts(dialog.assignments(), &error)) {
+        const auto detail = error.toStdString();
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Error,
+            "motion_settings", "save_shortcuts", detail,
+            {{"settings_group", shortcut_manager_.settingsGroup().toStdString()}});
+        QMessageBox::warning(
+            this, QStringLiteral("Settings Error"),
+            QStringLiteral("Keyboard shortcut preferences could not be saved."));
+    }
 }
 
 void MainWindow::createWorkspace()
@@ -217,6 +309,9 @@ void MainWindow::createWorkspace()
     inspector_tabs_->addTab(transform_inspector_, QStringLiteral("Transform"));
 
     timeline_ = new TimelineNavigator(composition_splitter_);
+    timeline_->setShortcutActions(
+        play_pause_action_, previous_frame_action_, next_frame_action_, loop_action_,
+        zoom_in_action_, zoom_out_action_);
     timeline_->setMediaDropHandler([this](const std::filesystem::path& path,
                                           std::int64_t frame,
                                           model::LayerId before) {

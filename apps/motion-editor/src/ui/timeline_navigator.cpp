@@ -1,6 +1,8 @@
 #include "timeline_navigator.h"
 #include "timeline_navigator_math.h"
 
+#include <QAction>
+
 #include <QComboBox>
 #include <QFontMetrics>
 #include <QHBoxLayout>
@@ -944,17 +946,21 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     connect(playback_timer_, &QTimer::timeout, this, [this] { playbackTick(); });
 
     connect(previous_frame_button_, &QPushButton::clicked, this, [this] {
-        seekToFrame(current_frame_ - (current_frame_ > 0 ? 1 : 0));
+        if (previous_frame_action_ != nullptr) previous_frame_action_->trigger();
+        else seekToFrame(current_frame_ - (current_frame_ > 0 ? 1 : 0));
     });
     connect(play_pause_button_, &QPushButton::clicked, this, [this] {
-        if (playing_) pausePlayback();
+        if (play_pause_action_ != nullptr) play_pause_action_->trigger();
+        else if (playing_) pausePlayback();
         else startPlayback();
     });
     connect(loop_button_, &QPushButton::toggled, this, [this](bool enabled) {
-        loop_enabled_ = enabled;
+        if (loop_action_ != nullptr) loop_action_->setChecked(enabled);
+        else loop_enabled_ = enabled;
     });
     connect(next_frame_button_, &QPushButton::clicked, this, [this] {
-        if (current_frame_ < visible_end_frame_) {
+        if (next_frame_action_ != nullptr) next_frame_action_->trigger();
+        else if (current_frame_ < visible_end_frame_) {
             seekToFrame(current_frame_ + 1);
         }
     });
@@ -984,10 +990,12 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
         applyZoomLevel(index);
     });
     connect(zoom_out_button_, &QPushButton::clicked, this, [this] {
-        applyZoomLevel(zoom_level_index_ - 1);
+        if (zoom_out_action_ != nullptr) zoom_out_action_->trigger();
+        else applyZoomLevel(zoom_level_index_ - 1);
     });
     connect(zoom_in_button_, &QPushButton::clicked, this, [this] {
-        applyZoomLevel(zoom_level_index_ + 1);
+        if (zoom_in_action_ != nullptr) zoom_in_action_->trigger();
+        else applyZoomLevel(zoom_level_index_ + 1);
     });
     connect(horizontal_scroll_bar_, &QScrollBar::valueChanged, this, [this](int value) {
         const auto maximum_start = maximumViewStartFrame();
@@ -1004,6 +1012,57 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     updateControls();
 }
 
+void TimelineNavigator::setShortcutActions(
+    QAction* play_pause,
+    QAction* previous_frame,
+    QAction* next_frame,
+    QAction* loop,
+    QAction* zoom_in,
+    QAction* zoom_out)
+{
+    play_pause_action_ = play_pause;
+    previous_frame_action_ = previous_frame;
+    next_frame_action_ = next_frame;
+    loop_action_ = loop;
+    zoom_in_action_ = zoom_in;
+    zoom_out_action_ = zoom_out;
+
+    if (play_pause_action_ != nullptr) {
+        connect(play_pause_action_, &QAction::triggered, this, [this] {
+            if (playing_) pausePlayback();
+            else startPlayback();
+        });
+    }
+    if (previous_frame_action_ != nullptr) {
+        connect(previous_frame_action_, &QAction::triggered, this, [this] {
+            seekToFrame(current_frame_ - (current_frame_ > 0 ? 1 : 0));
+        });
+    }
+    if (next_frame_action_ != nullptr) {
+        connect(next_frame_action_, &QAction::triggered, this, [this] {
+            if (current_frame_ < visible_end_frame_) seekToFrame(current_frame_ + 1);
+        });
+    }
+    if (loop_action_ != nullptr) {
+        connect(loop_action_, &QAction::toggled, this, [this](bool enabled) {
+            loop_enabled_ = enabled;
+            const QSignalBlocker blocker(loop_button_);
+            loop_button_->setChecked(enabled);
+        });
+    }
+    if (zoom_in_action_ != nullptr) {
+        connect(zoom_in_action_, &QAction::triggered, this, [this] {
+            applyZoomLevel(zoom_level_index_ + 1);
+        });
+    }
+    if (zoom_out_action_ != nullptr) {
+        connect(zoom_out_action_, &QAction::triggered, this, [this] {
+            applyZoomLevel(zoom_level_index_ - 1);
+        });
+    }
+    updateControls();
+}
+
 void TimelineNavigator::setCompositionTiming(
     model::FrameRate frame_rate)
 {
@@ -1017,6 +1076,7 @@ void TimelineNavigator::setCompositionTiming(
         const QSignalBlocker blocker(loop_button_);
         loop_button_->setChecked(false);
     }
+    if (loop_action_ != nullptr) loop_action_->setChecked(false);
     display_mode_ = TimelineDisplayMode::Time;
     {
         const QSignalBlocker blocker(display_mode_combo_);
@@ -1464,6 +1524,26 @@ void TimelineNavigator::updateControls()
         .arg(static_cast<int>(std::lround(zoom_factor_ * 100.0))));
     const QSignalBlocker blocker(zoom_slider_);
     zoom_slider_->setValue(zoom_level_index_);
+    if (previous_frame_action_ != nullptr) {
+        previous_frame_action_->setEnabled(previous_frame_button_->isEnabled());
+    }
+    if (next_frame_action_ != nullptr) {
+        next_frame_action_->setEnabled(next_frame_button_->isEnabled());
+    }
+    if (play_pause_action_ != nullptr) {
+        play_pause_action_->setEnabled(play_pause_button_->isEnabled());
+    }
+    if (loop_action_ != nullptr) {
+        loop_action_->setEnabled(loop_button_->isEnabled());
+        const QSignalBlocker loop_blocker(loop_action_);
+        loop_action_->setChecked(loop_enabled_);
+    }
+    if (zoom_in_action_ != nullptr) {
+        zoom_in_action_->setEnabled(zoom_in_button_->isEnabled());
+    }
+    if (zoom_out_action_ != nullptr) {
+        zoom_out_action_->setEnabled(zoom_out_button_->isEnabled());
+    }
 }
 
 } // namespace motion::ui

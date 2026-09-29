@@ -152,13 +152,17 @@ persistence, and recovery.
   edits, and projects session state into the window. A completed paint gesture
   is one undoable document operation; changing tools does not modify the image.
 - `ImageEditorWindow` owns the command-action registry and the **Settings >
-  Keyboard Shortcuts** dialog. Stable action names identify preferences stored
-  with `QSettings`, separately from editable documents. Defaults use Qt standard
+  Keyboard Shortcuts** dialog. The shared registration and persistence logic is
+  provided by `creative-suite::shortcuts`; the Image Editor keeps its existing
+  stable action names and `ImageEditor/KeyboardShortcuts` QSettings group,
+  separately from editable documents. Defaults use Qt standard
   sequences plus `B` for Paint, `E` for Eraser, and `Esc` to cancel crop or an
   in-progress shape. Shapes, Selection, and Delete Selected Objects have no
   default shortcut. The Selection and delete actions keep their existing
   settings keys so user-assigned shortcuts survive the rename. Duplicate
-  assignments are rejected. Paint and Eraser require an editable layer; Shapes
+  assignments are rejected before acceptance. The dialog stages edits until OK;
+  Cancel discards them, and accepted bindings are persisted as one validated
+  batch. Paint and Eraser require an editable layer; Shapes
   creates a new layer above the selected layer, and Selection remains
   available with Background selected. The fixed
   tool-size mouse gesture is documented separately and is not part of the

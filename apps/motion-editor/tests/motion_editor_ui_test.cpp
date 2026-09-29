@@ -9,6 +9,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QDialog>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
@@ -19,6 +20,7 @@
 #include <QImage>
 #include <QInputDialog>
 #include <QKeyEvent>
+#include <QKeySequenceEdit>
 #include <QLabel>
 #include <QListWidget>
 #include <QListView>
@@ -34,6 +36,7 @@
 #include <QPointer>
 #include <QProgressDialog>
 #include <QTemporaryDir>
+#include <QSettings>
 #include <QThread>
 #include <QTimer>
 #include <QToolButton>
@@ -250,11 +253,168 @@ QString pathToQString(const std::filesystem::path& path)
                              static_cast<qsizetype>(utf8_path.size()));
 }
 
+void interactWithShortcutDialog(
+    MainWindow& window,
+    const std::function<void(QDialog*)>& interaction)
+{
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        require(dialog != nullptr, "keyboard shortcut settings dialog opens");
+        interaction(dialog);
+    });
+    action(window, "motion-shortcut-settings-action")->trigger();
+}
+
+void testMotionShortcutSettings()
+{
+#if defined(Q_OS_MACOS)
+    const QKeySequence expected_import_sequence(Qt::META | Qt::Key_I);
+#else
+    const QKeySequence expected_import_sequence(Qt::CTRL | Qt::Key_I);
+#endif
+    MainWindow window;
+    auto* create_action = action(window, "motion-new-composition-action");
+    auto* import_action = action(window, "motion-import-media-action");
+    auto* play_action = action(window, "motion-play-pause-action");
+    auto* previous_action = action(window, "motion-previous-frame-action");
+    auto* next_action = action(window, "motion-next-frame-action");
+    auto* loop_action = action(window, "motion-loop-action");
+    auto* zoom_in_action = action(window, "motion-zoom-in-action");
+    auto* zoom_out_action = action(window, "motion-zoom-out-action");
+    require(create_action->shortcut() == QKeySequence::New &&
+                import_action->shortcut() == expected_import_sequence &&
+                play_action->shortcut() == QKeySequence(Qt::Key_Space) &&
+                previous_action->shortcut() == QKeySequence(Qt::Key_Left) &&
+                next_action->shortcut() == QKeySequence(Qt::Key_Right) &&
+                loop_action->shortcut().isEmpty() && zoom_in_action->shortcut().isEmpty() &&
+                zoom_out_action->shortcut().isEmpty(),
+            "Motion Studio registers its own default shortcut catalog");
+    require(create_action->isEnabled() && !import_action->isEnabled() &&
+                !play_action->isEnabled() && !previous_action->isEnabled() &&
+                !next_action->isEnabled() && !loop_action->isEnabled(),
+            "commands reflect the empty composition state");
+
+    interactWithShortcutDialog(window, [](QDialog* dialog) {
+        auto* editor = findWidget<QKeySequenceEdit>(dialog,
+            "motion-shortcut-editor-file.new_composition");
+        auto* buttons = findWidget<QDialogButtonBox>(dialog, "motion-shortcut-dialog-buttons");
+        editor->setKeySequence(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
+        buttons->button(QDialogButtonBox::Ok)->click();
+    });
+    require(create_action->shortcut() == QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N),
+            "OK applies the shortcut settings as a batch");
+
+    interactWithShortcutDialog(window, [](QDialog* dialog) {
+        auto* create_editor = findWidget<QKeySequenceEdit>(dialog,
+            "motion-shortcut-editor-file.new_composition");
+        auto* import_editor = findWidget<QKeySequenceEdit>(dialog,
+            "motion-shortcut-editor-media.import");
+        auto* buttons = findWidget<QDialogButtonBox>(dialog, "motion-shortcut-dialog-buttons");
+        create_editor->setKeySequence(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P));
+        import_editor->setKeySequence(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P));
+        buttons->button(QDialogButtonBox::Ok)->click();
+        require(findWidget<QLabel>(dialog, "motion-shortcut-validation-message")->isVisible(),
+                "duplicate shortcut assignments show an in-dialog conflict");
+        buttons->button(QDialogButtonBox::Cancel)->click();
+    });
+    require(create_action->shortcut() == QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N),
+            "a conflicted and cancelled edit leaves the active binding unchanged");
+
+    interactWithShortcutDialog(window, [](QDialog* dialog) {
+        auto* editor = findWidget<QKeySequenceEdit>(dialog,
+            "motion-shortcut-editor-file.new_composition");
+        editor->setKeySequence(QKeySequence(Qt::CTRL | Qt::Key_M));
+        findWidget<QPushButton>(dialog, "motion-shortcut-dialog-cancel")->click();
+    });
+    require(create_action->shortcut() == QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N),
+            "Cancel discards shortcut edits");
+
+    interactWithShortcutDialog(window, [](QDialog* dialog) {
+        findWidget<QPushButton>(dialog,
+            "motion-shortcut-clear-media.import")->click();
+        findWidget<QDialogButtonBox>(dialog, "motion-shortcut-dialog-buttons")
+            ->button(QDialogButtonBox::Ok)->click();
+    });
+    require(import_action->shortcut().isEmpty(),
+            "Clear removes one command shortcut and OK applies the change");
+
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("MotionStudio/KeyboardShortcuts"));
+    require(settings.value(QStringLiteral("file.new_composition")).toString() ==
+                QStringLiteral("Ctrl+Shift+N"),
+            "accepted shortcut preferences persist in the Motion Studio group");
+    settings.endGroup();
+
+    {
+        MainWindow reopened;
+        require(action(reopened, "motion-new-composition-action")->shortcut() ==
+                    QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N) &&
+                    action(reopened, "motion-import-media-action")->shortcut().isEmpty(),
+                "shortcut settings load when a new window is created");
+    }
+
+    interactWithShortcutDialog(window, [](QDialog* dialog) {
+        findWidget<QPushButton>(dialog, "motion-shortcut-reset-all")->click();
+        require(findWidget<QKeySequenceEdit>(dialog,
+                    "motion-shortcut-editor-file.new_composition")->keySequence() ==
+                    QKeySequence::New,
+                "Reset All previews the registered defaults");
+        findWidget<QPushButton>(dialog, "motion-shortcut-dialog-cancel")->click();
+    });
+    require(create_action->shortcut() == QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N),
+            "cancelling Reset All keeps the saved assignments");
+
+    interactWithShortcutDialog(window, [](QDialog* dialog) {
+        findWidget<QPushButton>(dialog, "motion-shortcut-reset-all")->click();
+        findWidget<QDialogButtonBox>(dialog, "motion-shortcut-dialog-buttons")
+            ->button(QDialogButtonBox::Ok)->click();
+    });
+    require(create_action->shortcut() == QKeySequence::New &&
+                import_action->shortcut() == expected_import_sequence,
+            "Reset All applies and persists all registered defaults");
+
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        require(dialog != nullptr, "New Composition action opens its existing dialog");
+        auto* width = findWidget<QLineEdit>(dialog, "motion-canvas-width");
+        auto* height = findWidget<QLineEdit>(dialog, "motion-canvas-height");
+        auto* rates = findWidget<QComboBox>(dialog, "motion-frame-rate");
+        auto* buttons = findWidget<QDialogButtonBox>(dialog, "motion-new-composition-buttons");
+        width->setText(QStringLiteral("640"));
+        height->setText(QStringLiteral("360"));
+        rates->setCurrentIndex(3);
+        buttons->button(QDialogButtonBox::Ok)->click();
+    });
+    create_action->trigger();
+    require(window.compositionDocument() != nullptr && import_action->isEnabled() &&
+                !play_action->isEnabled() && !loop_action->isEnabled() &&
+                zoom_in_action->isEnabled() && zoom_out_action->isEnabled(),
+            "composition creation enables import and timeline navigation but not empty playback");
+
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+        require(dialog != nullptr, "Import Media action opens the existing file picker");
+        dialog->reject();
+    });
+    import_action->trigger();
+}
+
 } // namespace
 
 int main(int argc, char* argv[])
 {
     QApplication application(argc, argv);
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite Motion Tests"));
+    QCoreApplication::setApplicationName(QStringLiteral("Motion Studio UI Tests"));
+    QTemporaryDir settings_directory;
+    require(settings_directory.isValid(), "temporary settings directory is available");
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                       settings_directory.path());
+    QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope,
+                       settings_directory.path());
+
+    testMotionShortcutSettings();
 
     motion::ui::TimelineNavigator frame_rate_range_check;
     frame_rate_range_check.resize(1200, 760);
@@ -730,6 +890,10 @@ int main(int argc, char* argv[])
     require(layer_rows->acceptDrops(), "timeline layer rows accept Media Pool drops");
     const auto image_catalog_path = image_entry->metadata.source_path;
     const auto video_catalog_path = video_entry->metadata.source_path;
+    auto* previous_frame_action = action(window, "motion-previous-frame-action");
+    auto* next_frame_action = action(window, "motion-next-frame-action");
+    auto* play_pause_action = action(window, "motion-play-pause-action");
+    auto* loop_action = action(window, "motion-loop-action");
     timeline->setCurrentFrame(0);
     deliverMediaDrop(layer_rows, image_catalog_path, QPoint(205, 15), true);
     require(window.compositionDocument()->layers().size() == 1 &&
@@ -737,6 +901,15 @@ int main(int argc, char* argv[])
                 window.compositionDocument()->layers().front().timeline_start_frame == 0 &&
                 window.compositionDocument()->layers().front().duration_frames == 120,
             "dropping a still onto empty timeline space creates a five-second layer at frame zero");
+    require(play_pause_action->isEnabled() && loop_action->isEnabled() &&
+                !previous_frame_action->isEnabled() && next_frame_action->isEnabled(),
+            "timeline commands update availability when a layer is added");
+    next_frame_action->trigger();
+    require(timeline->currentFrame() == 1 && previous_frame_action->isEnabled(),
+            "the registered Next frame shortcut action advances the playhead");
+    previous_frame_action->trigger();
+    require(timeline->currentFrame() == 0 && !previous_frame_action->isEnabled(),
+            "the registered Previous frame shortcut action returns to frame zero");
     auto* viewer = static_cast<motion::ui::CompositionViewer*>(
         findWidget<QWidget>(&window, "motion-composition-viewer"));
     require(waitFor([&] {

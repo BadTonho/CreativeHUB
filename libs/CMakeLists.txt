@@ -57,6 +57,10 @@ if(BUILD_VIDEO_MEDIA_LIBRARY)
     add_subdirectory(media)
 endif()
 
+if(BUILD_VIDEO_EDITOR OR BUILD_IMAGE_EDITOR OR BUILD_MOTION_EDITOR)
+    add_subdirectory(shortcuts)
+endif()
+
 foreach(shared_target IN ITEMS
         creative-suite-animation
         creative-suite-composition

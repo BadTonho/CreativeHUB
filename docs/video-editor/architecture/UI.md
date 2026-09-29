@@ -147,9 +147,11 @@ to the left of `Help`. It opens a modal settings dialog with `General`,
 Video Editor keyboard action, applies valid changes immediately, permits empty
 assignments, rejects duplicate combinations, and provides individual and
 global reset actions. The dialog opens at a larger 960x720 layout so the
-shortcut list is easier to review. Shortcut values are global user preferences
-stored by `QSettings` under `shortcuts/<id>`; mouse gestures are intentionally
-excluded.
+shortcut list is easier to review. Shortcut values are Video Editor application
+preferences stored by `QSettings` under `shortcuts/<id>`; mouse gestures are
+intentionally excluded. The shared registration, conflict, and persistence
+logic lives in `libs/shortcuts`; the Video Editor keeps its own settings dialog
+and applies valid changes immediately.
 The `General` tab also provides the enabled-by-default `Enable preview
 performance metrics` preference while Preview diagnostics are under active
 testing. It is stored globally under `performance/preview_metrics_enabled` and
@@ -171,10 +173,12 @@ are omitted.
 The existing timeline choices remain in the Edit menu. Opening or closing the
 dialog, refreshing the Autosave tab, or changing a shortcut, does not change
 project data, project dirty state, undo/redo history, or the `.csp` format.
-`SettingsDialog` and
-`ShortcutManager` are independent Qt components under
-`apps/video-editor/src/settings/`; `MainWindow` owns the manager, registers its
-actions, and only creates and opens the dialog.
+`SettingsDialog` remains a Video Editor component under
+`apps/video-editor/src/settings/`; `MainWindow` owns the manager from
+`creative-suite::shortcuts`, registers its actions, and creates and opens the
+dialog. Image Editor and Motion Studio use the same manager library with
+separate settings groups and app-owned dialogs. Their dialogs apply shortcut
+batches only after acceptance; cancelling preserves the active bindings.
 
 `Shift + Space` opens and closes the non-modal floating `Functions` window.
 The window is an empty 420x320 shell centered over the Video Editor. A click

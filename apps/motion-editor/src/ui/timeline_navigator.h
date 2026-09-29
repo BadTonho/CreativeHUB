@@ -12,6 +12,7 @@
 #include <vector>
 
 class QComboBox;
+class QAction;
 class QLabel;
 class QMouseEvent;
 class QPushButton;
@@ -81,6 +82,12 @@ public:
     explicit TimelineNavigator(QWidget* parent = nullptr);
 
     void setCompositionTiming(model::FrameRate frame_rate);
+    void setShortcutActions(QAction* play_pause,
+                           QAction* previous_frame,
+                           QAction* next_frame,
+                           QAction* loop,
+                           QAction* zoom_in,
+                           QAction* zoom_out);
     void setCurrentFrame(std::int64_t frame);
     void setLayers(const std::vector<model::CompositionLayer>& layers);
     void setSelectedLayerId(model::LayerId id);
@@ -147,6 +154,12 @@ private:
     QSlider* zoom_slider_ = nullptr;
     QLabel* zoom_level_label_ = nullptr;
     QComboBox* display_mode_combo_ = nullptr;
+    QAction* play_pause_action_ = nullptr;
+    QAction* previous_frame_action_ = nullptr;
+    QAction* next_frame_action_ = nullptr;
+    QAction* loop_action_ = nullptr;
+    QAction* zoom_in_action_ = nullptr;
+    QAction* zoom_out_action_ = nullptr;
     QLabel* frame_label_ = nullptr;
     QLabel* frame_rate_label_ = nullptr;
     TimelineRuler* ruler_ = nullptr;

@@ -3,14 +3,12 @@
 #include <QObject>
 #include <QPointer>
 
+#include "settings/shortcut_manager.h"
+
 class QAction;
 class QDialog;
 class QEvent;
 class QWidget;
-
-namespace settings {
-class ShortcutManager;
-}
 
 namespace ui {
 

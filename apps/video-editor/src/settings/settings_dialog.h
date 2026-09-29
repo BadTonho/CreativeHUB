@@ -3,6 +3,8 @@
 #include <QDialog>
 #include <QString>
 
+#include "shortcut_manager.h"
+
 #include <vector>
 
 class QWidget;
@@ -11,8 +13,6 @@ class QPushButton;
 class QTableWidget;
 
 namespace settings {
-
-class ShortcutManager;
 
 struct AutosaveSnapshotItem {
     QString project_name;

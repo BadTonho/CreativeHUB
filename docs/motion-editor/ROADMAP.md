@@ -125,6 +125,11 @@ the Motion Studio implementation choices are finalized.
   the furthest layer end or loop to frame 0, and keep the playhead in view.
   Playback decode requests coalesce without cancelling an in-flight playback
   decode; manual seeks still supersede outdated preview work. Audio is omitted.
+- [x] Add a resizable Settings dialog for configurable command shortcuts.
+  Reuse the shared shortcut manager while keeping Motion Studio command IDs,
+  defaults, and dialog behavior application-owned. OK applies a validated
+  batch; Cancel discards edits. Time/Frames and Media Pool commands remain
+  outside this initial list.
 - [ ] Add keyframe editing interactions to the timeline.
 - [ ] Add project save/load, versioned formats, undo/redo, autosave, and
   recovery for the first supported composition workflow.
@@ -211,8 +216,12 @@ Frames and back, and confirm the playhead and layer positions do not change;
 play and pause a video and confirm a seek pauses it; enable Loop and confirm it
 restarts at frame 0, then disable Loop and confirm playback stops on the
 final layer frame and Play restarts from frame 0; verify playback scrolls and
-extends the navigation range for a long clip; then close the application. Keyframe editing,
-document persistence, undo/redo, and export remain open.
+extends the navigation range for a long clip; open **Settings > Keyboard
+Shortcuts**, change a command, confirm duplicate assignments are rejected,
+check that Cancel discards edits and OK persists them, clear an assignment,
+restore defaults with **Reset All**, and confirm timeline commands are disabled
+when unavailable; then close the application. Keyframe editing, document
+persistence, undo/redo, and export remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.

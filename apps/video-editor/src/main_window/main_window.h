@@ -16,6 +16,7 @@
 #include "timeline/timeline_model.h"
 #include "ui/workspace/workspace_page_id.h"
 #include "ui/workspace/pages/edit/edit_workspace.h"
+#include "settings/shortcut_manager.h"
 
 #include <QMainWindow>
 #include <QString>
@@ -74,7 +75,6 @@ class TimelineTrackHeaderOverlay;
 }
 
 namespace settings {
-class ShortcutManager;
 struct AutosaveSnapshotItem;
 }
 

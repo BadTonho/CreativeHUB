@@ -2,9 +2,10 @@
 
 The editor uses Qt standard key sequences, which follow platform conventions.
 Open **Settings > Keyboard Shortcuts** to customize command shortcuts. Changes
-are saved in the Image Editor's local application preferences and do not modify
-`.cimg` documents. Clear a shortcut to disable it; duplicate combinations are
-rejected. Use **Reset All** to restore the defaults.
+are staged in the resizable dialog. **OK** validates and saves the batch in the
+Image Editor's local application preferences; **Cancel** discards edits. The
+settings do not modify `.cimg` documents. Clear a shortcut to disable it;
+duplicate combinations are rejected. Use **Reset All** to restore the defaults.
 
 | Action | Shortcut |
 | --- | --- |

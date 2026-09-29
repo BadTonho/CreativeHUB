@@ -5,7 +5,8 @@
 #include "recovery_store.h"
 #include "../tools/tool_sidebar.h"
 
-#include <QList>
+#include <creative_suite/shortcuts/shortcut_manager.h>
+
 #include <QByteArray>
 #include <QMainWindow>
 #include <QStringList>
@@ -145,7 +146,8 @@ private:
     bool shape_palette_positioned_ = false;
     int paint_diameter_ = 12;
     int eraser_diameter_ = 12;
-    QList<QAction*> shortcut_actions_;
+    creative_suite::shortcuts::ShortcutManager shortcut_manager_{
+        QStringLiteral("ImageEditor/KeyboardShortcuts")};
     QString linked_document_path_;
     QString linked_output_path_;
     QByteArray linked_document_fingerprint_;

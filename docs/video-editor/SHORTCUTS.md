@@ -55,3 +55,26 @@ Mouse gestures remain outside the customizable shortcut list.
 
 Layer group commands (Add Group, Group Selected, Ungroup, and Delete Group)
 are panel actions and have no keyboard shortcuts.
+
+## Motion Studio
+
+Open **Settings > Keyboard Shortcuts** to configure Motion Studio commands.
+Changes are applied and saved when **OK** is selected; **Cancel** discards the
+dialog edits. Clear an assignment to disable it, use **Reset All** to restore
+the defaults, and resolve duplicate combinations before accepting. Preferences
+are stored in the Motion Studio application settings, separate from composition
+documents. The default modifier is Ctrl on Windows/Linux and Cmd on macOS.
+
+| Shortcut | Action | Context |
+| --- | --- | --- |
+| Ctrl + N / Cmd + N | Create a new composition | Motion Studio |
+| Ctrl + I / Cmd + I | Import media | Motion Studio; enabled with a composition |
+| Space | Play or pause | Motion Studio; enabled when the timeline has layers |
+| Left Arrow | Previous frame | Motion Studio; enabled after frame 0 |
+| Right Arrow | Next frame | Motion Studio; enabled within the navigation range |
+| Unassigned by default | Toggle Loop | Motion Studio; enabled when the timeline has layers |
+| Unassigned by default | Zoom In | Motion Studio; enabled when a composition is open and below maximum zoom |
+| Unassigned by default | Zoom Out | Motion Studio; enabled when a composition is open and above minimum zoom |
+
+The Time / Frames selector and Media Pool commands are not part of the initial
+configurable shortcut list.

@@ -1130,24 +1130,17 @@ void ImageEditorWindow::registerShortcutAction(
     action->setProperty("defaultShortcut",
                         default_sequence.toString(QKeySequence::PortableText));
     action->setShortcut(default_sequence);
-    shortcut_actions_.append(action);
+    shortcut_manager_.registerAction(
+        action->objectName(), action->text(), action);
 }
 
 void ImageEditorWindow::loadShortcutPreferences() {
-    QSettings settings;
-    settings.beginGroup(QStringLiteral("ImageEditor/KeyboardShortcuts"));
-    for (auto* action : shortcut_actions_) {
-        const QString default_text = action->property("defaultShortcut").toString();
-        const QString stored_text = settings.value(action->objectName(), default_text).toString();
-        action->setShortcut(QKeySequence::fromString(
-            stored_text, QKeySequence::PortableText));
-    }
-    settings.endGroup();
-    if (settings.status() != QSettings::NoError) {
-        const QString cause = QStringLiteral(
-            "The keyboard shortcut preferences could not be read.");
+    QString error;
+    if (!shortcut_manager_.load(&error)) {
         logger_.logError(QStringLiteral("load_keyboard_shortcuts"),
-                         cause, settings.fileName());
+                         error.isEmpty()
+                             ? QStringLiteral("The keyboard shortcut preferences could not be read.")
+                             : error);
         statusBar()->showMessage(
             QStringLiteral("Keyboard shortcut preferences could not be loaded; defaults may be in use."),
             5000);
@@ -1156,45 +1149,32 @@ void ImageEditorWindow::loadShortcutPreferences() {
 
 void ImageEditorWindow::openShortcutSettings() {
     QList<ShortcutBinding> bindings;
-    bindings.reserve(shortcut_actions_.size());
-    for (const auto* action : shortcut_actions_) {
+    const auto& entries = shortcut_manager_.entries();
+    bindings.reserve(static_cast<qsizetype>(entries.size()));
+    for (const auto& entry : entries) {
         ShortcutBinding binding;
-        binding.id = action->objectName();
-        binding.label = action->text();
-        binding.default_sequence = QKeySequence::fromString(
-            action->property("defaultShortcut").toString(),
-            QKeySequence::PortableText);
-        binding.sequence = action->shortcut();
+        binding.id = entry.id;
+        binding.label = entry.label;
+        binding.default_sequence = entry.default_sequence;
+        binding.sequence = entry.action->shortcut();
         bindings.append(binding);
     }
 
     ShortcutSettingsDialog dialog(bindings, this);
     if (dialog.exec() != QDialog::Accepted) return;
     const auto updated_bindings = dialog.bindings();
-
-    QSettings settings;
-    settings.beginGroup(QStringLiteral("ImageEditor/KeyboardShortcuts"));
+    std::vector<creative_suite::shortcuts::ShortcutAssignment> assignments;
+    assignments.reserve(static_cast<std::size_t>(updated_bindings.size()));
     for (const auto& binding : updated_bindings) {
-        settings.setValue(binding.id,
-                          binding.sequence.toString(QKeySequence::PortableText));
+        assignments.push_back({binding.id, binding.sequence});
     }
-    settings.endGroup();
-    settings.sync();
-    if (settings.status() != QSettings::NoError) {
+    QString error;
+    if (!shortcut_manager_.applyShortcuts(assignments, &error)) {
         const QString cause = QStringLiteral(
             "The keyboard shortcut preferences could not be saved.");
-        logger_.logError(QStringLiteral("save_keyboard_shortcuts"), cause);
+        logger_.logError(QStringLiteral("save_keyboard_shortcuts"),
+                         error.isEmpty() ? cause : error);
         QMessageBox::warning(this, QStringLiteral("Settings Error"), cause);
-        return;
-    }
-
-    for (const auto& binding : updated_bindings) {
-        for (auto* action : shortcut_actions_) {
-            if (action->objectName() == binding.id) {
-                action->setShortcut(binding.sequence);
-                break;
-            }
-        }
     }
 }
 

@@ -50,6 +50,7 @@ target_include_directories(creative-suite-image-editor-ui-tests PRIVATE
 )
 target_link_libraries(creative-suite-image-editor-ui-tests PRIVATE
     creative-suite-image-editor-core
+    creative-suite::shortcuts
     Qt6::Widgets
     Qt6::Test
 )
@@ -96,6 +97,7 @@ target_include_directories(creative-suite-image-editor-export-ui-tests PRIVATE
 )
 target_link_libraries(creative-suite-image-editor-export-ui-tests PRIVATE
     creative-suite-image-editor-core
+    creative-suite::shortcuts
     Qt6::Widgets
     Qt6::Test
 )
