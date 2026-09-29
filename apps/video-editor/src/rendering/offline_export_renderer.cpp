@@ -11,18 +11,11 @@
 #include "timeline/timeline_transform.h"
 #include "ui/workspace/pages/render/render_output_capabilities.h"
 
+#include <creative_suite/media/video_encoder.h>
+
 extern "C" {
-#include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
-#include <libavutil/channel_layout.h>
-#include <libavutil/error.h>
-#include <libavutil/imgutils.h>
 #include <libavutil/mathematics.h>
-#include <libavutil/opt.h>
-#include <libavutil/pixdesc.h>
-#include <libavutil/samplefmt.h>
-#include <libswresample/swresample.h>
-#include <libswscale/swscale.h>
 }
 
 #include <QString>
@@ -60,62 +53,11 @@ struct FormatInputDeleter {
         if (value != nullptr) avformat_close_input(&value);
     }
 };
-struct FormatOutputDeleter {
-    void operator()(AVFormatContext* value) const noexcept {
-        if (value != nullptr) avformat_free_context(value);
-    }
-};
-struct CodecDeleter {
-    void operator()(AVCodecContext* value) const noexcept {
-        if (value != nullptr) avcodec_free_context(&value);
-    }
-};
-struct PacketDeleter {
-    void operator()(AVPacket* value) const noexcept {
-        if (value != nullptr) av_packet_free(&value);
-    }
-};
-struct FrameDeleter {
-    void operator()(AVFrame* value) const noexcept {
-        if (value != nullptr) av_frame_free(&value);
-    }
-};
-struct ResamplerDeleter {
-    void operator()(SwrContext* value) const noexcept {
-        if (value != nullptr) swr_free(&value);
-    }
-};
-struct ScalerDeleter {
-    void operator()(SwsContext* value) const noexcept {
-        if (value != nullptr) sws_freeContext(value);
-    }
-};
-
 using InputPtr = std::unique_ptr<AVFormatContext, FormatInputDeleter>;
-using OutputPtr = std::unique_ptr<AVFormatContext, FormatOutputDeleter>;
-using CodecPtr = std::unique_ptr<AVCodecContext, CodecDeleter>;
-using PacketPtr = std::unique_ptr<AVPacket, PacketDeleter>;
-using FramePtr = std::unique_ptr<AVFrame, FrameDeleter>;
-using ResamplerPtr = std::unique_ptr<SwrContext, ResamplerDeleter>;
-using ScalerPtr = std::unique_ptr<SwsContext, ScalerDeleter>;
 
 std::string pathUtf8(const std::filesystem::path& path) {
     const auto value = path.u8string();
     return {reinterpret_cast<const char*>(value.data()), value.size()};
-}
-
-std::string ffmpegMessage(int code) {
-    char buffer[AV_ERROR_MAX_STRING_SIZE]{};
-    if (av_strerror(code, buffer, sizeof(buffer)) == 0) return buffer;
-    return "FFmpeg error " + std::to_string(code);
-}
-
-[[noreturn]] void failFfmpeg(int code, const char* operation) {
-    throw ExportError(std::string(operation) + ": " + ffmpegMessage(code), code);
-}
-
-void check(int result, const char* operation) {
-    if (result < 0) failFfmpeg(result, operation);
 }
 
 AVRational frameRateRational(double value) {
@@ -341,14 +283,7 @@ std::filesystem::path makeTemporaryPath(const std::filesystem::path& target, std
 
 bool publishFile(const std::filesystem::path& temporary,
                  const std::filesystem::path& target) {
-#ifdef _WIN32
-    return MoveFileExW(temporary.c_str(), target.c_str(),
-        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
-#else
-    std::error_code error;
-    std::filesystem::rename(temporary, target, error);
-    return !error;
-#endif
+    return creative_suite::media::publishEncodedFileAtomically(temporary, target);
 }
 
 class OutputEncoder final {
@@ -357,279 +292,50 @@ public:
                   const std::filesystem::path& output_path,
                   double frame_rate,
                   bool with_audio)
-        : job_(job), frame_rate_(frameRateRational(frame_rate)) {
-        const auto output_utf8 = pathUtf8(output_path);
-        AVFormatContext* raw_output = nullptr;
-        check(avformat_alloc_output_context2(
-                  &raw_output, nullptr,
-                  job.settings.container_name.toUtf8().constData(),
-                  output_utf8.c_str()),
-              "Creating the output container");
-        if (raw_output == nullptr) throw std::runtime_error("FFmpeg did not create an output container.");
-        output_.reset(raw_output);
-        video_stream_ = createVideoStream(job);
-        if (with_audio) audio_stream_ = createAudioStream(job);
-        if ((output_->oformat->flags & AVFMT_NOFILE) == 0) {
-            check(avio_open(&output_->pb, output_utf8.c_str(), AVIO_FLAG_WRITE),
-                  "Opening the temporary output file");
-            io_open_ = true;
-        }
-        check(avformat_write_header(output_.get(), nullptr), "Writing the output header");
-        header_written_ = true;
-    }
-
-    ~OutputEncoder() {
-        if (io_open_ && output_ != nullptr) avio_closep(&output_->pb);
-    }
+        : encoder_(makeSettings(job, output_path, frame_rate, with_audio)) {}
 
     void writeVideo(const media::VideoFrame& source, std::int64_t output_frame) {
-        check(av_frame_make_writable(video_frame_.get()), "Preparing an output video frame");
-        const std::uint8_t* source_data[4]{source.rgba_pixels.data(), nullptr, nullptr, nullptr};
-        const int source_lines[4]{source.stride, 0, 0, 0};
-        const int rows = sws_scale(
-            scaler_.get(), source_data, source_lines, 0, source.height,
-            video_frame_->data, video_frame_->linesize);
-        if (rows != job_.settings.height) throw std::runtime_error("Converting an output video frame failed.");
-        video_frame_->pts = output_frame;
-        encode(video_codec_.get(), video_stream_, video_frame_.get());
+        encoder_.writeVideo(source, output_frame);
     }
 
-    void writeAudio(const std::vector<float>& stereo_samples,
-                    int sample_count) {
-        if (audio_codec_ == nullptr || sample_count <= 0) return;
-        check(av_frame_make_writable(audio_frame_.get()), "Preparing an output audio frame");
-        std::vector<std::int16_t> pcm(static_cast<std::size_t>(sample_count) * 2U);
-        for (std::size_t index = 0; index < pcm.size(); ++index) {
-            const auto value = std::clamp(stereo_samples[index], -1.0F, 1.0F);
-            pcm[index] = static_cast<std::int16_t>(std::lrint(value * 32767.0F));
-        }
-        const std::uint8_t* input_data[1]{reinterpret_cast<const std::uint8_t*>(pcm.data())};
-        const int output_samples = audio_codec_->frame_size > 0
-            ? audio_codec_->frame_size
-            : 1024;
-        const int converted = swr_convert(
-            audio_resampler_.get(), audio_frame_->data, output_samples,
-            input_data, sample_count);
-        check(converted, "Converting the output audio samples");
-        if (converted < output_samples) {
-            check(av_samples_set_silence(
-                      audio_frame_->data, converted, output_samples - converted,
-                      audio_codec_->ch_layout.nb_channels, audio_codec_->sample_fmt),
-                  "Padding the output audio frame");
-        }
-        audio_frame_->nb_samples = output_samples;
-        audio_frame_->pts = next_audio_pts_;
-        next_audio_pts_ += output_samples;
-        audio_input_samples_written_ += sample_count;
-        encode(audio_codec_.get(), audio_stream_, audio_frame_.get());
+    void writeAudio(const std::vector<float>& stereo_samples, int sample_count) {
+        encoder_.writeAudio(
+            std::span<const float>(stereo_samples.data(), stereo_samples.size()), sample_count);
     }
 
     [[nodiscard]] int nextAudioInputSampleCount() const {
-        if (audio_codec_ == nullptr) return 1024;
-        const auto frame_size = audio_codec_->frame_size > 0
-            ? audio_codec_->frame_size
-            : 1024;
-        const auto input_end = av_rescale_rnd(
-            next_audio_pts_ + frame_size, 48000, audio_sample_rate_, AV_ROUND_UP);
-        return static_cast<int>(std::max<std::int64_t>(
-            1, input_end - audio_input_samples_written_));
+        return encoder_.nextAudioInputSampleCount();
     }
 
-    void finish() {
-        if (finished_) return;
-        encode(video_codec_.get(), video_stream_, nullptr);
-        if (audio_codec_ != nullptr) {
-            encode(audio_codec_.get(), audio_stream_, nullptr);
-        }
-        if (header_written_) check(av_write_trailer(output_.get()), "Finishing the output container");
-        if (io_open_) {
-            check(avio_closep(&output_->pb), "Closing the temporary output file");
-            io_open_ = false;
-        }
-        finished_ = true;
-    }
+    void finish() { encoder_.finish(); }
 
 private:
-    AVStream* createVideoStream(const ui::RenderJob& job) {
-        const auto encoder_name = job.settings.video_encoder_name.toUtf8();
-        const AVCodec* codec = avcodec_find_encoder_by_name(encoder_name.constData());
-        if (codec == nullptr || codec->type != AVMEDIA_TYPE_VIDEO) {
-            throw std::runtime_error("The selected video encoder is unavailable.");
+    static creative_suite::media::VideoEncodingSettings makeSettings(
+        const ui::RenderJob& job,
+        const std::filesystem::path& output_path,
+        double frame_rate,
+        bool with_audio) {
+        const auto rate = frameRateRational(frame_rate);
+        creative_suite::media::VideoEncodingSettings settings;
+        settings.output_path = output_path;
+        settings.container_name = job.settings.container_name.toStdString();
+        settings.video_encoder_name = job.settings.video_encoder_name.toStdString();
+        settings.width = job.settings.width;
+        settings.height = job.settings.height;
+        settings.frame_rate_numerator = rate.num;
+        settings.frame_rate_denominator = rate.den;
+        settings.video_bitrate_mbps = job.settings.video_bitrate_mbps;
+        if (with_audio) {
+            settings.audio = creative_suite::media::AudioEncodingSettings{
+                job.settings.audio_encoder_name.toStdString(),
+                job.settings.audio_bitrate_kbps,
+                48000,
+                2};
         }
-        video_codec_.reset(avcodec_alloc_context3(codec));
-        if (video_codec_ == nullptr) throw std::runtime_error("Allocating the video encoder failed.");
-        video_codec_->codec_type = AVMEDIA_TYPE_VIDEO;
-        video_codec_->width = job.settings.width;
-        video_codec_->height = job.settings.height;
-        video_codec_->time_base = av_inv_q(frame_rate_);
-        video_codec_->framerate = frame_rate_;
-        video_codec_->bit_rate = static_cast<std::int64_t>(
-            std::llround(job.settings.video_bitrate_mbps * 1000000.0));
-        video_codec_->gop_size = std::max(1, av_q2d(frame_rate_) > 0.0
-            ? static_cast<int>(std::lround(av_q2d(frame_rate_) * 2.0))
-            : 60);
-        video_codec_->max_b_frames = 0;
-        if (output_->oformat->flags & AVFMT_GLOBALHEADER) {
-            video_codec_->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-        }
-        const void* pixel_config = nullptr;
-        int pixel_config_count = 0;
-        check(avcodec_get_supported_config(
-                  video_codec_.get(), codec, AV_CODEC_CONFIG_PIX_FORMAT, 0,
-                  &pixel_config, &pixel_config_count),
-              "Querying supported encoder pixel formats");
-        video_codec_->pix_fmt = AV_PIX_FMT_YUV420P;
-        if (pixel_config != nullptr && pixel_config_count > 0) {
-            const auto* formats = static_cast<const AVPixelFormat*>(pixel_config);
-            bool selected = false;
-            for (int index = 0; index < pixel_config_count; ++index) {
-                if (formats[index] == AV_PIX_FMT_YUV420P) {
-                    video_codec_->pix_fmt = formats[index];
-                    selected = true;
-                    break;
-                }
-            }
-            if (!selected) {
-                for (int index = 0; index < pixel_config_count; ++index) {
-                    const auto* description = av_pix_fmt_desc_get(formats[index]);
-                    if (description != nullptr &&
-                        (description->flags & AV_PIX_FMT_FLAG_HWACCEL) == 0) {
-                        video_codec_->pix_fmt = formats[index];
-                        selected = true;
-                        break;
-                    }
-                }
-            }
-            if (!selected) video_codec_->pix_fmt = formats[0];
-        }
-        AVDictionary* options = nullptr;
-        if (encoder_name == QByteArray("libx264")) {
-            av_dict_set(&options, "preset", "medium", 0);
-        }
-        const int open_result = avcodec_open2(video_codec_.get(), codec, &options);
-        av_dict_free(&options);
-        check(open_result, "Opening the selected video encoder");
-        auto* stream = avformat_new_stream(output_.get(), nullptr);
-        if (stream == nullptr) throw std::runtime_error("Creating the output video stream failed.");
-        stream->time_base = video_codec_->time_base;
-        check(avcodec_parameters_from_context(stream->codecpar, video_codec_.get()),
-              "Writing video encoder parameters");
-        video_frame_.reset(av_frame_alloc());
-        if (video_frame_ == nullptr) throw std::runtime_error("Allocating an output video frame failed.");
-        video_frame_->format = video_codec_->pix_fmt;
-        video_frame_->width = video_codec_->width;
-        video_frame_->height = video_codec_->height;
-        check(av_frame_get_buffer(video_frame_.get(), 32), "Allocating output video pixels");
-        scaler_.reset(sws_getContext(
-            job.settings.width, job.settings.height, AV_PIX_FMT_RGBA,
-            job.settings.width, job.settings.height, video_codec_->pix_fmt,
-            SWS_BICUBIC, nullptr, nullptr, nullptr));
-        if (scaler_ == nullptr) throw std::runtime_error("Creating the video pixel converter failed.");
-        return stream;
+        return settings;
     }
 
-    AVStream* createAudioStream(const ui::RenderJob& job) {
-        const auto encoder_name = job.settings.audio_encoder_name.toUtf8();
-        const AVCodec* codec = avcodec_find_encoder_by_name(encoder_name.constData());
-        if (codec == nullptr || codec->type != AVMEDIA_TYPE_AUDIO) {
-            throw std::runtime_error("The selected audio encoder is unavailable.");
-        }
-        audio_codec_.reset(avcodec_alloc_context3(codec));
-        if (audio_codec_ == nullptr) throw std::runtime_error("Allocating the audio encoder failed.");
-        const void* rate_config = nullptr;
-        int rate_config_count = 0;
-        check(avcodec_get_supported_config(
-                  audio_codec_.get(), codec, AV_CODEC_CONFIG_SAMPLE_RATE, 0,
-                  &rate_config, &rate_config_count),
-              "Querying supported audio sample rates");
-        audio_sample_rate_ = 48000;
-        if (rate_config != nullptr && rate_config_count > 0) {
-            const auto* rates = static_cast<const int*>(rate_config);
-            audio_sample_rate_ = rates[0];
-            for (int index = 0; index < rate_config_count; ++index) {
-                if (rates[index] == 48000) {
-                    audio_sample_rate_ = rates[index];
-                    break;
-                }
-            }
-        }
-        audio_codec_->sample_rate = audio_sample_rate_;
-        av_channel_layout_default(&audio_codec_->ch_layout, 2);
-        const void* sample_config = nullptr;
-        int sample_config_count = 0;
-        check(avcodec_get_supported_config(
-                  audio_codec_.get(), codec, AV_CODEC_CONFIG_SAMPLE_FORMAT, 0,
-                  &sample_config, &sample_config_count),
-              "Querying supported audio sample formats");
-        audio_codec_->sample_fmt = sample_config != nullptr && sample_config_count > 0
-            ? static_cast<const AVSampleFormat*>(sample_config)[0]
-            : AV_SAMPLE_FMT_FLTP;
-        audio_codec_->time_base = AVRational{1, audio_sample_rate_};
-        audio_codec_->bit_rate = static_cast<std::int64_t>(job.settings.audio_bitrate_kbps) * 1000;
-        if (output_->oformat->flags & AVFMT_GLOBALHEADER) {
-            audio_codec_->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-        }
-        check(avcodec_open2(audio_codec_.get(), codec, nullptr), "Opening the selected audio encoder");
-        auto* stream = avformat_new_stream(output_.get(), nullptr);
-        if (stream == nullptr) throw std::runtime_error("Creating the output audio stream failed.");
-        stream->time_base = audio_codec_->time_base;
-        check(avcodec_parameters_from_context(stream->codecpar, audio_codec_.get()),
-              "Writing audio encoder parameters");
-
-        AVChannelLayout input_layout{};
-        av_channel_layout_default(&input_layout, 2);
-        SwrContext* raw_resampler = nullptr;
-        const int result = swr_alloc_set_opts2(
-            &raw_resampler, &audio_codec_->ch_layout, audio_codec_->sample_fmt,
-            audio_codec_->sample_rate, &input_layout, AV_SAMPLE_FMT_S16,
-            48000, 0, nullptr);
-        av_channel_layout_uninit(&input_layout);
-        check(result, "Creating the output audio converter");
-        if (raw_resampler == nullptr) throw std::runtime_error("Creating the output audio converter failed.");
-        audio_resampler_.reset(raw_resampler);
-        check(swr_init(audio_resampler_.get()), "Initializing the output audio converter");
-        audio_frame_.reset(av_frame_alloc());
-        if (audio_frame_ == nullptr) throw std::runtime_error("Allocating an output audio frame failed.");
-        audio_frame_->format = audio_codec_->sample_fmt;
-        audio_frame_->sample_rate = audio_codec_->sample_rate;
-        check(av_channel_layout_copy(&audio_frame_->ch_layout, &audio_codec_->ch_layout),
-              "Copying the output audio layout");
-        audio_frame_->nb_samples = audio_codec_->frame_size > 0 ? audio_codec_->frame_size : 1024;
-        check(av_frame_get_buffer(audio_frame_.get(), 0), "Allocating output audio samples");
-        return stream;
-    }
-
-    void encode(AVCodecContext* codec, AVStream* stream, AVFrame* frame) {
-        check(avcodec_send_frame(codec, frame), frame == nullptr ? "Flushing an output encoder" : "Encoding output media");
-        while (true) {
-            PacketPtr packet(av_packet_alloc());
-            if (packet == nullptr) throw std::runtime_error("Allocating an output packet failed.");
-            const int result = avcodec_receive_packet(codec, packet.get());
-            if (result == AVERROR(EAGAIN) || result == AVERROR_EOF) break;
-            check(result, "Receiving an encoded output packet");
-            packet->stream_index = stream->index;
-            av_packet_rescale_ts(packet.get(), codec->time_base, stream->time_base);
-            check(av_interleaved_write_frame(output_.get(), packet.get()), "Writing an output packet");
-        }
-    }
-
-    const ui::RenderJob& job_;
-    AVRational frame_rate_{0, 1};
-    OutputPtr output_;
-    CodecPtr video_codec_;
-    CodecPtr audio_codec_;
-    AVStream* video_stream_ = nullptr;
-    AVStream* audio_stream_ = nullptr;
-    FramePtr video_frame_;
-    FramePtr audio_frame_;
-    ScalerPtr scaler_;
-    ResamplerPtr audio_resampler_;
-    int audio_sample_rate_ = 48000;
-    std::int64_t next_audio_pts_ = 0;
-    std::int64_t audio_input_samples_written_ = 0;
-    bool io_open_ = false;
-    bool header_written_ = false;
-    bool finished_ = false;
+    creative_suite::media::VideoEncoder encoder_;
 };
 
 std::vector<RenderClip> prepareClips(
@@ -913,6 +619,12 @@ void OfflineExportRenderer::render(
         }
         published = true;
         reportProgress(100);
+    } catch (const creative_suite::media::VideoEncodingError& error) {
+        if (!published) {
+            std::error_code cleanup_error;
+            std::filesystem::remove(temporary, cleanup_error);
+        }
+        throw ExportError(error.what(), error.errorCode());
     } catch (...) {
         if (!published) {
             std::error_code cleanup_error;

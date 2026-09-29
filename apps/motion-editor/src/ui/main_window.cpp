@@ -6,6 +6,8 @@
 #include "new_composition_dialog.h"
 #include "../persistence/motion_document_store.h"
 #include "preview_renderer.h"
+#include "motion_video_export.h"
+#include "motion_video_export_dialog.h"
 #include "shortcut_settings_dialog.h"
 #include "timeline_navigator.h"
 #include "../settings/autosave_preferences.h"
@@ -344,6 +346,12 @@ MainWindow::MainWindow(QWidget* parent,
         (void)saveCompositionAs();
     });
 
+    export_video_action_ = file_menu->addAction(QStringLiteral("Export Video..."));
+    export_video_action_->setObjectName(QStringLiteral("motion-export-video-action"));
+    export_video_action_->setEnabled(false);
+    connect(export_video_action_, &QAction::triggered,
+            this, [this] { startVideoExport(); });
+
     file_menu->addSeparator();
     import_media_action_ = file_menu->addAction(QStringLiteral("Import Media..."));
     import_media_action_->setObjectName(QStringLiteral("motion-import-media-action"));
@@ -476,6 +484,7 @@ MainWindow::MainWindow(QWidget* parent,
 MainWindow::~MainWindow()
 {
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
+    if (export_worker_) export_worker_->cancelAndWait();
     if (preview_renderer_) preview_renderer_->stopAndWait();
 }
 
@@ -673,6 +682,85 @@ bool MainWindow::saveToPath(const std::filesystem::path& path)
     return false;
 }
 
+void MainWindow::startVideoExport()
+{
+    finishPendingTransformEdit();
+    finishPendingContentEdit();
+    if (!document_ || !media_pool_ || export_worker_) return;
+
+    MotionVideoExportDialog dialog(document_->canvasSize(), document_->frameRate(), this);
+    if (dialog.exec() != QDialog::Accepted) return;
+    const auto settings = dialog.exportSettings();
+    if (!settings.has_value()) return;
+
+    MotionExportSnapshot snapshot;
+    snapshot.canvas_size = document_->canvasSize();
+    snapshot.frame_rate = document_->frameRate();
+    snapshot.layers = document_->layers();
+    for (const auto& layer : snapshot.layers) {
+        if (layer.kind == model::LayerKind::Image) {
+            snapshot.still_frames.emplace(
+                layer.source_path, media_pool_->sharedFirstFrameForPath(layer.source_path));
+        }
+    }
+
+    export_progress_ = new QProgressDialog(
+        QStringLiteral("Preparing video export..."), QStringLiteral("Cancel"), 0, 100, this);
+    export_progress_->setObjectName(QStringLiteral("motion-export-progress"));
+    export_progress_->setWindowTitle(QStringLiteral("Export Video"));
+    export_progress_->setWindowModality(Qt::NonModal);
+    export_progress_->setAutoClose(false);
+    export_progress_->setAutoReset(false);
+    export_progress_->setValue(0);
+    connect(export_progress_, &QProgressDialog::canceled, this, [this] {
+        if (!export_worker_) return;
+        export_worker_->cancel();
+        export_progress_->setLabelText(QStringLiteral("Canceling video export..."));
+        export_progress_->setCancelButton(nullptr);
+    });
+
+    QPointer<MainWindow> owner(this);
+    export_worker_ = std::make_unique<MotionVideoExportWorker>(
+        this, std::move(snapshot), *settings,
+        [owner](int progress) {
+            if (!owner.isNull() && owner->export_progress_ != nullptr) {
+                owner->export_progress_->setLabelText(
+                    QStringLiteral("Rendering video... %1%").arg(progress));
+                owner->export_progress_->setValue(progress);
+            }
+        },
+        [owner](MotionExportResult result) mutable {
+            if (!owner.isNull()) owner->finishVideoExport(std::move(result));
+        });
+    export_video_action_->setEnabled(false);
+    export_progress_->show();
+    export_worker_->start();
+}
+
+void MainWindow::finishVideoExport(MotionExportResult result)
+{
+    if (export_worker_) {
+        export_worker_->wait();
+        export_worker_.reset();
+    }
+    if (export_progress_ != nullptr) {
+        export_progress_->close();
+        export_progress_->deleteLater();
+        export_progress_ = nullptr;
+    }
+    updateDocumentState();
+    if (result.succeeded) {
+        statusBar()->showMessage(
+            QStringLiteral("Video exported to %1")
+                .arg(QString::fromUtf8(pathForLog(result.output_path))), 8000);
+    } else if (result.cancelled) {
+        statusBar()->showMessage(QStringLiteral("Video export canceled."), 5000);
+    } else {
+        QMessageBox::warning(this, QStringLiteral("Video Export Failed"),
+            QStringLiteral("The video could not be exported. See the Motion Studio log for details."));
+    }
+}
+
 bool MainWindow::confirmReplaceDocument()
 {
     if (!documentIsDirty()) return true;
@@ -736,6 +824,10 @@ void MainWindow::updateDocumentState()
     if (save_composition_action_ != nullptr) save_composition_action_->setEnabled(has_document);
     if (save_composition_as_action_ != nullptr)
         save_composition_as_action_->setEnabled(has_document);
+    if (export_video_action_ != nullptr) {
+        const bool has_layers = has_document && !document_->layers().empty();
+        export_video_action_->setEnabled(has_layers && !export_worker_);
+    }
     updateHistoryActions();
     if (!has_document) {
         setWindowModified(false);
@@ -989,6 +1081,15 @@ void MainWindow::closeEvent(QCloseEvent* event)
     if (!confirmReplaceDocument()) {
         event->ignore();
         return;
+    }
+    if (export_worker_) {
+        export_worker_->cancelAndWait();
+        export_worker_.reset();
+    }
+    if (export_progress_ != nullptr) {
+        export_progress_->close();
+        export_progress_->deleteLater();
+        export_progress_ = nullptr;
     }
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
     cleanupCurrentUnsavedSnapshots("close_unsaved_recovery_cleanup");

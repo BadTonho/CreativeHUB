@@ -14,7 +14,9 @@ compositor. Manual Save, Save As, and Open use a versioned `.motion` document
 that includes the Media Pool. The writer emits v2, reads v1 with default text
 or rectangle content for older native layers, and keeps the recovery wrapper
 at v1. Undo/Redo and configurable autosave and recovery cover the composition
-and Media Pool; export remains open.
+and Media Pool. A first-pass video export uses a shared FFmpeg encoder, with
+opaque video-only output and per-job settings; audio and alpha remain outside
+the implemented export path.
 This document records the agreed starting scope; it does not finalize a
 renderer, programming language, native file extension, codec, or implementation
 architecture.
@@ -139,6 +141,7 @@ every target GPU or that the path has met performance targets.
 | Timeline playback and CPU composition | `apps/video-editor/src/playback/playback_worker.cpp` selects and decodes timeline layers, rasterizes text, and calls the CPU `FrameCompositor`. The compositor returns the completed raster frame before preview presentation. | The shared raster compositor and animation evaluator are reusable candidates. Timeline scheduling, project data, and playback controls remain application-specific. |
 | Still images and text | `libs/media/src/still_image_decoder.cpp` uses Qt `QImageReader` for static raster images and returns the shared RGBA frame type. `apps/video-editor/src/rendering/text_renderer.cpp` rasterizes Video Editor text through Qt `QPainter`. | Motion Studio uses the shared still-image decoder for import previews and its own Qt rasterizer for multiline text, rectangles, and ellipses. It does not depend on the Video Editor text renderer or timeline types. |
 | Preview presentation | `OpenGLPreviewSurface` requests an OpenGL 3.2 Core context, uploads the already-composed RGBA frame as a texture, and draws it with a shader. GPU work presents the final frame; layer composition is CPU-side. `PreviewWidget` can use a CPU `QImage`/`QPixmap` path when GPU preview is disabled or fails. | Treat this Qt/OpenGL widget as Video Editor UI. It does not provide GPU layer composition or establish a Motion Studio renderer. |
+| Video encoding and output capabilities | The Video Editor previously owned FFmpeg container/codec discovery and its FFmpeg encoder wrapper alongside timeline assembly and audio rendering. The shared `libs/media/` encoder now handles RGBA frame encoding, optional stereo audio, container/codec discovery, and atomic publication support. | Motion Studio uses the shared encoder and capability list while its own worker schedules frames from an immutable composition snapshot. It currently exports opaque video without audio; project scheduling, settings UI, progress, cancellation, and output verification remain Motion-owned. |
 
 Existing regression tests cover the shared animation and composition
 libraries, Video Editor transform and text composition, playback-worker
@@ -160,12 +163,23 @@ timeline rows linked to Media Pool sources, and manual versioned save/open
 format. Image, video, text, and shape content render in the preview with
 linearly evaluated transform keyframes. Text and shape content is static;
 fonts are resolved by family name on the current system and are not embedded.
+**File > Export Video...** renders from frame 0 through the furthest layer end,
+including hidden layers for duration, converts between exact rational frame
+rates, and writes blank frames as opaque black. The settings dialog discovers
+available containers and compatible video encoders and offers composition,
+common, or custom dimensions, output frame rate, and quality/bitrate controls.
+Settings apply to the current job and are not persisted. Export jobs show
+progress, support cancellation, verify the staged file, and publish it only
+after successful completion; cancellation and failure preserve an existing
+destination. Audio and alpha are not exported.
 Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
 The native `.motion` writer emits v2 and reads v1 using default content for old
 text and shape records; the recovery wrapper remains at version 1. Richer
-curves and interpolation, effects, and export remain open. The one-hour ruler
+curves and interpolation and effects remain open. Final encoder/profile
+selection, output color handling, and cross-platform export behavior remain
+technical validation work. The one-hour ruler
 range controls navigation only and does not define the composition's duration. See
 [ROADMAP.md](ROADMAP.md) and [REUSE_PLAN.md](REUSE_PLAN.md) for current
 implementation details and provisional shared API contracts.

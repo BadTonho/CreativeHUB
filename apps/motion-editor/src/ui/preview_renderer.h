@@ -3,7 +3,6 @@
 #include "model/composition_document.h"
 
 #include <creative_suite/media/video_frame.h>
-#include <creative_suite/media/video_playback.h>
 
 #include <QThread>
 
@@ -12,12 +11,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <set>
-#include <string>
 #include <vector>
 
 namespace motion::ui {
@@ -39,7 +35,10 @@ struct PreviewRequest {
     model::CanvasSize canvas_size{};
     model::FrameRate frame_rate{};
     std::vector<PreviewLayerSnapshot> layers;
+    bool black_canvas_when_empty = false;
 };
+
+class CompositionFrameRenderer;
 
 enum class PreviewRequestMode : std::uint8_t {
     Interactive,
@@ -84,12 +83,6 @@ private:
     [[nodiscard]] creative_suite::media::RgbaFramePtr render(
         const PreviewRequest& request,
         std::uint64_t cancellation_generation);
-    void reportDecodeError(
-        const std::filesystem::path& path,
-        std::int64_t source_frame,
-        std::string cause,
-        std::optional<int> error_code = std::nullopt);
-
     QObject* result_receiver_ = nullptr;
     ResultHandler result_handler_;
     RenderFunction render_function_;
@@ -108,13 +101,7 @@ private:
     bool stopping_ = false;
     std::atomic<std::uint64_t> generation_{0};
     std::atomic<std::uint64_t> cancellation_generation_{0};
-    std::map<std::filesystem::path,
-             std::unique_ptr<creative_suite::media::VideoPlaybackSession>> video_sessions_;
-    struct CachedContentFrame {
-        model::LayerContent content;
-        creative_suite::media::RgbaFramePtr frame;
-    };
-    std::map<model::LayerId, CachedContentFrame> content_frames_;
+    std::unique_ptr<CompositionFrameRenderer> frame_renderer_;
 };
 
 } // namespace motion::ui

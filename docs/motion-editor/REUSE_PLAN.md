@@ -87,6 +87,7 @@ interpolation modes remain open.
 | creative-suite::composition | CPU composition of raster frames using shared transforms, opacity, and alpha coverage. It has no UI, timeline, or project dependency. | Motion Studio uses it to composite active image, video, text, and shape frames in document order. Text and vector-shape rasterization remains Motion Studio-owned. |
 | creative-suite::diagnostics | Structured local logging with caller-selected application log directories; the legacy no-argument default remains compatible with the Video Editor. | Reuse with a Motion Studio-specific application identifier and log directory. |
 | creative-suite::video-media | FFmpeg video playback session with a neutral optional DecodeObserver. It depends on FFmpeg and shared diagnostics, not preview UI. | Motion Studio keeps one playback session per source on its preview worker and decodes the source frame for the current timeline position. Its application-owned monotonic clock schedules composition frames; audio remains out of scope. |
+| creative-suite::video-encoding | Qt- and project-independent FFmpeg API for RGBA video encoding, optional interleaved stereo audio input, container/codec capability discovery, and atomic file publication. It shares the RGBA frame type but owns no composition, timeline, or UI. | Motion Studio schedules and renders immutable document snapshots, then uses the shared encoder for video-only output. The Video Editor uses the same encoding and discovery implementation while retaining timeline assembly, audio rendering, render queue, and application settings. |
 | creative-suite::media-assets | Neutral metadata, canonical-path media catalog, cached first frames, bins, online/offline state, video and still-image decoders, probes, and per-file import processing. The public API uses standard C++ types; its current decoders use FFmpeg and Qt Gui internally. Animated GIF import is rejected. | Populate Motion Studio's in-memory pool with video and still images while keeping its UI and document lifecycle application-owned. |
 | creative-suite::shortcuts | Qt action registration, per-application QSettings persistence, duplicate detection, resets, and validated batch application. It has no project or dialog dependency. | Motion Studio owns command IDs, defaults, action states, and its configurable-shortcuts dialog; the shared manager applies accepted edits atomically. Video Editor and Image Editor retain their own preference groups and dialog behavior. |
 
@@ -157,8 +158,8 @@ validation.
   composition/export and color management are not established by the current
   Motion Studio MVP scope; revisit them only if that scope changes.
 - Composition documents, timelines, editing history, autosave, recovery, and
-  export remain Motion Studio responsibilities. Manual save/reopen uses its
-  own versioned JSON `.motion` format. Version 2 stores typed text and shape
+  frame scheduling remain Motion Studio responsibilities. Manual save/reopen
+  uses its own versioned JSON `.motion` format. Version 2 stores typed text and shape
   content while version 1 documents remain readable with default text or
   rectangle content applied to older records. Bounded Undo/Redo is
   composition-owned. Autosave and recovery use a separate version 1 wrapper
@@ -172,6 +173,15 @@ validation.
   a positive source rate and frame count or duration, and their full source
   length is converted to composition frames. Image durations can be extended;
   video durations can be shortened and restored up to the source length.
+- Motion Studio exports from frame zero through the furthest layer end,
+  including hidden layers for duration. Its reusable frame renderer evaluates
+  visible image/video/text/shape content and transform keys, preserves blank
+  lead-in frames, and uses rational frame mapping when output FPS differs.
+  `creative-suite::video-encoding` handles FFmpeg capability discovery and
+  encoding; Motion owns its settings dialog, job snapshot, worker, progress,
+  cancellation, output verification, and publication lifecycle. The output is
+  currently opaque and has no audio; settings apply to one job and are not
+  saved. Codec/profile choices and cross-platform behavior remain provisional.
 - Configurable keyboard shortcuts use the shared shortcut manager and the
   `Creative Suite` / `Motion Studio` QSettings identity, with the
   `MotionStudio/KeyboardShortcuts` group and stable command IDs. The Motion
@@ -242,12 +252,12 @@ Studio application; Media Pool changes remain outside its history. Autosave
 and recovery use a version 1 wrapper, configurable timer, per-session untitled
 storage, saved-project sidecars, and recovery-management dialog. The `.motion`
 writer emits v2 and reads v1; other application formats remain unchanged.
-Export remains pending.
-The Motion Studio timeline consumes the shared media, playback, composition,
-and diagnostics libraries directly without linking Video Editor application
-types or targets. Layer insertion, timing, transforms, and preview behavior
+The Motion Studio timeline and export path consume shared media, playback,
+composition, diagnostics, and video-encoding libraries directly without
+linking Video Editor application types or targets. Layer insertion, timing,
+transforms, preview, and export behavior
 remain provisional until validated on Windows, macOS, and Linux and covered by
 Motion Studio consumer regressions. Manual Windows interaction validation is
-still pending.
+still pending; export-specific steps are in [ROADMAP.md](ROADMAP.md).
 The `.motion` extension and current C++/Qt 6 implementation remain provisional;
 the final application technology is not selected.

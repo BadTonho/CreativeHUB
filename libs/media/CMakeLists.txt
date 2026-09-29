@@ -1,4 +1,4 @@
-find_package(FFMPEG MODULE REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE)
+find_package(FFMPEG MODULE REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL SWRESAMPLE SWSCALE)
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Gui)
 set_property(GLOBAL PROPERTY CREATIVE_SUITE_FFMPEG_LIBRARY_DIRS "${FFMPEG_LIBRARY_DIRS}")
 
@@ -51,6 +51,27 @@ if(MSVC)
     target_compile_options(creative-suite-video-media PRIVATE /W4 /permissive-)
 else()
     target_compile_options(creative-suite-video-media PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_library(creative-suite-video-encoding STATIC
+    src/video_encoder.cpp
+    include/creative_suite/media/video_encoder.h
+)
+add_library(creative-suite::video-encoding ALIAS creative-suite-video-encoding)
+target_include_directories(creative-suite-video-encoding PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${FFMPEG_INCLUDE_DIRS}
+)
+target_link_directories(creative-suite-video-encoding PUBLIC ${FFMPEG_LIBRARY_DIRS})
+target_link_libraries(creative-suite-video-encoding PUBLIC
+    creative-suite::media-frame
+    ${FFMPEG_LIBRARIES}
+)
+target_compile_features(creative-suite-video-encoding PUBLIC cxx_std_20)
+if(MSVC)
+    target_compile_options(creative-suite-video-encoding PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-video-encoding PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 add_library(creative-suite-media-assets STATIC

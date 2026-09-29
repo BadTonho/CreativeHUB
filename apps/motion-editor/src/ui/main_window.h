@@ -45,6 +45,8 @@ class MediaDetailsWidget;
 class MediaPoolWidget;
 class PreviewRenderer;
 class TimelineNavigator;
+class MotionVideoExportWorker;
+struct MotionExportResult;
 
 class MainWindow final : public QMainWindow {
 public:
@@ -71,6 +73,8 @@ private:
     [[nodiscard]] bool saveComposition();
     [[nodiscard]] bool saveCompositionAs();
     [[nodiscard]] bool saveToPath(const std::filesystem::path& path);
+    void startVideoExport();
+    void finishVideoExport(MotionExportResult result);
     [[nodiscard]] bool confirmReplaceDocument();
     void updateDocumentState();
     void updateHistoryActions();
@@ -127,6 +131,7 @@ private:
     QAction* open_composition_action_ = nullptr;
     QAction* save_composition_action_ = nullptr;
     QAction* save_composition_as_action_ = nullptr;
+    QAction* export_video_action_ = nullptr;
     QAction* import_media_action_ = nullptr;
     QAction* new_text_layer_action_ = nullptr;
     QAction* new_rectangle_layer_action_ = nullptr;
@@ -179,6 +184,8 @@ private:
     std::optional<std::pair<model::LayerId, std::size_t>> active_transform_edit_;
     std::optional<model::LayerId> active_content_edit_layer_;
     QProgressDialog* open_progress_ = nullptr;
+    QProgressDialog* export_progress_ = nullptr;
+    std::unique_ptr<MotionVideoExportWorker> export_worker_;
     std::shared_ptr<std::atomic_bool> open_cancel_requested_;
     std::uint64_t open_generation_ = 0;
     creative_suite::shortcuts::ShortcutManager shortcut_manager_{

@@ -192,6 +192,7 @@ target_link_libraries(creative-suite-main-editor-core PUBLIC
     creative-suite::diagnostics
     creative-suite::media-frame
     creative-suite::video-media
+    creative-suite::video-encoding
     creative-suite::media-assets
     creative-suite::shortcuts
 )

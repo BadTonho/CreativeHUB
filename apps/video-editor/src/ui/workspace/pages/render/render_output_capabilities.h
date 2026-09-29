@@ -1,23 +1,11 @@
 #pragma once
 
-#include <string>
-#include <vector>
+#include <creative_suite/media/video_encoder.h>
 
 namespace ui {
 
-struct RenderEncoderOption {
-    std::string name;
-    std::string display_name;
-    int codec_id = 0;
-};
-
-struct RenderContainerOption {
-    std::string name;
-    std::string display_name;
-    std::string extensions;
-    std::vector<RenderEncoderOption> video_encoders;
-    std::vector<RenderEncoderOption> audio_encoders;
-};
+using RenderEncoderOption = creative_suite::media::VideoEncoderOption;
+using RenderContainerOption = creative_suite::media::VideoContainerOption;
 
 class RenderOutputCapabilities final {
 public:

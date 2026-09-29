@@ -31,6 +31,12 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/shortcut_settings_dialog.h
     src/ui/preview_renderer.cpp
     src/ui/preview_renderer.h
+    src/ui/composition_frame_renderer.cpp
+    src/ui/composition_frame_renderer.h
+    src/ui/motion_video_export.cpp
+    src/ui/motion_video_export.h
+    src/ui/motion_video_export_dialog.cpp
+    src/ui/motion_video_export_dialog.h
     src/ui/layer_content_renderer.cpp
     src/ui/layer_content_renderer.h
     src/ui/timeline_navigator.cpp
@@ -47,6 +53,7 @@ target_link_libraries(creative-suite-motion-editor-core PUBLIC
     creative-suite::media-assets
     creative-suite::shortcuts
     creative-suite::video-media
+    creative-suite::video-encoding
     Qt6::Widgets
 )
 target_compile_features(creative-suite-motion-editor-core PUBLIC cxx_std_20)

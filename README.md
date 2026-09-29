@@ -38,13 +38,14 @@ coverage in both the producer and consumer applications.
   macOS and Linux validation is deferred. See the [Image Editor roadmap](docs/image-editor/ROADMAP.md).
 - **Motion Studio:** its standalone Qt workspace has a Media Pool, image/video
   timeline layers, native text/rectangle/ellipse layers, CPU preview, playback,
-  and manual Save/Open using its own versioned `.motion` format. It supports
-  transform keyframe editing and bounded Undo/Redo for composition changes.
-  Autosave and recovery snapshots include the full Media Pool through a
-  separate version 1 wrapper; `.motion` v2 adds text and shape content while
-  version 1 documents remain readable. Effects and export remain open. C++
-  and Qt 6 remain provisional choices. It links shared libraries and builds
-  without the Video or Image Editor targets. See the
+  transform keyframe editing, and bounded Undo/Redo. Manual Save/Open and
+  configurable autosave/recovery use its own versioned `.motion` format and a
+  separate recovery wrapper. Its first video export offers FFmpeg container,
+  encoder, resolution, frame-rate, and quality settings, with progress and
+  cancellation. Export is opaque and contains no audio; effects, alpha export,
+  and platform validation remain open. C++ and Qt 6 remain provisional choices.
+  It links shared libraries and builds without the Video or Image Editor
+  targets. See the
   [scope and readiness guide](docs/motion-editor/SCOPE_AND_READINESS.md),
   [reuse plan](docs/motion-editor/REUSE_PLAN.md), and
   [native format specification](docs/motion-editor/FORMAT.md), and

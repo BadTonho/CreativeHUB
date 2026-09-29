@@ -2,8 +2,9 @@
 
 Status: **provisional; implementation started**. The standalone Motion Studio
 shell, in-memory composition/layer model, navigation timeline, Media Pool,
-image/video/text/shape layers, CPU preview, and versioned native save/open are
-wired into CMake under `apps/motion-editor/`. Its initial product scope and
+image/video/text/shape layers, CPU preview, versioned native save/open, and
+first-pass rendered video export are implemented under `apps/motion-editor/`.
+Its initial product scope and
 readiness are documented
 in [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md). C++ and Qt 6 are provisional
 implementation choices; no final language, renderer, or codec choices have
@@ -160,9 +161,20 @@ the Motion Studio implementation choices are finalized.
   composition rate. Save them in `.motion` v2; continue opening v1 documents by
   applying default text or rectangle content and upgrading them on save. Keep
   the recovery wrapper at v1 while it accepts nested document versions 1 and 2.
+- [x] Add **File > Export Video...** with runtime container and compatible
+  encoder discovery, composition/common/custom dimensions, output frame rate,
+  and quality/bitrate controls. Export an immutable composition snapshot from
+  frame 0 through the furthest layer end, including hidden layers when finding
+  the end, with rational frame-rate conversion, opaque black lead-in, progress,
+  and cancellation. Verify the staged output before atomic publication; failed
+  or canceled jobs preserve an existing destination. The neutral
+  `creative-suite::video-encoding` library serves Motion Studio and the Video
+  Editor, while the latter keeps its timeline assembly, queue, and optional
+  audio export. Motion export contains no audio or alpha, and settings are not
+  persisted.
 - [-] Extend actionable local error logging and automated coverage for the
-  remaining document, rendering, and application boundaries. Save/open failures
-  are logged; export failures are not implemented yet.
+  remaining document, rendering, and application boundaries. Save/open and
+  export failures are logged before concise user feedback.
 
 The in-memory document/layer model has unit coverage, including explicit canvas
 size, exact frame rate, media paths, layer order, timing, movement, and duration
@@ -190,6 +202,12 @@ documents, duplicate-state skipping, snapshot retention, invalid snapshots,
 startup recovery, saved-project recovery on Open, Settings management, and
 retaining the original Save target. The recovery wrapper is separate from the
 native `.motion` document schema and remains at wrapper version 1.
+Export tests cover fractional-rate conversion, image/video/text/shape
+composition, transform keyframes, hidden-layer duration, blank black frames,
+decoded output, progress, cancellation, failed-file cleanup, destination
+preservation, dialog defaults, and unchanged dirty state. Shared encoder tests
+cover capability discovery and encode/decode; the Video Editor export
+regression continues to cover its optional audio path.
 
 Frame rates are stored as exact rational values from the supported common-rate
 list. Creating a composition does not ask for or set its duration. The ruler
@@ -312,8 +330,15 @@ composition, allow a snapshot, close the app unexpectedly, then restore it on
 startup; open a saved project with a newer recovery snapshot and test Restore
 and Ignore; inspect, refresh, delete, restore, and open the folder for snapshots
 in **Settings > Autosave & Recovery**; verify missing sources restore offline
-and autosave does not overwrite the `.motion` file; then close the application.
-Richer curves and interpolation and export remain open.
+and autosave does not overwrite the `.motion` file. Open **File > Export
+Video...**, confirm composition resolution and frame-rate defaults, try a custom
+resolution and quality profile, export overlapping image, video, text, and
+shape layers with a blank lead-in, and play the result in a media player. Cancel
+another export and verify an existing destination remains unchanged; choose an
+unavailable encoder if one is offered and confirm a detailed log entry appears.
+Motion Studio export is opaque and video-only; audio and alpha export remain
+open. Then close the application. Richer curves, interpolation, effects,
+platform validation, and performance profiling remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.
@@ -324,8 +349,10 @@ composition without losing its layer or frame-rate data.
   richer interpolation, and documented easing behavior.
 - [ ] Add a simple effect set to the supported ordered text, vector-shape,
   raster-image, and video layers.
-- [ ] Complete the standalone save/reopen, preview, and rendered-video
-  workflows and profile representative compositions.
+- [x] Complete the first standalone save/reopen, preview, and rendered-video
+  export workflow; Motion Studio currently exports opaque video without audio.
+- [ ] Profile representative compositions and validate export throughput,
+  memory use, and codec behavior across target platforms.
 - [ ] Address measured bottlenecks before expanding the MVP scope.
 
 **Exit criteria:** the agreed MVP workflows pass regression coverage and
