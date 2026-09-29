@@ -354,7 +354,6 @@ void MainWindow::openComposition()
     if (open_cancel_requested_) return;
     QFileDialog dialog(this, QStringLiteral("Open Composition"));
     dialog.setObjectName(QStringLiteral("motion-open-composition-dialog"));
-    dialog.setOption(QFileDialog::DontUseNativeDialog, true);
     dialog.setFileMode(QFileDialog::ExistingFile);
     dialog.setAcceptMode(QFileDialog::AcceptOpen);
     dialog.setNameFilters({QStringLiteral("Motion Studio documents (*.motion)"),
@@ -436,7 +435,6 @@ bool MainWindow::saveCompositionAs()
     if (!document_) return false;
     QFileDialog dialog(this, QStringLiteral("Save Composition As"));
     dialog.setObjectName(QStringLiteral("motion-save-composition-dialog"));
-    dialog.setOption(QFileDialog::DontUseNativeDialog, true);
     dialog.setAcceptMode(QFileDialog::AcceptSave);
     dialog.setFileMode(QFileDialog::AnyFile);
     dialog.setNameFilters({QStringLiteral("Motion Studio documents (*.motion)")});
@@ -841,7 +839,6 @@ void MainWindow::openMedia()
     if (!document_.has_value() || media_pool_ == nullptr) return;
     QFileDialog dialog(this, QStringLiteral("Import Media"));
     dialog.setObjectName(QStringLiteral("motion-import-media-dialog"));
-    dialog.setOption(QFileDialog::DontUseNativeDialog, true);
     dialog.setFileMode(QFileDialog::ExistingFiles);
     dialog.setNameFilters({
         QStringLiteral("Supported media (*.avi *.mkv *.mov *.mp4 *.mxf *.webm *.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"),

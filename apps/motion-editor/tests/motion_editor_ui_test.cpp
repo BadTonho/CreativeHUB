@@ -420,8 +420,8 @@ void chooseDocumentFile(const std::filesystem::path& path,
                         QDialogButtonBox::StandardButton button)
 {
     auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
-    require(dialog != nullptr && dialog->testOption(QFileDialog::DontUseNativeDialog),
-            "document action opens the testable Qt file picker");
+    require(dialog != nullptr && !dialog->testOption(QFileDialog::DontUseNativeDialog),
+            "document action leaves the platform-native picker enabled");
     dialog->selectFile(pathToQString(path));
     auto* buttons = dialog->findChild<QDialogButtonBox*>();
     require(buttons != nullptr && buttons->button(button) != nullptr,
@@ -1017,9 +1017,9 @@ int main(int argc, char* argv[])
 
     QTimer::singleShot(0, [&window] {
         auto* file_dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
-        require(file_dialog != nullptr && file_dialog->testOption(QFileDialog::DontUseNativeDialog)
+        require(file_dialog != nullptr && !file_dialog->testOption(QFileDialog::DontUseNativeDialog)
                     && file_dialog->fileMode() == QFileDialog::ExistingFiles,
-                "media import opens the non-native multiple-file picker");
+                "media import uses the platform picker and allows multiple files");
         require(window.findChild<QProgressDialog*>(
                     QStringLiteral("motion-media-import-progress")) == nullptr,
                 "import progress is not created while choosing media");

@@ -214,11 +214,12 @@ Manual Windows validation remains pending: verify the centered empty-state
 button opens composition creation and disappears after creation; confirm a
 composition opens maximized and preserves a restored window size; confirm the
 new **File > Save As**, **File > Save**, and **File > Open Composition** actions
-write and reopen a `.motion` document with layers, keyframes, and Media Pool
-bins intact; confirm relative media paths still resolve after moving the project
-folder with its media; move a referenced source away and confirm it reopens
-offline; verify malformed and future-version files leave the current document
-and the source file unchanged; test Save, Discard, and Cancel before replacing
+use the Windows-native file picker; write and reopen a `.motion` document with
+layers, keyframes, and Media Pool bins intact; confirm relative media paths
+still resolve after moving the project folder with its media; move a referenced
+source away and confirm it reopens offline; verify malformed and future-version
+files leave the current document and the source file unchanged; test Save,
+Discard, and Cancel before replacing
 or closing a dirty composition; and confirm the title's dirty marker clears on
 save. Then confirm the one-hour navigation range, stepping, and separate drag
 extensions; import

@@ -79,6 +79,8 @@ Save As writes a `.motion` file using `QSaveFile` atomic commit. Save writes to
 the current document path, or opens Save As when the document has no path. A
 validation, write, or commit failure is logged with the operation, path, and
 error context; the previous file remains intact when the atomic write fails.
+Open, Save As, and media import use the platform's native file picker when the
+Qt platform provides one.
 
 Motion Studio compares the current composition and persisted Media Pool fields
 against the last saved state to track unsaved changes. A dirty document offers
