@@ -1079,7 +1079,10 @@ void MainWindow::toggleSelectedLayerKeyframe(std::size_t property_index)
             found->transform, found->keyframes, property, local_frame);
         changed = document_->setLayerKeyframe(
             selected_layer_id_, property, local_frame, value);
-        if (changed) timeline_->setLayerExpanded(selected_layer_id_, true);
+        if (changed) {
+            timeline_->setLayerExpanded(selected_layer_id_, true);
+            timeline_->setTransformGroupExpanded(selected_layer_id_, true);
+        }
     }
     if (!changed) return;
     updateDocumentState();

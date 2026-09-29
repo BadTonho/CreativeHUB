@@ -245,7 +245,14 @@ QColor propertyColor(TransformProperty property)
 }
 
 struct VisualTimelineRow {
+    enum class Kind : std::uint8_t {
+        Layer,
+        TransformGroup,
+        Property,
+    };
+
     std::size_t layer_index = 0;
+    Kind kind = Kind::Layer;
     std::optional<TransformProperty> property;
 };
 
@@ -270,6 +277,9 @@ public:
         std::erase_if(expanded_layers_, [&existing](model::LayerId id) {
             return !existing.contains(id);
         });
+        std::erase_if(expanded_transform_groups_, [&existing](model::LayerId id) {
+            return !existing.contains(id);
+        });
         rebuildVisualRows();
     }
 
@@ -281,9 +291,21 @@ public:
         rebuildVisualRows();
     }
 
+    void setTransformGroupExpanded(model::LayerId id, bool expanded)
+    {
+        if (findRow(id) == nullptr) return;
+        if (expanded && expanded_layers_.contains(id)) {
+            expanded_transform_groups_.insert(id);
+        } else {
+            expanded_transform_groups_.erase(id);
+        }
+        rebuildVisualRows();
+    }
+
     void collapseAllLayerTracks()
     {
         expanded_layers_.clear();
+        expanded_transform_groups_.clear();
         rebuildVisualRows();
     }
 
@@ -350,21 +372,32 @@ protected:
             const auto& visual = visual_rows_[visual_index];
             const auto& row = rows_[visual.layer_index];
             const int top = static_cast<int>(visual_index) * kTimelineRowHeight;
-            const bool property_track = visual.property.has_value();
+            const bool layer_row = visual.kind == VisualTimelineRow::Kind::Layer;
+            const bool transform_group =
+                visual.kind == VisualTimelineRow::Kind::TransformGroup;
+            const bool property_track = visual.kind == VisualTimelineRow::Kind::Property;
             const QRect row_rect(0, top, width(), kTimelineRowHeight);
             const bool selected = row.id == selected_layer_id_;
-            painter.fillRect(row_rect,
-                property_track ? QColor(34, 38, 45)
-                    : (selected ? QColor(64, 69, 78)
-                        : (visual.layer_index % 2 == 0
-                            ? QColor(39, 43, 50) : QColor(35, 39, 46))));
+            QColor row_background;
+            if (property_track) {
+                row_background = QColor(34, 38, 45);
+            } else if (transform_group) {
+                row_background = QColor(39, 43, 50);
+            } else if (selected) {
+                row_background = QColor(64, 69, 78);
+            } else {
+                row_background = visual.layer_index % 2 == 0
+                    ? QColor(39, 43, 50) : QColor(35, 39, 46);
+            }
+            painter.fillRect(row_rect, row_background);
             painter.fillRect(QRect(0, top, kTimelineHeaderWidth, kTimelineRowHeight),
-                             property_track ? QColor(39, 43, 50) : QColor(43, 47, 54));
+                property_track ? QColor(39, 43, 50)
+                    : (transform_group ? QColor(47, 51, 58) : QColor(43, 47, 54)));
             painter.setPen(QPen(QColor(63, 68, 76), 1));
             painter.drawLine(0, top + kTimelineRowHeight - 1,
                              width(), top + kTimelineRowHeight - 1);
 
-            if (!property_track) {
+            if (layer_row) {
                 const QPoint eye_center(15, top + kTimelineRowHeight / 2);
                 painter.setBrush(row.visible ? QColor(210, 215, 222) : Qt::NoBrush);
                 painter.setPen(QPen(row.visible ? QColor(210, 215, 222) : QColor(130, 136, 144), 1.5));
@@ -385,10 +418,6 @@ protected:
                 painter.setPen(Qt::NoPen);
                 painter.setBrush(QColor(185, 190, 198));
                 painter.drawPolygon(disclosure);
-                painter.setPen(QColor(228, 231, 235));
-                painter.drawText(QRect(50, top, kTimelineHeaderWidth - 56, kTimelineRowHeight),
-                                 Qt::AlignLeft | Qt::AlignVCenter,
-                                 row.name.isEmpty() ? QStringLiteral("Media Layer") : row.name);
 
                 const auto end_frame = row.start_frame > kMaximumFrame - row.duration_frames
                     ? kMaximumFrame : row.start_frame + row.duration_frames;
@@ -427,10 +456,27 @@ protected:
                             std::max(2, preview_right - preview_left), kTimelineRowHeight - 6), 3, 3);
                     }
                 }
+            } else if (transform_group) {
+                const bool expanded = expanded_transform_groups_.contains(row.id);
+                QPolygon disclosure;
+                if (expanded) {
+                    disclosure << QPoint(50, top + 13) << QPoint(60, top + 13)
+                               << QPoint(55, top + 20);
+                } else {
+                    disclosure << QPoint(52, top + 11) << QPoint(59, top + 17)
+                               << QPoint(52, top + 23);
+                }
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(QColor(185, 190, 198));
+                painter.drawPolygon(disclosure);
+                painter.setPen(QColor(228, 231, 235));
+                painter.drawText(QRect(66, top, kTimelineHeaderWidth - 72, kTimelineRowHeight),
+                                 Qt::AlignLeft | Qt::AlignVCenter,
+                                 QStringLiteral("Transform"));
             } else {
                 const auto property = *visual.property;
                 painter.setPen(propertyColor(property));
-                painter.drawText(QRect(49, top, kTimelineHeaderWidth - 56, kTimelineRowHeight),
+                painter.drawText(QRect(68, top, kTimelineHeaderWidth - 74, kTimelineRowHeight),
                                  Qt::AlignLeft | Qt::AlignVCenter, propertyName(property));
                 const int lane_center_y = top + kTimelineRowHeight / 2;
                 painter.setPen(QPen(QColor(68, 74, 83), 1));
@@ -501,7 +547,7 @@ protected:
         if (row_index < 0) return;
         const auto& visual = visual_rows_[static_cast<std::size_t>(row_index)];
         const auto& row = rows_[visual.layer_index];
-        if (!visual.property.has_value() && position.x() < 29) {
+        if (visual.kind == VisualTimelineRow::Kind::Layer && position.x() < 29) {
             if (layer_visibility) layer_visibility(row.id, !row.visible);
             event->accept();
             return;
@@ -509,7 +555,7 @@ protected:
         if (layer_selected) layer_selected(row.id);
         interaction_layer_id_ = row.id;
         press_position_ = position;
-        if (visual.property.has_value()) {
+        if (visual.kind == VisualTimelineRow::Kind::Property) {
             const auto property = *visual.property;
             const int lane_center_y = row_index * kTimelineRowHeight + kTimelineRowHeight / 2;
             const auto& keyframes = creative_suite::animation::keyframesFor(
@@ -532,8 +578,17 @@ protected:
             event->accept();
             return;
         }
-        if (position.x() < 48) {
+        if (visual.kind == VisualTimelineRow::Kind::Layer && position.x() < 48) {
             setLayerExpanded(row.id, !expanded_layers_.contains(row.id));
+            interaction_layer_id_ = 0;
+            event->accept();
+            return;
+        }
+        if (visual.kind == VisualTimelineRow::Kind::TransformGroup) {
+            if (position.x() < 64) {
+                setTransformGroupExpanded(
+                    row.id, !expanded_transform_groups_.contains(row.id));
+            }
             interaction_layer_id_ = 0;
             event->accept();
             return;
@@ -606,7 +661,8 @@ protected:
         if (interaction_mode_ == InteractionMode::None) {
             const int row_index = rowAtY(y);
             if (row_index >= 0 &&
-                !visual_rows_[static_cast<std::size_t>(row_index)].property.has_value() &&
+                visual_rows_[static_cast<std::size_t>(row_index)].kind ==
+                    VisualTimelineRow::Kind::Layer &&
                 x >= kTimelineHeaderWidth) {
                 const auto& row = rows_[visual_rows_[static_cast<std::size_t>(row_index)].layer_index];
                 const auto end_frame = row.start_frame > kMaximumFrame - row.duration_frames
@@ -762,12 +818,16 @@ private:
     void rebuildVisualRows()
     {
         visual_rows_.clear();
-        visual_rows_.reserve(rows_.size() * 2);
+        visual_rows_.reserve(rows_.size() * 7);
         for (std::size_t index = 0; index < rows_.size(); ++index) {
-            visual_rows_.push_back({index, std::nullopt});
+            const auto layer_id = rows_[index].id;
+            visual_rows_.push_back({index, VisualTimelineRow::Kind::Layer, std::nullopt});
             if (!expanded_layers_.contains(rows_[index].id)) continue;
+            visual_rows_.push_back(
+                {index, VisualTimelineRow::Kind::TransformGroup, std::nullopt});
+            if (!expanded_transform_groups_.contains(layer_id)) continue;
             for (const auto property : kTimelineProperties) {
-                visual_rows_.push_back({index, property});
+                visual_rows_.push_back({index, VisualTimelineRow::Kind::Property, property});
             }
         }
         const auto row_count = static_cast<int>(visual_rows_.size());
@@ -823,6 +883,7 @@ private:
     std::vector<LayerRow> rows_;
     std::vector<VisualTimelineRow> visual_rows_;
     std::unordered_set<model::LayerId> expanded_layers_;
+    std::unordered_set<model::LayerId> expanded_transform_groups_;
     std::int64_t visible_end_frame_ = 0;
     std::int64_t current_frame_ = 0;
     std::int64_t view_start_frame_ = 0;
@@ -1399,6 +1460,11 @@ void TimelineNavigator::setSelectedLayerId(model::LayerId id)
 void TimelineNavigator::setLayerExpanded(model::LayerId id, bool expanded)
 {
     static_cast<LayerRowsWidget*>(layer_rows_)->setLayerExpanded(id, expanded);
+}
+
+void TimelineNavigator::setTransformGroupExpanded(model::LayerId id, bool expanded)
+{
+    static_cast<LayerRowsWidget*>(layer_rows_)->setTransformGroupExpanded(id, expanded);
 }
 
 void TimelineNavigator::setMediaDropHandler(

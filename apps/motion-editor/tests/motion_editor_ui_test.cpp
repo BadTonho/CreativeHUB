@@ -68,6 +68,17 @@ void require(bool condition, const char* message)
     }
 }
 
+bool hasBrightPixel(const QImage& image, const QRect& area, int minimum_lightness)
+{
+    const auto bounded = area.intersected(image.rect());
+    for (int y = bounded.top(); y <= bounded.bottom(); ++y) {
+        for (int x = bounded.left(); x <= bounded.right(); ++x) {
+            if (image.pixelColor(x, y).lightness() >= minimum_lightness) return true;
+        }
+    }
+    return false;
+}
+
 template<typename Widget>
 Widget* findWidget(QObject* parent, const char* object_name)
 {
@@ -694,6 +705,29 @@ int main(int argc, char* argv[])
             "ruler ticks spread farther apart when the selected label format is wider");
     frame_rate_range_check.setCompositionTiming({60, 1});
 
+    motion::model::CompositionLayer hierarchy_layer;
+    hierarchy_layer.id = 7001;
+    hierarchy_layer.name = "Hierarchy fixture";
+    hierarchy_layer.duration_frames = 120;
+    frame_rate_range_check.setLayers({hierarchy_layer});
+    frame_rate_range_check.setLayerExpanded(hierarchy_layer.id, true);
+    frame_rate_range_check.setTransformGroupExpanded(hierarchy_layer.id, true);
+    auto* hierarchy_rows = findWidget<QWidget>(
+        &frame_rate_range_check, "motion-timeline-layer-rows");
+    const auto hierarchy_axis_left = frame_rate_range_check.frameToViewportX(
+        frame_rate_range_check.viewStartFrame());
+    require(hasBrightPixel(hierarchy_rows->grab().toImage(),
+                           QRect(68, 68, hierarchy_axis_left - 68, 34), 100),
+            "an expanded Transform group displays its property rows");
+    frame_rate_range_check.setCompositionTiming({60, 1});
+    const auto rows_after_timing_reset = hierarchy_rows->grab().toImage();
+    require(!hasBrightPixel(rows_after_timing_reset,
+                            QRect(66, 34, hierarchy_axis_left - 66, 34), 100) &&
+                !hasBrightPixel(rows_after_timing_reset,
+                                QRect(68, 68, hierarchy_axis_left - 68, 34), 100),
+            "resetting composition timing collapses layers and Transform groups");
+    frame_rate_range_check.setLayers({});
+
     require(frame_rate_range_check.zoomFactor() == 1.0 &&
                 frame_rate_range_check.framesPerView() == 60 * 60 * 60 &&
                 zoom_slider->value() == motion::ui::detail::kTimelineZoomDefaultIndex &&
@@ -1253,14 +1287,51 @@ int main(int argc, char* argv[])
         &window, "motion-transform-keyframe-opacity");
     auto* animated_rows = findWidget<QWidget>(&window, "motion-timeline-layer-rows");
     timeline->setCurrentFrame(animation_start);
+    const auto axis_left = timeline->frameToViewportX(timeline->viewStartFrame());
+    const auto collapsed_rows = animated_rows->grab().toImage();
+    require(!hasBrightPixel(collapsed_rows, QRect(50, 0, axis_left - 50, 34), 100),
+            "the collapsed layer header keeps its name out of the left column");
+    require(!hasBrightPixel(collapsed_rows,
+                            QRect(66, 34, axis_left - 66, 34), 100),
+            "a new layer starts with its Transform group collapsed");
+    sendMouseClick(animated_rows, QPoint(39, 15));
+    const auto layer_expanded_rows = animated_rows->grab().toImage();
+    require(hasBrightPixel(layer_expanded_rows,
+                           QRect(66, 34, axis_left - 66, 34), 100) &&
+                !hasBrightPixel(layer_expanded_rows,
+                                QRect(68, 68, axis_left - 68, 34), 100),
+            "expanding a layer reveals only its Transform group");
+    sendMouseClick(animated_rows, QPoint(55, 51));
+    const auto transform_expanded_rows = animated_rows->grab().toImage();
+    bool five_transform_properties_visible = true;
+    for (int property_index = 0; property_index < 5; ++property_index) {
+        five_transform_properties_visible = five_transform_properties_visible &&
+            hasBrightPixel(transform_expanded_rows,
+                QRect(68, 68 + property_index * 34, axis_left - 68, 34), 100);
+    }
+    require(five_transform_properties_visible,
+            "expanding Transform reveals all five transform property tracks");
+    sendMouseClick(animated_rows, QPoint(55, 51));
+    require(hasBrightPixel(animated_rows->grab().toImage(),
+                            QRect(66, 34, axis_left - 66, 34), 100),
+            "collapsing Transform keeps the group row while hiding its property tracks");
+    sendMouseClick(animated_rows, QPoint(39, 15));
+    require(!hasBrightPixel(animated_rows->grab().toImage(),
+                            QRect(50, 0, axis_left - 50, 34), 100),
+            "collapsing a layer hides its Transform group and property rows");
+
     const auto base_position_x = document->layers().front().transform.position_x;
     position_x_key_button->click();
     auto position_keys = creative_suite::animation::keyframesFor(
         document->layers().front().keyframes,
         creative_suite::animation::TransformProperty::PositionX);
+    const auto key_added_rows = animated_rows->grab().toImage();
+    bool key_add_expanded_transform =
+        hasBrightPixel(key_added_rows, QRect(66, 34, axis_left - 66, 34), 100) &&
+        hasBrightPixel(key_added_rows, QRect(68, 68, axis_left - 68, 34), 100);
     require(position_keys == std::vector<creative_suite::animation::Keyframe>{{0, base_position_x}} &&
-                animated_rows->height() >= 6 * 34,
-            "adding a transform key stores the evaluated value and expands property tracks");
+                key_add_expanded_transform,
+            "adding a transform key stores its value and reveals its property track");
     timeline->setCurrentFrame(animation_start + 10);
     require(animated_position_x->isReadOnly() &&
                 std::abs(animated_position_x->value() - base_position_x) < 0.000001,
@@ -1322,7 +1393,23 @@ int main(int argc, char* argv[])
 
     timeline_zoom_slider->setValue(21);
     timeline->setCurrentFrame(animation_start + 10);
-    const int key_lane_y = 51;
+    const auto clip_label_image = animated_rows->grab().toImage();
+    const int clip_left = timeline->frameToViewportX(animation_start);
+    const int clip_right = timeline->frameToViewportX(
+        animation_start + document->layers().front().duration_frames);
+    const int playhead_x = timeline->frameToViewportX(timeline->currentFrame());
+    bool clip_label_visible = false;
+    for (int y = 8; y < 27 && !clip_label_visible; ++y) {
+        for (int x = clip_left + 8; x < clip_right - 8; ++x) {
+            if (x != playhead_x && clip_label_image.pixelColor(x, y).lightness() > 210) {
+                clip_label_visible = true;
+                break;
+            }
+        }
+    }
+    require(!document->layers().front().name.empty() && clip_label_visible,
+            "the layer name remains visible inside its timeline clip");
+    const int key_lane_y = 85;
     const auto x_for_local_frame = [timeline, animation_start](std::int64_t local_frame) {
         return timeline->frameToViewportX(animation_start + local_frame);
     };

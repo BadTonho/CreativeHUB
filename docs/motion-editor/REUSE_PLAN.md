@@ -40,15 +40,19 @@ not depend on Video Editor timecode types or APIs.
 ### Transform keyframe editing
 
 Motion Studio stores transform keys as layer-local frames and uses the shared
-linear evaluator in its preview worker for both manual seeks and playback. Each
-image or video layer can expand into five property tracks; markers are mapped
-to composition time by adding the layer start frame. Clicking a marker seeks,
+linear evaluator in its preview worker for both manual seeks and playback. A
+layer disclosure reveals its Transform group, whose own disclosure reveals
+five property tracks. The layer name is omitted from the left header and stays
+on the timeline clip. Markers are mapped to composition time by adding the
+layer start frame. Clicking a marker seeks,
 and dragging moves it within the layer duration. Collision-safe movement and
 key removal are application-owned `CompositionDocument` operations. The
 inspector edits base values when no keys exist, edits key values at keyed
 frames, and shows read-only interpolated values between keys. This uses the
-existing `.motion` v1 keyframe data without a format change. Easing, Bezier
-curves, and other interpolation modes remain open.
+existing `.motion` v1 keyframe data without a format change. Expansion is UI
+state, starts collapsed on New/Open, and is not persisted. Adding a key from
+the inspector expands both levels. Easing, Bezier curves, and other
+interpolation modes remain open.
 
 ## Shared library candidates
 

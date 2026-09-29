@@ -137,10 +137,10 @@ the Motion Studio implementation choices are finalized.
   future-version documents without replacing the current composition or
   rewriting the source file. Missing media reopen as offline references.
 - [x] Add transform keyframe editing to image and video layers for Position X/Y,
-  Scale, Rotation, and Opacity. Expand per-layer property tracks, add or remove
-  keys from the inspector, seek by key marker, and drag keys within the layer's
-  duration. Use shared linear interpolation and preserve the `.motion` v1
-  format.
+  Scale, Rotation, and Opacity. Expand a layer's Transform group to reveal its
+  property tracks; add or remove keys from the inspector, seek by key marker,
+  and drag keys within the layer's duration. Use shared linear interpolation
+  and preserve the `.motion` v1 format.
 - [ ] Add undo/redo, autosave, and recovery for the first supported composition
   workflow.
 - [-] Extend actionable local error logging and automated coverage for the
@@ -155,8 +155,8 @@ button uses the File menu's creation flow and has offscreen UI regression
 coverage. Opening a composition preserves the current window state and geometry;
 the app starts maximized unless the user restores it. The canvas viewer,
 navigation ruler, timeline zoom and scrolling, layer rows, drag/drop, transforms,
-keyframe tracks and editing, time/frame display, and preview have offscreen
-coverage. The shared media catalog
+the nested Transform/property tracks and key editing, time/frame display, and
+preview have offscreen coverage. The shared media catalog
 and importer, plus the Motion Studio Media Pool, have regression coverage for
 video and still-image imports, first-frame thumbnails, bins, renaming, offline
 restoration, view modes, selection details,
@@ -202,15 +202,18 @@ videos may be shortened and restored up to their source duration. Selection,
 insertion, reordering, visibility, and seeking do not alter layer transforms or
 keyframes.
 
-Each image or video layer can be expanded to show Position X, Position Y,
-Scale, Rotation, and Opacity key tracks. Keys use layer-local frame numbers;
+Each image or video layer can be expanded to show its **Transform** group; that
+group expands to show Position X, Position Y, Scale, Rotation, and Opacity key
+tracks. The layer name is omitted from the left header and remains on the clip.
+Keys use layer-local frame numbers;
 their timeline markers appear at `layer start + local key frame`. Clicking a
 marker seeks to it, while dragging moves it to an integer local frame within
 the layer duration. A move onto another key for the same property is rejected
 without changing either key. Shortening a layer hides keys outside its current
 duration but retains them in the document; extending the layer makes them
-visible again. New and opened compositions start with all property tracks
-collapsed.
+visible again. New and opened compositions start with layers and Transform
+groups collapsed. Inserting a key from the inspector expands its layer and the
+Transform group.
 
 The transform inspector edits the base value when a property has no keys. For
 an animated property it displays the shared evaluator's linearly interpolated
@@ -259,12 +262,15 @@ extend the range only at its actual end, scrolling there if it is offscreen;
 resize the viewer, Media Pool, inspector, and timeline; replace the composition
 and confirm the pool resets; verify the timeline starts in Time mode, switch to
 Frames and back, and confirm the playhead and layer positions do not change;
-play and pause a video and confirm a seek pauses it; add Position and Opacity
-keys, inspect interpolated values, edit at a key, remove a key, drag a marker,
-and confirm a colliding move is rejected; scrub and play through the animation;
+play and pause a video and confirm a seek pauses it; confirm the left layer
+header has no name while the clip retains it; expand a layer to show only
+Transform, then expand Transform to show the five properties; collapse and
+reopen each level; add Position and Opacity keys, inspect interpolated values,
+edit at a key, remove a key, drag a marker, and confirm a colliding move is
+rejected; scrub and play through the animation;
 save and reopen and confirm keys and layer timing persist; enable Loop and
-confirm it restarts at frame 0, then disable Loop and confirm playback stops on the
-final layer frame and Play restarts from frame 0; verify playback scrolls and
+confirm it restarts at frame 0, then disable Loop and confirm playback stops
+on the final layer frame and Play restarts from frame 0; verify playback scrolls and
 extends the navigation range for a long clip; open **Settings > Keyboard
 Shortcuts**, change a command, confirm duplicate assignments are rejected,
 check that Cancel discards edits and OK persists them, clear an assignment,

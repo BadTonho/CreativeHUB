@@ -92,6 +92,7 @@ public:
     void setLayers(const std::vector<model::CompositionLayer>& layers);
     void setSelectedLayerId(model::LayerId id);
     void setLayerExpanded(model::LayerId id, bool expanded);
+    void setTransformGroupExpanded(model::LayerId id, bool expanded);
     [[nodiscard]] std::int64_t currentFrame() const noexcept;
     [[nodiscard]] bool isPlaying() const noexcept;
     [[nodiscard]] bool isLoopEnabled() const noexcept;
