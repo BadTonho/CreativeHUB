@@ -95,6 +95,7 @@ These are implementation safeguards, not product targets.
 
 ## Deferred document features
 
-Undo/redo, autosave, recovery, export settings, media relinking UI, migrations
-for any future schema revisions, and cross-application handoff are not part of
-version 1. `.csp` and `.cimg` are unchanged.
+Serialized Undo/Redo history, autosave, recovery, export settings, media
+relinking UI, migrations for any future schema revisions, and cross-application
+handoff are not part of version 1. Undo/Redo exists only in the current editing
+session. `.csp` and `.cimg` are unchanged.

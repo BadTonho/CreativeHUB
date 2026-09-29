@@ -302,6 +302,27 @@ MainWindow::MainWindow(QWidget* parent)
         import_media_action_);
     connect(import_media_action_, &QAction::triggered, this, [this] { openMedia(); });
 
+    auto* edit_menu = menuBar()->addMenu(QStringLiteral("Edit"));
+    undo_action_ = edit_menu->addAction(QStringLiteral("Undo"));
+    undo_action_->setObjectName(QStringLiteral("motion-undo-action"));
+    undo_action_->setShortcut(QKeySequence::Undo);
+    undo_action_->setShortcutContext(Qt::WindowShortcut);
+    undo_action_->setEnabled(false);
+    addAction(undo_action_);
+    shortcut_manager_.registerAction(
+        QStringLiteral("edit.undo"), QStringLiteral("Undo"), undo_action_);
+    connect(undo_action_, &QAction::triggered, this, [this] { undoComposition(); });
+
+    redo_action_ = edit_menu->addAction(QStringLiteral("Redo"));
+    redo_action_->setObjectName(QStringLiteral("motion-redo-action"));
+    redo_action_->setShortcut(QKeySequence::Redo);
+    redo_action_->setShortcutContext(Qt::WindowShortcut);
+    redo_action_->setEnabled(false);
+    addAction(redo_action_);
+    shortcut_manager_.registerAction(
+        QStringLiteral("edit.redo"), QStringLiteral("Redo"), redo_action_);
+    connect(redo_action_, &QAction::triggered, this, [this] { redoComposition(); });
+
     auto* settings_menu = menuBar()->addMenu(QStringLiteral("Settings"));
     settings_action_ = settings_menu->addAction(QStringLiteral("Keyboard Shortcuts..."));
     settings_action_->setObjectName(QStringLiteral("motion-shortcut-settings-action"));
@@ -374,12 +395,15 @@ MediaPoolWidget* MainWindow::mediaPoolWidget() const noexcept
 
 void MainWindow::createNewComposition()
 {
+    finishPendingTransformEdit();
     NewCompositionDialog dialog(this);
     if (dialog.exec() != QDialog::Accepted) return;
     const auto settings = dialog.compositionSettings();
     if (!settings.has_value()) return;
     if (!confirmReplaceDocument()) return;
 
+    composition_history_.clear();
+    active_transform_edit_.reset();
     document_.emplace(settings->canvas_size.width,
                       settings->canvas_size.height,
                       settings->frame_rate);
@@ -405,6 +429,7 @@ void MainWindow::createNewComposition()
 
 void MainWindow::openComposition()
 {
+    finishPendingTransformEdit();
     if (open_cancel_requested_) return;
     QFileDialog dialog(this, QStringLiteral("Open Composition"));
     dialog.setObjectName(QStringLiteral("motion-open-composition-dialog"));
@@ -478,6 +503,7 @@ void MainWindow::openComposition()
 
 bool MainWindow::saveComposition()
 {
+    finishPendingTransformEdit();
     if (!document_) return false;
     return document_path_.has_value()
         ? saveToPath(*document_path_)
@@ -486,6 +512,7 @@ bool MainWindow::saveComposition()
 
 bool MainWindow::saveCompositionAs()
 {
+    finishPendingTransformEdit();
     if (!document_) return false;
     QFileDialog dialog(this, QStringLiteral("Save Composition As"));
     dialog.setObjectName(QStringLiteral("motion-save-composition-dialog"));
@@ -501,6 +528,7 @@ bool MainWindow::saveCompositionAs()
 
 bool MainWindow::saveToPath(const std::filesystem::path& path)
 {
+    finishPendingTransformEdit();
     if (!document_) return false;
     try {
         const auto project_snapshot = projectData();
@@ -578,6 +606,7 @@ void MainWindow::updateDocumentState()
     if (save_composition_action_ != nullptr) save_composition_action_->setEnabled(has_document);
     if (save_composition_as_action_ != nullptr)
         save_composition_as_action_->setEnabled(has_document);
+    updateHistoryActions();
     if (!has_document) {
         setWindowModified(false);
         setWindowTitle(QStringLiteral("Motion Studio"));
@@ -588,6 +617,81 @@ void MainWindow::updateDocumentState()
         : QStringLiteral("Untitled");
     setWindowTitle(QStringLiteral("%1 — Motion Studio[*]").arg(document_name));
     setWindowModified(dirty);
+}
+
+CompositionEditState MainWindow::captureEditState() const
+{
+    if (!document_) throw std::logic_error("There is no open Motion Studio composition");
+    return {*document_, selected_layer_id_};
+}
+
+bool MainWindow::recordCompositionEdit(CompositionEditState before)
+{
+    if (!document_) return false;
+    const bool unchanged = before.document.canvasSize() == document_->canvasSize() &&
+        before.document.frameRate() == document_->frameRate() &&
+        before.document.layers() == document_->layers();
+    if (unchanged) return false;
+    composition_history_.recordBeforeEdit(std::move(before));
+    updateHistoryActions();
+    return true;
+}
+
+void MainWindow::finishPendingTransformEdit()
+{
+    if (!active_transform_edit_.has_value()) return;
+    active_transform_edit_.reset();
+    if (document_) {
+        composition_history_.finishCoalescedEdit(captureEditState());
+    }
+    updateHistoryActions();
+}
+
+void MainWindow::updateHistoryActions()
+{
+    const bool has_document = document_.has_value();
+    if (undo_action_ != nullptr)
+        undo_action_->setEnabled(has_document && composition_history_.canUndo());
+    if (redo_action_ != nullptr)
+        redo_action_->setEnabled(has_document && composition_history_.canRedo());
+}
+
+void MainWindow::undoComposition()
+{
+    finishPendingTransformEdit();
+    if (!document_) return;
+    auto state = composition_history_.undo(captureEditState());
+    if (!state.has_value()) {
+        updateHistoryActions();
+        return;
+    }
+    applyEditState(std::move(*state));
+}
+
+void MainWindow::redoComposition()
+{
+    finishPendingTransformEdit();
+    if (!document_) return;
+    auto state = composition_history_.redo(captureEditState());
+    if (!state.has_value()) {
+        updateHistoryActions();
+        return;
+    }
+    applyEditState(std::move(*state));
+}
+
+void MainWindow::applyEditState(CompositionEditState state)
+{
+    if (!document_) return;
+    *document_ = std::move(state.document);
+    const auto selected = std::find_if(
+        document_->layers().begin(), document_->layers().end(),
+        [&state](const auto& layer) { return layer.id == state.selected_layer_id; });
+    selected_layer_id_ = selected == document_->layers().end() ? 0 : state.selected_layer_id;
+    refreshTimeline();
+    syncTransformInspector();
+    updateDocumentState();
+    requestPreview();
 }
 
 void MainWindow::reportDocumentError(const char* operation,
@@ -687,6 +791,8 @@ void MainWindow::finishOpen(std::uint64_t generation,
         }
 
         if (!confirmReplaceDocument()) return;
+        composition_history_.clear();
+        active_transform_edit_.reset();
         document_.emplace(std::move(staged_document));
         document_path_ = creative_suite::media::MediaLibrary::canonicalPath(path);
         selected_layer_id_ = 0;
@@ -810,6 +916,8 @@ void MainWindow::createWorkspace()
         connect(field, &QDoubleSpinBox::valueChanged, this, [this, index](double) {
             editSelectedLayerTransform(index);
         });
+        connect(field, &QDoubleSpinBox::editingFinished,
+                this, [this] { finishPendingTransformEdit(); });
         connect(key_button, &QToolButton::clicked, this, [this, index] {
             toggleSelectedLayerKeyframe(index);
         });
@@ -842,6 +950,9 @@ void MainWindow::createWorkspace()
     timeline_->setKeyframeMoveHandler(
         [this](model::LayerId id, TransformProperty property,
                std::int64_t from_local_frame, std::int64_t to_local_frame) {
+            finishPendingTransformEdit();
+            if (!document_) return false;
+            auto before = captureEditState();
             if (!document_ || !document_->moveLayerKeyframe(
                     id, property, from_local_frame, to_local_frame)) {
                 if (statusBar() != nullptr) {
@@ -850,6 +961,7 @@ void MainWindow::createWorkspace()
                 }
                 return false;
             }
+            (void)recordCompositionEdit(std::move(before));
             updateDocumentState();
             refreshTimeline();
             syncTransformInspector();
@@ -857,30 +969,45 @@ void MainWindow::createWorkspace()
             return true;
         });
     timeline_->setLayerMoveHandler([this](model::LayerId id, std::int64_t frame) {
+        finishPendingTransformEdit();
+        if (!document_) return;
+        auto before = captureEditState();
         if (document_ && document_->moveLayerInTimeline(id, frame)) {
+            (void)recordCompositionEdit(std::move(before));
             updateDocumentState();
             refreshTimeline();
             requestPreview();
         }
     });
     timeline_->setLayerResizeHandler([this](model::LayerId id, std::int64_t duration) {
+        finishPendingTransformEdit();
+        if (!document_) return;
+        auto before = captureEditState();
         if (document_ && document_->resizeLayerDuration(id, duration)) {
+            (void)recordCompositionEdit(std::move(before));
             updateDocumentState();
             refreshTimeline();
             requestPreview();
         }
     });
     timeline_->setLayerReorderHandler([this](model::LayerId id, std::size_t front_index) {
+        finishPendingTransformEdit();
         if (!document_ || front_index >= document_->layers().size()) return;
+        auto before = captureEditState();
         const auto model_index = document_->layers().size() - 1 - front_index;
         if (document_->moveLayer(id, model_index)) {
+            (void)recordCompositionEdit(std::move(before));
             updateDocumentState();
             refreshTimeline();
             requestPreview();
         }
     });
     timeline_->setLayerVisibilityHandler([this](model::LayerId id, bool visible) {
+        finishPendingTransformEdit();
+        if (!document_) return;
+        auto before = captureEditState();
         if (document_ && document_->setLayerVisible(id, visible)) {
+            (void)recordCompositionEdit(std::move(before));
             updateDocumentState();
             refreshTimeline();
             if (selected_layer_id_ == id) syncTransformInspector();
@@ -888,7 +1015,11 @@ void MainWindow::createWorkspace()
         }
     });
     timeline_->setLayerRemoveHandler([this](model::LayerId id) {
-        if (!document_ || !document_->removeLayer(id)) return;
+        finishPendingTransformEdit();
+        if (!document_) return;
+        auto before = captureEditState();
+        if (!document_->removeLayer(id)) return;
+        (void)recordCompositionEdit(std::move(before));
         updateDocumentState();
         if (selected_layer_id_ == id) selected_layer_id_ = 0;
         refreshTimeline();
@@ -897,6 +1028,7 @@ void MainWindow::createWorkspace()
     });
     connect(timeline_, &TimelineNavigator::currentFrameChanged,
             this, [this] {
+                finishPendingTransformEdit();
                 syncTransformInspector();
                 requestPreview(timeline_ != nullptr && timeline_->isPlaying());
             });
@@ -970,6 +1102,7 @@ void MainWindow::refreshTimeline()
 
 void MainWindow::selectLayer(model::LayerId id)
 {
+    finishPendingTransformEdit();
     if (!document_) return;
     const auto& layers = document_->layers();
     const auto found = std::find_if(layers.begin(), layers.end(), [id](const auto& layer) {
@@ -1030,6 +1163,11 @@ void MainWindow::syncTransformInspector()
 void MainWindow::editSelectedLayerTransform(std::size_t property_index)
 {
     if (!document_ || selected_layer_id_ == 0 || property_index >= transform_fields_.size()) return;
+    const auto edit_identity = std::pair{selected_layer_id_, property_index};
+    const bool coalescing = active_transform_edit_ == edit_identity;
+    if (!coalescing) finishPendingTransformEdit();
+    std::optional<CompositionEditState> before;
+    if (!coalescing) before.emplace(captureEditState());
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
         [this](const auto& layer) { return layer.id == selected_layer_id_; });
     if (found == document_->layers().end()) return;
@@ -1038,20 +1176,32 @@ void MainWindow::editSelectedLayerTransform(std::size_t property_index)
     const auto raw_local_frame = (timeline_ != nullptr ? timeline_->currentFrame() : 0) -
         found->timeline_start_frame;
     const auto& frames = creative_suite::animation::keyframesFor(found->keyframes, property);
+    const double new_value = transform_fields_[property_index]->value();
     bool changed = false;
     if (frames.empty()) {
         auto transform = found->transform;
-        setTransformPropertyValue(transform, property, transform_fields_[property_index]->value());
-        changed = document_->setLayerTransform(selected_layer_id_, transform);
+        setTransformPropertyValue(transform, property, new_value);
+        if (transformPropertyValue(found->transform, property) != new_value)
+            changed = document_->setLayerTransform(selected_layer_id_, transform);
     } else if (raw_local_frame >= 0 && raw_local_frame < found->duration_frames &&
                containsKeyframeAt(found->keyframes, property, raw_local_frame)) {
-        changed = document_->setLayerKeyframe(
-            selected_layer_id_, property, raw_local_frame,
-            transform_fields_[property_index]->value());
+        const auto key = std::lower_bound(
+            frames.begin(), frames.end(), raw_local_frame,
+            [](const creative_suite::animation::Keyframe& item, std::int64_t frame) {
+                return item.frame < frame;
+            });
+        if (key != frames.end() && key->frame == raw_local_frame && key->value != new_value)
+            changed = document_->setLayerKeyframe(
+                selected_layer_id_, property, raw_local_frame, new_value);
     }
     if (!changed) {
         syncTransformInspector();
         return;
+    }
+    if (!coalescing) {
+        composition_history_.beginCoalescedEdit(std::move(*before));
+        active_transform_edit_ = edit_identity;
+        updateHistoryActions();
     }
     updateDocumentState();
     refreshTimeline();
@@ -1061,6 +1211,7 @@ void MainWindow::editSelectedLayerTransform(std::size_t property_index)
 
 void MainWindow::toggleSelectedLayerKeyframe(std::size_t property_index)
 {
+    finishPendingTransformEdit();
     if (!document_ || selected_layer_id_ == 0 || property_index >= kTransformProperties.size() ||
         timeline_ == nullptr) return;
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
@@ -1068,6 +1219,7 @@ void MainWindow::toggleSelectedLayerKeyframe(std::size_t property_index)
     if (found == document_->layers().end()) return;
     const auto local_frame = timeline_->currentFrame() - found->timeline_start_frame;
     if (local_frame < 0 || local_frame >= found->duration_frames) return;
+    auto before = captureEditState();
 
     const auto property = kTransformProperties[property_index];
     const bool has_key = containsKeyframeAt(found->keyframes, property, local_frame);
@@ -1085,6 +1237,7 @@ void MainWindow::toggleSelectedLayerKeyframe(std::size_t property_index)
         }
     }
     if (!changed) return;
+    (void)recordCompositionEdit(std::move(before));
     updateDocumentState();
     refreshTimeline();
     syncTransformInspector();
@@ -1095,6 +1248,7 @@ void MainWindow::handleMediaDrop(const std::filesystem::path& path,
                                 std::int64_t start_frame,
                                 model::LayerId before_layer_id)
 {
+    finishPendingTransformEdit();
     if (!document_ || media_pool_ == nullptr || timeline_ == nullptr) return;
     const auto index = media_pool_->library().indexForPath(path);
     if (index >= media_pool_->library().size()) {
@@ -1109,6 +1263,7 @@ void MainWindow::handleMediaDrop(const std::filesystem::path& path,
         return;
     }
 
+    auto before = captureEditState();
     model::LayerId added_id = 0;
     model::AddMediaLayerResult result = model::AddMediaLayerResult::InvalidTimingMetadata;
     try {
@@ -1157,6 +1312,7 @@ void MainWindow::handleMediaDrop(const std::filesystem::path& path,
         }
     }
     selected_layer_id_ = added_id;
+    (void)recordCompositionEdit(std::move(before));
     updateDocumentState();
     refreshTimeline();
     syncTransformInspector();

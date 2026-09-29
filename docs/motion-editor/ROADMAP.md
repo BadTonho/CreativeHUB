@@ -141,8 +141,10 @@ the Motion Studio implementation choices are finalized.
   property tracks; add or remove keys from the inspector, seek by key marker,
   and drag keys within the layer's duration. Use shared linear interpolation
   and preserve the `.motion` v1 format.
-- [ ] Add undo/redo, autosave, and recovery for the first supported composition
-  workflow.
+- [x] Add bounded Undo/Redo for composition edits, including layer timing,
+  order, visibility, transforms, and keyframes. Media Pool operations remain
+  outside the history.
+- [ ] Add autosave and recovery for the first supported composition workflow.
 - [-] Extend actionable local error logging and automated coverage for the
   remaining document, rendering, and application boundaries. Save/open failures
   are logged; export failures are not implemented yet.
@@ -268,15 +270,19 @@ Transform, then expand Transform to show the five properties; collapse and
 reopen each level; add Position and Opacity keys, inspect interpolated values,
 edit at a key, remove a key, drag a marker, and confirm a colliding move is
 rejected; scrub and play through the animation;
-save and reopen and confirm keys and layer timing persist; enable Loop and
+save and reopen and confirm keys and layer timing persist; use **Edit > Undo**
+and **Edit > Redo** on layer insertion, visibility, clip timing, transforms,
+and keyframes; confirm inspector edits group into one history step, undoing to
+the saved composition clears its dirty marker, Media Pool contents are
+unaffected, and new/opened compositions start with empty history; enable Loop and
 confirm it restarts at frame 0, then disable Loop and confirm playback stops
 on the final layer frame and Play restarts from frame 0; verify playback scrolls and
 extends the navigation range for a long clip; open **Settings > Keyboard
-Shortcuts**, change a command, confirm duplicate assignments are rejected,
+Shortcuts**, change Undo and Redo assignments, confirm duplicate assignments are rejected,
 check that Cancel discards edits and OK persists them, clear an assignment,
 restore defaults with **Reset All**, and confirm timeline commands are disabled
 when unavailable; then close the application. Richer curves and interpolation,
-undo/redo, autosave, recovery, and export remain open.
+autosave, recovery, and export remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.

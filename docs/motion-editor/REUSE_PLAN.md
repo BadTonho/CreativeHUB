@@ -133,8 +133,8 @@ validation.
   Motion Studio MVP scope; revisit them only if that scope changes.
 - Composition documents, timelines, editing history, autosave, recovery, and
   export remain Motion Studio responsibilities. Manual save/reopen uses its
-  own versioned JSON `.motion` format; undo/redo, autosave, and recovery remain
-  open. Timeline rows display front-to-back while the document stores layers
+  own versioned JSON `.motion` format. Bounded Undo/Redo is composition-owned;
+  autosave and recovery remain open. Timeline rows display front-to-back while the document stores layers
   back-to-front. Row drops insert
   above the target, and empty-space drops insert at the top. The eight-pixel
   snap tolerance uses frame zero and other layer starts and ends. Still images
@@ -205,8 +205,9 @@ and document boundaries as well.
 The standalone Motion Studio target and its Media Pool are implemented with
 provisional C++ and Qt 6 choices. Manual Save, Save As, and Open persist the
 composition and full Media Pool in a versioned `.motion` document. Media files
-remain external references; caches are rebuilt on open. Undo/redo, autosave,
-recovery, and export remain pending.
+remain external references; caches are rebuilt on open. Composition Undo/Redo
+is implemented in the Motion Studio application; Media Pool changes remain
+outside its history. Autosave, recovery, and export remain pending.
 The Motion Studio timeline consumes the shared media, playback, composition,
 and diagnostics libraries directly without linking Video Editor application
 types or targets. Layer insertion, timing, transforms, and preview behavior

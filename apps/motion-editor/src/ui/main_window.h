@@ -2,6 +2,7 @@
 
 #include "model/composition_document.h"
 #include "model/motion_project_data.h"
+#include "composition_history.h"
 
 #include <creative_suite/shortcuts/shortcut_manager.h>
 
@@ -14,6 +15,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <utility>
 
 class QAction;
 class QLabel;
@@ -51,8 +53,15 @@ private:
     [[nodiscard]] bool saveToPath(const std::filesystem::path& path);
     [[nodiscard]] bool confirmReplaceDocument();
     void updateDocumentState();
+    void updateHistoryActions();
     [[nodiscard]] bool documentIsDirty() const;
     [[nodiscard]] model::MotionProjectData projectData() const;
+    [[nodiscard]] CompositionEditState captureEditState() const;
+    [[nodiscard]] bool recordCompositionEdit(CompositionEditState before);
+    void finishPendingTransformEdit();
+    void undoComposition();
+    void redoComposition();
+    void applyEditState(CompositionEditState state);
     void finishOpen(std::uint64_t generation,
                     std::filesystem::path path,
                     model::MotionProjectData project,
@@ -86,6 +95,8 @@ private:
     QAction* save_composition_as_action_ = nullptr;
     QAction* import_media_action_ = nullptr;
     QAction* settings_action_ = nullptr;
+    QAction* undo_action_ = nullptr;
+    QAction* redo_action_ = nullptr;
     QAction* play_pause_action_ = nullptr;
     QAction* previous_frame_action_ = nullptr;
     QAction* next_frame_action_ = nullptr;
@@ -105,6 +116,8 @@ private:
     std::unique_ptr<PreviewRenderer> preview_renderer_;
     std::optional<std::filesystem::path> document_path_;
     std::optional<model::MotionProjectData> saved_data_;
+    CompositionHistory composition_history_;
+    std::optional<std::pair<model::LayerId, std::size_t>> active_transform_edit_;
     QProgressDialog* open_progress_ = nullptr;
     std::shared_ptr<std::atomic_bool> open_cancel_requested_;
     std::uint64_t open_generation_ = 0;

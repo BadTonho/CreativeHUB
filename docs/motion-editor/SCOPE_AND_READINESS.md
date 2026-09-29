@@ -11,8 +11,8 @@ The canvas previews active raster layers through the shared CPU compositor and
 decodes video away from the UI thread. Manual Save, Save As, and Open now use a
 versioned `.motion` document that includes the Media Pool. Image and video
 layers support linear transform keyframe editing and preview evaluation.
-Text/shape content is not rendered, and undo/redo, autosave, recovery, and
-export remain open.
+Text/shape content is not rendered. Undo/Redo now covers composition edits;
+autosave, recovery, and export remain open.
 This document records the agreed starting scope; it does not finalize a
 renderer, programming language, native file extension, codec, or implementation
 architecture.
@@ -157,7 +157,7 @@ owned. Motion Studio has its own composition/layer model, canvas viewer,
 timeline rows linked to Media Pool sources, and manual versioned save/open
 format. Image and video content render in the preview with linearly evaluated
 transform keyframes; text and shapes, richer curves and interpolation, effects,
-undo/redo, autosave, recovery, and export remain open. The one-hour ruler range
+autosave, recovery, and export remain open. The one-hour ruler range
 controls navigation only and does not define the composition's duration. See
 [ROADMAP.md](ROADMAP.md) and [REUSE_PLAN.md](REUSE_PLAN.md) for current
 implementation details and provisional shared API contracts.

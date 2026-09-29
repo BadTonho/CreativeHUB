@@ -71,6 +71,8 @@ documents. The default modifier is Ctrl on Windows/Linux and Cmd on macOS.
 | Ctrl + O / Cmd + O | Open a Motion Studio composition | Motion Studio |
 | Ctrl + S / Cmd + S | Save the current composition, or open Save As when it has no path | Motion Studio |
 | Ctrl + Shift + S / Cmd + Shift + S | Save the composition under a new path | Motion Studio |
+| Platform standard Undo sequence | Undo the last composition edit | Motion Studio; enabled when history is available |
+| Platform standard Redo sequence | Redo the last undone composition edit | Motion Studio; enabled when history is available |
 | Ctrl + I / Cmd + I | Import media | Motion Studio; enabled with a composition |
 | Space | Play or pause | Motion Studio; enabled when the timeline has layers |
 | Left Arrow | Previous frame | Motion Studio; enabled after frame 0 |

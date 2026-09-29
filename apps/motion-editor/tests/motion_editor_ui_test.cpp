@@ -292,6 +292,8 @@ void testMotionShortcutSettings()
     auto* save_action = action(window, "motion-save-composition-action");
     auto* save_as_action = action(window, "motion-save-composition-as-action");
     auto* import_action = action(window, "motion-import-media-action");
+    auto* undo_action = action(window, "motion-undo-action");
+    auto* redo_action = action(window, "motion-redo-action");
     auto* play_action = action(window, "motion-play-pause-action");
     auto* previous_action = action(window, "motion-previous-frame-action");
     auto* next_action = action(window, "motion-next-frame-action");
@@ -301,6 +303,8 @@ void testMotionShortcutSettings()
     require(create_action->shortcut() == QKeySequence::New &&
                 open_action->shortcut() == QKeySequence::Open &&
                 save_action->shortcut() == QKeySequence::Save &&
+                undo_action->shortcut() == QKeySequence::Undo &&
+                redo_action->shortcut() == QKeySequence::Redo &&
                 import_action->shortcut() == expected_import_sequence &&
                 play_action->shortcut() == QKeySequence(Qt::Key_Space) &&
                 previous_action->shortcut() == QKeySequence(Qt::Key_Left) &&
@@ -311,6 +315,7 @@ void testMotionShortcutSettings()
     require(create_action->isEnabled() && open_action->isEnabled() &&
                 !save_action->isEnabled() && !save_as_action->isEnabled() &&
                 !import_action->isEnabled() &&
+                !undo_action->isEnabled() && !redo_action->isEnabled() &&
                 !play_action->isEnabled() && !previous_action->isEnabled() &&
                 !next_action->isEnabled() && !loop_action->isEnabled(),
             "commands reflect the empty composition state");
@@ -318,11 +323,15 @@ void testMotionShortcutSettings()
     interactWithShortcutDialog(window, [](QDialog* dialog) {
         auto* editor = findWidget<QKeySequenceEdit>(dialog,
             "motion-shortcut-editor-file.new_composition");
+        auto* undo_editor = findWidget<QKeySequenceEdit>(dialog,
+            "motion-shortcut-editor-edit.undo");
         auto* buttons = findWidget<QDialogButtonBox>(dialog, "motion-shortcut-dialog-buttons");
         editor->setKeySequence(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
+        undo_editor->setKeySequence(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_U));
         buttons->button(QDialogButtonBox::Ok)->click();
     });
-    require(create_action->shortcut() == QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N),
+    require(create_action->shortcut() == QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N) &&
+                undo_action->shortcut() == QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_U),
             "OK applies the shortcut settings as a batch");
 
     interactWithShortcutDialog(window, [](QDialog* dialog) {
@@ -362,7 +371,9 @@ void testMotionShortcutSettings()
     QSettings settings;
     settings.beginGroup(QStringLiteral("MotionStudio/KeyboardShortcuts"));
     require(settings.value(QStringLiteral("file.new_composition")).toString() ==
-                QStringLiteral("Ctrl+Shift+N"),
+                QStringLiteral("Ctrl+Shift+N") &&
+                settings.value(QStringLiteral("edit.undo")).toString() ==
+                    QStringLiteral("Ctrl+Shift+U"),
             "accepted shortcut preferences persist in the Motion Studio group");
     settings.endGroup();
 
@@ -370,6 +381,8 @@ void testMotionShortcutSettings()
         MainWindow reopened;
         require(action(reopened, "motion-new-composition-action")->shortcut() ==
                     QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N) &&
+                    action(reopened, "motion-undo-action")->shortcut() ==
+                        QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_U) &&
                     action(reopened, "motion-import-media-action")->shortcut().isEmpty(),
                 "shortcut settings load when a new window is created");
     }
@@ -391,7 +404,9 @@ void testMotionShortcutSettings()
             ->button(QDialogButtonBox::Ok)->click();
     });
     require(create_action->shortcut() == QKeySequence::New &&
-                import_action->shortcut() == expected_import_sequence,
+                import_action->shortcut() == expected_import_sequence &&
+                undo_action->shortcut() == QKeySequence::Undo &&
+                redo_action->shortcut() == QKeySequence::Redo,
             "Reset All applies and persists all registered defaults");
 
     QTimer::singleShot(0, [] {
@@ -499,6 +514,9 @@ void testMotionDocumentSaveOpen()
 
     motion::model::MotionProjectData second_document;
     second_document.composition = {{320, 200}, {24, 1}};
+    motion::model::CompositionDocument opened_document(320, 200, {24, 1});
+    (void)opened_document.addLayer(motion::model::LayerKind::Shape, "Open history fixture");
+    second_document.layers = opened_document.layers();
     motion::persistence::MotionDocumentStore::save(load_path, second_document);
     motion::model::MotionProjectData offline_document;
     offline_document.composition = {{800, 450}, {30000, 1001}};
@@ -536,19 +554,41 @@ void testMotionDocumentSaveOpen()
                 window.compositionDocument()->frameRate() == motion::model::FrameRate{24, 1} &&
                 !window.isWindowModified(),
             "Open applies a staged document and starts with a clean state");
+    auto* undo_action = action(window, "motion-undo-action");
+    auto* redo_action = action(window, "motion-redo-action");
+    require(!undo_action->isEnabled() && !redo_action->isEnabled(),
+            "successfully opening a document clears prior history");
     auto* timeline = findWidget<motion::ui::TimelineNavigator>(&window, "motion-timeline");
     auto* display_mode = findWidget<QComboBox>(&window, "motion-timeline-display-mode");
     require(timeline->currentFrame() == 0 && timeline->zoomFactor() == 1.0 &&
                 display_mode->currentIndex() ==
                     static_cast<int>(motion::ui::TimelineDisplayMode::Time),
             "Open resets navigation-only UI state");
+    auto* rows = findWidget<QWidget>(&window, "motion-timeline-layer-rows");
+    sendMouseClick(rows, QPoint(15, 15));
+    require(undo_action->isEnabled() && window.isWindowModified(),
+            "a composition visibility edit becomes undoable and dirty");
+
+    QTimer::singleShot(0, [] {
+        auto* file_dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+        require(file_dialog != nullptr, "Open Composition picker opens before cancellation");
+        file_dialog->reject();
+    });
+    action(window, "motion-open-composition-action")->trigger();
+    require(window.compositionDocument()->layers().front().visible == false &&
+                window.isWindowModified() && undo_action->isEnabled(),
+            "cancelling Open preserves both the edited composition and its history");
 
     QTimer::singleShot(0, [&] { chooseDocumentFile(corrupt_path, QDialogButtonBox::Open); });
     answerMessageBoxWhenShown(QMessageBox::Ok);
     action(window, "motion-open-composition-action")->trigger();
     require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{320, 200} &&
-                !window.isWindowModified(),
-            "failed Open leaves the current document and clean state intact");
+                window.isWindowModified() && undo_action->isEnabled(),
+            "failed Open preserves the current document and its undo history");
+    undo_action->trigger();
+    require(window.compositionDocument()->layers().front().visible &&
+                !window.isWindowModified() && redo_action->isEnabled(),
+            "Undo restores the saved state and clears the dirty marker");
 
     createComposition(window, 400, 300, 2);
     require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{400, 300} &&
@@ -981,6 +1021,10 @@ int main(int argc, char* argv[])
     require(window.compositionDocument() != nullptr &&
                 window.compositionDocument()->canvasSize() == motion::model::CanvasSize{640, 360},
             "the empty-state action creates an explicitly sized composition");
+    auto* undo_action = action(window, "motion-undo-action");
+    auto* redo_action = action(window, "motion-redo-action");
+    require(!undo_action->isEnabled() && !redo_action->isEnabled(),
+            "a new composition begins with empty Undo and Redo history");
     require(window.centralWidget()->objectName() == QStringLiteral("motion-composition-splitter") &&
                 window.isMaximized(),
             "the composition workspace replaces the empty state and preserves maximization");
@@ -1128,6 +1172,14 @@ int main(int argc, char* argv[])
                 video_entry->first_frame.width > 0 && video_entry->first_frame.height > 0,
             "image and video entries have decoded, cached first-frame thumbnails");
 
+    const auto undo_baseline_path = pathFromQString(temporary.path()) / "undo-baseline.motion";
+    QTimer::singleShot(0, [&undo_baseline_path] {
+        chooseDocumentFile(undo_baseline_path, QDialogButtonBox::Save);
+    });
+    action(window, "motion-save-composition-as-action")->trigger();
+    require(!window.isWindowModified(),
+            "the composition and Media Pool baseline can be saved before history checks");
+
     auto* layer_rows = findWidget<QWidget>(&window, "motion-timeline-layer-rows");
     require(layer_rows->acceptDrops(), "timeline layer rows accept Media Pool drops");
     const auto image_catalog_path = image_entry->metadata.source_path;
@@ -1143,6 +1195,32 @@ int main(int argc, char* argv[])
                 window.compositionDocument()->layers().front().timeline_start_frame == 0 &&
                 window.compositionDocument()->layers().front().duration_frames == 120,
             "dropping a still onto empty timeline space creates a five-second layer at frame zero");
+    const auto inserted_image_id = window.compositionDocument()->layers().front().id;
+    auto* transform_inspector = findWidget<QWidget>(&window, "motion-transform-inspector");
+    require(undo_action->isEnabled() && !redo_action->isEnabled() && window.isWindowModified(),
+            "inserting a layer creates an undo step and marks the composition dirty");
+    undo_action->trigger();
+    require(window.compositionDocument()->layers().empty() && !undo_action->isEnabled() &&
+                redo_action->isEnabled() && !window.isWindowModified() &&
+                pool->library().size() == 2 && !transform_inspector->isEnabled(),
+            "Undo removes only the timeline layer, preserves the Media Pool, and returns to the saved state");
+    redo_action->trigger();
+    require(window.compositionDocument()->layers().size() == 1 &&
+                window.compositionDocument()->layers().front().id == inserted_image_id &&
+                undo_action->isEnabled() && !redo_action->isEnabled() &&
+                window.isWindowModified() && transform_inspector->isEnabled(),
+            "Redo restores the stable layer ID and marks the document dirty again");
+    action(window, "motion-save-composition-action")->trigger();
+    require(!window.isWindowModified() && undo_action->isEnabled(),
+            "saving a document does not clear its undo history");
+    undo_action->trigger();
+    require(window.compositionDocument()->layers().empty() && window.isWindowModified() &&
+                redo_action->isEnabled(),
+            "undoing past a saved state marks the saved document dirty");
+    redo_action->trigger();
+    require(window.compositionDocument()->layers().front().id == inserted_image_id &&
+                !window.isWindowModified(),
+            "redo returns exactly to the saved composition state");
     require(play_pause_action->isEnabled() && loop_action->isEnabled() &&
                 !previous_frame_action->isEnabled() && next_frame_action->isEnabled(),
             "timeline commands update availability when a layer is added");
@@ -1174,8 +1252,17 @@ int main(int argc, char* argv[])
             "selecting a timeline layer leaves the playhead unchanged");
     auto* position_x = findWidget<QDoubleSpinBox>(&window, "motion-transform-position-x");
     position_x->setValue(0.25);
-    require(window.compositionDocument()->layers().front().transform.position_x == 0.25,
+    position_x->setValue(0.75);
+    (void)QMetaObject::invokeMethod(position_x, "editingFinished", Qt::DirectConnection);
+    require(window.compositionDocument()->layers().front().transform.position_x == 0.75,
             "the transform inspector edits the selected layer base transform");
+    undo_action->trigger();
+    require(window.compositionDocument()->layers().front().transform.position_x == 0.5 &&
+                redo_action->isEnabled(),
+            "Undo treats successive values in one inspector interaction as one step");
+    redo_action->trigger();
+    require(window.compositionDocument()->layers().front().transform.position_x == 0.75,
+            "Redo restores the final grouped transform value");
 
     deliverMediaDrop(layer_rows, video_catalog_path, QPoint(205, 15), false);
     const auto after_video_drop = window.compositionDocument()->layers();
@@ -1332,6 +1419,14 @@ int main(int argc, char* argv[])
     require(position_keys == std::vector<creative_suite::animation::Keyframe>{{0, base_position_x}} &&
                 key_add_expanded_transform,
             "adding a transform key stores its value and reveals its property track");
+    undo_action->trigger();
+    require(document->layers().front().keyframes.position_x.empty() &&
+                redo_action->isEnabled(),
+            "Undo removes a newly inserted transform key");
+    redo_action->trigger();
+    require(document->layers().front().keyframes.position_x ==
+                std::vector<creative_suite::animation::Keyframe>{{0, base_position_x}},
+            "Redo restores the inserted transform key");
     timeline->setCurrentFrame(animation_start + 10);
     require(animated_position_x->isReadOnly() &&
                 std::abs(animated_position_x->value() - base_position_x) < 0.000001,
@@ -1674,6 +1769,8 @@ int main(int argc, char* argv[])
     require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{1920, 1080} &&
                 window.compositionDocument()->frameRate() == motion::model::FrameRate{30000, 1001},
             "replacement creates a new composition with the selected exact frame rate");
+    require(!undo_action->isEnabled() && !redo_action->isEnabled(),
+            "successfully creating a replacement composition clears history");
     require(pool->library().empty() && media_list->count() == 0 && timeline->currentFrame() == 0 &&
                 timeline_display_mode->currentIndex() == 0 &&
                 timeline_position_readout->text() == QStringLiteral("00:00:00.000"),

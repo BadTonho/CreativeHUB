@@ -13,6 +13,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/persistence/motion_document_store.h
     src/ui/composition_viewer.cpp
     src/ui/composition_viewer.h
+    src/ui/composition_history.cpp
+    src/ui/composition_history.h
     src/ui/main_window.cpp
     src/ui/main_window.h
     src/ui/media_pool_widget.cpp
