@@ -36,14 +36,15 @@ coverage in both the producer and consumer applications.
   including layers and groups, editable shapes, object selection, save/reopen,
   and export. Windows packaging and linked-image acceptance remain in progress;
   macOS and Linux validation is deferred. See the [Image Editor roadmap](docs/image-editor/ROADMAP.md).
-- **Motion Studio:** its standalone Qt shell and in-memory composition/layer
-  workspace are in progress; the viewer shows the canvas and selected-layer
-  guide, while layer-content rendering remains open. C++ and Qt 6 remain
-  provisional choices. It links the shared animation library and builds without
-  the Video or Image Editor targets. Timeline, persistence, media import, and
-  export remain open. See the
+- **Motion Studio:** its standalone Qt workspace has a Media Pool, image/video
+  timeline layers, CPU preview, playback, and manual Save/Open using its own
+  versioned `.motion` format. Text and shape rendering, keyframe editing,
+  undo/redo, autosave, recovery, and export remain open. C++ and Qt 6 remain
+  provisional choices. It links shared libraries and builds without the Video
+  or Image Editor targets. See the
   [scope and readiness guide](docs/motion-editor/SCOPE_AND_READINESS.md),
   [reuse plan](docs/motion-editor/REUSE_PLAN.md), and
+  [native format specification](docs/motion-editor/FORMAT.md), and
   [Motion Studio roadmap](docs/motion-editor/ROADMAP.md).
 
 ## Project principles
@@ -191,6 +192,7 @@ Before contributing, please read the project guidelines outlined in [`AGENTS.md`
 | [Image Editor roadmap](docs/image-editor/ROADMAP.md) | Image Editor milestones and validation. |
 | [Motion Studio scope and readiness](docs/motion-editor/SCOPE_AND_READINESS.md) | Initial users, MVP boundary, capability ownership, and compatibility policy. |
 | [Motion Studio reuse plan](docs/motion-editor/REUSE_PLAN.md) | Shared library boundaries and application ownership. |
+| [Motion Studio native format](docs/motion-editor/FORMAT.md) | Provisional `.motion` version 1 JSON layout and save/open behavior. |
 | [Motion Studio roadmap](docs/motion-editor/ROADMAP.md) | Provisional scope and technical milestones. |
 | [Cross-application compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md) | Shared interfaces and handoff contracts. |
 | [Technical prototype comparison](docs/video-editor/TECHNICAL_PROTOTYPE_COMPARISON.md) | Language and technology evaluation. |

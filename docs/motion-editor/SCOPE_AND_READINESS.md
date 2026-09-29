@@ -7,8 +7,10 @@ application-owned Media Pool connected to timeline rows for image and video
 layers. The timeline supports clip insertion, movement, reordering, visibility,
 removal, and duration edits; the selected layer's base transform is editable.
 The canvas previews active raster layers through the shared CPU compositor and
-decodes video away from the UI thread. Keyframes are not evaluated or edited,
-and text/shape content is not rendered. Persistence and export are still open.
+decodes video away from the UI thread. Manual Save, Save As, and Open now use a
+versioned `.motion` document that includes the Media Pool. Keyframes are not
+evaluated or edited, text/shape content is not rendered, and undo/redo,
+autosave, recovery, and export remain open.
 This document records the agreed starting scope; it does not finalize a
 renderer, programming language, native file extension, codec, or implementation
 architecture.
@@ -109,8 +111,9 @@ application compiles and packages the targets it needs; it does not load or
 launch another editor. The Video Editor supplies preview-metric recording
 through an observer adapter. Motion Studio has its own import dialog, worker
 orchestration, Media Pool UI, bins presentation, details inspector, and
-composition lifecycle. Its pool is ephemeral until document persistence is
-implemented. Image Editor link references remain in the Video Editor's
+composition lifecycle. The `.motion` document persists the complete Media Pool
+catalog and keeps media files as external references; thumbnails and decoded
+frames are rebuilt on open. Image Editor link references remain in the Video Editor's
 application-side project adapter rather than the shared media catalog.
 
 Any composition contract must define coordinate units and transforms, pixel
@@ -148,10 +151,11 @@ For Motion Studio, the existing neutral video decoder, shared media catalog,
 still-image decoder, RGBA frame model, transform evaluator, and raster
 compositor are reused directly. The Qt preview, Motion Studio timeline worker,
 text rasterizer, and application-specific project adapters remain application-
-owned. Motion Studio has its own in-memory document/layer model, canvas viewer,
-and timeline rows linked to Media Pool sources. Image and video content render
-in the preview; text and shapes, keyframe evaluation, effects, and standalone
-persistence and export remain open. The one-hour ruler range controls
+owned. Motion Studio has its own composition/layer model, canvas viewer,
+timeline rows linked to Media Pool sources, and manual versioned save/open
+format. Image and video content render in the preview; text and shapes,
+keyframe evaluation, effects, undo/redo, autosave, recovery, and export remain
+open. The one-hour ruler range controls
 navigation only and does not define the composition's duration. See
 [ROADMAP.md](ROADMAP.md) and [REUSE_PLAN.md](REUSE_PLAN.md) for current
 implementation details and provisional shared API contracts.
@@ -160,17 +164,18 @@ implementation details and provisional shared API contracts.
 
 - Motion Studio uses a native document format distinct from the Video Editor's
   `.csp` project format and the Image Editor's `.cimg` format.
-- The Motion Studio format has its own schema version and migration rules;
-  versions in the explicitly supported older range migrate forward when
-  opened.
-- A document with an unsupported future schema version is rejected without
-  overwriting or normalizing the original file.
+- The current implementation uses a version 1 JSON document identified by
+  `creative-suite.motion-studio`. Its provisional extension is `.motion`; the
+  field layout, path rules, exact limits, and atomic-save behavior are described
+  in [FORMAT.md](FORMAT.md).
+- Version 1 has no older supported versions to migrate. A document with an
+  unsupported future schema version is rejected without replacing the current
+  composition or overwriting or normalizing the original file.
 - Cross-application references identify a Motion Studio document and its saved
   revision through a separately documented compatibility contract. Native
   document versioning and the Video Editor reference contract are distinct.
-- The file extension, serialized field layout, path policy, migration window,
-  and exact link representation remain undecided until their implementation
-  contracts are validated.
+- Cross-application reference representation remains undecided until the
+  handoff contract is implemented and validated.
 
 ## Deferred Technical Decisions
 

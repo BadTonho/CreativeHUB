@@ -223,6 +223,23 @@ int main()
     require(next > front, "removed IDs are not reused");
     require(document.layers().size() == 3, "removal and insertion update layer storage");
 
+    CompositionLayer largest_id_layer{};
+    largest_id_layer.id = std::numeric_limits<LayerId>::max();
+    largest_id_layer.kind = LayerKind::Shape;
+    largest_id_layer.name = "Largest ID";
+    CompositionDocument exhausted_ids(
+        640, 360, fractional_rate, std::vector<CompositionLayer>{largest_id_layer});
+    require(exhausted_ids.layers().front().id == std::numeric_limits<LayerId>::max(),
+            "validated reconstruction preserves the largest persisted layer ID");
+    bool id_exhaustion_is_safe = false;
+    try {
+        static_cast<void>(exhausted_ids.addLayer(LayerKind::Shape, "After largest ID"));
+    } catch (const std::overflow_error&) {
+        id_exhaustion_is_safe = true;
+    }
+    require(id_exhaustion_is_safe,
+            "the allocator rejects new layers instead of wrapping past the largest ID");
+
     std::cout << "Motion Studio composition document tests passed.\n";
     return EXIT_SUCCESS;
 }

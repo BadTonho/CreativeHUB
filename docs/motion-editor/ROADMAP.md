@@ -2,12 +2,13 @@
 
 Status: **provisional; implementation started**. The standalone Motion Studio
 shell, in-memory composition/layer model, navigation timeline, Media Pool,
-raster clip layers, and CPU preview are wired into CMake under
-`apps/motion-editor/`. Its initial product scope and readiness are documented
+raster clip layers, CPU preview, and versioned native save/open are wired into
+CMake under `apps/motion-editor/`. Its initial product scope and readiness are documented
 in [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md). C++ and Qt 6 are provisional
 implementation choices; no final language, renderer, or codec choices have
 been made. Focused reuse libraries are tracked separately in
-[REUSE_PLAN.md](REUSE_PLAN.md).
+[REUSE_PLAN.md](REUSE_PLAN.md). The current native document contract is described
+in [FORMAT.md](FORMAT.md); `.motion` remains a provisional extension.
 
 Motion Studio may be developed in parallel with the Video Editor and Image
 Editor on an independent track. Cross-application integrations still depend on
@@ -130,13 +131,16 @@ the Motion Studio implementation choices are finalized.
   defaults, and dialog behavior application-owned. OK applies a validated
   batch; Cancel discards edits. Time/Frames and Media Pool commands remain
   outside this initial list.
+- [x] Add manual Open, Save, and Save As for the full composition and Media
+  Pool using an atomic, versioned `.motion` JSON document. Reject malformed and
+  future-version documents without replacing the current composition or
+  rewriting the source file. Missing media reopen as offline references.
 - [ ] Add keyframe editing interactions to the timeline.
-- [ ] Add project save/load, versioned formats, undo/redo, autosave, and
-  recovery for the first supported composition workflow.
+- [ ] Add undo/redo, autosave, and recovery for the first supported composition
+  workflow.
 - [-] Extend actionable local error logging and automated coverage for the
-  remaining document, rendering, and application boundaries. Media insertion
-  and preview failures are logged; persistence and export failures are not
-  implemented yet.
+  remaining document, rendering, and application boundaries. Save/open failures
+  are logged; export failures are not implemented yet.
 
 The in-memory document/layer model has unit coverage, including explicit canvas
 size, exact frame rate, media paths, layer order, timing, movement, and duration
@@ -151,7 +155,14 @@ and importer, plus the Motion Studio Media Pool, have regression coverage for
 video and still-image imports, first-frame thumbnails, bins, renaming, offline
 restoration, view modes, selection details,
 and clearing on composition replacement. The Video Editor retains its
-project-media and linked-image regressions.
+project-media and linked-image regressions. Motion Studio document tests cover
+empty and populated round trips, exact fractional rates, stable layer IDs,
+transforms, keyframes, bins, renamed and unused media, Unicode and relative or
+external paths, malformed/future versions, validation failures, and preserving
+an existing file after a rejected save. Offscreen UI tests cover Save As, Open,
+dirty title state, Save/Discard/Cancel replacement and close decisions, failed
+Open preserving the current document, navigation resets, media-pool changes,
+and missing assets reopening offline.
 
 Frame rates are stored as exact rational values from the supported common-rate
 list. Creating a composition does not ask for or set its duration. The ruler
@@ -202,7 +213,15 @@ CPU-only and omits text, shape, audio, source-in-point, and keyframe evaluation.
 Manual Windows validation remains pending: verify the centered empty-state
 button opens composition creation and disappears after creation; confirm a
 composition opens maximized and preserves a restored window size; confirm the
-one-hour navigation range, stepping, and separate drag extensions; import
+new **File > Save As**, **File > Save**, and **File > Open Composition** actions
+write and reopen a `.motion` document with layers, keyframes, and Media Pool
+bins intact; confirm relative media paths still resolve after moving the project
+folder with its media; move a referenced source away and confirm it reopens
+offline; verify malformed and future-version files leave the current document
+and the source file unchanged; test Save, Discard, and Cancel before replacing
+or closing a dirty composition; and confirm the title's dirty marker clears on
+save. Then confirm the one-hour navigation range, stepping, and separate drag
+extensions; import
 images and videos, organize bins, switch pool views, and restore offline items;
 drag media to empty space and existing rows; verify snapping and front-to-back
 order; select, move, hide, resize, and remove layers; edit transforms; seek
@@ -220,8 +239,8 @@ extends the navigation range for a long clip; open **Settings > Keyboard
 Shortcuts**, change a command, confirm duplicate assignments are rejected,
 check that Cancel discards edits and OK persists them, clear an assignment,
 restore defaults with **Reset All**, and confirm timeline commands are disabled
-when unavailable; then close the application. Keyframe editing, document
-persistence, undo/redo, and export remain open.
+when unavailable; then close the application. Keyframe editing, undo/redo,
+autosave, recovery, and export remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.

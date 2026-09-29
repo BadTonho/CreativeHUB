@@ -69,6 +69,8 @@ struct CompositionLayer {
     bool visible = true;
     creative_suite::animation::Transform2D transform;
     creative_suite::animation::TransformKeyframes keyframes;
+
+    friend bool operator==(const CompositionLayer&, const CompositionLayer&) = default;
 };
 
 enum class AddMediaLayerResult {
@@ -88,6 +90,13 @@ public:
         int canvas_width,
         int canvas_height,
         FrameRate frame_rate);
+    // Validated reconstruction path for persisted layer records. Existing IDs
+    // and ordering are retained; the next generated ID follows the greatest ID.
+    CompositionDocument(
+        int canvas_width,
+        int canvas_height,
+        FrameRate frame_rate,
+        std::vector<CompositionLayer> layers);
 
     [[nodiscard]] CanvasSize canvasSize() const noexcept;
     [[nodiscard]] FrameRate frameRate() const noexcept;

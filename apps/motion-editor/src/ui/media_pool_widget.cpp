@@ -310,6 +310,26 @@ void MediaPoolWidget::setSelectionChangedHandler(std::function<void()> handler)
     selection_changed_handler_ = std::move(handler);
 }
 
+void MediaPoolWidget::setContentChangedHandler(std::function<void()> handler)
+{
+    content_changed_handler_ = std::move(handler);
+}
+
+void MediaPoolWidget::replaceLibrary(MediaLibrary library)
+{
+    if (cancel_requested_) cancel_requested_->store(true, std::memory_order_relaxed);
+    cancel_requested_.reset();
+    ++import_generation_;
+    if (progress_ != nullptr) progress_->hide();
+    library_ = std::move(library);
+    shared_frame_cache_.clear();
+    refresh();
+    status_label_->setText(library_.empty()
+        ? QStringLiteral("No media imported")
+        : QStringLiteral("Media Pool loaded"));
+    if (content_changed_handler_) content_changed_handler_();
+}
+
 void MediaPoolWidget::clear()
 {
     if (cancel_requested_) cancel_requested_->store(true, std::memory_order_relaxed);
@@ -446,6 +466,8 @@ void MediaPoolWidget::handleMediaItemChanged(QListWidgetItem* item)
         result != creative_suite::media::MediaMutationResult::NoChange) {
         refreshMedia(pathText(path));
     }
+    if (result == creative_suite::media::MediaMutationResult::Changed &&
+        content_changed_handler_) content_changed_handler_();
     if (selection_changed_handler_) selection_changed_handler_();
 }
 
@@ -462,6 +484,8 @@ void MediaPoolWidget::handleBinItemChanged(QTreeWidgetItem* item, int column)
     if (new_path == old_path) return;
     const auto result = library_.renameBin(old_path.toUtf8().toStdString(),
                                            new_path.toUtf8().toStdString());
+    if (result == creative_suite::media::MediaMutationResult::Changed &&
+        content_changed_handler_) content_changed_handler_();
     const QString refresh_path = result == creative_suite::media::MediaMutationResult::Changed
         ? new_path : old_path;
     QTimer::singleShot(0, this, [this, refresh_path] {
@@ -499,6 +523,8 @@ void MediaPoolWidget::showMediaContextMenu(const QPoint& position)
             const auto result = library_.moveToBin(media_index, bin);
             if (result == creative_suite::media::MediaMutationResult::Changed ||
                 result == creative_suite::media::MediaMutationResult::NoChange) {
+                if (result == creative_suite::media::MediaMutationResult::Changed &&
+                    content_changed_handler_) content_changed_handler_();
                 QTimer::singleShot(0, this, [this, path, bin] {
                     refreshMedia(pathText(path));
                     status_label_->setText(QStringLiteral("Moved to %1")
@@ -557,6 +583,8 @@ void MediaPoolWidget::createBin()
         result == creative_suite::media::MediaMutationResult::NoChange) {
         refresh(path);
         status_label_->setText(QStringLiteral("Bin ready: %1").arg(path));
+        if (result == creative_suite::media::MediaMutationResult::Changed &&
+            content_changed_handler_) content_changed_handler_();
     } else {
         status_label_->setText(QStringLiteral("That bin name is not valid."));
     }
@@ -582,7 +610,10 @@ void MediaPoolWidget::moveSelectedBin()
     if (!accepted || new_path.isEmpty()) return;
     const auto result = library_.moveBin(old_path.toUtf8().toStdString(),
                                          new_path.toUtf8().toStdString());
-    if (result == creative_suite::media::MediaMutationResult::Changed) refresh(new_path);
+    if (result == creative_suite::media::MediaMutationResult::Changed) {
+        refresh(new_path);
+        if (content_changed_handler_) content_changed_handler_();
+    }
     else status_label_->setText(QStringLiteral("That bin move is not valid."));
 }
 
@@ -597,6 +628,7 @@ void MediaPoolWidget::markSelectedMediaOffline()
     if (result == creative_suite::media::MediaMutationResult::Changed) {
         status_label_->setText(QStringLiteral("Media marked offline; its source reference was kept."));
         QTimer::singleShot(0, this, [this, path] { refreshMedia(pathText(path)); });
+        if (content_changed_handler_) content_changed_handler_();
     }
 }
 
@@ -693,6 +725,7 @@ void MediaPoolWidget::finishImport(
     status_label_->setText(QStringLiteral("Imported %1; %2 failed; %3 duplicates%4.")
         .arg(imported).arg(failed).arg(duplicates)
         .arg(result.cancelled ? QStringLiteral("; cancelled") : QString{}));
+    if (imported > 0 && content_changed_handler_) content_changed_handler_();
 }
 
 MediaDetailsWidget::MediaDetailsWidget(QWidget* parent)

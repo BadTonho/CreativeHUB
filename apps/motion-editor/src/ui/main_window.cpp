@@ -3,34 +3,47 @@
 #include "composition_viewer.h"
 #include "media_pool_widget.h"
 #include "new_composition_dialog.h"
+#include "../persistence/motion_document_store.h"
 #include "preview_renderer.h"
 #include "shortcut_settings_dialog.h"
 #include "timeline_navigator.h"
 
 #include <creative_suite/diagnostics/logger.h>
+#include <creative_suite/media/media_importer.h>
+#include <creative_suite/media/media_library.h>
 
 #include <QAction>
 #include <QApplication>
+#include <QCloseEvent>
 #include <QKeySequence>
 #include <QDoubleSpinBox>
 #include <QDialog>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMetaObject>
+#include <QPointer>
+#include <QProgressDialog>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QVBoxLayout>
+#include <QRunnable>
+#include <QThreadPool>
 
 #include <algorithm>
 #include <filesystem>
 #include <limits>
+#include <map>
+#include <stdexcept>
+#include <unordered_map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -51,10 +64,83 @@ std::string pathForLog(const std::filesystem::path& path)
     return {reinterpret_cast<const char*>(encoded.data()), encoded.size()};
 }
 
+QString pathForDisplay(const std::filesystem::path& path)
+{
+    const auto encoded = path.generic_u8string();
+    return QString::fromUtf8(reinterpret_cast<const char*>(encoded.data()),
+                             static_cast<qsizetype>(encoded.size()));
+}
+
 QString layerName(const model::CompositionLayer& layer)
 {
     return QString::fromUtf8(layer.name.data(), static_cast<qsizetype>(layer.name.size()));
 }
+
+class OpenMediaStageTask final : public QRunnable {
+public:
+    using ProgressHandler = std::function<void(
+        std::uint64_t, std::size_t, std::size_t, const std::filesystem::path&)>;
+    using FinishedHandler = std::function<void(
+        std::uint64_t, std::filesystem::path, model::MotionProjectData,
+        creative_suite::media::MediaImportBatchResult)>;
+
+    OpenMediaStageTask(QObject* receiver,
+                       std::uint64_t generation,
+                       std::filesystem::path document_path,
+                       model::MotionProjectData project,
+                       std::shared_ptr<std::atomic_bool> cancel,
+                       ProgressHandler progress_handler,
+                       FinishedHandler finished_handler)
+        : receiver_(receiver), generation_(generation),
+          document_path_(std::move(document_path)), project_(std::move(project)),
+          cancel_(std::move(cancel)), progress_handler_(std::move(progress_handler)),
+          finished_handler_(std::move(finished_handler))
+    {
+        setAutoDelete(true);
+    }
+
+    void run() override
+    {
+        std::vector<std::filesystem::path> paths;
+        paths.reserve(project_.media.size());
+        for (const auto& media : project_.media) paths.push_back(media.source_path);
+        QPointer<QObject> receiver = receiver_;
+        const auto generation = generation_;
+        const auto progress_handler = progress_handler_;
+        auto result = creative_suite::media::MediaImporter{}.process(
+            paths, *cancel_, [receiver, generation, progress_handler](
+                std::size_t completed, std::size_t total,
+                const std::filesystem::path& path) {
+                if (receiver.isNull()) return;
+                QMetaObject::invokeMethod(receiver.data(),
+                    [receiver, generation, completed, total, path, progress_handler] {
+                        if (!receiver.isNull())
+                            progress_handler(generation, completed, total, path);
+                    }, Qt::QueuedConnection);
+            });
+        if (receiver.isNull()) return;
+        const auto finished_handler = finished_handler_;
+        auto document_path = document_path_;
+        auto project = std::move(project_);
+        QMetaObject::invokeMethod(receiver.data(),
+            [receiver, generation, document_path = std::move(document_path),
+             project = std::move(project), result = std::move(result),
+             finished_handler]() mutable {
+                if (!receiver.isNull())
+                    finished_handler(generation, std::move(document_path),
+                                     std::move(project), std::move(result));
+            }, Qt::QueuedConnection);
+    }
+
+private:
+    QPointer<QObject> receiver_;
+    std::uint64_t generation_ = 0;
+    std::filesystem::path document_path_;
+    model::MotionProjectData project_;
+    std::shared_ptr<std::atomic_bool> cancel_;
+    ProgressHandler progress_handler_;
+    FinishedHandler finished_handler_;
+};
 
 } // namespace
 
@@ -98,6 +184,53 @@ MainWindow::MainWindow(QWidget* parent)
     });
     connect(empty_state_new_composition_button_, &QPushButton::clicked,
             new_composition_action_, &QAction::trigger);
+
+    open_composition_action_ = file_menu->addAction(QStringLiteral("Open Composition..."));
+    open_composition_action_->setObjectName(QStringLiteral("motion-open-composition-action"));
+    open_composition_action_->setShortcut(QKeySequence::Open);
+    open_composition_action_->setShortcutContext(Qt::WindowShortcut);
+    addAction(open_composition_action_);
+    shortcut_manager_.registerAction(
+        QStringLiteral("file.open_composition"), QStringLiteral("Open Composition"),
+        open_composition_action_);
+    connect(open_composition_action_, &QAction::triggered, this, [this] {
+        openComposition();
+    });
+
+    save_composition_action_ = file_menu->addAction(QStringLiteral("Save"));
+    save_composition_action_->setObjectName(QStringLiteral("motion-save-composition-action"));
+    save_composition_action_->setShortcut(QKeySequence::Save);
+    save_composition_action_->setShortcutContext(Qt::WindowShortcut);
+    save_composition_action_->setEnabled(false);
+    addAction(save_composition_action_);
+    shortcut_manager_.registerAction(
+        QStringLiteral("file.save_composition"), QStringLiteral("Save Composition"),
+        save_composition_action_);
+    connect(save_composition_action_, &QAction::triggered, this, [this] {
+        (void)saveComposition();
+    });
+
+    save_composition_as_action_ = file_menu->addAction(QStringLiteral("Save As..."));
+    save_composition_as_action_->setObjectName(
+        QStringLiteral("motion-save-composition-as-action"));
+#if defined(Q_OS_MACOS)
+    save_composition_as_action_->setShortcut(
+        QKeySequence(Qt::META | Qt::SHIFT | Qt::Key_S));
+#else
+    save_composition_as_action_->setShortcut(
+        QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S));
+#endif
+    save_composition_as_action_->setShortcutContext(Qt::WindowShortcut);
+    save_composition_as_action_->setEnabled(false);
+    addAction(save_composition_as_action_);
+    shortcut_manager_.registerAction(
+        QStringLiteral("file.save_composition_as"), QStringLiteral("Save Composition As"),
+        save_composition_as_action_);
+    connect(save_composition_as_action_, &QAction::triggered, this, [this] {
+        (void)saveCompositionAs();
+    });
+
+    file_menu->addSeparator();
     import_media_action_ = file_menu->addAction(QStringLiteral("Import Media..."));
     import_media_action_->setObjectName(QStringLiteral("motion-import-media-action"));
     import_media_action_->setEnabled(false);
@@ -187,26 +320,17 @@ MediaPoolWidget* MainWindow::mediaPoolWidget() const noexcept
 
 void MainWindow::createNewComposition()
 {
-    if (document_.has_value()) {
-        QMessageBox replace_prompt(
-            QMessageBox::Warning,
-            QStringLiteral("Replace Composition"),
-            QStringLiteral("The current composition has not been saved. Replace it?"),
-            QMessageBox::Yes | QMessageBox::No,
-            this);
-        replace_prompt.setObjectName(QStringLiteral("motion-replace-composition-prompt"));
-        replace_prompt.setDefaultButton(QMessageBox::No);
-        if (replace_prompt.exec() != QMessageBox::Yes) return;
-    }
-
     NewCompositionDialog dialog(this);
     if (dialog.exec() != QDialog::Accepted) return;
     const auto settings = dialog.compositionSettings();
     if (!settings.has_value()) return;
+    if (!confirmReplaceDocument()) return;
 
     document_.emplace(settings->canvas_size.width,
                       settings->canvas_size.height,
                       settings->frame_rate);
+    document_path_.reset();
+    saved_data_.reset();
     selected_layer_id_ = 0;
     if (workspace_ == nullptr) createWorkspace();
     else {
@@ -221,7 +345,325 @@ void MainWindow::createNewComposition()
     media_details_->setMedia(nullptr);
     inspector_tabs_->setCurrentWidget(media_details_);
     syncTransformInspector();
+    updateDocumentState();
     requestPreview();
+}
+
+void MainWindow::openComposition()
+{
+    if (open_cancel_requested_) return;
+    QFileDialog dialog(this, QStringLiteral("Open Composition"));
+    dialog.setObjectName(QStringLiteral("motion-open-composition-dialog"));
+    dialog.setOption(QFileDialog::DontUseNativeDialog, true);
+    dialog.setFileMode(QFileDialog::ExistingFile);
+    dialog.setAcceptMode(QFileDialog::AcceptOpen);
+    dialog.setNameFilters({QStringLiteral("Motion Studio documents (*.motion)"),
+                           QStringLiteral("All files (*)")});
+    if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) return;
+
+    const auto path = pathFromQString(dialog.selectedFiles().front());
+    model::MotionProjectData project;
+    try {
+        project = persistence::MotionDocumentStore::load(path);
+    } catch (const persistence::MotionDocumentError& error) {
+        reportDocumentError("open_document", path, error,
+                            static_cast<int>(error.code()),
+                            error.systemError().value_or(-1));
+        return;
+    } catch (const std::exception& error) {
+        reportDocumentError("open_document", path, error);
+        return;
+    }
+
+    const auto generation = ++open_generation_;
+    open_cancel_requested_ = std::make_shared<std::atomic_bool>(false);
+    if (project.media.empty()) {
+        finishOpen(generation, path, std::move(project), {});
+        return;
+    }
+
+    open_progress_ = new QProgressDialog(
+        QStringLiteral("Preparing linked media..."), QStringLiteral("Cancel"),
+        0, static_cast<int>(project.media.size()), this);
+    open_progress_->setObjectName(QStringLiteral("motion-open-media-progress"));
+    open_progress_->setWindowTitle(QStringLiteral("Open Composition"));
+    open_progress_->setWindowModality(Qt::WindowModal);
+    open_progress_->setMinimumDuration(250);
+    open_progress_->setValue(0);
+    connect(open_progress_, &QProgressDialog::canceled, this, [this] {
+        if (open_cancel_requested_)
+            open_cancel_requested_->store(true, std::memory_order_relaxed);
+    });
+    new_composition_action_->setEnabled(false);
+    open_composition_action_->setEnabled(false);
+    open_progress_->show();
+
+    QPointer<MainWindow> owner(this);
+    auto progress_handler = [owner](std::uint64_t task_generation,
+                                    std::size_t completed,
+                                    std::size_t total,
+                                    const std::filesystem::path& media_path) {
+        if (owner.isNull() || task_generation != owner->open_generation_ ||
+            owner->open_progress_ == nullptr) return;
+        owner->open_progress_->setRange(0, static_cast<int>(total));
+        owner->open_progress_->setValue(static_cast<int>(completed));
+        owner->open_progress_->setLabelText(QStringLiteral("Loading %1")
+            .arg(QFileInfo(pathForDisplay(media_path)).fileName()));
+    };
+    auto finished_handler = [owner](std::uint64_t task_generation,
+                                    std::filesystem::path document_path,
+                                    model::MotionProjectData staged_project,
+                                    creative_suite::media::MediaImportBatchResult result) {
+        if (!owner.isNull())
+            owner->finishOpen(task_generation, std::move(document_path),
+                              std::move(staged_project), std::move(result));
+    };
+    QThreadPool::globalInstance()->start(new OpenMediaStageTask(
+        this, generation, path, std::move(project), open_cancel_requested_,
+        std::move(progress_handler), std::move(finished_handler)));
+}
+
+bool MainWindow::saveComposition()
+{
+    if (!document_) return false;
+    return document_path_.has_value()
+        ? saveToPath(*document_path_)
+        : saveCompositionAs();
+}
+
+bool MainWindow::saveCompositionAs()
+{
+    if (!document_) return false;
+    QFileDialog dialog(this, QStringLiteral("Save Composition As"));
+    dialog.setObjectName(QStringLiteral("motion-save-composition-dialog"));
+    dialog.setOption(QFileDialog::DontUseNativeDialog, true);
+    dialog.setAcceptMode(QFileDialog::AcceptSave);
+    dialog.setFileMode(QFileDialog::AnyFile);
+    dialog.setNameFilters({QStringLiteral("Motion Studio documents (*.motion)")});
+    dialog.setDefaultSuffix(QStringLiteral("motion"));
+    if (document_path_.has_value())
+        dialog.selectFile(QString::fromUtf8(pathForLog(*document_path_)));
+    if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) return false;
+    return saveToPath(pathFromQString(dialog.selectedFiles().front()));
+}
+
+bool MainWindow::saveToPath(const std::filesystem::path& path)
+{
+    if (!document_) return false;
+    try {
+        const auto project_snapshot = projectData();
+        persistence::MotionDocumentStore::save(path, project_snapshot);
+        document_path_ = creative_suite::media::MediaLibrary::canonicalPath(path);
+        saved_data_ = project_snapshot;
+        updateDocumentState();
+        statusBar()->showMessage(QStringLiteral("Composition saved."), 4000);
+        return true;
+    } catch (const persistence::MotionDocumentError& error) {
+        reportDocumentError("save_document", path, error,
+                            static_cast<int>(error.code()),
+                            error.systemError().value_or(-1));
+    } catch (const std::exception& error) {
+        reportDocumentError("save_document", path, error);
+    }
+    return false;
+}
+
+bool MainWindow::confirmReplaceDocument()
+{
+    if (!documentIsDirty()) return true;
+    QMessageBox prompt(QMessageBox::Warning,
+                       QStringLiteral("Unsaved Changes"),
+                       QStringLiteral("Save changes to the current composition before continuing?"),
+                       QMessageBox::NoButton, this);
+    prompt.setObjectName(QStringLiteral("motion-unsaved-changes-prompt"));
+    auto* save = prompt.addButton(QMessageBox::Save);
+    auto* discard = prompt.addButton(QMessageBox::Discard);
+    auto* cancel = prompt.addButton(QMessageBox::Cancel);
+    save->setObjectName(QStringLiteral("motion-unsaved-save-button"));
+    discard->setObjectName(QStringLiteral("motion-unsaved-discard-button"));
+    cancel->setObjectName(QStringLiteral("motion-unsaved-cancel-button"));
+    prompt.setDefaultButton(save);
+    prompt.exec();
+    if (prompt.clickedButton() == save) return saveComposition();
+    return prompt.clickedButton() == discard;
+}
+
+model::MotionProjectData MainWindow::projectData() const
+{
+    if (!document_) throw std::logic_error("There is no open Motion Studio composition");
+    model::MotionProjectData snapshot;
+    snapshot.composition = {document_->canvasSize(), document_->frameRate()};
+    snapshot.layers = document_->layers();
+    if (media_pool_ != nullptr) {
+        snapshot.bins = media_pool_->library().bins();
+        snapshot.media.reserve(media_pool_->library().items().size());
+        for (const auto& item : media_pool_->library().items()) {
+            snapshot.media.push_back({item.metadata.source_path,
+                                      item.metadata.kind,
+                                      item.display_name,
+                                      item.bin_path});
+        }
+    }
+    return snapshot;
+}
+
+bool MainWindow::documentIsDirty() const
+{
+    if (!document_) return false;
+    if (!saved_data_.has_value()) return true;
+    try {
+        return projectData() != *saved_data_;
+    } catch (...) {
+        return true;
+    }
+}
+
+void MainWindow::updateDocumentState()
+{
+    const bool has_document = document_.has_value();
+    const bool dirty = documentIsDirty();
+    if (import_media_action_ != nullptr) import_media_action_->setEnabled(has_document);
+    if (save_composition_action_ != nullptr) save_composition_action_->setEnabled(has_document);
+    if (save_composition_as_action_ != nullptr)
+        save_composition_as_action_->setEnabled(has_document);
+    if (!has_document) {
+        setWindowModified(false);
+        setWindowTitle(QStringLiteral("Motion Studio"));
+        return;
+    }
+    const QString document_name = document_path_.has_value()
+        ? QFileInfo(pathForDisplay(*document_path_)).fileName()
+        : QStringLiteral("Untitled");
+    setWindowTitle(QStringLiteral("%1 — Motion Studio[*]").arg(document_name));
+    setWindowModified(dirty);
+}
+
+void MainWindow::reportDocumentError(const char* operation,
+                                     const std::filesystem::path& path,
+                                     const std::exception& error,
+                                     int error_code,
+                                     int system_error)
+{
+    creative_suite::diagnostics::Context context{
+        {"path", pathForLog(path)}, {"error_code", std::to_string(error_code)}};
+    if (system_error >= 0)
+        context.emplace_back("system_error", std::to_string(system_error));
+    creative_suite::diagnostics::Logger::instance().log(
+        creative_suite::diagnostics::Level::Error,
+        "motion_document", operation, error.what(), context);
+    QMessageBox::warning(
+        this, QStringLiteral("Document Error"),
+        QStringLiteral("The composition could not be %1. Check the Motion Studio log for details.")
+            .arg(QString::fromUtf8(operation).contains(QStringLiteral("save"))
+                     ? QStringLiteral("saved") : QStringLiteral("opened")));
+}
+
+void MainWindow::finishOpen(std::uint64_t generation,
+                            std::filesystem::path path,
+                            model::MotionProjectData project,
+                            creative_suite::media::MediaImportBatchResult result)
+{
+    if (generation != open_generation_) return;
+    if (open_progress_ != nullptr) open_progress_->hide();
+    open_cancel_requested_.reset();
+    new_composition_action_->setEnabled(true);
+    open_composition_action_->setEnabled(true);
+    if (result.cancelled) return;
+
+    try {
+        auto staged_document = model::CompositionDocument(
+            project.composition.canvas_size.width,
+            project.composition.canvas_size.height,
+            project.composition.frame_rate,
+            project.layers);
+        creative_suite::media::MediaLibrary staged_library;
+        for (const auto& bin : project.bins) {
+            if (bin == creative_suite::media::default_bin) continue;
+            (void)staged_library.createBin(bin);
+        }
+
+        std::unordered_map<std::filesystem::path, std::size_t> imported_by_path;
+        imported_by_path.reserve(result.files.size());
+        for (std::size_t i = 0; i < result.files.size(); ++i) {
+            imported_by_path.emplace(
+                creative_suite::media::MediaLibrary::canonicalPath(result.files[i].path), i);
+        }
+        std::size_t offline_count = 0;
+        auto& logger = creative_suite::diagnostics::Logger::instance();
+        for (const auto& media : project.media) {
+            const auto found = imported_by_path.find(
+                creative_suite::media::MediaLibrary::canonicalPath(media.source_path));
+            bool restored = false;
+            if (found != imported_by_path.end()) {
+                auto& file = result.files[found->second];
+                if (file.status == creative_suite::media::MediaImportFileStatus::Imported &&
+                    file.item && file.item->metadata.kind == media.kind) {
+                    auto imported = std::move(*file.item);
+                    const auto mutation = staged_library.addOnline(
+                        std::move(imported.metadata), std::move(imported.first_frame),
+                        media.display_name, media.bin_path);
+                    restored = mutation == creative_suite::media::MediaMutationResult::Changed;
+                    if (!restored) {
+                        logger.log(creative_suite::diagnostics::Level::Warning,
+                                   "motion_document", "restore_media",
+                                   "The imported source could not be added to the staged Media Pool",
+                                   {{"path", pathForLog(media.source_path)},
+                                    {"media_mutation", std::to_string(static_cast<int>(mutation))}});
+                    }
+                } else if (file.status == creative_suite::media::MediaImportFileStatus::Failed) {
+                    logger.log(creative_suite::diagnostics::Level::Warning,
+                               "motion_document", "restore_media", file.cause,
+                               {{"path", pathForLog(media.source_path)},
+                                {"error_code", file.error_code.has_value()
+                                    ? std::to_string(*file.error_code) : std::string{}}});
+                } else if (file.status == creative_suite::media::MediaImportFileStatus::Imported) {
+                    logger.log(creative_suite::diagnostics::Level::Warning,
+                               "motion_document", "restore_media",
+                               "The source media kind does not match the saved Media Pool entry",
+                               {{"path", pathForLog(media.source_path)},
+                                {"saved_kind", std::to_string(static_cast<int>(media.kind))},
+                                {"imported_kind", file.item.has_value()
+                                    ? std::to_string(static_cast<int>(file.item->metadata.kind))
+                                    : std::string{}}});
+                }
+            }
+            if (!restored) {
+                (void)staged_library.addOffline(media.source_path, media.display_name,
+                                                media.bin_path, media.kind);
+                ++offline_count;
+            }
+        }
+
+        if (!confirmReplaceDocument()) return;
+        document_.emplace(std::move(staged_document));
+        document_path_ = creative_suite::media::MediaLibrary::canonicalPath(path);
+        selected_layer_id_ = 0;
+        if (workspace_ == nullptr) createWorkspace();
+        else if (preview_renderer_) preview_renderer_->resetSessions();
+        media_pool_->replaceLibrary(std::move(staged_library));
+        timeline_->setCompositionTiming(document_->frameRate());
+        timeline_->setLayers(document_->layers());
+        timeline_->setSelectedLayerId(0);
+        viewer_->setComposition(document_->canvasSize(), std::nullopt);
+        media_details_->setMedia(nullptr);
+        inspector_tabs_->setCurrentWidget(media_details_);
+        syncTransformInspector();
+        saved_data_ = projectData();
+        updateDocumentState();
+        requestPreview();
+        statusBar()->showMessage(offline_count == 0
+            ? QStringLiteral("Composition opened.")
+            : QStringLiteral("Composition opened; %1 media item(s) are offline.")
+                  .arg(offline_count), 7000);
+    } catch (const std::exception& error) {
+        reportDocumentError("open_document", path, error);
+    }
+}
+
+void MainWindow::closeEvent(QCloseEvent* event)
+{
+    if (confirmReplaceDocument()) event->accept();
+    else event->ignore();
 }
 
 void MainWindow::openShortcutSettings()
@@ -260,6 +702,7 @@ void MainWindow::createWorkspace()
     media_pool_->setMinimumWidth(220);
     media_pool_->setImportRequestedHandler([this] { openMedia(); });
     media_pool_->setSelectionChangedHandler([this] { updateMediaDetails(); });
+    media_pool_->setContentChangedHandler([this] { updateDocumentState(); });
     viewer_ = new CompositionViewer(workspace_);
     viewer_->setObjectName(QStringLiteral("motion-composition-viewer"));
     media_details_ = new MediaDetailsWidget(workspace_);
@@ -320,12 +763,14 @@ void MainWindow::createWorkspace()
     timeline_->setLayerSelectedHandler([this](model::LayerId id) { selectLayer(id); });
     timeline_->setLayerMoveHandler([this](model::LayerId id, std::int64_t frame) {
         if (document_ && document_->moveLayerInTimeline(id, frame)) {
+            updateDocumentState();
             refreshTimeline();
             requestPreview();
         }
     });
     timeline_->setLayerResizeHandler([this](model::LayerId id, std::int64_t duration) {
         if (document_ && document_->resizeLayerDuration(id, duration)) {
+            updateDocumentState();
             refreshTimeline();
             requestPreview();
         }
@@ -334,12 +779,14 @@ void MainWindow::createWorkspace()
         if (!document_ || front_index >= document_->layers().size()) return;
         const auto model_index = document_->layers().size() - 1 - front_index;
         if (document_->moveLayer(id, model_index)) {
+            updateDocumentState();
             refreshTimeline();
             requestPreview();
         }
     });
     timeline_->setLayerVisibilityHandler([this](model::LayerId id, bool visible) {
         if (document_ && document_->setLayerVisible(id, visible)) {
+            updateDocumentState();
             refreshTimeline();
             if (selected_layer_id_ == id) syncTransformInspector();
             requestPreview();
@@ -347,6 +794,7 @@ void MainWindow::createWorkspace()
     });
     timeline_->setLayerRemoveHandler([this](model::LayerId id) {
         if (!document_ || !document_->removeLayer(id)) return;
+        updateDocumentState();
         if (selected_layer_id_ == id) selected_layer_id_ = 0;
         refreshTimeline();
         syncTransformInspector();
@@ -481,6 +929,7 @@ void MainWindow::editSelectedLayerTransform()
         syncTransformInspector();
         return;
     }
+    updateDocumentState();
     syncTransformInspector();
     requestPreview();
 }
@@ -551,6 +1000,7 @@ void MainWindow::handleMediaDrop(const std::filesystem::path& path,
         }
     }
     selected_layer_id_ = added_id;
+    updateDocumentState();
     refreshTimeline();
     syncTransformInspector();
     inspector_tabs_->setCurrentWidget(transform_inspector_);

@@ -68,6 +68,9 @@ documents. The default modifier is Ctrl on Windows/Linux and Cmd on macOS.
 | Shortcut | Action | Context |
 | --- | --- | --- |
 | Ctrl + N / Cmd + N | Create a new composition | Motion Studio |
+| Ctrl + O / Cmd + O | Open a Motion Studio composition | Motion Studio |
+| Ctrl + S / Cmd + S | Save the current composition, or open Save As when it has no path | Motion Studio |
+| Ctrl + Shift + S / Cmd + Shift + S | Save the composition under a new path | Motion Studio |
 | Ctrl + I / Cmd + I | Import media | Motion Studio; enabled with a composition |
 | Space | Play or pause | Motion Studio; enabled when the timeline has layers |
 | Left Arrow | Previous frame | Motion Studio; enabled after frame 0 |

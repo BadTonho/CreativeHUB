@@ -4,6 +4,8 @@
 #include "ui/new_composition_dialog.h"
 #include "ui/timeline_navigator.h"
 #include "ui/timeline_navigator_math.h"
+#include "model/motion_project_data.h"
+#include "persistence/motion_document_store.h"
 
 #include <QAction>
 #include <QApplication>
@@ -17,6 +19,7 @@
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFileDialog>
+#include <QFile>
 #include <QImage>
 #include <QInputDialog>
 #include <QKeyEvent>
@@ -274,6 +277,9 @@ void testMotionShortcutSettings()
 #endif
     MainWindow window;
     auto* create_action = action(window, "motion-new-composition-action");
+    auto* open_action = action(window, "motion-open-composition-action");
+    auto* save_action = action(window, "motion-save-composition-action");
+    auto* save_as_action = action(window, "motion-save-composition-as-action");
     auto* import_action = action(window, "motion-import-media-action");
     auto* play_action = action(window, "motion-play-pause-action");
     auto* previous_action = action(window, "motion-previous-frame-action");
@@ -282,6 +288,8 @@ void testMotionShortcutSettings()
     auto* zoom_in_action = action(window, "motion-zoom-in-action");
     auto* zoom_out_action = action(window, "motion-zoom-out-action");
     require(create_action->shortcut() == QKeySequence::New &&
+                open_action->shortcut() == QKeySequence::Open &&
+                save_action->shortcut() == QKeySequence::Save &&
                 import_action->shortcut() == expected_import_sequence &&
                 play_action->shortcut() == QKeySequence(Qt::Key_Space) &&
                 previous_action->shortcut() == QKeySequence(Qt::Key_Left) &&
@@ -289,7 +297,9 @@ void testMotionShortcutSettings()
                 loop_action->shortcut().isEmpty() && zoom_in_action->shortcut().isEmpty() &&
                 zoom_out_action->shortcut().isEmpty(),
             "Motion Studio registers its own default shortcut catalog");
-    require(create_action->isEnabled() && !import_action->isEnabled() &&
+    require(create_action->isEnabled() && open_action->isEnabled() &&
+                !save_action->isEnabled() && !save_as_action->isEnabled() &&
+                !import_action->isEnabled() &&
                 !play_action->isEnabled() && !previous_action->isEnabled() &&
                 !next_action->isEnabled() && !loop_action->isEnabled(),
             "commands reflect the empty composition state");
@@ -387,6 +397,7 @@ void testMotionShortcutSettings()
     });
     create_action->trigger();
     require(window.compositionDocument() != nullptr && import_action->isEnabled() &&
+                save_action->isEnabled() && save_as_action->isEnabled() &&
                 !play_action->isEnabled() && !loop_action->isEnabled() &&
                 zoom_in_action->isEnabled() && zoom_out_action->isEnabled(),
             "composition creation enables import and timeline navigation but not empty playback");
@@ -397,6 +408,202 @@ void testMotionShortcutSettings()
         dialog->reject();
     });
     import_action->trigger();
+    QTimer::singleShot(0, [] {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        require(prompt != nullptr, "closing an unsaved composition requests a decision");
+        prompt->button(QMessageBox::Discard)->click();
+    });
+    window.close();
+}
+
+void chooseDocumentFile(const std::filesystem::path& path,
+                        QDialogButtonBox::StandardButton button)
+{
+    auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+    require(dialog != nullptr && dialog->testOption(QFileDialog::DontUseNativeDialog),
+            "document action opens the testable Qt file picker");
+    dialog->selectFile(pathToQString(path));
+    auto* buttons = dialog->findChild<QDialogButtonBox*>();
+    require(buttons != nullptr && buttons->button(button) != nullptr,
+            "document file picker exposes the expected action");
+    buttons->button(button)->click();
+}
+
+void createComposition(MainWindow& window, int width, int height, int frame_rate_index)
+{
+    QTimer::singleShot(0, [width, height, frame_rate_index] {
+        completeCompositionDialog(width, height, frame_rate_index);
+    });
+    action(window, "motion-new-composition-action")->trigger();
+}
+
+void answerMessageBoxWhenShown(QMessageBox::StandardButton button, int attempts = 0)
+{
+    QTimer::singleShot(5, [button, attempts] {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        if (prompt != nullptr) {
+            prompt->button(button)->click();
+            return;
+        }
+        require(attempts < 1000, "expected document decision or error dialog appears");
+        answerMessageBoxWhenShown(button, attempts + 1);
+    });
+}
+
+void acceptCompositionThenResolvePrompt(
+    MainWindow& window,
+    int width,
+    int height,
+    int frame_rate_index,
+    QMessageBox::StandardButton decision,
+    const std::optional<std::filesystem::path>& save_path = std::nullopt)
+{
+    QTimer::singleShot(0, [&window, width, height, frame_rate_index, decision, save_path] {
+        completeCompositionDialog(width, height, frame_rate_index);
+        QTimer::singleShot(0, [decision, save_path] {
+            auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            require(prompt != nullptr, "replacing a dirty composition requests a decision");
+            if (decision == QMessageBox::Save && save_path.has_value()) {
+                QTimer::singleShot(0, [save_path] {
+                    chooseDocumentFile(*save_path, QDialogButtonBox::Save);
+                });
+            }
+            prompt->button(decision)->click();
+        });
+    });
+    action(window, "motion-new-composition-action")->trigger();
+}
+
+void testMotionDocumentSaveOpen()
+{
+    QTemporaryDir temporary;
+    require(temporary.isValid(), "temporary document directory is available");
+    const auto root = pathFromQString(temporary.path());
+    const auto saved_as_path = root / "first.motion";
+    const auto replacement_save_path = root / "replacement.motion";
+    const auto load_path = root / "loaded.motion";
+    const auto missing_media_path = root / "missing-image.png";
+    const auto missing_media_document_path = root / "offline.motion";
+    const auto corrupt_path = root / "corrupt.motion";
+
+    motion::model::MotionProjectData second_document;
+    second_document.composition = {{320, 200}, {24, 1}};
+    motion::persistence::MotionDocumentStore::save(load_path, second_document);
+    motion::model::MotionProjectData offline_document;
+    offline_document.composition = {{800, 450}, {30000, 1001}};
+    offline_document.media.push_back({
+        missing_media_path, creative_suite::media::MediaKind::Image,
+        "Missing source", "Unsorted"});
+    motion::persistence::MotionDocumentStore::save(
+        missing_media_document_path, offline_document);
+    {
+        QFile corrupt(pathToQString(corrupt_path));
+        require(corrupt.open(QIODevice::WriteOnly), "corrupt fixture opens");
+        require(corrupt.write("not-json") == 8, "corrupt fixture is written");
+    }
+
+    MainWindow window;
+    window.show();
+    QTimer::singleShot(0, [] { completeCompositionDialog(640, 360, 2); });
+    action(window, "motion-new-composition-action")->trigger();
+    require(window.compositionDocument() != nullptr && window.isWindowModified(),
+            "an unsaved new composition is marked dirty");
+
+    QTimer::singleShot(0, [&] {
+        chooseDocumentFile(saved_as_path, QDialogButtonBox::Save);
+    });
+    action(window, "motion-save-composition-as-action")->trigger();
+    require(std::filesystem::is_regular_file(saved_as_path) && !window.isWindowModified(),
+            "Save As writes a native document and clears its dirty state");
+    require(motion::persistence::MotionDocumentStore::load(saved_as_path).composition.canvas_size ==
+                motion::model::CanvasSize{640, 360},
+            "the saved document contains the current composition settings");
+
+    QTimer::singleShot(0, [&] { chooseDocumentFile(load_path, QDialogButtonBox::Open); });
+    action(window, "motion-open-composition-action")->trigger();
+    require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{320, 200} &&
+                window.compositionDocument()->frameRate() == motion::model::FrameRate{24, 1} &&
+                !window.isWindowModified(),
+            "Open applies a staged document and starts with a clean state");
+    auto* timeline = findWidget<motion::ui::TimelineNavigator>(&window, "motion-timeline");
+    auto* display_mode = findWidget<QComboBox>(&window, "motion-timeline-display-mode");
+    require(timeline->currentFrame() == 0 && timeline->zoomFactor() == 1.0 &&
+                display_mode->currentIndex() ==
+                    static_cast<int>(motion::ui::TimelineDisplayMode::Time),
+            "Open resets navigation-only UI state");
+
+    QTimer::singleShot(0, [&] { chooseDocumentFile(corrupt_path, QDialogButtonBox::Open); });
+    answerMessageBoxWhenShown(QMessageBox::Ok);
+    action(window, "motion-open-composition-action")->trigger();
+    require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{320, 200} &&
+                !window.isWindowModified(),
+            "failed Open leaves the current document and clean state intact");
+
+    createComposition(window, 400, 300, 2);
+    require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{400, 300} &&
+                window.isWindowModified(),
+            "a clean document can be replaced and the new document becomes unsaved");
+    QTimer::singleShot(0, [] {
+        auto* file_dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+        require(file_dialog != nullptr, "Open Composition picker is available to cancel");
+        file_dialog->reject();
+    });
+    action(window, "motion-open-composition-action")->trigger();
+    require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{400, 300} &&
+                window.isWindowModified(),
+            "cancelling Open leaves an unsaved current composition intact");
+    acceptCompositionThenResolvePrompt(window, 800, 600, 4, QMessageBox::Cancel);
+    require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{400, 300} &&
+                window.isWindowModified(),
+            "Cancel on a replacement prompt preserves the current document");
+
+    acceptCompositionThenResolvePrompt(
+        window, 800, 600, 4, QMessageBox::Save, replacement_save_path);
+    require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{800, 600} &&
+                window.isWindowModified() &&
+                motion::persistence::MotionDocumentStore::load(replacement_save_path)
+                    .composition.canvas_size == motion::model::CanvasSize{400, 300},
+            "Save in the replacement prompt saves the old document before replacing it");
+    acceptCompositionThenResolvePrompt(window, 1000, 500, 4, QMessageBox::Discard);
+    require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{1000, 500},
+            "Discard replaces the dirty document without changing the saved file");
+
+    QTimer::singleShot(0, [&] { chooseDocumentFile(missing_media_document_path,
+                                                   QDialogButtonBox::Open); });
+    answerMessageBoxWhenShown(QMessageBox::Discard);
+    action(window, "motion-open-composition-action")->trigger();
+    auto* pool = window.mediaPoolWidget();
+    require(waitFor([&] {
+        return pool->library().size() == 1 && pool->library().items().front().offline;
+    }), "missing external media is restored as an offline Media Pool entry");
+    require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{800, 450} &&
+                !window.isWindowModified(),
+            "offline references do not prevent a valid composition from opening");
+    auto* offline_item = pool->mediaListWidget()->item(0);
+    require(offline_item != nullptr, "the offline source is visible in the Media Pool");
+    offline_item->setText(QStringLiteral("Missing source renamed"));
+    require(window.isWindowModified(),
+            "renaming an offline Media Pool entry marks the document dirty");
+    action(window, "motion-save-composition-action")->trigger();
+    require(!window.isWindowModified() &&
+                motion::persistence::MotionDocumentStore::load(missing_media_document_path)
+                    .media.front().display_name == "Missing source renamed",
+            "Save updates the current file with Media Pool changes");
+
+    createComposition(window, 640, 480, 2);
+
+    QTimer::singleShot(0, [] {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        require(prompt != nullptr, "closing a dirty document offers Save, Discard, and Cancel");
+        prompt->button(QMessageBox::Cancel)->click();
+    });
+    require(!window.close(), "Cancel keeps the window open");
+    QTimer::singleShot(0, [] {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        require(prompt != nullptr, "close can be retried after cancellation");
+        prompt->button(QMessageBox::Discard)->click();
+    });
+    require(window.close(), "Discard closes the window without saving");
 }
 
 } // namespace
@@ -415,6 +622,7 @@ int main(int argc, char* argv[])
                        settings_directory.path());
 
     testMotionShortcutSettings();
+    testMotionDocumentSaveOpen();
 
     motion::ui::TimelineNavigator frame_rate_range_check;
     frame_rate_range_check.resize(1200, 760);
@@ -1232,10 +1440,12 @@ int main(int argc, char* argv[])
 
     timeline_display_mode->setCurrentIndex(1);
     QTimer::singleShot(0, [] {
-        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
-        require(prompt != nullptr, "replacement prompt is shown");
-        prompt->button(QMessageBox::Yes)->click();
-        QTimer::singleShot(0, [] { completeCompositionDialog(1920, 1080, 4); });
+        completeCompositionDialog(1920, 1080, 4);
+        QTimer::singleShot(0, [] {
+            auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            require(prompt != nullptr, "replacement prompt is shown after composition setup");
+            prompt->button(QMessageBox::Discard)->click();
+        });
     });
     action(window, "motion-new-composition-action")->trigger();
     require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{1920, 1080} &&
@@ -1245,6 +1455,13 @@ int main(int argc, char* argv[])
                 timeline_display_mode->currentIndex() == 0 &&
                 timeline_position_readout->text() == QStringLiteral("00:00:00.000"),
             "replacing a composition clears its Media Pool, resets navigation, and restores Time display");
+
+    QTimer::singleShot(0, [] {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        require(prompt != nullptr, "closing the final unsaved composition requests a decision");
+        prompt->button(QMessageBox::Discard)->click();
+    });
+    window.close();
 
     std::cout << "Motion Studio Media Pool UI tests passed.\n";
     return EXIT_SUCCESS;

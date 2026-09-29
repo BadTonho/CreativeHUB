@@ -8,6 +8,9 @@ find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets)
 add_library(creative-suite-motion-editor-core STATIC
     src/model/composition_document.cpp
     src/model/composition_document.h
+    src/model/motion_project_data.h
+    src/persistence/motion_document_store.cpp
+    src/persistence/motion_document_store.h
     src/ui/composition_viewer.cpp
     src/ui/composition_viewer.h
     src/ui/main_window.cpp

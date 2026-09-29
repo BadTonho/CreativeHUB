@@ -1,12 +1,16 @@
 #pragma once
 
 #include "model/composition_document.h"
+#include "model/motion_project_data.h"
 
 #include <creative_suite/shortcuts/shortcut_manager.h>
 
 #include <QMainWindow>
 
 #include <array>
+#include <atomic>
+#include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -16,7 +20,11 @@ class QLabel;
 class QPushButton;
 class QSplitter;
 class QDoubleSpinBox;
+class QCloseEvent;
+class QProgressDialog;
 class QTabWidget;
+
+namespace creative_suite::media { struct MediaImportBatchResult; }
 
 namespace motion::ui {
 
@@ -36,6 +44,23 @@ public:
 
 private:
     void createNewComposition();
+    void openComposition();
+    [[nodiscard]] bool saveComposition();
+    [[nodiscard]] bool saveCompositionAs();
+    [[nodiscard]] bool saveToPath(const std::filesystem::path& path);
+    [[nodiscard]] bool confirmReplaceDocument();
+    void updateDocumentState();
+    [[nodiscard]] bool documentIsDirty() const;
+    [[nodiscard]] model::MotionProjectData projectData() const;
+    void finishOpen(std::uint64_t generation,
+                    std::filesystem::path path,
+                    model::MotionProjectData project,
+                    creative_suite::media::MediaImportBatchResult result);
+    void reportDocumentError(const char* operation,
+                             const std::filesystem::path& path,
+                             const std::exception& error,
+                             int error_code = -1,
+                             int system_error = -1);
     void createWorkspace();
     void openShortcutSettings();
     void openMedia();
@@ -48,11 +73,15 @@ private:
                          std::int64_t start_frame,
                          model::LayerId before_layer_id);
     void requestPreview(bool playback_tick = false);
+    void closeEvent(QCloseEvent* event) override;
 
     std::optional<model::CompositionDocument> document_;
     QLabel* empty_state_ = nullptr;
     QPushButton* empty_state_new_composition_button_ = nullptr;
     QAction* new_composition_action_ = nullptr;
+    QAction* open_composition_action_ = nullptr;
+    QAction* save_composition_action_ = nullptr;
+    QAction* save_composition_as_action_ = nullptr;
     QAction* import_media_action_ = nullptr;
     QAction* settings_action_ = nullptr;
     QAction* play_pause_action_ = nullptr;
@@ -71,6 +100,11 @@ private:
     std::array<QDoubleSpinBox*, 5> transform_fields_{};
     TimelineNavigator* timeline_ = nullptr;
     std::unique_ptr<PreviewRenderer> preview_renderer_;
+    std::optional<std::filesystem::path> document_path_;
+    std::optional<model::MotionProjectData> saved_data_;
+    QProgressDialog* open_progress_ = nullptr;
+    std::shared_ptr<std::atomic_bool> open_cancel_requested_;
+    std::uint64_t open_generation_ = 0;
     creative_suite::shortcuts::ShortcutManager shortcut_manager_{
         QStringLiteral("MotionStudio/KeyboardShortcuts")};
     model::LayerId selected_layer_id_ = 0;

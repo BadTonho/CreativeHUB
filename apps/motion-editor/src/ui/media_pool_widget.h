@@ -37,6 +37,8 @@ public:
         const std::filesystem::path& path) const;
     void setImportRequestedHandler(std::function<void()> handler);
     void setSelectionChangedHandler(std::function<void()> handler);
+    void setContentChangedHandler(std::function<void()> handler);
+    void replaceLibrary(creative_suite::media::MediaLibrary library);
     void clear();
     void importFiles(std::vector<std::filesystem::path> paths);
 
@@ -75,6 +77,7 @@ private:
     std::uint64_t import_generation_ = 0;
     std::function<void()> import_requested_handler_;
     std::function<void()> selection_changed_handler_;
+    std::function<void()> content_changed_handler_;
 };
 
 class MediaDetailsWidget final : public QWidget {

@@ -7,6 +7,7 @@
 #include <iterator>
 #include <limits>
 #include <stdexcept>
+#include <unordered_set>
 #include <utility>
 
 namespace motion::model {
@@ -56,6 +57,52 @@ bool validPositiveFinite(const std::optional<double>& value) noexcept
     return value.has_value() && std::isfinite(*value) && *value > 0.0;
 }
 
+bool validLayer(const CompositionLayer& layer) noexcept
+{
+    using creative_suite::animation::TransformProperty;
+    using creative_suite::animation::validKeyframeValue;
+    using creative_suite::animation::validTransform;
+
+    if (layer.id == 0 || !validLayerKind(layer.kind) || layer.timeline_start_frame < 0 ||
+        layer.duration_frames < 0 ||
+        layer.duration_frames > std::numeric_limits<std::int64_t>::max() -
+            layer.timeline_start_frame ||
+        layer.source_frame_count < 0 || layer.source_duration_frames < 0 ||
+        layer.maximum_timeline_duration_frames < 0 ||
+        !std::isfinite(layer.source_frame_rate) || layer.source_frame_rate < 0.0 ||
+        !validTransform(layer.transform)) {
+        return false;
+    }
+    if (layer.duration_frames > 0 &&
+        (layer.kind == LayerKind::Image || layer.kind == LayerKind::Video) &&
+        layer.source_path.empty()) {
+        return false;
+    }
+    if (layer.kind == LayerKind::Video && layer.duration_frames > 0 &&
+        (layer.maximum_timeline_duration_frames <= 0 ||
+         layer.duration_frames > layer.maximum_timeline_duration_frames ||
+         layer.source_frame_count <= 0 || layer.source_frame_rate <= 0.0)) {
+        return false;
+    }
+
+    const auto valid_keyframes = [](const auto& frames, TransformProperty property) {
+        std::int64_t previous_frame = -1;
+        for (const auto& keyframe : frames) {
+            if (keyframe.frame < 0 || keyframe.frame <= previous_frame ||
+                !validKeyframeValue(property, keyframe.value)) {
+                return false;
+            }
+            previous_frame = keyframe.frame;
+        }
+        return true;
+    };
+    return valid_keyframes(layer.keyframes.position_x, TransformProperty::PositionX) &&
+        valid_keyframes(layer.keyframes.position_y, TransformProperty::PositionY) &&
+        valid_keyframes(layer.keyframes.scale, TransformProperty::Scale) &&
+        valid_keyframes(layer.keyframes.rotation, TransformProperty::Rotation) &&
+        valid_keyframes(layer.keyframes.opacity, TransformProperty::Opacity);
+}
+
 } // namespace
 
 const std::array<FrameRate, 13>& supportedFrameRates() noexcept
@@ -82,6 +129,27 @@ CompositionDocument::CompositionDocument(
     if (!isSupportedFrameRate(frame_rate)) {
         throw std::invalid_argument("Composition frame rate is not supported");
     }
+}
+
+CompositionDocument::CompositionDocument(
+    int canvas_width,
+    int canvas_height,
+    FrameRate frame_rate,
+    std::vector<CompositionLayer> layers)
+    : CompositionDocument(canvas_width, canvas_height, frame_rate)
+{
+    std::unordered_set<LayerId> ids;
+    ids.reserve(layers.size());
+    LayerId greatest_id = 0;
+    for (const auto& layer : layers) {
+        if (!validLayer(layer) || !ids.insert(layer.id).second) {
+            throw std::invalid_argument("Composition contains an invalid or duplicate layer");
+        }
+        greatest_id = std::max(greatest_id, layer.id);
+    }
+    layers_ = std::move(layers);
+    next_layer_id_ = greatest_id == std::numeric_limits<LayerId>::max()
+        ? 0 : greatest_id + 1;
 }
 
 CanvasSize CompositionDocument::canvasSize() const noexcept

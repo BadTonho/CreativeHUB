@@ -7,9 +7,9 @@ no dependency on either other application at runtime.
 
 ## Application ownership
 
-Motion Studio owns its native composition document and format, timeline,
-playback clock and Play/Pause/Loop controls, interface, import workflow, editing
-history, autosave, recovery, and export workflow. It does not use the Video
+Motion Studio owns its native versioned `.motion` composition document,
+timeline, playback clock and Play/Pause/Loop controls, interface, import
+workflow, editing history, autosave, recovery, and export workflow. It does not use the Video
 Editor's .csp document, timeline model, effects interface, or
 OfflineExportRenderer.
 
@@ -27,8 +27,8 @@ model, or project setting is linked. A shared viewport mapping drives the
 Motion Studio ruler and layer rows, while a bounded horizontal scrollbar
 navigates the signed 64-bit frame range without allocating a timeline-sized
 widget. Zoom defaults to 100%, where the initial one-hour navigation range
-fits, and resets when a new composition is created. It remains UI state until
-Motion Studio persistence is designed.
+fits, and resets when a new composition is created. It remains UI state and is
+not stored in `.motion` documents.
 
 Timeline positions remain frame-based internally. Motion Studio defaults to a
 Time display that formats ruler ticks and the playhead readout as elapsed
@@ -98,10 +98,10 @@ validation.
   metadata probes, cached first frames, FFmpeg video decoding, and Qt-backed
   still-image decoding to both applications. The import dialog, task lifecycle,
   project/document integration, and pool UI remain application-owned. Motion
-  Studio's pool is in memory and is cleared when its composition is replaced;
-  persistence is pending. Motion Studio can drag video and image pool entries
-  into independent timed composition layers; each occurrence has a distinct
-  layer ID and retains a canonical source path.
+  Studio persists the full Media Pool catalog in its `.motion` document while
+  rebuilding thumbnails and decoded frames when reopened. Motion Studio can
+  drag video and image pool entries into independent timed composition layers;
+  each occurrence has a distinct layer ID and retains a canonical source path.
 - The compositor accepts raster frames only. The current Motion Studio preview
   uses it for image and video layers. Motion Studio still needs text and
   vector-shape rasterization, plus any effect processing in its own render
@@ -112,9 +112,11 @@ validation.
 - The current compositor always returns an opaque black canvas. Transparent
   composition/export and color management are not established by the current
   Motion Studio MVP scope; revisit them only if that scope changes.
-- Composition documents, timelines, history, autosave, recovery, save/reopen,
-  and export remain Motion Studio responsibilities. Timeline rows display
-  front-to-back while the document stores layers back-to-front. Row drops insert
+- Composition documents, timelines, editing history, autosave, recovery, and
+  export remain Motion Studio responsibilities. Manual save/reopen uses its
+  own versioned JSON `.motion` format; undo/redo, autosave, and recovery remain
+  open. Timeline rows display front-to-back while the document stores layers
+  back-to-front. Row drops insert
   above the target, and empty-space drops insert at the top. The eight-pixel
   snap tolerance uses frame zero and other layer starts and ends. Still images
   begin with five seconds rounded up at the exact composition rate; videos need
@@ -181,12 +183,15 @@ and document boundaries as well.
   executable, installation, or application target.
 
 The standalone Motion Studio target and its Media Pool are implemented with
-provisional C++ and Qt 6 choices. Media import and organization are in memory;
-pool persistence and the create/save/reopen/export workflow remain pending.
+provisional C++ and Qt 6 choices. Manual Save, Save As, and Open persist the
+composition and full Media Pool in a versioned `.motion` document. Media files
+remain external references; caches are rebuilt on open. Undo/redo, autosave,
+recovery, and export remain pending.
 The Motion Studio timeline consumes the shared media, playback, composition,
 and diagnostics libraries directly without linking Video Editor application
 types or targets. Layer insertion, timing, transforms, and preview behavior
 remain provisional until validated on Windows, macOS, and Linux and covered by
 Motion Studio consumer regressions. Manual Windows interaction validation is
 still pending.
-The native file format and final application technology are not selected.
+The `.motion` extension and current C++/Qt 6 implementation remain provisional;
+the final application technology is not selected.
