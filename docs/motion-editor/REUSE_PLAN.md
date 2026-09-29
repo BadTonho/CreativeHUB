@@ -9,9 +9,9 @@ no dependency on either other application at runtime.
 
 Motion Studio owns its native versioned `.motion` composition document,
 timeline, playback clock and Play/Pause/Loop controls, interface, import
-workflow, editing history, autosave, recovery, and export workflow. It does not use the Video
-Editor's .csp document, timeline model, effects interface, or
-OfflineExportRenderer.
+workflow, editing history, autosave, recovery, and export workflow. It does not
+use the Video Editor's `.csp` document, timeline model, effects interface, or
+`OfflineExportRenderer`.
 
 The Video Editor keeps its project, media organization, timeline editing,
 playback controls, export jobs, and user interface. Its existing
@@ -37,12 +37,25 @@ the existing integer frame labels. Label spacing follows the rendered label
 width. This presentation state resets to Time for a new composition and does
 not depend on Video Editor timecode types or APIs.
 
+### Transform keyframe editing
+
+Motion Studio stores transform keys as layer-local frames and uses the shared
+linear evaluator in its preview worker for both manual seeks and playback. Each
+image or video layer can expand into five property tracks; markers are mapped
+to composition time by adding the layer start frame. Clicking a marker seeks,
+and dragging moves it within the layer duration. Collision-safe movement and
+key removal are application-owned `CompositionDocument` operations. The
+inspector edits base values when no keys exist, edits key values at keyed
+frames, and shows read-only interpolated values between keys. This uses the
+existing `.motion` v1 keyframe data without a format change. Easing, Bezier
+curves, and other interpolation modes remain open.
+
 ## Shared library candidates
 
 | Library | Current boundary | Motion Studio use |
 | --- | --- | --- |
 | creative-suite::media-frame | creative_suite::media::RgbaFrame owns RGBA8 pixel storage and stride. It does not define a color space. | Shared frame handoff between decoders, raster layers, and composition. |
-| creative-suite::animation | 2D transform data, keyframe storage, validation, and linear evaluation. It has no timeline or document dependency. | Baseline transform evaluation. Motion Studio owns curve editing and its animation timeline. |
+| creative-suite::animation | 2D transform data, keyframe storage, validation, and linear evaluation. It has no timeline or document dependency. | Evaluate the five transform properties for Motion Studio image/video layers. Motion Studio owns key editing controls, property tracks, and frame mapping. |
 | creative-suite::composition | CPU composition of raster frames using shared transforms, opacity, and alpha coverage. It has no UI, timeline, or project dependency. | Motion Studio uses it to composite active image and video layers in document order. Text and vector shape rasterization remain app work. |
 | creative-suite::diagnostics | Structured local logging with caller-selected application log directories; the legacy no-argument default remains compatible with the Video Editor. | Reuse with a Motion Studio-specific application identifier and log directory. |
 | creative-suite::video-media | FFmpeg video playback session with a neutral optional DecodeObserver. It depends on FFmpeg and shared diagnostics, not preview UI. | Motion Studio keeps one playback session per source on its preview worker and decodes the source frame for the current timeline position. Its application-owned monotonic clock schedules composition frames; audio remains out of scope. |
@@ -106,9 +119,11 @@ validation.
   uses it for image and video layers. Motion Studio still needs text and
   vector-shape rasterization, plus any effect processing in its own render
   pipeline.
-- The shared animation evaluator is linear. Motion Studio's editable property
-  curves need richer interpolation behavior, whether in its own evaluator or a
-  later shared contract supported by both consumers.
+- The shared animation evaluator is linear and now drives transform keyframes
+  in Motion Studio preview and playback. Basic key insertion, removal, marker
+  seeking, and marker movement are implemented for the five transform
+  properties. Rich editable curves, easing, and other interpolation behavior
+  remain open for a Motion Studio-owned or later shared contract.
 - The current compositor always returns an opaque black canvas. Transparent
   composition/export and color management are not established by the current
   Motion Studio MVP scope; revisit them only if that scope changes.
@@ -139,8 +154,9 @@ validation.
   an interactive seek or composition replacement invalidates it. Decode
   failures include source path context in the Motion Studio diagnostic log; a
   failed source does not stop later preview requests. Playback uses the exact
-  composition rate, ends at the furthest layer out-point, and optionally loops
-  from frame 0. It does not evaluate keyframes or render text, shapes, or audio.
+  composition rate, evaluates transform keyframes through the shared linear
+  evaluator, ends at the furthest layer out-point, and optionally loops from
+  frame 0. It does not render text, shapes, or audio.
 
 ## Language boundary
 

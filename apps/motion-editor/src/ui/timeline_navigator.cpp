@@ -24,9 +24,12 @@
 #include <QSignalBlocker>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <limits>
+#include <optional>
+#include <unordered_set>
 #include <utility>
 
 namespace motion::ui {
@@ -204,6 +207,46 @@ struct LayerRow {
     std::int64_t start_frame = 0;
     std::int64_t duration_frames = 0;
     std::int64_t maximum_duration_frames = 0;
+    creative_suite::animation::TransformKeyframes keyframes;
+};
+
+using TransformProperty = creative_suite::animation::TransformProperty;
+
+constexpr std::array<TransformProperty, 5> kTimelineProperties{{
+    TransformProperty::PositionX,
+    TransformProperty::PositionY,
+    TransformProperty::Scale,
+    TransformProperty::Rotation,
+    TransformProperty::Opacity,
+}};
+
+QString propertyName(TransformProperty property)
+{
+    switch (property) {
+    case TransformProperty::PositionX: return QStringLiteral("Position X");
+    case TransformProperty::PositionY: return QStringLiteral("Position Y");
+    case TransformProperty::Scale: return QStringLiteral("Scale");
+    case TransformProperty::Rotation: return QStringLiteral("Rotation");
+    case TransformProperty::Opacity: return QStringLiteral("Opacity");
+    }
+    return {};
+}
+
+QColor propertyColor(TransformProperty property)
+{
+    switch (property) {
+    case TransformProperty::PositionX: return QColor(100, 190, 255);
+    case TransformProperty::PositionY: return QColor(130, 225, 180);
+    case TransformProperty::Scale: return QColor(210, 160, 255);
+    case TransformProperty::Rotation: return QColor(255, 190, 90);
+    case TransformProperty::Opacity: return QColor(255, 125, 150);
+    }
+    return QColor(255, 255, 255);
+}
+
+struct VisualTimelineRow {
+    std::size_t layer_index = 0;
+    std::optional<TransformProperty> property;
 };
 
 class LayerRowsWidget final : public QWidget {
@@ -221,12 +264,27 @@ public:
     void setRows(std::vector<LayerRow> rows)
     {
         rows_ = std::move(rows);
-        setMinimumHeight(std::max(kTimelineRowHeight,
-            static_cast<int>(rows_.size()) * kTimelineRowHeight));
-        resize(width(), std::max(kTimelineRowHeight,
-            static_cast<int>(rows_.size()) * kTimelineRowHeight));
-        updateGeometry();
-        update();
+        std::unordered_set<model::LayerId> existing;
+        existing.reserve(rows_.size());
+        for (const auto& row : rows_) existing.insert(row.id);
+        std::erase_if(expanded_layers_, [&existing](model::LayerId id) {
+            return !existing.contains(id);
+        });
+        rebuildVisualRows();
+    }
+
+    void setLayerExpanded(model::LayerId id, bool expanded)
+    {
+        if (findRow(id) == nullptr) return;
+        if (expanded) expanded_layers_.insert(id);
+        else expanded_layers_.erase(id);
+        rebuildVisualRows();
+    }
+
+    void collapseAllLayerTracks()
+    {
+        expanded_layers_.clear();
+        rebuildVisualRows();
     }
 
     void setViewState(std::int64_t end_frame,
@@ -254,6 +312,9 @@ public:
     std::function<void(model::LayerId, std::size_t)> layer_reorder;
     std::function<void(model::LayerId, bool)> layer_visibility;
     std::function<void(model::LayerId)> layer_remove;
+    std::function<void(model::LayerId, TransformProperty, std::int64_t)> keyframe_selected;
+    std::function<bool(model::LayerId, TransformProperty, std::int64_t, std::int64_t)>
+        keyframe_move;
     std::function<void(int)> zoom_step_requested;
     std::function<void(int)> viewport_width_changed;
 
@@ -269,7 +330,7 @@ protected:
     QSize sizeHint() const override
     {
         return {520, std::max(kTimelineRowHeight,
-            static_cast<int>(rows_.size()) * kTimelineRowHeight)};
+            static_cast<int>(visual_rows_.size()) * kTimelineRowHeight)};
     }
 
     void paintEvent(QPaintEvent*) override
@@ -284,72 +345,132 @@ protected:
                              QStringLiteral("Drag media here to add a layer"));
         }
 
-        for (std::size_t index = 0; index < rows_.size(); ++index) {
-            const auto& row = rows_[index];
-            const int top = static_cast<int>(index) * kTimelineRowHeight;
+        const auto mapping = viewMapping();
+        for (std::size_t visual_index = 0; visual_index < visual_rows_.size(); ++visual_index) {
+            const auto& visual = visual_rows_[visual_index];
+            const auto& row = rows_[visual.layer_index];
+            const int top = static_cast<int>(visual_index) * kTimelineRowHeight;
+            const bool property_track = visual.property.has_value();
             const QRect row_rect(0, top, width(), kTimelineRowHeight);
             const bool selected = row.id == selected_layer_id_;
             painter.fillRect(row_rect,
-                selected ? QColor(64, 69, 78)
-                         : (index % 2 == 0 ? QColor(39, 43, 50) : QColor(35, 39, 46)));
+                property_track ? QColor(34, 38, 45)
+                    : (selected ? QColor(64, 69, 78)
+                        : (visual.layer_index % 2 == 0
+                            ? QColor(39, 43, 50) : QColor(35, 39, 46))));
             painter.fillRect(QRect(0, top, kTimelineHeaderWidth, kTimelineRowHeight),
-                             QColor(43, 47, 54));
+                             property_track ? QColor(39, 43, 50) : QColor(43, 47, 54));
             painter.setPen(QPen(QColor(63, 68, 76), 1));
             painter.drawLine(0, top + kTimelineRowHeight - 1,
                              width(), top + kTimelineRowHeight - 1);
 
-            const QPoint eye_center(15, top + kTimelineRowHeight / 2);
-            painter.setBrush(row.visible ? QColor(210, 215, 222) : Qt::NoBrush);
-            painter.setPen(QPen(row.visible ? QColor(210, 215, 222) : QColor(130, 136, 144), 1.5));
-            painter.drawEllipse(eye_center, 5, 4);
-            if (row.visible) {
-                painter.setPen(QPen(QColor(43, 47, 54), 1));
-                painter.drawPoint(eye_center);
-            }
-            painter.setPen(QColor(228, 231, 235));
-            painter.drawText(QRect(29, top, kTimelineHeaderWidth - 35, kTimelineRowHeight),
-                             Qt::AlignLeft | Qt::AlignVCenter,
-                             row.name.isEmpty() ? QStringLiteral("Media Layer") : row.name);
+            if (!property_track) {
+                const QPoint eye_center(15, top + kTimelineRowHeight / 2);
+                painter.setBrush(row.visible ? QColor(210, 215, 222) : Qt::NoBrush);
+                painter.setPen(QPen(row.visible ? QColor(210, 215, 222) : QColor(130, 136, 144), 1.5));
+                painter.drawEllipse(eye_center, 5, 4);
+                if (row.visible) {
+                    painter.setPen(QPen(QColor(43, 47, 54), 1));
+                    painter.drawPoint(eye_center);
+                }
+                const bool expanded = expanded_layers_.contains(row.id);
+                QPolygon disclosure;
+                if (expanded) {
+                    disclosure << QPoint(34, top + 13) << QPoint(44, top + 13)
+                               << QPoint(39, top + 20);
+                } else {
+                    disclosure << QPoint(36, top + 11) << QPoint(43, top + 17)
+                               << QPoint(36, top + 23);
+                }
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(QColor(185, 190, 198));
+                painter.drawPolygon(disclosure);
+                painter.setPen(QColor(228, 231, 235));
+                painter.drawText(QRect(50, top, kTimelineHeaderWidth - 56, kTimelineRowHeight),
+                                 Qt::AlignLeft | Qt::AlignVCenter,
+                                 row.name.isEmpty() ? QStringLiteral("Media Layer") : row.name);
 
-            const auto end_frame = row.start_frame > kMaximumFrame - row.duration_frames
-                ? kMaximumFrame : row.start_frame + row.duration_frames;
-            const auto mapping = viewMapping();
-            if (end_frame >= view_start_frame_ && row.start_frame <= mapping.viewEndFrame()) {
-                const int clip_left = mapping.xForFrame(row.start_frame);
-                const int clip_right = std::max(clip_left + 2, mapping.xForFrame(end_frame));
-                const QRect clip_rect(clip_left, top + 5,
-                                      std::max(2, clip_right - clip_left),
-                                      kTimelineRowHeight - 10);
-                QColor clip_color = row.kind == model::LayerKind::Image
-                    ? QColor(54, 115, 160) : QColor(57, 132, 101);
-                if (!row.visible) clip_color = clip_color.darker(190);
-                painter.setPen(QPen(selected ? QColor(255, 183, 54) : clip_color.lighter(125),
-                                    selected ? 2 : 1));
-                painter.setBrush(clip_color);
-                painter.drawRoundedRect(clip_rect, 3, 3);
-                painter.setPen(QColor(245, 247, 250));
-                painter.drawText(clip_rect.adjusted(6, 0, -8, 0),
-                                 Qt::AlignLeft | Qt::AlignVCenter, row.name);
+                const auto end_frame = row.start_frame > kMaximumFrame - row.duration_frames
+                    ? kMaximumFrame : row.start_frame + row.duration_frames;
+                if (end_frame >= view_start_frame_ && row.start_frame <= mapping.viewEndFrame()) {
+                    const int clip_left = mapping.xForFrame(row.start_frame);
+                    const int clip_right = std::max(clip_left + 2, mapping.xForFrame(end_frame));
+                    const QRect clip_rect(clip_left, top + 5,
+                                          std::max(2, clip_right - clip_left),
+                                          kTimelineRowHeight - 10);
+                    QColor clip_color = row.kind == model::LayerKind::Image
+                        ? QColor(54, 115, 160) : QColor(57, 132, 101);
+                    if (!row.visible) clip_color = clip_color.darker(190);
+                    painter.setPen(QPen(selected ? QColor(255, 183, 54) : clip_color.lighter(125),
+                                        selected ? 2 : 1));
+                    painter.setBrush(clip_color);
+                    painter.drawRoundedRect(clip_rect, 3, 3);
+                    painter.setPen(QColor(245, 247, 250));
+                    painter.drawText(clip_rect.adjusted(6, 0, -8, 0),
+                                     Qt::AlignLeft | Qt::AlignVCenter, row.name);
 
-                if (interaction_layer_id_ == row.id && interaction_mode_ != InteractionMode::None) {
-                    const auto preview_start = interaction_mode_ == InteractionMode::Move
-                        ? preview_value_ : row.start_frame;
-                    const auto preview_duration = interaction_mode_ == InteractionMode::Resize
-                        ? preview_value_ : row.duration_frames;
-                    const auto preview_end = preview_start > kMaximumFrame - preview_duration
-                        ? kMaximumFrame : preview_start + preview_duration;
-                    const int preview_left = mapping.xForFrame(preview_start);
-                    const int preview_right = std::max(
-                        preview_left + 2, mapping.xForFrame(preview_end));
-                    painter.setPen(QPen(QColor(255, 183, 54), 2, Qt::DashLine));
-                    painter.setBrush(QColor(255, 183, 54, 55));
-                    painter.drawRoundedRect(QRect(preview_left, top + 3,
-                        std::max(2, preview_right - preview_left), kTimelineRowHeight - 6), 3, 3);
+                    if (interaction_layer_id_ == row.id &&
+                        (interaction_mode_ == InteractionMode::Move ||
+                         interaction_mode_ == InteractionMode::Resize)) {
+                        const auto preview_start = interaction_mode_ == InteractionMode::Move
+                            ? preview_value_ : row.start_frame;
+                        const auto preview_duration = interaction_mode_ == InteractionMode::Resize
+                            ? preview_value_ : row.duration_frames;
+                        const auto preview_end = preview_start > kMaximumFrame - preview_duration
+                            ? kMaximumFrame : preview_start + preview_duration;
+                        const int preview_left = mapping.xForFrame(preview_start);
+                        const int preview_right = std::max(
+                            preview_left + 2, mapping.xForFrame(preview_end));
+                        painter.setPen(QPen(QColor(255, 183, 54), 2, Qt::DashLine));
+                        painter.setBrush(QColor(255, 183, 54, 55));
+                        painter.drawRoundedRect(QRect(preview_left, top + 3,
+                            std::max(2, preview_right - preview_left), kTimelineRowHeight - 6), 3, 3);
+                    }
+                }
+            } else {
+                const auto property = *visual.property;
+                painter.setPen(propertyColor(property));
+                painter.drawText(QRect(49, top, kTimelineHeaderWidth - 56, kTimelineRowHeight),
+                                 Qt::AlignLeft | Qt::AlignVCenter, propertyName(property));
+                const int lane_center_y = top + kTimelineRowHeight / 2;
+                painter.setPen(QPen(QColor(68, 74, 83), 1));
+                painter.drawLine(mapping.axisLeft(), lane_center_y, width(), lane_center_y);
+                const auto& keyframes = creative_suite::animation::keyframesFor(
+                    row.keyframes, property);
+                for (const auto& keyframe : keyframes) {
+                    if (keyframe.frame < 0 || keyframe.frame >= row.duration_frames) continue;
+                    const auto composition_frame = row.start_frame + keyframe.frame;
+                    if (composition_frame < view_start_frame_ ||
+                        composition_frame > mapping.viewEndFrame()) continue;
+                    if (interaction_mode_ == InteractionMode::MoveKeyframe &&
+                        interaction_layer_id_ == row.id && interaction_property_ == property &&
+                        keyframe.frame == interaction_keyframe_frame_ &&
+                        preview_value_ != interaction_keyframe_frame_) continue;
+                    const int x = mapping.xForFrame(composition_frame);
+                    QPolygon diamond;
+                    diamond << QPoint(x, lane_center_y - 6) << QPoint(x + 6, lane_center_y)
+                            << QPoint(x, lane_center_y + 6) << QPoint(x - 6, lane_center_y);
+                    painter.setPen(QPen(propertyColor(property).lighter(135), 1));
+                    painter.setBrush(propertyColor(property));
+                    painter.drawPolygon(diamond);
+                }
+                if (interaction_mode_ == InteractionMode::MoveKeyframe &&
+                    interaction_layer_id_ == row.id && interaction_property_ == property) {
+                    const auto composition_frame = row.start_frame + preview_value_;
+                    if (composition_frame >= view_start_frame_ &&
+                        composition_frame <= mapping.viewEndFrame()) {
+                        const int x = mapping.xForFrame(composition_frame);
+                        QPolygon diamond;
+                        diamond << QPoint(x, lane_center_y - 7) << QPoint(x + 7, lane_center_y)
+                                << QPoint(x, lane_center_y + 7) << QPoint(x - 7, lane_center_y);
+                        painter.setPen(QPen(QColor(255, 183, 54), 2));
+                        painter.setBrush(propertyColor(property));
+                        painter.drawPolygon(diamond);
+                    }
                 }
             }
         }
 
-        const auto mapping = viewMapping();
         if (current_frame_ >= view_start_frame_ && current_frame_ <= mapping.viewEndFrame()) {
             const int playhead_x = mapping.xForFrame(current_frame_);
             painter.setPen(QPen(QColor(255, 183, 54), 1));
@@ -357,8 +478,8 @@ protected:
         }
 
         if (drag_preview_active_) {
-            const int row = rowAtY(drag_preview_y_);
-            const int top = row >= 0 ? row * kTimelineRowHeight : 0;
+            const int visual = rowAtY(drag_preview_y_);
+            const int top = visual >= 0 ? visual * kTimelineRowHeight : 0;
             painter.setPen(QPen(QColor(255, 183, 54), 2, Qt::DashLine));
             painter.drawLine(drag_preview_x_, top, drag_preview_x_, top + kTimelineRowHeight);
             painter.setBrush(QColor(255, 183, 54, 55));
@@ -375,20 +496,51 @@ protected:
             return;
         }
         setFocus(Qt::MouseFocusReason);
-        const int row_index = rowAtY(event->position().toPoint().y());
+        const auto position = event->position().toPoint();
+        const int row_index = rowAtY(position.y());
         if (row_index < 0) return;
-        const auto& row = rows_[static_cast<std::size_t>(row_index)];
-        if (event->position().toPoint().x() < 29) {
+        const auto& visual = visual_rows_[static_cast<std::size_t>(row_index)];
+        const auto& row = rows_[visual.layer_index];
+        if (!visual.property.has_value() && position.x() < 29) {
             if (layer_visibility) layer_visibility(row.id, !row.visible);
             event->accept();
             return;
         }
         if (layer_selected) layer_selected(row.id);
         interaction_layer_id_ = row.id;
-        press_position_ = event->position().toPoint();
+        press_position_ = position;
+        if (visual.property.has_value()) {
+            const auto property = *visual.property;
+            const int lane_center_y = row_index * kTimelineRowHeight + kTimelineRowHeight / 2;
+            const auto& keyframes = creative_suite::animation::keyframesFor(
+                row.keyframes, property);
+            for (const auto& keyframe : keyframes) {
+                if (keyframe.frame < 0 || keyframe.frame >= row.duration_frames) continue;
+                const int marker_x = viewMapping().xForFrame(row.start_frame + keyframe.frame);
+                if (std::abs(position.x() - marker_x) <= 8 &&
+                    std::abs(position.y() - lane_center_y) <= 9) {
+                    interaction_mode_ = InteractionMode::MoveKeyframe;
+                    interaction_property_ = property;
+                    interaction_keyframe_frame_ = keyframe.frame;
+                    preview_value_ = keyframe.frame;
+                    event->accept();
+                    return;
+                }
+            }
+            interaction_mode_ = InteractionMode::None;
+            interaction_layer_id_ = 0;
+            event->accept();
+            return;
+        }
+        if (position.x() < 48) {
+            setLayerExpanded(row.id, !expanded_layers_.contains(row.id));
+            interaction_layer_id_ = 0;
+            event->accept();
+            return;
+        }
         if (press_position_.x() < kTimelineHeaderWidth) {
             interaction_mode_ = InteractionMode::Reorder;
-            target_row_ = row_index;
+            target_row_ = static_cast<int>(visual.layer_index);
         } else {
             const auto end_frame = row.start_frame > kMaximumFrame - row.duration_frames
                 ? kMaximumFrame : row.start_frame + row.duration_frames;
@@ -418,8 +570,19 @@ protected:
         if ((event->buttons() & Qt::LeftButton) != 0 &&
             interaction_mode_ != InteractionMode::None) {
             if (interaction_mode_ == InteractionMode::Reorder) {
-                target_row_ = std::clamp(rowAtY(y), 0,
-                    static_cast<int>(rows_.size()) - 1);
+                const int visual_index = rowAtY(y);
+                if (visual_index >= 0) {
+                    target_row_ = static_cast<int>(
+                        visual_rows_[static_cast<std::size_t>(visual_index)].layer_index);
+                }
+            } else if (interaction_mode_ == InteractionMode::MoveKeyframe) {
+                if (const auto* row = findRow(interaction_layer_id_);
+                    row != nullptr && row->duration_frames > 0) {
+                    const auto composition_frame = frameAtX(x);
+                    preview_value_ = std::clamp(
+                        composition_frame - row->start_frame,
+                        std::int64_t{0}, row->duration_frames - 1);
+                }
             } else if (const auto* row = findRow(interaction_layer_id_); row != nullptr) {
                 if (interaction_mode_ == InteractionMode::Move) {
                     const auto raw = std::max<std::int64_t>(0,
@@ -442,8 +605,10 @@ protected:
         }
         if (interaction_mode_ == InteractionMode::None) {
             const int row_index = rowAtY(y);
-            if (row_index >= 0 && x >= kTimelineHeaderWidth) {
-                const auto& row = rows_[static_cast<std::size_t>(row_index)];
+            if (row_index >= 0 &&
+                !visual_rows_[static_cast<std::size_t>(row_index)].property.has_value() &&
+                x >= kTimelineHeaderWidth) {
+                const auto& row = rows_[visual_rows_[static_cast<std::size_t>(row_index)].layer_index];
                 const auto end_frame = row.start_frame > kMaximumFrame - row.duration_frames
                     ? kMaximumFrame : row.start_frame + row.duration_frames;
                 const int left = viewMapping().xForFrame(row.start_frame);
@@ -475,6 +640,8 @@ protected:
         const auto mode = interaction_mode_;
         const auto value = preview_value_;
         const auto target = target_row_;
+        const auto property = interaction_property_;
+        const auto old_keyframe = interaction_keyframe_frame_;
         const bool moved = (event->position().toPoint() - press_position_).manhattanLength() >= 4;
         interaction_mode_ = InteractionMode::None;
         interaction_layer_id_ = 0;
@@ -485,6 +652,12 @@ protected:
             layer_move(id, value);
         } else if (mode == InteractionMode::Resize && moved && layer_resize) {
             layer_resize(id, value);
+        } else if (mode == InteractionMode::MoveKeyframe) {
+            if (moved && value != old_keyframe) {
+                if (keyframe_move) keyframe_move(id, property, old_keyframe, value);
+            } else if (keyframe_selected) {
+                keyframe_selected(id, property, old_keyframe);
+            }
         }
         event->accept();
     }
@@ -558,7 +731,8 @@ protected:
         const auto frame = snappedFrame(frameAtX(position.x()), 0);
         const int row_index = rowAtY(position.y());
         const auto before = row_index >= 0
-            ? rows_[static_cast<std::size_t>(row_index)].id : model::LayerId{0};
+            ? rows_[visual_rows_[static_cast<std::size_t>(row_index)].layer_index].id
+            : model::LayerId{0};
         const auto path = pathFromQString(QString::fromUtf8(
             event->mimeData()->data(kMotionMediaMimeType)));
         drag_preview_active_ = false;
@@ -568,13 +742,13 @@ protected:
     }
 
 private:
-    enum class InteractionMode { None, Move, Resize, Reorder };
+    enum class InteractionMode { None, Move, Resize, Reorder, MoveKeyframe };
 
     [[nodiscard]] int rowAtY(int y) const noexcept
     {
         if (y < 0) return -1;
         const auto index = y / kTimelineRowHeight;
-        return index >= 0 && static_cast<std::size_t>(index) < rows_.size() ? index : -1;
+        return index >= 0 && static_cast<std::size_t>(index) < visual_rows_.size() ? index : -1;
     }
 
     [[nodiscard]] const LayerRow* findRow(model::LayerId id) const noexcept
@@ -583,6 +757,25 @@ private:
             return row.id == id;
         });
         return found == rows_.end() ? nullptr : &*found;
+    }
+
+    void rebuildVisualRows()
+    {
+        visual_rows_.clear();
+        visual_rows_.reserve(rows_.size() * 2);
+        for (std::size_t index = 0; index < rows_.size(); ++index) {
+            visual_rows_.push_back({index, std::nullopt});
+            if (!expanded_layers_.contains(rows_[index].id)) continue;
+            for (const auto property : kTimelineProperties) {
+                visual_rows_.push_back({index, property});
+            }
+        }
+        const auto row_count = static_cast<int>(visual_rows_.size());
+        const int content_height = std::max(kTimelineRowHeight, row_count * kTimelineRowHeight);
+        setMinimumHeight(content_height);
+        resize(width(), content_height);
+        updateGeometry();
+        update();
     }
 
     [[nodiscard]] TimelineViewMapping viewMapping() const noexcept
@@ -628,6 +821,8 @@ private:
     }
 
     std::vector<LayerRow> rows_;
+    std::vector<VisualTimelineRow> visual_rows_;
+    std::unordered_set<model::LayerId> expanded_layers_;
     std::int64_t visible_end_frame_ = 0;
     std::int64_t current_frame_ = 0;
     std::int64_t view_start_frame_ = 0;
@@ -635,6 +830,8 @@ private:
     model::LayerId selected_layer_id_ = 0;
     InteractionMode interaction_mode_ = InteractionMode::None;
     model::LayerId interaction_layer_id_ = 0;
+    TransformProperty interaction_property_ = TransformProperty::PositionX;
+    std::int64_t interaction_keyframe_frame_ = 0;
     QPoint press_position_;
     std::int64_t grabbed_frame_offset_ = 0;
     std::int64_t preview_value_ = 0;
@@ -1067,6 +1264,7 @@ void TimelineNavigator::setCompositionTiming(
     model::FrameRate frame_rate)
 {
     pausePlayback(false);
+    static_cast<LayerRowsWidget*>(layer_rows_)->collapseAllLayerTracks();
     frame_rate_ = frame_rate;
     current_frame_ = 0;
     playback_start_frame_ = 0;
@@ -1169,7 +1367,8 @@ void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& la
             layer->visible,
             layer->timeline_start_frame,
             layer->duration_frames,
-            layer->maximum_timeline_duration_frames});
+            layer->maximum_timeline_duration_frames,
+            layer->keyframes});
         if (layer->timeline_start_frame >= 0 && layer->duration_frames > 0) {
             const auto end_frame = layer->duration_frames >
                     maximum_frame - layer->timeline_start_frame
@@ -1195,6 +1394,11 @@ void TimelineNavigator::setLayers(const std::vector<model::CompositionLayer>& la
 void TimelineNavigator::setSelectedLayerId(model::LayerId id)
 {
     static_cast<LayerRowsWidget*>(layer_rows_)->setSelectedLayerId(id);
+}
+
+void TimelineNavigator::setLayerExpanded(model::LayerId id, bool expanded)
+{
+    static_cast<LayerRowsWidget*>(layer_rows_)->setLayerExpanded(id, expanded);
 }
 
 void TimelineNavigator::setMediaDropHandler(
@@ -1237,6 +1441,23 @@ void TimelineNavigator::setLayerRemoveHandler(
     std::function<void(model::LayerId)> handler)
 {
     static_cast<LayerRowsWidget*>(layer_rows_)->layer_remove = std::move(handler);
+}
+
+void TimelineNavigator::setKeyframeSelectedHandler(
+    std::function<void(model::LayerId,
+                       creative_suite::animation::TransformProperty,
+                       std::int64_t)> handler)
+{
+    static_cast<LayerRowsWidget*>(layer_rows_)->keyframe_selected = std::move(handler);
+}
+
+void TimelineNavigator::setKeyframeMoveHandler(
+    std::function<bool(model::LayerId,
+                       creative_suite::animation::TransformProperty,
+                       std::int64_t,
+                       std::int64_t)> handler)
+{
+    static_cast<LayerRowsWidget*>(layer_rows_)->keyframe_move = std::move(handler);
 }
 
 void TimelineNavigator::seekToFrame(std::int64_t frame)

@@ -369,6 +369,71 @@ bool CompositionDocument::setLayerKeyframe(
             layer->keyframes, property, local_frame, value);
 }
 
+bool CompositionDocument::removeLayerKeyframe(
+    LayerId id,
+    creative_suite::animation::TransformProperty property,
+    std::int64_t local_frame) noexcept
+{
+    auto* layer = findLayer(id);
+    return layer != nullptr && creative_suite::animation::removeKeyframe(
+        layer->keyframes, property, local_frame);
+}
+
+bool CompositionDocument::moveLayerKeyframe(
+    LayerId id,
+    creative_suite::animation::TransformProperty property,
+    std::int64_t from_local_frame,
+    std::int64_t to_local_frame) noexcept
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || from_local_frame < 0 || to_local_frame < 0 ||
+        layer->duration_frames <= 0 || from_local_frame >= layer->duration_frames ||
+        to_local_frame >= layer->duration_frames) {
+        return false;
+    }
+
+    using creative_suite::animation::Keyframe;
+    std::vector<Keyframe>* frames = nullptr;
+    switch (property) {
+    case creative_suite::animation::TransformProperty::PositionX:
+        frames = &layer->keyframes.position_x;
+        break;
+    case creative_suite::animation::TransformProperty::PositionY:
+        frames = &layer->keyframes.position_y;
+        break;
+    case creative_suite::animation::TransformProperty::Scale:
+        frames = &layer->keyframes.scale;
+        break;
+    case creative_suite::animation::TransformProperty::Rotation:
+        frames = &layer->keyframes.rotation;
+        break;
+    case creative_suite::animation::TransformProperty::Opacity:
+        frames = &layer->keyframes.opacity;
+        break;
+    }
+    if (frames == nullptr || from_local_frame == to_local_frame) return false;
+
+    const auto source = std::lower_bound(
+        frames->begin(), frames->end(), from_local_frame,
+        [](const Keyframe& keyframe, std::int64_t frame) {
+            return keyframe.frame < frame;
+        });
+    if (source == frames->end() || source->frame != from_local_frame) return false;
+
+    const auto destination = std::lower_bound(
+        frames->begin(), frames->end(), to_local_frame,
+        [](const Keyframe& keyframe, std::int64_t frame) {
+            return keyframe.frame < frame;
+        });
+    if (destination != frames->end() && destination->frame == to_local_frame) return false;
+
+    source->frame = to_local_frame;
+    std::sort(frames->begin(), frames->end(), [](const Keyframe& left, const Keyframe& right) {
+        return left.frame < right.frame;
+    });
+    return true;
+}
+
 CompositionLayer* CompositionDocument::findLayer(LayerId id) noexcept
 {
     const auto layer = std::find_if(layers_.begin(), layers_.end(), [id](const auto& item) {

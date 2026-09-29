@@ -149,6 +149,31 @@ int main(int argc, char* argv[])
     require(waitFor([&] { return applied_generation == recovery_generation; }) &&
                 applied_frame != nullptr,
             "preview rendering continues after an unavailable source file");
+
+    motion::ui::PreviewLayerSnapshot animated_layer;
+    animated_layer.kind = motion::model::LayerKind::Image;
+    animated_layer.local_frame = 5;
+    animated_layer.still_frame = solidFrame(255, 255, 255);
+    require(creative_suite::animation::setKeyframe(
+                animated_layer.keyframes,
+                creative_suite::animation::TransformProperty::Opacity, 0, 0.0) &&
+                creative_suite::animation::setKeyframe(
+                    animated_layer.keyframes,
+                    creative_suite::animation::TransformProperty::Opacity, 10, 1.0),
+            "preview animation fixture accepts opacity keys");
+    motion::ui::PreviewRequest animated_request{
+        {2, 2}, {24, 1}, {animated_layer}};
+    const auto animated_generation = renderer.submit(std::move(animated_request));
+    require(waitFor([&] { return applied_generation == animated_generation; }) &&
+                applied_frame != nullptr &&
+                applied_frame->rgba_pixels[0] >= 126 && applied_frame->rgba_pixels[0] <= 129,
+            "preview evaluates linear opacity at the exact intermediate local frame");
+    animated_layer.local_frame = 10;
+    const auto endpoint_generation = renderer.submit(motion::ui::PreviewRequest{
+        {2, 2}, {24, 1}, {animated_layer}});
+    require(waitFor([&] { return applied_generation == endpoint_generation; }) &&
+                applied_frame != nullptr && applied_frame->rgba_pixels[0] == 255,
+            "preview evaluates the exact keyframe value at its local frame");
     renderer.stopAndWait();
 
     QObject playback_receiver;

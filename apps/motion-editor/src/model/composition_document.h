@@ -126,6 +126,15 @@ public:
         creative_suite::animation::TransformProperty property,
         std::int64_t local_frame,
         double value) noexcept;
+    [[nodiscard]] bool removeLayerKeyframe(
+        LayerId id,
+        creative_suite::animation::TransformProperty property,
+        std::int64_t local_frame) noexcept;
+    [[nodiscard]] bool moveLayerKeyframe(
+        LayerId id,
+        creative_suite::animation::TransformProperty property,
+        std::int64_t from_local_frame,
+        std::int64_t to_local_frame) noexcept;
 
 private:
     [[nodiscard]] CompositionLayer* findLayer(LayerId id) noexcept;

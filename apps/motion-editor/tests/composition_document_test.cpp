@@ -217,6 +217,36 @@ int main()
     require(document.layers()[2].keyframes == stored_keyframes,
         "changing the base transform leaves keyframes untouched");
 
+    CompositionLayer animated_layer{};
+    animated_layer.id = 88;
+    animated_layer.kind = LayerKind::Image;
+    animated_layer.name = "Animated still";
+    animated_layer.source_path = "animated-still.png";
+    animated_layer.timeline_start_frame = 40;
+    animated_layer.duration_frames = 20;
+    CompositionDocument animated_document(
+        640, 360, fractional_rate, std::vector<CompositionLayer>{animated_layer});
+    require(animated_document.setLayerKeyframe(88, TransformProperty::PositionX, 2, 0.2) &&
+                animated_document.setLayerKeyframe(88, TransformProperty::PositionX, 10, 0.8),
+            "keyframe move fixture accepts two valid keys");
+    require(animated_document.moveLayerKeyframe(88, TransformProperty::PositionX, 2, 5),
+            "an existing keyframe can move within the layer duration");
+    require(keyframesFor(animated_document.layers().front().keyframes,
+                         TransformProperty::PositionX) ==
+                std::vector<Keyframe>{{5, 0.2}, {10, 0.8}},
+            "moving a key preserves its value and sorted order");
+    const auto before_rejected_move = animated_document.layers().front().keyframes;
+    require(!animated_document.moveLayerKeyframe(88, TransformProperty::PositionX, 5, 10) &&
+                !animated_document.moveLayerKeyframe(88, TransformProperty::PositionX, 5, 20) &&
+                !animated_document.moveLayerKeyframe(88, TransformProperty::PositionX, 6, 8) &&
+                animated_document.layers().front().keyframes == before_rejected_move,
+            "colliding, out-of-duration, and missing-key moves leave keys unchanged");
+    require(animated_document.removeLayerKeyframe(
+                88, TransformProperty::PositionX, 5) &&
+                keyframesFor(animated_document.layers().front().keyframes,
+                             TransformProperty::PositionX) == std::vector<Keyframe>{{10, 0.8}},
+            "an individual layer keyframe can be removed");
+
     require(document.removeLayer(back), "existing layer can be removed");
     require(!document.removeLayer(back), "removed layer cannot be removed again");
     const LayerId next = document.addLayer(LayerKind::Video, "Footage");

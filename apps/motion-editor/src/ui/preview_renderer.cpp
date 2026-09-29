@@ -2,6 +2,7 @@
 
 #include <creative_suite/composition/frame_compositor.h>
 #include <creative_suite/diagnostics/logger.h>
+#include <creative_suite/animation/animation.h>
 #include <creative_suite/media/media_library.h>
 
 #include <QMetaObject>
@@ -271,7 +272,9 @@ creative_suite::media::RgbaFramePtr PreviewRenderer::render(
 
         if (frame == nullptr) continue;
         owned_frames.push_back(frame);
-        composition_layers.push_back(CompositionLayer{frame.get(), layer.transform});
+        composition_layers.push_back(CompositionLayer{
+            frame.get(), creative_suite::animation::evaluateTransform(
+                layer.transform, layer.keyframes, layer.local_frame)});
     }
 
     if (cancellation_generation !=

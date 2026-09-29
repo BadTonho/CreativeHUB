@@ -91,6 +91,7 @@ public:
     void setCurrentFrame(std::int64_t frame);
     void setLayers(const std::vector<model::CompositionLayer>& layers);
     void setSelectedLayerId(model::LayerId id);
+    void setLayerExpanded(model::LayerId id, bool expanded);
     [[nodiscard]] std::int64_t currentFrame() const noexcept;
     [[nodiscard]] bool isPlaying() const noexcept;
     [[nodiscard]] bool isLoopEnabled() const noexcept;
@@ -116,6 +117,15 @@ public:
     void setLayerVisibilityHandler(
         std::function<void(model::LayerId, bool)> handler);
     void setLayerRemoveHandler(std::function<void(model::LayerId)> handler);
+    void setKeyframeSelectedHandler(
+        std::function<void(model::LayerId,
+                           creative_suite::animation::TransformProperty,
+                           std::int64_t)> handler);
+    void setKeyframeMoveHandler(
+        std::function<bool(model::LayerId,
+                           creative_suite::animation::TransformProperty,
+                           std::int64_t,
+                           std::int64_t)> handler);
 
 signals:
     void currentFrameChanged(qint64 frame);

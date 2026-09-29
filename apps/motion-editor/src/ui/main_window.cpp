@@ -8,6 +8,7 @@
 #include "shortcut_settings_dialog.h"
 #include "timeline_navigator.h"
 
+#include <creative_suite/animation/animation.h>
 #include <creative_suite/diagnostics/logger.h>
 #include <creative_suite/media/media_importer.h>
 #include <creative_suite/media/media_library.h>
@@ -34,6 +35,7 @@
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QRunnable>
 #include <QThreadPool>
@@ -74,6 +76,58 @@ QString pathForDisplay(const std::filesystem::path& path)
 QString layerName(const model::CompositionLayer& layer)
 {
     return QString::fromUtf8(layer.name.data(), static_cast<qsizetype>(layer.name.size()));
+}
+
+using TransformProperty = creative_suite::animation::TransformProperty;
+
+constexpr std::array<TransformProperty, 5> kTransformProperties{{
+    TransformProperty::PositionX,
+    TransformProperty::PositionY,
+    TransformProperty::Scale,
+    TransformProperty::Rotation,
+    TransformProperty::Opacity,
+}};
+
+double transformPropertyValue(
+    const creative_suite::animation::Transform2D& transform,
+    TransformProperty property) noexcept
+{
+    switch (property) {
+    case TransformProperty::PositionX: return transform.position_x;
+    case TransformProperty::PositionY: return transform.position_y;
+    case TransformProperty::Scale: return transform.scale;
+    case TransformProperty::Rotation: return transform.rotation_degrees;
+    case TransformProperty::Opacity: return transform.opacity;
+    }
+    return 0.0;
+}
+
+void setTransformPropertyValue(
+    creative_suite::animation::Transform2D& transform,
+    TransformProperty property,
+    double value) noexcept
+{
+    switch (property) {
+    case TransformProperty::PositionX: transform.position_x = value; break;
+    case TransformProperty::PositionY: transform.position_y = value; break;
+    case TransformProperty::Scale: transform.scale = value; break;
+    case TransformProperty::Rotation: transform.rotation_degrees = value; break;
+    case TransformProperty::Opacity: transform.opacity = value; break;
+    }
+}
+
+bool containsKeyframeAt(
+    const creative_suite::animation::TransformKeyframes& keyframes,
+    TransformProperty property,
+    std::int64_t local_frame) noexcept
+{
+    const auto& frames = creative_suite::animation::keyframesFor(keyframes, property);
+    const auto found = std::lower_bound(
+        frames.begin(), frames.end(), local_frame,
+        [](const creative_suite::animation::Keyframe& keyframe, std::int64_t frame) {
+            return keyframe.frame < frame;
+        });
+    return found != frames.end() && found->frame == local_frame;
 }
 
 class OpenMediaStageTask final : public QRunnable {
@@ -726,6 +780,10 @@ void MainWindow::createWorkspace()
         {QStringLiteral("Opacity (0-1)"), QStringLiteral("motion-transform-opacity")},
     }};
     for (std::size_t index = 0; index < transform_rows.size(); ++index) {
+        auto* property_row = new QWidget(transform_inspector_);
+        auto* property_layout = new QHBoxLayout(property_row);
+        property_layout->setContentsMargins(0, 0, 0, 0);
+        property_layout->setSpacing(4);
         auto* field = new QDoubleSpinBox(transform_inspector_);
         field->setObjectName(transform_rows[index].second);
         field->setDecimals(6);
@@ -740,9 +798,20 @@ void MainWindow::createWorkspace()
             field->setRange(0.0, 1.0);
         }
         transform_fields_[index] = field;
-        transform_form->addRow(transform_rows[index].first, field);
-        connect(field, &QDoubleSpinBox::valueChanged, this, [this](double) {
-            editSelectedLayerTransform();
+        property_layout->addWidget(field, 1);
+        auto* key_button = new QToolButton(property_row);
+        key_button->setObjectName(QStringLiteral("motion-transform-keyframe-%1")
+            .arg(transform_rows[index].second.mid(QStringLiteral("motion-transform-").size())));
+        key_button->setText(QStringLiteral("◇"));
+        key_button->setToolTip(QStringLiteral("Add or remove a keyframe at the current frame"));
+        transform_key_buttons_[index] = key_button;
+        property_layout->addWidget(key_button);
+        transform_form->addRow(transform_rows[index].first, property_row);
+        connect(field, &QDoubleSpinBox::valueChanged, this, [this, index](double) {
+            editSelectedLayerTransform(index);
+        });
+        connect(key_button, &QToolButton::clicked, this, [this, index] {
+            toggleSelectedLayerKeyframe(index);
         });
     }
     transform_layout->addLayout(transform_form);
@@ -759,6 +828,34 @@ void MainWindow::createWorkspace()
         handleMediaDrop(path, frame, before);
     });
     timeline_->setLayerSelectedHandler([this](model::LayerId id) { selectLayer(id); });
+    timeline_->setKeyframeSelectedHandler(
+        [this](model::LayerId id, TransformProperty, std::int64_t local_frame) {
+            if (!document_ || timeline_ == nullptr) return;
+            const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+                [id](const auto& layer) { return layer.id == id; });
+            if (found == document_->layers().end() || local_frame < 0 ||
+                local_frame >= found->duration_frames) return;
+            selectLayer(id);
+            const auto composition_frame = found->timeline_start_frame + local_frame;
+            timeline_->setCurrentFrame(composition_frame);
+        });
+    timeline_->setKeyframeMoveHandler(
+        [this](model::LayerId id, TransformProperty property,
+               std::int64_t from_local_frame, std::int64_t to_local_frame) {
+            if (!document_ || !document_->moveLayerKeyframe(
+                    id, property, from_local_frame, to_local_frame)) {
+                if (statusBar() != nullptr) {
+                    statusBar()->showMessage(
+                        QStringLiteral("A keyframe already exists at that frame."), 4000);
+                }
+                return false;
+            }
+            updateDocumentState();
+            refreshTimeline();
+            syncTransformInspector();
+            requestPreview();
+            return true;
+        });
     timeline_->setLayerMoveHandler([this](model::LayerId id, std::int64_t frame) {
         if (document_ && document_->moveLayerInTimeline(id, frame)) {
             updateDocumentState();
@@ -799,7 +896,10 @@ void MainWindow::createWorkspace()
         requestPreview();
     });
     connect(timeline_, &TimelineNavigator::currentFrameChanged,
-            this, [this] { requestPreview(timeline_ != nullptr && timeline_->isPlaying()); });
+            this, [this] {
+                syncTransformInspector();
+                requestPreview(timeline_ != nullptr && timeline_->isPlaying());
+            });
 
     workspace_->addWidget(media_pool_);
     workspace_->addWidget(viewer_);
@@ -880,10 +980,6 @@ void MainWindow::selectLayer(model::LayerId id)
     timeline_->setSelectedLayerId(id);
     syncTransformInspector();
     inspector_tabs_->setCurrentWidget(transform_inspector_);
-    viewer_->setSelectedLayerAnchor(found->visible
-        ? std::optional<QPointF>(QPointF(found->transform.position_x,
-                                         found->transform.position_y))
-        : std::nullopt);
 }
 
 void MainWindow::syncTransformInspector()
@@ -901,32 +997,93 @@ void MainWindow::syncTransformInspector()
         viewer_->setSelectedLayerAnchor(std::nullopt);
         return;
     }
-    const auto& transform = selected->transform;
-    const std::array<double, 5> values{{transform.position_x, transform.position_y,
-        transform.scale, transform.rotation_degrees, transform.opacity}};
+    const auto frame = timeline_ != nullptr ? timeline_->currentFrame() : 0;
+    const auto raw_local_frame = frame - selected->timeline_start_frame;
+    const auto local_frame = selected->duration_frames > 0
+        ? std::clamp(raw_local_frame, std::int64_t{0}, selected->duration_frames - 1)
+        : std::int64_t{0};
+    const auto evaluated = creative_suite::animation::evaluateTransform(
+        selected->transform, selected->keyframes, local_frame);
+    const bool current_frame_in_layer = raw_local_frame >= 0 &&
+        raw_local_frame < selected->duration_frames;
     for (std::size_t index = 0; index < transform_fields_.size(); ++index) {
+        const auto property = kTransformProperties[index];
+        const auto& frames = creative_suite::animation::keyframesFor(
+            selected->keyframes, property);
+        const bool current_key = current_frame_in_layer &&
+            containsKeyframeAt(selected->keyframes, property, raw_local_frame);
         const QSignalBlocker blocker(transform_fields_[index]);
-        transform_fields_[index]->setValue(values[index]);
+        transform_fields_[index]->setValue(transformPropertyValue(evaluated, property));
+        transform_fields_[index]->setReadOnly(!frames.empty() && !current_key);
+        transform_key_buttons_[index]->setEnabled(current_frame_in_layer);
+        transform_key_buttons_[index]->setText(current_key
+            ? QStringLiteral("◆") : QStringLiteral("◇"));
+        transform_key_buttons_[index]->setToolTip(current_key
+            ? QStringLiteral("Remove the keyframe at the current frame")
+            : QStringLiteral("Add a keyframe at the current frame"));
     }
     viewer_->setSelectedLayerAnchor(selected->visible
-        ? std::optional<QPointF>(QPointF(transform.position_x, transform.position_y))
+        ? std::optional<QPointF>(QPointF(evaluated.position_x, evaluated.position_y))
         : std::nullopt);
 }
 
-void MainWindow::editSelectedLayerTransform()
+void MainWindow::editSelectedLayerTransform(std::size_t property_index)
 {
-    if (!document_ || selected_layer_id_ == 0) return;
-    creative_suite::animation::Transform2D transform{
-        transform_fields_[0]->value(),
-        transform_fields_[1]->value(),
-        transform_fields_[2]->value(),
-        transform_fields_[3]->value(),
-        transform_fields_[4]->value()};
-    if (!document_->setLayerTransform(selected_layer_id_, transform)) {
+    if (!document_ || selected_layer_id_ == 0 || property_index >= transform_fields_.size()) return;
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (found == document_->layers().end()) return;
+
+    const auto property = kTransformProperties[property_index];
+    const auto raw_local_frame = (timeline_ != nullptr ? timeline_->currentFrame() : 0) -
+        found->timeline_start_frame;
+    const auto& frames = creative_suite::animation::keyframesFor(found->keyframes, property);
+    bool changed = false;
+    if (frames.empty()) {
+        auto transform = found->transform;
+        setTransformPropertyValue(transform, property, transform_fields_[property_index]->value());
+        changed = document_->setLayerTransform(selected_layer_id_, transform);
+    } else if (raw_local_frame >= 0 && raw_local_frame < found->duration_frames &&
+               containsKeyframeAt(found->keyframes, property, raw_local_frame)) {
+        changed = document_->setLayerKeyframe(
+            selected_layer_id_, property, raw_local_frame,
+            transform_fields_[property_index]->value());
+    }
+    if (!changed) {
         syncTransformInspector();
         return;
     }
     updateDocumentState();
+    refreshTimeline();
+    syncTransformInspector();
+    requestPreview();
+}
+
+void MainWindow::toggleSelectedLayerKeyframe(std::size_t property_index)
+{
+    if (!document_ || selected_layer_id_ == 0 || property_index >= kTransformProperties.size() ||
+        timeline_ == nullptr) return;
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (found == document_->layers().end()) return;
+    const auto local_frame = timeline_->currentFrame() - found->timeline_start_frame;
+    if (local_frame < 0 || local_frame >= found->duration_frames) return;
+
+    const auto property = kTransformProperties[property_index];
+    const bool has_key = containsKeyframeAt(found->keyframes, property, local_frame);
+    bool changed = false;
+    if (has_key) {
+        changed = document_->removeLayerKeyframe(selected_layer_id_, property, local_frame);
+    } else {
+        const auto value = creative_suite::animation::evaluateProperty(
+            found->transform, found->keyframes, property, local_frame);
+        changed = document_->setLayerKeyframe(
+            selected_layer_id_, property, local_frame, value);
+        if (changed) timeline_->setLayerExpanded(selected_layer_id_, true);
+    }
+    if (!changed) return;
+    updateDocumentState();
+    refreshTimeline();
     syncTransformInspector();
     requestPreview();
 }
@@ -1023,6 +1180,7 @@ void MainWindow::requestPreview(bool playback_tick)
         snapshot.source_frame_count = layer.source_frame_count;
         snapshot.source_frame_rate = layer.source_frame_rate;
         snapshot.transform = layer.transform;
+        snapshot.keyframes = layer.keyframes;
         if (layer.kind == model::LayerKind::Image) {
             snapshot.still_frame = media_pool_->sharedFirstFrameForPath(layer.source_path);
         }

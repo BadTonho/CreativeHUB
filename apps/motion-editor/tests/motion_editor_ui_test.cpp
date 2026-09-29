@@ -1235,9 +1235,145 @@ int main(int argc, char* argv[])
             "Delete removes the selected timeline layer");
 
     auto* document = window.compositionDocument();
+    if (!document->layers().back().visible) sendMouseClick(layer_rows, QPoint(15, 15));
+    sendMouseClick(layer_rows, QPoint(60, 15));
+    require(document->layers().front().keyframes ==
+                creative_suite::animation::TransformKeyframes{},
+            "a new media layer starts without transform keyframes");
+
+    const auto animated_layer_id = document->layers().front().id;
+    const auto animation_start = document->layers().front().timeline_start_frame;
+    auto* animated_position_x = findWidget<QDoubleSpinBox>(
+        &window, "motion-transform-position-x");
+    auto* position_x_key_button = findWidget<QToolButton>(
+        &window, "motion-transform-keyframe-position-x");
+    auto* animated_opacity = findWidget<QDoubleSpinBox>(
+        &window, "motion-transform-opacity");
+    auto* opacity_key_button = findWidget<QToolButton>(
+        &window, "motion-transform-keyframe-opacity");
+    auto* animated_rows = findWidget<QWidget>(&window, "motion-timeline-layer-rows");
+    timeline->setCurrentFrame(animation_start);
+    const auto base_position_x = document->layers().front().transform.position_x;
+    position_x_key_button->click();
+    auto position_keys = creative_suite::animation::keyframesFor(
+        document->layers().front().keyframes,
+        creative_suite::animation::TransformProperty::PositionX);
+    require(position_keys == std::vector<creative_suite::animation::Keyframe>{{0, base_position_x}} &&
+                animated_rows->height() >= 6 * 34,
+            "adding a transform key stores the evaluated value and expands property tracks");
+    timeline->setCurrentFrame(animation_start + 10);
+    require(animated_position_x->isReadOnly() &&
+                std::abs(animated_position_x->value() - base_position_x) < 0.000001,
+            "animated properties show the interpolated value read-only between keys");
+    animated_position_x->setValue(0.9);
+    require(std::abs(animated_position_x->value() - base_position_x) < 0.000001 &&
+                document->layers().front().keyframes.position_x.size() == 1,
+            "editing between keys does not create an implicit keyframe");
+    position_x_key_button->click();
+    require(!animated_position_x->isReadOnly(),
+            "inserting a key at the playhead makes the property editable there");
+    animated_position_x->setValue(0.9);
+    require(document->layers().front().keyframes.position_x ==
+                std::vector<creative_suite::animation::Keyframe>{{0, base_position_x}, {10, 0.9}},
+            "editing at a key updates that key without changing the base transform");
+    timeline->setCurrentFrame(animation_start + 5);
+    const double expected_position_x = (base_position_x + 0.9) / 2.0;
+    require(std::abs(animated_position_x->value() - expected_position_x) < 0.000001,
+            "the inspector shows linear interpolation at an intermediate frame");
+    const auto guide_at_intermediate = viewer->grab().toImage();
+    timeline->setCurrentFrame(animation_start);
+    require(viewer->grab().toImage() != guide_at_intermediate,
+            "the selected-layer canvas guide follows its evaluated animated position");
+    timeline->setCurrentFrame(animation_start + 5);
+    position_x_key_button->click();
+    position_x_key_button->click();
+    require(document->layers().front().keyframes.position_x.size() == 2,
+            "the diamond control adds and removes a key at the current frame");
+
+    timeline->setCurrentFrame(animation_start);
+    opacity_key_button->click();
+    animated_opacity->setValue(0.0);
+    auto preview_before_opacity = viewer->renderedFrame();
+    require(waitFor([&] {
+        return viewer->renderedFrame() != preview_before_opacity &&
+               viewer->renderedFrame() != nullptr;
+    }), "changing an opacity key requests an updated preview");
+    const auto transparent_frame = viewer->renderedFrame();
+    timeline->setCurrentFrame(animation_start + 10);
+    opacity_key_button->click();
+    animated_opacity->setValue(0.8);
+    preview_before_opacity = viewer->renderedFrame();
+    require(waitFor([&] {
+        return viewer->renderedFrame() != preview_before_opacity &&
+               viewer->renderedFrame() != nullptr;
+    }), "a second opacity key is evaluated during preview");
+    timeline->setCurrentFrame(animation_start + 5);
+    const auto half_opacity_generation = viewer->renderedFrame();
+    require(waitFor([&] { return viewer->renderedFrame() != half_opacity_generation; }),
+            "seeking between opacity keys updates the composed frame");
+    const auto half_opacity_frame = viewer->renderedFrame();
+    const auto animation_center = static_cast<std::size_t>(
+        180 * half_opacity_frame->stride + 320 * 4);
+    require(transparent_frame != nullptr &&
+                half_opacity_frame->rgba_pixels[animation_center] >
+                    transparent_frame->rgba_pixels[animation_center] &&
+                half_opacity_frame->rgba_pixels[animation_center] < 40,
+            "preview rendering interpolates opacity values at the playhead");
+
+    timeline_zoom_slider->setValue(21);
+    timeline->setCurrentFrame(animation_start + 10);
+    const int key_lane_y = 51;
+    const auto x_for_local_frame = [timeline, animation_start](std::int64_t local_frame) {
+        return timeline->frameToViewportX(animation_start + local_frame);
+    };
+    sendMouseClick(layer_rows, QPoint(x_for_local_frame(10), key_lane_y));
+    require(timeline->currentFrame() == animation_start + 10,
+            "clicking a keyframe marker seeks the composition playhead");
+    sendMouseDrag(layer_rows, QPoint(x_for_local_frame(0), key_lane_y),
+                  QPoint(x_for_local_frame(15), key_lane_y));
+    require(document->layers().front().keyframes.position_x ==
+                std::vector<creative_suite::animation::Keyframe>{{10, 0.9},
+                                                                  {15, base_position_x}},
+            "dragging a marker moves its layer-local frame while preserving its value");
+    const auto position_keys_before_collision = document->layers().front().keyframes.position_x;
+    sendMouseDrag(layer_rows, QPoint(x_for_local_frame(10), key_lane_y),
+                  QPoint(x_for_local_frame(15), key_lane_y));
+    require(document->layers().front().keyframes.position_x == position_keys_before_collision,
+            "dragging a key onto another key of the same property is rejected safely");
+
+    timeline->setCurrentFrame(animation_start);
+    require(waitFor([&] {
+        const auto frame = viewer->renderedFrame();
+        return frame != nullptr && frame->width == 640 && frame->height == 360;
+    }), "the first animated frame is available before playback");
+    const auto playback_start_frame = viewer->renderedFrame();
+    const auto layers_before_animated_playback = document->layers();
+    main_play_pause->click();
+    require(waitFor([&] {
+        const auto frame = viewer->renderedFrame();
+        if (timeline->currentFrame() < animation_start + 10 || frame == nullptr ||
+            frame == playback_start_frame) return false;
+        for (std::size_t pixel = 0; pixel + 3 < frame->rgba_pixels.size(); pixel += 4) {
+            if (frame->rgba_pixels[pixel] != 0 || frame->rgba_pixels[pixel + 1] != 0 ||
+                frame->rgba_pixels[pixel + 2] != 0) return true;
+        }
+        return false;
+    }, 1500), "playback presents a frame evaluated beyond the opacity key");
+    main_play_pause->click();
+    require(!timeline->isPlaying() &&
+                layers_before_animated_playback.size() == document->layers().size() &&
+                std::equal(layers_before_animated_playback.begin(),
+                    layers_before_animated_playback.end(), document->layers().begin(),
+                    [](const auto& before, const auto& after) {
+                        return before.id == after.id &&
+                               before.timeline_start_frame == after.timeline_start_frame &&
+                               before.duration_frames == after.duration_frames &&
+                               before.transform == after.transform &&
+                               before.keyframes == after.keyframes;
+                    }), "animated playback evaluates keys without changing the document");
+    timeline->setLayerExpanded(animated_layer_id, false);
+    timeline_zoom_slider->setValue(motion::ui::detail::kTimelineZoomDefaultIndex);
     const auto layer_before_zoom = document->layers().front();
-    require(layer_before_zoom.keyframes == creative_suite::animation::TransformKeyframes{},
-            "the layer starts with no evaluated keyframes in the current workflow");
 
     timeline->setCurrentFrame(123);
     const auto frame_before_display_switch = timeline->currentFrame();
@@ -1289,7 +1425,7 @@ int main(int argc, char* argv[])
                 timeline->currentFrame() == frame_from_ruler &&
                 document->layers().front().transform == layer_before_zoom.transform &&
                 document->layers().front().keyframes == layer_before_zoom.keyframes,
-            "ruler and layer viewport share frame mapping and seeking does not evaluate keyframes");
+            "ruler and layer viewport share frame mapping and seeking leaves stored keyframes unchanged");
 
     timeline->setCurrentFrame(layer_before_zoom.timeline_start_frame);
     timeline_zoom_slider->setValue(21);

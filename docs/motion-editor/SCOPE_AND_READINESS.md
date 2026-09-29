@@ -5,12 +5,14 @@ Motion Studio shell and in-memory composition/layer model have started using
 provisional C++ and Qt 6. Its workspace creates in-memory canvases and has an
 application-owned Media Pool connected to timeline rows for image and video
 layers. The timeline supports clip insertion, movement, reordering, visibility,
-removal, and duration edits; the selected layer's base transform is editable.
+removal, and duration edits; the selected layer's base transform and transform
+keyframes are editable.
 The canvas previews active raster layers through the shared CPU compositor and
 decodes video away from the UI thread. Manual Save, Save As, and Open now use a
-versioned `.motion` document that includes the Media Pool. Keyframes are not
-evaluated or edited, text/shape content is not rendered, and undo/redo,
-autosave, recovery, and export remain open.
+versioned `.motion` document that includes the Media Pool. Image and video
+layers support linear transform keyframe editing and preview evaluation.
+Text/shape content is not rendered, and undo/redo, autosave, recovery, and
+export remain open.
 This document records the agreed starting scope; it does not finalize a
 renderer, programming language, native file extension, codec, or implementation
 architecture.
@@ -88,7 +90,7 @@ provide a recoverable reference if a linked document or dependency is missing.
 | --- | --- | --- |
 | Media and decoding | `libs/media/` contains neutral metadata, an in-memory catalog, import processing, FFmpeg video probing/decoding, Qt-backed still-image decoding, and RGBA frames. Each editor owns its pool UI, worker lifecycle, and project/document integration. | Motion Studio already reuses the shared catalog and import processing in its own Media Pool. Imported items are in-memory and remain references to original files; the pool clears when replacing a composition. GIF import is unsupported. |
 | Composition and preview | `apps/video-editor/src/playback/` and `src/rendering/`; worker-side CPU composition, frame compositor, and a provisional OpenGL preview surface. | The CPU raster compositor is in `libs/composition/`; document coordinates, pixel format, alpha, lifetime, thread, and error behavior before treating its API as stable. GPU per-layer composition is not an existing capability. |
-| Transforms and animation | `apps/video-editor/src/timeline/`; normalized 2D position, scale, rotation, opacity, and linear per-clip keyframes. | The transform evaluator is in `libs/animation/`; Motion Studio owns curve editing and property controls. |
+| Transforms and animation | `apps/video-editor/src/timeline/`; normalized 2D position, scale, rotation, opacity, and linear per-clip keyframes. | Motion Studio uses `libs/animation/` to evaluate transform keyframes and owns basic key editing, property tracks, and inspector controls. Rich curves and easing remain open. |
 | Timeline and history | Timeline model, commands, and bounded undo/redo are application-specific. | Motion Studio owns its composition timeline and editing history; share lower-level behavior only where a second real consumer uses the same contract. |
 | Project persistence | `apps/video-editor/src/project/`; versioned `.csp` format currently at version 12, with migrations for supported earlier versions. | Keep a separate versioned Motion Studio native document and adapter. Do not reuse `.csp` as the native composition format. |
 | Autosave and recovery | `src/project/autosave_manager.*` and application coordination provide autosave snapshots and recovery. | Motion Studio must provide equivalent workflow-specific recovery; extract lower-level services only after ownership and boundary tests are clear. |
@@ -99,9 +101,9 @@ provide a recoverable reference if a linked document or dependency is missing.
 The approved reuse direction and its current implementation are recorded in
 [REUSE_PLAN.md](REUSE_PLAN.md). The transform/keyframe evaluator and raster
 frame compositor now have focused, Qt-independent CMake targets under
-`libs/`. The initial Motion Studio document model consumes the shared animation
-types and has model-level regression coverage; the raster compositor is not
-yet consumed. The Video Editor uses compatibility headers and retains
+`libs/`. Motion Studio uses the shared animation types in its document model
+and evaluator, and the raster compositor in its preview, with model and
+preview regression coverage. The Video Editor uses compatibility headers and retains
 timeline-specific keyframe split and trim operations. Shared contracts remain
 provisional until both consumers have appropriate regression coverage.
 
@@ -153,10 +155,10 @@ compositor are reused directly. The Qt preview, Motion Studio timeline worker,
 text rasterizer, and application-specific project adapters remain application-
 owned. Motion Studio has its own composition/layer model, canvas viewer,
 timeline rows linked to Media Pool sources, and manual versioned save/open
-format. Image and video content render in the preview; text and shapes,
-keyframe evaluation, effects, undo/redo, autosave, recovery, and export remain
-open. The one-hour ruler range controls
-navigation only and does not define the composition's duration. See
+format. Image and video content render in the preview with linearly evaluated
+transform keyframes; text and shapes, richer curves and interpolation, effects,
+undo/redo, autosave, recovery, and export remain open. The one-hour ruler range
+controls navigation only and does not define the composition's duration. See
 [ROADMAP.md](ROADMAP.md) and [REUSE_PLAN.md](REUSE_PLAN.md) for current
 implementation details and provisional shared API contracts.
 

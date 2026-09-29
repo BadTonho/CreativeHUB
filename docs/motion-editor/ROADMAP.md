@@ -119,8 +119,9 @@ the Motion Studio implementation choices are finalized.
   composition rate; videos use their identified source duration.
 - [x] Restore the selected layer's base-transform inspector and render active
   raster layers with the shared CPU compositor. Decode video frames on a
-  worker, coalesce rapid seeks, and ignore stale preview generations. Keyframes
-  remain stored but are not edited or evaluated.
+  worker, coalesce rapid seeks, and ignore stale preview generations. The
+  inspector edits base transforms or keys at the playhead, while the preview
+  evaluates transform keyframes on the worker.
 - [x] Add Play/Pause and optional Loop controls for continuous visual preview.
   Advance from a monotonic clock at the exact composition frame rate, stop at
   the furthest layer end or loop to frame 0, and keep the playhead in view.
@@ -135,7 +136,11 @@ the Motion Studio implementation choices are finalized.
   Pool using an atomic, versioned `.motion` JSON document. Reject malformed and
   future-version documents without replacing the current composition or
   rewriting the source file. Missing media reopen as offline references.
-- [ ] Add keyframe editing interactions to the timeline.
+- [x] Add transform keyframe editing to image and video layers for Position X/Y,
+  Scale, Rotation, and Opacity. Expand per-layer property tracks, add or remove
+  keys from the inspector, seek by key marker, and drag keys within the layer's
+  duration. Use shared linear interpolation and preserve the `.motion` v1
+  format.
 - [ ] Add undo/redo, autosave, and recovery for the first supported composition
   workflow.
 - [-] Extend actionable local error logging and automated coverage for the
@@ -150,7 +155,8 @@ button uses the File menu's creation flow and has offscreen UI regression
 coverage. Opening a composition preserves the current window state and geometry;
 the app starts maximized unless the user restores it. The canvas viewer,
 navigation ruler, timeline zoom and scrolling, layer rows, drag/drop, transforms,
-time/frame display, and preview have offscreen coverage. The shared media catalog
+keyframe tracks and editing, time/frame display, and preview have offscreen
+coverage. The shared media catalog
 and importer, plus the Motion Studio Media Pool, have regression coverage for
 video and still-image imports, first-frame thumbnails, bins, renaming, offline
 restoration, view modes, selection details,
@@ -196,6 +202,25 @@ videos may be shortened and restored up to their source duration. Selection,
 insertion, reordering, visibility, and seeking do not alter layer transforms or
 keyframes.
 
+Each image or video layer can be expanded to show Position X, Position Y,
+Scale, Rotation, and Opacity key tracks. Keys use layer-local frame numbers;
+their timeline markers appear at `layer start + local key frame`. Clicking a
+marker seeks to it, while dragging moves it to an integer local frame within
+the layer duration. A move onto another key for the same property is rejected
+without changing either key. Shortening a layer hides keys outside its current
+duration but retains them in the document; extending the layer makes them
+visible again. New and opened compositions start with all property tracks
+collapsed.
+
+The transform inspector edits the base value when a property has no keys. For
+an animated property it displays the shared evaluator's linearly interpolated
+value and is read-only between keys. Adding a key copies the currently
+evaluated value; at an existing key, the field edits that key. Removing the
+last key restores the base value. Key editing is available only when the
+playhead is within the selected layer. Transform keys are evaluated for both
+manual preview and playback, and the selected-layer guide follows the evaluated
+position. Seeking and animation do not change layer timing.
+
 The preview displays cached still-image frames or decodes video frames using
 the shared `VideoPlaybackSession`, then composites visible layers back-to-front
 with `FrameCompositor`. Decode and composition work runs off the UI thread.
@@ -204,11 +229,12 @@ restarts from frame 0 when enabled. Playback stops on the last frame of the
 furthest layer, including hidden layers, and pressing Play at the end restarts
 from frame 0. Manual seeking pauses playback. The monotonic clock remains on
 schedule when rendering falls behind; intermediate preview frames may be
-skipped. A completed frame from the current uninterrupted playback may still be
+skipped. Transform keyframes use the shared linear evaluator in the preview
+worker. A completed frame from the current uninterrupted playback may still be
 presented; manual seeking or replacing the composition invalidates it. Playback
 extends the navigation range by one hour as needed and scrolls to keep the
 playhead visible. This does not set a composition duration. Preview remains
-CPU-only and omits text, shape, audio, source-in-point, and keyframe evaluation.
+CPU-only and omits text, shape, audio, and source-in-point rendering.
 
 Manual Windows validation remains pending: verify the centered empty-state
 button opens composition creation and disappears after creation; confirm a
@@ -233,23 +259,26 @@ extend the range only at its actual end, scrolling there if it is offscreen;
 resize the viewer, Media Pool, inspector, and timeline; replace the composition
 and confirm the pool resets; verify the timeline starts in Time mode, switch to
 Frames and back, and confirm the playhead and layer positions do not change;
-play and pause a video and confirm a seek pauses it; enable Loop and confirm it
-restarts at frame 0, then disable Loop and confirm playback stops on the
+play and pause a video and confirm a seek pauses it; add Position and Opacity
+keys, inspect interpolated values, edit at a key, remove a key, drag a marker,
+and confirm a colliding move is rejected; scrub and play through the animation;
+save and reopen and confirm keys and layer timing persist; enable Loop and
+confirm it restarts at frame 0, then disable Loop and confirm playback stops on the
 final layer frame and Play restarts from frame 0; verify playback scrolls and
 extends the navigation range for a long clip; open **Settings > Keyboard
 Shortcuts**, change a command, confirm duplicate assignments are rejected,
 check that Cancel discards edits and OK persists them, clear an assignment,
 restore defaults with **Reset All**, and confirm timeline commands are disabled
-when unavailable; then close the application. Keyframe editing, undo/redo,
-autosave, recovery, and export remain open.
+when unavailable; then close the application. Richer curves and interpolation,
+undo/redo, autosave, recovery, and export remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.
 
 ### 3. Motion design MVP
 
-- [ ] Add keyframes and editable property curves with documented interpolation
-  behavior.
+- [ ] Extend basic linear transform keyframes with editable property curves,
+  richer interpolation, and documented easing behavior.
 - [ ] Support ordered text, vector-shape, raster-image, and video layers with
   basic 2D transforms and a simple effect set.
 - [ ] Complete the standalone save/reopen, preview, and rendered-video

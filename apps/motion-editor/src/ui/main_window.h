@@ -23,6 +23,7 @@ class QDoubleSpinBox;
 class QCloseEvent;
 class QProgressDialog;
 class QTabWidget;
+class QToolButton;
 
 namespace creative_suite::media { struct MediaImportBatchResult; }
 
@@ -68,7 +69,8 @@ private:
     void refreshTimeline();
     void selectLayer(model::LayerId id);
     void syncTransformInspector();
-    void editSelectedLayerTransform();
+    void editSelectedLayerTransform(std::size_t property_index);
+    void toggleSelectedLayerKeyframe(std::size_t property_index);
     void handleMediaDrop(const std::filesystem::path& path,
                          std::int64_t start_frame,
                          model::LayerId before_layer_id);
@@ -98,6 +100,7 @@ private:
     QTabWidget* inspector_tabs_ = nullptr;
     QWidget* transform_inspector_ = nullptr;
     std::array<QDoubleSpinBox*, 5> transform_fields_{};
+    std::array<QToolButton*, 5> transform_key_buttons_{};
     TimelineNavigator* timeline_ = nullptr;
     std::unique_ptr<PreviewRenderer> preview_renderer_;
     std::optional<std::filesystem::path> document_path_;
