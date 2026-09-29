@@ -11,8 +11,9 @@ The canvas previews active raster layers through the shared CPU compositor and
 decodes video away from the UI thread. Manual Save, Save As, and Open now use a
 versioned `.motion` document that includes the Media Pool. Image and video
 layers support linear transform keyframe editing and preview evaluation.
-Text/shape content is not rendered. Undo/Redo now covers composition edits;
-autosave, recovery, and export remain open.
+Text/shape content is not rendered. Undo/Redo covers composition edits.
+Configurable autosave and recovery snapshots cover the composition and Media
+Pool without changing the native `.motion` v1 schema; export remains open.
 This document records the agreed starting scope; it does not finalize a
 renderer, programming language, native file extension, codec, or implementation
 architecture.
@@ -93,7 +94,7 @@ provide a recoverable reference if a linked document or dependency is missing.
 | Transforms and animation | `apps/video-editor/src/timeline/`; normalized 2D position, scale, rotation, opacity, and linear per-clip keyframes. | Motion Studio uses `libs/animation/` to evaluate transform keyframes and owns basic key editing, property tracks, and inspector controls. Rich curves and easing remain open. |
 | Timeline and history | Timeline model, commands, and bounded undo/redo are application-specific. | Motion Studio owns its composition timeline and editing history; share lower-level behavior only where a second real consumer uses the same contract. |
 | Project persistence | `apps/video-editor/src/project/`; versioned `.csp` format currently at version 12, with migrations for supported earlier versions. | Keep a separate versioned Motion Studio native document and adapter. Do not reuse `.csp` as the native composition format. |
-| Autosave and recovery | `src/project/autosave_manager.*` and application coordination provide autosave snapshots and recovery. | Motion Studio must provide equivalent workflow-specific recovery; extract lower-level services only after ownership and boundary tests are clear. |
+| Autosave and recovery | `src/project/autosave_manager.*` and application coordination provide autosave snapshots and recovery. | Motion Studio implements an application-owned recovery store and versioned wrapper around `.motion` v1 data. Shared recovery services remain deferred until both document owners have stable common requirements. |
 | Diagnostics | Structured local logging is implemented in `libs/diagnostics/`; each application selects its own log directory. | Reuse the service with a Motion Studio-specific application identifier and context. |
 
 ### Candidate shared capabilities
@@ -156,9 +157,12 @@ text rasterizer, and application-specific project adapters remain application-
 owned. Motion Studio has its own composition/layer model, canvas viewer,
 timeline rows linked to Media Pool sources, and manual versioned save/open
 format. Image and video content render in the preview with linearly evaluated
-transform keyframes; text and shapes, richer curves and interpolation, effects,
-autosave, recovery, and export remain open. The one-hour ruler range
-controls navigation only and does not define the composition's duration. See
+transform keyframes. Autosave and recovery use a separate versioned wrapper:
+dirty compositions and the full Media Pool are snapshotted atomically, untitled
+work is isolated by session, and recovery restores through staged media loading.
+The native `.motion` v1 document remains unchanged. Text and shapes, richer
+curves and interpolation, effects, and export remain open. The one-hour ruler
+range controls navigation only and does not define the composition's duration. See
 [ROADMAP.md](ROADMAP.md) and [REUSE_PLAN.md](REUSE_PLAN.md) for current
 implementation details and provisional shared API contracts.
 
@@ -188,3 +192,7 @@ response, preview latency, and rendering for representative small, medium,
 and heavy compositions; and record dependency licenses, output-profile and
 codec findings, measurable resource and responsiveness targets, and
 alternatives. No final language or renderer choice is made by this document.
+Manual Windows validation of autosave and recovery remains pending: verify an
+untitled recovery after restart, saved-project recovery and Ignore behavior,
+missing media, and snapshot management in Settings. See the [roadmap](ROADMAP.md)
+for the complete manual checklist.

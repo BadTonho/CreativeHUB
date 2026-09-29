@@ -35,6 +35,8 @@ using model::MotionMediaEntryData;
 using model::MotionProjectData;
 
 constexpr std::int64_t kMaximumDocumentBytes = 128LL * 1024LL * 1024LL;
+constexpr int kRecoveryFormatVersion = 1;
+constexpr auto kRecoveryFormatIdentifier = "creative-suite.motion-studio-recovery";
 constexpr qsizetype kMaximumLayerCount = 100'000;
 constexpr qsizetype kMaximumMediaCount = 100'000;
 constexpr qsizetype kMaximumBinCount = 100'000;
@@ -80,9 +82,8 @@ QString storedPath(const std::filesystem::path& document_path,
     const auto source = MediaLibrary::canonicalPath(source_path);
     const auto document_directory =
         MediaLibrary::canonicalPath(document_path).parent_path();
-    std::error_code error;
-    const auto relative = std::filesystem::relative(source, document_directory, error);
-    if (!error && !relative.empty() && !relative.is_absolute() &&
+    const auto relative = source.lexically_relative(document_directory);
+    if (!relative.empty() && !relative.is_absolute() &&
         *relative.begin() != std::filesystem::path("..")) {
         return stringFromUtf8(pathToUtf8(relative));
     }
@@ -105,9 +106,8 @@ std::filesystem::path resolvedPath(const std::filesystem::path& document_path,
     }
     path = MediaLibrary::canonicalPath(path);
     if (was_relative) {
-        std::error_code error;
-        const auto relative = std::filesystem::relative(path, base, error);
-        if (error || relative.empty() || relative.is_absolute() ||
+        const auto relative = path.lexically_relative(base);
+        if (relative.empty() || relative.is_absolute() ||
             *relative.begin() == std::filesystem::path("..")) {
             fail(MotionDocumentErrorCode::InvalidValue, document_path,
                  QStringLiteral("A relative media path resolves outside the document directory."));
@@ -707,6 +707,138 @@ void MotionDocumentStore::save(
     if (!file.commit()) {
         fail(MotionDocumentErrorCode::Io, document_path,
              QStringLiteral("The Motion Studio document could not be committed atomically."),
+             static_cast<int>(file.error()));
+    }
+}
+
+MotionRecoveryData MotionDocumentStore::loadRecovery(
+    const std::filesystem::path& recovery_path)
+{
+    if (recovery_path.empty()) {
+        fail(MotionDocumentErrorCode::Io, recovery_path,
+             QStringLiteral("A recovery snapshot path is required."));
+    }
+    QFile file(pathToQString(recovery_path));
+    if (!file.open(QIODevice::ReadOnly)) {
+        fail(MotionDocumentErrorCode::Io, recovery_path,
+             QStringLiteral("The Motion Studio recovery snapshot could not be opened."),
+             static_cast<int>(file.error()));
+    }
+    if (file.size() < 0 || file.size() > kMaximumDocumentBytes) {
+        fail(MotionDocumentErrorCode::InvalidValue, recovery_path,
+             QStringLiteral("The Motion Studio recovery snapshot exceeds the supported file size."));
+    }
+    const auto bytes = file.readAll();
+    if (file.error() != QFileDevice::NoError) {
+        fail(MotionDocumentErrorCode::Io, recovery_path,
+             QStringLiteral("The Motion Studio recovery snapshot could not be read completely."),
+             static_cast<int>(file.error()));
+    }
+    QJsonParseError parse_error;
+    const auto parsed = QJsonDocument::fromJson(bytes, &parse_error);
+    if (parse_error.error != QJsonParseError::NoError || !parsed.isObject()) {
+        fail(MotionDocumentErrorCode::InvalidFormat, recovery_path,
+             QStringLiteral("The Motion Studio recovery snapshot is not valid JSON."));
+    }
+
+    const auto root = parsed.object();
+    if (root.value(QStringLiteral("format")).toString() !=
+            QLatin1String(kRecoveryFormatIdentifier)) {
+        fail(MotionDocumentErrorCode::InvalidFormat, recovery_path,
+             QStringLiteral("The file is not a Motion Studio recovery snapshot."));
+    }
+    const auto version_value = root.value(QStringLiteral("version"));
+    if (!version_value.isDouble() ||
+        version_value.toDouble() != static_cast<double>(kRecoveryFormatVersion)) {
+        fail(MotionDocumentErrorCode::UnsupportedVersion, recovery_path,
+             QStringLiteral("The Motion Studio recovery snapshot version is not supported."));
+    }
+    if (!root.value(QStringLiteral("document")).isObject()) {
+        fail(MotionDocumentErrorCode::MissingField, recovery_path,
+             QStringLiteral("The recovery snapshot does not contain a document."));
+    }
+    if (!root.value(QStringLiteral("target_document_path")).isString() ||
+        !root.value(QStringLiteral("session_id")).isString()) {
+        fail(MotionDocumentErrorCode::MissingField, recovery_path,
+             QStringLiteral("The recovery snapshot is missing its target or session identity."));
+    }
+
+    MotionRecoveryData result;
+    const auto target_path = root.value(QStringLiteral("target_document_path")).toString();
+    if (!target_path.isEmpty()) {
+        result.target_document_path = pathFromQString(target_path);
+        if (!result.target_document_path.is_absolute()) {
+            fail(MotionDocumentErrorCode::InvalidValue, recovery_path,
+                 QStringLiteral("The recovery target path must be absolute."));
+        }
+        result.target_document_path = MediaLibrary::canonicalPath(result.target_document_path);
+    }
+    result.session_id = root.value(QStringLiteral("session_id")).toString()
+        .toUtf8().toStdString();
+    if (result.session_id.empty()) {
+        fail(MotionDocumentErrorCode::InvalidValue, recovery_path,
+             QStringLiteral("The recovery session identity cannot be empty."));
+    }
+    const auto path_base = result.target_document_path.empty()
+        ? MediaLibrary::canonicalPath(recovery_path)
+        : result.target_document_path;
+    result.document = parseDocument(
+        root.value(QStringLiteral("document")).toObject(), path_base);
+    return result;
+}
+
+void MotionDocumentStore::saveRecovery(
+    const std::filesystem::path& recovery_path,
+    const std::filesystem::path& target_document_path,
+    const std::string& session_id,
+    const MotionProjectData& document)
+{
+    if (recovery_path.empty()) {
+        fail(MotionDocumentErrorCode::Io, recovery_path,
+             QStringLiteral("A recovery snapshot path is required."));
+    }
+    if (session_id.empty()) {
+        fail(MotionDocumentErrorCode::InvalidValue, recovery_path,
+             QStringLiteral("A recovery session identity is required."));
+    }
+
+    auto target_path = target_document_path;
+    if (!target_path.empty()) target_path = MediaLibrary::canonicalPath(target_path);
+    const auto path_base = target_path.empty()
+        ? MediaLibrary::canonicalPath(recovery_path)
+        : target_path;
+    validateDocument(document, path_base);
+
+    QJsonObject root;
+    root.insert(QStringLiteral("format"), QString::fromLatin1(kRecoveryFormatIdentifier));
+    root.insert(QStringLiteral("version"), kRecoveryFormatVersion);
+    root.insert(QStringLiteral("target_document_path"),
+                target_path.empty() ? QString{} : pathToQString(target_path));
+    root.insert(QStringLiteral("session_id"), QString::fromUtf8(
+        session_id.data(), static_cast<qsizetype>(session_id.size())));
+    root.insert(QStringLiteral("document"), encodeDocument(document, path_base));
+    const auto json = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    if (json.size() > kMaximumDocumentBytes) {
+        fail(MotionDocumentErrorCode::InvalidValue, recovery_path,
+             QStringLiteral("The Motion Studio recovery snapshot exceeds the supported file size."));
+    }
+
+    QSaveFile file(pathToQString(recovery_path));
+    if (!file.open(QIODevice::WriteOnly)) {
+        fail(MotionDocumentErrorCode::Io, recovery_path,
+             QStringLiteral("The Motion Studio recovery snapshot could not be opened for writing."),
+             static_cast<int>(file.error()));
+    }
+    if (file.write(json) != json.size()) {
+        const auto error_code = static_cast<int>(file.error());
+        file.cancelWriting();
+        fail(MotionDocumentErrorCode::Io, recovery_path,
+             QStringLiteral("The Motion Studio recovery snapshot could not be written completely."),
+             error_code);
+    }
+    if (!file.commit()) {
+        fail(MotionDocumentErrorCode::Io, recovery_path,
+             QStringLiteral("The Motion Studio recovery snapshot could not be committed atomically."),
              static_cast<int>(file.error()));
     }
 }

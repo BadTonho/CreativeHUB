@@ -1,13 +1,17 @@
 #include "ui/main_window.h"
 #include "ui/composition_viewer.h"
+#include "ui/autosave_recovery_dialog.h"
 #include "ui/media_pool_widget.h"
 #include "ui/new_composition_dialog.h"
 #include "ui/timeline_navigator.h"
 #include "ui/timeline_navigator_math.h"
 #include "model/motion_project_data.h"
 #include "persistence/motion_document_store.h"
+#include "persistence/motion_recovery_store.h"
+#include "settings/autosave_preferences.h"
 
 #include <QAction>
+#include <QCheckBox>
 #include <QApplication>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -40,6 +44,8 @@
 #include <QProgressDialog>
 #include <QTemporaryDir>
 #include <QSettings>
+#include <QSpinBox>
+#include <QTableWidget>
 #include <QThread>
 #include <QTimer>
 #include <QToolButton>
@@ -49,6 +55,7 @@
 #include <QWheelEvent>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -286,7 +293,9 @@ void testMotionShortcutSettings()
 #else
     const QKeySequence expected_import_sequence(Qt::CTRL | Qt::Key_I);
 #endif
-    MainWindow window;
+    QTemporaryDir recovery_directory;
+    require(recovery_directory.isValid(), "shortcut test recovery directory is available");
+    MainWindow window(nullptr, pathFromQString(recovery_directory.path()), "shortcut-tests");
     auto* create_action = action(window, "motion-new-composition-action");
     auto* open_action = action(window, "motion-open-composition-action");
     auto* save_action = action(window, "motion-save-composition-action");
@@ -378,7 +387,8 @@ void testMotionShortcutSettings()
     settings.endGroup();
 
     {
-        MainWindow reopened;
+        MainWindow reopened(nullptr, pathFromQString(recovery_directory.path()),
+                            "shortcut-tests-reopened");
         require(action(reopened, "motion-new-composition-action")->shortcut() ==
                     QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N) &&
                     action(reopened, "motion-undo-action")->shortcut() ==
@@ -463,6 +473,296 @@ void createComposition(MainWindow& window, int width, int height, int frame_rate
     action(window, "motion-new-composition-action")->trigger();
 }
 
+void chooseRecoveryActionOnNextDialog(const char* action_name,
+                                      int attempts = 0,
+                                      bool* handled = nullptr,
+                                      std::optional<QMessageBox::StandardButton> followup =
+                                          std::nullopt)
+{
+    const QString target_name = QString::fromLatin1(action_name);
+    QTimer::singleShot(0, [target_name, attempts, handled, followup] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (dialog != nullptr &&
+            dialog->objectName() == QStringLiteral("motion-recovery-choice-dialog")) {
+            if (handled != nullptr) *handled = true;
+            if (followup.has_value()) {
+                QTimer::singleShot(0, [button = *followup] {
+                    auto* prompt = qobject_cast<QMessageBox*>(
+                        QApplication::activeModalWidget());
+                    require(prompt != nullptr,
+                            "recovery replacement prompts for the current dirty document");
+                    prompt->button(button)->click();
+                });
+            }
+            findWidget<QPushButton>(dialog, target_name.toUtf8().constData())->click();
+            return;
+        }
+        require(attempts < 1000, "the requested recovery choice dialog appears");
+        chooseRecoveryActionOnNextDialog(target_name.toUtf8().constData(), attempts + 1,
+                                         handled, followup);
+    });
+}
+
+void testAutosavePreferencesAndSnapshots()
+{
+    QTemporaryDir temporary;
+    require(temporary.isValid(), "autosave test directory is available");
+    const auto root = pathFromQString(temporary.path());
+    motion::settings::setAutosaveEnabled(true);
+    motion::settings::setAutosaveIntervalSeconds(30);
+    motion::settings::setRecoveryRetention(5);
+
+    MainWindow window(nullptr, root / "recovery", "autosave-ui-session");
+    window.show();
+    createComposition(window, 320, 180, 2);
+    auto* timer = findWidget<QTimer>(&window, "motion-autosave-timer");
+    require(timer->isActive() && timer->interval() == 30000,
+            "autosave uses the enabled 30-second default interval");
+
+    const bool invoked = QMetaObject::invokeMethod(
+        timer, "timeout", Qt::DirectConnection);
+    require(invoked, "autosave timer can be triggered deterministically");
+    motion::persistence::MotionRecoveryStore store(root / "recovery", "autosave-ui-session");
+    auto snapshots = store.unsavedSnapshots();
+    require(snapshots.size() == 1 &&
+                motion::persistence::MotionDocumentStore::loadRecovery(snapshots.front().path)
+                    .document.composition.canvas_size == motion::model::CanvasSize{320, 180},
+            "a dirty untitled composition is captured in a recovery snapshot");
+    QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
+    require(store.unsavedSnapshots().size() == 1,
+            "an unchanged composition is not snapshotted twice");
+
+    QImage image(12, 8, QImage::Format_RGBA8888);
+    image.fill(QColor(60, 120, 200, 255));
+    const auto media_path = root / "pool-entry.png";
+    require(image.save(pathToQString(media_path)), "autosave media fixture is written");
+    window.mediaPoolWidget()->importFiles({media_path});
+    require(waitFor([&] { return window.mediaPoolWidget()->library().size() == 1; }),
+            "the Media Pool import finishes before the next autosave check");
+    QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
+    require(store.unsavedSnapshots().size() == 2,
+            "Media Pool changes are included in the next dirty snapshot");
+    const auto newest = motion::persistence::MotionDocumentStore::loadRecovery(
+        store.unsavedSnapshots().front().path);
+    require(newest.document.media.size() == 1 &&
+                newest.document.media.front().source_path ==
+                    creative_suite::media::MediaLibrary::canonicalPath(media_path),
+            "recovery snapshots include the full Media Pool catalog");
+
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        require(dialog != nullptr && dialog->objectName() ==
+                    QStringLiteral("motion-autosave-recovery-dialog"),
+                "Settings opens Autosave & Recovery");
+        auto* snapshots_table = findWidget<QTableWidget>(dialog, "motion-recovery-snapshots");
+        require(snapshots_table->rowCount() == 2,
+                "recovery settings lists current-session snapshots");
+        auto* interval = findWidget<QSpinBox>(dialog, "motion-autosave-interval");
+        auto* retention = findWidget<QSpinBox>(dialog, "motion-autosave-retention");
+        require(interval->minimum() == 10 && interval->maximum() == 300 &&
+                    retention->minimum() == 5 && retention->maximum() == 20,
+                "the autosave settings controls enforce the documented bounds");
+        interval->setValue(17);
+        retention->setValue(8);
+        findWidget<QCheckBox>(dialog, "motion-autosave-enabled")->setChecked(false);
+        findWidget<QPushButton>(dialog, "motion-recovery-refresh")->click();
+        snapshots_table->selectRow(0);
+        QTimer::singleShot(0, [] {
+            auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            require(prompt != nullptr, "deleting a recovery snapshot asks for confirmation");
+            prompt->button(QMessageBox::Yes)->click();
+        });
+        findWidget<QPushButton>(dialog, "motion-recovery-delete")->click();
+        require(snapshots_table->rowCount() == 1,
+                "Delete removes the selected snapshot and refreshes the list");
+        findWidget<QPushButton>(dialog, "motion-recovery-refresh")->click();
+        snapshots_table->selectRow(0);
+        QTimer::singleShot(0, [] {
+            auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            require(prompt != nullptr, "restoring from Settings confirms replacing the dirty document");
+            prompt->button(QMessageBox::Discard)->click();
+        });
+        findWidget<QPushButton>(dialog, "motion-recovery-restore")->click();
+    });
+    action(window, "motion-autosave-recovery-action")->trigger();
+    require(!motion::settings::autosaveEnabled() &&
+                motion::settings::autosaveIntervalSeconds() == 17 &&
+                motion::settings::recoveryRetention() == 8 && !timer->isActive() &&
+                window.compositionDocument()->canvasSize() == motion::model::CanvasSize{320, 180} &&
+                window.mediaPoolWidget()->library().empty() && window.isWindowModified(),
+            "Settings persist preferences and restore the selected snapshot as dirty");
+    {
+        MainWindow reopened(nullptr, root / "reopened-recovery", "autosave-settings-reopened");
+        auto* reopened_timer = findWidget<QTimer>(&reopened, "motion-autosave-timer");
+        require(!reopened_timer->isActive() && reopened_timer->interval() == 17000,
+                "autosave preferences are applied when a new window is created");
+    }
+
+    QTimer::singleShot(0, [] {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        require(prompt != nullptr, "closing an autosaved dirty document asks for a decision");
+        prompt->button(QMessageBox::Discard)->click();
+    });
+    window.close();
+    motion::settings::setAutosaveEnabled(true);
+    motion::settings::setAutosaveIntervalSeconds(30);
+    motion::settings::setRecoveryRetention(5);
+}
+
+void testRecoveryDialogFolderAction()
+{
+    motion::ui::AutosaveRecoveryDialog dialog(true, 30, 5);
+    dialog.setSnapshots({{
+        QStringLiteral("Untitled composition"), QStringLiteral("Untitled project"),
+        QStringLiteral("Now"), QStringLiteral("snapshot.motion-recovery"),
+        QStringLiteral("C:/recovery/snapshot.motion-recovery"), QString{},
+        QStringLiteral("C:/recovery")}});
+    QString opened_folder;
+    QObject::connect(&dialog, &motion::ui::AutosaveRecoveryDialog::openFolderRequested,
+                     &dialog, [&opened_folder](const QString& path) {
+        opened_folder = path;
+    });
+    auto* open_folder = findWidget<QPushButton>(&dialog, "motion-recovery-open-folder");
+    require(open_folder->isEnabled(), "Open Folder is enabled for a selected snapshot");
+    open_folder->click();
+    require(opened_folder == QStringLiteral("C:/recovery"),
+            "Open Folder reports the selected snapshot directory to the application");
+}
+
+void testRecoveryRestoreAndIgnore()
+{
+    QTemporaryDir temporary;
+    require(temporary.isValid(), "startup recovery directory is available");
+    const auto root = pathFromQString(temporary.path());
+    motion::persistence::MotionRecoveryStore store(root, "crashed-session");
+    motion::model::MotionProjectData recovered_project;
+    recovered_project.composition = {{720, 405}, {30000, 1001}};
+    motion::model::CompositionDocument layers(720, 405, {30000, 1001});
+    (void)layers.addLayer(motion::model::LayerKind::Shape, "Recovered shape");
+    recovered_project.layers = layers.layers();
+    const auto missing_image = root / "recovery-source-missing.png";
+    recovered_project.bins = {"Unsorted", "Footage"};
+    recovered_project.media.push_back({
+        creative_suite::media::MediaLibrary::canonicalPath(missing_image),
+        creative_suite::media::MediaKind::Image, "Recovered offline still", "Footage"});
+    store.saveSnapshot(recovered_project, 5);
+    const auto recovery_path = store.unsavedSnapshots().front().path;
+    motion::settings::setAutosaveEnabled(false);
+
+    {
+        MainWindow ignored(nullptr, root, "ignore-session");
+        bool ignore_handled = false;
+        chooseRecoveryActionOnNextDialog("motion-recovery-choice-ignore", 0,
+                                         &ignore_handled);
+        ignored.show();
+        require(waitFor([&] {
+                    return ignore_handled && QApplication::activeModalWidget() == nullptr &&
+                        ignored.compositionDocument() == nullptr;
+                }), "Ignore continues startup without opening the snapshot");
+        require(std::filesystem::is_regular_file(recovery_path),
+                "ignoring startup recovery preserves the snapshot");
+        ignored.close();
+    }
+
+    {
+        MainWindow restored(nullptr, root, "restore-session");
+        bool restore_handled = false;
+        chooseRecoveryActionOnNextDialog("motion-recovery-choice-restore", 0,
+                                         &restore_handled);
+        restored.show();
+        require(waitFor([&] {
+                    return restore_handled && restored.compositionDocument() != nullptr &&
+                        restored.isWindowModified();
+                }), "Restore stages the untitled snapshot and keeps it dirty");
+        require(restored.compositionDocument()->canvasSize() ==
+                    motion::model::CanvasSize{720, 405} &&
+                    restored.compositionDocument()->layers().front().name == "Recovered shape" &&
+                    restored.mediaPoolWidget()->library().size() == 1 &&
+                    restored.mediaPoolWidget()->library().items().front().offline &&
+                    restored.mediaPoolWidget()->library().items().front().display_name ==
+                        "Recovered offline still" && store.unsavedSnapshots().size() == 1,
+                "startup recovery keeps its source snapshot until the recovered work is safe");
+        QTimer::singleShot(0, [] {
+            auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            require(prompt != nullptr, "closing a restored dirty composition asks for a decision");
+            prompt->button(QMessageBox::Discard)->click();
+        });
+        restored.close();
+        require(store.unsavedSnapshots().empty(),
+                "discarding the restored untitled composition removes its recovery source");
+    }
+    motion::settings::setAutosaveEnabled(true);
+}
+
+void testSavedProjectRecoveryOnOpen()
+{
+    QTemporaryDir temporary;
+    require(temporary.isValid(), "saved-project recovery directory is available");
+    const auto root = pathFromQString(temporary.path());
+    const auto project_path = root / "saved.motion";
+    motion::model::MotionProjectData saved_project;
+    saved_project.composition = {{640, 360}, {24, 1}};
+    motion::model::CompositionDocument saved_layers(640, 360, {24, 1});
+    (void)saved_layers.addLayer(motion::model::LayerKind::Shape, "Saved version");
+    saved_project.layers = saved_layers.layers();
+    motion::persistence::MotionDocumentStore::save(project_path, saved_project);
+
+    auto recovery_project = saved_project;
+    recovery_project.layers.front().name = "Recovered version";
+    motion::persistence::MotionRecoveryStore store(root / "recovery", "recovery-session");
+    store.saveSnapshot(recovery_project, project_path, 5);
+    const auto snapshot_path = store.validSnapshotsForProject(project_path).front().path;
+    std::filesystem::last_write_time(snapshot_path,
+        std::filesystem::last_write_time(project_path) + std::chrono::seconds(2));
+
+    MainWindow window(nullptr, root / "recovery", "saved-project-ui-session");
+    createComposition(window, 200, 100, 2);
+    bool cancel_restore_handled = false;
+    QTimer::singleShot(0, [&] {
+        chooseDocumentFile(project_path, QDialogButtonBox::Open);
+        chooseRecoveryActionOnNextDialog("motion-recovery-choice-restore", 0,
+            &cancel_restore_handled, QMessageBox::Cancel);
+    });
+    action(window, "motion-open-composition-action")->trigger();
+    require(cancel_restore_handled &&
+                window.compositionDocument()->canvasSize() == motion::model::CanvasSize{200, 100} &&
+                window.isWindowModified() && std::filesystem::is_regular_file(snapshot_path),
+            "cancelling recovery preserves the open document and its source snapshot");
+
+    bool restore_handled = false;
+    QTimer::singleShot(0, [&] {
+        chooseDocumentFile(project_path, QDialogButtonBox::Open);
+        chooseRecoveryActionOnNextDialog("motion-recovery-choice-restore", 0,
+            &restore_handled, QMessageBox::Discard);
+    });
+    action(window, "motion-open-composition-action")->trigger();
+    require(restore_handled && window.compositionDocument() != nullptr && window.isWindowModified() &&
+                window.compositionDocument()->layers().front().name == "Recovered version" &&
+                window.windowTitle().contains(QStringLiteral("saved.motion")),
+            "Open offers and restores a newer saved-project snapshot as dirty");
+    action(window, "motion-save-composition-action")->trigger();
+    require(!window.isWindowModified() &&
+                motion::persistence::MotionDocumentStore::load(project_path)
+                    .layers.front().name == "Recovered version" &&
+                std::filesystem::is_regular_file(snapshot_path),
+            "restored saved projects keep their Save target and recovery history after Save");
+
+    auto* rows = findWidget<QWidget>(&window, "motion-timeline-layer-rows");
+    sendMouseClick(rows, QPoint(15, 15));
+    require(window.isWindowModified(),
+            "editing the restored saved project marks it dirty again");
+    auto* timer = findWidget<QTimer>(&window, "motion-autosave-timer");
+    require(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection),
+            "the saved-project autosave timer can be triggered deterministically");
+    const auto project_snapshots = store.validSnapshotsForProject(project_path);
+    require(project_snapshots.size() >= 2 &&
+                std::any_of(project_snapshots.begin(), project_snapshots.end(), [](const auto& snapshot) {
+                    return !motion::persistence::MotionDocumentStore::loadRecovery(
+                        snapshot.path).document.layers.front().visible;
+                }),
+            "dirty saved projects write recovery snapshots beside the document");
+}
+
 void answerMessageBoxWhenShown(QMessageBox::StandardButton button, int attempts = 0)
 {
     QTimer::singleShot(5, [button, attempts] {
@@ -531,7 +831,7 @@ void testMotionDocumentSaveOpen()
         require(corrupt.write("not-json") == 8, "corrupt fixture is written");
     }
 
-    MainWindow window;
+    MainWindow window(nullptr, root / "recovery", "document-tests");
     window.show();
     QTimer::singleShot(0, [] { completeCompositionDialog(640, 360, 2); });
     action(window, "motion-new-composition-action")->trigger();
@@ -673,6 +973,10 @@ int main(int argc, char* argv[])
                        settings_directory.path());
 
     testMotionShortcutSettings();
+    testAutosavePreferencesAndSnapshots();
+    testRecoveryDialogFolderAction();
+    testRecoveryRestoreAndIgnore();
+    testSavedProjectRecoveryOnOpen();
     testMotionDocumentSaveOpen();
 
     motion::ui::TimelineNavigator frame_rate_range_check;
@@ -1006,7 +1310,8 @@ int main(int argc, char* argv[])
     const auto video_path = std::filesystem::path(MOTION_EDITOR_TEST_MEDIA_DIR) / "reference.mkv";
     require(std::filesystem::is_regular_file(video_path), "video fixture exists");
 
-    MainWindow window;
+    MainWindow window(nullptr, pathFromQString(temporary.path()) / "recovery",
+                      "timeline-ui-tests");
     require(window.compositionDocument() == nullptr,
             "Motion Studio starts without a composition");
     window.show();

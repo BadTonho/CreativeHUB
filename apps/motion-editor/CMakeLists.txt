@@ -9,8 +9,14 @@ add_library(creative-suite-motion-editor-core STATIC
     src/model/composition_document.cpp
     src/model/composition_document.h
     src/model/motion_project_data.h
+    src/persistence/motion_recovery_store.cpp
+    src/persistence/motion_recovery_store.h
     src/persistence/motion_document_store.cpp
     src/persistence/motion_document_store.h
+    src/settings/autosave_preferences.cpp
+    src/settings/autosave_preferences.h
+    src/ui/autosave_recovery_dialog.cpp
+    src/ui/autosave_recovery_dialog.h
     src/ui/composition_viewer.cpp
     src/ui/composition_viewer.h
     src/ui/composition_history.cpp

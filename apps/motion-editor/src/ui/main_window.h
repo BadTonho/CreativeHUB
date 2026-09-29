@@ -3,6 +3,7 @@
 #include "model/composition_document.h"
 #include "model/motion_project_data.h"
 #include "composition_history.h"
+#include "../persistence/motion_recovery_store.h"
 
 #include <creative_suite/shortcuts/shortcut_manager.h>
 
@@ -15,7 +16,9 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
+#include <vector>
 
 class QAction;
 class QLabel;
@@ -26,6 +29,7 @@ class QCloseEvent;
 class QProgressDialog;
 class QTabWidget;
 class QToolButton;
+class QTimer;
 
 namespace creative_suite::media { struct MediaImportBatchResult; }
 
@@ -39,7 +43,9 @@ class TimelineNavigator;
 
 class MainWindow final : public QMainWindow {
 public:
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(QWidget* parent = nullptr,
+                        std::filesystem::path recovery_root = {},
+                        std::string recovery_session_id = {});
     ~MainWindow() override;
 
     [[nodiscard]] const model::CompositionDocument* compositionDocument() const noexcept;
@@ -48,6 +54,15 @@ public:
 private:
     void createNewComposition();
     void openComposition();
+    void stageOpenProject(std::filesystem::path target_path,
+                          model::MotionProjectData project,
+                          bool recovered = false,
+                          std::filesystem::path recovery_snapshot_path = {});
+    void restoreRecoverySnapshot(const std::filesystem::path& snapshot_path);
+    void maybeOfferUnsavedRecovery();
+    [[nodiscard]] std::optional<std::filesystem::path> chooseRecoverySnapshot(
+        std::vector<persistence::MotionRecoverySnapshot> snapshots,
+        const QString& project_label);
     [[nodiscard]] bool saveComposition();
     [[nodiscard]] bool saveCompositionAs();
     [[nodiscard]] bool saveToPath(const std::filesystem::path& path);
@@ -65,7 +80,9 @@ private:
     void finishOpen(std::uint64_t generation,
                     std::filesystem::path path,
                     model::MotionProjectData project,
-                    creative_suite::media::MediaImportBatchResult result);
+                    creative_suite::media::MediaImportBatchResult result,
+                    bool recovered,
+                    std::filesystem::path recovery_snapshot_path);
     void reportDocumentError(const char* operation,
                              const std::filesystem::path& path,
                              const std::exception& error,
@@ -73,6 +90,12 @@ private:
                              int system_error = -1);
     void createWorkspace();
     void openShortcutSettings();
+    void openAutosaveRecoverySettings();
+    void refreshAutosaveRecoveryDialog(class AutosaveRecoveryDialog& dialog) const;
+    void autosaveProject();
+    void configureAutosaveTimer();
+    void cleanupCurrentUnsavedSnapshots(const char* operation) noexcept;
+    void cleanupRecoveredUnsavedSnapshot(const char* operation) noexcept;
     void openMedia();
     void updateMediaDetails();
     void refreshTimeline();
@@ -95,6 +118,7 @@ private:
     QAction* save_composition_as_action_ = nullptr;
     QAction* import_media_action_ = nullptr;
     QAction* settings_action_ = nullptr;
+    QAction* autosave_settings_action_ = nullptr;
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
     QAction* play_pause_action_ = nullptr;
@@ -116,6 +140,10 @@ private:
     std::unique_ptr<PreviewRenderer> preview_renderer_;
     std::optional<std::filesystem::path> document_path_;
     std::optional<model::MotionProjectData> saved_data_;
+    std::optional<model::MotionProjectData> last_autosaved_data_;
+    std::optional<std::filesystem::path> recovered_untitled_snapshot_path_;
+    persistence::MotionRecoveryStore recovery_store_;
+    QTimer* autosave_timer_ = nullptr;
     CompositionHistory composition_history_;
     std::optional<std::pair<model::LayerId, std::size_t>> active_transform_edit_;
     QProgressDialog* open_progress_ = nullptr;

@@ -9,6 +9,12 @@
 
 namespace motion::persistence {
 
+struct MotionRecoveryData {
+    model::MotionProjectData document;
+    std::filesystem::path target_document_path;
+    std::string session_id;
+};
+
 enum class MotionDocumentErrorCode {
     Io,
     InvalidFormat,
@@ -43,6 +49,14 @@ public:
         const std::filesystem::path& document_path);
     static void save(const std::filesystem::path& document_path,
                      const model::MotionProjectData& document);
+
+    [[nodiscard]] static MotionRecoveryData loadRecovery(
+        const std::filesystem::path& recovery_path);
+    static void saveRecovery(
+        const std::filesystem::path& recovery_path,
+        const std::filesystem::path& target_document_path,
+        const std::string& session_id,
+        const model::MotionProjectData& document);
 };
 
 } // namespace motion::persistence

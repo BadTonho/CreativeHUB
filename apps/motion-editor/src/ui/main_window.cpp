@@ -1,12 +1,14 @@
 #include "main_window.h"
 
 #include "composition_viewer.h"
+#include "autosave_recovery_dialog.h"
 #include "media_pool_widget.h"
 #include "new_composition_dialog.h"
 #include "../persistence/motion_document_store.h"
 #include "preview_renderer.h"
 #include "shortcut_settings_dialog.h"
 #include "timeline_navigator.h"
+#include "../settings/autosave_preferences.h"
 
 #include <creative_suite/animation/animation.h>
 #include <creative_suite/diagnostics/logger.h>
@@ -14,14 +16,17 @@
 #include <creative_suite/media/media_library.h>
 
 #include <QAction>
+#include <QAbstractItemView>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QKeySequence>
 #include <QDoubleSpinBox>
 #include <QDialog>
+#include <QDesktopServices>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
@@ -35,7 +40,9 @@
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
+#include <QTimer>
 #include <QToolButton>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QRunnable>
 #include <QThreadPool>
@@ -136,18 +143,23 @@ public:
         std::uint64_t, std::size_t, std::size_t, const std::filesystem::path&)>;
     using FinishedHandler = std::function<void(
         std::uint64_t, std::filesystem::path, model::MotionProjectData,
-        creative_suite::media::MediaImportBatchResult)>;
+        creative_suite::media::MediaImportBatchResult, bool,
+        std::filesystem::path)>;
 
     OpenMediaStageTask(QObject* receiver,
                        std::uint64_t generation,
                        std::filesystem::path document_path,
                        model::MotionProjectData project,
                        std::shared_ptr<std::atomic_bool> cancel,
+                       bool recovered,
+                       std::filesystem::path recovery_snapshot_path,
                        ProgressHandler progress_handler,
                        FinishedHandler finished_handler)
         : receiver_(receiver), generation_(generation),
           document_path_(std::move(document_path)), project_(std::move(project)),
-          cancel_(std::move(cancel)), progress_handler_(std::move(progress_handler)),
+          cancel_(std::move(cancel)), recovered_(recovered),
+          recovery_snapshot_path_(std::move(recovery_snapshot_path)),
+          progress_handler_(std::move(progress_handler)),
           finished_handler_(std::move(finished_handler))
     {
         setAutoDelete(true);
@@ -175,14 +187,18 @@ public:
         if (receiver.isNull()) return;
         const auto finished_handler = finished_handler_;
         auto document_path = document_path_;
+        auto recovery_snapshot_path = recovery_snapshot_path_;
+        const auto recovered = recovered_;
         auto project = std::move(project_);
         QMetaObject::invokeMethod(receiver.data(),
             [receiver, generation, document_path = std::move(document_path),
              project = std::move(project), result = std::move(result),
+             recovered, recovery_snapshot_path = std::move(recovery_snapshot_path),
              finished_handler]() mutable {
                 if (!receiver.isNull())
                     finished_handler(generation, std::move(document_path),
-                                     std::move(project), std::move(result));
+                                     std::move(project), std::move(result), recovered,
+                                     std::move(recovery_snapshot_path));
             }, Qt::QueuedConnection);
     }
 
@@ -192,14 +208,19 @@ private:
     std::filesystem::path document_path_;
     model::MotionProjectData project_;
     std::shared_ptr<std::atomic_bool> cancel_;
+    bool recovered_ = false;
+    std::filesystem::path recovery_snapshot_path_;
     ProgressHandler progress_handler_;
     FinishedHandler finished_handler_;
 };
 
 } // namespace
 
-MainWindow::MainWindow(QWidget* parent)
-    : QMainWindow(parent)
+MainWindow::MainWindow(QWidget* parent,
+                       std::filesystem::path recovery_root,
+                       std::string recovery_session_id)
+    : QMainWindow(parent),
+      recovery_store_(std::move(recovery_root), std::move(recovery_session_id))
 {
     setWindowTitle(QStringLiteral("Motion Studio"));
     setWindowState(windowState() | Qt::WindowMaximized);
@@ -328,6 +349,12 @@ MainWindow::MainWindow(QWidget* parent)
     settings_action_->setObjectName(QStringLiteral("motion-shortcut-settings-action"));
     connect(settings_action_, &QAction::triggered,
             this, [this] { openShortcutSettings(); });
+    autosave_settings_action_ = settings_menu->addAction(
+        QStringLiteral("Autosave & Recovery..."));
+    autosave_settings_action_->setObjectName(
+        QStringLiteral("motion-autosave-recovery-action"));
+    connect(autosave_settings_action_, &QAction::triggered,
+            this, [this] { openAutosaveRecoverySettings(); });
 
     const auto register_timeline_action = [this](
         QAction*& action, const QString& object_name, const QString& id,
@@ -376,10 +403,18 @@ MainWindow::MainWindow(QWidget* parent)
             "motion_settings", "load_shortcuts", detail,
             {{"settings_group", shortcut_manager_.settingsGroup().toStdString()}});
     }
+
+    autosave_timer_ = new QTimer(this);
+    autosave_timer_->setObjectName(QStringLiteral("motion-autosave-timer"));
+    connect(autosave_timer_, &QTimer::timeout,
+            this, [this] { autosaveProject(); });
+    configureAutosaveTimer();
+    QTimer::singleShot(0, this, [this] { maybeOfferUnsavedRecovery(); });
 }
 
 MainWindow::~MainWindow()
 {
+    if (autosave_timer_ != nullptr) autosave_timer_->stop();
     if (preview_renderer_) preview_renderer_->stopAndWait();
 }
 
@@ -402,6 +437,9 @@ void MainWindow::createNewComposition()
     if (!settings.has_value()) return;
     if (!confirmReplaceDocument()) return;
 
+    cleanupCurrentUnsavedSnapshots("new_composition_cleanup");
+    cleanupRecoveredUnsavedSnapshot("new_recovered_snapshot_cleanup");
+    last_autosaved_data_.reset();
     composition_history_.clear();
     active_transform_edit_.reset();
     document_.emplace(settings->canvas_size.width,
@@ -440,9 +478,18 @@ void MainWindow::openComposition()
     if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) return;
 
     const auto path = pathFromQString(dialog.selectedFiles().front());
-    model::MotionProjectData project;
     try {
-        project = persistence::MotionDocumentStore::load(path);
+        const auto recoverable = recovery_store_.recoverableSnapshotsForProject(path);
+        if (!recoverable.empty()) {
+            const auto selected = chooseRecoverySnapshot(
+                recoverable, QFileInfo(pathForDisplay(path)).fileName());
+            if (selected.has_value()) {
+                restoreRecoverySnapshot(*selected);
+                return;
+            }
+        }
+        auto project = persistence::MotionDocumentStore::load(path);
+        stageOpenProject(path, std::move(project));
     } catch (const persistence::MotionDocumentError& error) {
         reportDocumentError("open_document", path, error,
                             static_cast<int>(error.code()),
@@ -450,13 +497,20 @@ void MainWindow::openComposition()
         return;
     } catch (const std::exception& error) {
         reportDocumentError("open_document", path, error);
-        return;
     }
+}
 
+void MainWindow::stageOpenProject(
+    std::filesystem::path target_path,
+    model::MotionProjectData project,
+    bool recovered,
+    std::filesystem::path recovery_snapshot_path)
+{
     const auto generation = ++open_generation_;
     open_cancel_requested_ = std::make_shared<std::atomic_bool>(false);
     if (project.media.empty()) {
-        finishOpen(generation, path, std::move(project), {});
+        finishOpen(generation, std::move(target_path), std::move(project), {},
+                   recovered, std::move(recovery_snapshot_path));
         return;
     }
 
@@ -491,13 +545,17 @@ void MainWindow::openComposition()
     auto finished_handler = [owner](std::uint64_t task_generation,
                                     std::filesystem::path document_path,
                                     model::MotionProjectData staged_project,
-                                    creative_suite::media::MediaImportBatchResult result) {
+                                    creative_suite::media::MediaImportBatchResult result,
+                                    bool was_recovered,
+                                    std::filesystem::path snapshot_path) {
         if (!owner.isNull())
             owner->finishOpen(task_generation, std::move(document_path),
-                              std::move(staged_project), std::move(result));
+                              std::move(staged_project), std::move(result),
+                              was_recovered, std::move(snapshot_path));
     };
     QThreadPool::globalInstance()->start(new OpenMediaStageTask(
-        this, generation, path, std::move(project), open_cancel_requested_,
+        this, generation, std::move(target_path), std::move(project),
+        open_cancel_requested_, recovered, std::move(recovery_snapshot_path),
         std::move(progress_handler), std::move(finished_handler)));
 }
 
@@ -530,11 +588,17 @@ bool MainWindow::saveToPath(const std::filesystem::path& path)
 {
     finishPendingTransformEdit();
     if (!document_) return false;
+    const bool was_untitled = !document_path_.has_value();
     try {
         const auto project_snapshot = projectData();
         persistence::MotionDocumentStore::save(path, project_snapshot);
         document_path_ = creative_suite::media::MediaLibrary::canonicalPath(path);
         saved_data_ = project_snapshot;
+        last_autosaved_data_.reset();
+        if (was_untitled) {
+            cleanupCurrentUnsavedSnapshots("save_as_unsaved_recovery_cleanup");
+            cleanupRecoveredUnsavedSnapshot("save_as_recovered_snapshot_cleanup");
+        }
         updateDocumentState();
         statusBar()->showMessage(QStringLiteral("Composition saved."), 4000);
         return true;
@@ -717,7 +781,9 @@ void MainWindow::reportDocumentError(const char* operation,
 void MainWindow::finishOpen(std::uint64_t generation,
                             std::filesystem::path path,
                             model::MotionProjectData project,
-                            creative_suite::media::MediaImportBatchResult result)
+                            creative_suite::media::MediaImportBatchResult result,
+                            bool recovered,
+                            std::filesystem::path recovery_snapshot_path)
 {
     if (generation != open_generation_) return;
     if (open_progress_ != nullptr) open_progress_->hide();
@@ -791,10 +857,19 @@ void MainWindow::finishOpen(std::uint64_t generation,
         }
 
         if (!confirmReplaceDocument()) return;
+        const auto current_unsaved_directory = recovery_store_.recoveryRoot() /
+            "unsaved" / recovery_store_.sessionId();
+        const bool recovered_from_current_session = recovered && path.empty() &&
+            recovery_snapshot_path.parent_path() == current_unsaved_directory;
+        const auto previous_recovered_snapshot = recovered_untitled_snapshot_path_;
         composition_history_.clear();
         active_transform_edit_.reset();
         document_.emplace(std::move(staged_document));
-        document_path_ = creative_suite::media::MediaLibrary::canonicalPath(path);
+        document_path_ = path.empty()
+            ? std::nullopt
+            : std::optional<std::filesystem::path>(
+                  creative_suite::media::MediaLibrary::canonicalPath(path));
+        last_autosaved_data_.reset();
         selected_layer_id_ = 0;
         if (workspace_ == nullptr) createWorkspace();
         else if (preview_renderer_) preview_renderer_->resetSessions();
@@ -806,9 +881,23 @@ void MainWindow::finishOpen(std::uint64_t generation,
         media_details_->setMedia(nullptr);
         inspector_tabs_->setCurrentWidget(media_details_);
         syncTransformInspector();
-        saved_data_ = projectData();
+        if (recovered) saved_data_.reset();
+        else saved_data_ = projectData();
         updateDocumentState();
         requestPreview();
+        if (!recovered_from_current_session)
+            cleanupCurrentUnsavedSnapshots("open_unsaved_recovery_cleanup");
+        if (previous_recovered_snapshot.has_value() &&
+            (!recovered || recovery_snapshot_path != *previous_recovered_snapshot)) {
+            cleanupRecoveredUnsavedSnapshot("open_recovered_snapshot_cleanup");
+        } else {
+            recovered_untitled_snapshot_path_.reset();
+        }
+        if (recovered && !document_path_.has_value())
+            recovered_untitled_snapshot_path_ = recovery_snapshot_path;
+        if (recovered) {
+            last_autosaved_data_ = projectData();
+        }
         statusBar()->showMessage(offline_count == 0
             ? QStringLiteral("Composition opened.")
             : QStringLiteral("Composition opened; %1 media item(s) are offline.")
@@ -820,8 +909,14 @@ void MainWindow::finishOpen(std::uint64_t generation,
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
-    if (confirmReplaceDocument()) event->accept();
-    else event->ignore();
+    if (!confirmReplaceDocument()) {
+        event->ignore();
+        return;
+    }
+    if (autosave_timer_ != nullptr) autosave_timer_->stop();
+    cleanupCurrentUnsavedSnapshots("close_unsaved_recovery_cleanup");
+    cleanupRecoveredUnsavedSnapshot("close_recovered_snapshot_cleanup");
+    event->accept();
 }
 
 void MainWindow::openShortcutSettings()
@@ -839,6 +934,323 @@ void MainWindow::openShortcutSettings()
         QMessageBox::warning(
             this, QStringLiteral("Settings Error"),
             QStringLiteral("Keyboard shortcut preferences could not be saved."));
+    }
+}
+
+void MainWindow::configureAutosaveTimer()
+{
+    if (autosave_timer_ == nullptr) return;
+    autosave_timer_->setInterval(settings::autosaveIntervalSeconds() * 1000);
+    if (settings::autosaveEnabled()) autosave_timer_->start();
+    else autosave_timer_->stop();
+}
+
+void MainWindow::autosaveProject()
+{
+    if (!settings::autosaveEnabled() || !document_ || !documentIsDirty()) return;
+
+    try {
+        auto snapshot = projectData();
+        if (last_autosaved_data_.has_value() &&
+            *last_autosaved_data_ == snapshot) return;
+        if (recovery_store_.containsSnapshotData(
+                snapshot, document_path_.value_or(std::filesystem::path{}))) {
+            last_autosaved_data_ = std::move(snapshot);
+            return;
+        }
+        if (document_path_.has_value()) {
+            recovery_store_.saveSnapshot(
+                snapshot, *document_path_, settings::recoveryRetention());
+        } else {
+            recovery_store_.saveSnapshot(snapshot, settings::recoveryRetention());
+        }
+        last_autosaved_data_ = std::move(snapshot);
+        if (recovered_untitled_snapshot_path_.has_value()) {
+            cleanupRecoveredUnsavedSnapshot("autosave_recovered_snapshot_cleanup");
+        }
+        statusBar()->showMessage(QStringLiteral("Recovery snapshot saved."), 2500);
+    } catch (const persistence::MotionDocumentError& error) {
+        creative_suite::diagnostics::Context context{
+            {"path", pathForLog(error.path())},
+            {"error_code", std::to_string(static_cast<int>(error.code()))}};
+        if (error.systemError().has_value())
+            context.emplace_back("system_error", std::to_string(*error.systemError()));
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Warning,
+            "motion_recovery", "autosave", error.what(), context);
+        statusBar()->showMessage(
+            QStringLiteral("Autosave failed. Check the Motion Studio log."), 5000);
+    } catch (const std::exception& error) {
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Warning,
+            "motion_recovery", "autosave", error.what(),
+            {{"document_path", document_path_.has_value()
+                ? pathForLog(*document_path_) : std::string{}}});
+        statusBar()->showMessage(
+            QStringLiteral("Autosave failed. Check the Motion Studio log."), 5000);
+    }
+}
+
+void MainWindow::cleanupCurrentUnsavedSnapshots(const char* operation) noexcept
+{
+    try {
+        recovery_store_.removeCurrentUnsavedSnapshots();
+    } catch (const persistence::MotionDocumentError& error) {
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Warning,
+            "motion_recovery", operation, error.what(),
+            {{"path", pathForLog(error.path())},
+             {"error_code", std::to_string(static_cast<int>(error.code()))}});
+    } catch (const std::exception& error) {
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Warning,
+            "motion_recovery", operation, error.what(),
+            {{"session_id", recovery_store_.sessionId()}});
+    }
+}
+
+void MainWindow::cleanupRecoveredUnsavedSnapshot(const char* operation) noexcept
+{
+    if (!recovered_untitled_snapshot_path_.has_value()) return;
+    const auto snapshot_path = *recovered_untitled_snapshot_path_;
+    try {
+        const auto current_directory = recovery_store_.recoveryRoot() /
+            "unsaved" / recovery_store_.sessionId();
+        if (snapshot_path.parent_path() == current_directory)
+            recovery_store_.removeSnapshot(snapshot_path);
+        else
+            recovery_store_.removeUnsavedSnapshotsForSession(snapshot_path);
+        recovered_untitled_snapshot_path_.reset();
+    } catch (const persistence::MotionDocumentError& error) {
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Warning,
+            "motion_recovery", operation, error.what(),
+            {{"path", pathForLog(error.path())},
+             {"error_code", std::to_string(static_cast<int>(error.code()))}});
+    } catch (const std::exception& error) {
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Warning,
+            "motion_recovery", operation, error.what(),
+            {{"snapshot_path", pathForLog(snapshot_path)}});
+    }
+}
+
+std::optional<std::filesystem::path> MainWindow::chooseRecoverySnapshot(
+    std::vector<persistence::MotionRecoverySnapshot> snapshots,
+    const QString& project_label)
+{
+    if (snapshots.empty()) return std::nullopt;
+
+    QDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("motion-recovery-choice-dialog"));
+    dialog.setWindowTitle(QStringLiteral("Composition Recovery"));
+    dialog.setModal(true);
+    dialog.resize(620, 360);
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* description = new QLabel(
+        QStringLiteral("Recovery snapshots were found for %1. Restore one or continue without recovery.")
+            .arg(project_label), &dialog);
+    description->setWordWrap(true);
+    auto* list = new QListWidget(&dialog);
+    list->setObjectName(QStringLiteral("motion-recovery-choice-list"));
+    list->setSelectionMode(QAbstractItemView::SingleSelection);
+    const auto append_snapshot = [list](const persistence::MotionRecoverySnapshot& snapshot) {
+        const QFileInfo info(pathForDisplay(snapshot.path));
+        const auto modified = info.lastModified().isValid()
+            ? info.lastModified().toLocalTime().toString(Qt::TextDate)
+            : QStringLiteral("Unknown time");
+        auto* item = new QListWidgetItem(
+            QStringLiteral("%1 — %2").arg(modified, info.fileName()), list);
+        item->setData(Qt::UserRole, pathForDisplay(snapshot.path));
+    };
+    for (const auto& snapshot : snapshots) append_snapshot(snapshot);
+    if (list->count() > 0) list->setCurrentRow(0);
+
+    auto* buttons = new QHBoxLayout();
+    auto* restore = new QPushButton(QStringLiteral("Restore"), &dialog);
+    restore->setObjectName(QStringLiteral("motion-recovery-choice-restore"));
+    auto* remove = new QPushButton(QStringLiteral("Delete"), &dialog);
+    remove->setObjectName(QStringLiteral("motion-recovery-choice-delete"));
+    auto* ignore = new QPushButton(QStringLiteral("Ignore"), &dialog);
+    ignore->setObjectName(QStringLiteral("motion-recovery-choice-ignore"));
+    buttons->addWidget(restore);
+    buttons->addWidget(remove);
+    buttons->addStretch();
+    buttons->addWidget(ignore);
+    layout->addWidget(description);
+    layout->addWidget(list, 1);
+    layout->addLayout(buttons);
+
+    std::optional<std::filesystem::path> selected_path;
+    const auto current_path = [list]() -> std::filesystem::path {
+        const auto* item = list->currentItem();
+        return item == nullptr ? std::filesystem::path{}
+                               : pathFromQString(item->data(Qt::UserRole).toString());
+    };
+    connect(restore, &QPushButton::clicked, &dialog, [&] {
+        const auto path = current_path();
+        if (path.empty()) return;
+        selected_path = path;
+        dialog.accept();
+    });
+    connect(remove, &QPushButton::clicked, &dialog, [&] {
+        auto* item = list->currentItem();
+        if (item == nullptr) return;
+        if (QMessageBox::question(
+                &dialog, QStringLiteral("Delete Recovery Snapshot"),
+                QStringLiteral("Delete the selected recovery snapshot?"),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+            return;
+        const auto path = current_path();
+        try {
+            recovery_store_.removeSnapshot(path);
+            delete list->takeItem(list->row(item));
+            if (list->count() > 0) list->setCurrentRow(0);
+        } catch (const persistence::MotionDocumentError& error) {
+            creative_suite::diagnostics::Logger::instance().log(
+                creative_suite::diagnostics::Level::Warning,
+                "motion_recovery", "delete_snapshot", error.what(),
+                {{"path", pathForLog(path)},
+                 {"error_code", std::to_string(static_cast<int>(error.code()))},
+                 {"system_error", error.systemError().has_value()
+                     ? std::to_string(*error.systemError()) : std::string{}}});
+            statusBar()->showMessage(
+                QStringLiteral("Recovery snapshot could not be deleted."), 5000);
+        }
+    });
+    connect(ignore, &QPushButton::clicked, &dialog, &QDialog::reject);
+    connect(list, &QListWidget::itemDoubleClicked, &dialog, [&] {
+        const auto path = current_path();
+        if (path.empty()) return;
+        selected_path = path;
+        dialog.accept();
+    });
+    connect(list, &QListWidget::itemSelectionChanged, &dialog, [list, restore, remove] {
+        const bool selected = list->currentItem() != nullptr;
+        restore->setEnabled(selected);
+        remove->setEnabled(selected);
+    });
+    restore->setEnabled(list->currentItem() != nullptr);
+    remove->setEnabled(list->currentItem() != nullptr);
+    static_cast<void>(dialog.exec());
+    return selected_path;
+}
+
+void MainWindow::maybeOfferUnsavedRecovery()
+{
+    auto snapshots = recovery_store_.unsavedSnapshots();
+    if (snapshots.empty()) return;
+    const auto selected = chooseRecoverySnapshot(
+        std::move(snapshots), QStringLiteral("an untitled composition"));
+    if (selected.has_value()) restoreRecoverySnapshot(*selected);
+}
+
+void MainWindow::restoreRecoverySnapshot(
+    const std::filesystem::path& snapshot_path)
+{
+    try {
+        const auto recovery = persistence::MotionDocumentStore::loadRecovery(snapshot_path);
+        stageOpenProject(recovery.target_document_path, recovery.document,
+                         true, snapshot_path);
+    } catch (const persistence::MotionDocumentError& error) {
+        reportDocumentError("restore_recovery", snapshot_path, error,
+                            static_cast<int>(error.code()),
+                            error.systemError().value_or(-1));
+    } catch (const std::exception& error) {
+        reportDocumentError("restore_recovery", snapshot_path, error);
+    }
+}
+
+void MainWindow::refreshAutosaveRecoveryDialog(
+    AutosaveRecoveryDialog& dialog) const
+{
+    std::vector<persistence::MotionRecoverySnapshot> snapshots;
+    if (document_path_.has_value()) {
+        snapshots = recovery_store_.validSnapshotsForProject(*document_path_);
+    }
+    auto unsaved = recovery_store_.unsavedSnapshots();
+    snapshots.insert(snapshots.end(),
+                     std::make_move_iterator(unsaved.begin()),
+                     std::make_move_iterator(unsaved.end()));
+    std::sort(snapshots.begin(), snapshots.end(),
+        [](const auto& left, const auto& right) {
+            if (left.modified_time != right.modified_time)
+                return left.modified_time > right.modified_time;
+            return left.path > right.path;
+        });
+
+    std::vector<AutosaveSnapshotRow> rows;
+    rows.reserve(snapshots.size());
+    for (const auto& snapshot : snapshots) {
+        const QFileInfo file_info(pathForDisplay(snapshot.path));
+        const bool has_project = !snapshot.target_document_path.empty();
+        const QFileInfo project_info(pathForDisplay(snapshot.target_document_path));
+        const auto modified = file_info.lastModified().isValid()
+            ? file_info.lastModified().toLocalTime().toString(Qt::TextDate)
+            : QStringLiteral("Unknown time");
+        rows.push_back({
+            has_project ? project_info.fileName() : QStringLiteral("Untitled composition"),
+            has_project ? QStringLiteral("Saved project") : QStringLiteral("Untitled project"),
+            modified,
+            file_info.fileName(),
+            pathForDisplay(snapshot.path),
+            has_project ? pathForDisplay(snapshot.target_document_path) : QString{},
+            pathForDisplay(snapshot.path.parent_path())});
+    }
+    dialog.setSnapshots(rows);
+}
+
+void MainWindow::openAutosaveRecoverySettings()
+{
+    AutosaveRecoveryDialog dialog(settings::autosaveEnabled(),
+                                  settings::autosaveIntervalSeconds(),
+                                  settings::recoveryRetention(), this);
+    refreshAutosaveRecoveryDialog(dialog);
+    connect(&dialog, &AutosaveRecoveryDialog::autosaveSettingsChanged,
+            this, [this](bool enabled, int interval, int retention) {
+        settings::setAutosaveEnabled(enabled);
+        settings::setAutosaveIntervalSeconds(interval);
+        settings::setRecoveryRetention(retention);
+        configureAutosaveTimer();
+    });
+    connect(&dialog, &AutosaveRecoveryDialog::refreshRequested,
+            this, [this, &dialog] { refreshAutosaveRecoveryDialog(dialog); });
+    connect(&dialog, &AutosaveRecoveryDialog::deleteSnapshotRequested,
+            this, [this, &dialog](const QString& encoded_path) {
+        if (QMessageBox::question(
+                this, QStringLiteral("Delete Recovery Snapshot"),
+                QStringLiteral("Delete the selected recovery snapshot?"),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+            return;
+        const auto path = pathFromQString(encoded_path);
+        try {
+            recovery_store_.removeSnapshot(path);
+            refreshAutosaveRecoveryDialog(dialog);
+        } catch (const persistence::MotionDocumentError& error) {
+            creative_suite::diagnostics::Logger::instance().log(
+                creative_suite::diagnostics::Level::Warning,
+                "motion_recovery", "delete_snapshot", error.what(),
+                {{"path", pathForLog(path)},
+                 {"error_code", std::to_string(static_cast<int>(error.code()))}});
+            statusBar()->showMessage(
+                QStringLiteral("Recovery snapshot could not be deleted."), 5000);
+        }
+    });
+    connect(&dialog, &AutosaveRecoveryDialog::openFolderRequested,
+            this, [this](const QString& encoded_folder) {
+        if (QDesktopServices::openUrl(QUrl::fromLocalFile(encoded_folder))) return;
+        creative_suite::diagnostics::Logger::instance().log(
+            creative_suite::diagnostics::Level::Warning,
+            "motion_recovery", "open_snapshot_folder",
+            "The recovery snapshot folder could not be opened.",
+            {{"path", pathForLog(pathFromQString(encoded_folder))}});
+        statusBar()->showMessage(
+            QStringLiteral("The recovery folder could not be opened."), 5000);
+    });
+
+    if (dialog.exec() == AutosaveRecoveryDialog::restore_snapshot_result) {
+        const auto path = pathFromQString(dialog.selectedSnapshotPath());
+        if (!path.empty()) restoreRecoverySnapshot(path);
     }
 }
 

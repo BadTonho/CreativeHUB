@@ -144,7 +144,11 @@ the Motion Studio implementation choices are finalized.
 - [x] Add bounded Undo/Redo for composition edits, including layer timing,
   order, visibility, transforms, and keyframes. Media Pool operations remain
   outside the history.
-- [ ] Add autosave and recovery for the first supported composition workflow.
+- [x] Add configurable autosave and recovery snapshots for the composition and
+  Media Pool. Saved-project snapshots use a versioned wrapper beside the
+  `.motion` file; untitled snapshots are separated by session under the
+  Motion Studio app-data directory. Restore stages media and keeps the
+  recovered document dirty. The native `.motion` v1 schema is unchanged.
 - [-] Extend actionable local error logging and automated coverage for the
   remaining document, rendering, and application boundaries. Save/open failures
   are logged; export failures are not implemented yet.
@@ -170,7 +174,11 @@ external paths, malformed/future versions, validation failures, and preserving
 an existing file after a rejected save. Offscreen UI tests cover Save As, Open,
 dirty title state, Save/Discard/Cancel replacement and close decisions, failed
 Open preserving the current document, navigation resets, media-pool changes,
-and missing assets reopening offline.
+and missing assets reopening offline. Autosave and recovery tests cover dirty
+documents, duplicate-state skipping, snapshot retention, invalid snapshots,
+startup recovery, saved-project recovery on Open, Settings management, and
+retaining the original Save target. The recovery wrapper is separate from the
+native `.motion` v1 schema.
 
 Frame rates are stored as exact rational values from the supported common-rate
 list. Creating a composition does not ask for or set its duration. The ruler
@@ -281,8 +289,13 @@ extends the navigation range for a long clip; open **Settings > Keyboard
 Shortcuts**, change Undo and Redo assignments, confirm duplicate assignments are rejected,
 check that Cancel discards edits and OK persists them, clear an assignment,
 restore defaults with **Reset All**, and confirm timeline commands are disabled
-when unavailable; then close the application. Richer curves and interpolation,
-autosave, recovery, and export remain open.
+when unavailable; configure autosave interval and retention; create an untitled
+composition, allow a snapshot, close the app unexpectedly, then restore it on
+startup; open a saved project with a newer recovery snapshot and test Restore
+and Ignore; inspect, refresh, delete, restore, and open the folder for snapshots
+in **Settings > Autosave & Recovery**; verify missing sources restore offline
+and autosave does not overwrite the `.motion` file; then close the application.
+Richer curves and interpolation and export remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.

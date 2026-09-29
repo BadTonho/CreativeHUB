@@ -29,6 +29,17 @@ target_compile_features(creative-suite-motion-editor-persistence-tests PRIVATE c
 add_test(NAME creative-suite-motion-editor-persistence
     COMMAND creative-suite-motion-editor-persistence-tests)
 
+add_executable(creative-suite-motion-editor-recovery-tests
+    motion_recovery_store_test.cpp
+)
+target_link_libraries(creative-suite-motion-editor-recovery-tests PRIVATE
+    creative-suite-motion-editor-core
+    Qt6::Core
+)
+target_compile_features(creative-suite-motion-editor-recovery-tests PRIVATE cxx_std_20)
+add_test(NAME creative-suite-motion-editor-recovery
+    COMMAND creative-suite-motion-editor-recovery-tests)
+
 add_executable(creative-suite-motion-editor-preview-tests
     preview_renderer_test.cpp
 )
@@ -78,6 +89,7 @@ if(MSVC)
     target_compile_options(creative-suite-motion-editor-document-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-history-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-persistence-tests PRIVATE /W4 /permissive-)
+    target_compile_options(creative-suite-motion-editor-recovery-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-preview-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-startup-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE /W4 /permissive-)
@@ -85,6 +97,7 @@ else()
     target_compile_options(creative-suite-motion-editor-document-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-history-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-persistence-tests PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(creative-suite-motion-editor-recovery-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-preview-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-startup-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE -Wall -Wextra -Wpedantic)

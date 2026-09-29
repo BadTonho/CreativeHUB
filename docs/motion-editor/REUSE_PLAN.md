@@ -18,6 +18,30 @@ playback controls, export jobs, and user interface. Its existing
 application APIs remain behind adapters when a lower-level capability is
 shared.
 
+### Autosave and recovery
+
+Motion Studio owns `MotionRecoveryStore`, its versioned recovery wrapper, the
+autosave preferences, and the recovery-management dialog. The store reuses the
+native document serializer and its atomic `QSaveFile` validation while keeping
+the `.motion` v1 schema unchanged. A recovery payload stores the complete
+composition and Media Pool plus the original document path and session ID; it
+does not store decoded caches, playhead, zoom, selection, or Undo/Redo history.
+
+Saved-project snapshots live beside the document in `<document>.autosave` and
+serialize relative media paths against the original project directory.
+Untitled snapshots live under the Motion Studio app-data directory, separated
+by session. Autosave defaults to enabled every 30 seconds and keeps five
+snapshots; the interval is configurable from 10 to 300 seconds and retention
+from 5 to 20. Only dirty documents are written, unchanged snapshot data is
+skipped, and failures are logged without repeated dialogs. Startup offers
+untitled recovery; opening a saved project offers snapshots newer than and
+different from that file. Settings lists open-project and untitled snapshots
+with refresh, restore, delete, and open-folder actions. Restore stages media,
+leaves missing sources offline, preserves a saved project's Save target, and
+marks the recovered state dirty. These workflows remain Motion Studio-owned;
+no Video Editor persistence or shared-library API is reused. Manual Windows
+validation remains pending; the detailed steps are in [ROADMAP.md](ROADMAP.md).
+
 ### Timeline zoom interaction
 
 Motion Studio adapts the Video Editor's discrete zoom levels, playhead-anchored
@@ -133,8 +157,10 @@ validation.
   Motion Studio MVP scope; revisit them only if that scope changes.
 - Composition documents, timelines, editing history, autosave, recovery, and
   export remain Motion Studio responsibilities. Manual save/reopen uses its
-  own versioned JSON `.motion` format. Bounded Undo/Redo is composition-owned;
-  autosave and recovery remain open. Timeline rows display front-to-back while the document stores layers
+  own versioned JSON `.motion` format. Bounded Undo/Redo is composition-owned.
+  Autosave and recovery use a separate versioned wrapper around the full
+  document and Media Pool; `.motion` v1 and other applications' formats remain
+  unchanged. Timeline rows display front-to-back while the document stores layers
   back-to-front. Row drops insert
   above the target, and empty-space drops insert at the top. The eight-pixel
   snap tolerance uses frame zero and other layer starts and ends. Still images
@@ -207,7 +233,10 @@ provisional C++ and Qt 6 choices. Manual Save, Save As, and Open persist the
 composition and full Media Pool in a versioned `.motion` document. Media files
 remain external references; caches are rebuilt on open. Composition Undo/Redo
 is implemented in the Motion Studio application; Media Pool changes remain
-outside its history. Autosave, recovery, and export remain pending.
+outside its history. Autosave and recovery use Motion Studio's versioned
+wrapper, configurable timer, per-session untitled storage, saved-project
+sidecars, and recovery-management dialog. The native `.motion` v1 format stays
+unchanged. Export remains pending.
 The Motion Studio timeline consumes the shared media, playback, composition,
 and diagnostics libraries directly without linking Video Editor application
 types or targets. Layer insertion, timing, transforms, and preview behavior

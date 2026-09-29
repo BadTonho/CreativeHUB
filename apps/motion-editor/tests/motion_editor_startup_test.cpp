@@ -3,14 +3,25 @@
 #include <QApplication>
 #include <QLabel>
 #include <QPushButton>
+#include <QTemporaryDir>
 
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
+#include <string>
 
 int main(int argc, char* argv[])
 {
     QApplication application(argc, argv);
-    motion::ui::MainWindow window;
+    QTemporaryDir recovery_directory;
+    if (!recovery_directory.isValid()) return EXIT_FAILURE;
+    const auto encoded_recovery = recovery_directory.path().toUtf8();
+    const auto* recovery_data = reinterpret_cast<const char8_t*>(encoded_recovery.constData());
+    motion::ui::MainWindow window(
+        nullptr,
+        std::filesystem::path(std::u8string(
+            recovery_data, recovery_data + encoded_recovery.size())),
+        "startup-test-session");
     window.show();
     application.processEvents();
 

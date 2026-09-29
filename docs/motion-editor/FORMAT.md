@@ -73,6 +73,37 @@ range, or Time/Frames display selection. On Open, the playhead resets to frame
 0, display mode to Time, zoom to 100%, navigation range to its initial
 one-hour range, and Loop to off.
 
+## Recovery snapshot wrapper
+
+Autosave and recovery do not modify the native `.motion` document. A separate
+UTF-8 JSON wrapper uses format identifier
+`creative-suite.motion-studio-recovery` and wrapper version `1`. Its fields are
+`format`, `version`, `target_document_path`, `session_id`, and `document`. The
+`document` value uses the same validated payload and version 1 schema described
+above; preview caches and Undo/Redo history are not included. The wrapper and
+its nested document are written atomically with `QSaveFile`.
+
+For a saved project, snapshots are stored in the sibling directory
+`<document path>.autosave`. The wrapper records the absolute target document
+path, and nested media paths are encoded and resolved relative to that original
+project directory even though the snapshot itself is in another directory.
+Other paths remain absolute. Untitled snapshots are stored under
+`QStandardPaths::AppLocalDataLocation/autosave/unsaved/<session id>`; their
+wrapper has an empty target path. Session directories keep separate editing
+sessions from overwriting one another.
+
+Autosave is enabled by default, runs every 30 seconds, and retains five
+snapshots. Settings allow intervals from 10 to 300 seconds and retention from
+5 to 20 snapshots. Only dirty documents are saved, and an unchanged state
+already present in recovery storage is skipped. Corrupt or unsupported
+snapshots are logged and ignored. Startup offers untitled recovery. When a
+saved project is opened, recovery offers only snapshots newer than and
+different from the saved file. Restore validates and stages the document and
+media before replacing the current composition; missing sources remain offline.
+A restored document is dirty, and a saved project retains its original Save
+target. Normal saves do not delete saved-project snapshots; retention and the
+recovery manager control their lifetime.
+
 ## Save and Open behavior
 
 Save As writes a `.motion` file using `QSaveFile` atomic commit. Save writes to
@@ -95,7 +126,8 @@ These are implementation safeguards, not product targets.
 
 ## Deferred document features
 
-Serialized Undo/Redo history, autosave, recovery, export settings, media
-relinking UI, migrations for any future schema revisions, and cross-application
-handoff are not part of version 1. Undo/Redo exists only in the current editing
-session. `.csp` and `.cimg` are unchanged.
+Serialized Undo/Redo history, export settings, media relinking UI, migrations
+for any future schema revisions, and cross-application handoff are not part of
+version 1. Undo/Redo exists only in the current editing session. Autosave and
+recovery metadata are stored in the separate wrapper described above.
+`.csp` and `.cimg` are unchanged.
