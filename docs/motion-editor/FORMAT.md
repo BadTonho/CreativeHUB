@@ -1,7 +1,7 @@
 # Motion Studio Native Document Format
 
 **Status:** provisional implementation contract. The `.motion` extension and
-version 1 schema may change before a stable release. This format is separate
+version 2 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.
 
 ## File identity and versioning
@@ -11,24 +11,27 @@ Motion Studio documents are UTF-8 JSON objects with these root fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite.motion-studio`. |
-| `version` | integer | Current schema version is `1`. |
+| `version` | integer | Current schema version is `2`. |
 | `composition` | object | Canvas size and exact rational frame rate. |
 | `media_pool` | object | All bins and media entries, including unused entries. |
 | `layers` | array | Ordered layers in back-to-front composition order. |
 
-Version 1 is the first supported schema, so there are no older versions to
-migrate yet. Motion Studio rejects malformed data, an unknown format
-identifier, invalid values, and unsupported future versions before applying
-the file. A failed Open leaves the current composition intact. A future-version
-file is never rewritten by Open.
+Motion Studio reads versions 1 and 2. Version 1 text and shape layers had no
+typed content, so they open with the current default text or rectangle content
+for their canvas. Saving a version 1 document writes it as version 2. Motion
+Studio rejects malformed data, an unknown format identifier, invalid values,
+and unsupported future versions before applying the file. A failed Open leaves
+the current composition intact. A future-version file is never rewritten by
+Open.
 
 ## Serialized values
 
 `composition.canvas` contains positive integer `width` and `height` values in
 pixels. `composition.frame_rate` contains decimal string fields `numerator` and
-`denominator`, preserving the exact rational rate. Version 1 accepts the
-composition rates currently offered by Motion Studio: 24000/1001, 24, 25,
-30000/1001, 30, 48, 50, 60000/1001, 60, 100, 120000/1001, 120, and 240 fps.
+`denominator`, preserving the exact rational rate. Both supported versions
+accept the composition rates currently offered by Motion Studio: 24000/1001,
+24, 25, 30000/1001, 30, 48, 50, 60000/1001, 60, 100, 120000/1001, 120, and
+240 fps.
 
 Each `media_pool.items` entry stores a source `path`, `kind` (`image` or
 `video`), user-facing `name`, and hierarchical `bin` path. The `bins` array
@@ -45,12 +48,30 @@ Each `layers` entry stores:
 - the source frame rate, visibility, base 2D transform, and stored transform
   keyframes for position X/Y, scale, rotation, and opacity.
 
+Version 2 adds typed content to native Text and Shape layers. A Text layer has
+a `text_content` object with UTF-8 `text` and `font_family`, integer
+`font_size_pixels`, RGBA byte-array `color`, `alignment` (`left`, `center`, or
+`right`), and integer `box_width` and `box_height`. A Shape layer has a
+`shape_content` object with `primitive` (`rectangle` or `ellipse`), integer
+`width` and `height`, RGBA byte-array `fill_color` and `stroke_color`, and
+integer `stroke_width_pixels`. Text boxes and shape dimensions are measured in
+canvas pixels before layer transforms. A zero stroke width disables the shape
+stroke. Color channels are integers from 0 through 255, including alpha.
+
+New Text layers default to `Text`, Sans Serif, 48 pixels, centered white text,
+and a word-wrapped box at 80% of canvas width by 50% of canvas height. New
+Rectangle and Ellipse layers default to one-quarter canvas width and height,
+with an opaque `#FFB736` fill and no stroke. New content layers start at the
+playhead and last five seconds, rounded up to the next composition frame using
+the exact rational frame rate. Text and shape content is static; the existing
+five transform properties and their keyframes apply to these layers.
+
 Frame counts and layer IDs are strings so JSON number precision cannot change
 64-bit values. Keyframe frame numbers are local to their layer/property and
 are stored as decimal strings. Keyframes must be nonnegative, strictly
-increasing, and valid for their transform property. Version 1 validates layer
-IDs, timing arithmetic, media references, transforms, canvas dimensions, and
-the exact supported frame rate before saving or loading.
+increasing, and valid for their transform property. Both supported versions
+validate layer IDs, timing arithmetic, media references, transforms, canvas
+dimensions, and the exact supported frame rate before saving or loading.
 
 ## Media paths and caches
 
@@ -79,9 +100,10 @@ Autosave and recovery do not modify the native `.motion` document. A separate
 UTF-8 JSON wrapper uses format identifier
 `creative-suite.motion-studio-recovery` and wrapper version `1`. Its fields are
 `format`, `version`, `target_document_path`, `session_id`, and `document`. The
-`document` value uses the same validated payload and version 1 schema described
-above; preview caches and Undo/Redo history are not included. The wrapper and
-its nested document are written atomically with `QSaveFile`.
+`document` value uses the same validated payload described above and may be
+version 1 or 2; preview caches and Undo/Redo history are not included. The
+wrapper remains version 1 and its nested document is written atomically with
+`QSaveFile`.
 
 For a saved project, snapshots are stored in the sibling directory
 `<document path>.autosave`. The wrapper records the absolute target document
@@ -120,14 +142,14 @@ the selected document and attempts to restore media before asking what to do
 with the current dirty document. Cancelling or failing either operation keeps
 the current composition and pool.
 
-Version 1 currently limits documents to 128 MiB, 100,000 layers, media entries,
+The current reader and writer limit documents to 128 MiB, 100,000 layers, media entries,
 or bins, 2,000,000 total keyframes, and 32,768 UTF-8 bytes per stored string.
 These are implementation safeguards, not product targets.
 
 ## Deferred document features
 
 Serialized Undo/Redo history, export settings, media relinking UI, migrations
-for any future schema revisions, and cross-application handoff are not part of
-version 1. Undo/Redo exists only in the current editing session. Autosave and
+for future schema revisions, and cross-application handoff are not part of
+version 2. Undo/Redo exists only in the current editing session. Autosave and
 recovery metadata are stored in the separate wrapper described above.
 `.csp` and `.cimg` are unchanged.

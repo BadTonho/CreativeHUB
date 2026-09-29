@@ -31,6 +31,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/shortcut_settings_dialog.h
     src/ui/preview_renderer.cpp
     src/ui/preview_renderer.h
+    src/ui/layer_content_renderer.cpp
+    src/ui/layer_content_renderer.h
     src/ui/timeline_navigator.cpp
     src/ui/timeline_navigator.h
     src/ui/timeline_navigator_math.h

@@ -1,8 +1,9 @@
 #include "ui/preview_renderer.h"
+#include "ui/layer_content_renderer.h"
 
 #include <creative_suite/diagnostics/logger.h>
 
-#include <QCoreApplication>
+#include <QGuiApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QTemporaryDir>
@@ -11,6 +12,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -82,12 +84,104 @@ motion::ui::PreviewRequest imageRequest(
 
 int main(int argc, char* argv[])
 {
-    QCoreApplication application(argc, argv);
+    QGuiApplication application(argc, argv);
     QTemporaryDir temporary;
     require(temporary.isValid(), "temporary preview log directory is available");
     auto& logger = creative_suite::diagnostics::Logger::instance();
     require(logger.initialize(filePath(temporary.path())),
             "preview errors can be logged to a temporary application directory");
+
+    using motion::model::ShapeKind;
+    using motion::model::ShapeLayerContent;
+    using motion::model::TextAlignment;
+    using motion::model::TextLayerContent;
+
+    ShapeLayerContent rectangle;
+    rectangle.width = 24;
+    rectangle.height = 16;
+    rectangle.fill_color = {20, 40, 60, 128};
+    rectangle.stroke_color = {240, 30, 10, 255};
+    rectangle.stroke_width_pixels = 2;
+    const auto rectangle_frame = motion::ui::rasterizeLayerContent(rectangle);
+    require(rectangle_frame.has_value() && rectangle_frame->width == 24 &&
+                rectangle_frame->height == 16,
+            "rectangle content rasterizes at its native pixel dimensions");
+    const auto rectangle_center = static_cast<std::size_t>(
+        8 * rectangle_frame->stride + 12 * 4);
+    require(rectangle_frame->rgba_pixels[rectangle_center] == 20 &&
+                rectangle_frame->rgba_pixels[rectangle_center + 1] == 40 &&
+                rectangle_frame->rgba_pixels[rectangle_center + 2] == 60 &&
+                rectangle_frame->rgba_pixels[rectangle_center + 3] == 128,
+            "rectangle fill preserves straight RGBA alpha");
+    const auto rectangle_stroke = static_cast<std::size_t>(
+        1 * rectangle_frame->stride + 12 * 4);
+    require(rectangle_frame->rgba_pixels[rectangle_stroke] >
+                rectangle_frame->rgba_pixels[rectangle_stroke + 1] &&
+                rectangle_frame->rgba_pixels[rectangle_stroke + 3] > 0,
+            "rectangle outline is rasterized over the fill");
+
+    ShapeLayerContent ellipse = rectangle;
+    ellipse.shape = ShapeKind::Ellipse;
+    ellipse.fill_color = {30, 170, 230, 255};
+    ellipse.stroke_width_pixels = 0;
+    const auto ellipse_frame = motion::ui::rasterizeLayerContent(ellipse);
+    require(ellipse_frame.has_value() && ellipse_frame->rgba_pixels[3] == 0,
+            "ellipse corners retain transparent RGBA pixels");
+    const auto ellipse_center = static_cast<std::size_t>(
+        8 * ellipse_frame->stride + 12 * 4);
+    require(ellipse_frame->rgba_pixels[ellipse_center] == 30 &&
+                ellipse_frame->rgba_pixels[ellipse_center + 1] == 170 &&
+                ellipse_frame->rgba_pixels[ellipse_center + 2] == 230 &&
+                ellipse_frame->rgba_pixels[ellipse_center + 3] == 255,
+            "ellipse fill is rasterized into the transparent frame");
+
+    TextLayerContent text;
+    text.text = "Motion \xE2\x9C\xA8\nStudio";
+    text.font_size_pixels = 25;
+    text.box_width = 180;
+    text.box_height = 90;
+    text.color = {230, 210, 20, 128};
+    text.alignment = TextAlignment::Left;
+    const auto text_frame = motion::ui::rasterizeLayerContent(text);
+    require(text_frame.has_value() && text_frame->width == text.box_width &&
+                text_frame->height == text.box_height,
+            "Unicode multiline text rasterizes in the editable box");
+    const auto alpha_bounds = [](const creative_suite::media::RgbaFrame& frame) {
+        int left = frame.width;
+        int top = frame.height;
+        int right = -1;
+        int bottom = -1;
+        for (int y = 0; y < frame.height; ++y) {
+            for (int x = 0; x < frame.width; ++x) {
+                const auto offset = static_cast<std::size_t>(y) * frame.stride +
+                    static_cast<std::size_t>(x) * 4 + 3;
+                if (frame.rgba_pixels[offset] > 8) {
+                    left = std::min(left, x);
+                    top = std::min(top, y);
+                    right = std::max(right, x);
+                    bottom = std::max(bottom, y);
+                }
+            }
+        }
+        return std::array<int, 4>{left, top, right, bottom};
+    };
+    const auto left_text_bounds = alpha_bounds(*text_frame);
+    require(left_text_bounds[2] >= left_text_bounds[0] &&
+                left_text_bounds[3] >= left_text_bounds[1],
+            "text rasterization produces visible antialiased glyph pixels");
+    for (int y = 0; y < text_frame->height; ++y) {
+        for (int x = 0; x < text_frame->width; ++x) {
+            const auto offset = static_cast<std::size_t>(y) * text_frame->stride +
+                static_cast<std::size_t>(x) * 4;
+            require(text_frame->rgba_pixels[offset + 3] <= 128,
+                    "text rasterization preserves the selected alpha ceiling");
+        }
+    }
+    text.alignment = TextAlignment::Right;
+    const auto right_text_frame = motion::ui::rasterizeLayerContent(text);
+    require(right_text_frame.has_value() &&
+                alpha_bounds(*right_text_frame)[0] > left_text_bounds[0],
+            "text alignment moves glyphs inside the content box");
 
     QObject result_receiver;
     motion::ui::PreviewRenderer* renderer_ptr = nullptr;
@@ -122,6 +216,50 @@ int main(int argc, char* argv[])
                 applied_frame->rgba_pixels[center_offset + 1] == 220 &&
                 applied_frame->rgba_pixels[center_offset + 2] == 30,
             "an older queued seek cannot replace the most recent preview result");
+
+    motion::ui::PreviewLayerSnapshot rectangle_layer;
+    rectangle_layer.id = 600;
+    rectangle_layer.kind = motion::model::LayerKind::Shape;
+    motion::model::ShapeLayerContent preview_shape;
+    preview_shape.width = 25;
+    preview_shape.height = 25;
+    preview_shape.fill_color = {245, 35, 15, 255};
+    rectangle_layer.content = preview_shape;
+    const auto design_generation = renderer.submit(
+        motion::ui::PreviewRequest{{100, 100}, {24, 1}, {rectangle_layer}});
+    require(waitFor([&] { return applied_generation == design_generation; }) &&
+                applied_frame != nullptr,
+            "native rectangle layers render through the preview worker");
+    int shape_left = 100;
+    int shape_top = 100;
+    int shape_right = -1;
+    int shape_bottom = -1;
+    for (int y = 0; y < applied_frame->height; ++y) {
+        for (int x = 0; x < applied_frame->width; ++x) {
+            const auto offset = static_cast<std::size_t>(y) * applied_frame->stride +
+                static_cast<std::size_t>(x) * 4;
+            if (applied_frame->rgba_pixels[offset] > 100) {
+                shape_left = std::min(shape_left, x);
+                shape_top = std::min(shape_top, y);
+                shape_right = std::max(shape_right, x);
+                shape_bottom = std::max(shape_bottom, y);
+            }
+        }
+    }
+    require(shape_left >= 35 && shape_left <= 40 && shape_right >= 59 && shape_right <= 64 &&
+                shape_top >= 35 && shape_bottom <= 64,
+            "pixel-sized shape geometry is preserved through compositor aspect fitting");
+    preview_shape.fill_color = {15, 45, 240, 255};
+    rectangle_layer.content = preview_shape;
+    const auto changed_shape_generation = renderer.submit(
+        motion::ui::PreviewRequest{{100, 100}, {24, 1}, {rectangle_layer}});
+    const auto changed_shape_center = static_cast<std::size_t>(
+        50 * applied_frame->stride + 50 * 4);
+    require(waitFor([&] { return applied_generation == changed_shape_generation; }) &&
+                applied_frame != nullptr &&
+                applied_frame->rgba_pixels[changed_shape_center] == 15 &&
+                applied_frame->rgba_pixels[changed_shape_center + 2] == 240,
+            "shape content edits replace cached raster frames");
 
     motion::ui::PreviewLayerSnapshot unavailable_video;
     unavailable_video.kind = motion::model::LayerKind::Video;

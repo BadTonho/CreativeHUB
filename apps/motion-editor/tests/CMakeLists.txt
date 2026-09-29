@@ -51,6 +51,9 @@ target_compile_features(creative-suite-motion-editor-preview-tests PRIVATE cxx_s
 add_test(NAME creative-suite-motion-editor-preview
     COMMAND creative-suite-motion-editor-preview-tests)
 creative_suite_deploy_media_runtime(creative-suite-motion-editor-preview-tests)
+set_tests_properties(creative-suite-motion-editor-preview PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
 
 add_executable(creative-suite-motion-editor-startup-tests
     motion_editor_startup_test.cpp
@@ -112,6 +115,7 @@ if(WIN32)
     find_program(QT_MOTION_TEST_DEPLOY_TOOL windeployqt HINTS "${QT_MOTION_TEST_BIN_DIR}" REQUIRED)
 
     foreach(TEST_TARGET IN ITEMS
+            creative-suite-motion-editor-preview-tests
             creative-suite-motion-editor-startup-tests
             creative-suite-motion-editor-ui-tests)
         add_custom_command(TARGET ${TEST_TARGET} POST_BUILD

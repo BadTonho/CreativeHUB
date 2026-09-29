@@ -2,6 +2,7 @@
 
 #include <creative_suite/media/media_library.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -95,6 +96,70 @@ int main()
                 AddMediaLayerResult::Added &&
                 fractional_rate_document.layers().front().duration_frames == 150,
             "fractional still duration rounds up using exact rational composition timing");
+
+    CompositionDocument design_document(640, 360, FrameRate{30000, 1001});
+    LayerId text_layer_id = 0;
+    require(design_document.addContentLayer(LayerKind::Text, "Text 1", 27, &text_layer_id),
+            "a text layer can be created at the current composition frame");
+    const auto& new_text_layer = design_document.layers().front();
+    const auto default_text = defaultTextLayerContent({640, 360});
+    require(new_text_layer.timeline_start_frame == 27 &&
+                new_text_layer.duration_frames == 150 &&
+                new_text_layer.transform.position_x == 0.5 &&
+                new_text_layer.transform.position_y == 0.5 &&
+                std::get<TextLayerContent>(new_text_layer.content) == default_text,
+            "text layers start centered with documented content and five-second duration");
+    auto edited_text = default_text;
+    edited_text.text = "Hello\nMotion Studio";
+    edited_text.font_size_pixels = 72;
+    edited_text.alignment = TextAlignment::Right;
+    require(design_document.setTextLayerContent(text_layer_id, edited_text) &&
+                std::get<TextLayerContent>(design_document.layers().front().content) == edited_text,
+            "valid text content and appearance changes are retained");
+    auto invalid_text = edited_text;
+    invalid_text.font_size_pixels = 0;
+    require(!design_document.setTextLayerContent(text_layer_id, invalid_text) &&
+                std::get<TextLayerContent>(design_document.layers().front().content) == edited_text,
+            "invalid text properties are rejected without changing the old content");
+    invalid_text = edited_text;
+    invalid_text.font_family.clear();
+    require(!design_document.setTextLayerContent(text_layer_id, invalid_text),
+            "text layers require a non-empty font family");
+
+    LayerId ellipse_layer_id = 0;
+    require(design_document.addContentLayer(
+                LayerKind::Shape, "Ellipse 1", 41, &ellipse_layer_id),
+            "a shape layer can be created at the current frame");
+    auto ellipse = defaultShapeLayerContent({640, 360}, ShapeKind::Ellipse);
+    require(design_document.setShapeLayerContent(ellipse_layer_id, ellipse),
+            "ellipse content with the quarter-canvas default size is accepted");
+    ellipse.stroke_width_pixels = 8;
+    ellipse.fill_color = {25, 50, 75, 128};
+    require(design_document.setShapeLayerContent(ellipse_layer_id, ellipse) &&
+                std::get<ShapeLayerContent>(design_document.layers().back().content) == ellipse,
+            "shape fill, alpha, and stroke properties are retained");
+    auto invalid_shape = ellipse;
+    invalid_shape.width = 0;
+    require(!design_document.setShapeLayerContent(ellipse_layer_id, invalid_shape) &&
+                std::get<ShapeLayerContent>(design_document.layers().back().content) == ellipse,
+            "non-positive shape dimensions are rejected without changing the old content");
+    invalid_shape = ellipse;
+    invalid_shape.stroke_width_pixels = std::min(ellipse.width, ellipse.height) + 1;
+    require(!design_document.setShapeLayerContent(ellipse_layer_id, invalid_shape) &&
+                std::get<ShapeLayerContent>(design_document.layers().back().content) == ellipse,
+            "shape strokes wider than the intrinsic bounds are rejected");
+    LayerId overflow_content_id = 0;
+    require(!design_document.addContentLayer(
+                LayerKind::Shape, "Overflow", std::numeric_limits<std::int64_t>::max(),
+                &overflow_content_id),
+            "content layer insertion rejects a duration that would overflow the timeline");
+
+    CompositionDocument integer_design_document(640, 360, FrameRate{24, 1});
+    LayerId integer_text_id = 0;
+    require(integer_design_document.addContentLayer(
+                LayerKind::Text, "Text", 0, &integer_text_id) &&
+                integer_design_document.layers().front().duration_frames == 120,
+            "content layer duration is exact at integer frame rates");
 
     VideoMetadata video_metadata;
     video_metadata.kind = MediaKind::Video;

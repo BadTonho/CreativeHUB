@@ -29,6 +29,17 @@ constexpr std::array<FrameRate, 13> kSupportedFrameRates{{
     {240, 1},
 }};
 
+constexpr std::size_t kMaximumContentStringBytes = 32'768;
+constexpr int kMaximumContentDimension = 32'768;
+constexpr int kMaximumTextSizePixels = 4'096;
+constexpr int kMaximumStrokeWidthPixels = 4'096;
+
+int fourFifths(int value) noexcept
+{
+    return std::clamp((value / 5) * 4 + ((value % 5) * 4) / 5,
+                      1, kMaximumContentDimension);
+}
+
 bool validLayerKind(LayerKind kind) noexcept
 {
     switch (kind) {
@@ -52,9 +63,60 @@ std::optional<std::int64_t> checkedCeiling(long double value) noexcept
     return std::max<std::int64_t>(1, static_cast<std::int64_t>(rounded));
 }
 
+std::optional<std::int64_t> fiveSecondFrameCount(FrameRate frame_rate) noexcept
+{
+    if (frame_rate.numerator <= 0 || frame_rate.denominator <= 0) return std::nullopt;
+    const auto max = std::numeric_limits<std::int64_t>::max();
+    const auto rounding = frame_rate.denominator - 1;
+    if (frame_rate.numerator > (max - rounding) / 5) return std::nullopt;
+    return (5 * frame_rate.numerator + rounding) / frame_rate.denominator;
+}
+
 bool validPositiveFinite(const std::optional<double>& value) noexcept
 {
     return value.has_value() && std::isfinite(*value) && *value > 0.0;
+}
+
+bool validTextContent(const TextLayerContent& content) noexcept
+{
+    return content.text.size() <= kMaximumContentStringBytes &&
+        !content.font_family.empty() &&
+        content.font_family.size() <= kMaximumContentStringBytes &&
+        content.font_size_pixels >= 1 &&
+        content.font_size_pixels <= kMaximumTextSizePixels &&
+        content.box_width >= 1 && content.box_width <= kMaximumContentDimension &&
+        content.box_height >= 1 && content.box_height <= kMaximumContentDimension &&
+        (content.alignment == TextAlignment::Left ||
+         content.alignment == TextAlignment::Center ||
+         content.alignment == TextAlignment::Right);
+}
+
+bool validShapeContent(const ShapeLayerContent& content) noexcept
+{
+    return (content.shape == ShapeKind::Rectangle || content.shape == ShapeKind::Ellipse) &&
+        content.width >= 1 && content.width <= kMaximumContentDimension &&
+        content.height >= 1 && content.height <= kMaximumContentDimension &&
+        content.stroke_width_pixels >= 0 &&
+        content.stroke_width_pixels <= kMaximumStrokeWidthPixels &&
+        content.stroke_width_pixels <= std::min(content.width, content.height);
+}
+
+bool validContentForKind(LayerKind kind, const LayerContent& content) noexcept
+{
+    switch (kind) {
+    case LayerKind::Text: {
+        const auto* text = std::get_if<TextLayerContent>(&content);
+        return text != nullptr && validTextContent(*text);
+    }
+    case LayerKind::Shape: {
+        const auto* shape = std::get_if<ShapeLayerContent>(&content);
+        return shape != nullptr && validShapeContent(*shape);
+    }
+    case LayerKind::Image:
+    case LayerKind::Video:
+        return std::holds_alternative<std::monostate>(content);
+    }
+    return false;
 }
 
 bool validLayer(const CompositionLayer& layer) noexcept
@@ -70,7 +132,8 @@ bool validLayer(const CompositionLayer& layer) noexcept
         layer.source_frame_count < 0 || layer.source_duration_frames < 0 ||
         layer.maximum_timeline_duration_frames < 0 ||
         !std::isfinite(layer.source_frame_rate) || layer.source_frame_rate < 0.0 ||
-        !validTransform(layer.transform)) {
+        !validTransform(layer.transform) ||
+        !validContentForKind(layer.kind, layer.content)) {
         return false;
     }
     if (layer.duration_frames > 0 &&
@@ -116,6 +179,26 @@ bool isSupportedFrameRate(FrameRate frame_rate) noexcept
         != kSupportedFrameRates.end();
 }
 
+TextLayerContent defaultTextLayerContent(CanvasSize canvas_size)
+{
+    TextLayerContent content;
+    content.box_width = fourFifths(canvas_size.width);
+    content.box_height = std::clamp(canvas_size.height / 2,
+                                    1, kMaximumContentDimension);
+    return content;
+}
+
+ShapeLayerContent defaultShapeLayerContent(CanvasSize canvas_size, ShapeKind shape)
+{
+    ShapeLayerContent content;
+    content.shape = shape;
+    content.width = std::clamp(canvas_size.width / 4,
+                               1, kMaximumContentDimension);
+    content.height = std::clamp(canvas_size.height / 4,
+                                1, kMaximumContentDimension);
+    return content;
+}
+
 CompositionDocument::CompositionDocument(
     int canvas_width,
     int canvas_height,
@@ -141,7 +224,16 @@ CompositionDocument::CompositionDocument(
     std::unordered_set<LayerId> ids;
     ids.reserve(layers.size());
     LayerId greatest_id = 0;
-    for (const auto& layer : layers) {
+    for (auto& layer : layers) {
+        // Accept older in-memory callers that construct generic Text/Shape
+        // records without content; the document now stores explicit defaults.
+        if (layer.kind == LayerKind::Text &&
+            std::holds_alternative<std::monostate>(layer.content)) {
+            layer.content = defaultTextLayerContent(canvas_size_);
+        } else if (layer.kind == LayerKind::Shape &&
+                   std::holds_alternative<std::monostate>(layer.content)) {
+            layer.content = defaultShapeLayerContent(canvas_size_);
+        }
         if (!validLayer(layer) || !ids.insert(layer.id).second) {
             throw std::invalid_argument("Composition contains an invalid or duplicate layer");
         }
@@ -177,9 +269,43 @@ LayerId CompositionDocument::addLayer(LayerKind kind, std::string name)
     }
 
     const LayerId id = next_layer_id_;
-    layers_.push_back(CompositionLayer{id, kind, std::move(name)});
+    CompositionLayer layer{id, kind, std::move(name)};
+    if (kind == LayerKind::Text) {
+        layer.content = defaultTextLayerContent(canvas_size_);
+    } else if (kind == LayerKind::Shape) {
+        layer.content = defaultShapeLayerContent(canvas_size_);
+    }
+    layers_.push_back(std::move(layer));
     ++next_layer_id_;
     return id;
+}
+
+bool CompositionDocument::addContentLayer(
+    LayerKind kind,
+    std::string name,
+    std::int64_t timeline_start_frame,
+    LayerId* added_id)
+{
+    if ((kind != LayerKind::Text && kind != LayerKind::Shape) ||
+        timeline_start_frame < 0) {
+        return false;
+    }
+    const auto duration = fiveSecondFrameCount(frame_rate_);
+    if (!duration.has_value() ||
+        *duration > std::numeric_limits<std::int64_t>::max() - timeline_start_frame) {
+        return false;
+    }
+    try {
+        const auto id = addLayer(kind, std::move(name));
+        auto* layer = findLayer(id);
+        if (layer == nullptr) return false;
+        layer->timeline_start_frame = timeline_start_frame;
+        layer->duration_frames = *duration;
+        if (added_id != nullptr) *added_id = id;
+        return true;
+    } catch (...) {
+        return false;
+    }
 }
 
 AddMediaLayerResult CompositionDocument::addMediaLayer(
@@ -202,9 +328,7 @@ AddMediaLayerResult CompositionDocument::addMediaLayer(
     std::int64_t duration_frames = 0;
 
     if (is_image) {
-        const auto image_duration = checkedCeiling(
-            5.0L * static_cast<long double>(frame_rate_.numerator) /
-            static_cast<long double>(frame_rate_.denominator));
+        const auto image_duration = fiveSecondFrameCount(frame_rate_);
         if (!image_duration.has_value()) return AddMediaLayerResult::InvalidTimingMetadata;
         duration_frames = *image_duration;
     } else {
@@ -354,6 +478,32 @@ bool CompositionDocument::setLayerTransform(
         return false;
     }
     layer->transform = transform;
+    return true;
+}
+
+bool CompositionDocument::setTextLayerContent(
+    LayerId id,
+    const TextLayerContent& content)
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || layer->kind != LayerKind::Text ||
+        !validTextContent(content)) {
+        return false;
+    }
+    layer->content = content;
+    return true;
+}
+
+bool CompositionDocument::setShapeLayerContent(
+    LayerId id,
+    const ShapeLayerContent& content)
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || layer->kind != LayerKind::Shape ||
+        !validShapeContent(content)) {
+        return false;
+    }
+    layer->content = content;
     return true;
 }
 

@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace motion::model {
@@ -55,6 +56,49 @@ enum class LayerKind : std::uint8_t {
     Video,
 };
 
+using ColorRgba = std::array<std::uint8_t, 4>;
+
+enum class TextAlignment : std::uint8_t {
+    Left,
+    Center,
+    Right,
+};
+
+struct TextLayerContent {
+    std::string text = "Text";
+    std::string font_family = "Sans Serif";
+    int font_size_pixels = 48;
+    ColorRgba color{255, 255, 255, 255};
+    TextAlignment alignment = TextAlignment::Center;
+    int box_width = 1;
+    int box_height = 1;
+
+    friend bool operator==(const TextLayerContent&, const TextLayerContent&) = default;
+};
+
+enum class ShapeKind : std::uint8_t {
+    Rectangle,
+    Ellipse,
+};
+
+struct ShapeLayerContent {
+    ShapeKind shape = ShapeKind::Rectangle;
+    int width = 1;
+    int height = 1;
+    ColorRgba fill_color{255, 183, 54, 255};
+    ColorRgba stroke_color{255, 255, 255, 255};
+    int stroke_width_pixels = 0;
+
+    friend bool operator==(const ShapeLayerContent&, const ShapeLayerContent&) = default;
+};
+
+using LayerContent = std::variant<std::monostate, TextLayerContent, ShapeLayerContent>;
+
+[[nodiscard]] TextLayerContent defaultTextLayerContent(CanvasSize canvas_size);
+[[nodiscard]] ShapeLayerContent defaultShapeLayerContent(
+    CanvasSize canvas_size,
+    ShapeKind shape = ShapeKind::Rectangle);
+
 struct CompositionLayer {
     LayerId id;
     LayerKind kind;
@@ -69,6 +113,7 @@ struct CompositionLayer {
     bool visible = true;
     creative_suite::animation::Transform2D transform;
     creative_suite::animation::TransformKeyframes keyframes;
+    LayerContent content;
 
     friend bool operator==(const CompositionLayer&, const CompositionLayer&) = default;
 };
@@ -103,6 +148,11 @@ public:
     [[nodiscard]] const std::vector<CompositionLayer>& layers() const noexcept;
 
     [[nodiscard]] LayerId addLayer(LayerKind kind, std::string name);
+    [[nodiscard]] bool addContentLayer(
+        LayerKind kind,
+        std::string name,
+        std::int64_t timeline_start_frame,
+        LayerId* added_id = nullptr);
     [[nodiscard]] AddMediaLayerResult addMediaLayer(
         const creative_suite::media::VideoMetadata& metadata,
         std::int64_t timeline_start_frame,
@@ -121,6 +171,12 @@ public:
     [[nodiscard]] bool setLayerTransform(
         LayerId id,
         const creative_suite::animation::Transform2D& transform) noexcept;
+    [[nodiscard]] bool setTextLayerContent(
+        LayerId id,
+        const TextLayerContent& content);
+    [[nodiscard]] bool setShapeLayerContent(
+        LayerId id,
+        const ShapeLayerContent& content);
     [[nodiscard]] bool setLayerKeyframe(
         LayerId id,
         creative_suite::animation::TransformProperty property,

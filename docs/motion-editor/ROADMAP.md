@@ -2,8 +2,9 @@
 
 Status: **provisional; implementation started**. The standalone Motion Studio
 shell, in-memory composition/layer model, navigation timeline, Media Pool,
-raster clip layers, CPU preview, and versioned native save/open are wired into
-CMake under `apps/motion-editor/`. Its initial product scope and readiness are documented
+image/video/text/shape layers, CPU preview, and versioned native save/open are
+wired into CMake under `apps/motion-editor/`. Its initial product scope and
+readiness are documented
 in [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md). C++ and Qt 6 are provisional
 implementation choices; no final language, renderer, or codec choices have
 been made. Focused reuse libraries are tracked separately in
@@ -92,7 +93,8 @@ the Motion Studio implementation choices are finalized.
   must be explicitly provided; the standalone window starts without a
   composition.
 - [x] Add an in-memory canvas viewer with worker-thread preview for visible
-  still-image and video layers. Text and shape content are not rasterized yet.
+  still-image and video layers, then add Motion Studio-owned Qt rasterization
+  for text, rectangles, and ellipses on the same preview worker.
   The empty state offers a centered New Composition button alongside the
   existing File menu action.
 - [x] Add an explicit exact frame rate and a navigation-only timeline with a
@@ -139,8 +141,8 @@ the Motion Studio implementation choices are finalized.
 - [x] Add transform keyframe editing to image and video layers for Position X/Y,
   Scale, Rotation, and Opacity. Expand a layer's Transform group to reveal its
   property tracks; add or remove keys from the inspector, seek by key marker,
-  and drag keys within the layer's duration. Use shared linear interpolation
-  and preserve the `.motion` v1 format.
+  and drag keys within the layer's duration. Use shared linear interpolation;
+  the keyframe payload fields remain unchanged in `.motion` v2.
 - [x] Add bounded Undo/Redo for composition edits, including layer timing,
   order, visibility, transforms, and keyframes. Media Pool operations remain
   outside the history.
@@ -148,7 +150,16 @@ the Motion Studio implementation choices are finalized.
   Media Pool. Saved-project snapshots use a versioned wrapper beside the
   `.motion` file; untitled snapshots are separated by session under the
   Motion Studio app-data directory. Restore stages media and keeps the
-  recovered document dirty. The native `.motion` v1 schema is unchanged.
+  recovered document dirty. The recovery wrapper stays at version 1 and
+  contains the nested native document payload.
+- [x] Add native Text, Rectangle, and Ellipse layers with content inspectors,
+  static text/shape content, alpha-aware solid colors, and the existing
+  transform/keyframe system. Rasterize their RGBA frames on the Motion Studio
+  preview worker and composite them through the shared CPU compositor.
+  New layers start at the playhead, centered, and last five seconds at the exact
+  composition rate. Save them in `.motion` v2; continue opening v1 documents by
+  applying default text or rectangle content and upgrading them on save. Keep
+  the recovery wrapper at v1 while it accepts nested document versions 1 and 2.
 - [-] Extend actionable local error logging and automated coverage for the
   remaining document, rendering, and application boundaries. Save/open failures
   are logged; export failures are not implemented yet.
@@ -178,7 +189,7 @@ and missing assets reopening offline. Autosave and recovery tests cover dirty
 documents, duplicate-state skipping, snapshot retention, invalid snapshots,
 startup recovery, saved-project recovery on Open, Settings management, and
 retaining the original Save target. The recovery wrapper is separate from the
-native `.motion` v1 schema.
+native `.motion` document schema and remains at wrapper version 1.
 
 Frame rates are stored as exact rational values from the supported common-rate
 list. Creating a composition does not ask for or set its duration. The ruler
@@ -247,7 +258,11 @@ worker. A completed frame from the current uninterrupted playback may still be
 presented; manual seeking or replacing the composition invalidates it. Playback
 extends the navigation range by one hour as needed and scrolls to keep the
 playhead visible. This does not set a composition duration. Preview remains
-CPU-only and omits text, shape, audio, and source-in-point rendering.
+CPU-only and Motion Studio-owned. Text, rectangle, and ellipse layers are
+rasterized to transparent RGBA8 with Qt painting on the preview worker; the
+shared compositor handles their layer order, transforms, opacity, and alpha.
+Text glyphs and shape fills/strokes are static; only their existing transform
+properties are animated. Source in-points and audio remain unsupported.
 
 Manual Windows validation remains pending: verify the centered empty-state
 button opens composition creation and disappears after creation; confirm a
@@ -277,10 +292,13 @@ header has no name while the clip retains it; expand a layer to show only
 Transform, then expand Transform to show the five properties; collapse and
 reopen each level; add Position and Opacity keys, inspect interpolated values,
 edit at a key, remove a key, drag a marker, and confirm a colliding move is
-rejected; scrub and play through the animation;
-save and reopen and confirm keys and layer timing persist; use **Edit > Undo**
-and **Edit > Redo** on layer insertion, visibility, clip timing, transforms,
-and keyframes; confirm inspector edits group into one history step, undoing to
+rejected; scrub and play through the animation; create multiline Unicode text,
+change its font, size, alignment, box dimensions, and alpha color; create
+rectangles and ellipses, edit their dimensions, fill, optional stroke, and alpha;
+animate a text or shape transform, save and reopen it, and confirm content and
+keys persist; use **Edit > Undo** and **Edit > Redo** on layer insertion,
+content edits, visibility, clip timing, transforms, and keyframes; confirm
+inspector edits group into one history step, undoing to
 the saved composition clears its dirty marker, Media Pool contents are
 unaffected, and new/opened compositions start with empty history; enable Loop and
 confirm it restarts at frame 0, then disable Loop and confirm playback stops
@@ -304,8 +322,8 @@ composition without losing its layer or frame-rate data.
 
 - [ ] Extend basic linear transform keyframes with editable property curves,
   richer interpolation, and documented easing behavior.
-- [ ] Support ordered text, vector-shape, raster-image, and video layers with
-  basic 2D transforms and a simple effect set.
+- [ ] Add a simple effect set to the supported ordered text, vector-shape,
+  raster-image, and video layers.
 - [ ] Complete the standalone save/reopen, preview, and rendered-video
   workflows and profile representative compositions.
 - [ ] Address measured bottlenecks before expanding the MVP scope.

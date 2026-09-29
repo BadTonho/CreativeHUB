@@ -121,6 +121,30 @@ motion::model::MotionProjectData populatedProject(const std::filesystem::path& r
             "video layer can be built for project serialization");
     require(document.moveLayer(video_id, 0), "layer order can be changed before saving");
 
+    LayerId text_id = 0;
+    require(document.addContentLayer(LayerKind::Text, "Title", 45, &text_id),
+            "text content layer can be built for project serialization");
+    auto text_content = std::get<TextLayerContent>(document.layers().back().content);
+    text_content.text = "Hello \xE4\xB8\x96\xE7\x95\x8C\nMotion Studio";
+    text_content.font_family = "Sans Serif";
+    text_content.alignment = TextAlignment::Right;
+    text_content.color = {10, 20, 30, 220};
+    require(document.setTextLayerContent(text_id, text_content),
+            "text appearance and Unicode content are stored");
+
+    LayerId ellipse_id = 0;
+    require(document.addContentLayer(LayerKind::Shape, "Ellipse", 90, &ellipse_id),
+            "shape content layer can be built for project serialization");
+    auto shape_content = std::get<ShapeLayerContent>(document.layers().back().content);
+    shape_content.shape = ShapeKind::Ellipse;
+    shape_content.width = 311;
+    shape_content.height = 157;
+    shape_content.fill_color = {120, 80, 40, 190};
+    shape_content.stroke_color = {255, 200, 10, 255};
+    shape_content.stroke_width_pixels = 7;
+    require(document.setShapeLayerContent(ellipse_id, shape_content),
+            "shape primitive, dimensions, fill, and stroke are stored");
+
     project.layers = document.layers();
     return project;
 }
@@ -146,10 +170,14 @@ int main(int argc, char** argv)
     const auto round_trip = motion::persistence::MotionDocumentStore::load(document_path);
     require(round_trip == populated,
             "layers, transforms, keyframes, media, bins, Unicode and unused items round-trip");
-    require(round_trip.layers.size() == 2 && round_trip.layers[0].id == populated.layers[0].id &&
-                round_trip.layers[1].id == populated.layers[1].id,
+    require(round_trip.layers.size() == 4 && round_trip.layers[0].id == populated.layers[0].id &&
+                round_trip.layers[1].id == populated.layers[1].id &&
+                round_trip.layers[2].id == populated.layers[2].id &&
+                round_trip.layers[3].id == populated.layers[3].id,
             "layer IDs and back-to-front ordering remain stable");
     const auto json = readBytes(document_path);
+    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 2,
+            "documents with native content are written using schema version 2");
     require(json.contains("assets/still-é.png") || json.contains("assets/still-Ã©.png"),
             "a source beneath the document directory is encoded as a relative path");
     require(json.contains("outside-影片.mkv") || json.contains("outside-\xE5\xBD\xB1\xE7\x89\x87.mkv"),
@@ -180,6 +208,91 @@ int main(int argc, char** argv)
             (void)motion::persistence::MotionDocumentStore::load(document_path);
         }, message) == motion::persistence::MotionDocumentErrorCode::InvalidValue, message);
     };
+
+    auto legacy_v1 = valid_json;
+    legacy_v1.insert(QStringLiteral("version"), 1);
+    auto legacy_layers = legacy_v1.value(QStringLiteral("layers")).toArray();
+    for (qsizetype index = 0; index < legacy_layers.size(); ++index) {
+        auto layer = legacy_layers[index].toObject();
+        if (layer.value(QStringLiteral("kind")).toString() == QLatin1String("text"))
+            layer.remove(QStringLiteral("text_content"));
+        if (layer.value(QStringLiteral("kind")).toString() == QLatin1String("shape"))
+            layer.remove(QStringLiteral("shape_content"));
+        legacy_layers[index] = layer;
+    }
+    legacy_v1.insert(QStringLiteral("layers"), legacy_layers);
+    writeBytes(document_path, QJsonDocument(legacy_v1).toJson());
+    const auto migrated_v1 = motion::persistence::MotionDocumentStore::load(document_path);
+    const auto migrated_text = std::find_if(
+        migrated_v1.layers.begin(), migrated_v1.layers.end(), [](const auto& layer) {
+            return layer.kind == motion::model::LayerKind::Text;
+        });
+    const auto migrated_shape = std::find_if(
+        migrated_v1.layers.begin(), migrated_v1.layers.end(), [](const auto& layer) {
+            return layer.kind == motion::model::LayerKind::Shape;
+        });
+    require(migrated_text != migrated_v1.layers.end() &&
+                std::get<motion::model::TextLayerContent>(migrated_text->content) ==
+                    motion::model::defaultTextLayerContent({1920, 1080}) &&
+                migrated_shape != migrated_v1.layers.end() &&
+                std::get<motion::model::ShapeLayerContent>(migrated_shape->content) ==
+                    motion::model::defaultShapeLayerContent({1920, 1080}),
+            "v1 text and shape records migrate to documented default content");
+    motion::persistence::MotionDocumentStore::save(document_path, migrated_v1);
+    require(QJsonDocument::fromJson(readBytes(document_path)).object()
+                .value(QStringLiteral("version")).toInt() == 2,
+            "saving a loaded v1 project upgrades it to v2");
+
+    motion::persistence::MotionDocumentStore::save(document_path, populated);
+    auto invalid_text = valid_json;
+    auto invalid_content_layers = invalid_text.value(QStringLiteral("layers")).toArray();
+    auto text_layer = std::find_if(invalid_content_layers.begin(), invalid_content_layers.end(),
+        [](const QJsonValue& value) {
+            return value.toObject().value(QStringLiteral("kind")).toString() ==
+                QLatin1String("text");
+        });
+    require(text_layer != invalid_content_layers.end(), "serialized text layer exists");
+    auto text_layer_object = text_layer->toObject();
+    auto text_payload = text_layer_object.value(QStringLiteral("text_content")).toObject();
+    text_payload.insert(QStringLiteral("box_width"), 0);
+    text_layer_object.insert(QStringLiteral("text_content"), text_payload);
+    *text_layer = text_layer_object;
+    invalid_text.insert(QStringLiteral("layers"), invalid_content_layers);
+    requireInvalidLoad(invalid_text, "invalid text-box dimensions are rejected");
+
+    auto invalid_color = valid_json;
+    auto invalid_color_layers = invalid_color.value(QStringLiteral("layers")).toArray();
+    text_layer = std::find_if(invalid_color_layers.begin(), invalid_color_layers.end(),
+        [](const QJsonValue& value) {
+            return value.toObject().value(QStringLiteral("kind")).toString() ==
+                QLatin1String("text");
+        });
+    require(text_layer != invalid_color_layers.end(), "text layer exists for color validation");
+    text_layer_object = text_layer->toObject();
+    text_payload = text_layer_object.value(QStringLiteral("text_content")).toObject();
+    auto encoded_color = text_payload.value(QStringLiteral("color")).toArray();
+    encoded_color.replace(3, 256);
+    text_payload.insert(QStringLiteral("color"), encoded_color);
+    text_layer_object.insert(QStringLiteral("text_content"), text_payload);
+    *text_layer = text_layer_object;
+    invalid_color.insert(QStringLiteral("layers"), invalid_color_layers);
+    requireInvalidLoad(invalid_color, "RGBA channels outside the byte range are rejected");
+
+    auto invalid_shape = valid_json;
+    auto invalid_shape_layers = invalid_shape.value(QStringLiteral("layers")).toArray();
+    auto shape_layer = std::find_if(invalid_shape_layers.begin(), invalid_shape_layers.end(),
+        [](const QJsonValue& value) {
+            return value.toObject().value(QStringLiteral("kind")).toString() ==
+                QLatin1String("shape");
+        });
+    require(shape_layer != invalid_shape_layers.end(), "serialized shape layer exists");
+    auto shape_layer_object = shape_layer->toObject();
+    auto shape_payload = shape_layer_object.value(QStringLiteral("shape_content")).toObject();
+    shape_payload.insert(QStringLiteral("stroke_width_pixels"), -1);
+    shape_layer_object.insert(QStringLiteral("shape_content"), shape_payload);
+    *shape_layer = shape_layer_object;
+    invalid_shape.insert(QStringLiteral("layers"), invalid_shape_layers);
+    requireInvalidLoad(invalid_shape, "negative shape stroke widths are rejected");
 
     auto invalid_dimensions = valid_json;
     auto invalid_composition = invalid_dimensions.value(QStringLiteral("composition")).toObject();

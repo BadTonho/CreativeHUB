@@ -6,14 +6,15 @@ provisional C++ and Qt 6. Its workspace creates in-memory canvases and has an
 application-owned Media Pool connected to timeline rows for image and video
 layers. The timeline supports clip insertion, movement, reordering, visibility,
 removal, and duration edits; the selected layer's base transform and transform
-keyframes are editable.
-The canvas previews active raster layers through the shared CPU compositor and
-decodes video away from the UI thread. Manual Save, Save As, and Open now use a
-versioned `.motion` document that includes the Media Pool. Image and video
-layers support linear transform keyframe editing and preview evaluation.
-Text/shape content is not rendered. Undo/Redo covers composition edits.
-Configurable autosave and recovery snapshots cover the composition and Media
-Pool without changing the native `.motion` v1 schema; export remains open.
+keyframes are editable. Native text, rectangle, and ellipse layers have content
+inspectors and static content; their transforms and transform keyframes work
+through the same timeline and preview path. Motion Studio rasterizes that
+content with Qt painting on its preview worker before using the shared CPU
+compositor. Manual Save, Save As, and Open use a versioned `.motion` document
+that includes the Media Pool. The writer emits v2, reads v1 with default text
+or rectangle content for older native layers, and keeps the recovery wrapper
+at v1. Undo/Redo and configurable autosave and recovery cover the composition
+and Media Pool; export remains open.
 This document records the agreed starting scope; it does not finalize a
 renderer, programming language, native file extension, codec, or implementation
 architecture.
@@ -90,11 +91,11 @@ provide a recoverable reference if a linked document or dependency is missing.
 | Capability | Current Video Editor location and behavior | Motion Studio readiness direction |
 | --- | --- | --- |
 | Media and decoding | `libs/media/` contains neutral metadata, an in-memory catalog, import processing, FFmpeg video probing/decoding, Qt-backed still-image decoding, and RGBA frames. Each editor owns its pool UI, worker lifecycle, and project/document integration. | Motion Studio already reuses the shared catalog and import processing in its own Media Pool. Imported items are in-memory and remain references to original files; the pool clears when replacing a composition. GIF import is unsupported. |
-| Composition and preview | `apps/video-editor/src/playback/` and `src/rendering/`; worker-side CPU composition, frame compositor, and a provisional OpenGL preview surface. | The CPU raster compositor is in `libs/composition/`; document coordinates, pixel format, alpha, lifetime, thread, and error behavior before treating its API as stable. GPU per-layer composition is not an existing capability. |
+| Composition and preview | `apps/video-editor/src/playback/` and `src/rendering/`; worker-side CPU composition, frame compositor, and a provisional OpenGL preview surface. | Motion Studio rasterizes native text and shape content to transparent RGBA8 on its own preview worker, then uses `libs/composition/` for CPU composition. This app-owned Qt renderer is provisional and does not establish a final renderer choice or GPU layer composition. |
 | Transforms and animation | `apps/video-editor/src/timeline/`; normalized 2D position, scale, rotation, opacity, and linear per-clip keyframes. | Motion Studio uses `libs/animation/` to evaluate transform keyframes and owns basic key editing, property tracks, and inspector controls. Rich curves and easing remain open. |
 | Timeline and history | Timeline model, commands, and bounded undo/redo are application-specific. | Motion Studio owns its composition timeline and editing history; share lower-level behavior only where a second real consumer uses the same contract. |
 | Project persistence | `apps/video-editor/src/project/`; versioned `.csp` format currently at version 12, with migrations for supported earlier versions. | Keep a separate versioned Motion Studio native document and adapter. Do not reuse `.csp` as the native composition format. |
-| Autosave and recovery | `src/project/autosave_manager.*` and application coordination provide autosave snapshots and recovery. | Motion Studio implements an application-owned recovery store and versioned wrapper around `.motion` v1 data. Shared recovery services remain deferred until both document owners have stable common requirements. |
+| Autosave and recovery | `src/project/autosave_manager.*` and application coordination provide autosave snapshots and recovery. | Motion Studio implements an application-owned version 1 recovery wrapper around validated `.motion` v1 or v2 data. Shared recovery services remain deferred until both document owners have stable common requirements. |
 | Diagnostics | Structured local logging is implemented in `libs/diagnostics/`; each application selects its own log directory. | Reuse the service with a Motion Studio-specific application identifier and context. |
 
 ### Candidate shared capabilities
@@ -136,7 +137,7 @@ every target GPU or that the path has met performance targets.
 | Build dependencies | `apps/video-editor/CMakeLists.txt` requires Qt 6 Core, Widgets, OpenGL, and OpenGLWidgets plus FFmpeg AVCODEC, AVFORMAT, AVUTIL, SWRESAMPLE, and SWSCALE. Qt Multimedia is optional and used for audio output. | This describes the Video Editor build, not a final Motion Studio stack. Keep renderer and dependency decisions open until platform, license, and performance validation. |
 | Video decode and frames | `libs/media/src/video_playback.cpp` uses FFmpeg to decode video and convert frames to owned RGBA8 storage. `VideoPlaybackSession` is independent of Qt and can report optional decode timings through an observer. | `creative-suite::video-media` and `creative-suite::media-frame` are candidates for video layers, subject to Motion Studio consumer regression coverage. |
 | Timeline playback and CPU composition | `apps/video-editor/src/playback/playback_worker.cpp` selects and decodes timeline layers, rasterizes text, and calls the CPU `FrameCompositor`. The compositor returns the completed raster frame before preview presentation. | The shared raster compositor and animation evaluator are reusable candidates. Timeline scheduling, project data, and playback controls remain application-specific. |
-| Still images and text | `libs/media/src/still_image_decoder.cpp` uses Qt `QImageReader` for static raster images and returns the shared RGBA frame type. `apps/video-editor/src/rendering/text_renderer.cpp` rasterizes text through Qt `QPainter`. | Motion Studio now uses the shared still-image decoder for import previews. Text rasterization remains application-specific work; vector-shape rasterization is not established by this path. |
+| Still images and text | `libs/media/src/still_image_decoder.cpp` uses Qt `QImageReader` for static raster images and returns the shared RGBA frame type. `apps/video-editor/src/rendering/text_renderer.cpp` rasterizes Video Editor text through Qt `QPainter`. | Motion Studio uses the shared still-image decoder for import previews and its own Qt rasterizer for multiline text, rectangles, and ellipses. It does not depend on the Video Editor text renderer or timeline types. |
 | Preview presentation | `OpenGLPreviewSurface` requests an OpenGL 3.2 Core context, uploads the already-composed RGBA frame as a texture, and draws it with a shader. GPU work presents the final frame; layer composition is CPU-side. `PreviewWidget` can use a CPU `QImage`/`QPixmap` path when GPU preview is disabled or fails. | Treat this Qt/OpenGL widget as Video Editor UI. It does not provide GPU layer composition or establish a Motion Studio renderer. |
 
 Existing regression tests cover the shared animation and composition
@@ -153,14 +154,17 @@ cross-platform support, and measured performance remain open validation work.
 For Motion Studio, the existing neutral video decoder, shared media catalog,
 still-image decoder, RGBA frame model, transform evaluator, and raster
 compositor are reused directly. The Qt preview, Motion Studio timeline worker,
-text rasterizer, and application-specific project adapters remain application-
-owned. Motion Studio has its own composition/layer model, canvas viewer,
+text and shape rasterizer, and application-specific project adapters remain
+application-owned. Motion Studio has its own composition/layer model, canvas viewer,
 timeline rows linked to Media Pool sources, and manual versioned save/open
-format. Image and video content render in the preview with linearly evaluated
-transform keyframes. Autosave and recovery use a separate versioned wrapper:
+format. Image, video, text, and shape content render in the preview with
+linearly evaluated transform keyframes. Text and shape content is static;
+fonts are resolved by family name on the current system and are not embedded.
+Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
-The native `.motion` v1 document remains unchanged. Text and shapes, richer
+The native `.motion` writer emits v2 and reads v1 using default content for old
+text and shape records; the recovery wrapper remains at version 1. Richer
 curves and interpolation, effects, and export remain open. The one-hour ruler
 range controls navigation only and does not define the composition's duration. See
 [ROADMAP.md](ROADMAP.md) and [REUSE_PLAN.md](REUSE_PLAN.md) for current
@@ -170,13 +174,15 @@ implementation details and provisional shared API contracts.
 
 - Motion Studio uses a native document format distinct from the Video Editor's
   `.csp` project format and the Image Editor's `.cimg` format.
-- The current implementation uses a version 1 JSON document identified by
+- The current implementation writes version 2 JSON documents and reads
+  versions 1 and 2, identified by
   `creative-suite.motion-studio`. Its provisional extension is `.motion`; the
   field layout, path rules, exact limits, and atomic-save behavior are described
   in [FORMAT.md](FORMAT.md).
-- Version 1 has no older supported versions to migrate. A document with an
-  unsupported future schema version is rejected without replacing the current
-  composition or overwriting or normalizing the original file.
+- Version 1 text and shape records migrate to documented defaults when opened;
+  saving them writes version 2. An unsupported future schema version is
+  rejected without replacing the current composition or overwriting or
+  normalizing the original file.
 - Cross-application references identify a Motion Studio document and its saved
   revision through a separately documented compatibility contract. Native
   document versioning and the Video Editor reference contract are distinct.

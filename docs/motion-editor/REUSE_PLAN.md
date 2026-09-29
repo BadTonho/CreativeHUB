@@ -22,8 +22,8 @@ shared.
 
 Motion Studio owns `MotionRecoveryStore`, its versioned recovery wrapper, the
 autosave preferences, and the recovery-management dialog. The store reuses the
-native document serializer and its atomic `QSaveFile` validation while keeping
-the `.motion` v1 schema unchanged. A recovery payload stores the complete
+native document serializer and its atomic `QSaveFile` validation while writing
+the native `.motion` document at version 2. A recovery payload stores the complete
 composition and Media Pool plus the original document path and session ID; it
 does not store decoded caches, playhead, zoom, selection, or Undo/Redo history.
 
@@ -72,8 +72,8 @@ layer start frame. Clicking a marker seeks,
 and dragging moves it within the layer duration. Collision-safe movement and
 key removal are application-owned `CompositionDocument` operations. The
 inspector edits base values when no keys exist, edits key values at keyed
-frames, and shows read-only interpolated values between keys. This uses the
-existing `.motion` v1 keyframe data without a format change. Expansion is UI
+frames, and shows read-only interpolated values between keys. Version 2 keeps
+the existing keyframe fields and local-frame semantics unchanged. Expansion is UI
 state, starts collapsed on New/Open, and is not persisted. Adding a key from
 the inspector expands both levels. Easing, Bezier curves, and other
 interpolation modes remain open.
@@ -83,8 +83,8 @@ interpolation modes remain open.
 | Library | Current boundary | Motion Studio use |
 | --- | --- | --- |
 | creative-suite::media-frame | creative_suite::media::RgbaFrame owns RGBA8 pixel storage and stride. It does not define a color space. | Shared frame handoff between decoders, raster layers, and composition. |
-| creative-suite::animation | 2D transform data, keyframe storage, validation, and linear evaluation. It has no timeline or document dependency. | Evaluate the five transform properties for Motion Studio image/video layers. Motion Studio owns key editing controls, property tracks, and frame mapping. |
-| creative-suite::composition | CPU composition of raster frames using shared transforms, opacity, and alpha coverage. It has no UI, timeline, or project dependency. | Motion Studio uses it to composite active image and video layers in document order. Text and vector shape rasterization remain app work. |
+| creative-suite::animation | 2D transform data, keyframe storage, validation, and linear evaluation. It has no timeline or document dependency. | Evaluate the five transform properties for Motion Studio image, video, text, and shape layers. Motion Studio owns key editing controls, property tracks, and frame mapping. |
+| creative-suite::composition | CPU composition of raster frames using shared transforms, opacity, and alpha coverage. It has no UI, timeline, or project dependency. | Motion Studio uses it to composite active image, video, text, and shape frames in document order. Text and vector-shape rasterization remains Motion Studio-owned. |
 | creative-suite::diagnostics | Structured local logging with caller-selected application log directories; the legacy no-argument default remains compatible with the Video Editor. | Reuse with a Motion Studio-specific application identifier and log directory. |
 | creative-suite::video-media | FFmpeg video playback session with a neutral optional DecodeObserver. It depends on FFmpeg and shared diagnostics, not preview UI. | Motion Studio keeps one playback session per source on its preview worker and decodes the source frame for the current timeline position. Its application-owned monotonic clock schedules composition frames; audio remains out of scope. |
 | creative-suite::media-assets | Neutral metadata, canonical-path media catalog, cached first frames, bins, online/offline state, video and still-image decoders, probes, and per-file import processing. The public API uses standard C++ types; its current decoders use FFmpeg and Qt Gui internally. Animated GIF import is rejected. | Populate Motion Studio's in-memory pool with video and still images while keeping its UI and document lifecycle application-owned. |
@@ -143,10 +143,11 @@ validation.
   rebuilding thumbnails and decoded frames when reopened. Motion Studio can
   drag video and image pool entries into independent timed composition layers;
   each occurrence has a distinct layer ID and retains a canonical source path.
-- The compositor accepts raster frames only. The current Motion Studio preview
-  uses it for image and video layers. Motion Studio still needs text and
-  vector-shape rasterization, plus any effect processing in its own render
-  pipeline.
+- The compositor accepts raster frames only. Motion Studio rasterizes text,
+  rectangles, and ellipses to transparent RGBA8 with Qt painting on its own
+  preview worker, then sends those frames through the shared compositor.
+  Content is static while transforms and transform keyframes apply normally.
+  This CPU rasterization is provisional and does not establish a final renderer.
 - The shared animation evaluator is linear and now drives transform keyframes
   in Motion Studio preview and playback. Basic key insertion, removal, marker
   seeking, and marker movement are implemented for the five transform
@@ -157,10 +158,13 @@ validation.
   Motion Studio MVP scope; revisit them only if that scope changes.
 - Composition documents, timelines, editing history, autosave, recovery, and
   export remain Motion Studio responsibilities. Manual save/reopen uses its
-  own versioned JSON `.motion` format. Bounded Undo/Redo is composition-owned.
-  Autosave and recovery use a separate versioned wrapper around the full
-  document and Media Pool; `.motion` v1 and other applications' formats remain
-  unchanged. Timeline rows display front-to-back while the document stores layers
+  own versioned JSON `.motion` format. Version 2 stores typed text and shape
+  content while version 1 documents remain readable with default text or
+  rectangle content applied to older records. Bounded Undo/Redo is
+  composition-owned. Autosave and recovery use a separate version 1 wrapper
+  around the full document and Media Pool; it accepts nested `.motion` versions
+  1 and 2. Other applications' formats remain unchanged. Timeline rows display
+  front-to-back while the document stores layers
   back-to-front. Row drops insert
   above the target, and empty-space drops insert at the top. The eight-pixel
   snap tolerance uses frame zero and other layer starts and ends. Still images
@@ -186,7 +190,7 @@ validation.
   failed source does not stop later preview requests. Playback uses the exact
   composition rate, evaluates transform keyframes through the shared linear
   evaluator, ends at the furthest layer out-point, and optionally loops from
-  frame 0. It does not render text, shapes, or audio.
+  frame 0. It renders text and shapes but does not render audio.
 
 ## Language boundary
 
@@ -231,12 +235,14 @@ and document boundaries as well.
 The standalone Motion Studio target and its Media Pool are implemented with
 provisional C++ and Qt 6 choices. Manual Save, Save As, and Open persist the
 composition and full Media Pool in a versioned `.motion` document. Media files
-remain external references; caches are rebuilt on open. Composition Undo/Redo
-is implemented in the Motion Studio application; Media Pool changes remain
-outside its history. Autosave and recovery use Motion Studio's versioned
-wrapper, configurable timer, per-session untitled storage, saved-project
-sidecars, and recovery-management dialog. The native `.motion` v1 format stays
-unchanged. Export remains pending.
+remain external references; caches are rebuilt on open. Native text and shape
+content is rasterized with Qt painting on the preview worker and composited by
+the shared CPU compositor. Composition Undo/Redo is implemented in the Motion
+Studio application; Media Pool changes remain outside its history. Autosave
+and recovery use a version 1 wrapper, configurable timer, per-session untitled
+storage, saved-project sidecars, and recovery-management dialog. The `.motion`
+writer emits v2 and reads v1; other application formats remain unchanged.
+Export remains pending.
 The Motion Studio timeline consumes the shared media, playback, composition,
 and diagnostics libraries directly without linking Video Editor application
 types or targets. Layer insertion, timing, transforms, and preview behavior

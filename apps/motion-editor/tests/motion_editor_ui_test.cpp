@@ -13,6 +13,7 @@
 #include <QAction>
 #include <QCheckBox>
 #include <QApplication>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDialog>
@@ -46,6 +47,7 @@
 #include <QSettings>
 #include <QSpinBox>
 #include <QTableWidget>
+#include <QTextEdit>
 #include <QThread>
 #include <QTimer>
 #include <QToolButton>
@@ -81,6 +83,21 @@ bool hasBrightPixel(const QImage& image, const QRect& area, int minimum_lightnes
     for (int y = bounded.top(); y <= bounded.bottom(); ++y) {
         for (int x = bounded.left(); x <= bounded.right(); ++x) {
             if (image.pixelColor(x, y).lightness() >= minimum_lightness) return true;
+        }
+    }
+    return false;
+}
+
+bool frameHasVisibleRgb(const creative_suite::media::RgbaFrame& frame)
+{
+    for (int y = 0; y < frame.height; ++y) {
+        const auto* row = frame.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
+        for (int x = 0; x < frame.width; ++x) {
+            const auto* pixel = row + static_cast<std::size_t>(x) * 4U;
+            if (pixel[3] != 0 && (pixel[0] > 40 || pixel[1] > 40 || pixel[2] > 40)) {
+                return true;
+            }
         }
     }
     return false;
@@ -957,6 +974,177 @@ void testMotionDocumentSaveOpen()
     require(window.close(), "Discard closes the window without saving");
 }
 
+void testNativeTextAndShapeLayers()
+{
+    QTemporaryDir recovery_directory;
+    require(recovery_directory.isValid(), "native-content recovery directory is available");
+    MainWindow window(nullptr, pathFromQString(recovery_directory.path()), "content-layers");
+    QTimer::singleShot(0, [] { completeCompositionDialog(640, 360, 4); });
+    action(window, "motion-new-composition-action")->trigger();
+    auto* timeline = findWidget<motion::ui::TimelineNavigator>(
+        &window, "motion-timeline");
+    timeline->setCurrentFrame(47);
+
+    auto* new_text = action(window, "motion-new-text-layer-action");
+    auto* new_rectangle = action(window, "motion-new-rectangle-layer-action");
+    auto* new_ellipse = action(window, "motion-new-ellipse-layer-action");
+    require(new_text->isEnabled() && new_rectangle->isEnabled() && new_ellipse->isEnabled(),
+            "native content layer actions enable when a composition exists");
+    new_text->trigger();
+    require(window.compositionDocument()->layers().size() == 1,
+            "New Text inserts one native layer");
+    const auto text_layer = window.compositionDocument()->layers().front();
+    const auto text_content = std::get<motion::model::TextLayerContent>(text_layer.content);
+    require(text_layer.kind == motion::model::LayerKind::Text &&
+                text_layer.timeline_start_frame == 47 && text_layer.duration_frames == 150 &&
+                text_content == motion::model::defaultTextLayerContent({640, 360}) &&
+                text_content.text == "Text" && text_content.font_size_pixels == 48 &&
+                text_content.color == motion::model::ColorRgba{255, 255, 255, 255},
+            "new text uses the selected frame, centered default box, and documented appearance");
+    auto* inspector_tabs = findWidget<QTabWidget>(&window, "motion-inspector-tabs");
+    auto* layer_inspector = findWidget<QWidget>(&window, "motion-layer-content-inspector");
+    require(inspector_tabs->currentWidget() == layer_inspector,
+            "creating text opens its content inspector");
+
+    auto* text_field = findWidget<QTextEdit>(&window, "motion-text-content");
+    auto* text_size = findWidget<QSpinBox>(&window, "motion-text-font-size");
+    auto* text_alignment = findWidget<QComboBox>(&window, "motion-text-alignment");
+    auto* text_box_width = findWidget<QSpinBox>(&window, "motion-text-box-width");
+    auto* text_box_height = findWidget<QSpinBox>(&window, "motion-text-box-height");
+    text_field->setPlainText(QStringLiteral("Hello\nMotion Studio"));
+    text_size->setValue(72);
+    text_alignment->setCurrentIndex(text_alignment->findData(
+        static_cast<int>(motion::model::TextAlignment::Right)));
+    text_box_width->setValue(500);
+    text_box_height->setValue(200);
+    QFocusEvent text_focus_out(QEvent::FocusOut);
+    QApplication::sendEvent(text_field, &text_focus_out);
+    const auto edited_text = std::get<motion::model::TextLayerContent>(
+        window.compositionDocument()->layers().front().content);
+    require(edited_text.text == "Hello\nMotion Studio" && edited_text.font_size_pixels == 72 &&
+                edited_text.alignment == motion::model::TextAlignment::Right &&
+                edited_text.box_width == 500 && edited_text.box_height == 200 &&
+                action(window, "motion-undo-action")->isEnabled() && window.isWindowModified(),
+            "text, size, alignment, and box edits update dirty state and grouped undo history");
+    action(window, "motion-undo-action")->trigger();
+    require(std::get<motion::model::TextLayerContent>(
+                window.compositionDocument()->layers().front().content) == text_content,
+            "one Undo restores the text and size fields edited in the same interaction");
+    action(window, "motion-redo-action")->trigger();
+    require(std::get<motion::model::TextLayerContent>(
+                window.compositionDocument()->layers().front().content) == edited_text,
+            "Redo restores text layer content edits");
+
+    auto* viewer_widget = findWidget<QWidget>(&window, "motion-composition-viewer");
+    auto* viewer = dynamic_cast<motion::ui::CompositionViewer*>(viewer_widget);
+    require(viewer != nullptr, "composition viewer exists for native-layer preview checks");
+    require(waitFor([&] {
+        const auto frame = viewer->renderedFrame();
+        return frame != nullptr && frameHasVisibleRgb(*frame);
+    }), "native text content renders in the asynchronous composition preview");
+    const auto text_preview = viewer->renderedFrame();
+
+    new_rectangle->trigger();
+    require(window.compositionDocument()->layers().size() == 2 &&
+                std::get<motion::model::ShapeLayerContent>(
+                    window.compositionDocument()->layers().back().content).shape ==
+                    motion::model::ShapeKind::Rectangle,
+            "New Rectangle creates a native rectangle layer");
+
+    new_ellipse->trigger();
+    require(window.compositionDocument()->layers().size() == 3 &&
+                window.compositionDocument()->layers().back().kind ==
+                    motion::model::LayerKind::Shape,
+            "New Ellipse inserts an independent shape layer");
+    const auto ellipse_layer_id = window.compositionDocument()->layers().back().id;
+    auto ellipse = std::get<motion::model::ShapeLayerContent>(
+        window.compositionDocument()->layers().back().content);
+    require(ellipse.shape == motion::model::ShapeKind::Ellipse &&
+                ellipse.width == 160 && ellipse.height == 90 &&
+                ellipse.fill_color == motion::model::ColorRgba{255, 183, 54, 255} &&
+                ellipse.stroke_width_pixels == 0 &&
+                window.compositionDocument()->layers().back().timeline_start_frame == 47 &&
+                window.compositionDocument()->layers().back().duration_frames == 150,
+            "new ellipses use quarter-canvas dimensions, accent fill, and five-second timing");
+    require(inspector_tabs->currentWidget() == layer_inspector,
+            "creating a shape opens its content inspector");
+    require(waitFor([&] {
+        return viewer->renderedFrame() != nullptr && viewer->renderedFrame() != text_preview;
+    }), "native shape insertion refreshes the asynchronous preview");
+    const auto ellipse_preview = viewer->renderedFrame();
+
+    auto* shape_fill = findWidget<QPushButton>(&window, "motion-shape-fill-color");
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QColorDialog*>(QApplication::activeModalWidget());
+        require(dialog != nullptr, "shape color action opens the color picker");
+        dialog->setCurrentColor(QColor(30, 80, 190, 128));
+        dialog->accept();
+    });
+    shape_fill->click();
+    ellipse = std::get<motion::model::ShapeLayerContent>(
+        window.compositionDocument()->layers().back().content);
+    require(ellipse.fill_color == motion::model::ColorRgba{30, 80, 190, 128},
+            "shape fill inspector stores RGBA color including alpha");
+    require(waitFor([&] {
+        return viewer->renderedFrame() != nullptr && viewer->renderedFrame() != ellipse_preview;
+    }), "shape color edits refresh the composed preview");
+    const auto colored_ellipse_preview = viewer->renderedFrame();
+    action(window, "motion-undo-action")->trigger();
+    require(std::get<motion::model::ShapeLayerContent>(
+                window.compositionDocument()->layers().back().content).fill_color ==
+                motion::model::ColorRgba{255, 183, 54, 255},
+            "Undo restores the previous shape fill color");
+    action(window, "motion-redo-action")->trigger();
+
+    auto* shape_width = findWidget<QSpinBox>(&window, "motion-shape-width");
+    shape_width->setValue(220);
+    (void)QMetaObject::invokeMethod(shape_width, "editingFinished", Qt::DirectConnection);
+    require(std::get<motion::model::ShapeLayerContent>(
+                window.compositionDocument()->layers().back().content).width == 220,
+            "shape inspector edits intrinsic geometry");
+    action(window, "motion-undo-action")->trigger();
+    require(std::get<motion::model::ShapeLayerContent>(
+                window.compositionDocument()->layers().back().content).width == 160,
+            "Undo restores a grouped shape dimension edit");
+    action(window, "motion-redo-action")->trigger();
+    auto* shape_stroke_width = findWidget<QSpinBox>(&window, "motion-shape-stroke-width");
+    shape_stroke_width->setValue(8);
+    (void)QMetaObject::invokeMethod(shape_stroke_width, "editingFinished", Qt::DirectConnection);
+    shape_width->setValue(4);
+    const auto shape_after_rejected_edit = std::get<motion::model::ShapeLayerContent>(
+        window.compositionDocument()->layers().back().content);
+    require(shape_after_rejected_edit.width == 220 &&
+                shape_after_rejected_edit.stroke_width_pixels == 8 &&
+                shape_width->value() == 220,
+            "an invalid shape width leaves the model intact and restores the inspector value");
+    action(window, "motion-undo-action")->trigger();
+    require(std::get<motion::model::ShapeLayerContent>(
+                window.compositionDocument()->layers().back().content).stroke_width_pixels == 0,
+            "a rejected inspector edit does not create an Undo step");
+    action(window, "motion-redo-action")->trigger();
+    const auto before_shape_resize_preview = viewer->renderedFrame();
+
+    require(waitFor([&] {
+        return viewer->renderedFrame() != nullptr &&
+            viewer->renderedFrame() != before_shape_resize_preview &&
+            viewer->renderedFrame() != colored_ellipse_preview;
+    }), "native shape content refreshes the composed preview");
+    require(window.compositionDocument()->layers().size() == 3 &&
+                window.compositionDocument()->layers().back().id == ellipse_layer_id &&
+                timeline->currentFrame() == 47,
+            "native layer edits retain stable timeline rows and do not move the playhead");
+
+    const auto* timeline_rows = findWidget<QWidget>(&window, "motion-timeline-layer-rows");
+    require(timeline_rows != nullptr,
+            "text and shape layers are represented in the existing timeline widget");
+    auto* position_x_key = findWidget<QToolButton>(
+        &window, "motion-transform-keyframe-position-x");
+    position_x_key->click();
+    require(window.compositionDocument()->layers().back().keyframes.position_x ==
+                std::vector<creative_suite::animation::Keyframe>{{0, 0.5}},
+            "shape layers participate in the existing transform keyframe system");
+}
+
 } // namespace
 
 int main(int argc, char* argv[])
@@ -978,6 +1166,7 @@ int main(int argc, char* argv[])
     testRecoveryRestoreAndIgnore();
     testSavedProjectRecoveryOnOpen();
     testMotionDocumentSaveOpen();
+    testNativeTextAndShapeLayers();
 
     motion::ui::TimelineNavigator frame_rate_range_check;
     frame_rate_range_check.resize(1200, 760);

@@ -96,6 +96,21 @@ motion::model::MotionProjectData projectData(
     require(composition.setLayerKeyframe(
                 id, creative_suite::animation::TransformProperty::Opacity, 20, 0.4),
             "recovery fixture stores keyframes");
+    LayerId text_id = 0;
+    require(composition.addContentLayer(LayerKind::Text, "Recovery title", 5, &text_id),
+            "recovery fixture can add text content");
+    auto text = std::get<TextLayerContent>(composition.layers().back().content);
+    text.text = "Recovery \xE2\x9C\xA8 title";
+    require(composition.setTextLayerContent(text_id, text),
+            "recovery fixture stores text content");
+    LayerId shape_id = 0;
+    require(composition.addContentLayer(LayerKind::Shape, "Recovery ellipse", 12, &shape_id),
+            "recovery fixture can add shape content");
+    auto shape = std::get<ShapeLayerContent>(composition.layers().back().content);
+    shape.shape = ShapeKind::Ellipse;
+    shape.stroke_width_pixels = 4;
+    require(composition.setShapeLayerContent(shape_id, shape),
+            "recovery fixture stores shape content");
     project.layers = composition.layers();
     return project;
 }

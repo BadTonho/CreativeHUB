@@ -27,9 +27,14 @@ class QSplitter;
 class QDoubleSpinBox;
 class QCloseEvent;
 class QProgressDialog;
+class QStackedWidget;
 class QTabWidget;
+class QTextEdit;
 class QToolButton;
 class QTimer;
+class QFontComboBox;
+class QComboBox;
+class QSpinBox;
 
 namespace creative_suite::media { struct MediaImportBatchResult; }
 
@@ -74,6 +79,7 @@ private:
     [[nodiscard]] CompositionEditState captureEditState() const;
     [[nodiscard]] bool recordCompositionEdit(CompositionEditState before);
     void finishPendingTransformEdit();
+    void finishPendingContentEdit();
     void undoComposition();
     void redoComposition();
     void applyEditState(CompositionEditState state);
@@ -101,6 +107,10 @@ private:
     void refreshTimeline();
     void selectLayer(model::LayerId id);
     void syncTransformInspector();
+    void syncLayerContentInspector(const model::CompositionLayer* selected);
+    void createContentLayer(model::LayerKind kind, model::ShapeKind shape);
+    void editSelectedLayerContent();
+    void chooseSelectedLayerColor(bool text_color, bool stroke_color);
     void editSelectedLayerTransform(std::size_t property_index);
     void toggleSelectedLayerKeyframe(std::size_t property_index);
     void handleMediaDrop(const std::filesystem::path& path,
@@ -108,6 +118,7 @@ private:
                          model::LayerId before_layer_id);
     void requestPreview(bool playback_tick = false);
     void closeEvent(QCloseEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
     std::optional<model::CompositionDocument> document_;
     QLabel* empty_state_ = nullptr;
@@ -117,6 +128,9 @@ private:
     QAction* save_composition_action_ = nullptr;
     QAction* save_composition_as_action_ = nullptr;
     QAction* import_media_action_ = nullptr;
+    QAction* new_text_layer_action_ = nullptr;
+    QAction* new_rectangle_layer_action_ = nullptr;
+    QAction* new_ellipse_layer_action_ = nullptr;
     QAction* settings_action_ = nullptr;
     QAction* autosave_settings_action_ = nullptr;
     QAction* undo_action_ = nullptr;
@@ -134,6 +148,23 @@ private:
     MediaDetailsWidget* media_details_ = nullptr;
     QTabWidget* inspector_tabs_ = nullptr;
     QWidget* transform_inspector_ = nullptr;
+    QWidget* layer_content_inspector_ = nullptr;
+    QStackedWidget* layer_content_pages_ = nullptr;
+    QWidget* text_content_page_ = nullptr;
+    QWidget* shape_content_page_ = nullptr;
+    QTextEdit* text_content_field_ = nullptr;
+    QFontComboBox* text_font_field_ = nullptr;
+    QSpinBox* text_font_size_field_ = nullptr;
+    QPushButton* text_color_button_ = nullptr;
+    QComboBox* text_alignment_field_ = nullptr;
+    QSpinBox* text_box_width_field_ = nullptr;
+    QSpinBox* text_box_height_field_ = nullptr;
+    QSpinBox* shape_width_field_ = nullptr;
+    QSpinBox* shape_height_field_ = nullptr;
+    QPushButton* shape_fill_button_ = nullptr;
+    QPushButton* shape_stroke_button_ = nullptr;
+    QSpinBox* shape_stroke_width_field_ = nullptr;
+    int layer_content_tab_index_ = -1;
     std::array<QDoubleSpinBox*, 5> transform_fields_{};
     std::array<QToolButton*, 5> transform_key_buttons_{};
     TimelineNavigator* timeline_ = nullptr;
@@ -146,6 +177,7 @@ private:
     QTimer* autosave_timer_ = nullptr;
     CompositionHistory composition_history_;
     std::optional<std::pair<model::LayerId, std::size_t>> active_transform_edit_;
+    std::optional<model::LayerId> active_content_edit_layer_;
     QProgressDialog* open_progress_ = nullptr;
     std::shared_ptr<std::atomic_bool> open_cancel_requested_;
     std::uint64_t open_generation_ = 0;

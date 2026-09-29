@@ -16,12 +16,14 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
 namespace motion::ui {
 
 struct PreviewLayerSnapshot {
+    model::LayerId id = 0;
     model::LayerKind kind = model::LayerKind::Image;
     std::filesystem::path source_path;
     std::int64_t local_frame = 0;
@@ -29,6 +31,7 @@ struct PreviewLayerSnapshot {
     double source_frame_rate = 0.0;
     creative_suite::animation::Transform2D transform;
     creative_suite::animation::TransformKeyframes keyframes;
+    model::LayerContent content;
     creative_suite::media::RgbaFramePtr still_frame;
 };
 
@@ -107,6 +110,11 @@ private:
     std::atomic<std::uint64_t> cancellation_generation_{0};
     std::map<std::filesystem::path,
              std::unique_ptr<creative_suite::media::VideoPlaybackSession>> video_sessions_;
+    struct CachedContentFrame {
+        model::LayerContent content;
+        creative_suite::media::RgbaFramePtr frame;
+    };
+    std::map<model::LayerId, CachedContentFrame> content_frames_;
 };
 
 } // namespace motion::ui

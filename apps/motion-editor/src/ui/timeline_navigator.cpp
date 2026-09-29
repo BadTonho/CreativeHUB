@@ -427,8 +427,13 @@ protected:
                     const QRect clip_rect(clip_left, top + 5,
                                           std::max(2, clip_right - clip_left),
                                           kTimelineRowHeight - 10);
-                    QColor clip_color = row.kind == model::LayerKind::Image
-                        ? QColor(54, 115, 160) : QColor(57, 132, 101);
+                    QColor clip_color;
+                    switch (row.kind) {
+                    case model::LayerKind::Image: clip_color = QColor(54, 115, 160); break;
+                    case model::LayerKind::Video: clip_color = QColor(57, 132, 101); break;
+                    case model::LayerKind::Text: clip_color = QColor(91, 89, 174); break;
+                    case model::LayerKind::Shape: clip_color = QColor(164, 104, 52); break;
+                    }
                     if (!row.visible) clip_color = clip_color.darker(190);
                     painter.setPen(QPen(selected ? QColor(255, 183, 54) : clip_color.lighter(125),
                                         selected ? 2 : 1));

@@ -19,10 +19,13 @@
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QColorDialog>
 #include <QKeySequence>
 #include <QDoubleSpinBox>
 #include <QDialog>
 #include <QDesktopServices>
+#include <QEvent>
+#include <QFontComboBox>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
@@ -36,12 +39,15 @@
 #include <QPointer>
 #include <QProgressDialog>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QSignalBlocker>
+#include <QStackedWidget>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QTimer>
 #include <QToolButton>
+#include <QTextEdit>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QRunnable>
@@ -83,6 +89,39 @@ QString pathForDisplay(const std::filesystem::path& path)
 QString layerName(const model::CompositionLayer& layer)
 {
     return QString::fromUtf8(layer.name.data(), static_cast<qsizetype>(layer.name.size()));
+}
+
+QColor qColor(const model::ColorRgba& color)
+{
+    return QColor(color[0], color[1], color[2], color[3]);
+}
+
+model::ColorRgba modelColor(const QColor& color)
+{
+    return {static_cast<std::uint8_t>(color.red()),
+            static_cast<std::uint8_t>(color.green()),
+            static_cast<std::uint8_t>(color.blue()),
+            static_cast<std::uint8_t>(color.alpha())};
+}
+
+void setColorButton(QPushButton* button, const model::ColorRgba& color)
+{
+    if (button == nullptr) return;
+    const QColor value = qColor(color);
+    button->setText(value.name(QColor::HexArgb));
+    button->setStyleSheet(QStringLiteral("QPushButton { background-color: %1; }")
+                              .arg(value.name(QColor::HexArgb)));
+}
+
+QString qString(const std::string& value)
+{
+    return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
+}
+
+std::string utf8String(const QString& value)
+{
+    const auto bytes = value.toUtf8();
+    return {bytes.constData(), static_cast<std::size_t>(bytes.size())};
 }
 
 using TransformProperty = creative_suite::animation::TransformProperty;
@@ -322,6 +361,28 @@ MainWindow::MainWindow(QWidget* parent,
         QStringLiteral("media.import"), QStringLiteral("Import Media"),
         import_media_action_);
     connect(import_media_action_, &QAction::triggered, this, [this] { openMedia(); });
+
+    auto* layer_menu = menuBar()->addMenu(QStringLiteral("Layer"));
+    new_text_layer_action_ = layer_menu->addAction(QStringLiteral("New Text"));
+    new_text_layer_action_->setObjectName(QStringLiteral("motion-new-text-layer-action"));
+    new_text_layer_action_->setEnabled(false);
+    connect(new_text_layer_action_, &QAction::triggered, this, [this] {
+        createContentLayer(model::LayerKind::Text, model::ShapeKind::Rectangle);
+    });
+    new_rectangle_layer_action_ = layer_menu->addAction(QStringLiteral("New Rectangle"));
+    new_rectangle_layer_action_->setObjectName(
+        QStringLiteral("motion-new-rectangle-layer-action"));
+    new_rectangle_layer_action_->setEnabled(false);
+    connect(new_rectangle_layer_action_, &QAction::triggered, this, [this] {
+        createContentLayer(model::LayerKind::Shape, model::ShapeKind::Rectangle);
+    });
+    new_ellipse_layer_action_ = layer_menu->addAction(QStringLiteral("New Ellipse"));
+    new_ellipse_layer_action_->setObjectName(
+        QStringLiteral("motion-new-ellipse-layer-action"));
+    new_ellipse_layer_action_->setEnabled(false);
+    connect(new_ellipse_layer_action_, &QAction::triggered, this, [this] {
+        createContentLayer(model::LayerKind::Shape, model::ShapeKind::Ellipse);
+    });
 
     auto* edit_menu = menuBar()->addMenu(QStringLiteral("Edit"));
     undo_action_ = edit_menu->addAction(QStringLiteral("Undo"));
@@ -667,6 +728,11 @@ void MainWindow::updateDocumentState()
     const bool has_document = document_.has_value();
     const bool dirty = documentIsDirty();
     if (import_media_action_ != nullptr) import_media_action_->setEnabled(has_document);
+    if (new_text_layer_action_ != nullptr) new_text_layer_action_->setEnabled(has_document);
+    if (new_rectangle_layer_action_ != nullptr)
+        new_rectangle_layer_action_->setEnabled(has_document);
+    if (new_ellipse_layer_action_ != nullptr)
+        new_ellipse_layer_action_->setEnabled(has_document);
     if (save_composition_action_ != nullptr) save_composition_action_->setEnabled(has_document);
     if (save_composition_as_action_ != nullptr)
         save_composition_as_action_->setEnabled(has_document);
@@ -705,6 +771,17 @@ void MainWindow::finishPendingTransformEdit()
 {
     if (!active_transform_edit_.has_value()) return;
     active_transform_edit_.reset();
+    if (document_) {
+        composition_history_.finishCoalescedEdit(captureEditState());
+    }
+    updateHistoryActions();
+    finishPendingContentEdit();
+}
+
+void MainWindow::finishPendingContentEdit()
+{
+    if (!active_content_edit_layer_.has_value()) return;
+    active_content_edit_layer_.reset();
     if (document_) {
         composition_history_.finishCoalescedEdit(captureEditState());
     }
@@ -1282,6 +1359,134 @@ void MainWindow::createWorkspace()
     inspector_tabs_->setMinimumWidth(250);
     inspector_tabs_->addTab(media_details_, QStringLiteral("Media"));
 
+    layer_content_inspector_ = new QWidget(inspector_tabs_);
+    layer_content_inspector_->setObjectName(QStringLiteral("motion-layer-content-inspector"));
+    auto* content_layout = new QVBoxLayout(layer_content_inspector_);
+    auto* content_title = new QLabel(QStringLiteral("Selected Layer Content"),
+                                     layer_content_inspector_);
+    content_title->setObjectName(QStringLiteral("motion-layer-content-title"));
+    content_layout->addWidget(content_title);
+    layer_content_pages_ = new QStackedWidget(layer_content_inspector_);
+    layer_content_pages_->setObjectName(QStringLiteral("motion-layer-content-pages"));
+    auto* empty_content_page = new QLabel(
+        QStringLiteral("Select a text or shape layer to edit its content."),
+        layer_content_pages_);
+    empty_content_page->setObjectName(QStringLiteral("motion-layer-content-empty"));
+    empty_content_page->setWordWrap(true);
+    empty_content_page->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    layer_content_pages_->addWidget(empty_content_page);
+
+    text_content_page_ = new QWidget(layer_content_pages_);
+    text_content_page_->setObjectName(QStringLiteral("motion-text-content-page"));
+    auto* text_layout = new QVBoxLayout(text_content_page_);
+    auto* text_form = new QFormLayout();
+    text_content_field_ = new QTextEdit(text_content_page_);
+    text_content_field_->setObjectName(QStringLiteral("motion-text-content"));
+    text_content_field_->setAcceptRichText(false);
+    text_content_field_->setMaximumHeight(112);
+    text_form->addRow(QStringLiteral("Text"), text_content_field_);
+
+    text_font_field_ = new QFontComboBox(text_content_page_);
+    text_font_field_->setObjectName(QStringLiteral("motion-text-font-family"));
+    text_form->addRow(QStringLiteral("Font"), text_font_field_);
+
+    text_font_size_field_ = new QSpinBox(text_content_page_);
+    text_font_size_field_->setObjectName(QStringLiteral("motion-text-font-size"));
+    text_font_size_field_->setRange(1, 4096);
+    text_font_size_field_->setSuffix(QStringLiteral(" px"));
+    text_form->addRow(QStringLiteral("Size"), text_font_size_field_);
+
+    text_color_button_ = new QPushButton(text_content_page_);
+    text_color_button_->setObjectName(QStringLiteral("motion-text-color"));
+    text_form->addRow(QStringLiteral("Color"), text_color_button_);
+
+    text_alignment_field_ = new QComboBox(text_content_page_);
+    text_alignment_field_->setObjectName(QStringLiteral("motion-text-alignment"));
+    text_alignment_field_->addItem(QStringLiteral("Left"),
+        static_cast<int>(model::TextAlignment::Left));
+    text_alignment_field_->addItem(QStringLiteral("Center"),
+        static_cast<int>(model::TextAlignment::Center));
+    text_alignment_field_->addItem(QStringLiteral("Right"),
+        static_cast<int>(model::TextAlignment::Right));
+    text_form->addRow(QStringLiteral("Alignment"), text_alignment_field_);
+
+    text_box_width_field_ = new QSpinBox(text_content_page_);
+    text_box_width_field_->setObjectName(QStringLiteral("motion-text-box-width"));
+    text_box_width_field_->setRange(1, 32768);
+    text_box_width_field_->setSuffix(QStringLiteral(" px"));
+    text_form->addRow(QStringLiteral("Box width"), text_box_width_field_);
+
+    text_box_height_field_ = new QSpinBox(text_content_page_);
+    text_box_height_field_->setObjectName(QStringLiteral("motion-text-box-height"));
+    text_box_height_field_->setRange(1, 32768);
+    text_box_height_field_->setSuffix(QStringLiteral(" px"));
+    text_form->addRow(QStringLiteral("Box height"), text_box_height_field_);
+    text_layout->addLayout(text_form);
+    text_layout->addStretch(1);
+    layer_content_pages_->addWidget(text_content_page_);
+
+    shape_content_page_ = new QWidget(layer_content_pages_);
+    shape_content_page_->setObjectName(QStringLiteral("motion-shape-content-page"));
+    auto* shape_layout = new QVBoxLayout(shape_content_page_);
+    auto* shape_form = new QFormLayout();
+    shape_width_field_ = new QSpinBox(shape_content_page_);
+    shape_width_field_->setObjectName(QStringLiteral("motion-shape-width"));
+    shape_width_field_->setRange(1, 32768);
+    shape_width_field_->setSuffix(QStringLiteral(" px"));
+    shape_form->addRow(QStringLiteral("Width"), shape_width_field_);
+    shape_height_field_ = new QSpinBox(shape_content_page_);
+    shape_height_field_->setObjectName(QStringLiteral("motion-shape-height"));
+    shape_height_field_->setRange(1, 32768);
+    shape_height_field_->setSuffix(QStringLiteral(" px"));
+    shape_form->addRow(QStringLiteral("Height"), shape_height_field_);
+    shape_fill_button_ = new QPushButton(shape_content_page_);
+    shape_fill_button_->setObjectName(QStringLiteral("motion-shape-fill-color"));
+    shape_form->addRow(QStringLiteral("Fill"), shape_fill_button_);
+    shape_stroke_button_ = new QPushButton(shape_content_page_);
+    shape_stroke_button_->setObjectName(QStringLiteral("motion-shape-stroke-color"));
+    shape_form->addRow(QStringLiteral("Stroke"), shape_stroke_button_);
+    shape_stroke_width_field_ = new QSpinBox(shape_content_page_);
+    shape_stroke_width_field_->setObjectName(QStringLiteral("motion-shape-stroke-width"));
+    shape_stroke_width_field_->setRange(0, 4096);
+    shape_stroke_width_field_->setSuffix(QStringLiteral(" px"));
+    shape_form->addRow(QStringLiteral("Stroke width"), shape_stroke_width_field_);
+    shape_layout->addLayout(shape_form);
+    shape_layout->addStretch(1);
+    layer_content_pages_->addWidget(shape_content_page_);
+    content_layout->addWidget(layer_content_pages_, 1);
+    layer_content_tab_index_ = inspector_tabs_->addTab(
+        layer_content_inspector_, QStringLiteral("Layer"));
+    inspector_tabs_->setTabEnabled(layer_content_tab_index_, false);
+
+    text_content_field_->installEventFilter(this);
+    text_font_field_->installEventFilter(this);
+    text_alignment_field_->installEventFilter(this);
+    for (auto* field : {text_font_size_field_, text_box_width_field_,
+                        text_box_height_field_, shape_width_field_,
+                        shape_height_field_, shape_stroke_width_field_}) {
+        field->installEventFilter(this);
+        connect(field, &QSpinBox::valueChanged, this, [this](int) {
+            editSelectedLayerContent();
+        });
+        connect(field, &QSpinBox::editingFinished,
+                this, [this] { finishPendingContentEdit(); });
+    }
+    connect(text_content_field_, &QTextEdit::textChanged,
+            this, [this] { editSelectedLayerContent(); });
+    connect(text_font_field_, &QFontComboBox::currentFontChanged,
+            this, [this](const QFont&) { editSelectedLayerContent(); });
+    connect(text_alignment_field_, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [this](int) { editSelectedLayerContent(); });
+    connect(text_color_button_, &QPushButton::clicked, this, [this] {
+        chooseSelectedLayerColor(true, false);
+    });
+    connect(shape_fill_button_, &QPushButton::clicked, this, [this] {
+        chooseSelectedLayerColor(false, false);
+    });
+    connect(shape_stroke_button_, &QPushButton::clicked, this, [this] {
+        chooseSelectedLayerColor(false, true);
+    });
+
     transform_inspector_ = new QWidget(inspector_tabs_);
     transform_inspector_->setObjectName(QStringLiteral("motion-transform-inspector"));
     auto* transform_layout = new QVBoxLayout(transform_inspector_);
@@ -1524,7 +1729,60 @@ void MainWindow::selectLayer(model::LayerId id)
     selected_layer_id_ = id;
     timeline_->setSelectedLayerId(id);
     syncTransformInspector();
-    inspector_tabs_->setCurrentWidget(transform_inspector_);
+    if (found->kind == model::LayerKind::Text || found->kind == model::LayerKind::Shape) {
+        inspector_tabs_->setCurrentWidget(layer_content_inspector_);
+    } else {
+        inspector_tabs_->setCurrentWidget(transform_inspector_);
+    }
+}
+
+void MainWindow::createContentLayer(model::LayerKind kind, model::ShapeKind shape)
+{
+    finishPendingTransformEdit();
+    if (!document_ || timeline_ == nullptr) return;
+
+    auto before = captureEditState();
+    const std::size_t same_kind_count = static_cast<std::size_t>(std::count_if(
+        document_->layers().begin(), document_->layers().end(),
+        [kind, shape](const model::CompositionLayer& layer) {
+            if (layer.kind != kind) return false;
+            if (kind != model::LayerKind::Shape) return true;
+            const auto* content = std::get_if<model::ShapeLayerContent>(&layer.content);
+            return content != nullptr && content->shape == shape;
+        }));
+    QString name;
+    if (kind == model::LayerKind::Text) {
+        name = QStringLiteral("Text %1").arg(same_kind_count + 1);
+    } else {
+        name = QStringLiteral("%1 %2")
+            .arg(shape == model::ShapeKind::Ellipse
+                    ? QStringLiteral("Ellipse") : QStringLiteral("Rectangle"))
+            .arg(same_kind_count + 1);
+    }
+
+    model::LayerId added_id = 0;
+    if (!document_->addContentLayer(kind, utf8String(name), timeline_->currentFrame(), &added_id)) {
+        statusBar()->showMessage(
+            QStringLiteral("The layer could not be added at the current frame."), 4000);
+        return;
+    }
+    if (kind == model::LayerKind::Shape && shape == model::ShapeKind::Ellipse) {
+        auto layer = std::find_if(
+            document_->layers().begin(), document_->layers().end(),
+            [added_id](const model::CompositionLayer& item) { return item.id == added_id; });
+        if (layer != document_->layers().end()) {
+            auto content = std::get<model::ShapeLayerContent>(layer->content);
+            content.shape = model::ShapeKind::Ellipse;
+            (void)document_->setShapeLayerContent(added_id, content);
+        }
+    }
+    selected_layer_id_ = added_id;
+    (void)recordCompositionEdit(std::move(before));
+    refreshTimeline();
+    syncTransformInspector();
+    inspector_tabs_->setCurrentWidget(layer_content_inspector_);
+    updateDocumentState();
+    requestPreview();
 }
 
 void MainWindow::syncTransformInspector()
@@ -1538,6 +1796,7 @@ void MainWindow::syncTransformInspector()
         if (found != layers.end()) selected = &*found;
     }
     if (transform_inspector_ != nullptr) transform_inspector_->setEnabled(selected != nullptr);
+    syncLayerContentInspector(selected);
     if (selected == nullptr) {
         viewer_->setSelectedLayerAnchor(std::nullopt);
         return;
@@ -1570,6 +1829,151 @@ void MainWindow::syncTransformInspector()
     viewer_->setSelectedLayerAnchor(selected->visible
         ? std::optional<QPointF>(QPointF(evaluated.position_x, evaluated.position_y))
         : std::nullopt);
+}
+
+void MainWindow::syncLayerContentInspector(const model::CompositionLayer* selected)
+{
+    if (layer_content_pages_ == nullptr || inspector_tabs_ == nullptr) return;
+    const auto* text = selected != nullptr
+        ? std::get_if<model::TextLayerContent>(&selected->content) : nullptr;
+    const auto* shape = selected != nullptr
+        ? std::get_if<model::ShapeLayerContent>(&selected->content) : nullptr;
+    const bool supports_content = text != nullptr || shape != nullptr;
+    inspector_tabs_->setTabEnabled(layer_content_tab_index_, supports_content);
+    if (text != nullptr) {
+        layer_content_pages_->setCurrentIndex(1);
+        const QSignalBlocker text_blocker(text_content_field_);
+        const QSignalBlocker font_blocker(text_font_field_);
+        const QSignalBlocker size_blocker(text_font_size_field_);
+        const QSignalBlocker alignment_blocker(text_alignment_field_);
+        const QSignalBlocker width_blocker(text_box_width_field_);
+        const QSignalBlocker height_blocker(text_box_height_field_);
+        text_content_field_->setPlainText(qString(text->text));
+        text_font_field_->setCurrentFont(QFont(qString(text->font_family)));
+        text_font_size_field_->setValue(text->font_size_pixels);
+        text_alignment_field_->setCurrentIndex(text_alignment_field_->findData(
+            static_cast<int>(text->alignment)));
+        text_box_width_field_->setValue(text->box_width);
+        text_box_height_field_->setValue(text->box_height);
+        setColorButton(text_color_button_, text->color);
+        return;
+    }
+    if (shape != nullptr) {
+        layer_content_pages_->setCurrentIndex(2);
+        const QSignalBlocker width_blocker(shape_width_field_);
+        const QSignalBlocker height_blocker(shape_height_field_);
+        const QSignalBlocker stroke_width_blocker(shape_stroke_width_field_);
+        shape_width_field_->setValue(shape->width);
+        shape_height_field_->setValue(shape->height);
+        shape_stroke_width_field_->setValue(shape->stroke_width_pixels);
+        setColorButton(shape_fill_button_, shape->fill_color);
+        setColorButton(shape_stroke_button_, shape->stroke_color);
+        return;
+    }
+    layer_content_pages_->setCurrentIndex(0);
+}
+
+void MainWindow::editSelectedLayerContent()
+{
+    if (!document_ || selected_layer_id_ == 0) return;
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (found == document_->layers().end()) return;
+    const bool is_text = found->kind == model::LayerKind::Text;
+    const bool is_shape = found->kind == model::LayerKind::Shape;
+    if (!is_text && !is_shape) return;
+
+    const bool coalescing = active_content_edit_layer_ == selected_layer_id_;
+    std::optional<CompositionEditState> before;
+    if (!coalescing) {
+        finishPendingTransformEdit();
+        before.emplace(captureEditState());
+    }
+
+    bool changed = false;
+    bool rejected = false;
+    if (is_text) {
+        auto content = std::get<model::TextLayerContent>(found->content);
+        content.text = utf8String(text_content_field_->toPlainText());
+        content.font_family = utf8String(text_font_field_->currentFont().family());
+        content.font_size_pixels = text_font_size_field_->value();
+        content.alignment = static_cast<model::TextAlignment>(
+            text_alignment_field_->currentData().toInt());
+        content.box_width = text_box_width_field_->value();
+        content.box_height = text_box_height_field_->value();
+        if (content != std::get<model::TextLayerContent>(found->content)) {
+            changed = document_->setTextLayerContent(selected_layer_id_, content);
+            rejected = !changed;
+        }
+    } else {
+        auto content = std::get<model::ShapeLayerContent>(found->content);
+        content.width = shape_width_field_->value();
+        content.height = shape_height_field_->value();
+        content.stroke_width_pixels = shape_stroke_width_field_->value();
+        if (content != std::get<model::ShapeLayerContent>(found->content)) {
+            changed = document_->setShapeLayerContent(selected_layer_id_, content);
+            rejected = !changed;
+        }
+    }
+    if (rejected) {
+        syncLayerContentInspector(&*found);
+        statusBar()->showMessage(
+            QStringLiteral("The layer content value is outside the supported range."), 4000);
+        return;
+    }
+    if (!changed) return;
+    if (!coalescing) {
+        composition_history_.beginCoalescedEdit(std::move(*before));
+        active_content_edit_layer_ = selected_layer_id_;
+        updateHistoryActions();
+    }
+    updateDocumentState();
+    requestPreview();
+}
+
+void MainWindow::chooseSelectedLayerColor(bool text_color, bool stroke_color)
+{
+    finishPendingTransformEdit();
+    if (!document_ || selected_layer_id_ == 0) return;
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (found == document_->layers().end()) return;
+
+    model::ColorRgba old_color{};
+    if (text_color && found->kind == model::LayerKind::Text) {
+        old_color = std::get<model::TextLayerContent>(found->content).color;
+    } else if (!text_color && found->kind == model::LayerKind::Shape) {
+        const auto& shape = std::get<model::ShapeLayerContent>(found->content);
+        old_color = stroke_color ? shape.stroke_color : shape.fill_color;
+    } else {
+        return;
+    }
+    const QColor chosen = QColorDialog::getColor(
+        qColor(old_color), this,
+        text_color ? QStringLiteral("Text Color")
+            : stroke_color ? QStringLiteral("Stroke Color") : QStringLiteral("Fill Color"),
+        QColorDialog::ShowAlphaChannel);
+    if (!chosen.isValid()) return;
+    const auto new_color = modelColor(chosen);
+    if (new_color == old_color) return;
+
+    auto before = captureEditState();
+    bool changed = false;
+    if (text_color) {
+        auto content = std::get<model::TextLayerContent>(found->content);
+        content.color = new_color;
+        changed = document_->setTextLayerContent(selected_layer_id_, content);
+    } else {
+        auto content = std::get<model::ShapeLayerContent>(found->content);
+        if (stroke_color) content.stroke_color = new_color;
+        else content.fill_color = new_color;
+        changed = document_->setShapeLayerContent(selected_layer_id_, content);
+    }
+    if (!changed) return;
+    (void)recordCompositionEdit(std::move(before));
+    syncLayerContentInspector(found == document_->layers().end() ? nullptr : &*found);
+    updateDocumentState();
+    requestPreview();
 }
 
 void MainWindow::editSelectedLayerTransform(std::size_t property_index)
@@ -1745,6 +2149,7 @@ void MainWindow::requestPreview(bool playback_tick)
             continue;
         }
         PreviewLayerSnapshot snapshot;
+        snapshot.id = layer.id;
         snapshot.kind = layer.kind;
         snapshot.source_path = layer.source_path;
         snapshot.local_frame = frame - layer.timeline_start_frame;
@@ -1752,6 +2157,7 @@ void MainWindow::requestPreview(bool playback_tick)
         snapshot.source_frame_rate = layer.source_frame_rate;
         snapshot.transform = layer.transform;
         snapshot.keyframes = layer.keyframes;
+        snapshot.content = layer.content;
         if (layer.kind == model::LayerKind::Image) {
             snapshot.still_frame = media_pool_->sharedFirstFrameForPath(layer.source_path);
         }
@@ -1760,6 +2166,19 @@ void MainWindow::requestPreview(bool playback_tick)
     (void)preview_renderer_->submit(
         std::move(request),
         playback_tick ? PreviewRequestMode::Playback : PreviewRequestMode::Interactive);
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event != nullptr && event->type() == QEvent::FocusOut &&
+        (watched == text_content_field_ || watched == text_font_field_ ||
+         watched == text_alignment_field_ || watched == text_font_size_field_ ||
+         watched == text_box_width_field_ || watched == text_box_height_field_ ||
+         watched == shape_width_field_ || watched == shape_height_field_ ||
+         watched == shape_stroke_width_field_)) {
+        finishPendingContentEdit();
+    }
+    return QMainWindow::eventFilter(watched, event);
 }
 
 } // namespace motion::ui

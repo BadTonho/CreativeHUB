@@ -1,4 +1,5 @@
 #include "preview_renderer.h"
+#include "layer_content_renderer.h"
 
 #include <creative_suite/composition/frame_compositor.h>
 #include <creative_suite/diagnostics/logger.h>
@@ -121,7 +122,10 @@ void PreviewRenderer::run()
                 in_flight_generation_ = request->generation;
             }
         }
-        if (reset_sessions) video_sessions_.clear();
+        if (reset_sessions) {
+            video_sessions_.clear();
+            content_frames_.clear();
+        }
         if (!request.has_value()) continue;
 
         creative_suite::media::RgbaFramePtr output;
@@ -186,13 +190,17 @@ creative_suite::media::RgbaFramePtr PreviewRenderer::render(
     using creative_suite::composition::CompositionLayer;
     using creative_suite::media::VideoPlaybackSession;
 
-    if (request.layers.empty()) return {};
+    if (request.layers.empty()) {
+        content_frames_.clear();
+        return {};
+    }
     if (request.frame_rate.numerator <= 0 || request.frame_rate.denominator <= 0) {
         return {};
     }
 
     std::vector<creative_suite::composition::CompositionLayer> composition_layers;
     std::vector<creative_suite::media::RgbaFramePtr> owned_frames;
+    std::set<model::LayerId> active_content_ids;
     composition_layers.reserve(request.layers.size());
     owned_frames.reserve(request.layers.size());
     const long double timeline_rate =
@@ -266,15 +274,57 @@ creative_suite::media::RgbaFramePtr PreviewRenderer::render(
                 video_sessions_.erase(layer.source_path);
                 continue;
             }
+        } else if (layer.kind == model::LayerKind::Text ||
+                   layer.kind == model::LayerKind::Shape) {
+            active_content_ids.insert(layer.id);
+            auto cached = content_frames_.find(layer.id);
+            if (cached == content_frames_.end() || cached->second.content != layer.content) {
+                const auto rasterized = rasterizeLayerContent(layer.content);
+                if (!rasterized.has_value()) {
+                    creative_suite::diagnostics::Logger::instance().log(
+                        creative_suite::diagnostics::Level::Warning,
+                        "motion_preview", "rasterize_layer_content",
+                        "Text or shape content could not be rasterized within the supported limits",
+                        {{"layer_id", std::to_string(layer.id)}});
+                    content_frames_.erase(layer.id);
+                    continue;
+                }
+                cached = content_frames_.insert_or_assign(
+                    layer.id,
+                    CachedContentFrame{
+                        layer.content,
+                        std::make_shared<const creative_suite::media::RgbaFrame>(
+                            *rasterized)}).first;
+            }
+            frame = cached->second.frame;
         } else {
             continue;
         }
 
         if (frame == nullptr) continue;
         owned_frames.push_back(frame);
-        composition_layers.push_back(CompositionLayer{
-            frame.get(), creative_suite::animation::evaluateTransform(
-                layer.transform, layer.keyframes, layer.local_frame)});
+        auto transform = creative_suite::animation::evaluateTransform(
+            layer.transform, layer.keyframes, layer.local_frame);
+        if (layer.kind == model::LayerKind::Text ||
+            layer.kind == model::LayerKind::Shape) {
+            const double fit_scale = std::min(
+                static_cast<double>(request.canvas_size.width) / frame->width,
+                static_cast<double>(request.canvas_size.height) / frame->height);
+            if (!std::isfinite(fit_scale) || fit_scale <= 0.0) continue;
+            // The shared compositor aspect-fits every source frame to the
+            // canvas. Compensate here so intrinsic pixel dimensions on native
+            // text/shape layers remain pixel-sized at transform scale 1.
+            transform.scale /= fit_scale;
+        }
+        composition_layers.push_back(CompositionLayer{frame.get(), transform});
+    }
+
+    for (auto cached = content_frames_.begin(); cached != content_frames_.end();) {
+        if (!active_content_ids.contains(cached->first)) {
+            cached = content_frames_.erase(cached);
+        } else {
+            ++cached;
+        }
     }
 
     if (cancellation_generation !=

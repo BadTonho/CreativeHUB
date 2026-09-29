@@ -31,6 +31,7 @@ using model::CompositionDocument;
 using model::CompositionLayer;
 using model::FrameRate;
 using model::LayerKind;
+using model::ShapeKind;
 using model::MotionMediaEntryData;
 using model::MotionProjectData;
 
@@ -263,6 +264,73 @@ LayerKind parseLayerKind(const QString& value,
          QStringLiteral("The document contains an unsupported layer kind."));
 }
 
+QString textAlignmentName(model::TextAlignment alignment)
+{
+    switch (alignment) {
+    case model::TextAlignment::Left: return QStringLiteral("left");
+    case model::TextAlignment::Center: return QStringLiteral("center");
+    case model::TextAlignment::Right: return QStringLiteral("right");
+    }
+    return {};
+}
+
+model::TextAlignment parseTextAlignment(const QString& value,
+                                        const std::filesystem::path& path)
+{
+    if (value == QLatin1String("left")) return model::TextAlignment::Left;
+    if (value == QLatin1String("center")) return model::TextAlignment::Center;
+    if (value == QLatin1String("right")) return model::TextAlignment::Right;
+    fail(MotionDocumentErrorCode::InvalidValue, path,
+         QStringLiteral("The text layer has an unsupported alignment."));
+}
+
+QString shapeKindName(ShapeKind shape)
+{
+    switch (shape) {
+    case ShapeKind::Rectangle: return QStringLiteral("rectangle");
+    case ShapeKind::Ellipse: return QStringLiteral("ellipse");
+    }
+    return {};
+}
+
+ShapeKind parseShapeKind(const QString& value, const std::filesystem::path& path)
+{
+    if (value == QLatin1String("rectangle")) return ShapeKind::Rectangle;
+    if (value == QLatin1String("ellipse")) return ShapeKind::Ellipse;
+    fail(MotionDocumentErrorCode::InvalidValue, path,
+         QStringLiteral("The shape layer has an unsupported primitive."));
+}
+
+QJsonArray writeColor(const model::ColorRgba& color)
+{
+    QJsonArray array;
+    for (const auto channel : color) array.append(static_cast<int>(channel));
+    return array;
+}
+
+model::ColorRgba parseColor(const QJsonValue& value,
+                            const std::filesystem::path& path)
+{
+    if (!value.isArray() || value.toArray().size() != 4) {
+        fail(MotionDocumentErrorCode::InvalidValue, path,
+             QStringLiteral("A layer color must contain four RGBA channels."));
+    }
+    const auto array = value.toArray();
+    model::ColorRgba color{};
+    for (qsizetype index = 0; index < 4; ++index) {
+        const auto channel = array.at(index);
+        if (!channel.isDouble() || !std::isfinite(channel.toDouble()) ||
+            std::floor(channel.toDouble()) != channel.toDouble() ||
+            channel.toDouble() < 0.0 || channel.toDouble() > 255.0) {
+            fail(MotionDocumentErrorCode::InvalidValue, path,
+                 QStringLiteral("A layer color channel must be an integer in the range 0 to 255."));
+        }
+        color[static_cast<std::size_t>(index)] =
+            static_cast<std::uint8_t>(channel.toInt());
+    }
+    return color;
+}
+
 QString mediaKindName(MediaKind kind)
 {
     return kind == MediaKind::Image ? QStringLiteral("image") : QStringLiteral("video");
@@ -424,6 +492,28 @@ QJsonObject writeLayer(const CompositionLayer& layer,
     keyframes.insert(QStringLiteral("rotation"), writeKeyframes(layer.keyframes.rotation));
     keyframes.insert(QStringLiteral("opacity"), writeKeyframes(layer.keyframes.opacity));
     object.insert(QStringLiteral("keyframes"), keyframes);
+    if (layer.kind == LayerKind::Text) {
+        const auto& text = std::get<model::TextLayerContent>(layer.content);
+        QJsonObject content;
+        content.insert(QStringLiteral("text"), stringFromUtf8(text.text));
+        content.insert(QStringLiteral("font_family"), stringFromUtf8(text.font_family));
+        content.insert(QStringLiteral("font_size_pixels"), text.font_size_pixels);
+        content.insert(QStringLiteral("color"), writeColor(text.color));
+        content.insert(QStringLiteral("alignment"), textAlignmentName(text.alignment));
+        content.insert(QStringLiteral("box_width"), text.box_width);
+        content.insert(QStringLiteral("box_height"), text.box_height);
+        object.insert(QStringLiteral("text_content"), content);
+    } else if (layer.kind == LayerKind::Shape) {
+        const auto& shape = std::get<model::ShapeLayerContent>(layer.content);
+        QJsonObject content;
+        content.insert(QStringLiteral("primitive"), shapeKindName(shape.shape));
+        content.insert(QStringLiteral("width"), shape.width);
+        content.insert(QStringLiteral("height"), shape.height);
+        content.insert(QStringLiteral("fill_color"), writeColor(shape.fill_color));
+        content.insert(QStringLiteral("stroke_color"), writeColor(shape.stroke_color));
+        content.insert(QStringLiteral("stroke_width_pixels"), shape.stroke_width_pixels);
+        object.insert(QStringLiteral("shape_content"), content);
+    }
     return object;
 }
 
@@ -455,7 +545,9 @@ std::vector<creative_suite::animation::Keyframe> parseKeyframes(
 
 CompositionLayer parseLayer(const QJsonValue& value,
                             const std::filesystem::path& document_path,
-                            std::size_t& keyframe_count)
+                            std::size_t& keyframe_count,
+                            int document_version,
+                            model::CanvasSize canvas_size)
 {
     if (!value.isObject()) {
         fail(MotionDocumentErrorCode::InvalidValue, document_path,
@@ -499,6 +591,35 @@ CompositionLayer parseLayer(const QJsonValue& value,
         requiredArray(keyframes, "rotation", document_path), document_path, keyframe_count);
     layer.keyframes.opacity = parseKeyframes(
         requiredArray(keyframes, "opacity", document_path), document_path, keyframe_count);
+    if (document_version == 1 && layer.kind == LayerKind::Text) {
+        layer.content = model::defaultTextLayerContent(canvas_size);
+    } else if (document_version == 1 && layer.kind == LayerKind::Shape) {
+        layer.content = model::defaultShapeLayerContent(canvas_size);
+    } else if (layer.kind == LayerKind::Text) {
+        const auto content = requiredObject(object, "text_content", document_path);
+        model::TextLayerContent text;
+        text.text = requiredString(content, "text", document_path).toUtf8().toStdString();
+        text.font_family = requiredString(content, "font_family", document_path)
+            .toUtf8().toStdString();
+        text.font_size_pixels = requiredInt(content, "font_size_pixels", document_path);
+        text.color = parseColor(content.value(QStringLiteral("color")), document_path);
+        text.alignment = parseTextAlignment(
+            requiredString(content, "alignment", document_path), document_path);
+        text.box_width = requiredInt(content, "box_width", document_path);
+        text.box_height = requiredInt(content, "box_height", document_path);
+        layer.content = std::move(text);
+    } else if (layer.kind == LayerKind::Shape) {
+        const auto content = requiredObject(object, "shape_content", document_path);
+        model::ShapeLayerContent shape;
+        shape.shape = parseShapeKind(
+            requiredString(content, "primitive", document_path), document_path);
+        shape.width = requiredInt(content, "width", document_path);
+        shape.height = requiredInt(content, "height", document_path);
+        shape.fill_color = parseColor(content.value(QStringLiteral("fill_color")), document_path);
+        shape.stroke_color = parseColor(content.value(QStringLiteral("stroke_color")), document_path);
+        shape.stroke_width_pixels = requiredInt(content, "stroke_width_pixels", document_path);
+        layer.content = shape;
+    }
     return layer;
 }
 
@@ -511,7 +632,7 @@ MotionProjectData parseDocument(const QJsonObject& root,
              QStringLiteral("The file is not a Motion Studio document."));
     }
     const int version = requiredInt(root, "version", document_path);
-    if (version != MotionDocumentStore::current_format_version) {
+    if (version != 1 && version != MotionDocumentStore::current_format_version) {
         fail(MotionDocumentErrorCode::UnsupportedVersion, document_path,
              QStringLiteral("Motion Studio document version %1 is not supported.").arg(version));
     }
@@ -526,6 +647,7 @@ MotionProjectData parseDocument(const QJsonObject& root,
         frame_rate, "numerator", document_path);
     result.composition.frame_rate.denominator = requiredInt64(
         frame_rate, "denominator", document_path);
+    const auto canvas_size = result.composition.canvas_size;
 
     const auto media_pool = requiredObject(root, "media_pool", document_path);
     const auto bins = requiredArray(media_pool, "bins", document_path);
@@ -579,7 +701,8 @@ MotionProjectData parseDocument(const QJsonObject& root,
     result.layers.reserve(static_cast<std::size_t>(layers.size()));
     std::size_t keyframe_count = 0;
     for (const auto& value : layers) {
-        result.layers.push_back(parseLayer(value, document_path, keyframe_count));
+        result.layers.push_back(parseLayer(
+            value, document_path, keyframe_count, version, canvas_size));
     }
     validateDocument(result, document_path);
     return result;
