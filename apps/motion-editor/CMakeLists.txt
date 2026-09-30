@@ -47,6 +47,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/layer_content_renderer.h
     src/ui/layer_effect_processor.cpp
     src/ui/layer_effect_processor.h
+    src/ui/layer_effect_worker_pool.cpp
+    src/ui/layer_effect_worker_pool.h
     src/ui/timeline_navigator.cpp
     src/ui/timeline_navigator.h
     src/ui/timeline_navigator_math.h

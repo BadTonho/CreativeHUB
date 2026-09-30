@@ -58,6 +58,7 @@ add_creative_suite_test(
 creative_suite_deploy_media_runtime(creative-suite-motion-editor-preview-tests)
 set_tests_properties(creative-suite-motion-editor-preview PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 90
 )
 
 add_executable(creative-suite-motion-editor-performance-tests

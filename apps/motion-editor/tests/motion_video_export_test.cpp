@@ -152,6 +152,7 @@ MotionExportSnapshot makeSnapshot(const std::filesystem::path& source_video)
     auto image = imageLayer(3, 4);
     image.effects.emplace_back(motion::model::ColorAdjustmentEffect{
         true, 20.0, 100.0, 100.0});
+    image.effects.emplace_back(motion::model::GaussianBlurEffect{true, 10.0});
     snapshot.still_frames.emplace(image.source_path, solidFrame(20, 180, 30));
     snapshot.layers.push_back(std::move(image));
 

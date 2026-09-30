@@ -207,9 +207,18 @@ the Motion Studio implementation choices are finalized.
 - [x] Make neutral Color Adjustment an exact byte-preserving no-op while
   retaining per-effect timing records. Replace floating-point Gaussian Blur
   rolling sums with integer accumulation and equivalent rounding, and process
-  vertical passes in 32-pixel tiles. Preview, playback, and export use the same
-  processor. Differential tests compare output against the previous algorithm;
-  the Windows 1080p/60 performance measurement remains pending.
+  vertical passes in 32-pixel tiles. Preview, playback, and export share a
+  bounded Motion Studio worker pool that parallelizes premultiplication,
+  horizontal rows, vertical tiles, and final alpha conversion, with a barrier
+  between each blur pass. The pool uses at most eight workers and reserves one
+  reported logical core when more than one is available, while keeping at
+  least one worker; unknown core counts fall back to one worker. Single- and
+  multi-worker differential tests compare bytes against the previous
+  algorithm; concurrent calls, cancellation, and per-effect timing are covered.
+- [-] Verify the blur speed target on Windows with three 10-second runs of the
+  same 1920 × 1080, 60 fps radius-10 composition and neutral Color Adjustment.
+  Compare the 238.429 ms serial average against the 178.8 ms target, check
+  rendered/coalesced request counts, and confirm pixel equality.
 - [-] Extend actionable local error logging and automated coverage for the
   remaining document, rendering, and application boundaries. Save/open and
   export failures are logged before concise user feedback.
@@ -403,9 +412,10 @@ unavailable encoder if one is offered and confirm a detailed log entry appears.
 For effect performance, use the same 1920 × 1080, 60 fps composition for three
 10-second runs with Gaussian Blur at radius 10 and neutral Color Adjustment;
 check logged per-effect averages and rendered/coalesced counts, target under
-1 ms for neutral Color Adjustment and at least 25% lower blur time than the
-286–306 ms baseline, and confirm the preview pixels match the pre-optimization
-render.
+1 ms for neutral Color Adjustment and no more than 178.8 ms per blur application
+(at least 25% below the latest 238.429 ms serial average), and confirm the
+preview pixels match the pre-parallelization render. The automated tests verify
+byte equality but do not establish this Windows performance target.
 Motion Studio export is opaque and video-only; audio and alpha export remain
 open. Then close the application. Overshoot-capable curves, additional
 interpolation modes, advanced effects, platform validation, and performance

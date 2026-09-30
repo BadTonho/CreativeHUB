@@ -1,6 +1,7 @@
 #include "ui/preview_renderer.h"
 #include "ui/layer_content_renderer.h"
 #include "ui/layer_effect_processor.h"
+#include "ui/layer_effect_worker_pool.h"
 #include "diagnostics/performance_metrics.h"
 
 #include <creative_suite/diagnostics/logger.h>
@@ -225,30 +226,86 @@ int main(int argc, char* argv[])
     using motion::model::TextAlignment;
     using motion::model::TextLayerContent;
 
+    motion::ui::detail::LayerEffectWorkerPool serial_effect_pool(1);
+    motion::ui::detail::LayerEffectWorkerPool parallel_effect_pool(4);
+    motion::ui::detail::LayerEffectWorkerPool capped_effect_pool(100);
+    const auto logical_core_count = std::thread::hardware_concurrency();
+    const auto expected_shared_workers = logical_core_count == 0
+        ? 1U
+        : std::min(8U, logical_core_count > 1 ? logical_core_count - 1U : 1U);
+    require(serial_effect_pool.maximumThreadCount() == 1 &&
+                parallel_effect_pool.maximumThreadCount() == 4 &&
+                capped_effect_pool.maximumThreadCount() == 8 &&
+                motion::ui::detail::sharedLayerEffectWorkerPool().maximumThreadCount() ==
+                    expected_shared_workers,
+            "effect pools honor single/multi-worker limits, the cap, and reserved-core policy");
     for (const auto& test_case : std::array<std::array<int, 4>, 4>{
              std::array<int, 4>{5, 3, 0, 0},
              std::array<int, 4>{7, 5, 1, 0},
              std::array<int, 4>{35, 19, 10, 12},
              std::array<int, 4>{67, 39, 100, 4}}) {
-        auto optimized = effectTestFrame(test_case[0], test_case[1], test_case[3]);
-        auto reference = optimized;
+        auto serial_optimized = effectTestFrame(test_case[0], test_case[1], test_case[3]);
+        auto parallel_optimized = serial_optimized;
+        auto reference = serial_optimized;
         referenceGaussianBlur(reference, test_case[2]);
         require(motion::ui::applyLayerEffects(
-                    optimized,
+                    serial_optimized,
                     {motion::model::GaussianBlurEffect{
-                        true, static_cast<double>(test_case[2])}}) &&
-                    optimized.rgba_pixels == reference.rgba_pixels,
-                "tiled integer Gaussian blur is byte-identical to the prior implementation");
+                        true, static_cast<double>(test_case[2])}}, {}, {},
+                    &serial_effect_pool) &&
+                    serial_optimized.rgba_pixels == reference.rgba_pixels,
+                "single-worker integer blur is byte-identical to the prior implementation");
+        require(motion::ui::applyLayerEffects(
+                    parallel_optimized,
+                    {motion::model::GaussianBlurEffect{
+                        true, static_cast<double>(test_case[2])}}, {}, {},
+                    &parallel_effect_pool) &&
+                    parallel_optimized.rgba_pixels == reference.rgba_pixels &&
+                    parallel_optimized.rgba_pixels == serial_optimized.rgba_pixels,
+                "parallel integer blur is byte-identical to both reference and single-worker output");
     }
 
-    auto cancellable_blur = effectTestFrame(40, 40, 0);
+    auto cancellable_blur = effectTestFrame(400, 240, 0);
     int cancellation_checks = 0;
     const bool blur_completed = motion::ui::applyLayerEffects(
         cancellable_blur,
         {motion::model::GaussianBlurEffect{true, 10.0}},
-        [&] { return ++cancellation_checks >= 3; });
+        [&] { return ++cancellation_checks >= 3; }, {}, &parallel_effect_pool);
     require(!blur_completed && cancellation_checks >= 3,
-            "tiled Gaussian blur checks cancellation while processing rows");
+            "parallel Gaussian blur cancels safely while worker ranges are active");
+
+    auto concurrent_left = effectTestFrame(97, 61, 8);
+    auto concurrent_right = effectTestFrame(123, 79, 12);
+    auto concurrent_left_reference = concurrent_left;
+    auto concurrent_right_reference = concurrent_right;
+    referenceGaussianBlur(concurrent_left_reference, 10);
+    referenceGaussianBlur(concurrent_right_reference, 10);
+    std::atomic<int> concurrent_timing_records{0};
+    bool left_completed = false;
+    bool right_completed = false;
+    std::thread left_blur([&] {
+        left_completed = motion::ui::applyLayerEffects(
+            concurrent_left, {motion::model::GaussianBlurEffect{true, 10.0}}, {},
+            [&](motion::ui::LayerEffectKind effect, std::uint64_t) {
+                if (effect == motion::ui::LayerEffectKind::GaussianBlur)
+                    ++concurrent_timing_records;
+            }, &parallel_effect_pool);
+    });
+    std::thread right_blur([&] {
+        right_completed = motion::ui::applyLayerEffects(
+            concurrent_right, {motion::model::GaussianBlurEffect{true, 10.0}}, {},
+            [&](motion::ui::LayerEffectKind effect, std::uint64_t) {
+                if (effect == motion::ui::LayerEffectKind::GaussianBlur)
+                    ++concurrent_timing_records;
+            }, &parallel_effect_pool);
+    });
+    left_blur.join();
+    right_blur.join();
+    require(left_completed && right_completed &&
+                concurrent_left.rgba_pixels == concurrent_left_reference.rgba_pixels &&
+                concurrent_right.rgba_pixels == concurrent_right_reference.rgba_pixels &&
+                concurrent_timing_records.load() == 2,
+            "concurrent preview/export effect calls complete with isolated pixels and one timing each");
 
     creative_suite::media::RgbaFrame transparent_edge;
     transparent_edge.width = 3;

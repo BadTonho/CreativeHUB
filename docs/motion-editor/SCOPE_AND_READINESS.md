@@ -201,6 +201,15 @@ and 100, including padded rows and transparent edges. Neutral Color Adjustment
 and preserves all RGBA bytes exactly while still appearing in effect timing
 records. Non-neutral color adjustment processes stored RGBA8 values without
 color-space conversion and preserves alpha.
+Preview, playback, and export use one reusable Motion Studio worker pool for
+the independent blur stages. It parallelizes premultiplication and final
+conversion by rows, horizontal passes by rows, and vertical passes by 32-pixel
+tiles, while synchronizing between passes. The pool is capped at eight threads,
+reserves one reported logical core when possible, and falls back to one worker
+if the core count is unavailable. Automated tests compare single- and
+multi-worker output byte-for-byte, exercise simultaneous calls and cancellation,
+and check that each application of the effect still produces one timing record.
+The blur duration is wall-clock time, including pool scheduling and pass barriers.
 Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
@@ -248,12 +257,13 @@ and heavy compositions, cross-platform resource behavior, startup, seek/paint
 latency, memory limits, and export throughput still require measured validation.
 On Windows, toggle the option, seek and play compositions, export a job, then
 use **Help > Open Log Folder** to inspect samples and job summaries.
-The effects optimization has automated byte-equivalence coverage, but its
+The blur parallelization has automated byte-equivalence coverage, but its
 performance target still needs a Windows measurement: use the same 1920 × 1080,
 60 fps composition for three 10-second runs with radius-10 Gaussian Blur and
 neutral Color Adjustment. Compare effect averages and rendered/coalesced request
-counts with the recorded 286–306 ms blur baseline; the targets are below 1 ms
-for neutral adjustment and at least 25% lower blur time, with no pixel changes.
+counts with the latest 238.429 ms serial blur average; target at most 178.8 ms
+per blur application (at least 25% lower), below 1 ms for neutral adjustment,
+and no pixel changes. This timing target is not yet verified on Windows.
 
 ## Native Format and Compatibility Policy
 

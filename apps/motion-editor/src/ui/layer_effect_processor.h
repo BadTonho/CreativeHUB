@@ -10,6 +10,10 @@
 
 namespace motion::ui {
 
+namespace detail {
+class LayerEffectWorkerPool;
+}
+
 enum class LayerEffectKind {
     GaussianBlur,
     ColorAdjustment,
@@ -22,11 +26,13 @@ using EffectTimingRecorder =
     const std::vector<model::LayerEffect>& effects) noexcept;
 
 // Applies an ordered Motion Studio effect stack to an owned straight-alpha
-// RGBA8 frame. Returns false only when cancellation is requested.
+// RGBA8 frame. Blur timings measure wall time, including shared-pool queue and
+// synchronization time. Returns false only when cancellation is requested.
 [[nodiscard]] bool applyLayerEffects(
     creative_suite::media::RgbaFrame& frame,
     const std::vector<model::LayerEffect>& effects,
     const std::function<bool()>& should_cancel = {},
-    const EffectTimingRecorder& record_effect_timing = {});
+    const EffectTimingRecorder& record_effect_timing = {},
+    detail::LayerEffectWorkerPool* worker_pool = nullptr);
 
 } // namespace motion::ui
