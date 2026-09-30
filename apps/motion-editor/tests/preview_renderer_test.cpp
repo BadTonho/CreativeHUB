@@ -1,6 +1,7 @@
 #include "ui/preview_renderer.h"
 #include "ui/layer_content_renderer.h"
 #include "ui/layer_effect_processor.h"
+#include "diagnostics/performance_metrics.h"
 
 #include <creative_suite/diagnostics/logger.h>
 
@@ -86,6 +87,9 @@ motion::ui::PreviewRequest imageRequest(
 int main(int argc, char* argv[])
 {
     QGuiApplication application(argc, argv);
+    auto& performance_metrics = motion::diagnostics::PerformanceMetrics::instance();
+    performance_metrics.setEnabled(true);
+    performance_metrics.reset();
     QTemporaryDir temporary;
     require(temporary.isValid(), "temporary preview log directory is available");
     auto& logger = creative_suite::diagnostics::Logger::instance();
@@ -469,6 +473,18 @@ int main(int argc, char* argv[])
                 playback_applied_frame->rgba_pixels[0] == 30,
             "manual preview requests can cancel playback work and present the seek result");
     playback_renderer.stopAndWait();
+
+    const auto performance_snapshot = performance_metrics.takeSnapshotAndReset();
+    require(performance_snapshot.has_value() &&
+                performance_snapshot->requests > 0 &&
+                performance_snapshot->rendered_frames > 0 &&
+                performance_snapshot->coalesced_requests > 0 &&
+                performance_snapshot->stale_results > 0,
+            "preview lifecycle metrics record requests, completed work, coalescing, and stale results");
+    require(performance_snapshot->timings[static_cast<std::size_t>(
+                motion::diagnostics::PreviewTimingStage::FrameRender)].count > 0,
+            "preview worker records total frame-render timing");
+    performance_metrics.setEnabled(false);
 
     std::cout << "Motion Studio preview renderer tests passed.\n";
     return EXIT_SUCCESS;

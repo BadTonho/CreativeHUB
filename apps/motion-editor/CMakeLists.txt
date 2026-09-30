@@ -6,6 +6,8 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets)
 
 add_library(creative-suite-motion-editor-core STATIC
+    src/diagnostics/performance_metrics.cpp
+    src/diagnostics/performance_metrics.h
     src/model/composition_document.cpp
     src/model/composition_document.h
     src/model/motion_project_data.h
@@ -29,6 +31,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/new_composition_dialog.h
     src/ui/shortcut_settings_dialog.cpp
     src/ui/shortcut_settings_dialog.h
+    src/ui/general_settings_dialog.cpp
+    src/ui/general_settings_dialog.h
     src/ui/preview_renderer.cpp
     src/ui/preview_renderer.h
     src/ui/property_curve_editor.cpp
@@ -54,6 +58,7 @@ target_link_libraries(creative-suite-motion-editor-core PUBLIC
     creative-suite::animation
     creative-suite::composition
     creative-suite::diagnostics
+    creative-suite::system-monitor
     creative-suite::media-assets
     creative-suite::shortcuts
     creative-suite::video-media

@@ -18,6 +18,9 @@ class CompositionFrameRenderer final {
 public:
     using CancellationPredicate = std::function<bool()>;
 
+    explicit CompositionFrameRenderer(bool record_preview_metrics = true) noexcept
+        : record_preview_metrics_(record_preview_metrics) {}
+
     void reset();
     [[nodiscard]] creative_suite::media::RgbaFramePtr render(
         const PreviewRequest& request,
@@ -38,6 +41,7 @@ private:
         creative_suite::media::RgbaFramePtr frame;
     };
     std::map<model::LayerId, CachedContentFrame> content_frames_;
+    bool record_preview_metrics_ = true;
 };
 
 } // namespace motion::ui

@@ -1,6 +1,6 @@
-#include "performance_usage.h"
+#include <creative_suite/system_monitor/performance_usage.h>
 
-#include "system_memory_usage.h"
+#include <creative_suite/system_monitor/system_memory_usage.h>
 
 #include <algorithm>
 #include <chrono>

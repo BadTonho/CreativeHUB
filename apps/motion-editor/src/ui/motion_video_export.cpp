@@ -38,6 +38,14 @@ void checkCancelled(const std::atomic_bool& cancel_requested)
     if (cancel_requested.load(std::memory_order_acquire)) throw MotionExportCancelled{};
 }
 
+void recordElapsed(std::uint64_t& target, std::chrono::steady_clock::duration elapsed) noexcept
+{
+    const auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count();
+    if (nanoseconds <= 0) return;
+    const auto value = static_cast<std::uint64_t>(nanoseconds);
+    target += value;
+}
+
 std::filesystem::path temporaryPathFor(const std::filesystem::path& target)
 {
     auto name = target.stem();
@@ -120,8 +128,20 @@ void MotionVideoExporter::exportVideo(
     const MotionExportSnapshot& snapshot,
     const MotionExportSettings& settings,
     const std::atomic_bool& cancel_requested,
-    ProgressCallback report_progress)
+    ProgressCallback report_progress,
+    MotionExportPerformanceSummary* performance_summary)
 {
+    const auto export_started = std::chrono::steady_clock::now();
+    struct ElapsedRecorder {
+        MotionExportPerformanceSummary* summary;
+        std::chrono::steady_clock::time_point started;
+        ~ElapsedRecorder()
+        {
+            if (summary != nullptr) recordElapsed(
+                summary->elapsed_nanoseconds, std::chrono::steady_clock::now() - started);
+        }
+    } elapsed_recorder{performance_summary, export_started};
+
     if (snapshot.canvas_size.width <= 0 || snapshot.canvas_size.height <= 0 ||
         snapshot.frame_rate.numerator <= 0 || snapshot.frame_rate.denominator <= 0 ||
         snapshot.layers.empty()) {
@@ -175,7 +195,7 @@ void MotionVideoExporter::exportVideo(
         encoding.frame_rate_denominator = output_rate.den;
         encoding.video_bitrate_mbps = settings.video_bitrate_mbps;
         creative_suite::media::VideoEncoder encoder(std::move(encoding));
-        CompositionFrameRenderer frame_renderer;
+        CompositionFrameRenderer frame_renderer(false);
         int last_reported_progress = -1;
 
         for (std::int64_t output_frame = 0;
@@ -212,18 +232,45 @@ void MotionVideoExporter::exportVideo(
                 request.layers.push_back(std::move(active));
             }
 
+            const auto render_started = std::chrono::steady_clock::now();
             const auto frame = frame_renderer.render(
                 request,
                 [&cancel_requested] {
                     return cancel_requested.load(std::memory_order_acquire);
                 },
                 true);
+            if (performance_summary != nullptr) {
+                const auto render_duration = std::chrono::steady_clock::now() - render_started;
+                recordElapsed(performance_summary->render_total_nanoseconds, render_duration);
+                const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    render_duration).count();
+                if (ns > 0) {
+                    performance_summary->render_maximum_nanoseconds = std::max(
+                        performance_summary->render_maximum_nanoseconds,
+                        static_cast<std::uint64_t>(ns));
+                }
+                ++performance_summary->render_count;
+            }
             checkCancelled(cancel_requested);
             if (frame == nullptr) {
                 throw std::runtime_error("Motion Studio could not compose output frame " +
                                          std::to_string(output_frame) + ".");
             }
+            if (performance_summary != nullptr) ++performance_summary->frames_rendered;
+            const auto write_started = std::chrono::steady_clock::now();
             encoder.writeVideo(*frame, output_frame);
+            if (performance_summary != nullptr) {
+                const auto write_duration = std::chrono::steady_clock::now() - write_started;
+                recordElapsed(performance_summary->write_total_nanoseconds, write_duration);
+                const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    write_duration).count();
+                if (ns > 0) {
+                    performance_summary->write_maximum_nanoseconds = std::max(
+                        performance_summary->write_maximum_nanoseconds,
+                        static_cast<std::uint64_t>(ns));
+                }
+                ++performance_summary->write_count;
+            }
             if (report_progress) {
                 const auto progress = static_cast<int>(
                     (output_frame + 1) * 99 / output_frame_count);
@@ -290,6 +337,8 @@ void MotionVideoExportWorker::run()
 {
     MotionExportResult result;
     result.output_path = settings_.output_path;
+    MotionExportPerformanceSummary performance;
+    const auto worker_started = std::chrono::steady_clock::now();
     try {
         MotionVideoExporter::exportVideo(snapshot_, settings_, *cancel_requested_,
             [this](int progress) {
@@ -299,7 +348,7 @@ void MotionVideoExportWorker::run()
                 QMetaObject::invokeMethod(receiver.data(), [receiver, handler, progress] {
                     if (!receiver.isNull() && handler) handler(progress);
                 }, Qt::QueuedConnection);
-            });
+            }, &performance);
         result.succeeded = true;
     } catch (const MotionExportCancelled&) {
         result.cancelled = true;
@@ -314,6 +363,45 @@ void MotionVideoExportWorker::run()
     } catch (...) {
         result.error_message = "Unknown video export failure.";
     }
+
+    if (performance.elapsed_nanoseconds == 0) {
+        recordElapsed(performance.elapsed_nanoseconds,
+                      std::chrono::steady_clock::now() - worker_started);
+    }
+
+    const auto elapsed_seconds = static_cast<double>(performance.elapsed_nanoseconds) /
+        1'000'000'000.0;
+    const auto achieved_fps = elapsed_seconds > 0.0
+        ? static_cast<double>(performance.frames_rendered) / elapsed_seconds : 0.0;
+    const auto output_fps = settings_.frame_rate.asDouble();
+    creative_suite::diagnostics::Logger::instance().log(
+        creative_suite::diagnostics::Level::Info,
+        "motion_performance", "export_summary",
+        "Motion Studio video export performance summary.",
+        {{"schema_version", "1"},
+         {"outcome", result.succeeded ? "completed" :
+             (result.cancelled ? "cancelled" : "failed")},
+         {"elapsed_ms", std::to_string(elapsed_seconds * 1000.0)},
+         {"frames_rendered", std::to_string(performance.frames_rendered)},
+         {"render_count", std::to_string(performance.render_count)},
+         {"render_average_ms", performance.render_count == 0 ? "N/A" :
+             std::to_string(static_cast<double>(performance.render_total_nanoseconds) /
+                 static_cast<double>(performance.render_count) / 1'000'000.0)},
+         {"render_maximum_ms", std::to_string(
+             static_cast<double>(performance.render_maximum_nanoseconds) / 1'000'000.0)},
+         {"write_count", std::to_string(performance.write_count)},
+         {"write_average_ms", performance.write_count == 0 ? "N/A" :
+             std::to_string(static_cast<double>(performance.write_total_nanoseconds) /
+                 static_cast<double>(performance.write_count) / 1'000'000.0)},
+         {"write_maximum_ms", std::to_string(
+             static_cast<double>(performance.write_maximum_nanoseconds) / 1'000'000.0)},
+         {"output_width", std::to_string(settings_.width)},
+         {"output_height", std::to_string(settings_.height)},
+         {"output_frame_rate_numerator", std::to_string(settings_.frame_rate.numerator)},
+         {"output_frame_rate_denominator", std::to_string(settings_.frame_rate.denominator)},
+         {"achieved_frames_per_second", std::to_string(achieved_fps)},
+         {"realtime_factor", output_fps > 0.0
+             ? std::to_string(achieved_fps / output_fps) : "N/A"}});
 
     if (!result.succeeded && !result.cancelled) {
         creative_suite::diagnostics::Logger::instance().log(

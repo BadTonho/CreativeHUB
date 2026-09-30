@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model/composition_document.h"
+#include "../diagnostics/performance_metrics.h"
 
 #include <creative_suite/media/video_frame.h>
 
@@ -63,7 +64,8 @@ public:
 
     PreviewRenderer(QObject* result_receiver,
                     ResultHandler result_handler,
-                    RenderFunction render_function = {});
+                    RenderFunction render_function = {},
+                    diagnostics::PerformanceMetrics* metrics = nullptr);
     ~PreviewRenderer() override;
 
     [[nodiscard]] std::uint64_t submit(
@@ -103,6 +105,7 @@ private:
     std::atomic<std::uint64_t> generation_{0};
     std::atomic<std::uint64_t> cancellation_generation_{0};
     std::unique_ptr<CompositionFrameRenderer> frame_renderer_;
+    diagnostics::PerformanceMetrics* metrics_ = nullptr;
 };
 
 } // namespace motion::ui

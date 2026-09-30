@@ -10,6 +10,7 @@
 #include "persistence/motion_document_store.h"
 #include "persistence/motion_recovery_store.h"
 #include "settings/autosave_preferences.h"
+#include "diagnostics/performance_metrics.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -1776,6 +1777,8 @@ int main(int argc, char* argv[])
     require(!legacy_layout.isEmpty(), "the previous default dock state can be constructed");
     isolated_layout_settings.setValue(QStringLiteral("workspace/dock_layout_state"),
                                       legacy_layout);
+    isolated_layout_settings.setValue(
+        QStringLiteral("MotionStudio/Performance/preview_metrics_enabled"), true);
     isolated_layout_settings.sync();
     const auto image_path = pathFromQString(temporary.path()) / "poster.png";
     QImage image(48, 32, QImage::Format_RGBA8888);
@@ -1797,6 +1800,43 @@ int main(int argc, char* argv[])
     require(empty_button->isVisible(), "the empty state has a New Composition button");
     require(!action(window, "motion-import-media-action")->isEnabled(),
             "media cannot be imported before a composition exists");
+    auto* general_settings_action = action(window, "motion-general-settings-action");
+    auto* metrics_timer = window.findChild<QTimer*>(
+        QStringLiteral("motion-performance-metrics-timer"));
+    require(general_settings_action != nullptr && metrics_timer != nullptr &&
+                metrics_timer->isActive() &&
+                motion::diagnostics::PerformanceMetrics::instance().enabled(),
+            "preview metrics default to enabled and use the periodic sampler");
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        require(dialog != nullptr, "General Settings opens as a dialog");
+        auto* checkbox = dialog->findChild<QCheckBox*>(
+            QStringLiteral("motion-preview-performance-metrics-checkbox"));
+        require(checkbox != nullptr && checkbox->isChecked(),
+                "General Settings starts with preview metrics enabled");
+        checkbox->setChecked(false);
+        dialog->accept();
+    });
+    general_settings_action->trigger();
+    require(!motion::settings::previewPerformanceMetricsEnabled() &&
+                !motion::diagnostics::PerformanceMetrics::instance().enabled() &&
+                !metrics_timer->isActive(),
+            "disabling preview metrics applies immediately and persists");
+    QTimer::singleShot(0, [] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        require(dialog != nullptr, "General Settings can be reopened");
+        auto* checkbox = dialog->findChild<QCheckBox*>(
+            QStringLiteral("motion-preview-performance-metrics-checkbox"));
+        require(checkbox != nullptr && !checkbox->isChecked(),
+                "General Settings displays the persisted disabled state");
+        checkbox->setChecked(true);
+        dialog->accept();
+    });
+    general_settings_action->trigger();
+    require(motion::settings::previewPerformanceMetricsEnabled() &&
+                motion::diagnostics::PerformanceMetrics::instance().enabled() &&
+                metrics_timer->isActive(),
+            "enabling preview metrics immediately restarts collection");
 
     QTimer::singleShot(0, [] { completeCompositionDialog(640, 360, 2); });
     empty_button->click();

@@ -4,6 +4,7 @@
 
 #include <creative_suite/media/video_encoder.h>
 #include <creative_suite/media/video_playback.h>
+#include <creative_suite/diagnostics/logger.h>
 
 #include <QApplication>
 #include <QAction>
@@ -34,6 +35,7 @@
 #include <functional>
 #include <iostream>
 #include <iterator>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -358,6 +360,9 @@ int main(int argc, char* argv[])
         const auto [container, encoder] = chooseOutput();
         QTemporaryDir temporary_directory;
         require(temporary_directory.isValid(), "a temporary export folder is available");
+        const auto log_directory = pathFromQString(temporary_directory.path()) / "diagnostics";
+        require(creative_suite::diagnostics::Logger::instance().initialize(log_directory),
+                "a temporary diagnostics log can be initialized for export metrics checks");
         const std::filesystem::path source_video =
             std::filesystem::path(MOTION_EDITOR_EXPORT_TEST_MEDIA_DIR) / "reference.mkv";
         require(std::filesystem::is_regular_file(source_video),
@@ -367,9 +372,17 @@ int main(int argc, char* argv[])
         auto snapshot = makeSnapshot(source_video);
         std::vector<int> progress;
         std::atomic_bool cancel_requested{false};
+        motion::ui::MotionExportPerformanceSummary export_performance;
         motion::ui::MotionVideoExporter::exportVideo(
             snapshot, settingsFor(target, container, encoder), cancel_requested,
-            [&progress](int value) { progress.push_back(value); });
+            [&progress](int value) { progress.push_back(value); }, &export_performance);
+        require(export_performance.elapsed_nanoseconds > 0 &&
+                    export_performance.frames_rendered == 9 &&
+                    export_performance.render_count == 9 &&
+                    export_performance.write_count == 9 &&
+                    export_performance.render_total_nanoseconds > 0 &&
+                    export_performance.write_total_nanoseconds > 0,
+                "successful export collects elapsed, render, and encode/write timings");
         require(std::filesystem::is_regular_file(target), "Motion export publishes a video file");
         require(!progress.empty() && progress.back() == 100,
                 "Motion export reports completion progress");
@@ -413,16 +426,21 @@ int main(int argc, char* argv[])
         }
         const auto previous_bytes = fileBytes(preserved_target);
         std::atomic_bool canceled{true};
+        motion::ui::MotionExportPerformanceSummary cancellation_performance;
         bool cancellation_reported = false;
         try {
             motion::ui::MotionVideoExporter::exportVideo(
-                snapshot, settingsFor(preserved_target, container, encoder), canceled);
+                snapshot, settingsFor(preserved_target, container, encoder), canceled,
+                {}, &cancellation_performance);
         } catch (const motion::ui::MotionExportCancelled&) {
             cancellation_reported = true;
         }
         require(cancellation_reported, "a requested cancellation has a distinct outcome");
         require(fileBytes(preserved_target) == previous_bytes,
                 "cancellation leaves an existing destination unchanged");
+        require(cancellation_performance.elapsed_nanoseconds > 0 &&
+                    cancellation_performance.frames_rendered == 0,
+                "cancelled export retains a timing summary without rendering frames");
 
         const auto failure_target = outputPath(temporary_directory, container, "preserve-on-failure");
         {
@@ -443,22 +461,87 @@ int main(int argc, char* argv[])
         missing_video.source_frame_rate = 24.0;
         unavailable.layers.push_back(missing_video);
         std::atomic_bool not_canceled{false};
+        motion::ui::MotionExportPerformanceSummary failure_performance;
         bool failed = false;
         try {
             motion::ui::MotionVideoExporter::exportVideo(
-                unavailable, settingsFor(failure_target, container, encoder), not_canceled);
+                unavailable, settingsFor(failure_target, container, encoder), not_canceled,
+                {}, &failure_performance);
         } catch (const std::exception&) {
             failed = true;
         }
         require(failed, "an unavailable visible source fails export with an error");
         require(fileBytes(failure_target) == failure_bytes,
                 "failed export preserves an existing destination");
+        require(failure_performance.elapsed_nanoseconds > 0,
+                "failed export retains elapsed-time diagnostics");
         for (const auto& entry : std::filesystem::directory_iterator(temporary_directory.path().toStdString())) {
             require(entry.path().filename().string().find(".rendering-motion-") == std::string::npos,
                     "failed and canceled export temporary files are removed");
         }
 
         testMainWindowExportAction(temporary_directory);
+
+        QObject worker_receiver;
+        std::optional<motion::ui::MotionExportResult> cancelled_result;
+        motion::ui::MotionVideoExportWorker cancelled_worker(
+            &worker_receiver, snapshot,
+            settingsFor(outputPath(temporary_directory, container, "worker-cancel"),
+                        container, encoder),
+            {}, [&cancelled_result](motion::ui::MotionExportResult result) {
+                cancelled_result = std::move(result);
+            });
+        cancelled_worker.cancel();
+        cancelled_worker.start();
+        require(waitFor([&] { return cancelled_result.has_value(); }),
+                "a canceled export worker reports its completed job");
+        cancelled_worker.wait();
+        require(cancelled_result->cancelled && !cancelled_result->succeeded,
+                "a worker cancellation has a distinct result");
+
+        std::optional<motion::ui::MotionExportResult> failed_result;
+        motion::ui::MotionVideoExportWorker failed_worker(
+            &worker_receiver, unavailable,
+            settingsFor(failure_target, container, encoder),
+            {}, [&failed_result](motion::ui::MotionExportResult result) {
+                failed_result = std::move(result);
+            });
+        failed_worker.start();
+        require(waitFor([&] { return failed_result.has_value(); }),
+                "a failed export worker reports its completed job");
+        failed_worker.wait();
+        require(!failed_result->cancelled && !failed_result->succeeded &&
+                    !failed_result->error_message.empty(),
+                "a failed worker preserves the technical failure result");
+
+        const auto log_contents = fileBytes(
+            creative_suite::diagnostics::Logger::instance().log_path());
+        const std::string log_text(log_contents.begin(), log_contents.end());
+        std::istringstream log_lines(log_text);
+        std::string log_line;
+        std::vector<std::string> export_summaries;
+        while (std::getline(log_lines, log_line)) {
+            if (log_line.find("operation=\"export_summary\"") != std::string::npos)
+                export_summaries.push_back(log_line);
+        }
+        require(export_summaries.size() >= 3,
+                "completed, canceled, and failed jobs each write an export summary");
+        bool saw_completed = false;
+        bool saw_cancelled = false;
+        bool saw_failed = false;
+        for (const auto& summary : export_summaries) {
+            saw_completed = saw_completed || summary.find("outcome=\"completed\"") != std::string::npos;
+            saw_cancelled = saw_cancelled || summary.find("outcome=\"cancelled\"") != std::string::npos;
+            saw_failed = saw_failed || summary.find("outcome=\"failed\"") != std::string::npos;
+            require(summary.find("render_average_ms=") != std::string::npos &&
+                        summary.find("write_average_ms=") != std::string::npos &&
+                        summary.find("achieved_frames_per_second=") != std::string::npos &&
+                        summary.find("output_path=") == std::string::npos &&
+                        summary.find("window-export.") == std::string::npos,
+                    "export performance summaries include render/output metrics without paths");
+        }
+        require(saw_completed && saw_cancelled && saw_failed,
+                "export summaries identify each terminal job outcome");
 
         std::cout << "Motion Studio video export tests passed.\n";
         return EXIT_SUCCESS;

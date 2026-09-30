@@ -1,4 +1,5 @@
 #include "composition_viewer.h"
+#include "../diagnostics/performance_metrics.h"
 
 #include <QPaintEvent>
 #include <QPainter>
@@ -36,12 +37,18 @@ void CompositionViewer::setComposition(
     canvas_size_ = canvas_size;
     selected_layer_anchor_ = std::move(selected_layer_anchor);
     rendered_frame_.reset();
+    rendered_frame_generation_ = 0;
+    rendered_frame_paint_pending_ = false;
     update();
 }
 
-void CompositionViewer::setRenderedFrame(creative_suite::media::RgbaFramePtr frame)
+void CompositionViewer::setRenderedFrame(
+    creative_suite::media::RgbaFramePtr frame,
+    std::uint64_t request_generation)
 {
     rendered_frame_ = std::move(frame);
+    rendered_frame_generation_ = request_generation;
+    rendered_frame_paint_pending_ = rendered_frame_ != nullptr && request_generation != 0;
     update();
 }
 
@@ -60,16 +67,25 @@ void CompositionViewer::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event);
 
+    const auto record_paint = [this] {
+        if (!rendered_frame_paint_pending_) return;
+        rendered_frame_paint_pending_ = false;
+        diagnostics::PerformanceMetrics::instance().recordViewerPaint(
+            rendered_frame_generation_);
+    };
+
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.fillRect(rect(), kSurroundColor);
 
     if (canvas_size_.width <= 0 || canvas_size_.height <= 0) {
+        record_paint();
         return;
     }
 
     const QRectF available = QRectF(rect()).adjusted(24.0, 42.0, -24.0, -24.0);
     if (available.width() <= 0.0 || available.height() <= 0.0) {
+        record_paint();
         return;
     }
 
@@ -113,6 +129,7 @@ void CompositionViewer::paintEvent(QPaintEvent* event)
         QStringLiteral("%1 x %2 px").arg(canvas_size_.width).arg(canvas_size_.height));
 
     if (!selected_layer_anchor_.has_value()) {
+        record_paint();
         return;
     }
 
@@ -120,6 +137,7 @@ void CompositionViewer::paintEvent(QPaintEvent* event)
         canvas_rect.left() + selected_layer_anchor_->x() * canvas_rect.width(),
         canvas_rect.top() + selected_layer_anchor_->y() * canvas_rect.height());
     if (!std::isfinite(guide.x()) || !std::isfinite(guide.y()) || !rect().contains(guide.toPoint())) {
+        record_paint();
         return;
     }
 
@@ -129,6 +147,7 @@ void CompositionViewer::paintEvent(QPaintEvent* event)
     painter.drawLine(guide + QPointF(0.0, -guide_radius), guide + QPointF(0.0, guide_radius));
     painter.setBrush(Qt::NoBrush);
     painter.drawEllipse(guide, 3.5, 3.5);
+    record_paint();
 }
 
 } // namespace motion::ui

@@ -60,6 +60,20 @@ set_tests_properties(creative-suite-motion-editor-preview PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
+add_executable(creative-suite-motion-editor-performance-tests
+    performance_metrics_test.cpp
+)
+target_link_libraries(creative-suite-motion-editor-performance-tests PRIVATE
+    creative-suite-motion-editor-core
+    Qt6::Widgets
+)
+target_compile_features(creative-suite-motion-editor-performance-tests PRIVATE cxx_std_20)
+add_creative_suite_test(
+    NAME creative-suite-motion-editor-performance
+    COMMAND creative-suite-motion-editor-performance-tests)
+set_tests_properties(creative-suite-motion-editor-performance PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 add_executable(creative-suite-motion-editor-export-tests
     motion_video_export_test.cpp
 )
@@ -120,6 +134,7 @@ if(MSVC)
     target_compile_options(creative-suite-motion-editor-persistence-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-recovery-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-preview-tests PRIVATE /W4 /permissive-)
+    target_compile_options(creative-suite-motion-editor-performance-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-export-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-startup-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE /W4 /permissive-)
@@ -129,6 +144,7 @@ else()
     target_compile_options(creative-suite-motion-editor-persistence-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-recovery-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-preview-tests PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(creative-suite-motion-editor-performance-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-export-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-startup-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-motion-editor-ui-tests PRIVATE -Wall -Wextra -Wpedantic)
@@ -144,6 +160,7 @@ if(WIN32)
 
     foreach(TEST_TARGET IN ITEMS
             creative-suite-motion-editor-preview-tests
+            creative-suite-motion-editor-performance-tests
             creative-suite-motion-editor-export-tests
             creative-suite-motion-editor-startup-tests
             creative-suite-motion-editor-ui-tests)

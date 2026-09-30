@@ -219,6 +219,14 @@ validation.
   discards it. New Composition, Import Media, Play/Pause, Previous frame, and
   Next frame have defaults; Loop and Zoom In/Out start unassigned. Time/Frames
   and Media Pool commands are not registered in this first settings screen.
+- `creative-suite::system-monitor` owns the cross-platform, best-effort process
+  CPU and memory sampler extracted from the Video Editor. The Video Editor
+  consumes it through compatibility headers, preserving its existing metrics
+  schema and preferences. Motion Studio uses the same sampler for resource
+  context, while its preview-stage aggregation, request lifecycle counters,
+  one-second logging policy, and export summaries remain Motion-owned. The
+  shared sampler does not report GPU metrics, and the Motion log omits project
+  paths, media paths, layer names, and text content.
 - Preview decode and composition run on a worker thread. The worker coalesces
   pending seeks, keeps video decoder sessions on that worker, and drops stale
   results by request generation. During playback it lets the active decode

@@ -209,6 +209,38 @@ navigation only and does not define the composition's duration. See
 [ROADMAP.md](ROADMAP.md) and [REUSE_PLAN.md](REUSE_PLAN.md) for current
 implementation details and provisional shared API contracts.
 
+## Motion Studio Performance Diagnostics
+
+Motion Studio has a persisted **Settings > General...** option,
+**Enable preview performance metrics**, enabled by default. When enabled,
+preview activity is aggregated and logged once per second through the existing
+Motion Studio diagnostics logger. Empty intervals are silent. Records include a
+schema version; best-effort process CPU, working-set/private memory, and system
+memory; canvas dimensions and exact frame-rate numerator/denominator; layer and
+effect counts; request, rendered-frame, coalesced-request, and stale-result
+counters; and count, average, maximum, p95, and p99 durations for video decode,
+text/shape rasterization, effects, CPU composition, total frame render, and
+request-to-viewer-paint latency. A bounded sample window is used for percentile
+estimates.
+
+The cross-platform CPU and memory sampler is owned by the shared
+`creative-suite::system-monitor` library and is consumed by both editors. The
+Video Editor continues to use its existing preference and log schema through
+compatibility headers. Motion Studio keeps its stage aggregation, one-second
+activity policy, and export summaries application-owned. Export jobs log one
+summary on completion, failure, or cancellation with elapsed time, rendered
+frames, render and encode/write timings, output dimensions/rate, achieved
+frames per second, and realtime factor. Cancellation is an informational
+outcome; technical export failures continue through the existing error log.
+
+Performance records do not include project/media paths, layer names, or text
+content. GPU metrics are not collected. These diagnostics help inspect a running
+session; they are not performance benchmarks. Representative small, medium,
+and heavy compositions, cross-platform resource behavior, startup, seek/paint
+latency, memory limits, and export throughput still require measured validation.
+On Windows, toggle the option, seek and play compositions, export a job, then
+use **Help > Open Log Folder** to inspect samples and job summaries.
+
 ## Native Format and Compatibility Policy
 
 - Motion Studio uses a native document format distinct from the Video Editor's

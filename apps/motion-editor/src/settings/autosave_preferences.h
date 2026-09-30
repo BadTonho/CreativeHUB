@@ -16,4 +16,7 @@ void setAutosaveIntervalSeconds(int seconds);
 [[nodiscard]] int recoveryRetention();
 void setRecoveryRetention(int count);
 
+[[nodiscard]] bool previewPerformanceMetricsEnabled();
+void setPreviewPerformanceMetricsEnabled(bool enabled);
+
 } // namespace motion::settings

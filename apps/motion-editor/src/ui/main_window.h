@@ -4,8 +4,10 @@
 #include "model/motion_project_data.h"
 #include "composition_history.h"
 #include "../persistence/motion_recovery_store.h"
+#include "../diagnostics/performance_metrics.h"
 
 #include <creative_suite/shortcuts/shortcut_manager.h>
+#include <creative_suite/system_monitor/performance_usage.h>
 
 #include <QMainWindow>
 
@@ -108,6 +110,9 @@ private:
     void restoreDefaultPanelLayout();
     void openShortcutSettings();
     void openAutosaveRecoverySettings();
+    void openGeneralSettings();
+    void configurePreviewPerformanceMetrics();
+    void flushPreviewPerformanceMetrics();
     void refreshAutosaveRecoveryDialog(class AutosaveRecoveryDialog& dialog) const;
     void autosaveProject();
     void configureAutosaveTimer();
@@ -165,6 +170,7 @@ private:
     QAction* new_rectangle_layer_action_ = nullptr;
     QAction* new_ellipse_layer_action_ = nullptr;
     QAction* settings_action_ = nullptr;
+    QAction* general_settings_action_ = nullptr;
     QAction* autosave_settings_action_ = nullptr;
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
@@ -229,6 +235,8 @@ private:
     std::optional<std::filesystem::path> recovered_untitled_snapshot_path_;
     persistence::MotionRecoveryStore recovery_store_;
     QTimer* autosave_timer_ = nullptr;
+    QTimer* performance_metrics_timer_ = nullptr;
+    system_monitor::PerformanceSampler performance_sampler_;
     CompositionHistory composition_history_;
     std::optional<std::pair<model::LayerId, std::size_t>> active_transform_edit_;
     std::optional<model::LayerId> active_content_edit_layer_;

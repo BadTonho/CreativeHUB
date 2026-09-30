@@ -6,17 +6,20 @@
 #include <QMetaObject>
 
 #include <utility>
+#include <chrono>
 
 namespace motion::ui {
 
 PreviewRenderer::PreviewRenderer(
     QObject* result_receiver,
     ResultHandler result_handler,
-    RenderFunction render_function)
+    RenderFunction render_function,
+    diagnostics::PerformanceMetrics* metrics)
     : result_receiver_(result_receiver)
     , result_handler_(std::move(result_handler))
     , render_function_(std::move(render_function))
     , frame_renderer_(std::make_unique<CompositionFrameRenderer>())
+    , metrics_(metrics != nullptr ? metrics : &diagnostics::PerformanceMetrics::instance())
 {
     setObjectName(QStringLiteral("motion-preview-renderer"));
     start();
@@ -37,6 +40,10 @@ std::uint64_t PreviewRenderer::submit(PreviewRequest request, PreviewRequestMode
         cancellation_generation_.fetch_add(1, std::memory_order_relaxed);
     }
     const auto current_generation = generation_.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (pending_.has_value() && metrics_ != nullptr) {
+        metrics_->recordCoalescedRequest(pending_->generation);
+    }
+    if (metrics_ != nullptr) metrics_->recordRequest(current_generation);
     pending_ = PendingRequest{
         current_generation,
         cancellation_generation_.load(std::memory_order_relaxed),
@@ -52,6 +59,9 @@ void PreviewRenderer::resetSessions()
     if (stopping_) return;
     generation_.fetch_add(1, std::memory_order_relaxed);
     cancellation_generation_.fetch_add(1, std::memory_order_relaxed);
+    if (pending_.has_value() && metrics_ != nullptr) {
+        metrics_->recordStaleResult(pending_->generation);
+    }
     pending_.reset();
     reset_sessions_pending_ = true;
     wake_.notify_one();
@@ -82,6 +92,9 @@ void PreviewRenderer::stopAndWait()
             stopping_ = true;
             generation_.fetch_add(1, std::memory_order_relaxed);
             cancellation_generation_.fetch_add(1, std::memory_order_relaxed);
+            if (pending_.has_value() && metrics_ != nullptr) {
+                metrics_->recordStaleResult(pending_->generation);
+            }
             pending_.reset();
         }
     }
@@ -114,6 +127,7 @@ void PreviewRenderer::run()
         if (!request.has_value()) continue;
 
         creative_suite::media::RgbaFramePtr output;
+        const auto render_started = std::chrono::steady_clock::now();
         try {
             if (render_function_) {
                 const auto cancellation_generation = request->cancellation_generation;
@@ -138,6 +152,16 @@ void PreviewRenderer::run()
                 creative_suite::diagnostics::Level::Error,
                 "motion_preview", "render_frame", "Unknown preview rendering failure");
         }
+        const auto render_elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - render_started).count();
+        if (metrics_ != nullptr) {
+            if (render_elapsed >= 0) {
+                metrics_->recordTiming(
+                    diagnostics::PreviewTimingStage::FrameRender,
+                    static_cast<std::uint64_t>(render_elapsed));
+            }
+            if (output != nullptr) metrics_->recordRenderedFrame();
+        }
         {
             std::lock_guard lock(mutex_);
             if (in_flight_generation_ == request->generation) {
@@ -148,6 +172,7 @@ void PreviewRenderer::run()
         if (!canPresentResult(
                 request->generation, request->mode, request->cancellation_generation) ||
             result_receiver_ == nullptr) {
+            if (metrics_ != nullptr) metrics_->recordStaleResult(request->generation);
             continue;
         }
         const auto handler = result_handler_;

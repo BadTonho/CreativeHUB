@@ -4,6 +4,8 @@ Status: **provisional; implementation started**. The standalone Motion Studio
 shell, in-memory composition/layer model, navigation timeline, Media Pool,
 image/video/text/shape layers, CPU preview, versioned native save/open, and
 first-pass rendered video export are implemented under `apps/motion-editor/`.
+Configurable preview performance metrics and per-job export summaries are also
+written to the Motion Studio diagnostics log.
 Its per-layer CPU effects currently include ordered Gaussian Blur and Color
 Adjustment stacks shared by preview, playback, and export.
 Its initial product scope and
@@ -193,6 +195,12 @@ the Motion Studio implementation choices are finalized.
   Editor, while the latter keeps its timeline assembly, queue, and optional
   audio export. Motion export contains no audio or alpha, and settings are not
   persisted.
+- [x] Add configurable one-second preview performance samples and per-job
+  export summaries. The shared system-monitor library provides best-effort
+  process CPU and memory readings; Motion Studio records render-stage timing,
+  request-to-viewer-paint latency, coalesced/stale work, and export throughput.
+  This diagnostic logging does not replace representative-project profiling or
+  cross-platform validation.
 - [-] Extend actionable local error logging and automated coverage for the
   remaining document, rendering, and application boundaries. Save/open and
   export failures are logged before concise user feedback.
@@ -370,7 +378,14 @@ composition, allow a snapshot, close the app unexpectedly, then restore it on
 startup; open a saved project with a newer recovery snapshot and test Restore
 and Ignore; inspect, refresh, delete, restore, and open the folder for snapshots
 in **Settings > Autosave & Recovery**; verify missing sources restore offline
-and autosave does not overwrite the `.motion` file. Open **File > Export
+and autosave does not overwrite the `.motion` file. Use **Settings > General...**
+to disable and re-enable preview metrics; seek and play, then inspect **Help >
+Open Log Folder** for active-only samples with CPU/memory, stage timings,
+percentiles, and request counters. Confirm idle intervals stay silent and
+records contain no paths, layer names, or text content. Export a composition and
+inspect its completion summary for elapsed time, frame count, render/write
+timings, output size/rate, and achieved speed; also confirm canceled and failed
+jobs have summaries. Open **File > Export
 Video...**, confirm composition resolution and frame-rate defaults, try a custom
 resolution and quality profile, export overlapping image, video, text, and
 shape layers with a blank lead-in, and play the result in a media player. Cancel

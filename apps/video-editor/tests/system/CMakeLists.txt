@@ -1,11 +1,12 @@
 add_executable(creative-suite-main-editor-system-memory-tests
     system_memory_usage_test.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/system/system_memory_usage.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/system/system_memory_usage.h
 )
 
 target_include_directories(creative-suite-main-editor-system-memory-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}
+)
+target_link_libraries(creative-suite-main-editor-system-memory-tests PRIVATE
+    creative-suite::system-monitor
 )
 
 if(WIN32)
@@ -27,14 +28,15 @@ add_creative_suite_test(
 
 add_executable(creative-suite-main-editor-performance-usage-tests
     performance_usage_test.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/system/performance_usage.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/system/performance_usage.h
-    ${VIDEO_EDITOR_SOURCE_DIR}/system/system_memory_usage.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/system/system_memory_usage.h
 )
 
 target_include_directories(creative-suite-main-editor-performance-usage-tests PRIVATE
     ${VIDEO_EDITOR_SOURCE_DIR}
+)
+target_link_libraries(creative-suite-main-editor-performance-usage-tests PRIVATE
+    creative-suite::system-monitor
 )
 
 if(MSVC)
@@ -56,7 +58,6 @@ add_creative_suite_test(
 
 add_executable(creative-suite-main-editor-system-memory-details-tests
     system_memory_details_dialog_test.cpp
-    ${VIDEO_EDITOR_SOURCE_DIR}/system/system_memory_usage.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/system/system_memory_usage.h
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/system/system_memory_details_dialog.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/ui/system/system_memory_details_dialog.h
@@ -69,6 +70,7 @@ target_include_directories(creative-suite-main-editor-system-memory-details-test
 )
 
 target_link_libraries(creative-suite-main-editor-system-memory-details-tests PRIVATE
+    creative-suite::system-monitor
     Qt6::Widgets
 )
 

@@ -53,6 +53,21 @@ target_include_directories(creative-suite-diagnostics PUBLIC
 )
 target_compile_features(creative-suite-diagnostics PUBLIC cxx_std_20)
 
+add_library(creative-suite-system-monitor STATIC
+    system-monitor/src/performance_usage.cpp
+    system-monitor/src/system_memory_usage.cpp
+    system-monitor/include/creative_suite/system_monitor/performance_usage.h
+    system-monitor/include/creative_suite/system_monitor/system_memory_usage.h
+)
+add_library(creative-suite::system-monitor ALIAS creative-suite-system-monitor)
+target_include_directories(creative-suite-system-monitor PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/system-monitor/include
+)
+target_compile_features(creative-suite-system-monitor PUBLIC cxx_std_20)
+if(WIN32)
+    target_link_libraries(creative-suite-system-monitor PUBLIC Psapi)
+endif()
+
 if(BUILD_VIDEO_MEDIA_LIBRARY)
     add_subdirectory(media)
 endif()
@@ -64,7 +79,8 @@ endif()
 foreach(shared_target IN ITEMS
         creative-suite-animation
         creative-suite-composition
-        creative-suite-diagnostics)
+        creative-suite-diagnostics
+        creative-suite-system-monitor)
     if(MSVC)
         target_compile_options(${shared_target} PRIVATE /W4 /permissive-)
     else()

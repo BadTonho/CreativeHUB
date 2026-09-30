@@ -35,6 +35,17 @@ struct MotionExportSnapshot {
     std::map<std::filesystem::path, creative_suite::media::RgbaFramePtr> still_frames;
 };
 
+struct MotionExportPerformanceSummary {
+    std::uint64_t elapsed_nanoseconds = 0;
+    std::uint64_t frames_rendered = 0;
+    std::uint64_t render_count = 0;
+    std::uint64_t render_total_nanoseconds = 0;
+    std::uint64_t render_maximum_nanoseconds = 0;
+    std::uint64_t write_count = 0;
+    std::uint64_t write_total_nanoseconds = 0;
+    std::uint64_t write_maximum_nanoseconds = 0;
+};
+
 class MotionExportCancelled final : public std::exception {
 public:
     [[nodiscard]] const char* what() const noexcept override
@@ -53,7 +64,8 @@ public:
         const MotionExportSnapshot& snapshot,
         const MotionExportSettings& settings,
         const std::atomic_bool& cancel_requested,
-        ProgressCallback report_progress = {});
+        ProgressCallback report_progress = {},
+        MotionExportPerformanceSummary* performance_summary = nullptr);
 };
 
 struct MotionExportResult {

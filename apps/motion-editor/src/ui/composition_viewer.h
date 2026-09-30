@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <optional>
+#include <cstdint>
 
 class QPaintEvent;
 
@@ -22,7 +23,8 @@ public:
         model::CanvasSize canvas_size,
         std::optional<QPointF> selected_layer_anchor);
     void setSelectedLayerAnchor(std::optional<QPointF> selected_layer_anchor);
-    void setRenderedFrame(creative_suite::media::RgbaFramePtr frame);
+    void setRenderedFrame(creative_suite::media::RgbaFramePtr frame,
+                          std::uint64_t request_generation = 0);
     [[nodiscard]] creative_suite::media::RgbaFramePtr renderedFrame() const noexcept;
 
 protected:
@@ -32,6 +34,8 @@ private:
     model::CanvasSize canvas_size_{0, 0};
     std::optional<QPointF> selected_layer_anchor_;
     creative_suite::media::RgbaFramePtr rendered_frame_;
+    std::uint64_t rendered_frame_generation_ = 0;
+    bool rendered_frame_paint_pending_ = false;
 };
 
 } // namespace motion::ui

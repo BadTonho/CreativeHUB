@@ -45,9 +45,7 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/settings/shortcut_manager.h
     src/settings/user_preferences.cpp
     src/settings/user_preferences.h
-    src/system/performance_usage.cpp
     src/system/performance_usage.h
-    src/system/system_memory_usage.cpp
     src/system/system_memory_usage.h
     src/ui/preview/preview_widget.cpp
     src/ui/preview/preview_widget.h
@@ -195,6 +193,7 @@ target_link_libraries(creative-suite-main-editor-core PUBLIC
     creative-suite::video-encoding
     creative-suite::media-assets
     creative-suite::shortcuts
+    creative-suite::system-monitor
 )
 
 if(WIN32)

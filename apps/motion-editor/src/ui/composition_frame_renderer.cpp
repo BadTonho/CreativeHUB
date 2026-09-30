@@ -1,12 +1,14 @@
 #include "composition_frame_renderer.h"
 #include "layer_content_renderer.h"
 #include "layer_effect_processor.h"
+#include "../diagnostics/performance_metrics.h"
 
 #include <creative_suite/composition/frame_compositor.h>
 #include <creative_suite/diagnostics/logger.h>
 #include <creative_suite/animation/animation.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <set>
@@ -15,6 +17,27 @@
 
 namespace motion::ui {
 namespace {
+
+class StageTimer final {
+public:
+    StageTimer(bool enabled, diagnostics::PreviewTimingStage stage) noexcept
+        : enabled_(enabled), stage_(stage), started_(std::chrono::steady_clock::now()) {}
+    ~StageTimer()
+    {
+        if (!enabled_) return;
+        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - started_).count();
+        if (elapsed >= 0) {
+            diagnostics::PerformanceMetrics::instance().recordTiming(
+                stage_, static_cast<std::uint64_t>(elapsed));
+        }
+    }
+
+private:
+    bool enabled_;
+    diagnostics::PreviewTimingStage stage_;
+    std::chrono::steady_clock::time_point started_;
+};
 
 std::string pathForLog(const std::filesystem::path& path)
 {
@@ -105,6 +128,8 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 source_frame = std::min(source_frame, layer.source_frame_count - 1);
             }
             try {
+                StageTimer decode_timer(
+                    record_preview_metrics_, diagnostics::PreviewTimingStage::Decode);
                 auto session = video_sessions_.find(layer.source_path);
                 if (session == video_sessions_.end()) {
                     auto opened = VideoPlaybackSession::open(layer.source_path);
@@ -154,6 +179,9 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             active_content_ids.insert(layer.id);
             auto cached = content_frames_.find(layer.id);
             if (cached == content_frames_.end() || cached->second.content != layer.content) {
+                StageTimer raster_timer(
+                    record_preview_metrics_,
+                    diagnostics::PreviewTimingStage::TextShapeRasterization);
                 const auto rasterized = rasterizeLayerContent(layer.content);
                 if (!rasterized.has_value()) {
                     if (fail_on_media_error) {
@@ -183,6 +211,8 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         if (frame == nullptr) continue;
         if (hasEnabledLayerEffects(layer.effects)) {
             try {
+                StageTimer effects_timer(
+                    record_preview_metrics_, diagnostics::PreviewTimingStage::Effects);
                 auto processed = std::make_shared<creative_suite::media::RgbaFrame>(*frame);
                 if (!applyLayerEffects(*processed, layer.effects, should_cancel)) {
                     return {};
@@ -230,6 +260,8 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         (composition_layers.empty() && !request.black_canvas_when_empty)) {
         return {};
     }
+    StageTimer composition_timer(
+        record_preview_metrics_, diagnostics::PreviewTimingStage::Composition);
     auto composed = creative_suite::composition::FrameCompositor::compose(
         request.canvas_size.width,
         request.canvas_size.height,

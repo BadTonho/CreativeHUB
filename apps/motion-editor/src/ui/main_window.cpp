@@ -9,6 +9,7 @@
 #include "preview_renderer.h"
 #include "motion_video_export.h"
 #include "motion_video_export_dialog.h"
+#include "general_settings_dialog.h"
 #include "shortcut_settings_dialog.h"
 #include "timeline_navigator.h"
 #include "../settings/autosave_preferences.h"
@@ -566,6 +567,12 @@ MainWindow::MainWindow(QWidget* parent,
         QStringLiteral("motion-autosave-recovery-action"));
     connect(autosave_settings_action_, &QAction::triggered,
             this, [this] { openAutosaveRecoverySettings(); });
+    general_settings_action_ = settings_menu->addAction(
+        QStringLiteral("General..."));
+    general_settings_action_->setObjectName(
+        QStringLiteral("motion-general-settings-action"));
+    connect(general_settings_action_, &QAction::triggered,
+            this, [this] { openGeneralSettings(); });
 
     auto* help_menu = menuBar()->addMenu(QStringLiteral("&Help"));
     auto* system_action = help_menu->addAction(QStringLiteral("&System"));
@@ -667,12 +674,20 @@ MainWindow::MainWindow(QWidget* parent,
     connect(autosave_timer_, &QTimer::timeout,
             this, [this] { autosaveProject(); });
     configureAutosaveTimer();
+    performance_metrics_timer_ = new QTimer(this);
+    performance_metrics_timer_->setObjectName(
+        QStringLiteral("motion-performance-metrics-timer"));
+    performance_metrics_timer_->setInterval(1000);
+    connect(performance_metrics_timer_, &QTimer::timeout,
+            this, [this] { flushPreviewPerformanceMetrics(); });
+    configurePreviewPerformanceMetrics();
     QTimer::singleShot(0, this, [this] { maybeOfferUnsavedRecovery(); });
 }
 
 MainWindow::~MainWindow()
 {
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
+    if (performance_metrics_timer_ != nullptr) performance_metrics_timer_->stop();
     if (export_worker_) export_worker_->cancelAndWait();
     if (preview_renderer_) preview_renderer_->stopAndWait();
 }
@@ -1636,6 +1651,58 @@ void MainWindow::openAutosaveRecoverySettings()
     }
 }
 
+void MainWindow::openGeneralSettings()
+{
+    GeneralSettingsDialog dialog(settings::previewPerformanceMetricsEnabled(), this);
+    connect(&dialog, &GeneralSettingsDialog::previewMetricsEnabledChanged,
+            this, [this](bool enabled) {
+        settings::setPreviewPerformanceMetricsEnabled(enabled);
+        configurePreviewPerformanceMetrics();
+    });
+    (void)dialog.exec();
+}
+
+void MainWindow::configurePreviewPerformanceMetrics()
+{
+    const bool enabled = settings::previewPerformanceMetricsEnabled();
+    diagnostics::PerformanceMetrics::instance().setEnabled(enabled);
+    performance_sampler_.reset();
+    if (performance_metrics_timer_ == nullptr) return;
+    if (enabled) performance_metrics_timer_->start(1000);
+    else performance_metrics_timer_->stop();
+}
+
+void MainWindow::flushPreviewPerformanceMetrics()
+{
+    auto& metrics = diagnostics::PerformanceMetrics::instance();
+    const auto snapshot = metrics.takeSnapshotAndReset();
+    if (!snapshot.has_value()) {
+        performance_sampler_.reset();
+        return;
+    }
+
+    const auto resources = performance_sampler_.sample();
+    diagnostics::PreviewLogMetadata metadata;
+    if (document_.has_value()) {
+        const auto canvas = document_->canvasSize();
+        const auto rate = document_->frameRate();
+        metadata.canvas_width = canvas.width;
+        metadata.canvas_height = canvas.height;
+        metadata.frame_rate_numerator = rate.numerator;
+        metadata.frame_rate_denominator = rate.denominator;
+        metadata.layer_count = document_->layers().size();
+        for (const auto& layer : document_->layers())
+            metadata.effect_count += layer.effects.size();
+    }
+    const auto context = diagnostics::makePreviewPerformanceContext(
+        *snapshot, resources, metadata);
+
+    creative_suite::diagnostics::Logger::instance().log(
+        creative_suite::diagnostics::Level::Info,
+        "motion_performance", "preview_sample",
+        "Motion Studio preview performance interval.", context);
+}
+
 void MainWindow::createWorkspace()
 {
     const bool was_maximized = isMaximized();
@@ -2245,7 +2312,13 @@ void MainWindow::createWorkspace()
                 (mode != PreviewRequestMode::Playback ||
                  (timeline_ != nullptr && timeline_->isPlaying()));
             if (may_present && viewer_ != nullptr) {
-                viewer_->setRenderedFrame(std::move(frame));
+                if (frame != nullptr) {
+                    viewer_->setRenderedFrame(std::move(frame), generation);
+                } else {
+                    diagnostics::PerformanceMetrics::instance().discardRequest(generation);
+                }
+            } else {
+                diagnostics::PerformanceMetrics::instance().recordStaleResult(generation);
             }
         });
     if (!was_maximized && !was_full_screen) setGeometry(previous_geometry);
