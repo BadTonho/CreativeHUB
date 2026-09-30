@@ -566,6 +566,14 @@ MainWindow::MainWindow(QWidget* parent,
     connect(autosave_settings_action_, &QAction::triggered,
             this, [this] { openAutosaveRecoverySettings(); });
 
+    auto* help_menu = menuBar()->addMenu(QStringLiteral("Help"));
+    auto* about_action = help_menu->addAction(QStringLiteral("About Motion Studio"));
+    about_action->setObjectName(QStringLiteral("motion-about-action"));
+    connect(about_action, &QAction::triggered, this, [this] {
+        QMessageBox::about(this, QStringLiteral("About Motion Studio"),
+            QStringLiteral("<h3>Motion Studio</h3><p>Beta 0.1.0</p>"));
+    });
+
     const auto register_timeline_action = [this](
         QAction*& action, const QString& object_name, const QString& id,
         const QString& label, const QKeySequence& default_sequence) {
