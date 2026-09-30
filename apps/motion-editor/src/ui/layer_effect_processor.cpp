@@ -62,60 +62,111 @@ std::uint8_t byteFromUnit(double value) noexcept
     return static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0, 1.0) * 255.0));
 }
 
-bool boxBlurPass(const creative_suite::media::RgbaFrame& source,
-                 creative_suite::media::RgbaFrame& destination,
-                 int radius,
-                 bool horizontal,
-                 const std::function<bool()>& should_cancel)
+bool horizontalBoxBlurPass(const creative_suite::media::RgbaFrame& source,
+                           creative_suite::media::RgbaFrame& destination,
+                           int radius,
+                           const std::function<bool()>& should_cancel)
 {
-    const int outer_count = horizontal ? source.height : source.width;
-    const int inner_count = horizontal ? source.width : source.height;
-    const int source_stride = source.stride;
-    const int destination_stride = destination.stride;
     const int window_size = radius * 2 + 1;
-    for (int outer = 0; outer < outer_count; ++outer) {
+    for (int y = 0; y < source.height; ++y) {
         if (should_cancel && should_cancel()) return false;
-        std::array<double, 4> sums{};
+        std::array<std::uint32_t, 4> sums{};
         for (int offset = -radius; offset <= radius; ++offset) {
-            const int sample = std::clamp(offset, 0, inner_count - 1);
+            const int sample_x = std::clamp(offset, 0, source.width - 1);
             const auto* pixel = source.rgba_pixels.data() +
-                (horizontal
-                    ? static_cast<std::size_t>(outer) * static_cast<std::size_t>(source_stride) +
-                        static_cast<std::size_t>(sample) * 4U
-                    : static_cast<std::size_t>(sample) * static_cast<std::size_t>(source_stride) +
-                        static_cast<std::size_t>(outer) * 4U);
+                static_cast<std::size_t>(y) * static_cast<std::size_t>(source.stride) +
+                static_cast<std::size_t>(sample_x) * 4U;
             for (std::size_t channel = 0; channel < 4; ++channel)
-                sums[channel] += pixel[channel];
+                sums[channel] += static_cast<std::uint32_t>(pixel[channel]);
         }
-        for (int inner = 0; inner < inner_count; ++inner) {
+
+        for (int x = 0; x < source.width; ++x) {
             auto* output = destination.rgba_pixels.data() +
-                (horizontal
-                    ? static_cast<std::size_t>(outer) * static_cast<std::size_t>(destination_stride) +
-                        static_cast<std::size_t>(inner) * 4U
-                    : static_cast<std::size_t>(inner) * static_cast<std::size_t>(destination_stride) +
-                        static_cast<std::size_t>(outer) * 4U);
+                static_cast<std::size_t>(y) * static_cast<std::size_t>(destination.stride) +
+                static_cast<std::size_t>(x) * 4U;
             for (std::size_t channel = 0; channel < 4; ++channel) {
-                output[channel] = static_cast<std::uint8_t>(std::lround(
-                    sums[channel] / static_cast<double>(window_size)));
+                output[channel] = static_cast<std::uint8_t>(
+                    (sums[channel] + static_cast<std::uint32_t>(window_size / 2)) /
+                    static_cast<std::uint32_t>(window_size));
             }
-            if (inner + 1 < inner_count) {
-                const int leaving = std::clamp(inner - radius, 0, inner_count - 1);
-                const int entering = std::clamp(inner + radius + 1, 0, inner_count - 1);
-                const auto* leaving_pixel = source.rgba_pixels.data() +
-                    (horizontal
-                        ? static_cast<std::size_t>(outer) * static_cast<std::size_t>(source_stride) +
-                            static_cast<std::size_t>(leaving) * 4U
-                        : static_cast<std::size_t>(leaving) * static_cast<std::size_t>(source_stride) +
-                            static_cast<std::size_t>(outer) * 4U);
-                const auto* entering_pixel = source.rgba_pixels.data() +
-                    (horizontal
-                        ? static_cast<std::size_t>(outer) * static_cast<std::size_t>(source_stride) +
-                            static_cast<std::size_t>(entering) * 4U
-                        : static_cast<std::size_t>(entering) * static_cast<std::size_t>(source_stride) +
-                            static_cast<std::size_t>(outer) * 4U);
+            if (x + 1 < source.width) {
+                const int leaving_x = std::clamp(x - radius, 0, source.width - 1);
+                const int entering_x = std::clamp(x + radius + 1, 0, source.width - 1);
+                const auto* leaving = source.rgba_pixels.data() +
+                    static_cast<std::size_t>(y) * static_cast<std::size_t>(source.stride) +
+                    static_cast<std::size_t>(leaving_x) * 4U;
+                const auto* entering = source.rgba_pixels.data() +
+                    static_cast<std::size_t>(y) * static_cast<std::size_t>(source.stride) +
+                    static_cast<std::size_t>(entering_x) * 4U;
+                for (std::size_t channel = 0; channel < 4; ++channel) {
+                    sums[channel] -= static_cast<std::uint32_t>(leaving[channel]);
+                    sums[channel] += static_cast<std::uint32_t>(entering[channel]);
+                }
+            }
+        }
+    }
+    return true;
+}
+
+bool verticalBoxBlurPassTiled(const creative_suite::media::RgbaFrame& source,
+                              creative_suite::media::RgbaFrame& destination,
+                              int radius,
+                              const std::function<bool()>& should_cancel)
+{
+    constexpr int tile_width = 32;
+    const int window_size = radius * 2 + 1;
+    const auto denominator = static_cast<std::uint32_t>(window_size);
+    const auto rounding_bias = static_cast<std::uint32_t>(window_size / 2);
+
+    for (int tile_start = 0; tile_start < source.width; tile_start += tile_width) {
+        if (should_cancel && should_cancel()) return false;
+        const int columns = std::min(tile_width, source.width - tile_start);
+        std::array<std::array<std::uint32_t, 4>, tile_width> sums{};
+        for (int offset = -radius; offset <= radius; ++offset) {
+            const int sample_y = std::clamp(offset, 0, source.height - 1);
+            const auto* row = source.rgba_pixels.data() +
+                static_cast<std::size_t>(sample_y) * static_cast<std::size_t>(source.stride) +
+                static_cast<std::size_t>(tile_start) * 4U;
+            for (int column = 0; column < columns; ++column) {
+                const auto* pixel = row + static_cast<std::size_t>(column) * 4U;
                 for (std::size_t channel = 0; channel < 4; ++channel)
-                    sums[channel] += static_cast<double>(entering_pixel[channel]) -
-                        static_cast<double>(leaving_pixel[channel]);
+                    sums[static_cast<std::size_t>(column)][channel] +=
+                        static_cast<std::uint32_t>(pixel[channel]);
+            }
+        }
+
+        for (int y = 0; y < source.height; ++y) {
+            if (should_cancel && should_cancel()) return false;
+            auto* output_row = destination.rgba_pixels.data() +
+                static_cast<std::size_t>(y) * static_cast<std::size_t>(destination.stride) +
+                static_cast<std::size_t>(tile_start) * 4U;
+            for (int column = 0; column < columns; ++column) {
+                auto* output = output_row + static_cast<std::size_t>(column) * 4U;
+                for (std::size_t channel = 0; channel < 4; ++channel) {
+                    output[channel] = static_cast<std::uint8_t>(
+                        (sums[static_cast<std::size_t>(column)][channel] + rounding_bias) /
+                        denominator);
+                }
+            }
+
+            if (y + 1 < source.height) {
+                const int leaving_y = std::clamp(y - radius, 0, source.height - 1);
+                const int entering_y = std::clamp(y + radius + 1, 0, source.height - 1);
+                const auto* leaving_row = source.rgba_pixels.data() +
+                    static_cast<std::size_t>(leaving_y) * static_cast<std::size_t>(source.stride) +
+                    static_cast<std::size_t>(tile_start) * 4U;
+                const auto* entering_row = source.rgba_pixels.data() +
+                    static_cast<std::size_t>(entering_y) * static_cast<std::size_t>(source.stride) +
+                    static_cast<std::size_t>(tile_start) * 4U;
+                for (int column = 0; column < columns; ++column) {
+                    const auto index = static_cast<std::size_t>(column);
+                    const auto* leaving = leaving_row + index * 4U;
+                    const auto* entering = entering_row + index * 4U;
+                    for (std::size_t channel = 0; channel < 4; ++channel) {
+                        sums[index][channel] -= static_cast<std::uint32_t>(leaving[channel]);
+                        sums[index][channel] += static_cast<std::uint32_t>(entering[channel]);
+                    }
+                }
             }
         }
     }
@@ -150,8 +201,8 @@ bool applyGaussianBlur(creative_suite::media::RgbaFrame& frame,
         }
     }
     for (int pass = 0; pass < 3; ++pass) {
-        if (!boxBlurPass(frame, scratch, radius, true, should_cancel) ||
-            !boxBlurPass(scratch, frame, radius, false, should_cancel)) return false;
+        if (!horizontalBoxBlurPass(frame, scratch, radius, should_cancel) ||
+            !verticalBoxBlurPassTiled(scratch, frame, radius, should_cancel)) return false;
     }
     for (int y = 0; y < frame.height; ++y) {
         if (should_cancel && should_cancel()) return false;
@@ -178,6 +229,9 @@ void applyColorAdjustment(creative_suite::media::RgbaFrame& frame,
                           const model::ColorAdjustmentEffect& effect,
                           const std::function<bool()>& should_cancel)
 {
+    if (effect.brightness == 0.0 && effect.contrast_percent == 100.0 &&
+        effect.saturation_percent == 100.0) return;
+
     const double brightness = effect.brightness / 100.0;
     const double contrast = effect.contrast_percent / 100.0;
     const double saturation = effect.saturation_percent / 100.0;

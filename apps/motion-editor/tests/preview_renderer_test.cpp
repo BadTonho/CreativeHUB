@@ -73,6 +73,130 @@ std::filesystem::path filePath(const QString& value)
     return std::filesystem::path(std::u8string(first, first + utf8.size()));
 }
 
+void referenceBoxBlurPass(const creative_suite::media::RgbaFrame& source,
+                         creative_suite::media::RgbaFrame& destination,
+                         int radius,
+                         bool horizontal)
+{
+    const int outer_count = horizontal ? source.height : source.width;
+    const int inner_count = horizontal ? source.width : source.height;
+    const int window_size = radius * 2 + 1;
+    for (int outer = 0; outer < outer_count; ++outer) {
+        std::array<double, 4> sums{};
+        for (int offset = -radius; offset <= radius; ++offset) {
+            const int sample = std::clamp(offset, 0, inner_count - 1);
+            const auto* pixel = source.rgba_pixels.data() +
+                (horizontal
+                    ? static_cast<std::size_t>(outer) * static_cast<std::size_t>(source.stride) +
+                        static_cast<std::size_t>(sample) * 4U
+                    : static_cast<std::size_t>(sample) * static_cast<std::size_t>(source.stride) +
+                        static_cast<std::size_t>(outer) * 4U);
+            for (std::size_t channel = 0; channel < 4; ++channel)
+                sums[channel] += pixel[channel];
+        }
+        for (int inner = 0; inner < inner_count; ++inner) {
+            auto* output = destination.rgba_pixels.data() +
+                (horizontal
+                    ? static_cast<std::size_t>(outer) * static_cast<std::size_t>(destination.stride) +
+                        static_cast<std::size_t>(inner) * 4U
+                    : static_cast<std::size_t>(inner) * static_cast<std::size_t>(destination.stride) +
+                        static_cast<std::size_t>(outer) * 4U);
+            for (std::size_t channel = 0; channel < 4; ++channel) {
+                output[channel] = static_cast<std::uint8_t>(std::lround(
+                    sums[channel] / static_cast<double>(window_size)));
+            }
+            if (inner + 1 < inner_count) {
+                const int leaving = std::clamp(inner - radius, 0, inner_count - 1);
+                const int entering = std::clamp(inner + radius + 1, 0, inner_count - 1);
+                const auto* leaving_pixel = source.rgba_pixels.data() +
+                    (horizontal
+                        ? static_cast<std::size_t>(outer) * static_cast<std::size_t>(source.stride) +
+                            static_cast<std::size_t>(leaving) * 4U
+                        : static_cast<std::size_t>(leaving) * static_cast<std::size_t>(source.stride) +
+                            static_cast<std::size_t>(outer) * 4U);
+                const auto* entering_pixel = source.rgba_pixels.data() +
+                    (horizontal
+                        ? static_cast<std::size_t>(outer) * static_cast<std::size_t>(source.stride) +
+                            static_cast<std::size_t>(entering) * 4U
+                        : static_cast<std::size_t>(entering) * static_cast<std::size_t>(source.stride) +
+                            static_cast<std::size_t>(outer) * 4U);
+                for (std::size_t channel = 0; channel < 4; ++channel)
+                    sums[channel] += static_cast<double>(entering_pixel[channel]) -
+                        static_cast<double>(leaving_pixel[channel]);
+            }
+        }
+    }
+}
+
+void referenceGaussianBlur(creative_suite::media::RgbaFrame& frame, int radius)
+{
+    if (radius <= 0) return;
+    creative_suite::media::RgbaFrame scratch;
+    scratch.width = frame.width;
+    scratch.height = frame.height;
+    scratch.stride = frame.stride;
+    scratch.rgba_pixels.resize(frame.rgba_pixels.size());
+    for (int y = 0; y < frame.height; ++y) {
+        auto* row = frame.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
+        for (int x = 0; x < frame.width; ++x) {
+            auto* pixel = row + static_cast<std::size_t>(x) * 4U;
+            const auto alpha = static_cast<unsigned>(pixel[3]);
+            for (std::size_t channel = 0; channel < 3; ++channel) {
+                pixel[channel] = static_cast<std::uint8_t>(
+                    (static_cast<unsigned>(pixel[channel]) * alpha + 127U) / 255U);
+            }
+        }
+    }
+    for (int pass = 0; pass < 3; ++pass) {
+        referenceBoxBlurPass(frame, scratch, radius, true);
+        referenceBoxBlurPass(scratch, frame, radius, false);
+    }
+    for (int y = 0; y < frame.height; ++y) {
+        auto* row = frame.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
+        for (int x = 0; x < frame.width; ++x) {
+            auto* pixel = row + static_cast<std::size_t>(x) * 4U;
+            const auto alpha = static_cast<unsigned>(pixel[3]);
+            if (alpha == 0) {
+                pixel[0] = pixel[1] = pixel[2] = 0;
+            } else {
+                for (std::size_t channel = 0; channel < 3; ++channel) {
+                    pixel[channel] = static_cast<std::uint8_t>(std::min(
+                        255U, (static_cast<unsigned>(pixel[channel]) * 255U + alpha / 2U) /
+                            alpha));
+                }
+            }
+        }
+    }
+}
+
+creative_suite::media::RgbaFrame effectTestFrame(int width,
+                                                  int height,
+                                                  int padding_bytes)
+{
+    creative_suite::media::RgbaFrame frame;
+    frame.width = width;
+    frame.height = height;
+    frame.stride = width * 4 + padding_bytes;
+    frame.rgba_pixels.resize(static_cast<std::size_t>(frame.stride) *
+        static_cast<std::size_t>(height), 0xA5);
+    for (int y = 0; y < height; ++y) {
+        auto* row = frame.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
+        for (int x = 0; x < width; ++x) {
+            auto* pixel = row + static_cast<std::size_t>(x) * 4U;
+            pixel[0] = static_cast<std::uint8_t>((x * 37 + y * 19 + 3) % 256);
+            pixel[1] = static_cast<std::uint8_t>((x * 13 + y * 53 + 71) % 256);
+            pixel[2] = static_cast<std::uint8_t>((x * 61 + y * 7 + 149) % 256);
+            pixel[3] = static_cast<std::uint8_t>((x * 29 + y * 43 + 17) % 256);
+            if (x == 0 || y == 0) pixel[3] = 0;
+            if (x == width - 1 || y == height - 1) pixel[3] = 255;
+        }
+    }
+    return frame;
+}
+
 motion::ui::PreviewRequest imageRequest(
     creative_suite::media::RgbaFramePtr frame)
 {
@@ -101,6 +225,31 @@ int main(int argc, char* argv[])
     using motion::model::TextAlignment;
     using motion::model::TextLayerContent;
 
+    for (const auto& test_case : std::array<std::array<int, 4>, 4>{
+             std::array<int, 4>{5, 3, 0, 0},
+             std::array<int, 4>{7, 5, 1, 0},
+             std::array<int, 4>{35, 19, 10, 12},
+             std::array<int, 4>{67, 39, 100, 4}}) {
+        auto optimized = effectTestFrame(test_case[0], test_case[1], test_case[3]);
+        auto reference = optimized;
+        referenceGaussianBlur(reference, test_case[2]);
+        require(motion::ui::applyLayerEffects(
+                    optimized,
+                    {motion::model::GaussianBlurEffect{
+                        true, static_cast<double>(test_case[2])}}) &&
+                    optimized.rgba_pixels == reference.rgba_pixels,
+                "tiled integer Gaussian blur is byte-identical to the prior implementation");
+    }
+
+    auto cancellable_blur = effectTestFrame(40, 40, 0);
+    int cancellation_checks = 0;
+    const bool blur_completed = motion::ui::applyLayerEffects(
+        cancellable_blur,
+        {motion::model::GaussianBlurEffect{true, 10.0}},
+        [&] { return ++cancellation_checks >= 3; });
+    require(!blur_completed && cancellation_checks >= 3,
+            "tiled Gaussian blur checks cancellation while processing rows");
+
     creative_suite::media::RgbaFrame transparent_edge;
     transparent_edge.width = 3;
     transparent_edge.height = 1;
@@ -118,22 +267,42 @@ int main(int argc, char* argv[])
             "Gaussian blur preserves red through transparent edges without dark fringes");
 
     creative_suite::media::RgbaFrame neutral_color;
-    neutral_color.width = 1;
-    neutral_color.height = 1;
-    neutral_color.stride = 4;
-    neutral_color.rgba_pixels = {40, 80, 120, 128};
+    neutral_color.width = 7;
+    neutral_color.height = 3;
+    neutral_color.stride = 32;
+    neutral_color.rgba_pixels.resize(static_cast<std::size_t>(
+        neutral_color.stride * neutral_color.height), 0xCD);
+    for (int y = 0; y < neutral_color.height; ++y) {
+        auto* row = neutral_color.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * static_cast<std::size_t>(neutral_color.stride);
+        for (int x = 0; x < neutral_color.width; ++x) {
+            auto* pixel = row + static_cast<std::size_t>(x) * 4U;
+            pixel[0] = static_cast<std::uint8_t>(x * 31 + y * 7);
+            pixel[1] = static_cast<std::uint8_t>(255 - x * 19 - y * 11);
+            pixel[2] = static_cast<std::uint8_t>(x * 3 + y * 83);
+            pixel[3] = static_cast<std::uint8_t>(std::array<int, 4>{0, 1, 128, 255}[
+                static_cast<std::size_t>((x + y) % 4)]);
+        }
+    }
     const auto neutral_original = neutral_color.rgba_pixels;
+    int neutral_timing_records = 0;
     require(motion::ui::applyLayerEffects(
                 neutral_color,
-                {motion::model::ColorAdjustmentEffect{true, 0.0, 100.0, 100.0}}) &&
-                neutral_color.rgba_pixels == neutral_original,
-            "neutral color adjustment leaves RGBA8 values unchanged");
+                {motion::model::ColorAdjustmentEffect{true, 0.0, 100.0, 100.0}},
+                {},
+                [&](motion::ui::LayerEffectKind kind, std::uint64_t) {
+                    if (kind == motion::ui::LayerEffectKind::ColorAdjustment)
+                        ++neutral_timing_records;
+                }) &&
+                neutral_color.rgba_pixels == neutral_original &&
+                neutral_timing_records == 1,
+            "neutral color adjustment preserves varied RGBA8 bytes and records its timing");
     require(motion::ui::applyLayerEffects(
                 neutral_color,
                 {motion::model::ColorAdjustmentEffect{true, 0.0, 0.0, 0.0}}) &&
                 neutral_color.rgba_pixels[0] == neutral_color.rgba_pixels[1] &&
                 neutral_color.rgba_pixels[1] == neutral_color.rgba_pixels[2] &&
-                neutral_color.rgba_pixels[3] == 128,
+                neutral_color.rgba_pixels[3] == neutral_original[3],
             "zero contrast and saturation produce gray while preserving alpha");
 
     creative_suite::media::RgbaFrame ordered_color;

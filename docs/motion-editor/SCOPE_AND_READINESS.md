@@ -193,8 +193,14 @@ destination. Audio and alpha are not exported. Static Gaussian Blur and Color
 Adjustment stacks run before each layer's transforms in the shared Motion frame
 renderer, so the preview, playback, and export evaluate the same effects. Blur
 uses a bounded three-pass box approximation to a Gaussian with premultiplied
-alpha. Color adjustment processes the stored RGBA8 values without color-space
-conversion and preserves alpha.
+alpha. Its rolling sums use integer arithmetic with byte-identical rounding,
+and the vertical pass traverses 32-pixel-wide tiles. The test suite compares
+the optimized blur against the previous implementation for radii 0, 1, 10,
+and 100, including padded rows and transparent edges. Neutral Color Adjustment
+(`0` brightness, `100%` contrast, `100%` saturation) bypasses the pixel loop
+and preserves all RGBA bytes exactly while still appearing in effect timing
+records. Non-neutral color adjustment processes stored RGBA8 values without
+color-space conversion and preserves alpha.
 Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
@@ -242,6 +248,12 @@ and heavy compositions, cross-platform resource behavior, startup, seek/paint
 latency, memory limits, and export throughput still require measured validation.
 On Windows, toggle the option, seek and play compositions, export a job, then
 use **Help > Open Log Folder** to inspect samples and job summaries.
+The effects optimization has automated byte-equivalence coverage, but its
+performance target still needs a Windows measurement: use the same 1920 × 1080,
+60 fps composition for three 10-second runs with radius-10 Gaussian Blur and
+neutral Color Adjustment. Compare effect averages and rendered/coalesced request
+counts with the recorded 286–306 ms blur baseline; the targets are below 1 ms
+for neutral adjustment and at least 25% lower blur time, with no pixel changes.
 
 ## Native Format and Compatibility Policy
 

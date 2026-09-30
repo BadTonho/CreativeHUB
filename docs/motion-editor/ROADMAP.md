@@ -204,6 +204,12 @@ the Motion Studio implementation choices are finalized.
   content.
   This diagnostic logging does not replace representative-project profiling or
   cross-platform validation.
+- [x] Make neutral Color Adjustment an exact byte-preserving no-op while
+  retaining per-effect timing records. Replace floating-point Gaussian Blur
+  rolling sums with integer accumulation and equivalent rounding, and process
+  vertical passes in 32-pixel tiles. Preview, playback, and export use the same
+  processor. Differential tests compare output against the previous algorithm;
+  the Windows 1080p/60 performance measurement remains pending.
 - [-] Extend actionable local error logging and automated coverage for the
   remaining document, rendering, and application boundaries. Save/open and
   export failures are logged before concise user feedback.
@@ -394,10 +400,16 @@ resolution and quality profile, export overlapping image, video, text, and
 shape layers with a blank lead-in, and play the result in a media player. Cancel
 another export and verify an existing destination remains unchanged; choose an
 unavailable encoder if one is offered and confirm a detailed log entry appears.
+For effect performance, use the same 1920 × 1080, 60 fps composition for three
+10-second runs with Gaussian Blur at radius 10 and neutral Color Adjustment;
+check logged per-effect averages and rendered/coalesced counts, target under
+1 ms for neutral Color Adjustment and at least 25% lower blur time than the
+286–306 ms baseline, and confirm the preview pixels match the pre-optimization
+render.
 Motion Studio export is opaque and video-only; audio and alpha export remain
 open. Then close the application. Overshoot-capable curves, additional
 interpolation modes, advanced effects, platform validation, and performance
-profiling remain open.
+measurement remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.

@@ -95,9 +95,15 @@ repeat effect types and disabled effects are retained. The renderer applies enab
 layer's RGBA8 frame before its transform and shared raster composition. It
 serves preview, playback, and export, so each output path uses the same effect
 order and parameter behavior. Blur uses a bounded three-pass box approximation
-to a Gaussian, with premultiplied RGB and alpha; color adjustment operates on
-RGBA8 channel values and preserves alpha. These are static, Motion Studio-only
-effects; no shared effects engine or Video Editor API is introduced.
+to a Gaussian, with premultiplied RGB and alpha. Its rolling sums use integer
+accumulation and equivalent rounding, with the vertical pass traversed in
+32-pixel-wide tiles; differential tests compare pixels against the prior
+implementation. Neutral Color Adjustment skips pixel processing and preserves
+RGBA bytes exactly, while still recording per-effect timings. Non-neutral
+color adjustment operates on RGBA8 channel values and preserves alpha. These
+are static, Motion Studio-only effects; no shared effects engine or Video
+Editor API is introduced. The target performance gain remains subject to the
+documented Windows measurement in [ROADMAP.md](ROADMAP.md).
 
 Version 4 of `.motion` persists each layer's effect stack. Versions 1 through
 3 load with empty stacks, and the version 1 recovery wrapper accepts nested
