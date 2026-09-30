@@ -23,6 +23,7 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QColorDialog>
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDesktopServices>
 #include <QDockWidget>
@@ -566,12 +567,51 @@ MainWindow::MainWindow(QWidget* parent,
     connect(autosave_settings_action_, &QAction::triggered,
             this, [this] { openAutosaveRecoverySettings(); });
 
-    auto* help_menu = menuBar()->addMenu(QStringLiteral("Help"));
-    auto* about_action = help_menu->addAction(QStringLiteral("About Motion Studio"));
+    auto* help_menu = menuBar()->addMenu(QStringLiteral("&Help"));
+    auto* system_action = help_menu->addAction(QStringLiteral("&System"));
+    connect(system_action, &QAction::triggered, this, [this] {
+        const auto version = QCoreApplication::applicationVersion();
+        const auto executable_path = QCoreApplication::applicationFilePath();
+        QMessageBox::information(
+            this,
+            QStringLiteral("System"),
+            QStringLiteral("Motion Studio\n\nVersion: %1\nExecutable: %2")
+                .arg(version.isEmpty() ? QStringLiteral("Beta 0.1.0") : version,
+                     executable_path.isEmpty()
+                         ? QStringLiteral("N/A")
+                         : executable_path));
+    });
+
+    auto* open_log_folder_action = help_menu->addAction(
+        QStringLiteral("Open &Log Folder"));
+    connect(open_log_folder_action, &QAction::triggered, this, [this] {
+        auto& logger = creative_suite::diagnostics::Logger::instance();
+        const auto directory = logger.log_directory();
+        const auto directory_text = pathForLog(directory);
+        const bool opened = !directory.empty() && QDesktopServices::openUrl(
+            QUrl::fromLocalFile(pathForDisplay(directory)));
+        if (!opened) {
+            logger.log(
+                creative_suite::diagnostics::Level::Warning,
+                "ui", "open_log_folder", "Could not open the log directory.",
+                {{"path", directory_text}});
+            statusBar()->showMessage(QStringLiteral("Could not open the log folder."));
+            return;
+        }
+        logger.log(
+            creative_suite::diagnostics::Level::Info,
+            "ui", "open_log_folder", "Opened the log directory.",
+            {{"path", directory_text}});
+        statusBar()->showMessage(QStringLiteral("Log folder opened."));
+    });
+
+    help_menu->addSeparator();
+    auto* about_action = help_menu->addAction(QStringLiteral("&About Motion Studio"));
     about_action->setObjectName(QStringLiteral("motion-about-action"));
     connect(about_action, &QAction::triggered, this, [this] {
         QMessageBox::about(this, QStringLiteral("About Motion Studio"),
-            QStringLiteral("<h3>Motion Studio</h3><p>Beta 0.1.0</p>"));
+            QStringLiteral("Motion Studio application shell\n\n"
+                           "This is an early open-source creative suite workspace."));
     });
 
     const auto register_timeline_action = [this](

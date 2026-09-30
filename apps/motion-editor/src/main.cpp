@@ -11,6 +11,7 @@ int main(int argc, char* argv[])
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
     QCoreApplication::setApplicationName(QStringLiteral("Motion Studio"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("Beta 0.1.0"));
     motion::ui::MainWindow window;
     window.show();
     return application.exec();

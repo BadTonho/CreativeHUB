@@ -137,8 +137,8 @@ the Motion Studio implementation choices are finalized.
   defaults, and dialog behavior application-owned. OK applies a validated
   batch; Cancel discards edits. Time/Frames and Media Pool commands remain
   outside this initial list.
-- [x] Add **Help > About Motion Studio** showing the current application label,
-  **Beta 0.1.0**.
+- [x] Match the Video Editor's Help menu pattern with **System** (application
+  version and executable path), **Open Log Folder**, and **About Motion Studio**.
 - [x] Add manual Open, Save, and Save As for the full composition and Media
   Pool using an atomic, versioned `.motion` JSON document. Reject malformed and
   future-version documents without replacing the current composition or
@@ -301,8 +301,10 @@ shared compositor handles their layer order, transforms, opacity, and alpha.
 Text glyphs and shape fills/strokes are static; only their existing transform
 properties are animated. Source in-points and audio remain unsupported.
 
-Manual Windows validation remains pending: open **Help > About Motion Studio**
-and confirm it displays **Beta 0.1.0**; verify the centered empty-state
+Manual Windows validation remains pending: open **Help > System** and confirm
+it displays **Beta 0.1.0** and the executable path; open **Help > Open Log
+Folder** and confirm the Motion Studio log directory opens, then verify the
+About text; verify the centered empty-state
 button opens composition creation and disappears after creation; confirm a
 composition opens maximized and preserves a restored window size; confirm the
 new **File > Save As**, **File > Save**, and **File > Open Composition** actions
