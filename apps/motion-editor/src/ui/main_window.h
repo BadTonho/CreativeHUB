@@ -167,6 +167,7 @@ private:
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
     QDockWidget* graph_editor_dock_ = nullptr;
+    QDockWidget* active_timeline_graph_dock_ = nullptr;
     MediaPoolWidget* media_pool_ = nullptr;
     CompositionViewer* viewer_ = nullptr;
     MediaDetailsWidget* media_details_ = nullptr;

@@ -1795,8 +1795,28 @@ void MainWindow::createWorkspace()
             });
     connect(timeline_, &TimelineNavigator::graphEditorToggled,
             this, [this](bool open) {
-                if (graph_editor_dock_ != nullptr)
-                    graph_editor_dock_->setVisible(open);
+                if (timeline_dock_ == nullptr || graph_editor_dock_ == nullptr) return;
+                const bool tabbed =
+                    tabifiedDockWidgets(timeline_dock_).contains(graph_editor_dock_) ||
+                    tabifiedDockWidgets(graph_editor_dock_).contains(timeline_dock_);
+                if (tabbed) {
+                    if (open) {
+                        active_timeline_graph_dock_ = graph_editor_dock_;
+                        timeline_->setGraphEditorOpen(true);
+                        graph_editor_dock_->show();
+                        graph_editor_dock_->raise();
+                        refreshCurveEditor();
+                    } else {
+                        active_timeline_graph_dock_ = timeline_dock_;
+                        timeline_->setGraphEditorOpen(false);
+                        timeline_dock_->show();
+                        timeline_dock_->raise();
+                    }
+                    return;
+                }
+                active_timeline_graph_dock_ = open ? graph_editor_dock_ : timeline_dock_;
+                graph_editor_dock_->setVisible(open);
+                timeline_->setGraphEditorOpen(open);
                 if (open) refreshCurveEditor();
             });
 
@@ -1874,8 +1894,11 @@ void MainWindow::createWorkspace()
     addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
     addDockWidget(Qt::BottomDockWidgetArea, graph_editor_dock_);
-    splitDockWidget(timeline_dock_, graph_editor_dock_, Qt::Vertical);
-    graph_editor_dock_->hide();
+    tabifyDockWidget(timeline_dock_, graph_editor_dock_);
+    graph_editor_dock_->show();
+    timeline_dock_->raise();
+    active_timeline_graph_dock_ = timeline_dock_;
+    timeline_->setGraphEditorOpen(false);
 
     const auto add_panel_action = [this](QDockWidget* dock,
                                          const QString& action_object_name) {
@@ -1887,13 +1910,39 @@ void MainWindow::createWorkspace()
     add_panel_action(inspector_dock_, QStringLiteral("motion-view-inspector-action"));
     add_panel_action(timeline_dock_, QStringLiteral("motion-view-timeline-action"));
     add_panel_action(graph_editor_dock_, QStringLiteral("motion-view-graph-editor-action"));
+    connect(graph_editor_dock_->toggleViewAction(), &QAction::triggered,
+            this, [this](bool visible) {
+                if (visible && graph_editor_dock_ != nullptr && timeline_ != nullptr) {
+                    active_timeline_graph_dock_ = graph_editor_dock_;
+                    timeline_->setGraphEditorOpen(true);
+                    graph_editor_dock_->show();
+                    graph_editor_dock_->raise();
+                }
+            });
     view_menu_->addSeparator();
     reset_panel_layout_action_->setEnabled(true);
 
     connect(graph_editor_dock_, &QDockWidget::visibilityChanged,
             this, [this](bool visible) {
-                if (timeline_ != nullptr) timeline_->setGraphEditorOpen(visible);
-                if (visible) refreshCurveEditor();
+                const bool tabbed = timeline_dock_ != nullptr &&
+                    (tabifiedDockWidgets(timeline_dock_).contains(graph_editor_dock_) ||
+                     tabifiedDockWidgets(graph_editor_dock_).contains(timeline_dock_));
+                if (!tabbed && visible) {
+                    active_timeline_graph_dock_ = graph_editor_dock_;
+                    if (timeline_ != nullptr) timeline_->setGraphEditorOpen(true);
+                    refreshCurveEditor();
+                } else if (graph_editor_dock_->isHidden()) {
+                    active_timeline_graph_dock_ = timeline_dock_;
+                    if (timeline_ != nullptr) timeline_->setGraphEditorOpen(false);
+                }
+            });
+    connect(this, &QMainWindow::tabifiedDockWidgetActivated,
+            this, [this](QDockWidget* activated) {
+                if (activated != timeline_dock_ && activated != graph_editor_dock_) return;
+                active_timeline_graph_dock_ = activated;
+                if (timeline_ != nullptr)
+                    timeline_->setGraphEditorOpen(activated == graph_editor_dock_);
+                if (activated == graph_editor_dock_) refreshCurveEditor();
             });
     restoreWorkspaceLayout();
     empty_state_ = nullptr;
@@ -1928,10 +1977,51 @@ void MainWindow::restoreWorkspaceLayout()
         QString::fromLatin1(kDockLayoutSettingsKey)).toByteArray();
     if (saved_state.isEmpty() || !restoreState(saved_state, kDockLayoutVersion)) {
         restoreDefaultPanelLayout();
+    } else {
+        const std::array<QDockWidget*, 4> docks{{
+            media_pool_dock_, inspector_dock_, timeline_dock_, graph_editor_dock_}};
+        bool has_tab_groups = false;
+        for (std::size_t first = 0; first < docks.size(); ++first) {
+            for (std::size_t second = first + 1; second < docks.size(); ++second) {
+                has_tab_groups = has_tab_groups ||
+                    tabifiedDockWidgets(docks[first]).contains(docks[second]) ||
+                    tabifiedDockWidgets(docks[second]).contains(docks[first]);
+            }
+        }
+        const bool old_default_layout =
+            !has_tab_groups &&
+            std::all_of(docks.begin(), docks.end(), [](const QDockWidget* dock) {
+                return !dock->isFloating();
+            }) &&
+            dockWidgetArea(media_pool_dock_) == Qt::LeftDockWidgetArea &&
+            dockWidgetArea(inspector_dock_) == Qt::RightDockWidgetArea &&
+            dockWidgetArea(timeline_dock_) == Qt::BottomDockWidgetArea &&
+            dockWidgetArea(graph_editor_dock_) == Qt::BottomDockWidgetArea &&
+            !media_pool_dock_->isHidden() && !inspector_dock_->isHidden() &&
+            !timeline_dock_->isHidden() && graph_editor_dock_->isHidden();
+        if (old_default_layout) {
+            tabifyDockWidget(timeline_dock_, graph_editor_dock_);
+            graph_editor_dock_->show();
+            timeline_dock_->show();
+            timeline_dock_->raise();
+            active_timeline_graph_dock_ = timeline_dock_;
+        }
     }
 
-    if (timeline_ != nullptr)
-        timeline_->setGraphEditorOpen(!graph_editor_dock_->isHidden());
+    const bool tabbed =
+        tabifiedDockWidgets(timeline_dock_).contains(graph_editor_dock_) ||
+        tabifiedDockWidgets(graph_editor_dock_).contains(timeline_dock_);
+    if (tabbed) {
+        if (active_timeline_graph_dock_ != graph_editor_dock_)
+            active_timeline_graph_dock_ = timeline_dock_;
+        if (timeline_ != nullptr)
+            timeline_->setGraphEditorOpen(active_timeline_graph_dock_ == graph_editor_dock_);
+    } else {
+        active_timeline_graph_dock_ = graph_editor_dock_->isVisible()
+            ? graph_editor_dock_ : timeline_dock_;
+        if (timeline_ != nullptr)
+            timeline_->setGraphEditorOpen(active_timeline_graph_dock_ == graph_editor_dock_);
+    }
 }
 
 void MainWindow::saveWorkspaceLayout()
@@ -1974,17 +2064,18 @@ void MainWindow::restoreDefaultPanelLayout()
     addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
     addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
     addDockWidget(Qt::BottomDockWidgetArea, graph_editor_dock_);
-    splitDockWidget(timeline_dock_, graph_editor_dock_, Qt::Vertical);
+    tabifyDockWidget(timeline_dock_, graph_editor_dock_);
     for (auto* dock : docks) {
         if (dock->isFloating()) dock->setFloating(false);
     }
-    graph_editor_dock_->show();
-    graph_editor_dock_->hide();
     media_pool_dock_->show();
     inspector_dock_->show();
     timeline_dock_->show();
+    graph_editor_dock_->show();
+    timeline_dock_->raise();
+    active_timeline_graph_dock_ = timeline_dock_;
     resizeDocks({media_pool_dock_, inspector_dock_}, {270, 300}, Qt::Horizontal);
-    resizeDocks({timeline_dock_, graph_editor_dock_}, {220, 170}, Qt::Vertical);
+    resizeDocks({timeline_dock_}, {240}, Qt::Vertical);
     if (timeline_ != nullptr) timeline_->setGraphEditorOpen(false);
 }
 

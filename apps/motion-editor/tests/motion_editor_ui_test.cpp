@@ -38,6 +38,7 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QMainWindow>
 #include <QPushButton>
 #include <QLineEdit>
 #include <QScrollBar>
@@ -867,12 +868,24 @@ void testMotionDocumentSaveOpen()
                 motion::model::CanvasSize{640, 360},
             "the saved document contains the current composition settings");
 
+    auto* graph_dock = findWidget<QDockWidget>(&window, "motion-graph-editor-dock");
+    auto* timeline_dock = findWidget<QDockWidget>(&window, "motion-timeline-dock");
+    graph_dock->raise();
+    QCoreApplication::processEvents();
     QTimer::singleShot(0, [&] { chooseDocumentFile(load_path, QDialogButtonBox::Open); });
     action(window, "motion-open-composition-action")->trigger();
     require(window.compositionDocument()->canvasSize() == motion::model::CanvasSize{320, 200} &&
                 window.compositionDocument()->frameRate() == motion::model::FrameRate{24, 1} &&
                 !window.isWindowModified(),
             "Open applies a staged document and starts with a clean state");
+    auto* open_graph_button = findWidget<QPushButton>(
+        &window, "motion-timeline-graph-editor-toggle");
+    require(!graph_dock->isHidden() && open_graph_button->isChecked(),
+            "opening a composition preserves the active Graph Editor tab");
+    timeline_dock->raise();
+    QCoreApplication::processEvents();
+    require(!open_graph_button->isChecked(),
+            "the Timeline tab remains selectable after opening a composition");
     auto* undo_action = action(window, "motion-undo-action");
     auto* redo_action = action(window, "motion-redo-action");
     require(!undo_action->isEnabled() && !redo_action->isEnabled(),
@@ -1145,6 +1158,40 @@ void testNativeTextAndShapeLayers()
     require(window.compositionDocument()->layers().back().keyframes.position_x ==
                 std::vector<creative_suite::animation::Keyframe>{{0, 0.5}},
             "shape layers participate in the existing transform keyframe system");
+}
+
+QByteArray legacyDefaultPanelLayoutState()
+{
+    QMainWindow fixture;
+    fixture.setDockNestingEnabled(true);
+    fixture.setDockOptions(QMainWindow::AllowNestedDocks | QMainWindow::AllowTabbedDocks);
+    fixture.setCentralWidget(new QWidget(&fixture));
+    const auto make_dock = [&fixture](const QString& title, const QString& object_name) {
+        auto* dock = new QDockWidget(title, &fixture);
+        dock->setObjectName(object_name);
+        dock->setWidget(new QWidget(dock));
+        return dock;
+    };
+    auto* media = make_dock(QStringLiteral("Media Pool"),
+                            QStringLiteral("motion-media-pool-dock"));
+    auto* inspector = make_dock(QStringLiteral("Inspector"),
+                               QStringLiteral("motion-inspector-dock"));
+    auto* timeline = make_dock(QStringLiteral("Timeline"),
+                              QStringLiteral("motion-timeline-dock"));
+    auto* graph = make_dock(QStringLiteral("Graph Editor"),
+                           QStringLiteral("motion-graph-editor-dock"));
+    fixture.addDockWidget(Qt::LeftDockWidgetArea, media);
+    fixture.addDockWidget(Qt::RightDockWidgetArea, inspector);
+    fixture.addDockWidget(Qt::BottomDockWidgetArea, timeline);
+    fixture.addDockWidget(Qt::BottomDockWidgetArea, graph);
+    fixture.splitDockWidget(timeline, graph, Qt::Vertical);
+    graph->hide();
+    fixture.resize(1280, 720);
+    fixture.show();
+    QCoreApplication::processEvents();
+    const auto state = fixture.saveState(1);
+    fixture.hide();
+    return state;
 }
 
 } // namespace
@@ -1495,6 +1542,10 @@ int main(int argc, char* argv[])
     require(temporary.isValid(), "temporary media directory is available");
     QSettings isolated_layout_settings;
     isolated_layout_settings.remove(QStringLiteral("workspace/dock_layout_state"));
+    const auto legacy_layout = legacyDefaultPanelLayoutState();
+    require(!legacy_layout.isEmpty(), "the previous default dock state can be constructed");
+    isolated_layout_settings.setValue(QStringLiteral("workspace/dock_layout_state"),
+                                      legacy_layout);
     isolated_layout_settings.sync();
     const auto image_path = pathFromQString(temporary.path()) / "poster.png";
     QImage image(48, 32, QImage::Format_RGBA8888);
@@ -1508,6 +1559,8 @@ int main(int argc, char* argv[])
                       "timeline-ui-tests");
     require(window.compositionDocument() == nullptr,
             "Motion Studio starts without a composition");
+    require(window.findChildren<QDockWidget*>().empty(),
+            "startup without a composition does not create workspace panels");
     window.show();
     application.processEvents();
     auto* empty_button = findWidget<QPushButton>(&window, "motion-empty-new-composition-button");
@@ -1534,6 +1587,8 @@ int main(int argc, char* argv[])
     auto* reset_panel_layout = action(window, "motion-reset-panel-layout-action");
     auto* media_pool_view_action = action(window, "motion-view-media-pool-action");
     auto* graph_editor_view_action = action(window, "motion-view-graph-editor-action");
+    auto* graph_editor_toggle = findWidget<QPushButton>(
+        &window, "motion-timeline-graph-editor-toggle");
     require(media_pool_dock != nullptr && inspector_dock != nullptr &&
                 timeline_dock != nullptr && graph_editor_dock != nullptr &&
                 window.dockWidgetArea(media_pool_dock) == Qt::LeftDockWidgetArea &&
@@ -1543,26 +1598,49 @@ int main(int argc, char* argv[])
                 media_pool_dock->features().testFlag(QDockWidget::DockWidgetMovable) &&
                 media_pool_dock->features().testFlag(QDockWidget::DockWidgetFloatable) &&
                 media_pool_dock->features().testFlag(QDockWidget::DockWidgetClosable) &&
-                graph_editor_dock->isHidden() && reset_panel_layout->isEnabled(),
-            "the workspace creates movable panels in the default dock arrangement");
+                !graph_editor_dock->isHidden() && !graph_editor_toggle->isChecked() &&
+                window.tabifiedDockWidgets(timeline_dock).contains(graph_editor_dock) &&
+                reset_panel_layout->isEnabled(),
+            "the workspace migrates the previous default layout to Timeline and Graph Editor tabs");
     media_pool_view_action->trigger();
     require(media_pool_dock->isHidden(), "View can hide the Media Pool dock");
     media_pool_view_action->trigger();
     require(!media_pool_dock->isHidden(), "View can show the Media Pool dock again");
     graph_editor_view_action->trigger();
+    QCoreApplication::processEvents();
+    require(graph_editor_dock->isHidden() && !graph_editor_toggle->isChecked(),
+            "View can hide the Graph Editor tab");
+    graph_editor_view_action->trigger();
+    QCoreApplication::processEvents();
+    require(!graph_editor_dock->isHidden() && graph_editor_toggle->isChecked(),
+            "showing the Graph Editor from View selects its tab");
+    timeline_dock->raise();
+    QCoreApplication::processEvents();
     require(!graph_editor_dock->isHidden() &&
-                graph_editor_dock->geometry().top() > timeline_dock->geometry().top() &&
-                findWidget<QPushButton>(&window,
-                    "motion-timeline-graph-editor-toggle")->isChecked(),
-            "the View menu and Graph Editor timeline button stay synchronized");
-    findWidget<QPushButton>(&window, "motion-timeline-graph-editor-toggle")->click();
-    require(graph_editor_dock->isHidden() && !graph_editor_view_action->isChecked(),
-            "the Graph Editor timeline button hides its dock and updates View");
+                !graph_editor_toggle->isChecked(),
+            "the native Timeline tab switches back without removing Graph Editor");
+    graph_editor_toggle->click();
+    QCoreApplication::processEvents();
+    require(!graph_editor_dock->isHidden() && graph_editor_toggle->isChecked(),
+            "the Graph Editor button selects its tab");
+    graph_editor_view_action->trigger();
+    QCoreApplication::processEvents();
+    require(graph_editor_dock->isHidden() &&
+                !graph_editor_toggle->isChecked(),
+            "View hides the Graph Editor tab and returns to Timeline");
+    graph_editor_view_action->trigger();
+    QCoreApplication::processEvents();
+    require(!graph_editor_dock->isHidden() &&
+                graph_editor_toggle->isChecked(),
+            "View restores and selects the Graph Editor tab");
     reset_panel_layout->trigger();
+    QCoreApplication::processEvents();
     require(window.dockWidgetArea(media_pool_dock) == Qt::LeftDockWidgetArea &&
                 window.dockWidgetArea(inspector_dock) == Qt::RightDockWidgetArea &&
-                graph_editor_dock->isHidden(),
-            "Reset Panel Layout restores the first-run arrangement");
+                !graph_editor_dock->isHidden() &&
+                !graph_editor_toggle->isChecked() &&
+                window.tabifiedDockWidgets(timeline_dock).contains(graph_editor_dock),
+            "Reset Panel Layout restores both tabs with Timeline selected");
     require(window.mediaPoolWidget() != nullptr && window.mediaPoolWidget()->library().empty(),
             "a new composition starts with an empty Media Pool");
     require(findWidget<QWidget>(&window, "motion-media-pool") != nullptr &&
@@ -2004,8 +2082,6 @@ int main(int argc, char* argv[])
     require(document->layers().front().keyframes.position_x.size() == 2,
             "the diamond control adds and removes a key at the current frame");
 
-    auto* graph_editor_toggle = findWidget<QPushButton>(
-        &window, "motion-timeline-graph-editor-toggle");
     auto* graph_editor_panel = findWidget<QWidget>(
         &window, "motion-graph-editor-panel");
     auto* property_curve = findWidget<motion::ui::PropertyCurveEditor>(
@@ -2020,7 +2096,7 @@ int main(int argc, char* argv[])
     graph_editor_toggle->click();
     QCoreApplication::processEvents();
     require(graph_editor_panel->isVisible(),
-            "the Graph Editor toggle opens the expandable panel below the timeline");
+            "the Graph Editor button selects its tab and opens the curve panel");
     sendMouseClick(animated_rows,
         QPoint(timeline->frameToViewportX(animation_start + 5), 85));
     require(curve_preset->isEnabled() && curve_preset->currentIndex() == 0,
@@ -2075,8 +2151,9 @@ int main(int argc, char* argv[])
                 document->layers().front().duration_frames == layer_duration_before_curve_edits,
             "curve editing does not change the playhead or layer timing");
     graph_editor_toggle->click();
-    require(!graph_editor_panel->isVisible(),
-            "the Graph Editor panel can be collapsed again");
+    QCoreApplication::processEvents();
+    require(!graph_editor_dock->isHidden() && !graph_editor_toggle->isChecked(),
+            "returning to Timeline leaves Graph Editor available as a tab");
 
     timeline->setCurrentFrame(animation_start);
     opacity_key_button->click();
@@ -2379,6 +2456,7 @@ int main(int argc, char* argv[])
             "restoring an offline source preserves its Media Pool label");
 
     graph_editor_dock->show();
+    graph_editor_dock->raise();
     QCoreApplication::processEvents();
     timeline_display_mode->setCurrentIndex(1);
     QTimer::singleShot(0, [] {
@@ -2421,8 +2499,11 @@ int main(int argc, char* argv[])
                 window.dockWidgetArea(inspector_dock) == Qt::RightDockWidgetArea &&
                 window.dockWidgetArea(timeline_dock) == Qt::BottomDockWidgetArea &&
                 !media_pool_dock->isHidden() && !graph_editor_dock->isFloating() &&
-                graph_editor_dock->isHidden(),
-            "Reset Panel Layout removes tabbing and floating and restores default visibility");
+                !graph_editor_dock->isHidden() &&
+                !findWidget<QPushButton>(&window,
+                    "motion-timeline-graph-editor-toggle")->isChecked() &&
+                window.tabifiedDockWidgets(timeline_dock).contains(graph_editor_dock),
+            "Reset Panel Layout restores the default tab group and selects Timeline");
     window.addDockWidget(Qt::LeftDockWidgetArea, inspector_dock);
     window.tabifyDockWidget(media_pool_dock, inspector_dock);
     media_pool_dock->hide();

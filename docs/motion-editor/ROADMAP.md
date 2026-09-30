@@ -153,8 +153,11 @@ the Motion Studio implementation choices are finalized.
   wrapper at v1 and accept nested documents through v3.
 - [x] Make Media Pool, Inspector, Timeline, and Graph Editor movable, resizable,
   tabifiable, floatable, and hideable Qt dock panels around a central Preview.
-  Keep the Inspector tabs together, restore the first-run layout on request,
-  and persist customized panel state globally in Motion Studio settings.
+  Timeline and Graph Editor share a bottom tab group, with Timeline selected by
+  default. The Graph Editor button selects its tab; View and the dock close
+  control show or hide it. Preserve customized layouts, migrate the previous
+  uncustomized default layout, and persist panel state globally in Motion Studio
+  settings.
 - [x] Add bounded Undo/Redo for composition edits, including layer timing,
   order, visibility, transforms, and keyframes. Media Pool operations remain
   outside the history.
@@ -304,11 +307,14 @@ source away and confirm it reopens offline; verify malformed and future-version
 files leave the current document and the source file unchanged; test Save,
 Discard, and Cancel before replacing
 or closing a dirty composition; and confirm the title's dirty marker clears on
-save. Move, resize, tabify, float, and hide the Media Pool, Inspector, Timeline,
-and Graph Editor; confirm the Graph Editor timeline button and **View** actions
-stay synchronized, restart the app to verify layout restoration, then use
-**View > Reset Panel Layout**. Then confirm the one-hour navigation range,
-stepping, and separate drag extensions; import
+save. Move, resize, tabify, float, and hide the Media Pool and Inspector. Switch
+between the Timeline and Graph Editor tabs using the native dock tabs and the
+Graph Editor button; use **View > Graph Editor** and its close control to hide
+and restore that tab. Restart the app to verify layout restoration, then use
+**View > Reset Panel Layout** and confirm Timeline is selected with both tabs
+available. Confirm the previous uncustomized default layout migrates to the
+tabbed layout while a customized layout remains intact. Then confirm the
+one-hour navigation range, stepping, and separate drag extensions; import
 images and videos, organize bins, switch pool views, and restore offline items;
 drag media to empty space and existing rows; verify snapping and front-to-back
 order; select, move, hide, resize, and remove layers; edit transforms; seek

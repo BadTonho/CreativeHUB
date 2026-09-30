@@ -1194,7 +1194,7 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     graph_editor_button_ = new QPushButton(QStringLiteral("Graph Editor"), this);
     graph_editor_button_->setObjectName(QStringLiteral("motion-timeline-graph-editor-toggle"));
     graph_editor_button_->setCheckable(true);
-    graph_editor_button_->setToolTip(QStringLiteral("Show or hide the property curve editor"));
+    graph_editor_button_->setToolTip(QStringLiteral("Select the Graph Editor tab"));
     controls->addWidget(previous_frame_button_);
     controls->addWidget(play_pause_button_);
     controls->addWidget(loop_button_);
