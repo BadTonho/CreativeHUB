@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <limits>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -42,6 +43,7 @@ constexpr qsizetype kMaximumLayerCount = 100'000;
 constexpr qsizetype kMaximumMediaCount = 100'000;
 constexpr qsizetype kMaximumBinCount = 100'000;
 constexpr qsizetype kMaximumKeyframeCount = 2'000'000;
+constexpr qsizetype kMaximumEffectCount = 1'000'000;
 constexpr qsizetype kMaximumStringBytes = 32'768;
 
 [[noreturn]] void fail(MotionDocumentErrorCode code,
@@ -331,6 +333,73 @@ model::ColorRgba parseColor(const QJsonValue& value,
     return color;
 }
 
+QJsonArray writeEffects(const std::vector<model::LayerEffect>& effects)
+{
+    QJsonArray array;
+    for (const auto& effect : effects) {
+        QJsonObject object;
+        std::visit([&object](const auto& value) {
+            using Effect = std::decay_t<decltype(value)>;
+            object.insert(QStringLiteral("enabled"), value.enabled);
+            if constexpr (std::is_same_v<Effect, model::GaussianBlurEffect>) {
+                object.insert(QStringLiteral("type"), QStringLiteral("gaussian_blur"));
+                object.insert(QStringLiteral("radius_pixels"), value.radius_pixels);
+            } else {
+                object.insert(QStringLiteral("type"), QStringLiteral("color_adjustment"));
+                object.insert(QStringLiteral("brightness"), value.brightness);
+                object.insert(QStringLiteral("contrast_percent"), value.contrast_percent);
+                object.insert(QStringLiteral("saturation_percent"), value.saturation_percent);
+            }
+        }, effect);
+        array.append(object);
+    }
+    return array;
+}
+
+std::vector<model::LayerEffect> parseEffects(const QJsonArray& array,
+                                            const std::filesystem::path& path,
+                                            std::size_t& effect_count)
+{
+    if (effect_count + static_cast<std::size_t>(array.size()) >
+        static_cast<std::size_t>(kMaximumEffectCount)) {
+        fail(MotionDocumentErrorCode::InvalidValue, path,
+             QStringLiteral("The document contains too many layer effects."));
+    }
+    effect_count += static_cast<std::size_t>(array.size());
+    std::vector<model::LayerEffect> effects;
+    effects.reserve(static_cast<std::size_t>(array.size()));
+    for (const auto& value : array) {
+        if (!value.isObject()) {
+            fail(MotionDocumentErrorCode::InvalidValue, path,
+                 QStringLiteral("A layer effect entry must be an object."));
+        }
+        const auto object = value.toObject();
+        const auto type = requiredString(object, "type", path);
+        const auto enabled = requiredBool(object, "enabled", path);
+        if (type == QLatin1String("gaussian_blur")) {
+            model::GaussianBlurEffect blur;
+            blur.enabled = enabled;
+            blur.radius_pixels = requiredNumber(object, "radius_pixels", path);
+            effects.emplace_back(blur);
+        } else if (type == QLatin1String("color_adjustment")) {
+            model::ColorAdjustmentEffect color;
+            color.enabled = enabled;
+            color.brightness = requiredNumber(object, "brightness", path);
+            color.contrast_percent = requiredNumber(object, "contrast_percent", path);
+            color.saturation_percent = requiredNumber(object, "saturation_percent", path);
+            effects.emplace_back(color);
+        } else {
+            fail(MotionDocumentErrorCode::InvalidValue, path,
+                 QStringLiteral("The document contains an unsupported layer effect."));
+        }
+    }
+    if (!model::validLayerEffects(effects)) {
+        fail(MotionDocumentErrorCode::InvalidValue, path,
+             QStringLiteral("The document contains invalid layer effect parameters."));
+    }
+    return effects;
+}
+
 QString mediaKindName(MediaKind kind)
 {
     return kind == MediaKind::Image ? QStringLiteral("image") : QStringLiteral("video");
@@ -400,6 +469,7 @@ void validateDocument(const MotionProjectData& document,
     }
 
     std::size_t keyframe_count = 0;
+    std::size_t effect_count = 0;
     for (const auto& layer : document.layers) {
         keyframe_count += layer.keyframes.position_x.size() +
             layer.keyframes.position_y.size() + layer.keyframes.scale.size() +
@@ -407,6 +477,11 @@ void validateDocument(const MotionProjectData& document,
         if (keyframe_count > static_cast<std::size_t>(kMaximumKeyframeCount)) {
             fail(MotionDocumentErrorCode::InvalidValue, path,
                  QStringLiteral("The document contains too many keyframes."));
+        }
+        effect_count += layer.effects.size();
+        if (effect_count > static_cast<std::size_t>(kMaximumEffectCount)) {
+            fail(MotionDocumentErrorCode::InvalidValue, path,
+                 QStringLiteral("The document contains too many layer effects."));
         }
         if (!layer.source_path.empty()) {
             if (pathToUtf8(layer.source_path).size() >
@@ -523,6 +598,7 @@ QJsonObject writeLayer(const CompositionLayer& layer,
         content.insert(QStringLiteral("stroke_width_pixels"), shape.stroke_width_pixels);
         object.insert(QStringLiteral("shape_content"), content);
     }
+    object.insert(QStringLiteral("effects"), writeEffects(layer.effects));
     return object;
 }
 
@@ -581,6 +657,7 @@ std::vector<creative_suite::animation::Keyframe> parseKeyframes(
 CompositionLayer parseLayer(const QJsonValue& value,
                             const std::filesystem::path& document_path,
                             std::size_t& keyframe_count,
+                            std::size_t& effect_count,
                             int document_version,
                             model::CanvasSize canvas_size)
 {
@@ -660,6 +737,10 @@ CompositionLayer parseLayer(const QJsonValue& value,
         shape.stroke_width_pixels = requiredInt(content, "stroke_width_pixels", document_path);
         layer.content = shape;
     }
+    if (document_version >= 4) {
+        layer.effects = parseEffects(requiredArray(object, "effects", document_path),
+                                     document_path, effect_count);
+    }
     return layer;
 }
 
@@ -672,7 +753,7 @@ MotionProjectData parseDocument(const QJsonObject& root,
              QStringLiteral("The file is not a Motion Studio document."));
     }
     const int version = requiredInt(root, "version", document_path);
-    if (version != 1 && version != 2 &&
+    if (version != 1 && version != 2 && version != 3 &&
         version != MotionDocumentStore::current_format_version) {
         fail(MotionDocumentErrorCode::UnsupportedVersion, document_path,
              QStringLiteral("Motion Studio document version %1 is not supported.").arg(version));
@@ -741,9 +822,10 @@ MotionProjectData parseDocument(const QJsonObject& root,
     }
     result.layers.reserve(static_cast<std::size_t>(layers.size()));
     std::size_t keyframe_count = 0;
+    std::size_t effect_count = 0;
     for (const auto& value : layers) {
         result.layers.push_back(parseLayer(
-            value, document_path, keyframe_count, version, canvas_size));
+            value, document_path, keyframe_count, effect_count, version, canvas_size));
     }
     validateDocument(result, document_path);
     return result;

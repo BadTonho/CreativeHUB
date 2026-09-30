@@ -1,5 +1,6 @@
 #include "composition_frame_renderer.h"
 #include "layer_content_renderer.h"
+#include "layer_effect_processor.h"
 
 #include <creative_suite/composition/frame_compositor.h>
 #include <creative_suite/diagnostics/logger.h>
@@ -180,6 +181,26 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         }
 
         if (frame == nullptr) continue;
+        if (hasEnabledLayerEffects(layer.effects)) {
+            try {
+                auto processed = std::make_shared<creative_suite::media::RgbaFrame>(*frame);
+                if (!applyLayerEffects(*processed, layer.effects, should_cancel)) {
+                    return {};
+                }
+                frame = std::move(processed);
+            } catch (const std::exception& error) {
+                if (should_cancel && should_cancel()) return {};
+                if (fail_on_media_error) {
+                    throw std::runtime_error("Effect processing failed for layer " +
+                        std::to_string(layer.id) + ": " + error.what());
+                }
+                creative_suite::diagnostics::Logger::instance().log(
+                    creative_suite::diagnostics::Level::Error,
+                    "motion_preview", "apply_layer_effects", error.what(),
+                    {{"layer_id", std::to_string(layer.id)}});
+                continue;
+            }
+        }
         owned_frames.push_back(frame);
         auto transform = creative_suite::animation::evaluateTransform(
             layer.transform, layer.keyframes, layer.local_frame);

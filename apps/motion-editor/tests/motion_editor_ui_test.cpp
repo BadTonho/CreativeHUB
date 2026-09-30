@@ -1160,6 +1160,94 @@ void testNativeTextAndShapeLayers()
             "shape layers participate in the existing transform keyframe system");
 }
 
+void testMotionLayerEffects()
+{
+    QTemporaryDir recovery_directory;
+    require(recovery_directory.isValid(), "effect test recovery directory is available");
+    MainWindow window(nullptr, pathFromQString(recovery_directory.path()), "layer-effects-ui");
+    createComposition(window, 320, 180, 2);
+    action(window, "motion-new-rectangle-layer-action")->trigger();
+    auto* inspector_tabs = findWidget<QTabWidget>(&window, "motion-inspector-tabs");
+    const int effects_tab = inspector_tabs->indexOf(
+        findWidget<QWidget>(&window, "motion-effects-inspector"));
+    require(effects_tab >= 0 && inspector_tabs->isTabEnabled(effects_tab),
+            "Effects is available for a selected native shape layer");
+    inspector_tabs->setCurrentIndex(effects_tab);
+
+    auto* effects = findWidget<QListWidget>(&window, "motion-layer-effects");
+    auto* add_blur = findWidget<QAction>(&window, "motion-add-gaussian-blur");
+    auto* add_color = findWidget<QAction>(&window, "motion-add-color-adjustment");
+    auto* up = findWidget<QPushButton>(&window, "motion-effect-up");
+    auto* remove = findWidget<QPushButton>(&window, "motion-effect-remove");
+    require(effects->count() == 0 && !up->isEnabled() && !remove->isEnabled(),
+            "new layers start with an empty, inert effect stack");
+    add_blur->trigger();
+    require(effects->count() == 1 &&
+                std::get<motion::model::GaussianBlurEffect>(
+                    window.compositionDocument()->layers().back().effects.front()) ==
+                    motion::model::GaussianBlurEffect{} && window.isWindowModified(),
+            "adding Gaussian Blur uses its documented default and marks the document dirty");
+    add_color->trigger();
+    require(effects->count() == 2 &&
+                std::get<motion::model::ColorAdjustmentEffect>(
+                    window.compositionDocument()->layers().back().effects.back()) ==
+                    motion::model::ColorAdjustmentEffect{},
+            "adding Color Adjustment uses neutral defaults and allows a stacked effect");
+
+    auto* brightness = findWidget<QDoubleSpinBox>(&window, "motion-effect-brightness");
+    auto* contrast = findWidget<QDoubleSpinBox>(&window, "motion-effect-contrast");
+    brightness->setValue(20.0);
+    contrast->setValue(135.0);
+    const auto edited_color = std::get<motion::model::ColorAdjustmentEffect>(
+        window.compositionDocument()->layers().back().effects.back());
+    require(edited_color.brightness == 20.0 && edited_color.contrast_percent == 135.0,
+            "effect parameter fields update the selected layer");
+    action(window, "motion-undo-action")->trigger();
+    require(std::get<motion::model::ColorAdjustmentEffect>(
+                window.compositionDocument()->layers().back().effects.back()) ==
+                motion::model::ColorAdjustmentEffect{},
+            "Undo groups continuous parameter edits into one effect change");
+    action(window, "motion-redo-action")->trigger();
+    require(std::get<motion::model::ColorAdjustmentEffect>(
+                window.compositionDocument()->layers().back().effects.back()) == edited_color,
+            "Redo restores the grouped effect parameters");
+
+    up->click();
+    require(std::holds_alternative<motion::model::ColorAdjustmentEffect>(
+                window.compositionDocument()->layers().back().effects.front()),
+            "effect rows can be reordered and the list order controls rendering order");
+    action(window, "motion-undo-action")->trigger();
+    require(std::holds_alternative<motion::model::GaussianBlurEffect>(
+                window.compositionDocument()->layers().back().effects.front()),
+            "Undo restores effect ordering");
+
+    effects->item(0)->setCheckState(Qt::Unchecked);
+    require(!std::get<motion::model::GaussianBlurEffect>(
+                window.compositionDocument()->layers().back().effects.front()).enabled,
+            "the effect row checkbox toggles processing for that layer effect");
+    action(window, "motion-undo-action")->trigger();
+    require(std::get<motion::model::GaussianBlurEffect>(
+                window.compositionDocument()->layers().back().effects.front()).enabled,
+            "Undo restores the enabled state of an effect");
+
+    remove->click();
+    require(window.compositionDocument()->layers().back().effects.size() == 1,
+            "Remove deletes the selected effect from the stack");
+    action(window, "motion-undo-action")->trigger();
+    require(window.compositionDocument()->layers().back().effects.size() == 2,
+            "Undo restores a removed effect");
+    require(inspector_tabs->currentWidget() == findWidget<QWidget>(
+                &window, "motion-effects-inspector"),
+            "effect edits keep the Effects inspector active");
+
+    QTimer::singleShot(0, [] {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        require(prompt != nullptr, "dirty effect composition asks before closing");
+        prompt->button(QMessageBox::Discard)->click();
+    });
+    window.close();
+}
+
 QByteArray legacyDefaultPanelLayoutState()
 {
     QMainWindow fixture;
@@ -1216,6 +1304,7 @@ int main(int argc, char* argv[])
     testSavedProjectRecoveryOnOpen();
     testMotionDocumentSaveOpen();
     testNativeTextAndShapeLayers();
+    testMotionLayerEffects();
 
     motion::ui::TimelineNavigator frame_rate_range_check;
     frame_rate_range_check.resize(1200, 760);

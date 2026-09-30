@@ -36,6 +36,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
+#include <QListWidgetItem>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -904,13 +905,25 @@ bool MainWindow::recordCompositionEdit(CompositionEditState before)
 
 void MainWindow::finishPendingTransformEdit()
 {
-    if (!active_transform_edit_.has_value()) return;
-    active_transform_edit_.reset();
+    if (active_transform_edit_.has_value()) {
+        active_transform_edit_.reset();
+        if (document_) {
+            composition_history_.finishCoalescedEdit(captureEditState());
+        }
+        updateHistoryActions();
+    }
+    finishPendingEffectEdit();
+    finishPendingContentEdit();
+}
+
+void MainWindow::finishPendingEffectEdit()
+{
+    if (!active_effect_edit_.has_value()) return;
+    active_effect_edit_.reset();
     if (document_) {
         composition_history_.finishCoalescedEdit(captureEditState());
     }
     updateHistoryActions();
-    finishPendingContentEdit();
 }
 
 void MainWindow::finishPendingContentEdit()
@@ -1681,6 +1694,120 @@ void MainWindow::createWorkspace()
     transform_layout->addStretch(1);
     inspector_tabs_->addTab(transform_inspector_, QStringLiteral("Transform"));
 
+    effects_inspector_ = new QWidget(inspector_tabs_);
+    effects_inspector_->setObjectName(QStringLiteral("motion-effects-inspector"));
+    auto* effects_layout = new QVBoxLayout(effects_inspector_);
+    auto* effects_toolbar = new QHBoxLayout();
+    add_layer_effect_button_ = new QPushButton(QStringLiteral("Add Effect"), effects_inspector_);
+    add_layer_effect_button_->setObjectName(QStringLiteral("motion-add-effect"));
+    auto* add_effect_menu = new QMenu(add_layer_effect_button_);
+    auto* add_blur_action = add_effect_menu->addAction(QStringLiteral("Gaussian Blur"));
+    add_blur_action->setObjectName(QStringLiteral("motion-add-gaussian-blur"));
+    auto* add_color_action = add_effect_menu->addAction(QStringLiteral("Color Adjustment"));
+    add_color_action->setObjectName(QStringLiteral("motion-add-color-adjustment"));
+    add_layer_effect_button_->setMenu(add_effect_menu);
+    effects_toolbar->addWidget(add_layer_effect_button_);
+    effect_up_button_ = new QPushButton(QStringLiteral("Up"), effects_inspector_);
+    effect_up_button_->setObjectName(QStringLiteral("motion-effect-up"));
+    effect_down_button_ = new QPushButton(QStringLiteral("Down"), effects_inspector_);
+    effect_down_button_->setObjectName(QStringLiteral("motion-effect-down"));
+    remove_effect_button_ = new QPushButton(QStringLiteral("Remove"), effects_inspector_);
+    remove_effect_button_->setObjectName(QStringLiteral("motion-effect-remove"));
+    effects_toolbar->addWidget(effect_up_button_);
+    effects_toolbar->addWidget(effect_down_button_);
+    effects_toolbar->addWidget(remove_effect_button_);
+    effects_layout->addLayout(effects_toolbar);
+    layer_effect_list_ = new QListWidget(effects_inspector_);
+    layer_effect_list_->setObjectName(QStringLiteral("motion-layer-effects"));
+    layer_effect_list_->setSelectionMode(QAbstractItemView::SingleSelection);
+    effects_layout->addWidget(layer_effect_list_, 1);
+    effect_parameter_pages_ = new QStackedWidget(effects_inspector_);
+    effect_parameter_pages_->setObjectName(QStringLiteral("motion-effect-parameters"));
+    auto* no_effect_page = new QLabel(
+        QStringLiteral("Select an effect to edit its parameters."), effect_parameter_pages_);
+    no_effect_page->setObjectName(QStringLiteral("motion-effect-empty"));
+    no_effect_page->setWordWrap(true);
+    no_effect_page->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    effect_parameter_pages_->addWidget(no_effect_page);
+
+    auto* blur_page = new QWidget(effect_parameter_pages_);
+    blur_page->setObjectName(QStringLiteral("motion-gaussian-blur-parameters"));
+    auto* blur_form = new QFormLayout(blur_page);
+    blur_radius_field_ = new QDoubleSpinBox(blur_page);
+    blur_radius_field_->setObjectName(QStringLiteral("motion-effect-blur-radius"));
+    blur_radius_field_->setRange(0.0, 100.0);
+    blur_radius_field_->setDecimals(1);
+    blur_radius_field_->setSingleStep(0.5);
+    blur_radius_field_->setSuffix(QStringLiteral(" px"));
+    blur_radius_field_->setKeyboardTracking(false);
+    blur_form->addRow(QStringLiteral("Radius (sigma)"), blur_radius_field_);
+    effect_parameter_pages_->addWidget(blur_page);
+
+    auto* color_page = new QWidget(effect_parameter_pages_);
+    color_page->setObjectName(QStringLiteral("motion-color-adjustment-parameters"));
+    auto* color_form = new QFormLayout(color_page);
+    effect_brightness_field_ = new QDoubleSpinBox(color_page);
+    effect_brightness_field_->setObjectName(QStringLiteral("motion-effect-brightness"));
+    effect_brightness_field_->setRange(-100.0, 100.0);
+    effect_brightness_field_->setDecimals(1);
+    effect_brightness_field_->setKeyboardTracking(false);
+    color_form->addRow(QStringLiteral("Brightness"), effect_brightness_field_);
+    effect_contrast_field_ = new QDoubleSpinBox(color_page);
+    effect_contrast_field_->setObjectName(QStringLiteral("motion-effect-contrast"));
+    effect_contrast_field_->setRange(0.0, 200.0);
+    effect_contrast_field_->setDecimals(1);
+    effect_contrast_field_->setSuffix(QStringLiteral(" %"));
+    effect_contrast_field_->setKeyboardTracking(false);
+    color_form->addRow(QStringLiteral("Contrast"), effect_contrast_field_);
+    effect_saturation_field_ = new QDoubleSpinBox(color_page);
+    effect_saturation_field_->setObjectName(QStringLiteral("motion-effect-saturation"));
+    effect_saturation_field_->setRange(0.0, 200.0);
+    effect_saturation_field_->setDecimals(1);
+    effect_saturation_field_->setSuffix(QStringLiteral(" %"));
+    effect_saturation_field_->setKeyboardTracking(false);
+    color_form->addRow(QStringLiteral("Saturation"), effect_saturation_field_);
+    effect_parameter_pages_->addWidget(color_page);
+    effects_layout->addWidget(effect_parameter_pages_);
+    effects_tab_index_ = inspector_tabs_->addTab(
+        effects_inspector_, QStringLiteral("Effects"));
+    inspector_tabs_->setTabEnabled(effects_tab_index_, false);
+
+    connect(add_blur_action, &QAction::triggered, this, [this] { addLayerEffect(0); });
+    connect(add_color_action, &QAction::triggered, this, [this] { addLayerEffect(1); });
+    connect(effect_up_button_, &QPushButton::clicked, this,
+            [this] { moveSelectedEffect(-1); });
+    connect(effect_down_button_, &QPushButton::clicked, this,
+            [this] { moveSelectedEffect(1); });
+    connect(remove_effect_button_, &QPushButton::clicked, this,
+            [this] { removeSelectedEffect(); });
+    connect(layer_effect_list_, &QListWidget::currentRowChanged,
+            this, [this](int row) { selectEffectRow(row); });
+    connect(layer_effect_list_, &QListWidget::itemChanged, this,
+            [this](QListWidgetItem* item) {
+                if (item == nullptr || !document_ || selected_layer_id_ == 0) return;
+                const auto row = layer_effect_list_->row(item);
+                const auto found = std::find_if(document_->layers().begin(),
+                    document_->layers().end(), [this](const auto& layer) {
+                        return layer.id == selected_layer_id_;
+                    });
+                if (found == document_->layers().end() || row < 0 ||
+                    static_cast<std::size_t>(row) >= found->effects.size()) return;
+                auto effects = found->effects;
+                std::visit([item](auto& effect) {
+                    effect.enabled = item->checkState() == Qt::Checked;
+                }, effects[static_cast<std::size_t>(row)]);
+                applySelectedEffectStack(std::move(effects));
+            });
+    for (auto* field : {blur_radius_field_, effect_brightness_field_,
+                        effect_contrast_field_, effect_saturation_field_}) {
+        field->installEventFilter(this);
+        connect(field, &QDoubleSpinBox::valueChanged, this, [this](double) {
+            editSelectedEffectParameters();
+        });
+        connect(field, &QDoubleSpinBox::editingFinished,
+                this, [this] { finishPendingEffectEdit(); });
+    }
+
     timeline_ = new TimelineNavigator(this);
     timeline_->setShortcutActions(
         play_pause_action_, previous_frame_action_, next_frame_action_, loop_action_,
@@ -2320,6 +2447,7 @@ void MainWindow::syncTransformInspector()
     }
     if (transform_inspector_ != nullptr) transform_inspector_->setEnabled(selected != nullptr);
     syncLayerContentInspector(selected);
+    syncEffectsInspector(selected);
     if (selected == nullptr) {
         viewer_->setSelectedLayerAnchor(std::nullopt);
         return;
@@ -2394,6 +2522,221 @@ void MainWindow::syncLayerContentInspector(const model::CompositionLayer* select
         return;
     }
     layer_content_pages_->setCurrentIndex(0);
+}
+
+void MainWindow::syncEffectsInspector(const model::CompositionLayer* selected)
+{
+    if (effects_inspector_ == nullptr || layer_effect_list_ == nullptr) return;
+    const bool has_layer = selected != nullptr;
+    effects_inspector_->setEnabled(has_layer);
+    if (inspector_tabs_ != nullptr && effects_tab_index_ >= 0)
+        inspector_tabs_->setTabEnabled(effects_tab_index_, has_layer);
+    if (selected_effect_.has_value() &&
+        (!has_layer || selected_effect_->first != selected->id)) {
+        selected_effect_.reset();
+    }
+
+    int selected_row = -1;
+    if (selected != nullptr && selected_effect_.has_value()) {
+        if (selected_effect_->second < selected->effects.size()) {
+            selected_row = static_cast<int>(selected_effect_->second);
+        } else {
+            selected_effect_.reset();
+        }
+    }
+    const QSignalBlocker list_blocker(layer_effect_list_);
+    layer_effect_list_->clear();
+    if (selected != nullptr) {
+        for (const auto& effect : selected->effects) {
+            const bool enabled = std::visit([](const auto& value) { return value.enabled; }, effect);
+            const QString name = std::holds_alternative<model::GaussianBlurEffect>(effect)
+                ? QStringLiteral("Gaussian Blur") : QStringLiteral("Color Adjustment");
+            auto* item = new QListWidgetItem(name, layer_effect_list_);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setCheckState(enabled ? Qt::Checked : Qt::Unchecked);
+        }
+    }
+    if (selected_row < 0 && selected != nullptr && !selected->effects.empty()) {
+        selected_row = 0;
+        selected_effect_ = std::pair{selected->id, std::size_t{0}};
+    }
+    if (selected_row >= 0) layer_effect_list_->setCurrentRow(selected_row);
+
+    const bool has_effect = selected != nullptr && selected_row >= 0 &&
+        static_cast<std::size_t>(selected_row) < selected->effects.size();
+    effect_up_button_->setEnabled(has_effect && selected_row > 0);
+    effect_down_button_->setEnabled(has_effect &&
+        static_cast<std::size_t>(selected_row + 1) < selected->effects.size());
+    remove_effect_button_->setEnabled(has_effect);
+    effect_parameter_pages_->setEnabled(has_effect);
+    if (!has_effect) {
+        effect_parameter_pages_->setCurrentIndex(0);
+        return;
+    }
+
+    const auto& effect = selected->effects[static_cast<std::size_t>(selected_row)];
+    if (const auto* blur = std::get_if<model::GaussianBlurEffect>(&effect)) {
+        effect_parameter_pages_->setCurrentIndex(1);
+        const QSignalBlocker blocker(blur_radius_field_);
+        blur_radius_field_->setValue(blur->radius_pixels);
+    } else {
+        const auto& color = std::get<model::ColorAdjustmentEffect>(effect);
+        effect_parameter_pages_->setCurrentIndex(2);
+        const QSignalBlocker brightness_blocker(effect_brightness_field_);
+        const QSignalBlocker contrast_blocker(effect_contrast_field_);
+        const QSignalBlocker saturation_blocker(effect_saturation_field_);
+        effect_brightness_field_->setValue(color.brightness);
+        effect_contrast_field_->setValue(color.contrast_percent);
+        effect_saturation_field_->setValue(color.saturation_percent);
+    }
+}
+
+void MainWindow::selectEffectRow(int row)
+{
+    if (!document_ || selected_layer_id_ == 0 || row < 0) {
+        selected_effect_.reset();
+        const auto found = document_ ? std::find_if(document_->layers().begin(),
+            document_->layers().end(), [this](const auto& layer) {
+                return layer.id == selected_layer_id_;
+            }) : std::vector<model::CompositionLayer>::const_iterator{};
+        syncEffectsInspector(document_ && found != document_->layers().end() ? &*found : nullptr);
+        return;
+    }
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (found == document_->layers().end() ||
+        static_cast<std::size_t>(row) >= found->effects.size()) {
+        selected_effect_.reset();
+        syncEffectsInspector(found == document_->layers().end() ? nullptr : &*found);
+        return;
+    }
+    selected_effect_ = std::pair{selected_layer_id_, static_cast<std::size_t>(row)};
+    syncEffectsInspector(&*found);
+}
+
+void MainWindow::addLayerEffect(int kind)
+{
+    finishPendingTransformEdit();
+    if (!document_ || selected_layer_id_ == 0 || (kind != 0 && kind != 1)) return;
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (found == document_->layers().end()) return;
+    auto before = captureEditState();
+    auto effects = found->effects;
+    if (kind == 0) effects.emplace_back(model::GaussianBlurEffect{});
+    else effects.emplace_back(model::ColorAdjustmentEffect{});
+    const auto new_index = effects.size() - 1;
+    if (!document_->setLayerEffects(selected_layer_id_, effects)) return;
+    selected_effect_ = std::pair{selected_layer_id_, new_index};
+    (void)recordCompositionEdit(std::move(before));
+    syncEffectsInspector(&*found);
+    inspector_tabs_->setCurrentWidget(effects_inspector_);
+    updateDocumentState();
+    requestPreview();
+}
+
+void MainWindow::applySelectedEffectStack(
+    std::vector<model::LayerEffect> effects,
+    bool coalesce_parameters)
+{
+    if (!document_ || selected_layer_id_ == 0 || !selected_effect_.has_value() ||
+        selected_effect_->first != selected_layer_id_) return;
+    const auto effect_identity = *selected_effect_;
+    const bool coalescing = coalesce_parameters && active_effect_edit_ == effect_identity;
+    if (!coalescing) finishPendingTransformEdit();
+
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (found == document_->layers().end() ||
+        effect_identity.second >= effects.size() || effects == found->effects) return;
+
+    std::optional<CompositionEditState> before;
+    if (!coalescing) before.emplace(captureEditState());
+    if (!document_->setLayerEffects(selected_layer_id_, effects)) {
+        syncEffectsInspector(&*found);
+        statusBar()->showMessage(
+            QStringLiteral("The effect parameters are outside the supported range."), 4000);
+        return;
+    }
+    if (coalesce_parameters) {
+        if (before.has_value()) {
+            composition_history_.beginCoalescedEdit(std::move(*before));
+            active_effect_edit_ = effect_identity;
+            updateHistoryActions();
+        }
+    } else {
+        (void)recordCompositionEdit(std::move(*before));
+    }
+    syncEffectsInspector(&*found);
+    updateDocumentState();
+    requestPreview();
+}
+
+void MainWindow::editSelectedEffectParameters()
+{
+    if (!document_ || !selected_effect_.has_value() ||
+        selected_effect_->first != selected_layer_id_) return;
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (found == document_->layers().end() || selected_effect_->second >= found->effects.size())
+        return;
+    auto effects = found->effects;
+    auto& effect = effects[selected_effect_->second];
+    if (auto* blur = std::get_if<model::GaussianBlurEffect>(&effect)) {
+        blur->radius_pixels = blur_radius_field_->value();
+    } else {
+        auto& color = std::get<model::ColorAdjustmentEffect>(effect);
+        color.brightness = effect_brightness_field_->value();
+        color.contrast_percent = effect_contrast_field_->value();
+        color.saturation_percent = effect_saturation_field_->value();
+    }
+    applySelectedEffectStack(std::move(effects), true);
+}
+
+void MainWindow::moveSelectedEffect(int direction)
+{
+    finishPendingTransformEdit();
+    if (!document_ || !selected_effect_.has_value() || direction == 0) return;
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (found == document_->layers().end()) return;
+    const auto from = selected_effect_->second;
+    if ((direction < 0 && from == 0) ||
+        (direction > 0 && from + 1 >= found->effects.size())) return;
+    auto before = captureEditState();
+    auto effects = found->effects;
+    const auto to = direction < 0 ? from - 1 : from + 1;
+    std::swap(effects[from], effects[to]);
+    if (!document_->setLayerEffects(selected_layer_id_, effects)) return;
+    selected_effect_ = std::pair{selected_layer_id_, to};
+    (void)recordCompositionEdit(std::move(before));
+    syncEffectsInspector(&*found);
+    updateDocumentState();
+    requestPreview();
+}
+
+void MainWindow::removeSelectedEffect()
+{
+    finishPendingTransformEdit();
+    if (!document_ || !selected_effect_.has_value()) return;
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (found == document_->layers().end() || selected_effect_->second >= found->effects.size())
+        return;
+    auto before = captureEditState();
+    auto effects = found->effects;
+    const auto removed = selected_effect_->second;
+    effects.erase(effects.begin() + static_cast<std::ptrdiff_t>(removed));
+    if (!effects.empty()) {
+        selected_effect_ = std::pair{selected_layer_id_, std::min(removed, effects.size() - 1)};
+    } else {
+        selected_effect_.reset();
+    }
+    if (!document_->setLayerEffects(selected_layer_id_, effects)) return;
+    (void)recordCompositionEdit(std::move(before));
+    syncEffectsInspector(&*found);
+    updateDocumentState();
+    requestPreview();
 }
 
 void MainWindow::editSelectedLayerContent()
@@ -2681,6 +3024,7 @@ void MainWindow::requestPreview(bool playback_tick)
         snapshot.transform = layer.transform;
         snapshot.keyframes = layer.keyframes;
         snapshot.content = layer.content;
+        snapshot.effects = layer.effects;
         if (layer.kind == model::LayerKind::Image) {
             snapshot.still_frame = media_pool_->sharedFirstFrameForPath(layer.source_path);
         }
@@ -2700,6 +3044,11 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
          watched == shape_width_field_ || watched == shape_height_field_ ||
          watched == shape_stroke_width_field_)) {
         finishPendingContentEdit();
+    }
+    if (event != nullptr && event->type() == QEvent::FocusOut &&
+        (watched == blur_radius_field_ || watched == effect_brightness_field_ ||
+         watched == effect_contrast_field_ || watched == effect_saturation_field_)) {
+        finishPendingEffectEdit();
     }
     return QMainWindow::eventFilter(watched, event);
 }

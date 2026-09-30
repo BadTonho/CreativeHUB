@@ -1,5 +1,6 @@
 #include "ui/preview_renderer.h"
 #include "ui/layer_content_renderer.h"
+#include "ui/layer_effect_processor.h"
 
 #include <creative_suite/diagnostics/logger.h>
 
@@ -95,6 +96,64 @@ int main(int argc, char* argv[])
     using motion::model::ShapeLayerContent;
     using motion::model::TextAlignment;
     using motion::model::TextLayerContent;
+
+    creative_suite::media::RgbaFrame transparent_edge;
+    transparent_edge.width = 3;
+    transparent_edge.height = 1;
+    transparent_edge.stride = 12;
+    transparent_edge.rgba_pixels = {
+        0, 0, 0, 0, 255, 0, 0, 255, 0, 0, 0, 0};
+    require(motion::ui::applyLayerEffects(
+                transparent_edge,
+                {motion::model::GaussianBlurEffect{true, 1.0}}),
+            "Gaussian blur completes for a small RGBA frame");
+    require(transparent_edge.rgba_pixels[3] > 0 &&
+                transparent_edge.rgba_pixels[0] >= 250 &&
+                transparent_edge.rgba_pixels[1] == 0 &&
+                transparent_edge.rgba_pixels[11] > 0,
+            "Gaussian blur preserves red through transparent edges without dark fringes");
+
+    creative_suite::media::RgbaFrame neutral_color;
+    neutral_color.width = 1;
+    neutral_color.height = 1;
+    neutral_color.stride = 4;
+    neutral_color.rgba_pixels = {40, 80, 120, 128};
+    const auto neutral_original = neutral_color.rgba_pixels;
+    require(motion::ui::applyLayerEffects(
+                neutral_color,
+                {motion::model::ColorAdjustmentEffect{true, 0.0, 100.0, 100.0}}) &&
+                neutral_color.rgba_pixels == neutral_original,
+            "neutral color adjustment leaves RGBA8 values unchanged");
+    require(motion::ui::applyLayerEffects(
+                neutral_color,
+                {motion::model::ColorAdjustmentEffect{true, 0.0, 0.0, 0.0}}) &&
+                neutral_color.rgba_pixels[0] == neutral_color.rgba_pixels[1] &&
+                neutral_color.rgba_pixels[1] == neutral_color.rgba_pixels[2] &&
+                neutral_color.rgba_pixels[3] == 128,
+            "zero contrast and saturation produce gray while preserving alpha");
+
+    creative_suite::media::RgbaFrame ordered_color;
+    ordered_color.width = 1;
+    ordered_color.height = 1;
+    ordered_color.stride = 4;
+    ordered_color.rgba_pixels = {102, 102, 102, 255};
+    require(motion::ui::applyLayerEffects(ordered_color, {
+                motion::model::ColorAdjustmentEffect{true, 20.0, 200.0, 100.0}}),
+            "ordered color stack applies its first item");
+    const auto brightness_then_contrast = ordered_color.rgba_pixels[0];
+    ordered_color.rgba_pixels = {102, 102, 102, 255};
+    require(motion::ui::applyLayerEffects(ordered_color, {
+                motion::model::ColorAdjustmentEffect{true, 0.0, 200.0, 100.0},
+                motion::model::ColorAdjustmentEffect{true, 20.0, 100.0, 100.0}}) &&
+                ordered_color.rgba_pixels[0] != brightness_then_contrast,
+            "separate effects are applied in displayed stack order");
+
+    auto disabled_frame = *solidFrame(35, 60, 90);
+    const auto disabled_original = disabled_frame.rgba_pixels;
+    require(motion::ui::applyLayerEffects(disabled_frame, {
+                motion::model::ColorAdjustmentEffect{false, 100.0, 0.0, 0.0}}) &&
+                disabled_frame.rgba_pixels == disabled_original,
+            "disabled effects leave pixels unchanged");
 
     ShapeLayerContent rectangle;
     rectangle.width = 24;
@@ -216,6 +275,19 @@ int main(int argc, char* argv[])
                 applied_frame->rgba_pixels[center_offset + 1] == 220 &&
                 applied_frame->rgba_pixels[center_offset + 2] == 30,
             "an older queued seek cannot replace the most recent preview result");
+
+    motion::ui::PreviewLayerSnapshot effected_image;
+    effected_image.kind = motion::model::LayerKind::Image;
+    effected_image.still_frame = solidFrame(40, 80, 120);
+    effected_image.effects.emplace_back(
+        motion::model::ColorAdjustmentEffect{true, 20.0, 100.0, 100.0});
+    const auto effected_generation = renderer.submit(
+        motion::ui::PreviewRequest{{4, 4}, {24, 1}, {effected_image}});
+    require(waitFor([&] { return applied_generation == effected_generation; }) &&
+                applied_frame != nullptr && applied_frame->rgba_pixels[0] == 91 &&
+                applied_frame->rgba_pixels[1] == 131 &&
+                applied_frame->rgba_pixels[2] == 171,
+            "the preview worker applies layer effects before the shared compositor");
 
     motion::ui::PreviewLayerSnapshot rectangle_layer;
     rectangle_layer.id = 600;

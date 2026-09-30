@@ -94,6 +94,28 @@ struct ShapeLayerContent {
 
 using LayerContent = std::variant<std::monostate, TextLayerContent, ShapeLayerContent>;
 
+struct GaussianBlurEffect {
+    bool enabled = true;
+    double radius_pixels = 10.0;
+
+    friend bool operator==(const GaussianBlurEffect&, const GaussianBlurEffect&) = default;
+};
+
+struct ColorAdjustmentEffect {
+    bool enabled = true;
+    double brightness = 0.0;
+    double contrast_percent = 100.0;
+    double saturation_percent = 100.0;
+
+    friend bool operator==(const ColorAdjustmentEffect&,
+                           const ColorAdjustmentEffect&) = default;
+};
+
+using LayerEffect = std::variant<GaussianBlurEffect, ColorAdjustmentEffect>;
+
+[[nodiscard]] bool validLayerEffect(const LayerEffect& effect) noexcept;
+[[nodiscard]] bool validLayerEffects(const std::vector<LayerEffect>& effects) noexcept;
+
 [[nodiscard]] TextLayerContent defaultTextLayerContent(CanvasSize canvas_size);
 [[nodiscard]] ShapeLayerContent defaultShapeLayerContent(
     CanvasSize canvas_size,
@@ -114,6 +136,7 @@ struct CompositionLayer {
     creative_suite::animation::Transform2D transform;
     creative_suite::animation::TransformKeyframes keyframes;
     LayerContent content;
+    std::vector<LayerEffect> effects;
 
     friend bool operator==(const CompositionLayer&, const CompositionLayer&) = default;
 };
@@ -177,6 +200,9 @@ public:
     [[nodiscard]] bool setShapeLayerContent(
         LayerId id,
         const ShapeLayerContent& content);
+    [[nodiscard]] bool setLayerEffects(
+        LayerId id,
+        const std::vector<LayerEffect>& effects);
     [[nodiscard]] bool setLayerKeyframe(
         LayerId id,
         creative_suite::animation::TransformProperty property,

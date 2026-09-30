@@ -4,6 +4,8 @@ Status: **provisional; implementation started**. The standalone Motion Studio
 shell, in-memory composition/layer model, navigation timeline, Media Pool,
 image/video/text/shape layers, CPU preview, versioned native save/open, and
 first-pass rendered video export are implemented under `apps/motion-editor/`.
+Its per-layer CPU effects currently include ordered Gaussian Blur and Color
+Adjustment stacks shared by preview, playback, and export.
 Its initial product scope and
 readiness are documented
 in [SCOPE_AND_READINESS.md](SCOPE_AND_READINESS.md). C++ and Qt 6 are provisional
@@ -149,8 +151,9 @@ the Motion Studio implementation choices are finalized.
   Linear, Ease In, Ease Out, and Ease In/Out presets. A preset or completed
   handle drag is one Undo action; graph selection and panel visibility are UI
   state. Preview, playback, and export use the same shared animation evaluator.
-  Save curves in `.motion` v3 while reading v1/v2 as Linear; keep the recovery
-  wrapper at v1 and accept nested documents through v3.
+  Curves were introduced in `.motion` v3; the current v4 format retains them
+  and adds per-layer effects. Read v1/v2 curves as Linear, and keep the
+  recovery wrapper at v1 while accepting nested documents through v4.
 - [x] Make Media Pool, Inspector, Timeline, and Graph Editor movable, resizable,
   tabifiable, floatable, and hideable Qt dock panels around a central Preview.
   Timeline and Graph Editor share a bottom tab group, with Timeline selected by
@@ -333,10 +336,15 @@ edit at a key, remove a key, drag a marker, and confirm a colliding move is
 rejected; scrub and play through the animation; open the Graph Editor, select a
 property and segment, drag each Bezier handle, apply every easing preset, and
 verify Undo/Redo, preview, playback, and export use the curve; save and reopen a
-v3 project and confirm v1/v2 projects retain linear interpolation; create
+v4 project and confirm v1-v3 projects retain empty effect stacks and older
+versions retain linear interpolation; create
 multiline Unicode text, change its font, size, alignment, box dimensions, and
 alpha color; create
 rectangles and ellipses, edit their dimensions, fill, optional stroke, and alpha;
+use the Effects inspector tab to add Gaussian Blur and Color Adjustment to
+different layers, adjust parameters, toggle, reorder, and remove effects, then
+verify preview, playback, export,
+Undo/Redo, and save/reopen preserve the stack and order;
 animate a text or shape transform, save and reopen it, and confirm content and
 keys persist; use **Edit > Undo** and **Edit > Redo** on layer insertion,
 content edits, visibility, clip timing, transforms, and keyframes; confirm
@@ -362,8 +370,8 @@ another export and verify an existing destination remains unchanged; choose an
 unavailable encoder if one is offered and confirm a detailed log entry appears.
 Motion Studio export is opaque and video-only; audio and alpha export remain
 open. Then close the application. Overshoot-capable curves, additional
-interpolation modes, effects, platform validation, and performance profiling
-remain open.
+interpolation modes, advanced effects, platform validation, and performance
+profiling remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.
@@ -373,8 +381,10 @@ composition without losing its layer or frame-rate data.
 - [x] Extend transform keyframes with editable property curves and bounded
   cubic Bezier easing; retain Linear as the default and migrate v1/v2 documents
   as linear segments.
-- [ ] Add a simple effect set to the supported ordered text, vector-shape,
-  raster-image, and video layers.
+- [x] Add a Motion Studio-owned ordered effect stack for Gaussian Blur and
+  Color Adjustment on text, vector-shape, raster-image, and video layers;
+  persist it in `.motion` v4 and share evaluation across preview, playback,
+  and export.
 - [x] Complete the first standalone save/reopen, preview, and rendered-video
   export workflow; Motion Studio currently exports opaque video without audio.
 - [ ] Profile representative compositions and validate export throughput,
@@ -401,8 +411,8 @@ gate.
 
 ### 5. Future research
 
-- [ ] Revisit animated masks, chained effects, nested compositions, particles,
-  3D features, and node-based workflows only after the core 2D motion workflows
+- [ ] Revisit animated masks, advanced effects and effect graphs, nested
+  compositions, particles, 3D features, and node-based workflows only after the core 2D motion workflows
   meet their performance targets and a clear use case justifies their added
   complexity.
 

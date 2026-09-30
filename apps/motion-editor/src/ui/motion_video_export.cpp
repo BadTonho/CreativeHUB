@@ -204,6 +204,7 @@ void MotionVideoExporter::exportVideo(
                 active.transform = layer.transform;
                 active.keyframes = layer.keyframes;
                 active.content = layer.content;
+                active.effects = layer.effects;
                 if (layer.kind == model::LayerKind::Image) {
                     const auto still = snapshot.still_frames.find(layer.source_path);
                     if (still != snapshot.still_frames.end()) active.still_frame = still->second;

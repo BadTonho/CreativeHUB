@@ -148,6 +148,8 @@ MotionExportSnapshot makeSnapshot(const std::filesystem::path& source_video)
     snapshot.frame_rate = {30000, 1001};
 
     auto image = imageLayer(3, 4);
+    image.effects.emplace_back(motion::model::ColorAdjustmentEffect{
+        true, 20.0, 100.0, 100.0});
     snapshot.still_frames.emplace(image.source_path, solidFrame(20, 180, 30));
     snapshot.layers.push_back(std::move(image));
 
@@ -395,6 +397,12 @@ int main(int argc, char* argv[])
         require(!has_non_black(*decoded.front()), "blank lead-in exports as opaque black");
         require(has_non_black(*decoded[3]),
                 "image, video, text, shape, transforms, and keyframes contribute to preview output");
+        const auto background_offset = static_cast<std::size_t>(1) * decoded[3]->stride +
+            static_cast<std::size_t>(1) * 4U;
+        require(decoded[3]->rgba_pixels[background_offset] > 50 &&
+                    decoded[3]->rgba_pixels[background_offset + 1] > 210 &&
+                    decoded[3]->rgba_pixels[background_offset + 2] > 60,
+                "Color Adjustment is included in exported still-layer pixels");
         require(!has_non_black(*decoded.back()),
                 "hidden layers extend the export duration without rendering pixels");
 

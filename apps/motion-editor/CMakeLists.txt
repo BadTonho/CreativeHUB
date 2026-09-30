@@ -41,6 +41,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/motion_video_export_dialog.h
     src/ui/layer_content_renderer.cpp
     src/ui/layer_content_renderer.h
+    src/ui/layer_effect_processor.cpp
+    src/ui/layer_effect_processor.h
     src/ui/timeline_navigator.cpp
     src/ui/timeline_navigator.h
     src/ui/timeline_navigator_math.h

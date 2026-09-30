@@ -33,6 +33,7 @@ constexpr std::size_t kMaximumContentStringBytes = 32'768;
 constexpr int kMaximumContentDimension = 32'768;
 constexpr int kMaximumTextSizePixels = 4'096;
 constexpr int kMaximumStrokeWidthPixels = 4'096;
+constexpr std::size_t kMaximumLayerEffectCount = 256;
 
 int fourFifths(int value) noexcept
 {
@@ -133,7 +134,8 @@ bool validLayer(const CompositionLayer& layer) noexcept
         !std::isfinite(layer.source_frame_rate) || layer.source_frame_rate < 0.0 ||
         !validTransform(layer.transform) ||
         !validTransformKeyframes(layer.keyframes) ||
-        !validContentForKind(layer.kind, layer.content)) {
+        !validContentForKind(layer.kind, layer.content) ||
+        !validLayerEffects(layer.effects)) {
         return false;
     }
     if (layer.duration_frames > 0 &&
@@ -162,6 +164,29 @@ bool isSupportedFrameRate(FrameRate frame_rate) noexcept
 {
     return std::find(kSupportedFrameRates.begin(), kSupportedFrameRates.end(), frame_rate)
         != kSupportedFrameRates.end();
+}
+
+bool validLayerEffect(const LayerEffect& effect) noexcept
+{
+    if (const auto* blur = std::get_if<GaussianBlurEffect>(&effect)) {
+        return std::isfinite(blur->radius_pixels) &&
+            blur->radius_pixels >= 0.0 && blur->radius_pixels <= 100.0;
+    }
+    if (const auto* color = std::get_if<ColorAdjustmentEffect>(&effect)) {
+        return std::isfinite(color->brightness) &&
+            color->brightness >= -100.0 && color->brightness <= 100.0 &&
+            std::isfinite(color->contrast_percent) &&
+            color->contrast_percent >= 0.0 && color->contrast_percent <= 200.0 &&
+            std::isfinite(color->saturation_percent) &&
+            color->saturation_percent >= 0.0 && color->saturation_percent <= 200.0;
+    }
+    return false;
+}
+
+bool validLayerEffects(const std::vector<LayerEffect>& effects) noexcept
+{
+    return effects.size() <= kMaximumLayerEffectCount &&
+        std::all_of(effects.begin(), effects.end(), validLayerEffect);
 }
 
 TextLayerContent defaultTextLayerContent(CanvasSize canvas_size)
@@ -489,6 +514,16 @@ bool CompositionDocument::setShapeLayerContent(
         return false;
     }
     layer->content = content;
+    return true;
+}
+
+bool CompositionDocument::setLayerEffects(
+    LayerId id,
+    const std::vector<LayerEffect>& effects)
+{
+    auto* layer = findLayer(id);
+    if (layer == nullptr || !validLayerEffects(effects)) return false;
+    layer->effects = effects;
     return true;
 }
 

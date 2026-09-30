@@ -262,6 +262,28 @@ int main()
     require(!document.setLayerTransform(middle, invalid_transform), "invalid transform is rejected");
     require(document.layers()[2].transform == transform, "invalid transform leaves prior values intact");
 
+    const std::vector<LayerEffect> layer_effects{
+        GaussianBlurEffect{}, ColorAdjustmentEffect{}, GaussianBlurEffect{false, 0.0}};
+    require(document.setLayerEffects(middle, layer_effects) &&
+                document.layers()[2].effects == layer_effects,
+            "a layer stores an ordered stack with repeated effect types and disabled entries");
+    auto invalid_effects = layer_effects;
+    std::get<GaussianBlurEffect>(invalid_effects.front()).radius_pixels = 100.1;
+    require(!document.setLayerEffects(middle, invalid_effects) &&
+                document.layers()[2].effects == layer_effects,
+            "an out-of-range blur radius is rejected without changing the previous stack");
+    invalid_effects = layer_effects;
+    std::get<ColorAdjustmentEffect>(invalid_effects[1]).brightness =
+        std::numeric_limits<double>::quiet_NaN();
+    require(!document.setLayerEffects(middle, invalid_effects),
+            "non-finite color adjustment parameters are rejected");
+    invalid_effects = layer_effects;
+    std::get<ColorAdjustmentEffect>(invalid_effects[1]).saturation_percent = 201.0;
+    require(!document.setLayerEffects(middle, invalid_effects),
+            "color adjustment ranges are validated atomically");
+    require(!document.setLayerEffects(9999, layer_effects),
+            "effect stacks cannot be changed on an unknown layer");
+
     require(document.setLayerKeyframe(middle, TransformProperty::PositionX, 12, -0.5),
         "valid shared keyframe is accepted");
     require(document.setLayerKeyframe(middle, TransformProperty::Opacity, 30, 0.25),

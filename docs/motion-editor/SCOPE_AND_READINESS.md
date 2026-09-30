@@ -11,11 +11,13 @@ Native text, rectangle, and ellipse layers have content
 inspectors and static content; their transforms and transform keyframes work
 through the same timeline and preview path. Motion Studio rasterizes that
 content with Qt painting on its preview worker before using the shared CPU
-compositor. Manual Save, Save As, and Open use a versioned `.motion` document
-that includes the Media Pool. The writer emits v3, reads v1 and v2 with old
-keyframes migrated as Linear, and reads v1 text or shape records with default
-content. The recovery wrapper remains at v1 and accepts nested documents
-through v3. Undo/Redo and configurable autosave and recovery cover the
+compositor. Per-layer Gaussian Blur and Color Adjustment are applied on that
+same CPU worker before transforms, and the same renderer is used for playback
+and video export. Manual Save, Save As, and Open use a versioned `.motion`
+document that includes the Media Pool. The writer emits v4, reads v1-v3 with
+empty effect stacks, reads v1 and v2 with old keyframes migrated as Linear,
+and reads v1 text or shape records with default content. The recovery wrapper
+remains at v1 and accepts nested documents through v4. Undo/Redo and configurable autosave and recovery cover the
 composition and Media Pool. A first-pass video export uses a shared FFmpeg
 encoder, with opaque video-only output and per-job settings; audio and alpha
 remain outside the implemented export path. The composition workspace keeps
@@ -50,14 +52,14 @@ The first Motion Studio MVP is a 2D composition workflow with:
 - ordered layers for text, vector shapes, still images, and video sources;
 - a composition timeline, basic 2D transforms, keyframes, and editable property
   curves;
-- simple effects, with the initial effect set selected during technical
-  validation;
+- ordered per-layer Gaussian Blur and Color Adjustment effects with editable
+  parameters, enable/disable, reordering, and undoable stack operations;
 - editable project save and reopen, plus rendered video export;
 - document validation, actionable local error logging, undo/redo, autosave, and
   recovery appropriate to the supported workflow.
 
-The MVP does not include audio editing or mixing, animated masks, chained
-effects, nested compositions, 3D, node-based workflows, or particles. Video
+The MVP does not include audio editing or mixing, animated masks, advanced
+effect graphs, nested compositions, 3D, node-based workflows, or particles. Video
 sources are visual layers; the MVP does not promise audio playback or audio in
 the export. Transparent export is not a requirement established by this
 scope. Codecs, output profiles, and any later alpha-channel support remain for
@@ -69,7 +71,7 @@ technical validation.
   properties, save it, and reopen it with its layer order, media references,
   timing, transforms, and keyframes intact.
 - The timeline and preview show the evaluated composition at the selected
-  frame, and a rendered video reflects the saved composition.
+  frame, and a rendered video reflects the saved composition and its effects.
 - Unsupported future document versions are reported without modifying the
   original file.
 - Visual behavior and performance are validated on representative small,
@@ -106,7 +108,7 @@ provide a recoverable reference if a linked document or dependency is missing.
 | Transforms and animation | `apps/video-editor/src/timeline/`; normalized 2D position, scale, rotation, opacity, and linear per-clip keyframes. | Motion Studio uses `libs/animation/` to evaluate Linear and bounded cubic Bezier transform segments consistently in preview, playback, and export. Its Graph Editor, presets, property tracks, and inspector remain application-owned. |
 | Timeline and history | Timeline model, commands, and bounded undo/redo are application-specific. | Motion Studio owns its composition timeline and editing history; share lower-level behavior only where a second real consumer uses the same contract. |
 | Project persistence | `apps/video-editor/src/project/`; versioned `.csp` format currently at version 12, with migrations for supported earlier versions. | Keep a separate versioned Motion Studio native document and adapter. Do not reuse `.csp` as the native composition format. |
-| Autosave and recovery | `src/project/autosave_manager.*` and application coordination provide autosave snapshots and recovery. | Motion Studio implements an application-owned version 1 recovery wrapper around validated `.motion` v1, v2, or v3 data. Shared recovery services remain deferred until both document owners have stable common requirements. |
+| Autosave and recovery | `src/project/autosave_manager.*` and application coordination provide autosave snapshots and recovery. | Motion Studio implements an application-owned version 1 recovery wrapper around validated `.motion` v1-v4 data, including effect stacks. Shared recovery services remain deferred until both document owners have stable common requirements. |
 | Diagnostics | Structured local logging is implemented in `libs/diagnostics/`; each application selects its own log directory. | Reuse the service with a Motion Studio-specific application identifier and context. |
 
 ### Candidate shared capabilities
@@ -187,14 +189,20 @@ common, or custom dimensions, output frame rate, and quality/bitrate controls.
 Settings apply to the current job and are not persisted. Export jobs show
 progress, support cancellation, verify the staged file, and publish it only
 after successful completion; cancellation and failure preserve an existing
-destination. Audio and alpha are not exported.
+destination. Audio and alpha are not exported. Static Gaussian Blur and Color
+Adjustment stacks run before each layer's transforms in the shared Motion frame
+renderer, so the preview, playback, and export evaluate the same effects. Blur
+uses a bounded three-pass box approximation to a Gaussian with premultiplied
+alpha. Color adjustment processes the stored RGBA8 values without color-space
+conversion and preserves alpha.
 Autosave and recovery use a separate versioned wrapper:
 dirty compositions and the full Media Pool are snapshotted atomically, untitled
 work is isolated by session, and recovery restores through staged media loading.
-The native `.motion` writer emits v3, reads v1/v2 as linear keyframes, and
-migrates v1 text and shape records using documented defaults; the recovery
-wrapper remains at version 1 and accepts nested documents through v3. Other
-interpolation modes, overshoot-capable curves, and effects remain open. Final
+The native `.motion` writer emits v4, reads v1-v3 with empty effect stacks,
+reads v1/v2 keyframes as Linear, and migrates v1 text and shape records using
+documented defaults; the recovery wrapper remains at version 1 and accepts
+nested documents through v4. Other interpolation modes, overshoot-capable
+curves, and advanced effects remain open. Final
 encoder/profile selection, output color handling, and cross-platform export
 behavior remain technical validation work. The one-hour ruler range controls
 navigation only and does not define the composition's duration. See
@@ -205,13 +213,14 @@ implementation details and provisional shared API contracts.
 
 - Motion Studio uses a native document format distinct from the Video Editor's
   `.csp` project format and the Image Editor's `.cimg` format.
-- The current implementation writes version 3 JSON documents and reads
-  versions 1, 2, and 3, identified by
+- The current implementation writes version 4 JSON documents and reads
+  versions 1, 2, 3, and 4, identified by
   `creative-suite.motion-studio`. Its provisional extension is `.motion`; the
   field layout, path rules, exact limits, and atomic-save behavior are described
   in [FORMAT.md](FORMAT.md).
 - Version 1 text and shape records migrate to documented defaults when opened;
-  v1/v2 keyframes load as Linear, and saving older documents writes version 3.
+  v1-v3 load with empty effect stacks, v1/v2 keyframes load as Linear, and
+  saving older documents writes version 4.
   An unsupported future schema version is
   rejected without replacing the current composition or overwriting or
   normalizing the original file.

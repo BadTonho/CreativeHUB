@@ -26,6 +26,7 @@ class QLabel;
 class QMenu;
 class QPushButton;
 class QDoubleSpinBox;
+class QListWidget;
 class QCloseEvent;
 class QProgressDialog;
 class QStackedWidget;
@@ -86,6 +87,7 @@ private:
     [[nodiscard]] bool recordCompositionEdit(CompositionEditState before);
     void finishPendingTransformEdit();
     void finishPendingContentEdit();
+    void finishPendingEffectEdit();
     void undoComposition();
     void redoComposition();
     void applyEditState(CompositionEditState state);
@@ -127,6 +129,14 @@ private:
         creative_suite::animation::CubicBezierEasing easing);
     void resetCurveEditor();
     void syncLayerContentInspector(const model::CompositionLayer* selected);
+    void syncEffectsInspector(const model::CompositionLayer* selected);
+    void addLayerEffect(int kind);
+    void editSelectedEffectParameters();
+    void applySelectedEffectStack(std::vector<model::LayerEffect> effects,
+                                  bool coalesce_parameters = false);
+    void moveSelectedEffect(int direction);
+    void removeSelectedEffect();
+    void selectEffectRow(int row);
     void createContentLayer(model::LayerKind kind, model::ShapeKind shape);
     void editSelectedLayerContent();
     void chooseSelectedLayerColor(bool text_color, bool stroke_color);
@@ -173,6 +183,18 @@ private:
     MediaDetailsWidget* media_details_ = nullptr;
     QTabWidget* inspector_tabs_ = nullptr;
     QWidget* transform_inspector_ = nullptr;
+    QWidget* effects_inspector_ = nullptr;
+    QListWidget* layer_effect_list_ = nullptr;
+    QPushButton* add_layer_effect_button_ = nullptr;
+    QPushButton* effect_up_button_ = nullptr;
+    QPushButton* effect_down_button_ = nullptr;
+    QPushButton* remove_effect_button_ = nullptr;
+    QStackedWidget* effect_parameter_pages_ = nullptr;
+    QDoubleSpinBox* blur_radius_field_ = nullptr;
+    QDoubleSpinBox* effect_brightness_field_ = nullptr;
+    QDoubleSpinBox* effect_contrast_field_ = nullptr;
+    QDoubleSpinBox* effect_saturation_field_ = nullptr;
+    int effects_tab_index_ = -1;
     QWidget* curve_editor_panel_ = nullptr;
     PropertyCurveEditor* curve_editor_ = nullptr;
     QComboBox* curve_preset_combo_ = nullptr;
@@ -207,6 +229,8 @@ private:
     CompositionHistory composition_history_;
     std::optional<std::pair<model::LayerId, std::size_t>> active_transform_edit_;
     std::optional<model::LayerId> active_content_edit_layer_;
+    std::optional<std::pair<model::LayerId, std::size_t>> active_effect_edit_;
+    std::optional<std::pair<model::LayerId, std::size_t>> selected_effect_;
     struct CurveSelection {
         model::LayerId layer_id = 0;
         creative_suite::animation::TransformProperty property =

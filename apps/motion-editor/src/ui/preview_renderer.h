@@ -28,6 +28,7 @@ struct PreviewLayerSnapshot {
     creative_suite::animation::Transform2D transform;
     creative_suite::animation::TransformKeyframes keyframes;
     model::LayerContent content;
+    std::vector<model::LayerEffect> effects;
     creative_suite::media::RgbaFramePtr still_frame;
 };
 

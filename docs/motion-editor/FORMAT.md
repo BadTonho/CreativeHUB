@@ -1,7 +1,7 @@
 # Motion Studio Native Document Format
 
 **Status:** provisional implementation contract. The `.motion` extension and
-version 3 schema may change before a stable release. This format is separate
+version 4 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.
 
 ## File identity and versioning
@@ -11,15 +11,15 @@ Motion Studio documents are UTF-8 JSON objects with these root fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite.motion-studio`. |
-| `version` | integer | Current schema version is `3`. |
+| `version` | integer | Current schema version is `4`. |
 | `composition` | object | Canvas size and exact rational frame rate. |
 | `media_pool` | object | All bins and media entries, including unused entries. |
 | `layers` | array | Ordered layers in back-to-front composition order. |
 
-Motion Studio reads versions 1, 2, and 3. Version 1 text and shape layers had no
-typed content, so they open with the current default text or rectangle content
+Motion Studio reads versions 1, 2, 3, and 4. Version 1 text and shape layers
+had no typed content, so they open with the current default text or rectangle content
 for their canvas. Versions 1 and 2 use linear keyframe interpolation. Saving an
-older document writes it as version 3. Motion Studio rejects malformed data, an
+older document writes it as version 4. Motion Studio rejects malformed data, an
 unknown format identifier, invalid values, and unsupported future versions
 before applying the file. A failed Open leaves the current composition intact.
 A future-version file is never rewritten by Open.
@@ -28,7 +28,7 @@ A future-version file is never rewritten by Open.
 
 `composition.canvas` contains positive integer `width` and `height` values in
 pixels. `composition.frame_rate` contains decimal string fields `numerator` and
-`denominator`, preserving the exact rational rate. Both supported versions
+`denominator`, preserving the exact rational rate. All supported versions
 accept the composition rates currently offered by Motion Studio: 24000/1001,
 24, 25, 30000/1001, 30, 48, 50, 60000/1001, 60, 100, 120000/1001, 120, and
 240 fps.
@@ -68,6 +68,21 @@ two-thirds controls, which do not affect linear evaluation. Versions 1 and 2
 load keys as linear. Interpolation changes timing between key values only;
 property endpoints and layer timing are unchanged.
 
+Version 4 adds an `effects` array to each layer. The array is ordered from first
+to last applied effect; repeated effect types are allowed. Each entry has an
+`enabled` Boolean and a `type` discriminator. A `gaussian_blur` entry stores
+`radius_pixels` from 0 through 100. The radius is the Gaussian sigma in pixels
+of the source layer frame. Processing uses a three-pass box approximation of a
+Gaussian, premultiplied RGB and alpha, and clamps samples at the source-frame
+edges; blur does not expand the layer bounds. A `color_adjustment` entry stores
+`brightness` from -100 through 100, `contrast_percent` from 0 through 200, and
+`saturation_percent` from 0 through 200. It applies brightness, contrast about
+the midpoint, then saturation, to the current RGBA8 channel values; alpha is
+preserved and no color-space conversion is performed. Disabled effects are
+retained but skipped. Effects are static and run on each layer's raster frame
+before its transform and composition. Versions 1 through 3 load with empty
+effect stacks.
+
 New Text layers default to `Text`, Sans Serif, 48 pixels, centered white text,
 and a word-wrapped box at 80% of canvas width by 50% of canvas height. New
 Rectangle and Ellipse layers default to one-quarter canvas width and height,
@@ -82,7 +97,8 @@ are stored as decimal strings. Keyframes must be nonnegative, strictly
 increasing, and valid for their transform property. All supported versions
 validate layer IDs, timing arithmetic, media references, transforms, canvas
 dimensions, and the exact supported frame rate before saving or loading.
-Version 3 also validates interpolation modes and Bezier controls.
+Version 3 and later validate interpolation modes and Bezier controls. Version
+4 validates effect types, stack sizes, enabled flags, and parameter ranges.
 
 ## Media paths and caches
 
@@ -112,7 +128,7 @@ UTF-8 JSON wrapper uses format identifier
 `creative-suite.motion-studio-recovery` and wrapper version `1`. Its fields are
 `format`, `version`, `target_document_path`, `session_id`, and `document`. The
 `document` value uses the same validated payload described above and may be
-version 1, 2, or 3; preview caches and Undo/Redo history are not included. The
+version 1, 2, 3, or 4; preview caches and Undo/Redo history are not included. The
 wrapper remains version 1 and its nested document is written atomically with
 `QSaveFile`.
 
@@ -153,14 +169,15 @@ the selected document and attempts to restore media before asking what to do
 with the current dirty document. Cancelling or failing either operation keeps
 the current composition and pool.
 
-The current reader and writer limit documents to 128 MiB, 100,000 layers, media entries,
-or bins, 2,000,000 total keyframes, and 32,768 UTF-8 bytes per stored string.
+The current reader and writer limit documents to 128 MiB, 100,000 layers,
+media entries, or bins, 2,000,000 total keyframes, 256 effects per layer,
+1,000,000 effects in total, and 32,768 UTF-8 bytes per stored string.
 These are implementation safeguards, not product targets.
 
 ## Deferred document features
 
 Serialized Undo/Redo history, export settings, media relinking UI, migrations
 for future schema revisions, and cross-application handoff are not part of
-version 3. Undo/Redo exists only in the current editing session. Autosave and
+version 4. Undo/Redo exists only in the current editing session. Autosave and
 recovery metadata are stored in the separate wrapper described above.
 `.csp` and `.cimg` are unchanged.

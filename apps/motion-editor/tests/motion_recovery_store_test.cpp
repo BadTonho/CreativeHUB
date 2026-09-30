@@ -104,6 +104,10 @@ motion::model::MotionProjectData projectData(
                 creative_suite::animation::InterpolationMode::CubicBezier,
                 {0.35, 0.0, 0.65, 1.0}),
             "recovery fixture stores easing controls");
+    require(composition.setLayerEffects(id, {
+                GaussianBlurEffect{true, 7.5},
+                ColorAdjustmentEffect{true, 8.0, 110.0, 95.0}}),
+            "recovery fixture stores a layer effect stack");
     LayerId text_id = 0;
     require(composition.addContentLayer(LayerKind::Text, "Recovery title", 5, &text_id),
             "recovery fixture can add text content");
@@ -119,6 +123,8 @@ motion::model::MotionProjectData projectData(
     shape.stroke_width_pixels = 4;
     require(composition.setShapeLayerContent(shape_id, shape),
             "recovery fixture stores shape content");
+    require(composition.setLayerEffects(shape_id, {GaussianBlurEffect{false, 0.0}}),
+            "recovery fixture stores disabled shape effects");
     project.layers = composition.layers();
     return project;
 }

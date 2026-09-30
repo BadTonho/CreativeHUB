@@ -23,7 +23,7 @@ shared.
 Motion Studio owns `MotionRecoveryStore`, its versioned recovery wrapper, the
 autosave preferences, and the recovery-management dialog. The store reuses the
 native document serializer and its atomic `QSaveFile` validation while writing
-the native `.motion` document at version 3. A recovery payload stores the complete
+the native `.motion` document at version 4. A recovery payload stores the complete
 composition and Media Pool plus the original document path and session ID; it
 does not store decoded caches, playhead, zoom, selection, or Undo/Redo history.
 
@@ -83,6 +83,24 @@ between keys. `.motion` v3 stores interpolation and normalized control points;
 v1 and v2 keys migrate as Linear. Layer expansion is UI state, starts collapsed
 on New/Open, and is not persisted. Adding a key from the inspector expands
 both levels.
+
+### Layer effects
+
+Motion Studio owns the effect types, parameter validation, ordered per-layer
+stacks, inspector controls, edit history, and CPU processing. The current
+effects are Gaussian Blur and Color Adjustment; stacks may repeat effect types
+and disabled effects are retained. The renderer applies enabled effects to a
+layer's RGBA8 frame before its transform and shared raster composition. It
+serves preview, playback, and export, so each output path uses the same effect
+order and parameter behavior. Blur uses a bounded three-pass box approximation
+to a Gaussian, with premultiplied RGB and alpha; color adjustment operates on
+RGBA8 channel values and preserves alpha. These are static, Motion Studio-only
+effects; no shared effects engine or Video Editor API is introduced.
+
+Version 4 of `.motion` persists each layer's effect stack. Versions 1 through
+3 load with empty stacks, and the version 1 recovery wrapper accepts nested
+documents through version 4. The format contract and migration behavior are
+specified in [FORMAT.md](FORMAT.md).
 
 ## Shared library candidates
 
@@ -261,9 +279,10 @@ the shared CPU compositor. Composition Undo/Redo is implemented in the Motion
 Studio application; Media Pool changes remain outside its history. Autosave
 and recovery use a version 1 wrapper, configurable timer, per-session untitled
 storage, saved-project sidecars, and recovery-management dialog. The `.motion`
-writer emits v3 and reads v1/v2; earlier keyframes migrate as Linear. The
-recovery wrapper remains at version 1 and accepts nested v1, v2, and v3
-documents. Other application formats remain unchanged.
+writer emits v4 and reads v1-v3; older keyframes migrate as Linear, and v1-v3
+documents receive empty effect stacks. The recovery wrapper remains at version
+1 and accepts nested documents through v4. Other application formats remain
+unchanged.
 The Motion Studio timeline and export path consume shared media, playback,
 composition, diagnostics, and video-encoding libraries directly without
 linking Video Editor application types or targets. Layer insertion, timing,

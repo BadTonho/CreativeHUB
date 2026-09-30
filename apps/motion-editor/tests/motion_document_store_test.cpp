@@ -114,6 +114,10 @@ motion::model::MotionProjectData populatedProject(const std::filesystem::path& r
                 {0.3, 0.1, 0.7, 0.9}),
             "a custom outgoing curve is stored");
     require(document.setLayerVisible(still_id, false), "visibility is stored");
+    require(document.setLayerEffects(still_id, {
+                GaussianBlurEffect{true, 4.5},
+                ColorAdjustmentEffect{false, 12.0, 125.0, 80.0}}),
+            "image effect stack can be built for persistence");
 
     VideoMetadata video;
     video.kind = MediaKind::Video;
@@ -125,6 +129,9 @@ motion::model::MotionProjectData populatedProject(const std::filesystem::path& r
     require(document.addMediaLayer(video, 20, &video_id) == AddMediaLayerResult::Added,
             "video layer can be built for project serialization");
     require(document.moveLayer(video_id, 0), "layer order can be changed before saving");
+    require(document.setLayerEffects(video_id, {
+                ColorAdjustmentEffect{true, -15.0, 110.0, 140.0}}),
+            "video color adjustment can be built for persistence");
 
     LayerId text_id = 0;
     require(document.addContentLayer(LayerKind::Text, "Title", 45, &text_id),
@@ -136,6 +143,8 @@ motion::model::MotionProjectData populatedProject(const std::filesystem::path& r
     text_content.color = {10, 20, 30, 220};
     require(document.setTextLayerContent(text_id, text_content),
             "text appearance and Unicode content are stored");
+    require(document.setLayerEffects(text_id, {GaussianBlurEffect{false, 0.0}}),
+            "disabled effects are retained on text layers");
 
     LayerId ellipse_id = 0;
     require(document.addContentLayer(LayerKind::Shape, "Ellipse", 90, &ellipse_id),
@@ -149,6 +158,9 @@ motion::model::MotionProjectData populatedProject(const std::filesystem::path& r
     shape_content.stroke_width_pixels = 7;
     require(document.setShapeLayerContent(ellipse_id, shape_content),
             "shape primitive, dimensions, fill, and stroke are stored");
+    require(document.setLayerEffects(ellipse_id, {
+                GaussianBlurEffect{true, 18.0}, GaussianBlurEffect{true, 2.0}}),
+            "repeated effect types retain their order on shape layers");
 
     project.layers = document.layers();
     return project;
@@ -191,8 +203,8 @@ int main(int argc, char** argv)
                 round_trip.layers[3].id == populated.layers[3].id,
             "layer IDs and back-to-front ordering remain stable");
     const auto json = readBytes(document_path);
-    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 3,
-            "documents with curves are written using schema version 3");
+    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 4,
+            "documents with curves and effects are written using schema version 4");
     require(json.contains("assets/still-é.png") || json.contains("assets/still-Ã©.png"),
             "a source beneath the document directory is encoded as a relative path");
     require(json.contains("outside-影片.mkv") || json.contains("outside-\xE5\xBD\xB1\xE7\x89\x87.mkv"),
@@ -255,8 +267,8 @@ int main(int argc, char** argv)
             "v1 text and shape records migrate to documented default content");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v1);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 3,
-            "saving a loaded v1 project upgrades it to v3");
+                .value(QStringLiteral("version")).toInt() == 4,
+            "saving a loaded v1 project upgrades it to v4");
 
     auto legacy_v2 = valid_json;
     legacy_v2.insert(QStringLiteral("version"), 2);
@@ -294,8 +306,33 @@ int main(int argc, char** argv)
             "version 2 keys migrate with Linear interpolation");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v2);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 3,
-            "saving a loaded v2 project upgrades it to v3");
+                .value(QStringLiteral("version")).toInt() == 4,
+            "saving a loaded v2 project upgrades it to v4");
+
+    auto legacy_v3 = valid_json;
+    legacy_v3.insert(QStringLiteral("version"), 3);
+    auto legacy_v3_layers = legacy_v3.value(QStringLiteral("layers")).toArray();
+    for (qsizetype index = 0; index < legacy_v3_layers.size(); ++index) {
+        auto layer = legacy_v3_layers[index].toObject();
+        layer.remove(QStringLiteral("effects"));
+        legacy_v3_layers[index] = layer;
+    }
+    legacy_v3.insert(QStringLiteral("layers"), legacy_v3_layers);
+    writeBytes(document_path, QJsonDocument(legacy_v3).toJson());
+    const auto migrated_v3 = motion::persistence::MotionDocumentStore::load(document_path);
+    require(std::all_of(migrated_v3.layers.begin(), migrated_v3.layers.end(),
+                [](const auto& layer) { return layer.effects.empty(); }) &&
+                std::any_of(migrated_v3.layers.begin(), migrated_v3.layers.end(),
+                    [](const auto& layer) {
+                        return !layer.keyframes.position_x.empty() &&
+                            layer.keyframes.position_x.front().interpolation ==
+                                creative_suite::animation::InterpolationMode::CubicBezier;
+                    }),
+            "version 3 documents retain curves and migrate with empty effect stacks");
+    motion::persistence::MotionDocumentStore::save(document_path, migrated_v3);
+    require(QJsonDocument::fromJson(readBytes(document_path)).object()
+                .value(QStringLiteral("version")).toInt() == 4,
+            "saving a loaded v3 project upgrades it to v4");
 
     motion::persistence::MotionDocumentStore::save(document_path, populated);
     auto invalid_text = valid_json;
@@ -370,6 +407,18 @@ int main(int argc, char** argv)
     *shape_layer = shape_layer_object;
     invalid_shape.insert(QStringLiteral("layers"), invalid_shape_layers);
     requireInvalidLoad(invalid_shape, "negative shape stroke widths are rejected");
+
+    auto invalid_effect = valid_json;
+    auto invalid_effect_layers = invalid_effect.value(QStringLiteral("layers")).toArray();
+    auto effect_layer = invalid_effect_layers[0].toObject();
+    QJsonObject blur;
+    blur.insert(QStringLiteral("type"), QStringLiteral("gaussian_blur"));
+    blur.insert(QStringLiteral("enabled"), true);
+    blur.insert(QStringLiteral("radius_pixels"), 100.1);
+    effect_layer.insert(QStringLiteral("effects"), QJsonArray{blur});
+    invalid_effect_layers[0] = effect_layer;
+    invalid_effect.insert(QStringLiteral("layers"), invalid_effect_layers);
+    requireInvalidLoad(invalid_effect, "out-of-range effect parameters are rejected on load");
 
     auto invalid_dimensions = valid_json;
     auto invalid_composition = invalid_dimensions.value(QStringLiteral("composition")).toObject();
