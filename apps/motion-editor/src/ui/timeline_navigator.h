@@ -93,6 +93,7 @@ public:
     void setSelectedLayerId(model::LayerId id);
     void setLayerExpanded(model::LayerId id, bool expanded);
     void setTransformGroupExpanded(model::LayerId id, bool expanded);
+    void setGraphEditorOpen(bool open);
     [[nodiscard]] std::int64_t currentFrame() const noexcept;
     [[nodiscard]] bool isPlaying() const noexcept;
     [[nodiscard]] bool isLoopEnabled() const noexcept;
@@ -127,9 +128,14 @@ public:
                            creative_suite::animation::TransformProperty,
                            std::int64_t,
                            std::int64_t)> handler);
+    void setCurveSegmentSelectedHandler(
+        std::function<void(model::LayerId,
+                           creative_suite::animation::TransformProperty,
+                           std::int64_t)> handler);
 
 signals:
     void currentFrameChanged(qint64 frame);
+    void graphEditorToggled(bool open);
 
 private:
     void seekToFrame(std::int64_t frame);
@@ -173,6 +179,7 @@ private:
     QAction* zoom_out_action_ = nullptr;
     QLabel* frame_label_ = nullptr;
     QLabel* frame_rate_label_ = nullptr;
+    QPushButton* graph_editor_button_ = nullptr;
     TimelineRuler* ruler_ = nullptr;
     QWidget* layer_rows_ = nullptr;
     QScrollArea* layer_scroll_area_ = nullptr;

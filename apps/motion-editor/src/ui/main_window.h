@@ -43,6 +43,7 @@ namespace motion::ui {
 class CompositionViewer;
 class MediaDetailsWidget;
 class MediaPoolWidget;
+class PropertyCurveEditor;
 class PreviewRenderer;
 class TimelineNavigator;
 class MotionVideoExportWorker;
@@ -111,6 +112,16 @@ private:
     void refreshTimeline();
     void selectLayer(model::LayerId id);
     void syncTransformInspector();
+    void refreshCurveEditor();
+    void selectCurveSegment(
+        model::LayerId id,
+        creative_suite::animation::TransformProperty property,
+        std::int64_t local_start_frame);
+    void applyCurvePreset(int preset_index);
+    void applyCurveEasing(
+        std::int64_t local_start_frame,
+        creative_suite::animation::CubicBezierEasing easing);
+    void resetCurveEditor();
     void syncLayerContentInspector(const model::CompositionLayer* selected);
     void createContentLayer(model::LayerKind kind, model::ShapeKind shape);
     void editSelectedLayerContent();
@@ -153,6 +164,10 @@ private:
     MediaDetailsWidget* media_details_ = nullptr;
     QTabWidget* inspector_tabs_ = nullptr;
     QWidget* transform_inspector_ = nullptr;
+    QWidget* curve_editor_panel_ = nullptr;
+    PropertyCurveEditor* curve_editor_ = nullptr;
+    QComboBox* curve_preset_combo_ = nullptr;
+    QLabel* curve_custom_label_ = nullptr;
     QWidget* layer_content_inspector_ = nullptr;
     QStackedWidget* layer_content_pages_ = nullptr;
     QWidget* text_content_page_ = nullptr;
@@ -183,6 +198,13 @@ private:
     CompositionHistory composition_history_;
     std::optional<std::pair<model::LayerId, std::size_t>> active_transform_edit_;
     std::optional<model::LayerId> active_content_edit_layer_;
+    struct CurveSelection {
+        model::LayerId layer_id = 0;
+        creative_suite::animation::TransformProperty property =
+            creative_suite::animation::TransformProperty::PositionX;
+        std::int64_t segment_start_frame = 0;
+    };
+    std::optional<CurveSelection> curve_selection_;
     QProgressDialog* open_progress_ = nullptr;
     QProgressDialog* export_progress_ = nullptr;
     std::unique_ptr<MotionVideoExportWorker> export_worker_;

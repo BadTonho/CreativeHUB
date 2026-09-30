@@ -13,6 +13,23 @@ enum class TransformProperty {
     Opacity,
 };
 
+enum class InterpolationMode {
+    Linear,
+    CubicBezier,
+};
+
+// Normalized easing controls for the segment starting at a keyframe. Both
+// coordinates stay in [0, 1]; ordered x coordinates keep time monotonic and
+// bounded y coordinates prevent easing overshoot.
+struct CubicBezierEasing {
+    double x1 = 1.0 / 3.0;
+    double y1 = 1.0 / 3.0;
+    double x2 = 2.0 / 3.0;
+    double y2 = 2.0 / 3.0;
+
+    friend bool operator==(const CubicBezierEasing&, const CubicBezierEasing&) = default;
+};
+
 // Position uses normalized composition-canvas coordinates and may lie outside
 // [0, 1] to place a layer partly or fully off-canvas. Scale must be positive,
 // rotation is in degrees, and opacity is in [0, 1]. All transform values must
@@ -32,6 +49,9 @@ struct Keyframe {
     // non-negative when inserted through setKeyframe().
     std::int64_t frame = 0;
     double value = 0.0;
+    // Interpolation applies from this key to the next key in the same property.
+    InterpolationMode interpolation = InterpolationMode::Linear;
+    CubicBezierEasing easing;
 
     friend bool operator==(const Keyframe&, const Keyframe&) = default;
 };
@@ -53,6 +73,16 @@ struct TransformKeyframes {
 [[nodiscard]] bool validKeyframeValue(
     TransformProperty property,
     double value) noexcept;
+[[nodiscard]] bool validCubicBezierEasing(const CubicBezierEasing& easing) noexcept;
+[[nodiscard]] bool validKeyframeInterpolation(
+    InterpolationMode interpolation,
+    const CubicBezierEasing& easing) noexcept;
+[[nodiscard]] bool validTransformKeyframes(
+    const TransformKeyframes& keyframes) noexcept;
+[[nodiscard]] double evaluateEasing(
+    double progress,
+    InterpolationMode interpolation,
+    const CubicBezierEasing& easing) noexcept;
 
 [[nodiscard]] double evaluateProperty(
     const Transform2D& base,
@@ -61,8 +91,8 @@ struct TransformKeyframes {
     std::int64_t local_frame) noexcept;
 
 // With no keyframes, evaluation returns the base value. Otherwise it clamps
-// to endpoint values and linearly interpolates between adjacent keyframes;
-// there is no easing or angular wraparound.
+// to endpoint values and interpolates between adjacent keys using the outgoing
+// interpolation stored on the left key. Rotation has no angular wraparound.
 [[nodiscard]] Transform2D evaluateTransform(
     const Transform2D& base,
     const TransformKeyframes& keyframes,
@@ -78,6 +108,13 @@ struct TransformKeyframes {
     TransformKeyframes& keyframes,
     TransformProperty property,
     std::int64_t local_frame) noexcept;
+
+[[nodiscard]] bool setKeyframeInterpolation(
+    TransformKeyframes& keyframes,
+    TransformProperty property,
+    std::int64_t local_frame,
+    InterpolationMode interpolation,
+    const CubicBezierEasing& easing) noexcept;
 
 [[nodiscard]] const std::vector<Keyframe>& keyframesFor(
     const TransformKeyframes& keyframes,

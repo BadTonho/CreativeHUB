@@ -3,6 +3,7 @@
 #include "ui/autosave_recovery_dialog.h"
 #include "ui/media_pool_widget.h"
 #include "ui/new_composition_dialog.h"
+#include "ui/property_curve_editor.h"
 #include "ui/timeline_navigator.h"
 #include "ui/timeline_navigator_math.h"
 #include "model/motion_project_data.h"
@@ -1834,7 +1835,20 @@ int main(int argc, char* argv[])
     require(moved_image != window.compositionDocument()->layers().end() &&
                 moved_image->timeline_start_frame > 0,
             "dragging a clip body moves its composition start frame");
-    sendMouseDrag(layer_rows, QPoint(202, 49), QPoint(196, 49));
+    const auto video_before_resize = std::find_if(
+        window.compositionDocument()->layers().begin(),
+        window.compositionDocument()->layers().end(), [video_layer_id](const auto& layer) {
+            return layer.id == video_layer_id;
+        });
+    require(video_before_resize != window.compositionDocument()->layers().end(),
+            "the video layer remains available for edge resizing");
+    const int video_clip_left_x = timeline->frameToViewportX(
+        video_before_resize->timeline_start_frame);
+    const int video_clip_right_x = std::max(video_clip_left_x + 2,
+        timeline->frameToViewportX(
+            video_before_resize->timeline_start_frame + video_before_resize->duration_frames));
+    sendMouseDrag(layer_rows, QPoint(video_clip_right_x - 1, 49),
+                  QPoint(video_clip_right_x - 17, 49));
     const auto shortened_video = std::find_if(window.compositionDocument()->layers().begin(),
         window.compositionDocument()->layers().end(), [video_layer_id](const auto& layer) {
             return layer.id == video_layer_id;
@@ -1949,6 +1963,80 @@ int main(int argc, char* argv[])
     position_x_key_button->click();
     require(document->layers().front().keyframes.position_x.size() == 2,
             "the diamond control adds and removes a key at the current frame");
+
+    auto* graph_editor_toggle = findWidget<QPushButton>(
+        &window, "motion-timeline-graph-editor-toggle");
+    auto* graph_editor_panel = findWidget<QWidget>(
+        &window, "motion-graph-editor-panel");
+    auto* property_curve = findWidget<motion::ui::PropertyCurveEditor>(
+        &window, "motion-property-curve-editor");
+    auto* curve_preset = findWidget<QComboBox>(
+        &window, "motion-curve-editor-preset");
+    timeline_zoom_slider->setValue(21);
+    timeline->setCurrentFrame(animation_start + 5);
+    const auto frame_before_curve_edits = timeline->currentFrame();
+    const auto layer_start_before_curve_edits = document->layers().front().timeline_start_frame;
+    const auto layer_duration_before_curve_edits = document->layers().front().duration_frames;
+    graph_editor_toggle->click();
+    QCoreApplication::processEvents();
+    require(graph_editor_panel->isVisible(),
+            "the Graph Editor toggle opens the expandable panel below the timeline");
+    sendMouseClick(animated_rows,
+        QPoint(timeline->frameToViewportX(animation_start + 5), 85));
+    require(curve_preset->isEnabled() && curve_preset->currentIndex() == 0,
+            "selecting a keyed property segment loads its Linear curve preset");
+    const auto preview_before_curve_preset = viewer->renderedFrame();
+    curve_preset->setCurrentIndex(1);
+    auto& position_curve = document->layers().front().keyframes.position_x.front();
+    require(position_curve.interpolation ==
+                creative_suite::animation::InterpolationMode::CubicBezier &&
+                std::abs(animated_position_x->value() -
+                    creative_suite::animation::evaluateProperty(
+                        document->layers().front().transform,
+                        document->layers().front().keyframes,
+                        creative_suite::animation::TransformProperty::PositionX, 5)) < 1e-6 &&
+                timeline->currentFrame() == frame_before_curve_edits,
+            "Ease In updates the shared evaluator and inspector without seeking");
+    require(waitFor([&] {
+        return viewer->renderedFrame() != nullptr &&
+               viewer->renderedFrame() != preview_before_curve_preset;
+    }), "applying a curve preset refreshes the composition preview");
+
+    const auto ease_in = position_curve.easing;
+    undo_action->trigger();
+    require(document->layers().front().keyframes.position_x.front().interpolation ==
+                creative_suite::animation::InterpolationMode::Linear,
+            "Undo restores the previous segment interpolation");
+    redo_action->trigger();
+    require(document->layers().front().keyframes.position_x.front().easing == ease_in,
+            "Redo restores the selected easing preset");
+
+    const auto first_handle = property_curve->controlHandlePosition(0);
+    sendMouseDrag(property_curve, first_handle, first_handle + QPoint(9, -12));
+    const auto custom_easing = document->layers().front().keyframes.position_x.front().easing;
+    require(custom_easing != ease_in && curve_preset->currentIndex() == -1,
+            "dragging a Bézier handle edits the curve and marks it custom");
+    undo_action->trigger();
+    require(document->layers().front().keyframes.position_x.front().easing == ease_in,
+            "one Undo restores the curve state before the complete handle drag");
+    undo_action->trigger();
+    require(document->layers().front().keyframes.position_x.front().interpolation ==
+                creative_suite::animation::InterpolationMode::Linear,
+            "a second Undo removes the separate preset edit");
+    redo_action->trigger();
+    redo_action->trigger();
+    require(document->layers().front().keyframes.position_x.front().easing == custom_easing,
+            "Redo reapplies the preset and the custom Bézier handle edit");
+    curve_preset->setCurrentIndex(0);
+    require(document->layers().front().keyframes.position_x.front().interpolation ==
+                creative_suite::animation::InterpolationMode::Linear &&
+                timeline->currentFrame() == frame_before_curve_edits &&
+                document->layers().front().timeline_start_frame == layer_start_before_curve_edits &&
+                document->layers().front().duration_frames == layer_duration_before_curve_edits,
+            "curve editing does not change the playhead or layer timing");
+    graph_editor_toggle->click();
+    require(!graph_editor_panel->isVisible(),
+            "the Graph Editor panel can be collapsed again");
 
     timeline->setCurrentFrame(animation_start);
     opacity_key_button->click();

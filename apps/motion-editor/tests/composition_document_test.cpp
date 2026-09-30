@@ -266,9 +266,26 @@ int main()
         "valid shared keyframe is accepted");
     require(document.setLayerKeyframe(middle, TransformProperty::Opacity, 30, 0.25),
         "opacity keyframe is stored");
-    require(keyframesFor(document.layers()[2].keyframes, TransformProperty::PositionX)
-                == std::vector<Keyframe>{{12, -0.5}},
-        "shared keyframe value and local frame are retained");
+    const creative_suite::animation::CubicBezierEasing custom_easing{0.3, 0.1, 0.7, 0.9};
+    require(document.setLayerKeyframeInterpolation(
+                middle, TransformProperty::PositionX, 12,
+                creative_suite::animation::InterpolationMode::CubicBezier, custom_easing) &&
+                document.layers()[2].keyframes.position_x.front().easing == custom_easing,
+            "a stored keyframe can receive validated outgoing curve controls");
+    const auto keyframes_before_invalid_curve = document.layers()[2].keyframes;
+    require(!document.setLayerKeyframeInterpolation(
+                middle, TransformProperty::PositionX, 12,
+                creative_suite::animation::InterpolationMode::CubicBezier,
+                {0.8, 0.0, 0.2, 1.0}) &&
+                document.layers()[2].keyframes == keyframes_before_invalid_curve,
+            "invalid curve controls are rejected without changing the document");
+    const auto& stored_position_keys = keyframesFor(
+        document.layers()[2].keyframes, TransformProperty::PositionX);
+    require(stored_position_keys.size() == 1 && stored_position_keys.front().frame == 12 &&
+                stored_position_keys.front().value == -0.5 &&
+                stored_position_keys.front().interpolation ==
+                    creative_suite::animation::InterpolationMode::CubicBezier,
+        "shared keyframe value, local frame, and interpolation are retained");
     require(!document.setLayerKeyframe(middle, TransformProperty::Scale, -1, 2.0),
         "negative local keyframe frame is rejected");
     require(!document.setLayerKeyframe(middle, TransformProperty::Opacity, 31, 1.5),

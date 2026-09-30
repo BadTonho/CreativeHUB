@@ -1,10 +1,12 @@
 #include <creative_suite/animation/animation.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace {
 
@@ -47,6 +49,45 @@ int main() {
                     evaluateProperty(
                         base, keyframes, TransformProperty::PositionX, 11) == 1.0,
                 "Keyframe evaluation did not interpolate linearly and clamp endpoints.");
+
+        const CubicBezierEasing ease_in{0.42, 0.0, 1.0, 1.0};
+        require(validCubicBezierEasing(ease_in) &&
+                    setKeyframeInterpolation(keyframes, TransformProperty::PositionX, 0,
+                                             InterpolationMode::CubicBezier, ease_in) &&
+                    evaluateProperty(base, keyframes, TransformProperty::PositionX, 0) == 0.0 &&
+                    evaluateProperty(base, keyframes, TransformProperty::PositionX, 10) == 1.0 &&
+                    evaluateProperty(base, keyframes, TransformProperty::PositionX, 5) < 0.4,
+                "Cubic easing preserves endpoint values and changes intermediate evaluation.");
+
+        const CubicBezierEasing invalid_easing{0.8, 0.0, 0.2, 1.0};
+        require(!validCubicBezierEasing(invalid_easing) &&
+                    !setKeyframeInterpolation(keyframes, TransformProperty::PositionX, 0,
+                                              InterpolationMode::CubicBezier, invalid_easing),
+                "Bezier controls with reversed time coordinates are rejected.");
+
+        TransformKeyframes eased_properties;
+        const std::array<std::pair<TransformProperty, std::pair<double, double>>, 5> ranges{{
+            {TransformProperty::PositionX, {0.0, 10.0}},
+            {TransformProperty::PositionY, {10.0, 0.0}},
+            {TransformProperty::Scale, {1.0, 3.0}},
+            {TransformProperty::Rotation, {0.0, 90.0}},
+            {TransformProperty::Opacity, {0.0, 1.0}},
+        }};
+        for (const auto& [property, range] : ranges) {
+            require(setKeyframe(eased_properties, property, 0, range.first) &&
+                        setKeyframe(eased_properties, property, 10, range.second) &&
+                        setKeyframeInterpolation(eased_properties, property, 0,
+                                                 InterpolationMode::CubicBezier, ease_in),
+                    "Every transform property accepts cubic easing.");
+            const double value = evaluateProperty(base, eased_properties, property, 5);
+            const double linear_midpoint = (range.first + range.second) * 0.5;
+            require((range.second >= range.first && value < linear_midpoint) ||
+                        (range.second < range.first && value > linear_midpoint),
+                    "Cubic easing applies independently to all five transform properties.");
+            require(evaluateProperty(base, eased_properties, property, 0) == range.first &&
+                        evaluateProperty(base, eased_properties, property, 10) == range.second,
+                    "Eased transform properties retain exact keyed endpoint values.");
+        }
 
         require(setKeyframe(keyframes, TransformProperty::PositionX, 10, 0.8) &&
                     keyframesFor(keyframes, TransformProperty::PositionX).size() == 2 &&

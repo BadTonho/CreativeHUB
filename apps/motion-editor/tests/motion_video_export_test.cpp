@@ -169,6 +169,12 @@ MotionExportSnapshot makeSnapshot(const std::filesystem::path& source_video)
     require(creative_suite::animation::setKeyframe(shape.keyframes,
                 creative_suite::animation::TransformProperty::Opacity, 3, 1.0),
             "shape opacity end key is valid");
+    require(creative_suite::animation::setKeyframeInterpolation(
+                shape.keyframes,
+                creative_suite::animation::TransformProperty::Opacity, 0,
+                creative_suite::animation::InterpolationMode::CubicBezier,
+                {0.42, 0.0, 1.0, 1.0}),
+            "shape opacity supports an eased export segment");
     snapshot.layers.push_back(std::move(shape));
 
     CompositionLayer text{};

@@ -108,6 +108,11 @@ motion::model::MotionProjectData populatedProject(const std::filesystem::path& r
                                       0, 0.25), "first keyframe is stored");
     require(document.setLayerKeyframe(still_id, creative_suite::animation::TransformProperty::PositionX,
                                       29, 0.5), "second keyframe is stored");
+    require(document.setLayerKeyframeInterpolation(
+                still_id, creative_suite::animation::TransformProperty::PositionX, 0,
+                creative_suite::animation::InterpolationMode::CubicBezier,
+                {0.3, 0.1, 0.7, 0.9}),
+            "a custom outgoing curve is stored");
     require(document.setLayerVisible(still_id, false), "visibility is stored");
 
     VideoMetadata video;
@@ -169,15 +174,25 @@ int main(int argc, char** argv)
     motion::persistence::MotionDocumentStore::save(document_path, populated);
     const auto round_trip = motion::persistence::MotionDocumentStore::load(document_path);
     require(round_trip == populated,
-            "layers, transforms, keyframes, media, bins, Unicode and unused items round-trip");
+            "layers, transforms, curves, media, bins, Unicode and unused items round-trip");
+    const auto round_trip_curve_layer = std::find_if(
+        round_trip.layers.begin(), round_trip.layers.end(), [](const auto& layer) {
+            return !layer.keyframes.position_x.empty();
+        });
+    require(round_trip_curve_layer != round_trip.layers.end() &&
+                round_trip_curve_layer->keyframes.position_x.front().interpolation ==
+                creative_suite::animation::InterpolationMode::CubicBezier &&
+                round_trip_curve_layer->keyframes.position_x.front().easing ==
+                    creative_suite::animation::CubicBezierEasing{0.3, 0.1, 0.7, 0.9},
+            "custom interpolation and controls survive the native document round trip");
     require(round_trip.layers.size() == 4 && round_trip.layers[0].id == populated.layers[0].id &&
                 round_trip.layers[1].id == populated.layers[1].id &&
                 round_trip.layers[2].id == populated.layers[2].id &&
                 round_trip.layers[3].id == populated.layers[3].id,
             "layer IDs and back-to-front ordering remain stable");
     const auto json = readBytes(document_path);
-    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 2,
-            "documents with native content are written using schema version 2");
+    require(QJsonDocument::fromJson(json).object().value(QStringLiteral("version")).toInt() == 3,
+            "documents with curves are written using schema version 3");
     require(json.contains("assets/still-é.png") || json.contains("assets/still-Ã©.png"),
             "a source beneath the document directory is encoded as a relative path");
     require(json.contains("outside-影片.mkv") || json.contains("outside-\xE5\xBD\xB1\xE7\x89\x87.mkv"),
@@ -240,8 +255,47 @@ int main(int argc, char** argv)
             "v1 text and shape records migrate to documented default content");
     motion::persistence::MotionDocumentStore::save(document_path, migrated_v1);
     require(QJsonDocument::fromJson(readBytes(document_path)).object()
-                .value(QStringLiteral("version")).toInt() == 2,
-            "saving a loaded v1 project upgrades it to v2");
+                .value(QStringLiteral("version")).toInt() == 3,
+            "saving a loaded v1 project upgrades it to v3");
+
+    auto legacy_v2 = valid_json;
+    legacy_v2.insert(QStringLiteral("version"), 2);
+    auto legacy_v2_layers = legacy_v2.value(QStringLiteral("layers")).toArray();
+    for (qsizetype layer_index = 0; layer_index < legacy_v2_layers.size(); ++layer_index) {
+        auto layer = legacy_v2_layers[layer_index].toObject();
+        auto keyframes = layer.value(QStringLiteral("keyframes")).toObject();
+        for (const auto* property : {"position_x", "position_y", "scale", "rotation", "opacity"}) {
+            const auto property_name = QString::fromLatin1(property);
+            auto values = keyframes.value(property_name).toArray();
+            for (qsizetype key_index = 0; key_index < values.size(); ++key_index) {
+                auto key = values[key_index].toObject();
+                key.remove(QStringLiteral("interpolation"));
+                key.remove(QStringLiteral("easing"));
+                values[key_index] = key;
+            }
+            keyframes.insert(property_name, values);
+        }
+        layer.insert(QStringLiteral("keyframes"), keyframes);
+        legacy_v2_layers[layer_index] = layer;
+    }
+    legacy_v2.insert(QStringLiteral("layers"), legacy_v2_layers);
+    writeBytes(document_path, QJsonDocument(legacy_v2).toJson());
+    const auto migrated_v2 = motion::persistence::MotionDocumentStore::load(document_path);
+    const auto migrated_curve_layer = std::find_if(
+        migrated_v2.layers.begin(), migrated_v2.layers.end(), [](const auto& layer) {
+            return !layer.keyframes.position_x.empty();
+        });
+    require(migrated_curve_layer != migrated_v2.layers.end() &&
+                std::all_of(migrated_curve_layer->keyframes.position_x.begin(),
+                    migrated_curve_layer->keyframes.position_x.end(), [](const auto& key) {
+                        return key.interpolation ==
+                            creative_suite::animation::InterpolationMode::Linear;
+                    }),
+            "version 2 keys migrate with Linear interpolation");
+    motion::persistence::MotionDocumentStore::save(document_path, migrated_v2);
+    require(QJsonDocument::fromJson(readBytes(document_path)).object()
+                .value(QStringLiteral("version")).toInt() == 3,
+            "saving a loaded v2 project upgrades it to v3");
 
     motion::persistence::MotionDocumentStore::save(document_path, populated);
     auto invalid_text = valid_json;
@@ -259,6 +313,29 @@ int main(int argc, char** argv)
     *text_layer = text_layer_object;
     invalid_text.insert(QStringLiteral("layers"), invalid_content_layers);
     requireInvalidLoad(invalid_text, "invalid text-box dimensions are rejected");
+
+    auto invalid_curve = valid_json;
+    auto invalid_curve_layers = invalid_curve.value(QStringLiteral("layers")).toArray();
+    auto curve_layer = std::find_if(invalid_curve_layers.begin(), invalid_curve_layers.end(),
+        [](const QJsonValue& value) {
+            return !value.toObject().value(QStringLiteral("keyframes")).toObject()
+                .value(QStringLiteral("position_x")).toArray().isEmpty();
+        });
+    require(curve_layer != invalid_curve_layers.end(), "serialized curve layer exists");
+    auto curve_layer_object = curve_layer->toObject();
+    auto curve_keyframes = curve_layer_object.value(QStringLiteral("keyframes")).toObject();
+    auto curve_keys = curve_keyframes.value(QStringLiteral("position_x")).toArray();
+    auto curve_key = curve_keys.at(0).toObject();
+    auto easing = curve_key.value(QStringLiteral("easing")).toObject();
+    easing.insert(QStringLiteral("x1"), 0.9);
+    easing.insert(QStringLiteral("x2"), 0.1);
+    curve_key.insert(QStringLiteral("easing"), easing);
+    curve_keys[0] = curve_key;
+    curve_keyframes.insert(QStringLiteral("position_x"), curve_keys);
+    curve_layer_object.insert(QStringLiteral("keyframes"), curve_keyframes);
+    *curve_layer = curve_layer_object;
+    invalid_curve.insert(QStringLiteral("layers"), invalid_curve_layers);
+    requireInvalidLoad(invalid_curve, "invalid easing controls are rejected");
 
     auto invalid_color = valid_json;
     auto invalid_color_layers = invalid_color.value(QStringLiteral("layers")).toArray();

@@ -182,6 +182,12 @@ public:
         creative_suite::animation::TransformProperty property,
         std::int64_t local_frame,
         double value) noexcept;
+    [[nodiscard]] bool setLayerKeyframeInterpolation(
+        LayerId id,
+        creative_suite::animation::TransformProperty property,
+        std::int64_t local_frame,
+        creative_suite::animation::InterpolationMode interpolation,
+        const creative_suite::animation::CubicBezierEasing& easing) noexcept;
     [[nodiscard]] bool removeLayerKeyframe(
         LayerId id,
         creative_suite::animation::TransformProperty property,

@@ -23,7 +23,7 @@ shared.
 Motion Studio owns `MotionRecoveryStore`, its versioned recovery wrapper, the
 autosave preferences, and the recovery-management dialog. The store reuses the
 native document serializer and its atomic `QSaveFile` validation while writing
-the native `.motion` document at version 2. A recovery payload stores the complete
+the native `.motion` document at version 3. A recovery payload stores the complete
 composition and Media Pool plus the original document path and session ID; it
 does not store decoded caches, playhead, zoom, selection, or Undo/Redo history.
 
@@ -64,26 +64,32 @@ not depend on Video Editor timecode types or APIs.
 ### Transform keyframe editing
 
 Motion Studio stores transform keys as layer-local frames and uses the shared
-linear evaluator in its preview worker for both manual seeks and playback. A
-layer disclosure reveals its Transform group, whose own disclosure reveals
+animation evaluator in its preview, playback, and export paths. Each key stores
+the outgoing segment's interpolation; the current choices are Linear and
+bounded cubic Bezier easing. The expandable Graph Editor is Motion Studio UI:
+it displays the selected transform property's value curve, supports segment
+selection, editable Bezier handles, and Linear, Ease In, Ease Out, and Ease
+In/Out presets. Presets and completed handle drags each create one Undo action.
+Graph panel visibility and segment selection are UI state and are not saved.
+
+A layer disclosure reveals its Transform group, whose own disclosure reveals
 five property tracks. The layer name is omitted from the left header and stays
 on the timeline clip. Markers are mapped to composition time by adding the
-layer start frame. Clicking a marker seeks,
-and dragging moves it within the layer duration. Collision-safe movement and
-key removal are application-owned `CompositionDocument` operations. The
-inspector edits base values when no keys exist, edits key values at keyed
-frames, and shows read-only interpolated values between keys. Version 2 keeps
-the existing keyframe fields and local-frame semantics unchanged. Expansion is UI
-state, starts collapsed on New/Open, and is not persisted. Adding a key from
-the inspector expands both levels. Easing, Bezier curves, and other
-interpolation modes remain open.
+layer start frame. Clicking a marker seeks, and dragging moves it within the
+layer duration. Collision-safe movement and key removal are application-owned
+`CompositionDocument` operations. The inspector edits base values when no keys
+exist, edits key values at keyed frames, and shows evaluated read-only values
+between keys. `.motion` v3 stores interpolation and normalized control points;
+v1 and v2 keys migrate as Linear. Layer expansion is UI state, starts collapsed
+on New/Open, and is not persisted. Adding a key from the inspector expands
+both levels.
 
 ## Shared library candidates
 
 | Library | Current boundary | Motion Studio use |
 | --- | --- | --- |
 | creative-suite::media-frame | creative_suite::media::RgbaFrame owns RGBA8 pixel storage and stride. It does not define a color space. | Shared frame handoff between decoders, raster layers, and composition. |
-| creative-suite::animation | 2D transform data, keyframe storage, validation, and linear evaluation. It has no timeline or document dependency. | Evaluate the five transform properties for Motion Studio image, video, text, and shape layers. Motion Studio owns key editing controls, property tracks, and frame mapping. |
+| creative-suite::animation | 2D transform data, keyframe storage, interpolation/easing validation, and linear/cubic-Bezier evaluation. It has no timeline, UI, or document dependency. | Evaluate the five transform properties consistently for Motion Studio preview, playback, and export. Motion Studio owns the Graph Editor, presets, history actions, and frame mapping. |
 | creative-suite::composition | CPU composition of raster frames using shared transforms, opacity, and alpha coverage. It has no UI, timeline, or project dependency. | Motion Studio uses it to composite active image, video, text, and shape frames in document order. Text and vector-shape rasterization remains Motion Studio-owned. |
 | creative-suite::diagnostics | Structured local logging with caller-selected application log directories; the legacy no-argument default remains compatible with the Video Editor. | Reuse with a Motion Studio-specific application identifier and log directory. |
 | creative-suite::video-media | FFmpeg video playback session with a neutral optional DecodeObserver. It depends on FFmpeg and shared diagnostics, not preview UI. | Motion Studio keeps one playback session per source on its preview worker and decodes the source frame for the current timeline position. Its application-owned monotonic clock schedules composition frames; audio remains out of scope. |
@@ -107,10 +113,13 @@ loads another editor's executable or installation.
   `[0, 1]`, and inserts or replaces a key at that frame while keeping the list
   sorted. Callers editing the public vectors directly must preserve unique,
   ascending frame numbers.
-- Evaluation returns the base value when a property has no keys, clamps to the
-  first or last key outside the keyed range, and linearly interpolates between
-  adjacent keys. It does not provide easing, Bezier curves, subframe sampling,
-  or angular wraparound.
+- Evaluation returns the base value when a property has no keys and clamps to
+  the first or last key outside the keyed range. Between adjacent keys, the
+  left key's outgoing interpolation is applied to normalized segment progress,
+  then used to interpolate the property values. Cubic Bezier controls are
+  normalized, finite, bounded to `[0, 1]`, and constrained by `x1 <= x2`; they
+  cannot overshoot or reverse time. Subframe sampling and angular wraparound
+  remain unsupported.
 
 ### Raster composition
 
@@ -149,11 +158,12 @@ validation.
   preview worker, then sends those frames through the shared compositor.
   Content is static while transforms and transform keyframes apply normally.
   This CPU rasterization is provisional and does not establish a final renderer.
-- The shared animation evaluator is linear and now drives transform keyframes
-  in Motion Studio preview and playback. Basic key insertion, removal, marker
-  seeking, and marker movement are implemented for the five transform
-  properties. Rich editable curves, easing, and other interpolation behavior
-  remain open for a Motion Studio-owned or later shared contract.
+- The shared animation evaluator drives transform keyframes in Motion Studio
+  preview, playback, and export. Basic key insertion, removal, marker seeking,
+  and marker movement are implemented for the five transform properties. The
+  Graph Editor and easing presets are Motion Studio-owned; shared Linear and
+  bounded cubic Bezier segment evaluation is available to all consumers. More
+  interpolation modes and overshoot-capable curves remain open.
 - The current compositor always returns an opaque black canvas. Transparent
   composition/export and color management are not established by the current
   Motion Studio MVP scope; revisit them only if that scope changes.
@@ -251,7 +261,9 @@ the shared CPU compositor. Composition Undo/Redo is implemented in the Motion
 Studio application; Media Pool changes remain outside its history. Autosave
 and recovery use a version 1 wrapper, configurable timer, per-session untitled
 storage, saved-project sidecars, and recovery-management dialog. The `.motion`
-writer emits v2 and reads v1; other application formats remain unchanged.
+writer emits v3 and reads v1/v2; earlier keyframes migrate as Linear. The
+recovery wrapper remains at version 1 and accepts nested v1, v2, and v3
+documents. Other application formats remain unchanged.
 The Motion Studio timeline and export path consume shared media, playback,
 composition, diagnostics, and video-encoding libraries directly without
 linking Video Editor application types or targets. Layer insertion, timing,

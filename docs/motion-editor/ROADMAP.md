@@ -142,8 +142,15 @@ the Motion Studio implementation choices are finalized.
 - [x] Add transform keyframe editing to image and video layers for Position X/Y,
   Scale, Rotation, and Opacity. Expand a layer's Transform group to reveal its
   property tracks; add or remove keys from the inspector, seek by key marker,
-  and drag keys within the layer's duration. Use shared linear interpolation;
-  the keyframe payload fields remain unchanged in `.motion` v2.
+  and drag keys within the layer's duration. New segments default to Linear;
+  `.motion` v1 and v2 keys remain linear when migrated to v3.
+- [x] Add an expandable Graph Editor below the timeline for the selected
+  transform property. Edit segment easing with bounded cubic Bezier handles or
+  Linear, Ease In, Ease Out, and Ease In/Out presets. A preset or completed
+  handle drag is one Undo action; graph selection and panel visibility are UI
+  state. Preview, playback, and export use the same shared animation evaluator.
+  Save curves in `.motion` v3 while reading v1/v2 as Linear; keep the recovery
+  wrapper at v1 and accept nested documents through v3.
 - [x] Add bounded Undo/Redo for composition edits, including layer timing,
   order, visibility, transforms, and keyframes. Media Pool operations remain
   outside the history.
@@ -255,7 +262,7 @@ groups collapsed. Inserting a key from the inspector expands its layer and the
 Transform group.
 
 The transform inspector edits the base value when a property has no keys. For
-an animated property it displays the shared evaluator's linearly interpolated
+an animated property it displays the shared evaluator's interpolated
 value and is read-only between keys. Adding a key copies the currently
 evaluated value; at an existing key, the field edits that key. Removing the
 last key restores the base value. Key editing is available only when the
@@ -271,7 +278,7 @@ restarts from frame 0 when enabled. Playback stops on the last frame of the
 furthest layer, including hidden layers, and pressing Play at the end restarts
 from frame 0. Manual seeking pauses playback. The monotonic clock remains on
 schedule when rendering falls behind; intermediate preview frames may be
-skipped. Transform keyframes use the shared linear evaluator in the preview
+skipped. Transform keyframes use the shared curve evaluator in the preview
 worker. A completed frame from the current uninterrupted playback may still be
 presented; manual seeking or replacing the composition invalidates it. Playback
 extends the navigation range by one hour as needed and scrolls to keep the
@@ -310,8 +317,12 @@ header has no name while the clip retains it; expand a layer to show only
 Transform, then expand Transform to show the five properties; collapse and
 reopen each level; add Position and Opacity keys, inspect interpolated values,
 edit at a key, remove a key, drag a marker, and confirm a colliding move is
-rejected; scrub and play through the animation; create multiline Unicode text,
-change its font, size, alignment, box dimensions, and alpha color; create
+rejected; scrub and play through the animation; open the Graph Editor, select a
+property and segment, drag each Bezier handle, apply every easing preset, and
+verify Undo/Redo, preview, playback, and export use the curve; save and reopen a
+v3 project and confirm v1/v2 projects retain linear interpolation; create
+multiline Unicode text, change its font, size, alignment, box dimensions, and
+alpha color; create
 rectangles and ellipses, edit their dimensions, fill, optional stroke, and alpha;
 animate a text or shape transform, save and reopen it, and confirm content and
 keys persist; use **Edit > Undo** and **Edit > Redo** on layer insertion,
@@ -337,16 +348,18 @@ shape layers with a blank lead-in, and play the result in a media player. Cancel
 another export and verify an existing destination remains unchanged; choose an
 unavailable encoder if one is offered and confirm a detailed log entry appears.
 Motion Studio export is opaque and video-only; audio and alpha export remain
-open. Then close the application. Richer curves, interpolation, effects,
-platform validation, and performance profiling remain open.
+open. Then close the application. Overshoot-capable curves, additional
+interpolation modes, effects, platform validation, and performance profiling
+remain open.
 
 **Exit criteria:** a user can create, save, reopen, and preview a simple
 composition without losing its layer or frame-rate data.
 
 ### 3. Motion design MVP
 
-- [ ] Extend basic linear transform keyframes with editable property curves,
-  richer interpolation, and documented easing behavior.
+- [x] Extend transform keyframes with editable property curves and bounded
+  cubic Bezier easing; retain Linear as the default and migrate v1/v2 documents
+  as linear segments.
 - [ ] Add a simple effect set to the supported ordered text, vector-shape,
   raster-image, and video layers.
 - [x] Complete the first standalone save/reopen, preview, and rendered-video

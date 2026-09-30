@@ -31,6 +31,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/shortcut_settings_dialog.h
     src/ui/preview_renderer.cpp
     src/ui/preview_renderer.h
+    src/ui/property_curve_editor.cpp
+    src/ui/property_curve_editor.h
     src/ui/composition_frame_renderer.cpp
     src/ui/composition_frame_renderer.h
     src/ui/motion_video_export.cpp

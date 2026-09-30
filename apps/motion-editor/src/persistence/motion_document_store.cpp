@@ -462,6 +462,15 @@ QJsonArray writeKeyframes(const std::vector<creative_suite::animation::Keyframe>
         QJsonObject object;
         object.insert(QStringLiteral("frame"), encodedInt64(keyframe.frame));
         object.insert(QStringLiteral("value"), keyframe.value);
+        object.insert(QStringLiteral("interpolation"),
+            keyframe.interpolation == creative_suite::animation::InterpolationMode::CubicBezier
+                ? QStringLiteral("cubic_bezier") : QStringLiteral("linear"));
+        QJsonObject easing;
+        easing.insert(QStringLiteral("x1"), keyframe.easing.x1);
+        easing.insert(QStringLiteral("y1"), keyframe.easing.y1);
+        easing.insert(QStringLiteral("x2"), keyframe.easing.x2);
+        easing.insert(QStringLiteral("y2"), keyframe.easing.y2);
+        object.insert(QStringLiteral("easing"), easing);
         array.append(object);
     }
     return array;
@@ -520,9 +529,12 @@ QJsonObject writeLayer(const CompositionLayer& layer,
 std::vector<creative_suite::animation::Keyframe> parseKeyframes(
     const QJsonArray& array,
     const std::filesystem::path& path,
-    std::size_t& keyframe_count)
+    std::size_t& keyframe_count,
+    int document_version)
 {
     using creative_suite::animation::Keyframe;
+    using creative_suite::animation::InterpolationMode;
+    using creative_suite::animation::validKeyframeInterpolation;
     if (keyframe_count + static_cast<std::size_t>(array.size()) >
         static_cast<std::size_t>(kMaximumKeyframeCount)) {
         fail(MotionDocumentErrorCode::InvalidValue, path,
@@ -537,8 +549,31 @@ std::vector<creative_suite::animation::Keyframe> parseKeyframes(
                  QStringLiteral("A keyframe entry must be an object."));
         }
         const auto object = value.toObject();
-        result.push_back({requiredInt64(object, "frame", path),
-                          requiredNumber(object, "value", path)});
+        Keyframe keyframe;
+        keyframe.frame = requiredInt64(object, "frame", path);
+        keyframe.value = requiredNumber(object, "value", path);
+        if (document_version >= 3) {
+            const auto interpolation = requiredString(object, "interpolation", path);
+            if (interpolation == QLatin1String("linear")) {
+                keyframe.interpolation = InterpolationMode::Linear;
+            } else if (interpolation == QLatin1String("cubic_bezier")) {
+                keyframe.interpolation = InterpolationMode::CubicBezier;
+            } else {
+                fail(MotionDocumentErrorCode::InvalidValue, path,
+                     QStringLiteral("A keyframe interpolation mode is not supported."));
+            }
+            const auto easing = requiredObject(object, "easing", path);
+            keyframe.easing = {
+                requiredNumber(easing, "x1", path),
+                requiredNumber(easing, "y1", path),
+                requiredNumber(easing, "x2", path),
+                requiredNumber(easing, "y2", path)};
+            if (!validKeyframeInterpolation(keyframe.interpolation, keyframe.easing)) {
+                fail(MotionDocumentErrorCode::InvalidValue, path,
+                     QStringLiteral("A keyframe contains invalid easing controls."));
+            }
+        }
+        result.push_back(keyframe);
     }
     return result;
 }
@@ -582,15 +617,20 @@ CompositionLayer parseLayer(const QJsonValue& value,
 
     const auto keyframes = requiredObject(object, "keyframes", document_path);
     layer.keyframes.position_x = parseKeyframes(
-        requiredArray(keyframes, "position_x", document_path), document_path, keyframe_count);
+        requiredArray(keyframes, "position_x", document_path), document_path,
+        keyframe_count, document_version);
     layer.keyframes.position_y = parseKeyframes(
-        requiredArray(keyframes, "position_y", document_path), document_path, keyframe_count);
+        requiredArray(keyframes, "position_y", document_path), document_path,
+        keyframe_count, document_version);
     layer.keyframes.scale = parseKeyframes(
-        requiredArray(keyframes, "scale", document_path), document_path, keyframe_count);
+        requiredArray(keyframes, "scale", document_path), document_path,
+        keyframe_count, document_version);
     layer.keyframes.rotation = parseKeyframes(
-        requiredArray(keyframes, "rotation", document_path), document_path, keyframe_count);
+        requiredArray(keyframes, "rotation", document_path), document_path,
+        keyframe_count, document_version);
     layer.keyframes.opacity = parseKeyframes(
-        requiredArray(keyframes, "opacity", document_path), document_path, keyframe_count);
+        requiredArray(keyframes, "opacity", document_path), document_path,
+        keyframe_count, document_version);
     if (document_version == 1 && layer.kind == LayerKind::Text) {
         layer.content = model::defaultTextLayerContent(canvas_size);
     } else if (document_version == 1 && layer.kind == LayerKind::Shape) {
@@ -632,7 +672,8 @@ MotionProjectData parseDocument(const QJsonObject& root,
              QStringLiteral("The file is not a Motion Studio document."));
     }
     const int version = requiredInt(root, "version", document_path);
-    if (version != 1 && version != MotionDocumentStore::current_format_version) {
+    if (version != 1 && version != 2 &&
+        version != MotionDocumentStore::current_format_version) {
         fail(MotionDocumentErrorCode::UnsupportedVersion, document_path,
              QStringLiteral("Motion Studio document version %1 is not supported.").arg(version));
     }

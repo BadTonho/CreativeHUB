@@ -16,6 +16,7 @@
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QSlider>
 #include <QTimer>
@@ -337,6 +338,8 @@ public:
     std::function<void(model::LayerId, TransformProperty, std::int64_t)> keyframe_selected;
     std::function<bool(model::LayerId, TransformProperty, std::int64_t, std::int64_t)>
         keyframe_move;
+    std::function<void(model::LayerId, TransformProperty, std::int64_t)>
+        curve_segment_selected;
     std::function<void(int)> zoom_step_requested;
     std::function<void(int)> viewport_width_changed;
 
@@ -550,8 +553,11 @@ protected:
         const auto position = event->position().toPoint();
         const int row_index = rowAtY(position.y());
         if (row_index < 0) return;
-        const auto& visual = visual_rows_[static_cast<std::size_t>(row_index)];
-        const auto& row = rows_[visual.layer_index];
+        // Selecting a layer refreshes this widget's row vectors. Keep local
+        // copies so the selection callback cannot invalidate data used by the
+        // remainder of this mouse-press event.
+        const auto visual = visual_rows_[static_cast<std::size_t>(row_index)];
+        const auto row = rows_[visual.layer_index];
         if (visual.kind == VisualTimelineRow::Kind::Layer && position.x() < 29) {
             if (layer_visibility) layer_visibility(row.id, !row.visible);
             event->accept();
@@ -565,11 +571,17 @@ protected:
             const int lane_center_y = row_index * kTimelineRowHeight + kTimelineRowHeight / 2;
             const auto& keyframes = creative_suite::animation::keyframesFor(
                 row.keyframes, property);
-            for (const auto& keyframe : keyframes) {
+            for (std::size_t key_index = 0; key_index < keyframes.size(); ++key_index) {
+                const auto& keyframe = keyframes[key_index];
                 if (keyframe.frame < 0 || keyframe.frame >= row.duration_frames) continue;
                 const int marker_x = viewMapping().xForFrame(row.start_frame + keyframe.frame);
                 if (std::abs(position.x() - marker_x) <= 8 &&
                     std::abs(position.y() - lane_center_y) <= 9) {
+                    if (curve_segment_selected && keyframes.size() >= 2) {
+                        const auto segment_index = std::min(key_index, keyframes.size() - 2);
+                        curve_segment_selected(row.id, property,
+                                               keyframes[segment_index].frame);
+                    }
                     interaction_mode_ = InteractionMode::MoveKeyframe;
                     interaction_property_ = property;
                     interaction_keyframe_frame_ = keyframe.frame;
@@ -577,6 +589,20 @@ protected:
                     event->accept();
                     return;
                 }
+            }
+            if (curve_segment_selected && keyframes.size() >= 2) {
+                const auto clicked_local_frame = std::max<std::int64_t>(0,
+                    frameAtX(position.x()) - row.start_frame);
+                const auto upper = std::upper_bound(keyframes.begin(), keyframes.end(),
+                    clicked_local_frame, [](std::int64_t frame, const auto& keyframe) {
+                        return frame < keyframe.frame;
+                    });
+                const auto segment_index = upper == keyframes.begin()
+                    ? std::size_t{0}
+                    : std::min(static_cast<std::size_t>(
+                        std::distance(keyframes.begin(), upper) - 1), keyframes.size() - 2);
+                curve_segment_selected(row.id, property,
+                                       keyframes[segment_index].frame);
             }
             interaction_mode_ = InteractionMode::None;
             interaction_layer_id_ = 0;
@@ -1165,10 +1191,15 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
     frame_rate_label_->setObjectName(QStringLiteral("motion-timeline-frame-rate"));
     next_frame_button_ = new QPushButton(QStringLiteral("Next frame"), this);
     next_frame_button_->setObjectName(QStringLiteral("motion-timeline-next-frame"));
+    graph_editor_button_ = new QPushButton(QStringLiteral("Graph Editor"), this);
+    graph_editor_button_->setObjectName(QStringLiteral("motion-timeline-graph-editor-toggle"));
+    graph_editor_button_->setCheckable(true);
+    graph_editor_button_->setToolTip(QStringLiteral("Show or hide the property curve editor"));
     controls->addWidget(previous_frame_button_);
     controls->addWidget(play_pause_button_);
     controls->addWidget(loop_button_);
     controls->addWidget(display_mode_combo_);
+    controls->addWidget(graph_editor_button_);
     controls->addWidget(frame_label_);
     controls->addStretch(1);
     controls->addWidget(zoom_out_button_);
@@ -1234,6 +1265,8 @@ TimelineNavigator::TimelineNavigator(QWidget* parent)
             updateViewWidgets();
             updateControls();
         });
+    connect(graph_editor_button_, &QPushButton::toggled,
+            this, &TimelineNavigator::graphEditorToggled);
     connect(ruler_, &TimelineRuler::seekRequested, this, [this](qint64 frame) {
         seekToFrame(static_cast<std::int64_t>(frame));
     });
@@ -1472,6 +1505,13 @@ void TimelineNavigator::setTransformGroupExpanded(model::LayerId id, bool expand
     static_cast<LayerRowsWidget*>(layer_rows_)->setTransformGroupExpanded(id, expanded);
 }
 
+void TimelineNavigator::setGraphEditorOpen(bool open)
+{
+    if (graph_editor_button_ == nullptr || graph_editor_button_->isChecked() == open) return;
+    const QSignalBlocker blocker(graph_editor_button_);
+    graph_editor_button_->setChecked(open);
+}
+
 void TimelineNavigator::setMediaDropHandler(
     std::function<void(const std::filesystem::path&, std::int64_t, model::LayerId)> handler)
 {
@@ -1529,6 +1569,14 @@ void TimelineNavigator::setKeyframeMoveHandler(
                        std::int64_t)> handler)
 {
     static_cast<LayerRowsWidget*>(layer_rows_)->keyframe_move = std::move(handler);
+}
+
+void TimelineNavigator::setCurveSegmentSelectedHandler(
+    std::function<void(model::LayerId,
+                       creative_suite::animation::TransformProperty,
+                       std::int64_t)> handler)
+{
+    static_cast<LayerRowsWidget*>(layer_rows_)->curve_segment_selected = std::move(handler);
 }
 
 void TimelineNavigator::seekToFrame(std::int64_t frame)

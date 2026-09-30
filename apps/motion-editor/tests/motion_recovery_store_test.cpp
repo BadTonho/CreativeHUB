@@ -96,6 +96,14 @@ motion::model::MotionProjectData projectData(
     require(composition.setLayerKeyframe(
                 id, creative_suite::animation::TransformProperty::Opacity, 20, 0.4),
             "recovery fixture stores keyframes");
+    require(composition.setLayerKeyframe(
+                id, creative_suite::animation::TransformProperty::Opacity, 40, 0.9),
+            "recovery fixture stores an animation segment");
+    require(composition.setLayerKeyframeInterpolation(
+                id, creative_suite::animation::TransformProperty::Opacity, 20,
+                creative_suite::animation::InterpolationMode::CubicBezier,
+                {0.35, 0.0, 0.65, 1.0}),
+            "recovery fixture stores easing controls");
     LayerId text_id = 0;
     require(composition.addContentLayer(LayerKind::Text, "Recovery title", 5, &text_id),
             "recovery fixture can add text content");

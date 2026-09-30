@@ -42,7 +42,7 @@ private:
 
 class MotionDocumentStore final {
 public:
-    static constexpr int current_format_version = 2;
+    static constexpr int current_format_version = 3;
     static constexpr const char* format_identifier = "creative-suite.motion-studio";
 
     [[nodiscard]] static model::MotionProjectData load(

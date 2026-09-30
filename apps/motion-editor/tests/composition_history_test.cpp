@@ -59,6 +59,11 @@ void testUndoRedoAndSelection()
     require(document.setLayerKeyframe(
                 front, creative_suite::animation::TransformProperty::PositionX, 4, 0.75),
             "keyframe mutation succeeds");
+    require(document.setLayerKeyframeInterpolation(
+                front, creative_suite::animation::TransformProperty::PositionX, 4,
+                creative_suite::animation::InterpolationMode::CubicBezier,
+                {0.42, 0.0, 1.0, 1.0}),
+            "curve edit mutation succeeds");
     require(document.moveLayerKeyframe(
                 front, creative_suite::animation::TransformProperty::PositionX, 4, 6),
             "keyframe movement succeeds");
@@ -83,7 +88,9 @@ void testUndoRedoAndSelection()
                 redone->document.layers()[0].duration_frames == 8 &&
                 redone->document.layers()[0].transform.position_x == 0.75 &&
                 redone->document.layers()[0].keyframes.position_x ==
-                    std::vector<creative_suite::animation::Keyframe>{{6, 0.75}} &&
+                    std::vector<creative_suite::animation::Keyframe>{
+                        {6, 0.75, creative_suite::animation::InterpolationMode::CubicBezier,
+                         {0.42, 0.0, 1.0, 1.0}}} &&
                 !history.canRedo() && history.canUndo(),
             "Redo reapplies the complete composition edit state");
 }

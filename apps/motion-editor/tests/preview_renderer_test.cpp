@@ -299,13 +299,19 @@ int main(int argc, char* argv[])
                     animated_layer.keyframes,
                     creative_suite::animation::TransformProperty::Opacity, 10, 1.0),
             "preview animation fixture accepts opacity keys");
+    require(creative_suite::animation::setKeyframeInterpolation(
+                animated_layer.keyframes,
+                creative_suite::animation::TransformProperty::Opacity, 0,
+                creative_suite::animation::InterpolationMode::CubicBezier,
+                {0.42, 0.0, 1.0, 1.0}),
+            "preview animation fixture accepts an easing curve");
     motion::ui::PreviewRequest animated_request{
         {2, 2}, {24, 1}, {animated_layer}};
     const auto animated_generation = renderer.submit(std::move(animated_request));
     require(waitFor([&] { return applied_generation == animated_generation; }) &&
                 applied_frame != nullptr &&
-                applied_frame->rgba_pixels[0] >= 126 && applied_frame->rgba_pixels[0] <= 129,
-            "preview evaluates linear opacity at the exact intermediate local frame");
+                applied_frame->rgba_pixels[0] >= 75 && applied_frame->rgba_pixels[0] <= 90,
+            "preview evaluates the Bézier-eased opacity at an intermediate local frame");
     animated_layer.local_frame = 10;
     const auto endpoint_generation = renderer.submit(motion::ui::PreviewRequest{
         {2, 2}, {24, 1}, {animated_layer}});

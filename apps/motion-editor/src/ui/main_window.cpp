@@ -4,6 +4,7 @@
 #include "autosave_recovery_dialog.h"
 #include "media_pool_widget.h"
 #include "new_composition_dialog.h"
+#include "property_curve_editor.h"
 #include "../persistence/motion_document_store.h"
 #include "preview_renderer.h"
 #include "motion_video_export.h"
@@ -57,6 +58,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <stdexcept>
@@ -127,6 +129,8 @@ std::string utf8String(const QString& value)
 }
 
 using TransformProperty = creative_suite::animation::TransformProperty;
+using InterpolationMode = creative_suite::animation::InterpolationMode;
+using CubicBezierEasing = creative_suite::animation::CubicBezierEasing;
 
 constexpr std::array<TransformProperty, 5> kTransformProperties{{
     TransformProperty::PositionX,
@@ -135,6 +139,30 @@ constexpr std::array<TransformProperty, 5> kTransformProperties{{
     TransformProperty::Rotation,
     TransformProperty::Opacity,
 }};
+
+std::pair<InterpolationMode, CubicBezierEasing> easingForPreset(int preset_index)
+{
+    switch (preset_index) {
+    case 1: return {InterpolationMode::CubicBezier, {0.42, 0.0, 1.0, 1.0}};
+    case 2: return {InterpolationMode::CubicBezier, {0.0, 0.0, 0.58, 1.0}};
+    case 3: return {InterpolationMode::CubicBezier, {0.42, 0.0, 0.58, 1.0}};
+    default: return {InterpolationMode::Linear, {}};
+    }
+}
+
+int curvePresetIndex(const creative_suite::animation::Keyframe& keyframe)
+{
+    if (keyframe.interpolation == InterpolationMode::Linear) return 0;
+    const std::array<CubicBezierEasing, 3> presets{{
+        {0.42, 0.0, 1.0, 1.0},
+        {0.0, 0.0, 0.58, 1.0},
+        {0.42, 0.0, 0.58, 1.0},
+    }};
+    for (std::size_t index = 0; index < presets.size(); ++index) {
+        if (keyframe.easing == presets[index]) return static_cast<int>(index) + 1;
+    }
+    return -1;
+}
 
 double transformPropertyValue(
     const creative_suite::animation::Transform2D& transform,
@@ -523,6 +551,7 @@ void MainWindow::createNewComposition()
         media_pool_->clear();
         preview_renderer_->resetSessions();
     }
+    resetCurveEditor();
     import_media_action_->setEnabled(true);
     timeline_->setCompositionTiming(settings->frame_rate);
     timeline_->setLayers(document_->layers());
@@ -1042,6 +1071,7 @@ void MainWindow::finishOpen(std::uint64_t generation,
         selected_layer_id_ = 0;
         if (workspace_ == nullptr) createWorkspace();
         else if (preview_renderer_) preview_renderer_->resetSessions();
+        resetCurveEditor();
         media_pool_->replaceLibrary(std::move(staged_library));
         timeline_->setCompositionTiming(document_->frameRate());
         timeline_->setLayers(document_->layers());
@@ -1655,15 +1685,21 @@ void MainWindow::createWorkspace()
     });
     timeline_->setLayerSelectedHandler([this](model::LayerId id) { selectLayer(id); });
     timeline_->setKeyframeSelectedHandler(
-        [this](model::LayerId id, TransformProperty, std::int64_t local_frame) {
+        [this](model::LayerId id, TransformProperty property, std::int64_t local_frame) {
             if (!document_ || timeline_ == nullptr) return;
             const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
                 [id](const auto& layer) { return layer.id == id; });
             if (found == document_->layers().end() || local_frame < 0 ||
                 local_frame >= found->duration_frames) return;
             selectLayer(id);
+            selectCurveSegment(id, property, local_frame);
             const auto composition_frame = found->timeline_start_frame + local_frame;
             timeline_->setCurrentFrame(composition_frame);
+        });
+    timeline_->setCurveSegmentSelectedHandler(
+        [this](model::LayerId id, TransformProperty property, std::int64_t local_frame) {
+            selectLayer(id);
+            selectCurveSegment(id, property, local_frame);
         });
     timeline_->setKeyframeMoveHandler(
         [this](model::LayerId id, TransformProperty property,
@@ -1750,6 +1786,53 @@ void MainWindow::createWorkspace()
                 syncTransformInspector();
                 requestPreview(timeline_ != nullptr && timeline_->isPlaying());
             });
+    connect(timeline_, &TimelineNavigator::graphEditorToggled,
+            this, [this](bool open) {
+                if (curve_editor_panel_ != nullptr) curve_editor_panel_->setVisible(open);
+                if (open) refreshCurveEditor();
+            });
+
+    curve_editor_panel_ = new QWidget(composition_splitter_);
+    curve_editor_panel_->setObjectName(QStringLiteral("motion-graph-editor-panel"));
+    curve_editor_panel_->setMinimumHeight(168);
+    auto* curve_panel_layout = new QVBoxLayout(curve_editor_panel_);
+    curve_panel_layout->setContentsMargins(6, 4, 6, 4);
+    curve_panel_layout->setSpacing(3);
+    auto* curve_panel_controls = new QHBoxLayout();
+    auto* curve_panel_title = new QLabel(QStringLiteral("Graph Editor"), curve_editor_panel_);
+    curve_panel_title->setObjectName(QStringLiteral("motion-graph-editor-title"));
+    curve_panel_controls->addWidget(curve_panel_title);
+    curve_panel_controls->addStretch(1);
+    curve_custom_label_ = new QLabel(QStringLiteral("Custom Bézier"), curve_editor_panel_);
+    curve_custom_label_->setObjectName(QStringLiteral("motion-curve-editor-custom-status"));
+    curve_custom_label_->hide();
+    curve_panel_controls->addWidget(curve_custom_label_);
+    curve_preset_combo_ = new QComboBox(curve_editor_panel_);
+    curve_preset_combo_->setObjectName(QStringLiteral("motion-curve-editor-preset"));
+    curve_preset_combo_->addItem(QStringLiteral("Linear"));
+    curve_preset_combo_->addItem(QStringLiteral("Ease In"));
+    curve_preset_combo_->addItem(QStringLiteral("Ease Out"));
+    curve_preset_combo_->addItem(QStringLiteral("Ease In/Out"));
+    curve_preset_combo_->setToolTip(
+        QStringLiteral("Set interpolation for the selected keyframe segment"));
+    curve_panel_controls->addWidget(curve_preset_combo_);
+    curve_panel_layout->addLayout(curve_panel_controls);
+    curve_editor_ = new PropertyCurveEditor(curve_editor_panel_);
+    curve_editor_->setSelectionHandler([this](std::int64_t local_start_frame) {
+        if (!curve_selection_) return;
+        curve_selection_->segment_start_frame = local_start_frame;
+        refreshCurveEditor();
+    });
+    curve_editor_->setEasingEditedHandler(
+        [this](std::int64_t local_start_frame, CubicBezierEasing easing) {
+            if (!curve_selection_) return;
+            curve_selection_->segment_start_frame = local_start_frame;
+            applyCurveEasing(local_start_frame, easing);
+        });
+    connect(curve_preset_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [this](int index) { applyCurvePreset(index); });
+    curve_panel_layout->addWidget(curve_editor_, 1);
+    curve_editor_panel_->hide();
 
     workspace_->addWidget(media_pool_);
     workspace_->addWidget(viewer_);
@@ -1760,8 +1843,10 @@ void MainWindow::createWorkspace()
     workspace_->setSizes({270, 800, 300});
     composition_splitter_->addWidget(workspace_);
     composition_splitter_->addWidget(timeline_);
+    composition_splitter_->addWidget(curve_editor_panel_);
     composition_splitter_->setStretchFactor(0, 1);
     composition_splitter_->setStretchFactor(1, 0);
+    composition_splitter_->setStretchFactor(2, 0);
     composition_splitter_->setSizes({570, 220});
     setCentralWidget(composition_splitter_);
     empty_state_ = nullptr;
@@ -1816,6 +1901,130 @@ void MainWindow::refreshTimeline()
     if (timeline_ == nullptr || !document_) return;
     timeline_->setLayers(document_->layers());
     timeline_->setSelectedLayerId(selected_layer_id_);
+    refreshCurveEditor();
+}
+
+void MainWindow::selectCurveSegment(
+    model::LayerId id,
+    TransformProperty property,
+    std::int64_t local_start_frame)
+{
+    if (!document_) return;
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [id](const auto& layer) { return layer.id == id; });
+    if (found == document_->layers().end()) return;
+    const auto& keys = creative_suite::animation::keyframesFor(found->keyframes, property);
+    std::int64_t segment_start = 0;
+    if (keys.size() >= 2) {
+        const auto upper = std::upper_bound(keys.begin(), keys.end(), local_start_frame,
+            [](std::int64_t frame, const auto& keyframe) {
+                return frame < keyframe.frame;
+            });
+        const auto segment_index = upper == keys.begin()
+            ? std::size_t{0}
+            : std::min(static_cast<std::size_t>(
+                std::distance(keys.begin(), upper) - 1), keys.size() - 2);
+        segment_start = keys[segment_index].frame;
+    }
+    curve_selection_ = CurveSelection{id, property, segment_start};
+    refreshCurveEditor();
+}
+
+void MainWindow::refreshCurveEditor()
+{
+    if (curve_editor_ == nullptr) return;
+    if (!document_ || !curve_selection_) {
+        curve_editor_->setCurve(0, TransformProperty::PositionX, {}, std::nullopt);
+        if (curve_preset_combo_ != nullptr) curve_preset_combo_->setEnabled(false);
+        if (curve_custom_label_ != nullptr) curve_custom_label_->hide();
+        return;
+    }
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == curve_selection_->layer_id; });
+    if (found == document_->layers().end()) {
+        curve_selection_.reset();
+        refreshCurveEditor();
+        return;
+    }
+    const auto& keys = creative_suite::animation::keyframesFor(
+        found->keyframes, curve_selection_->property);
+    if (keys.size() >= 2 && std::none_of(keys.begin(), keys.end(), [this](const auto& keyframe) {
+            return keyframe.frame == curve_selection_->segment_start_frame;
+        })) {
+        curve_selection_->segment_start_frame = keys.front().frame;
+    }
+    curve_editor_->setCurve(found->id, curve_selection_->property, keys,
+        keys.size() >= 2
+            ? std::optional<std::int64_t>(curve_selection_->segment_start_frame)
+            : std::nullopt);
+    const auto selected_key = std::lower_bound(keys.begin(), keys.end(),
+        curve_selection_->segment_start_frame, [](const auto& item, std::int64_t frame) {
+            return item.frame < frame;
+        });
+    const bool has_segment = selected_key != keys.end() &&
+        selected_key->frame == curve_selection_->segment_start_frame &&
+        std::next(selected_key) != keys.end();
+    if (curve_preset_combo_ != nullptr) {
+        const QSignalBlocker blocker(curve_preset_combo_);
+        curve_preset_combo_->setEnabled(has_segment);
+        if (has_segment) {
+            const int preset_index = curvePresetIndex(*selected_key);
+            curve_preset_combo_->setCurrentIndex(preset_index);
+            if (curve_custom_label_ != nullptr)
+                curve_custom_label_->setVisible(preset_index < 0);
+        } else {
+            curve_preset_combo_->setCurrentIndex(0);
+            if (curve_custom_label_ != nullptr) curve_custom_label_->hide();
+        }
+    }
+}
+
+void MainWindow::applyCurvePreset(int preset_index)
+{
+    if (preset_index < 0 || preset_index > 3 || !document_ || !curve_selection_) return;
+    finishPendingTransformEdit();
+    const auto [interpolation, easing] = easingForPreset(preset_index);
+    const auto before = captureEditState();
+    if (!document_->setLayerKeyframeInterpolation(
+            curve_selection_->layer_id, curve_selection_->property,
+            curve_selection_->segment_start_frame, interpolation, easing)) {
+        refreshCurveEditor();
+        return;
+    }
+    (void)recordCompositionEdit(before);
+    updateDocumentState();
+    refreshTimeline();
+    syncTransformInspector();
+    requestPreview();
+}
+
+void MainWindow::applyCurveEasing(
+    std::int64_t local_start_frame,
+    CubicBezierEasing easing)
+{
+    if (!document_ || !curve_selection_) return;
+    finishPendingTransformEdit();
+    auto before = captureEditState();
+    if (!document_->setLayerKeyframeInterpolation(
+            curve_selection_->layer_id, curve_selection_->property,
+            local_start_frame, InterpolationMode::CubicBezier, easing)) {
+        refreshCurveEditor();
+        return;
+    }
+    curve_selection_->segment_start_frame = local_start_frame;
+    (void)recordCompositionEdit(std::move(before));
+    updateDocumentState();
+    refreshTimeline();
+    syncTransformInspector();
+    requestPreview();
+}
+
+void MainWindow::resetCurveEditor()
+{
+    curve_selection_.reset();
+    if (curve_editor_panel_ != nullptr) curve_editor_panel_->hide();
+    if (timeline_ != nullptr) timeline_->setGraphEditorOpen(false);
+    refreshCurveEditor();
 }
 
 void MainWindow::selectLayer(model::LayerId id)
@@ -1829,6 +2038,11 @@ void MainWindow::selectLayer(model::LayerId id)
     if (found == layers.end()) return;
     selected_layer_id_ = id;
     timeline_->setSelectedLayerId(id);
+    if (!curve_selection_ || curve_selection_->layer_id != id) {
+        selectCurveSegment(id, TransformProperty::PositionX, 0);
+    } else {
+        refreshCurveEditor();
+    }
     syncTransformInspector();
     if (found->kind == model::LayerKind::Text || found->kind == model::LayerKind::Shape) {
         inspector_tabs_->setCurrentWidget(layer_content_inspector_);

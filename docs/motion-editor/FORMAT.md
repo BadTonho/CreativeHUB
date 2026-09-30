@@ -1,7 +1,7 @@
 # Motion Studio Native Document Format
 
 **Status:** provisional implementation contract. The `.motion` extension and
-version 2 schema may change before a stable release. This format is separate
+version 3 schema may change before a stable release. This format is separate
 from the Video Editor `.csp` project and Image Editor `.cimg` document.
 
 ## File identity and versioning
@@ -11,18 +11,18 @@ Motion Studio documents are UTF-8 JSON objects with these root fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite.motion-studio`. |
-| `version` | integer | Current schema version is `2`. |
+| `version` | integer | Current schema version is `3`. |
 | `composition` | object | Canvas size and exact rational frame rate. |
 | `media_pool` | object | All bins and media entries, including unused entries. |
 | `layers` | array | Ordered layers in back-to-front composition order. |
 
-Motion Studio reads versions 1 and 2. Version 1 text and shape layers had no
+Motion Studio reads versions 1, 2, and 3. Version 1 text and shape layers had no
 typed content, so they open with the current default text or rectangle content
-for their canvas. Saving a version 1 document writes it as version 2. Motion
-Studio rejects malformed data, an unknown format identifier, invalid values,
-and unsupported future versions before applying the file. A failed Open leaves
-the current composition intact. A future-version file is never rewritten by
-Open.
+for their canvas. Versions 1 and 2 use linear keyframe interpolation. Saving an
+older document writes it as version 3. Motion Studio rejects malformed data, an
+unknown format identifier, invalid values, and unsupported future versions
+before applying the file. A failed Open leaves the current composition intact.
+A future-version file is never rewritten by Open.
 
 ## Serialized values
 
@@ -58,6 +58,16 @@ integer `stroke_width_pixels`. Text boxes and shape dimensions are measured in
 canvas pixels before layer transforms. A zero stroke width disables the shape
 stroke. Color channels are integers from 0 through 255, including alpha.
 
+Version 3 adds outgoing interpolation data to each transform keyframe. The
+`interpolation` value is `linear` or `cubic_bezier`; `easing` contains normalized
+`x1`, `y1`, `x2`, and `y2` controls for the segment from this key to the next.
+Bezier controls must be finite and within `[0, 1]`, with `x1 <= x2`, so the
+curve has no temporal reversal or value overshoot. The last key has no outgoing
+segment but is serialized consistently. Linear keys use default one-third and
+two-thirds controls, which do not affect linear evaluation. Versions 1 and 2
+load keys as linear. Interpolation changes timing between key values only;
+property endpoints and layer timing are unchanged.
+
 New Text layers default to `Text`, Sans Serif, 48 pixels, centered white text,
 and a word-wrapped box at 80% of canvas width by 50% of canvas height. New
 Rectangle and Ellipse layers default to one-quarter canvas width and height,
@@ -69,9 +79,10 @@ five transform properties and their keyframes apply to these layers.
 Frame counts and layer IDs are strings so JSON number precision cannot change
 64-bit values. Keyframe frame numbers are local to their layer/property and
 are stored as decimal strings. Keyframes must be nonnegative, strictly
-increasing, and valid for their transform property. Both supported versions
+increasing, and valid for their transform property. All supported versions
 validate layer IDs, timing arithmetic, media references, transforms, canvas
 dimensions, and the exact supported frame rate before saving or loading.
+Version 3 also validates interpolation modes and Bezier controls.
 
 ## Media paths and caches
 
@@ -101,7 +112,7 @@ UTF-8 JSON wrapper uses format identifier
 `creative-suite.motion-studio-recovery` and wrapper version `1`. Its fields are
 `format`, `version`, `target_document_path`, `session_id`, and `document`. The
 `document` value uses the same validated payload described above and may be
-version 1 or 2; preview caches and Undo/Redo history are not included. The
+version 1, 2, or 3; preview caches and Undo/Redo history are not included. The
 wrapper remains version 1 and its nested document is written atomically with
 `QSaveFile`.
 
@@ -150,6 +161,6 @@ These are implementation safeguards, not product targets.
 
 Serialized Undo/Redo history, export settings, media relinking UI, migrations
 for future schema revisions, and cross-application handoff are not part of
-version 2. Undo/Redo exists only in the current editing session. Autosave and
+version 3. Undo/Redo exists only in the current editing session. Autosave and
 recovery metadata are stored in the separate wrapper described above.
 `.csp` and `.cimg` are unchanged.

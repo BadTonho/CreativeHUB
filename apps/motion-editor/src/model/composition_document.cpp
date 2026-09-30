@@ -121,9 +121,8 @@ bool validContentForKind(LayerKind kind, const LayerContent& content) noexcept
 
 bool validLayer(const CompositionLayer& layer) noexcept
 {
-    using creative_suite::animation::TransformProperty;
-    using creative_suite::animation::validKeyframeValue;
     using creative_suite::animation::validTransform;
+    using creative_suite::animation::validTransformKeyframes;
 
     if (layer.id == 0 || !validLayerKind(layer.kind) || layer.timeline_start_frame < 0 ||
         layer.duration_frames < 0 ||
@@ -133,6 +132,7 @@ bool validLayer(const CompositionLayer& layer) noexcept
         layer.maximum_timeline_duration_frames < 0 ||
         !std::isfinite(layer.source_frame_rate) || layer.source_frame_rate < 0.0 ||
         !validTransform(layer.transform) ||
+        !validTransformKeyframes(layer.keyframes) ||
         !validContentForKind(layer.kind, layer.content)) {
         return false;
     }
@@ -148,22 +148,7 @@ bool validLayer(const CompositionLayer& layer) noexcept
         return false;
     }
 
-    const auto valid_keyframes = [](const auto& frames, TransformProperty property) {
-        std::int64_t previous_frame = -1;
-        for (const auto& keyframe : frames) {
-            if (keyframe.frame < 0 || keyframe.frame <= previous_frame ||
-                !validKeyframeValue(property, keyframe.value)) {
-                return false;
-            }
-            previous_frame = keyframe.frame;
-        }
-        return true;
-    };
-    return valid_keyframes(layer.keyframes.position_x, TransformProperty::PositionX) &&
-        valid_keyframes(layer.keyframes.position_y, TransformProperty::PositionY) &&
-        valid_keyframes(layer.keyframes.scale, TransformProperty::Scale) &&
-        valid_keyframes(layer.keyframes.rotation, TransformProperty::Rotation) &&
-        valid_keyframes(layer.keyframes.opacity, TransformProperty::Opacity);
+    return true;
 }
 
 } // namespace
@@ -517,6 +502,18 @@ bool CompositionDocument::setLayerKeyframe(
     return layer != nullptr
         && creative_suite::animation::setKeyframe(
             layer->keyframes, property, local_frame, value);
+}
+
+bool CompositionDocument::setLayerKeyframeInterpolation(
+    LayerId id,
+    creative_suite::animation::TransformProperty property,
+    std::int64_t local_frame,
+    creative_suite::animation::InterpolationMode interpolation,
+    const creative_suite::animation::CubicBezierEasing& easing) noexcept
+{
+    auto* layer = findLayer(id);
+    return layer != nullptr && creative_suite::animation::setKeyframeInterpolation(
+        layer->keyframes, property, local_frame, interpolation, easing);
 }
 
 bool CompositionDocument::removeLayerKeyframe(

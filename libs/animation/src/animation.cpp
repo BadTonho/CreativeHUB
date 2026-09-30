@@ -57,6 +57,28 @@ void setBaseValue(
     }
 }
 
+double cubicCoordinate(double t, double first_control, double second_control) noexcept {
+    const double inverse = 1.0 - t;
+    return 3.0 * inverse * inverse * t * first_control +
+        3.0 * inverse * t * t * second_control + t * t * t;
+}
+
+double applyEasing(double progress, const CubicBezierEasing& easing) noexcept {
+    // Bisection is deterministic and robust for the monotonic x curve. Frame
+    // evaluation does not need sub-frame precision beyond double accuracy.
+    double low = 0.0;
+    double high = 1.0;
+    for (int iteration = 0; iteration < 48; ++iteration) {
+        const double middle = (low + high) * 0.5;
+        if (cubicCoordinate(middle, easing.x1, easing.x2) < progress) {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    return cubicCoordinate((low + high) * 0.5, easing.y1, easing.y2);
+}
+
 } // namespace
 
 bool validTransform(const Transform2D& transform) noexcept {
@@ -73,6 +95,56 @@ bool validKeyframeValue(TransformProperty property, double value) noexcept {
     if (property == TransformProperty::Scale) return value > 0.0;
     if (property == TransformProperty::Opacity) return value >= 0.0 && value <= 1.0;
     return true;
+}
+
+bool validCubicBezierEasing(const CubicBezierEasing& easing) noexcept {
+    return std::isfinite(easing.x1) && std::isfinite(easing.y1) &&
+        std::isfinite(easing.x2) && std::isfinite(easing.y2) &&
+        easing.x1 >= 0.0 && easing.x1 <= easing.x2 && easing.x2 <= 1.0 &&
+        easing.y1 >= 0.0 && easing.y1 <= 1.0 &&
+        easing.y2 >= 0.0 && easing.y2 <= 1.0;
+}
+
+bool validKeyframeInterpolation(
+    InterpolationMode interpolation,
+    const CubicBezierEasing& easing) noexcept {
+    return (interpolation == InterpolationMode::Linear ||
+            interpolation == InterpolationMode::CubicBezier) &&
+        validCubicBezierEasing(easing);
+}
+
+bool validTransformKeyframes(const TransformKeyframes& keyframes) noexcept {
+    const auto valid_property = [](const std::vector<Keyframe>& values,
+                                   TransformProperty property) {
+        std::int64_t previous = -1;
+        for (const auto& keyframe : values) {
+            if (keyframe.frame < 0 || keyframe.frame <= previous ||
+                !validKeyframeValue(property, keyframe.value) ||
+                !validKeyframeInterpolation(keyframe.interpolation, keyframe.easing)) {
+                return false;
+            }
+            previous = keyframe.frame;
+        }
+        return true;
+    };
+    return valid_property(keyframes.position_x, TransformProperty::PositionX) &&
+        valid_property(keyframes.position_y, TransformProperty::PositionY) &&
+        valid_property(keyframes.scale, TransformProperty::Scale) &&
+        valid_property(keyframes.rotation, TransformProperty::Rotation) &&
+        valid_property(keyframes.opacity, TransformProperty::Opacity);
+}
+
+double evaluateEasing(
+    double progress,
+    InterpolationMode interpolation,
+    const CubicBezierEasing& easing) noexcept {
+    if (!std::isfinite(progress)) return 0.0;
+    progress = std::clamp(progress, 0.0, 1.0);
+    if (interpolation != InterpolationMode::CubicBezier ||
+        !validKeyframeInterpolation(interpolation, easing)) {
+        return progress;
+    }
+    return applyEasing(progress, easing);
 }
 
 const std::vector<Keyframe>& keyframesFor(
@@ -98,8 +170,9 @@ double evaluateProperty(
     const auto& left = *(upper - 1);
     const auto distance = right.frame - left.frame;
     if (distance <= 0) return right.value;
-    const double fraction = static_cast<double>(local_frame - left.frame) /
+    double fraction = static_cast<double>(local_frame - left.frame) /
         static_cast<double>(distance);
+    fraction = evaluateEasing(fraction, left.interpolation, left.easing);
     return left.value + (right.value - left.value) * fraction;
 }
 
@@ -144,6 +217,23 @@ bool removeKeyframe(
         [local_frame](const auto& keyframe) { return keyframe.frame == local_frame; });
     if (found == values.end()) return false;
     values.erase(found);
+    return true;
+}
+
+bool setKeyframeInterpolation(
+    TransformKeyframes& keyframes,
+    TransformProperty property,
+    std::int64_t local_frame,
+    InterpolationMode interpolation,
+    const CubicBezierEasing& easing) noexcept {
+    if (local_frame < 0 || !validKeyframeInterpolation(interpolation, easing)) return false;
+    auto& values = mutableKeyframes(keyframes, property);
+    const auto found = std::find_if(values.begin(), values.end(),
+        [local_frame](const auto& keyframe) { return keyframe.frame == local_frame; });
+    if (found == values.end()) return false;
+    if (found->interpolation == interpolation && found->easing == easing) return false;
+    found->interpolation = interpolation;
+    found->easing = easing;
     return true;
 }
 
