@@ -52,6 +52,9 @@ target_link_libraries(creative-suite-motion-editor-preview-tests PRIVATE
     Qt6::Core
 )
 target_compile_features(creative-suite-motion-editor-preview-tests PRIVATE cxx_std_20)
+target_compile_definitions(creative-suite-motion-editor-preview-tests PRIVATE
+    MOTION_EDITOR_TEST_MEDIA_DIR="${PROJECT_SOURCE_DIR}/prototypes/testdata"
+)
 add_creative_suite_test(
     NAME creative-suite-motion-editor-preview
     COMMAND creative-suite-motion-editor-preview-tests)

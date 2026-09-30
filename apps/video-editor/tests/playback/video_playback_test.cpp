@@ -9,6 +9,7 @@ extern "C" {
 }
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -21,6 +22,28 @@ namespace {
 void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
 }
+
+class SeekRecordingObserver final : public creative_suite::media::DecodeObserver {
+public:
+    [[nodiscard]] bool is_enabled() const noexcept override { return true; }
+    void record_timing(
+        creative_suite::media::DecodeTimingStage,
+        std::uint64_t) noexcept override {}
+    void record_discarded_frame() noexcept override {}
+    void record_timestamp_seek(
+        creative_suite::media::DecodeSeekResult result,
+        std::uint64_t nanoseconds) noexcept override {
+        ++attempts;
+        elapsed_nanoseconds += nanoseconds;
+        if (result == creative_suite::media::DecodeSeekResult::Succeeded) ++successes;
+        else ++failures;
+    }
+
+    std::uint64_t attempts = 0;
+    std::uint64_t successes = 0;
+    std::uint64_t failures = 0;
+    std::uint64_t elapsed_nanoseconds = 0;
+};
 
 std::filesystem::path uniqueTestDirectory() {
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -170,6 +193,28 @@ std::filesystem::path createInterframeTestVideo(
     requireFfmpeg(av_write_trailer(writer.format),
                    "Finishing the interframe test container");
     return output_path;
+}
+
+void validateTimestampSeekObserver(const std::filesystem::path& path) {
+    SeekRecordingObserver observer;
+    auto session = creative_suite::media::VideoPlaybackSession::open(path, &observer);
+    const auto first = session->decode_next_frame();
+    require(first.has_value() && *first != nullptr,
+            "The observed session could not decode its first frame.");
+    const auto sought = session->decode_frame_at(30);
+    require(sought.has_value() && *sought != nullptr,
+            "The observed session could not seek to a later frame.");
+    require(observer.attempts == 1 && observer.successes == 1 &&
+                observer.failures == 0 && observer.elapsed_nanoseconds > 0,
+            "The shared decoder did not report its successful timestamp seek.");
+
+    const auto outside = session->decode_frame_at(1'000'000'000);
+    require(!outside.has_value(),
+            "The observed out-of-range seek unexpectedly produced a frame.");
+    require(observer.attempts >= 2 &&
+                observer.successes + observer.failures == observer.attempts &&
+                observer.elapsed_nanoseconds > 0,
+            "The shared decoder did not report its out-of-range timestamp-seek attempt.");
 }
 
 void validateForwardDecode(
@@ -507,10 +552,12 @@ int main(int argc, char* argv[]) {
         std::ofstream(empty_file, std::ios::binary).close();
         expectMediaError(empty_file, "Opening media for playback");
 
+        const auto interframe_path = createInterframeTestVideo(
+            directory / "interframe-seek.mkv");
+        validateTimestampSeekObserver(interframe_path);
+
         if (argc == 2) {
             validateReference(argv[1]);
-            const auto interframe_path = createInterframeTestVideo(
-                directory / "interframe-seek.mkv");
             auto& metrics = rendering::PreviewPerformanceMetrics::instance();
             metrics.setEnabled(true);
             validateLongSeekDecode(interframe_path, metrics);

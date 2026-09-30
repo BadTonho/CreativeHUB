@@ -38,6 +38,13 @@ public:
     void record_discarded_frame() noexcept override {
         rendering::PreviewPerformanceMetrics::instance().recordDecodeDiscardedFrame();
     }
+
+    void record_timestamp_seek(
+        creative_suite::media::DecodeSeekResult,
+        std::uint64_t) noexcept override {
+        // Preserve the Video Editor's established metrics schema and playback
+        // strategy; Motion Studio consumes timestamp-seek detail separately.
+    }
 };
 
 VideoEditorDecodeObserver& videoEditorDecodeObserver() noexcept {

@@ -45,6 +45,43 @@ std::string pathForLog(const std::filesystem::path& path)
     return {reinterpret_cast<const char*>(encoded.data()), encoded.size()};
 }
 
+class MotionDecodeObserver final : public creative_suite::media::DecodeObserver {
+public:
+    [[nodiscard]] bool is_enabled() const noexcept override
+    {
+        return diagnostics::PerformanceMetrics::instance().enabled();
+    }
+
+    void record_timing(
+        creative_suite::media::DecodeTimingStage,
+        std::uint64_t) noexcept override
+    {
+        // Motion records aggregate decode, timestamp-seek, and forward-decode
+        // timings at the operation boundary rather than duplicating FFmpeg
+        // substages in its one-second preview samples.
+    }
+
+    void record_discarded_frame() noexcept override
+    {
+        diagnostics::PerformanceMetrics::instance().recordDiscardedIntermediateFrame();
+    }
+
+    void record_timestamp_seek(
+        creative_suite::media::DecodeSeekResult result,
+        std::uint64_t nanoseconds) noexcept override
+    {
+        diagnostics::PerformanceMetrics::instance().recordTimestampSeek(
+            result == creative_suite::media::DecodeSeekResult::Succeeded,
+            nanoseconds);
+    }
+};
+
+MotionDecodeObserver& motionDecodeObserver() noexcept
+{
+    static MotionDecodeObserver observer;
+    return observer;
+}
+
 } // namespace
 
 void CompositionFrameRenderer::reset()
@@ -55,7 +92,8 @@ void CompositionFrameRenderer::reset()
 creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     const PreviewRequest& request,
     const CancellationPredicate& should_cancel,
-    bool fail_on_media_error)
+    bool fail_on_media_error,
+    PreviewRequestMode mode)
 {
     using creative_suite::composition::CompositionLayer;
     using creative_suite::media::VideoPlaybackSession;
@@ -132,14 +170,50 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                     record_preview_metrics_, diagnostics::PreviewTimingStage::Decode);
                 auto session = video_sessions_.find(layer.source_path);
                 if (session == video_sessions_.end()) {
-                    auto opened = VideoPlaybackSession::open(layer.source_path);
+                    auto opened = VideoPlaybackSession::open(
+                        layer.source_path,
+                        record_preview_metrics_ ? &motionDecodeObserver() : nullptr);
                     session = video_sessions_.emplace(layer.source_path, std::move(opened)).first;
                 }
-                const auto decoded = session->second->decode_frame_at(
-                    source_frame,
-                    [&should_cancel] {
-                        return should_cancel && should_cancel();
-                    });
+                const auto cancelled = [&should_cancel] {
+                    return should_cancel && should_cancel();
+                };
+                std::optional<creative_suite::media::VideoFramePtr> decoded;
+                const bool collect_forward_metrics =
+                    record_preview_metrics_ &&
+                    diagnostics::PerformanceMetrics::instance().enabled();
+                if (shouldUseSequentialPlaybackDecode(
+                        mode,
+                        session->second->current_frame_index(),
+                        source_frame)) {
+                    creative_suite::media::ForwardDecodeDiagnostics forward_diagnostics;
+                    try {
+                        decoded = session->second->decode_forward_to(
+                            source_frame,
+                            cancelled,
+                            collect_forward_metrics ? &forward_diagnostics : nullptr);
+                    } catch (const std::exception&) {
+                        // The shared decoder logs operational exceptions. If
+                        // they were not caused by cancellation, try the normal
+                        // timestamp-seek path below to recover this preview.
+                        if (cancelled()) return {};
+                    }
+                    if (collect_forward_metrics && forward_diagnostics.attempted) {
+                        diagnostics::PerformanceMetrics::instance().recordForwardDecode(
+                            forward_diagnostics.completed,
+                            forward_diagnostics.elapsed_nanoseconds);
+                    }
+                    if (!decoded.has_value()) {
+                        if (!shouldFallbackToTimestampSeek(cancelled())) return {};
+                        if (collect_forward_metrics) {
+                            diagnostics::PerformanceMetrics::instance()
+                                .recordForwardDecodeFallback();
+                        }
+                        decoded = session->second->decode_frame_at(source_frame, cancelled);
+                    }
+                } else {
+                    decoded = session->second->decode_frame_at(source_frame, cancelled);
+                }
                 if (!decoded.has_value()) {
                     if ((should_cancel && should_cancel())) return {};
                     if (fail_on_media_error) {

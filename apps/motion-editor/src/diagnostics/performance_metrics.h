@@ -15,6 +15,8 @@ namespace motion::diagnostics {
 
 enum class PreviewTimingStage : std::size_t {
     Decode,
+    TimestampSeek,
+    ForwardDecode,
     TextShapeRasterization,
     Effects,
     Composition,
@@ -42,6 +44,13 @@ struct PreviewMetricsSnapshot {
     std::uint64_t rendered_frames = 0;
     std::uint64_t coalesced_requests = 0;
     std::uint64_t stale_results = 0;
+    std::uint64_t timestamp_seek_attempts = 0;
+    std::uint64_t timestamp_seek_successes = 0;
+    std::uint64_t timestamp_seek_failures = 0;
+    std::uint64_t forward_decode_attempts = 0;
+    std::uint64_t forward_decode_completions = 0;
+    std::uint64_t forward_decode_fallbacks = 0;
+    std::uint64_t discarded_intermediate_frames = 0;
     std::array<TimingSummary,
                static_cast<std::size_t>(PreviewTimingStage::Count)> timings{};
     std::array<TimingSummary,
@@ -80,6 +89,11 @@ public:
     void recordStaleResult(std::uint64_t generation) noexcept;
     void discardRequest(std::uint64_t generation) noexcept;
     void recordRenderedFrame() noexcept;
+    void recordTimestampSeek(bool succeeded, std::uint64_t duration_nanoseconds) noexcept;
+    void recordForwardDecode(bool completed,
+                             std::uint64_t duration_nanoseconds) noexcept;
+    void recordForwardDecodeFallback() noexcept;
+    void recordDiscardedIntermediateFrame() noexcept;
     void recordTiming(PreviewTimingStage stage,
                       std::uint64_t duration_nanoseconds) noexcept;
     void recordEffectTiming(PreviewEffectKind effect,
@@ -98,12 +112,21 @@ private:
     };
 
     static constexpr std::size_t maximum_percentile_samples_ = 8192;
+    void recordTimingLocked(PreviewTimingStage stage,
+                            std::uint64_t duration_nanoseconds) noexcept;
     mutable std::mutex mutex_;
     bool enabled_ = false;
     std::uint64_t requests_ = 0;
     std::uint64_t rendered_frames_ = 0;
     std::uint64_t coalesced_requests_ = 0;
     std::uint64_t stale_results_ = 0;
+    std::uint64_t timestamp_seek_attempts_ = 0;
+    std::uint64_t timestamp_seek_successes_ = 0;
+    std::uint64_t timestamp_seek_failures_ = 0;
+    std::uint64_t forward_decode_attempts_ = 0;
+    std::uint64_t forward_decode_completions_ = 0;
+    std::uint64_t forward_decode_fallbacks_ = 0;
+    std::uint64_t discarded_intermediate_frames_ = 0;
     std::array<TimingBucket,
                static_cast<std::size_t>(PreviewTimingStage::Count)> timings_{};
     std::array<TimingBucket,

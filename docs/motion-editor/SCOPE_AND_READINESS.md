@@ -235,9 +235,13 @@ memory; canvas dimensions and exact frame-rate numerator/denominator; layer and
 effect counts; request, rendered-frame, coalesced-request, and stale-result
 counters; and count, average, maximum, p95, and p99 durations for video decode,
 text/shape rasterization, effects, CPU composition, total frame render, and
-request-to-viewer-paint latency. Schema v3 reports actual application counts
+request-to-viewer-paint latency. Schema v4 reports actual application counts
 and separate timing summaries for Gaussian Blur and Color Adjustment, plus the
-effective effect-worker count. The configured effect count remains distinct
+effective effect-worker count. It also reports actual timestamp-seek outcomes
+and duration, playback forward-decode attempts/completions/fallbacks, and
+discarded intermediate frames. Seek and forward-decode durations are
+submeasurements of total decode time and should not be added to it. The
+configured effect count remains distinct
 from per-interval application counts. A bounded sample window is used for
 percentile estimates.
 
@@ -267,7 +271,15 @@ averages, decode time, rendered frames, coalesced requests, and CPU use. The
 selected count appears in each active preview sample. The temporary override
 is diagnostic-only; invalid values fall back to the automatic policy. Keep the
 automatic default until playback-wide results show a repeatable improvement,
-and confirm output remains byte-identical.
+and confirm output remains byte-identical. Motion Studio playback uses forward
+decoding when the decoder is already positioned two to eight source frames
+before its target; one-frame advances use the existing direct next-frame path.
+Backward seeks, larger gaps, and interactive scrubbing use timestamp seeking.
+An unsuccessful forward decode falls back to the existing seek path unless it
+was cancelled. Export is unchanged. Validate with repeated playback runs and
+compare seek/decode counters, decode and frame-render durations, displayed
+frames, coalesced requests, and CPU use; confirm scrubbing and export output are
+unchanged.
 
 ## Native Format and Compatibility Policy
 

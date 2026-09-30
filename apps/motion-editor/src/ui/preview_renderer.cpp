@@ -139,7 +139,8 @@ void PreviewRenderer::run()
             } else {
                 output = render(
                     request->request,
-                    request->cancellation_generation);
+                    request->cancellation_generation,
+                    request->mode);
             }
         } catch (const std::exception& error) {
             creative_suite::diagnostics::Logger::instance().log(
@@ -195,13 +196,14 @@ void PreviewRenderer::run()
 
 creative_suite::media::RgbaFramePtr PreviewRenderer::render(
     const PreviewRequest& request,
-    std::uint64_t cancellation_generation)
+    std::uint64_t cancellation_generation,
+    PreviewRequestMode mode)
 {
     if (!frame_renderer_) return {};
     return frame_renderer_->render(request, [this, cancellation_generation] {
         return cancellation_generation !=
             cancellation_generation_.load(std::memory_order_relaxed);
-    });
+    }, false, mode);
 }
 
 } // namespace motion::ui

@@ -31,6 +31,11 @@ enum class DecodeTimingStage {
     PixelConversion,
 };
 
+enum class DecodeSeekResult : std::uint8_t {
+    Succeeded,
+    Failed,
+};
+
 // Optional application instrumentation. The media library remains usable
 // without an observer and does not depend on any application's metrics system.
 // The session does not own the observer; it must outlive the session. Callbacks
@@ -43,6 +48,15 @@ public:
         DecodeTimingStage stage,
         std::uint64_t nanoseconds) noexcept = 0;
     virtual void record_discarded_frame() noexcept = 0;
+    // Reports an actual FFmpeg timestamp-seek call. A default implementation
+    // keeps existing consumers source-compatible when they do not need this
+    // diagnostic.
+    virtual void record_timestamp_seek(
+        DecodeSeekResult result,
+        std::uint64_t nanoseconds) noexcept {
+        (void)result;
+        (void)nanoseconds;
+    }
 };
 
 class VideoPlaybackSession final {

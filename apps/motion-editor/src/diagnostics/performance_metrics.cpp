@@ -22,7 +22,8 @@ std::uint64_t percentile(std::deque<std::uint64_t> values, double fraction)
 bool PreviewMetricsSnapshot::hasActivity() const noexcept
 {
     if (requests != 0 || rendered_frames != 0 || coalesced_requests != 0 ||
-        stale_results != 0) return true;
+        stale_results != 0 || timestamp_seek_attempts != 0 ||
+        forward_decode_attempts != 0 || discarded_intermediate_frames != 0) return true;
     const auto has_timing = [](const auto& values) {
         return std::any_of(values.begin(), values.end(), [](const TimingSummary& timing) {
             return timing.count != 0;
@@ -43,6 +44,9 @@ void PerformanceMetrics::setEnabled(bool enabled) noexcept
     enabled_ = enabled;
     if (!enabled_) {
         requests_ = rendered_frames_ = coalesced_requests_ = stale_results_ = 0;
+        timestamp_seek_attempts_ = timestamp_seek_successes_ = timestamp_seek_failures_ = 0;
+        forward_decode_attempts_ = forward_decode_completions_ = 0;
+        forward_decode_fallbacks_ = discarded_intermediate_frames_ = 0;
         timings_ = {};
         effect_timings_ = {};
         request_started_.clear();
@@ -59,6 +63,9 @@ void PerformanceMetrics::reset() noexcept
 {
     std::lock_guard lock(mutex_);
     requests_ = rendered_frames_ = coalesced_requests_ = stale_results_ = 0;
+    timestamp_seek_attempts_ = timestamp_seek_successes_ = timestamp_seek_failures_ = 0;
+    forward_decode_attempts_ = forward_decode_completions_ = 0;
+    forward_decode_fallbacks_ = discarded_intermediate_frames_ = 0;
     timings_ = {};
     effect_timings_ = {};
     request_started_.clear();
@@ -103,6 +110,41 @@ void PerformanceMetrics::recordRenderedFrame() noexcept
     if (enabled_) ++rendered_frames_;
 }
 
+void PerformanceMetrics::recordTimestampSeek(
+    bool succeeded,
+    std::uint64_t duration_nanoseconds) noexcept
+{
+    std::lock_guard lock(mutex_);
+    if (!enabled_) return;
+    ++timestamp_seek_attempts_;
+    if (succeeded) ++timestamp_seek_successes_;
+    else ++timestamp_seek_failures_;
+    recordTimingLocked(PreviewTimingStage::TimestampSeek, duration_nanoseconds);
+}
+
+void PerformanceMetrics::recordForwardDecode(
+    bool completed,
+    std::uint64_t duration_nanoseconds) noexcept
+{
+    std::lock_guard lock(mutex_);
+    if (!enabled_) return;
+    ++forward_decode_attempts_;
+    if (completed) ++forward_decode_completions_;
+    recordTimingLocked(PreviewTimingStage::ForwardDecode, duration_nanoseconds);
+}
+
+void PerformanceMetrics::recordForwardDecodeFallback() noexcept
+{
+    std::lock_guard lock(mutex_);
+    if (enabled_) ++forward_decode_fallbacks_;
+}
+
+void PerformanceMetrics::recordDiscardedIntermediateFrame() noexcept
+{
+    std::lock_guard lock(mutex_);
+    if (enabled_) ++discarded_intermediate_frames_;
+}
+
 void PerformanceMetrics::recordTiming(
     PreviewTimingStage stage,
     std::uint64_t duration_nanoseconds) noexcept
@@ -111,6 +153,15 @@ void PerformanceMetrics::recordTiming(
     if (index >= timings_.size()) return;
     std::lock_guard lock(mutex_);
     if (!enabled_) return;
+    recordTimingLocked(stage, duration_nanoseconds);
+}
+
+void PerformanceMetrics::recordTimingLocked(
+    PreviewTimingStage stage,
+    std::uint64_t duration_nanoseconds) noexcept
+{
+    const auto index = static_cast<std::size_t>(stage);
+    if (index >= timings_.size()) return;
     auto& timing = timings_[index];
     ++timing.count;
     timing.total_nanoseconds += duration_nanoseconds;
@@ -166,6 +217,14 @@ std::optional<PreviewMetricsSnapshot> PerformanceMetrics::takeSnapshotAndReset()
     result.rendered_frames = std::exchange(rendered_frames_, 0);
     result.coalesced_requests = std::exchange(coalesced_requests_, 0);
     result.stale_results = std::exchange(stale_results_, 0);
+    result.timestamp_seek_attempts = std::exchange(timestamp_seek_attempts_, 0);
+    result.timestamp_seek_successes = std::exchange(timestamp_seek_successes_, 0);
+    result.timestamp_seek_failures = std::exchange(timestamp_seek_failures_, 0);
+    result.forward_decode_attempts = std::exchange(forward_decode_attempts_, 0);
+    result.forward_decode_completions = std::exchange(forward_decode_completions_, 0);
+    result.forward_decode_fallbacks = std::exchange(forward_decode_fallbacks_, 0);
+    result.discarded_intermediate_frames =
+        std::exchange(discarded_intermediate_frames_, 0);
     for (std::size_t index = 0; index < timings_.size(); ++index) {
         auto& source = timings_[index];
         auto& destination = result.timings[index];
@@ -194,6 +253,8 @@ const char* previewTimingStageName(PreviewTimingStage stage) noexcept
 {
     switch (stage) {
     case PreviewTimingStage::Decode: return "decode";
+    case PreviewTimingStage::TimestampSeek: return "timestamp_seek";
+    case PreviewTimingStage::ForwardDecode: return "forward_decode";
     case PreviewTimingStage::TextShapeRasterization: return "text_shape_rasterization";
     case PreviewTimingStage::Effects: return "effects";
     case PreviewTimingStage::Composition: return "composition";
@@ -223,7 +284,7 @@ creative_suite::diagnostics::Context makePreviewPerformanceContext(
         return value.has_value() ? std::to_string(*value) : std::string("N/A");
     };
     creative_suite::diagnostics::Context context{
-        {"schema_version", "3"},
+        {"schema_version", "4"},
         {"interval_ms", "1000"},
         {"process_cpu_percent", optionalNumber(resources.process_cpu_percent)},
         {"process_working_set_bytes", optionalNumber(resources.process_working_set_bytes)},
@@ -234,6 +295,14 @@ creative_suite::diagnostics::Context makePreviewPerformanceContext(
         {"rendered_frames", std::to_string(metrics.rendered_frames)},
         {"coalesced_requests", std::to_string(metrics.coalesced_requests)},
         {"stale_results", std::to_string(metrics.stale_results)},
+        {"timestamp_seek_attempts", std::to_string(metrics.timestamp_seek_attempts)},
+        {"timestamp_seek_successes", std::to_string(metrics.timestamp_seek_successes)},
+        {"timestamp_seek_failures", std::to_string(metrics.timestamp_seek_failures)},
+        {"forward_decode_attempts", std::to_string(metrics.forward_decode_attempts)},
+        {"forward_decode_completions", std::to_string(metrics.forward_decode_completions)},
+        {"forward_decode_fallbacks", std::to_string(metrics.forward_decode_fallbacks)},
+        {"discarded_intermediate_frames",
+         std::to_string(metrics.discarded_intermediate_frames)},
         {"canvas_width", std::to_string(metadata.canvas_width)},
         {"canvas_height", std::to_string(metadata.canvas_height)},
         {"frame_rate_numerator", std::to_string(metadata.frame_rate_numerator)},

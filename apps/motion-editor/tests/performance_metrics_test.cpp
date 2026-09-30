@@ -60,6 +60,12 @@ int main(int argc, char* argv[])
     metrics.recordRequest(10);
     metrics.recordCoalescedRequest(11);
     metrics.recordStaleResult(12);
+    metrics.recordTimestampSeek(true, 6'000'000);
+    metrics.recordTimestampSeek(false, 9'000'000);
+    metrics.recordForwardDecode(true, 4'000'000);
+    metrics.recordForwardDecode(false, 12'000'000);
+    metrics.recordForwardDecodeFallback();
+    metrics.recordDiscardedIntermediateFrame();
     metrics.recordRenderedFrame();
     metrics.recordRenderedFrame();
     for (const std::uint64_t value : {1'000'000ULL, 2'000'000ULL, 3'000'000ULL,
@@ -76,7 +82,13 @@ int main(int argc, char* argv[])
     const auto snapshot = metrics.takeSnapshotAndReset();
     require(snapshot.has_value() && snapshot->requests == 1 &&
                 snapshot->rendered_frames == 2 && snapshot->coalesced_requests == 1 &&
-                snapshot->stale_results == 1,
+                snapshot->stale_results == 1 && snapshot->timestamp_seek_attempts == 2 &&
+                snapshot->timestamp_seek_successes == 1 &&
+                snapshot->timestamp_seek_failures == 1 &&
+                snapshot->forward_decode_attempts == 2 &&
+                snapshot->forward_decode_completions == 1 &&
+                snapshot->forward_decode_fallbacks == 1 &&
+                snapshot->discarded_intermediate_frames == 1,
             "preview counters aggregate requests, rendered frames, coalescing, and stale work");
     const auto& decode = snapshot->timings[
         static_cast<std::size_t>(motion::diagnostics::PreviewTimingStage::Decode)];
@@ -110,8 +122,17 @@ int main(int argc, char* argv[])
         serialized_context << key << '=' << value << '\n';
     const auto context_text = serialized_context.str();
     require(context_text.find("process_cpu_percent=27.500000") != std::string::npos &&
-                context_text.find("schema_version=3") != std::string::npos &&
+                context_text.find("schema_version=4") != std::string::npos &&
                 context_text.find("decode_p95_ms=") != std::string::npos &&
+                context_text.find("timestamp_seek_attempts=2") != std::string::npos &&
+                context_text.find("timestamp_seek_successes=1") != std::string::npos &&
+                context_text.find("timestamp_seek_failures=1") != std::string::npos &&
+                context_text.find("forward_decode_attempts=2") != std::string::npos &&
+                context_text.find("forward_decode_completions=1") != std::string::npos &&
+                context_text.find("forward_decode_fallbacks=1") != std::string::npos &&
+                context_text.find("discarded_intermediate_frames=1") != std::string::npos &&
+                context_text.find("timestamp_seek_average_ms=7.500000") != std::string::npos &&
+                context_text.find("forward_decode_count=2") != std::string::npos &&
                 context_text.find("gaussian_blur_apply_count=2") != std::string::npos &&
                 context_text.find("gaussian_blur_average_ms=20.000000") != std::string::npos &&
                 context_text.find("color_adjustment_apply_count=1") != std::string::npos &&

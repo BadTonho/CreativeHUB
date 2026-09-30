@@ -389,6 +389,10 @@ bool VideoPlaybackSession::seekToTimestamp(
         impl.stream_start_time);
     if (!timestamp.has_value()) return false;
 
+    const bool observe_seek = impl.observer != nullptr && impl.observer->is_enabled();
+    const auto seek_started = observe_seek
+        ? std::chrono::steady_clock::now()
+        : std::chrono::steady_clock::time_point{};
     const int seek_result = avformat_seek_file(
         impl.format.get(),
         impl.stream_index,
@@ -396,6 +400,15 @@ bool VideoPlaybackSession::seekToTimestamp(
         *timestamp,
         *timestamp,
         AVSEEK_FLAG_BACKWARD);
+    if (observe_seek) {
+        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - seek_started).count();
+        if (elapsed >= 0) {
+            impl.observer->record_timestamp_seek(
+                seek_result >= 0 ? DecodeSeekResult::Succeeded : DecodeSeekResult::Failed,
+                static_cast<std::uint64_t>(elapsed));
+        }
+    }
     if (seek_result < 0) return false;
 
     resetDecoderPosition(impl);

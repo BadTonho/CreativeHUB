@@ -131,7 +131,7 @@ specified in [FORMAT.md](FORMAT.md).
 | creative-suite::animation | 2D transform data, keyframe storage, interpolation/easing validation, and linear/cubic-Bezier evaluation. It has no timeline, UI, or document dependency. | Evaluate the five transform properties consistently for Motion Studio preview, playback, and export. Motion Studio owns the Graph Editor, presets, history actions, and frame mapping. |
 | creative-suite::composition | CPU composition of raster frames using shared transforms, opacity, and alpha coverage. It has no UI, timeline, or project dependency. | Motion Studio uses it to composite active image, video, text, and shape frames in document order. Text and vector-shape rasterization remains Motion Studio-owned. |
 | creative-suite::diagnostics | Structured local logging with caller-selected application log directories; the legacy no-argument default remains compatible with the Video Editor. | Reuse with a Motion Studio-specific application identifier and log directory. |
-| creative-suite::video-media | FFmpeg video playback session with a neutral optional DecodeObserver. It depends on FFmpeg and shared diagnostics, not preview UI. | Motion Studio keeps one playback session per source on its preview worker and decodes the source frame for the current timeline position. Its application-owned monotonic clock schedules composition frames; audio remains out of scope. |
+| creative-suite::video-media | FFmpeg video playback session with a neutral optional DecodeObserver, including actual timestamp-seek outcomes and durations. It depends on FFmpeg and shared diagnostics, not preview UI. | Motion Studio keeps one playback session per source on its preview worker, uses sequential decoding for short forward gaps during playback, and reports seek/decode path metrics. Interactive seeking and export retain timestamp-based decoding. Its application-owned monotonic clock schedules composition frames; audio remains out of scope. |
 | creative-suite::video-encoding | Qt- and project-independent FFmpeg API for RGBA video encoding, optional interleaved stereo audio input, container/codec capability discovery, and atomic file publication. It shares the RGBA frame type but owns no composition, timeline, or UI. | Motion Studio schedules and renders immutable document snapshots, then uses the shared encoder for video-only output. The Video Editor uses the same encoding and discovery implementation while retaining timeline assembly, audio rendering, render queue, and application settings. |
 | creative-suite::media-assets | Neutral metadata, canonical-path media catalog, cached first frames, bins, online/offline state, video and still-image decoders, probes, and per-file import processing. The public API uses standard C++ types; its current decoders use FFmpeg and Qt Gui internally. Animated GIF import is rejected. | Populate Motion Studio's in-memory pool with video and still images while keeping its UI and document lifecycle application-owned. |
 | creative-suite::shortcuts | Qt action registration, per-application QSettings persistence, duplicate detection, resets, and validated batch application. It has no project or dialog dependency. | Motion Studio owns command IDs, defaults, action states, and its configurable-shortcuts dialog; the shared manager applies accepted edits atomically. Video Editor and Image Editor retain their own preference groups and dialog behavior. |
@@ -259,6 +259,15 @@ validation.
   composition rate, evaluates transform keyframes through the shared linear
   evaluator, ends at the furthest layer out-point, and optionally loops from
   frame 0. It renders text and shapes but does not render audio.
+- During playback, source-frame gaps of two through eight use the shared
+  session's sequential forward decoder when it is already positioned before
+  the target. One-frame advances keep the decoder's direct next-frame path;
+  backward seeks and larger gaps use timestamp seeking. Failed forward decode
+  retries by timestamp seek unless cancelled. Interactive scrubbing and export
+  keep their existing seek behavior. Motion preview schema v4 records actual
+  timestamp-seek outcomes and durations, forward-decode attempts/completions/
+  fallbacks, and discarded intermediate frames without logging media paths or
+  content.
 
 ## Language boundary
 

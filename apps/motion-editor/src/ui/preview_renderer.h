@@ -47,6 +47,27 @@ enum class PreviewRequestMode : std::uint8_t {
     Playback,
 };
 
+inline constexpr std::int64_t maximum_sequential_playback_decode_gap_frames = 8;
+
+[[nodiscard]] inline bool shouldUseSequentialPlaybackDecode(
+    PreviewRequestMode mode,
+    std::int64_t current_frame,
+    std::int64_t requested_frame) noexcept
+{
+    if (mode != PreviewRequestMode::Playback || current_frame < 0 ||
+        requested_frame <= current_frame) {
+        return false;
+    }
+    const auto gap = requested_frame - current_frame;
+    return gap >= 2 && gap <= maximum_sequential_playback_decode_gap_frames;
+}
+
+[[nodiscard]] inline bool shouldFallbackToTimestampSeek(
+    bool forward_decode_was_cancelled) noexcept
+{
+    return !forward_decode_was_cancelled;
+}
+
 // Serializes decoding on a worker thread and keeps decoder sessions local to
 // that thread. Interactive requests cancel stale decodes; playback requests
 // replace pending work without interrupting the in-flight playback decode.
@@ -85,7 +106,8 @@ protected:
 private:
     [[nodiscard]] creative_suite::media::RgbaFramePtr render(
         const PreviewRequest& request,
-        std::uint64_t cancellation_generation);
+        std::uint64_t cancellation_generation,
+        PreviewRequestMode mode);
     QObject* result_receiver_ = nullptr;
     ResultHandler result_handler_;
     RenderFunction render_function_;

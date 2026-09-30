@@ -331,6 +331,16 @@ shared compositor handles their layer order, transforms, opacity, and alpha.
 Text glyphs and shape fills/strokes are static; only their existing transform
 properties are animated. Source in-points and audio remain unsupported.
 
+During playback, the preview worker decodes forward sequentially for source
+frame gaps of two through eight frames when the decoder is already positioned
+before the target. One-frame advances keep the decoder's existing fast path;
+backward seeks, larger gaps, and interactive scrubbing use timestamp seeking.
+An unsuccessful forward decode falls back to timestamp seeking unless it was
+cancelled. Export retains its existing decode path. Preview performance schema
+v4 reports actual timestamp-seek outcomes and time, forward-decode attempts,
+completions and fallbacks, and discarded intermediate frames. These counters
+are diagnostics; they do not change the automatic effect-worker policy.
+
 Manual Windows validation remains pending: confirm the Motion Studio icon on
 the application window and executable; open **Help > System** and confirm
 it displays **Beta 0.1.0** and the executable path; open **Help > Open Log
@@ -418,7 +428,12 @@ restarting the app for each setting. After warm-up, collect three 10-second runs
 per setting. Compare logged blur and full-frame render averages, decode timing,
 rendered/coalesced counts, and CPU use; confirm the worker count in each sample
 and that preview pixels remain identical. The override is temporary and does
-not change the automatic default.
+not change the automatic default. For decoder-path validation, use a video layer
+with playback metrics enabled. After warming up, compare repeated playback runs
+before and after this change; inspect timestamp-seek attempts/successes/failures,
+forward-decode completions and fallbacks, decode and full-frame timing, rendered
+frames, coalesced requests, and CPU use. Confirm interactive scrubbing remains
+responsive and export output is unchanged.
 Motion Studio export is opaque and video-only; audio and alpha export remain
 open. Then close the application. Overshoot-capable curves, additional
 interpolation modes, advanced effects, platform validation, and performance

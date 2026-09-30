@@ -1,10 +1,12 @@
 #include "ui/preview_renderer.h"
+#include "ui/composition_frame_renderer.h"
 #include "ui/layer_content_renderer.h"
 #include "ui/layer_effect_processor.h"
 #include "ui/layer_effect_worker_pool.h"
 #include "diagnostics/performance_metrics.h"
 
 #include <creative_suite/diagnostics/logger.h>
+#include <creative_suite/media/video_playback.h>
 
 #include <QGuiApplication>
 #include <QElapsedTimer>
@@ -27,6 +29,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -221,6 +224,102 @@ int main(int argc, char* argv[])
     auto& logger = creative_suite::diagnostics::Logger::instance();
     require(logger.initialize(filePath(temporary.path())),
             "preview errors can be logged to a temporary application directory");
+
+    using motion::ui::PreviewRequestMode;
+    const auto use_forward_decode = motion::ui::shouldUseSequentialPlaybackDecode;
+    require(!use_forward_decode(PreviewRequestMode::Playback, -1, 1) &&
+                !use_forward_decode(PreviewRequestMode::Playback, 10, 10) &&
+                !use_forward_decode(PreviewRequestMode::Playback, 10, 9) &&
+                !use_forward_decode(PreviewRequestMode::Playback, 10, 11) &&
+                use_forward_decode(PreviewRequestMode::Playback, 10, 12) &&
+                use_forward_decode(PreviewRequestMode::Playback, 10, 18) &&
+                !use_forward_decode(PreviewRequestMode::Playback, 10, 19) &&
+                !use_forward_decode(PreviewRequestMode::Interactive, 10, 12),
+            "only forward playback gaps from two through eight frames use sequential decoding");
+    require(motion::ui::shouldFallbackToTimestampSeek(false) &&
+                !motion::ui::shouldFallbackToTimestampSeek(true),
+            "a failed forward decode retries by seek only when it was not cancelled");
+
+    const auto decode_test_video =
+        std::filesystem::path(MOTION_EDITOR_TEST_MEDIA_DIR) / "reference.mkv";
+    require(std::filesystem::exists(decode_test_video),
+            "the bundled video fixture is available for playback decode regressions");
+    auto videoRequest = [&](std::int64_t frame) {
+        motion::ui::PreviewLayerSnapshot layer;
+        layer.id = 9201;
+        layer.kind = motion::model::LayerKind::Video;
+        layer.source_path = decode_test_video;
+        layer.source_frame_rate = 30.0;
+        layer.source_frame_count = 0;
+        layer.local_frame = frame;
+        return motion::ui::PreviewRequest{{64, 64}, {30, 1}, {std::move(layer)}};
+    };
+    motion::ui::CompositionFrameRenderer playback_frame_renderer;
+    performance_metrics.reset();
+    const std::array<std::pair<std::int64_t, PreviewRequestMode>, 7> video_requests{{
+        {0, PreviewRequestMode::Interactive},
+        {1, PreviewRequestMode::Playback},
+        {3, PreviewRequestMode::Playback},
+        {11, PreviewRequestMode::Playback},
+        {20, PreviewRequestMode::Playback},
+        {5, PreviewRequestMode::Playback},
+        {7, PreviewRequestMode::Interactive},
+    }};
+    for (const auto& [frame_index, mode] : video_requests) {
+        const auto request = videoRequest(frame_index);
+        const auto actual = playback_frame_renderer.render(request, {}, false, mode);
+        motion::ui::CompositionFrameRenderer exact_seek_renderer(false);
+        const auto expected = exact_seek_renderer.render(
+            request, {}, false, PreviewRequestMode::Interactive);
+        require(actual != nullptr && expected != nullptr &&
+                    actual->rgba_pixels == expected->rgba_pixels,
+                "playback forward decode returns the same exact target pixels as timestamp seeking");
+    }
+    const auto playback_decode_snapshot = performance_metrics.takeSnapshotAndReset();
+    require(playback_decode_snapshot.has_value() &&
+                playback_decode_snapshot->forward_decode_attempts == 2 &&
+                playback_decode_snapshot->forward_decode_completions == 2 &&
+                playback_decode_snapshot->forward_decode_fallbacks == 0 &&
+                playback_decode_snapshot->timestamp_seek_attempts == 3 &&
+                playback_decode_snapshot->timestamp_seek_successes > 0 &&
+                playback_decode_snapshot->timestamp_seek_successes +
+                    playback_decode_snapshot->timestamp_seek_failures ==
+                    playback_decode_snapshot->timestamp_seek_attempts &&
+                playback_decode_snapshot->discarded_intermediate_frames >= 8 &&
+                playback_decode_snapshot->timings[static_cast<std::size_t>(
+                    motion::diagnostics::PreviewTimingStage::ForwardDecode)].count == 2,
+            "playback metrics distinguish short sequential decode, random seeks, and discarded frames");
+    playback_frame_renderer.reset();
+
+    auto frame_count_session =
+        creative_suite::media::VideoPlaybackSession::open(decode_test_video);
+    std::int64_t last_source_frame = -1;
+    while (frame_count_session->decode_next_frame().has_value()) {
+        last_source_frame = frame_count_session->current_frame_index();
+    }
+    require(last_source_frame > 8,
+            "the video fixture has enough frames to exercise forward-decode fallback");
+    motion::ui::CompositionFrameRenderer fallback_frame_renderer;
+    performance_metrics.reset();
+    auto fallback_request = videoRequest(last_source_frame - 8);
+    require(fallback_frame_renderer.render(
+                fallback_request, {}, false, PreviewRequestMode::Playback) != nullptr,
+            "playback can timestamp-seek to a frame near the source end");
+    fallback_request.layers.front().local_frame = last_source_frame;
+    require(fallback_frame_renderer.render(
+                fallback_request, {}, false, PreviewRequestMode::Playback) != nullptr,
+            "playback sequentially decodes the final source frame");
+    fallback_request.layers.front().local_frame = last_source_frame + 2;
+    require(fallback_frame_renderer.render(
+                fallback_request, {}, false, PreviewRequestMode::Playback) == nullptr,
+            "an out-of-range playback request remains a failed frame after fallback");
+    const auto fallback_snapshot = performance_metrics.takeSnapshotAndReset();
+    require(fallback_snapshot.has_value() &&
+                fallback_snapshot->forward_decode_attempts == 2 &&
+                fallback_snapshot->forward_decode_completions == 1 &&
+                fallback_snapshot->forward_decode_fallbacks == 1,
+            "an un-cancelled short forward-decode failure retries with timestamp seeking");
+    fallback_frame_renderer.reset();
 
     using motion::model::ShapeKind;
     using motion::model::ShapeLayerContent;

@@ -25,7 +25,8 @@ public:
     [[nodiscard]] creative_suite::media::RgbaFramePtr render(
         const PreviewRequest& request,
         const CancellationPredicate& should_cancel = {},
-        bool fail_on_media_error = false);
+        bool fail_on_media_error = false,
+        PreviewRequestMode mode = PreviewRequestMode::Interactive);
 
 private:
     void reportDecodeError(
