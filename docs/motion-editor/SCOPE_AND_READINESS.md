@@ -18,7 +18,11 @@ content. The recovery wrapper remains at v1 and accepts nested documents
 through v3. Undo/Redo and configurable autosave and recovery cover the
 composition and Media Pool. A first-pass video export uses a shared FFmpeg
 encoder, with opaque video-only output and per-job settings; audio and alpha
-remain outside the implemented export path.
+remain outside the implemented export path. The composition workspace keeps
+the Preview central and presents the Media Pool, Inspector, Timeline, and Graph
+Editor as rearrangeable Qt dock panels. Motion Studio stores their layout in
+application settings, independently of each composition, and offers a command
+to restore the first-run arrangement.
 This document records the agreed starting scope; it does not finalize a
 renderer, programming language, native file extension, codec, or implementation
 architecture.

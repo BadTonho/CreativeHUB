@@ -151,6 +151,10 @@ the Motion Studio implementation choices are finalized.
   state. Preview, playback, and export use the same shared animation evaluator.
   Save curves in `.motion` v3 while reading v1/v2 as Linear; keep the recovery
   wrapper at v1 and accept nested documents through v3.
+- [x] Make Media Pool, Inspector, Timeline, and Graph Editor movable, resizable,
+  tabifiable, floatable, and hideable Qt dock panels around a central Preview.
+  Keep the Inspector tabs together, restore the first-run layout on request,
+  and persist customized panel state globally in Motion Studio settings.
 - [x] Add bounded Undo/Redo for composition edits, including layer timing,
   order, visibility, transforms, and keyframes. Media Pool operations remain
   outside the history.
@@ -300,8 +304,11 @@ source away and confirm it reopens offline; verify malformed and future-version
 files leave the current document and the source file unchanged; test Save,
 Discard, and Cancel before replacing
 or closing a dirty composition; and confirm the title's dirty marker clears on
-save. Then confirm the one-hour navigation range, stepping, and separate drag
-extensions; import
+save. Move, resize, tabify, float, and hide the Media Pool, Inspector, Timeline,
+and Graph Editor; confirm the Graph Editor timeline button and **View** actions
+stay synchronized, restart the app to verify layout restoration, then use
+**View > Reset Panel Layout**. Then confirm the one-hour navigation range,
+stepping, and separate drag extensions; import
 images and videos, organize bins, switch pool views, and restore offline items;
 drag media to empty space and existing rows; verify snapping and front-to-back
 order; select, move, hide, resize, and remove layers; edit transforms; seek

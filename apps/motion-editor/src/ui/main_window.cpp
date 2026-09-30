@@ -27,6 +27,7 @@
 #include <QDoubleSpinBox>
 #include <QDialog>
 #include <QDesktopServices>
+#include <QDockWidget>
 #include <QEvent>
 #include <QFontComboBox>
 #include <QFileDialog>
@@ -44,8 +45,8 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QSignalBlocker>
+#include <QSettings>
 #include <QStackedWidget>
-#include <QSplitter>
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QTimer>
@@ -139,6 +140,9 @@ constexpr std::array<TransformProperty, 5> kTransformProperties{{
     TransformProperty::Rotation,
     TransformProperty::Opacity,
 }};
+
+constexpr int kDockLayoutVersion = 1;
+constexpr auto kDockLayoutSettingsKey = "workspace/dock_layout_state";
 
 std::pair<InterpolationMode, CubicBezierEasing> easingForPreset(int preset_index)
 {
@@ -441,6 +445,16 @@ MainWindow::MainWindow(QWidget* parent,
         QStringLiteral("edit.redo"), QStringLiteral("Redo"), redo_action_);
     connect(redo_action_, &QAction::triggered, this, [this] { redoComposition(); });
 
+    view_menu_ = menuBar()->addMenu(QStringLiteral("View"));
+    view_menu_->setObjectName(QStringLiteral("motion-view-menu"));
+    reset_panel_layout_action_ = view_menu_->addAction(
+        QStringLiteral("Reset Panel Layout"));
+    reset_panel_layout_action_->setObjectName(
+        QStringLiteral("motion-reset-panel-layout-action"));
+    reset_panel_layout_action_->setEnabled(false);
+    connect(reset_panel_layout_action_, &QAction::triggered,
+            this, [this] { restoreDefaultPanelLayout(); });
+
     auto* settings_menu = menuBar()->addMenu(QStringLiteral("Settings"));
     settings_action_ = settings_menu->addAction(QStringLiteral("Keyboard Shortcuts..."));
     settings_action_->setObjectName(QStringLiteral("motion-shortcut-settings-action"));
@@ -546,7 +560,7 @@ void MainWindow::createNewComposition()
     document_path_.reset();
     saved_data_.reset();
     selected_layer_id_ = 0;
-    if (workspace_ == nullptr) createWorkspace();
+    if (viewer_ == nullptr) createWorkspace();
     else {
         media_pool_->clear();
         preview_renderer_->resetSessions();
@@ -1069,7 +1083,7 @@ void MainWindow::finishOpen(std::uint64_t generation,
                   creative_suite::media::MediaLibrary::canonicalPath(path));
         last_autosaved_data_.reset();
         selected_layer_id_ = 0;
-        if (workspace_ == nullptr) createWorkspace();
+        if (viewer_ == nullptr) createWorkspace();
         else if (preview_renderer_) preview_renderer_->resetSessions();
         resetCurveEditor();
         media_pool_->replaceLibrary(std::move(staged_library));
@@ -1124,6 +1138,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
     cleanupCurrentUnsavedSnapshots("close_unsaved_recovery_cleanup");
     cleanupRecoveredUnsavedSnapshot("close_recovered_snapshot_cleanup");
+    saveWorkspaceLayout();
     event->accept();
 }
 
@@ -1468,24 +1483,16 @@ void MainWindow::createWorkspace()
     const bool was_full_screen = isFullScreen();
     const auto previous_geometry = geometry();
 
-    composition_splitter_ = new QSplitter(Qt::Vertical, this);
-    composition_splitter_->setObjectName(QStringLiteral("motion-composition-splitter"));
-    composition_splitter_->setChildrenCollapsible(false);
-
-    workspace_ = new QSplitter(Qt::Horizontal, composition_splitter_);
-    workspace_->setObjectName(QStringLiteral("motion-workspace"));
-    workspace_->setChildrenCollapsible(false);
-
-    media_pool_ = new MediaPoolWidget(workspace_);
+    media_pool_ = new MediaPoolWidget(this);
     media_pool_->setMinimumWidth(220);
     media_pool_->setImportRequestedHandler([this] { openMedia(); });
     media_pool_->setSelectionChangedHandler([this] { updateMediaDetails(); });
     media_pool_->setContentChangedHandler([this] { updateDocumentState(); });
-    viewer_ = new CompositionViewer(workspace_);
+    viewer_ = new CompositionViewer(this);
     viewer_->setObjectName(QStringLiteral("motion-composition-viewer"));
-    media_details_ = new MediaDetailsWidget(workspace_);
+    media_details_ = new MediaDetailsWidget(this);
 
-    inspector_tabs_ = new QTabWidget(workspace_);
+    inspector_tabs_ = new QTabWidget(this);
     inspector_tabs_->setObjectName(QStringLiteral("motion-inspector-tabs"));
     inspector_tabs_->setMinimumWidth(250);
     inspector_tabs_->addTab(media_details_, QStringLiteral("Media"));
@@ -1674,7 +1681,7 @@ void MainWindow::createWorkspace()
     transform_layout->addStretch(1);
     inspector_tabs_->addTab(transform_inspector_, QStringLiteral("Transform"));
 
-    timeline_ = new TimelineNavigator(composition_splitter_);
+    timeline_ = new TimelineNavigator(this);
     timeline_->setShortcutActions(
         play_pause_action_, previous_frame_action_, next_frame_action_, loop_action_,
         zoom_in_action_, zoom_out_action_);
@@ -1788,11 +1795,12 @@ void MainWindow::createWorkspace()
             });
     connect(timeline_, &TimelineNavigator::graphEditorToggled,
             this, [this](bool open) {
-                if (curve_editor_panel_ != nullptr) curve_editor_panel_->setVisible(open);
+                if (graph_editor_dock_ != nullptr)
+                    graph_editor_dock_->setVisible(open);
                 if (open) refreshCurveEditor();
             });
 
-    curve_editor_panel_ = new QWidget(composition_splitter_);
+    curve_editor_panel_ = new QWidget(this);
     curve_editor_panel_->setObjectName(QStringLiteral("motion-graph-editor-panel"));
     curve_editor_panel_->setMinimumHeight(168);
     auto* curve_panel_layout = new QVBoxLayout(curve_editor_panel_);
@@ -1832,23 +1840,62 @@ void MainWindow::createWorkspace()
     connect(curve_preset_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
             this, [this](int index) { applyCurvePreset(index); });
     curve_panel_layout->addWidget(curve_editor_, 1);
-    curve_editor_panel_->hide();
 
-    workspace_->addWidget(media_pool_);
-    workspace_->addWidget(viewer_);
-    workspace_->addWidget(inspector_tabs_);
-    workspace_->setStretchFactor(0, 0);
-    workspace_->setStretchFactor(1, 1);
-    workspace_->setStretchFactor(2, 0);
-    workspace_->setSizes({270, 800, 300});
-    composition_splitter_->addWidget(workspace_);
-    composition_splitter_->addWidget(timeline_);
-    composition_splitter_->addWidget(curve_editor_panel_);
-    composition_splitter_->setStretchFactor(0, 1);
-    composition_splitter_->setStretchFactor(1, 0);
-    composition_splitter_->setStretchFactor(2, 0);
-    composition_splitter_->setSizes({570, 220});
-    setCentralWidget(composition_splitter_);
+    setDockNestingEnabled(true);
+    setDockOptions(QMainWindow::AllowNestedDocks | QMainWindow::AllowTabbedDocks);
+    setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
+    setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
+    setCentralWidget(viewer_);
+
+    const auto create_dock = [this](QWidget* content, const QString& title,
+                                    const QString& object_name) {
+        auto* dock = new QDockWidget(title, this);
+        dock->setObjectName(object_name);
+        dock->setFeatures(QDockWidget::DockWidgetClosable |
+                          QDockWidget::DockWidgetMovable |
+                          QDockWidget::DockWidgetFloatable);
+        dock->setWidget(content);
+        return dock;
+    };
+    media_pool_dock_ = create_dock(
+        media_pool_, QStringLiteral("Media Pool"),
+        QStringLiteral("motion-media-pool-dock"));
+    inspector_dock_ = create_dock(
+        inspector_tabs_, QStringLiteral("Inspector"),
+        QStringLiteral("motion-inspector-dock"));
+    timeline_dock_ = create_dock(
+        timeline_, QStringLiteral("Timeline"),
+        QStringLiteral("motion-timeline-dock"));
+    graph_editor_dock_ = create_dock(
+        curve_editor_panel_, QStringLiteral("Graph Editor"),
+        QStringLiteral("motion-graph-editor-dock"));
+
+    addDockWidget(Qt::LeftDockWidgetArea, media_pool_dock_);
+    addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
+    addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
+    addDockWidget(Qt::BottomDockWidgetArea, graph_editor_dock_);
+    splitDockWidget(timeline_dock_, graph_editor_dock_, Qt::Vertical);
+    graph_editor_dock_->hide();
+
+    const auto add_panel_action = [this](QDockWidget* dock,
+                                         const QString& action_object_name) {
+        auto* action = dock->toggleViewAction();
+        action->setObjectName(action_object_name);
+        view_menu_->addAction(action);
+    };
+    add_panel_action(media_pool_dock_, QStringLiteral("motion-view-media-pool-action"));
+    add_panel_action(inspector_dock_, QStringLiteral("motion-view-inspector-action"));
+    add_panel_action(timeline_dock_, QStringLiteral("motion-view-timeline-action"));
+    add_panel_action(graph_editor_dock_, QStringLiteral("motion-view-graph-editor-action"));
+    view_menu_->addSeparator();
+    reset_panel_layout_action_->setEnabled(true);
+
+    connect(graph_editor_dock_, &QDockWidget::visibilityChanged,
+            this, [this](bool visible) {
+                if (timeline_ != nullptr) timeline_->setGraphEditorOpen(visible);
+                if (visible) refreshCurveEditor();
+            });
+    restoreWorkspaceLayout();
     empty_state_ = nullptr;
     empty_state_new_composition_button_ = nullptr;
 
@@ -1867,6 +1914,78 @@ void MainWindow::createWorkspace()
             }
         });
     if (!was_maximized && !was_full_screen) setGeometry(previous_geometry);
+}
+
+void MainWindow::restoreWorkspaceLayout()
+{
+    if (media_pool_dock_ == nullptr || inspector_dock_ == nullptr ||
+        timeline_dock_ == nullptr || graph_editor_dock_ == nullptr) {
+        return;
+    }
+
+    QSettings settings;
+    const auto saved_state = settings.value(
+        QString::fromLatin1(kDockLayoutSettingsKey)).toByteArray();
+    if (saved_state.isEmpty() || !restoreState(saved_state, kDockLayoutVersion)) {
+        restoreDefaultPanelLayout();
+    }
+
+    if (timeline_ != nullptr)
+        timeline_->setGraphEditorOpen(!graph_editor_dock_->isHidden());
+}
+
+void MainWindow::saveWorkspaceLayout()
+{
+    if (media_pool_dock_ == nullptr || inspector_dock_ == nullptr ||
+        timeline_dock_ == nullptr || graph_editor_dock_ == nullptr) {
+        return;
+    }
+
+    QSettings settings;
+    settings.setValue(QString::fromLatin1(kDockLayoutSettingsKey),
+                      saveState(kDockLayoutVersion));
+    settings.sync();
+    if (settings.status() == QSettings::NoError) return;
+
+    creative_suite::diagnostics::Logger::instance().log(
+        creative_suite::diagnostics::Level::Warning,
+        "motion_workspace", "save_panel_layout",
+        "The workspace panel layout could not be saved.",
+        {{"settings_key", kDockLayoutSettingsKey}});
+}
+
+void MainWindow::restoreDefaultPanelLayout()
+{
+    if (media_pool_dock_ == nullptr || inspector_dock_ == nullptr ||
+        timeline_dock_ == nullptr || graph_editor_dock_ == nullptr) {
+        return;
+    }
+
+    const std::array<QDockWidget*, 4> docks{{
+        media_pool_dock_, inspector_dock_, timeline_dock_, graph_editor_dock_}};
+    for (auto* dock : docks) {
+        if (dock->isFloating()) dock->setFloating(false);
+        removeDockWidget(dock);
+    }
+
+    setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
+    setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
+    addDockWidget(Qt::LeftDockWidgetArea, media_pool_dock_);
+    addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
+    addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
+    addDockWidget(Qt::BottomDockWidgetArea, graph_editor_dock_);
+    splitDockWidget(timeline_dock_, graph_editor_dock_, Qt::Vertical);
+    for (auto* dock : docks) {
+        if (dock->isFloating()) dock->setFloating(false);
+    }
+    graph_editor_dock_->show();
+    graph_editor_dock_->hide();
+    media_pool_dock_->show();
+    inspector_dock_->show();
+    timeline_dock_->show();
+    resizeDocks({media_pool_dock_, inspector_dock_}, {270, 300}, Qt::Horizontal);
+    resizeDocks({timeline_dock_, graph_editor_dock_}, {220, 170}, Qt::Vertical);
+    if (timeline_ != nullptr) timeline_->setGraphEditorOpen(false);
 }
 
 void MainWindow::openMedia()
@@ -2022,8 +2141,6 @@ void MainWindow::applyCurveEasing(
 void MainWindow::resetCurveEditor()
 {
     curve_selection_.reset();
-    if (curve_editor_panel_ != nullptr) curve_editor_panel_->hide();
-    if (timeline_ != nullptr) timeline_->setGraphEditorOpen(false);
     refreshCurveEditor();
 }
 

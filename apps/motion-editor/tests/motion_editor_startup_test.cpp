@@ -1,6 +1,8 @@
 #include "ui/main_window.h"
 
 #include <QApplication>
+#include <QAction>
+#include <QDockWidget>
 #include <QLabel>
 #include <QPushButton>
 #include <QTemporaryDir>
@@ -36,7 +38,12 @@ int main(int argc, char* argv[])
         || new_composition_button == nullptr
         || new_composition_button->text() != QStringLiteral("New Composition...")
         || !new_composition_button->isVisible()
-        || window.findChild<QWidget*>(QStringLiteral("motion-media-pool")) != nullptr) {
+        || window.findChild<QWidget*>(QStringLiteral("motion-media-pool")) != nullptr
+        || !window.findChildren<QDockWidget*>().empty()
+        || window.findChild<QAction*>(
+               QStringLiteral("motion-reset-panel-layout-action")) == nullptr
+        || window.findChild<QAction*>(
+               QStringLiteral("motion-reset-panel-layout-action"))->isEnabled()) {
         std::cerr << "Motion Studio did not start maximized in its empty state.\n";
         return EXIT_FAILURE;
     }

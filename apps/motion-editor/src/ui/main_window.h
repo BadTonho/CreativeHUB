@@ -21,9 +21,10 @@
 #include <vector>
 
 class QAction;
+class QDockWidget;
 class QLabel;
+class QMenu;
 class QPushButton;
-class QSplitter;
 class QDoubleSpinBox;
 class QCloseEvent;
 class QProgressDialog;
@@ -100,6 +101,9 @@ private:
                              int error_code = -1,
                              int system_error = -1);
     void createWorkspace();
+    void restoreWorkspaceLayout();
+    void saveWorkspaceLayout();
+    void restoreDefaultPanelLayout();
     void openShortcutSettings();
     void openAutosaveRecoverySettings();
     void refreshAutosaveRecoveryDialog(class AutosaveRecoveryDialog& dialog) const;
@@ -151,14 +155,18 @@ private:
     QAction* autosave_settings_action_ = nullptr;
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
+    QAction* reset_panel_layout_action_ = nullptr;
     QAction* play_pause_action_ = nullptr;
     QAction* previous_frame_action_ = nullptr;
     QAction* next_frame_action_ = nullptr;
     QAction* loop_action_ = nullptr;
     QAction* zoom_in_action_ = nullptr;
     QAction* zoom_out_action_ = nullptr;
-    QSplitter* composition_splitter_ = nullptr;
-    QSplitter* workspace_ = nullptr;
+    QMenu* view_menu_ = nullptr;
+    QDockWidget* media_pool_dock_ = nullptr;
+    QDockWidget* inspector_dock_ = nullptr;
+    QDockWidget* timeline_dock_ = nullptr;
+    QDockWidget* graph_editor_dock_ = nullptr;
     MediaPoolWidget* media_pool_ = nullptr;
     CompositionViewer* viewer_ = nullptr;
     MediaDetailsWidget* media_details_ = nullptr;

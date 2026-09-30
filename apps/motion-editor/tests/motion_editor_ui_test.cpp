@@ -18,6 +18,7 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDialog>
+#include <QDockWidget>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
@@ -1492,6 +1493,9 @@ int main(int argc, char* argv[])
 
     QTemporaryDir temporary;
     require(temporary.isValid(), "temporary media directory is available");
+    QSettings isolated_layout_settings;
+    isolated_layout_settings.remove(QStringLiteral("workspace/dock_layout_state"));
+    isolated_layout_settings.sync();
     const auto image_path = pathFromQString(temporary.path()) / "poster.png";
     QImage image(48, 32, QImage::Format_RGBA8888);
     image.fill(QColor(20, 140, 210, 255));
@@ -1520,9 +1524,45 @@ int main(int argc, char* argv[])
     auto* redo_action = action(window, "motion-redo-action");
     require(!undo_action->isEnabled() && !redo_action->isEnabled(),
             "a new composition begins with empty Undo and Redo history");
-    require(window.centralWidget()->objectName() == QStringLiteral("motion-composition-splitter") &&
+    require(window.centralWidget()->objectName() == QStringLiteral("motion-composition-viewer") &&
                 window.isMaximized(),
             "the composition workspace replaces the empty state and preserves maximization");
+    auto* media_pool_dock = findWidget<QDockWidget>(&window, "motion-media-pool-dock");
+    auto* inspector_dock = findWidget<QDockWidget>(&window, "motion-inspector-dock");
+    auto* timeline_dock = findWidget<QDockWidget>(&window, "motion-timeline-dock");
+    auto* graph_editor_dock = findWidget<QDockWidget>(&window, "motion-graph-editor-dock");
+    auto* reset_panel_layout = action(window, "motion-reset-panel-layout-action");
+    auto* media_pool_view_action = action(window, "motion-view-media-pool-action");
+    auto* graph_editor_view_action = action(window, "motion-view-graph-editor-action");
+    require(media_pool_dock != nullptr && inspector_dock != nullptr &&
+                timeline_dock != nullptr && graph_editor_dock != nullptr &&
+                window.dockWidgetArea(media_pool_dock) == Qt::LeftDockWidgetArea &&
+                window.dockWidgetArea(inspector_dock) == Qt::RightDockWidgetArea &&
+                window.dockWidgetArea(timeline_dock) == Qt::BottomDockWidgetArea &&
+                window.dockWidgetArea(graph_editor_dock) == Qt::BottomDockWidgetArea &&
+                media_pool_dock->features().testFlag(QDockWidget::DockWidgetMovable) &&
+                media_pool_dock->features().testFlag(QDockWidget::DockWidgetFloatable) &&
+                media_pool_dock->features().testFlag(QDockWidget::DockWidgetClosable) &&
+                graph_editor_dock->isHidden() && reset_panel_layout->isEnabled(),
+            "the workspace creates movable panels in the default dock arrangement");
+    media_pool_view_action->trigger();
+    require(media_pool_dock->isHidden(), "View can hide the Media Pool dock");
+    media_pool_view_action->trigger();
+    require(!media_pool_dock->isHidden(), "View can show the Media Pool dock again");
+    graph_editor_view_action->trigger();
+    require(!graph_editor_dock->isHidden() &&
+                graph_editor_dock->geometry().top() > timeline_dock->geometry().top() &&
+                findWidget<QPushButton>(&window,
+                    "motion-timeline-graph-editor-toggle")->isChecked(),
+            "the View menu and Graph Editor timeline button stay synchronized");
+    findWidget<QPushButton>(&window, "motion-timeline-graph-editor-toggle")->click();
+    require(graph_editor_dock->isHidden() && !graph_editor_view_action->isChecked(),
+            "the Graph Editor timeline button hides its dock and updates View");
+    reset_panel_layout->trigger();
+    require(window.dockWidgetArea(media_pool_dock) == Qt::LeftDockWidgetArea &&
+                window.dockWidgetArea(inspector_dock) == Qt::RightDockWidgetArea &&
+                graph_editor_dock->isHidden(),
+            "Reset Panel Layout restores the first-run arrangement");
     require(window.mediaPoolWidget() != nullptr && window.mediaPoolWidget()->library().empty(),
             "a new composition starts with an empty Media Pool");
     require(findWidget<QWidget>(&window, "motion-media-pool") != nullptr &&
@@ -2338,6 +2378,8 @@ int main(int argc, char* argv[])
     require(pool->library().items()[restored_index].display_name == "Poster renamed",
             "restoring an offline source preserves its Media Pool label");
 
+    graph_editor_dock->show();
+    QCoreApplication::processEvents();
     timeline_display_mode->setCurrentIndex(1);
     QTimer::singleShot(0, [] {
         completeCompositionDialog(1920, 1080, 4);
@@ -2355,15 +2397,75 @@ int main(int argc, char* argv[])
             "successfully creating a replacement composition clears history");
     require(pool->library().empty() && media_list->count() == 0 && timeline->currentFrame() == 0 &&
                 timeline_display_mode->currentIndex() == 0 &&
-                timeline_position_readout->text() == QStringLiteral("00:00:00.000"),
-            "replacing a composition clears its Media Pool, resets navigation, and restores Time display");
+                timeline_position_readout->text() == QStringLiteral("00:00:00.000") &&
+                !graph_editor_dock->isHidden() &&
+                findWidget<QPushButton>(&window,
+                    "motion-timeline-graph-editor-toggle")->isChecked(),
+            "replacing a composition resets document navigation and Media Pool while keeping the workspace layout");
 
+    window.addDockWidget(Qt::LeftDockWidgetArea, inspector_dock);
+    window.tabifyDockWidget(media_pool_dock, inspector_dock);
+    const bool docks_tabified =
+        window.tabifiedDockWidgets(inspector_dock).contains(media_pool_dock) ||
+        window.tabifiedDockWidgets(media_pool_dock).contains(inspector_dock);
+    media_pool_dock->hide();
+    graph_editor_dock->setFloating(true);
+    graph_editor_dock->show();
+    QCoreApplication::processEvents();
+    require(docks_tabified &&
+                media_pool_dock->isHidden() && graph_editor_dock->isFloating(),
+            "panels can be tabified, hidden, and floated before saving the workspace");
+    reset_panel_layout->trigger();
+    QCoreApplication::processEvents();
+    require(window.dockWidgetArea(media_pool_dock) == Qt::LeftDockWidgetArea &&
+                window.dockWidgetArea(inspector_dock) == Qt::RightDockWidgetArea &&
+                window.dockWidgetArea(timeline_dock) == Qt::BottomDockWidgetArea &&
+                !media_pool_dock->isHidden() && !graph_editor_dock->isFloating() &&
+                graph_editor_dock->isHidden(),
+            "Reset Panel Layout removes tabbing and floating and restores default visibility");
+    window.addDockWidget(Qt::LeftDockWidgetArea, inspector_dock);
+    window.tabifyDockWidget(media_pool_dock, inspector_dock);
+    media_pool_dock->hide();
+    graph_editor_dock->setFloating(true);
+    graph_editor_dock->show();
+    QCoreApplication::processEvents();
     QTimer::singleShot(0, [] {
         auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
         require(prompt != nullptr, "closing the final unsaved composition requests a decision");
         prompt->button(QMessageBox::Discard)->click();
     });
     window.close();
+    require(!window.isVisible(), "the customized workspace closes successfully");
+
+    MainWindow restored_window(nullptr,
+        pathFromQString(temporary.path()) / "layout-restoration-recovery",
+        "layout-restoration-session");
+    restored_window.show();
+    createComposition(restored_window, 640, 360, 2);
+    auto* restored_media_dock = findWidget<QDockWidget>(
+        &restored_window, "motion-media-pool-dock");
+    auto* restored_inspector_dock = findWidget<QDockWidget>(
+        &restored_window, "motion-inspector-dock");
+    auto* restored_graph_dock = findWidget<QDockWidget>(
+        &restored_window, "motion-graph-editor-dock");
+    const bool media_was_hidden = restored_media_dock->isHidden();
+    restored_media_dock->show();
+    QCoreApplication::processEvents();
+    const bool restored_as_tab =
+        restored_window.tabifiedDockWidgets(restored_inspector_dock)
+            .contains(restored_media_dock) ||
+        restored_window.tabifiedDockWidgets(restored_media_dock)
+            .contains(restored_inspector_dock);
+    restored_media_dock->hide();
+    require(restored_media_dock->isHidden() && restored_graph_dock->isFloating() &&
+                media_was_hidden && restored_as_tab,
+            "a recreated window restores hidden, tabified, and floating panel state");
+    QTimer::singleShot(0, [] {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        require(prompt != nullptr, "closing the restored test composition prompts for changes");
+        prompt->button(QMessageBox::Discard)->click();
+    });
+    restored_window.close();
 
     std::cout << "Motion Studio Media Pool UI tests passed.\n";
     return EXIT_SUCCESS;
