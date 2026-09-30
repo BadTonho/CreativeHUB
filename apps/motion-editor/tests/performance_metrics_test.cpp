@@ -66,6 +66,12 @@ int main(int argc, char* argv[])
                                       4'000'000ULL, 5'000'000ULL}) {
         metrics.recordTiming(motion::diagnostics::PreviewTimingStage::Decode, value);
     }
+    metrics.recordEffectTiming(
+        motion::diagnostics::PreviewEffectKind::GaussianBlur, 10'000'000);
+    metrics.recordEffectTiming(
+        motion::diagnostics::PreviewEffectKind::GaussianBlur, 30'000'000);
+    metrics.recordEffectTiming(
+        motion::diagnostics::PreviewEffectKind::ColorAdjustment, 2'000'000);
     metrics.recordViewerPaint(10);
     const auto snapshot = metrics.takeSnapshotAndReset();
     require(snapshot.has_value() && snapshot->requests == 1 &&
@@ -83,6 +89,14 @@ int main(int argc, char* argv[])
         static_cast<std::size_t>(motion::diagnostics::PreviewTimingStage::RequestToViewerPaint)];
     require(paint.count == 1 && paint.maximum_nanoseconds > 0,
             "request-to-viewer-paint latency is recorded for the matching generation");
+    const auto& gaussian_blur = snapshot->effect_timings[
+        static_cast<std::size_t>(motion::diagnostics::PreviewEffectKind::GaussianBlur)];
+    const auto& color_adjustment = snapshot->effect_timings[
+        static_cast<std::size_t>(motion::diagnostics::PreviewEffectKind::ColorAdjustment)];
+    require(gaussian_blur.count == 2 && gaussian_blur.total_nanoseconds == 40'000'000 &&
+                gaussian_blur.maximum_nanoseconds == 30'000'000 &&
+                color_adjustment.count == 1 && color_adjustment.total_nanoseconds == 2'000'000,
+            "effect timing summaries distinguish Gaussian Blur and Color Adjustment");
     system_monitor::PerformanceSnapshot resources;
     resources.process_cpu_percent = 27.5;
     resources.process_working_set_bytes = 123456;
@@ -96,7 +110,12 @@ int main(int argc, char* argv[])
         serialized_context << key << '=' << value << '\n';
     const auto context_text = serialized_context.str();
     require(context_text.find("process_cpu_percent=27.500000") != std::string::npos &&
+                context_text.find("schema_version=2") != std::string::npos &&
                 context_text.find("decode_p95_ms=") != std::string::npos &&
+                context_text.find("gaussian_blur_apply_count=2") != std::string::npos &&
+                context_text.find("gaussian_blur_average_ms=20.000000") != std::string::npos &&
+                context_text.find("color_adjustment_apply_count=1") != std::string::npos &&
+                context_text.find("color_adjustment_average_ms=2.000000") != std::string::npos &&
                 context_text.find("request_to_viewer_paint_count=1") != std::string::npos &&
                 context_text.find("canvas_width=1920") != std::string::npos &&
                 context_text.find("effect_count=3") != std::string::npos,

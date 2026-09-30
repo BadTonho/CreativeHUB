@@ -284,6 +284,8 @@ int main(int argc, char* argv[])
     effected_image.kind = motion::model::LayerKind::Image;
     effected_image.still_frame = solidFrame(40, 80, 120);
     effected_image.effects.emplace_back(
+        motion::model::GaussianBlurEffect{true, 1.0});
+    effected_image.effects.emplace_back(
         motion::model::ColorAdjustmentEffect{true, 20.0, 100.0, 100.0});
     const auto effected_generation = renderer.submit(
         motion::ui::PreviewRequest{{4, 4}, {24, 1}, {effected_image}});
@@ -484,6 +486,11 @@ int main(int argc, char* argv[])
     require(performance_snapshot->timings[static_cast<std::size_t>(
                 motion::diagnostics::PreviewTimingStage::FrameRender)].count > 0,
             "preview worker records total frame-render timing");
+    require(performance_snapshot->effect_timings[static_cast<std::size_t>(
+                motion::diagnostics::PreviewEffectKind::GaussianBlur)].count > 0 &&
+                performance_snapshot->effect_timings[static_cast<std::size_t>(
+                    motion::diagnostics::PreviewEffectKind::ColorAdjustment)].count > 0,
+            "preview worker records actual applications of both effect types separately");
     performance_metrics.setEnabled(false);
 
     std::cout << "Motion Studio preview renderer tests passed.\n";

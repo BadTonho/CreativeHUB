@@ -214,7 +214,18 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 StageTimer effects_timer(
                     record_preview_metrics_, diagnostics::PreviewTimingStage::Effects);
                 auto processed = std::make_shared<creative_suite::media::RgbaFrame>(*frame);
-                if (!applyLayerEffects(*processed, layer.effects, should_cancel)) {
+                const EffectTimingRecorder effect_timing_recorder =
+                    [record = record_preview_metrics_](
+                        LayerEffectKind effect, std::uint64_t duration_nanoseconds) {
+                        if (!record) return;
+                        const auto kind = effect == LayerEffectKind::GaussianBlur
+                            ? diagnostics::PreviewEffectKind::GaussianBlur
+                            : diagnostics::PreviewEffectKind::ColorAdjustment;
+                        diagnostics::PerformanceMetrics::instance().recordEffectTiming(
+                            kind, duration_nanoseconds);
+                    };
+                if (!applyLayerEffects(*processed, layer.effects, should_cancel,
+                                       effect_timing_recorder)) {
                     return {};
                 }
                 frame = std::move(processed);

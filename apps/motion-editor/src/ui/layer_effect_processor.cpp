@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -12,6 +13,35 @@
 
 namespace motion::ui {
 namespace {
+
+template<typename Operation>
+bool measureEffect(const EffectTimingRecorder& recorder,
+                   LayerEffectKind effect,
+                   Operation&& operation)
+{
+    const auto started = std::chrono::steady_clock::now();
+    bool completed = false;
+    try {
+        completed = operation();
+    } catch (...) {
+        if (recorder) {
+            const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - started).count();
+            if (elapsed >= 0) {
+                try { recorder(effect, static_cast<std::uint64_t>(elapsed)); } catch (...) {}
+            }
+        }
+        throw;
+    }
+    if (recorder) {
+        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - started).count();
+        if (elapsed >= 0) {
+            try { recorder(effect, static_cast<std::uint64_t>(elapsed)); } catch (...) {}
+        }
+    }
+    return completed;
+}
 
 void validateFrame(const creative_suite::media::RgbaFrame& frame)
 {
@@ -186,7 +216,8 @@ bool hasEnabledLayerEffects(const std::vector<model::LayerEffect>& effects) noex
 bool applyLayerEffects(
     creative_suite::media::RgbaFrame& frame,
     const std::vector<model::LayerEffect>& effects,
-    const std::function<bool()>& should_cancel)
+    const std::function<bool()>& should_cancel,
+    const EffectTimingRecorder& record_effect_timing)
 {
     if (effects.empty()) return true;
     if (!model::validLayerEffects(effects)) {
@@ -201,10 +232,14 @@ bool applyLayerEffects(
             using Effect = std::decay_t<decltype(value)>;
             if (!value.enabled) return true;
             if constexpr (std::is_same_v<Effect, model::GaussianBlurEffect>) {
-                return applyGaussianBlur(frame, value.radius_pixels, should_cancel);
+                return measureEffect(record_effect_timing, LayerEffectKind::GaussianBlur,
+                    [&] { return applyGaussianBlur(frame, value.radius_pixels, should_cancel); });
             } else {
-                applyColorAdjustment(frame, value, should_cancel);
-                return !(should_cancel && should_cancel());
+                return measureEffect(record_effect_timing, LayerEffectKind::ColorAdjustment,
+                    [&] {
+                        applyColorAdjustment(frame, value, should_cancel);
+                        return !(should_cancel && should_cancel());
+                    });
             }
         }, effect);
         if (!completed) return false;

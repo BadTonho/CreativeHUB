@@ -224,7 +224,8 @@ validation.
   consumes it through compatibility headers, preserving its existing metrics
   schema and preferences. Motion Studio uses the same sampler for resource
   context, while its preview-stage aggregation, request lifecycle counters,
-  one-second logging policy, and export summaries remain Motion-owned. The
+  one-second logging policy, per-effect counts/timings for Gaussian Blur and
+  Color Adjustment, and export summaries remain Motion-owned. The
   shared sampler does not report GPU metrics, and the Motion log omits project
   paths, media paths, layer names, and text content.
 - Preview decode and composition run on a worker thread. The worker coalesces

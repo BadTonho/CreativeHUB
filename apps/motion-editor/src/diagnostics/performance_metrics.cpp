@@ -23,9 +23,12 @@ bool PreviewMetricsSnapshot::hasActivity() const noexcept
 {
     if (requests != 0 || rendered_frames != 0 || coalesced_requests != 0 ||
         stale_results != 0) return true;
-    return std::any_of(timings.begin(), timings.end(), [](const TimingSummary& timing) {
-        return timing.count != 0;
-    });
+    const auto has_timing = [](const auto& values) {
+        return std::any_of(values.begin(), values.end(), [](const TimingSummary& timing) {
+            return timing.count != 0;
+        });
+    };
+    return has_timing(timings) || has_timing(effect_timings);
 }
 
 PerformanceMetrics& PerformanceMetrics::instance() noexcept
@@ -41,6 +44,7 @@ void PerformanceMetrics::setEnabled(bool enabled) noexcept
     if (!enabled_) {
         requests_ = rendered_frames_ = coalesced_requests_ = stale_results_ = 0;
         timings_ = {};
+        effect_timings_ = {};
         request_started_.clear();
     }
 }
@@ -56,6 +60,7 @@ void PerformanceMetrics::reset() noexcept
     std::lock_guard lock(mutex_);
     requests_ = rendered_frames_ = coalesced_requests_ = stale_results_ = 0;
     timings_ = {};
+    effect_timings_ = {};
     request_started_.clear();
 }
 
@@ -116,6 +121,24 @@ void PerformanceMetrics::recordTiming(
     timing.percentile_samples.push_back(duration_nanoseconds);
 }
 
+void PerformanceMetrics::recordEffectTiming(
+    PreviewEffectKind effect,
+    std::uint64_t duration_nanoseconds) noexcept
+{
+    const auto index = static_cast<std::size_t>(effect);
+    if (index >= effect_timings_.size()) return;
+    std::lock_guard lock(mutex_);
+    if (!enabled_) return;
+    auto& timing = effect_timings_[index];
+    ++timing.count;
+    timing.total_nanoseconds += duration_nanoseconds;
+    timing.maximum_nanoseconds = std::max(timing.maximum_nanoseconds, duration_nanoseconds);
+    if (timing.percentile_samples.size() == maximum_percentile_samples_) {
+        timing.percentile_samples.pop_front();
+    }
+    timing.percentile_samples.push_back(duration_nanoseconds);
+}
+
 void PerformanceMetrics::recordViewerPaint(std::uint64_t generation) noexcept
 {
     std::chrono::steady_clock::time_point started;
@@ -153,6 +176,16 @@ std::optional<PreviewMetricsSnapshot> PerformanceMetrics::takeSnapshotAndReset()
         destination.p99_nanoseconds = percentile(source.percentile_samples, 0.99);
         source.percentile_samples.clear();
     }
+    for (std::size_t index = 0; index < effect_timings_.size(); ++index) {
+        auto& source = effect_timings_[index];
+        auto& destination = result.effect_timings[index];
+        destination.count = std::exchange(source.count, 0);
+        destination.total_nanoseconds = std::exchange(source.total_nanoseconds, 0);
+        destination.maximum_nanoseconds = std::exchange(source.maximum_nanoseconds, 0);
+        destination.p95_nanoseconds = percentile(source.percentile_samples, 0.95);
+        destination.p99_nanoseconds = percentile(source.percentile_samples, 0.99);
+        source.percentile_samples.clear();
+    }
     if (!result.hasActivity()) return std::nullopt;
     return result;
 }
@@ -171,6 +204,16 @@ const char* previewTimingStageName(PreviewTimingStage stage) noexcept
     return "unknown";
 }
 
+const char* previewEffectKindName(PreviewEffectKind effect) noexcept
+{
+    switch (effect) {
+    case PreviewEffectKind::GaussianBlur: return "gaussian_blur";
+    case PreviewEffectKind::ColorAdjustment: return "color_adjustment";
+    case PreviewEffectKind::Count: break;
+    }
+    return "unknown_effect";
+}
+
 creative_suite::diagnostics::Context makePreviewPerformanceContext(
     const PreviewMetricsSnapshot& metrics,
     const system_monitor::PerformanceSnapshot& resources,
@@ -180,7 +223,7 @@ creative_suite::diagnostics::Context makePreviewPerformanceContext(
         return value.has_value() ? std::to_string(*value) : std::string("N/A");
     };
     creative_suite::diagnostics::Context context{
-        {"schema_version", "1"},
+        {"schema_version", "2"},
         {"interval_ms", "1000"},
         {"process_cpu_percent", optionalNumber(resources.process_cpu_percent)},
         {"process_working_set_bytes", optionalNumber(resources.process_working_set_bytes)},
@@ -209,6 +252,22 @@ creative_suite::diagnostics::Context makePreviewPerformanceContext(
             return std::to_string(static_cast<double>(ns) / 1'000'000.0);
         };
         context.emplace_back(prefix + "_count", std::to_string(timing.count));
+        context.emplace_back(prefix + "_average_ms", std::to_string(average));
+        context.emplace_back(prefix + "_maximum_ms", milliseconds(timing.maximum_nanoseconds));
+        context.emplace_back(prefix + "_p95_ms", milliseconds(timing.p95_nanoseconds));
+        context.emplace_back(prefix + "_p99_ms", milliseconds(timing.p99_nanoseconds));
+    }
+    for (std::size_t index = 0; index < metrics.effect_timings.size(); ++index) {
+        const auto& timing = metrics.effect_timings[index];
+        const auto prefix = std::string(previewEffectKindName(
+            static_cast<PreviewEffectKind>(index)));
+        const auto average = timing.count == 0 ? 0.0 :
+            static_cast<double>(timing.total_nanoseconds) /
+                static_cast<double>(timing.count) / 1'000'000.0;
+        const auto milliseconds = [](std::uint64_t ns) {
+            return std::to_string(static_cast<double>(ns) / 1'000'000.0);
+        };
+        context.emplace_back(prefix + "_apply_count", std::to_string(timing.count));
         context.emplace_back(prefix + "_average_ms", std::to_string(average));
         context.emplace_back(prefix + "_maximum_ms", milliseconds(timing.maximum_nanoseconds));
         context.emplace_back(prefix + "_p95_ms", milliseconds(timing.p95_nanoseconds));

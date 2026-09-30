@@ -198,7 +198,10 @@ the Motion Studio implementation choices are finalized.
 - [x] Add configurable one-second preview performance samples and per-job
   export summaries. The shared system-monitor library provides best-effort
   process CPU and memory readings; Motion Studio records render-stage timing,
-  request-to-viewer-paint latency, coalesced/stale work, and export throughput.
+  request-to-viewer-paint latency, coalesced/stale work, per-effect application
+  counts and timings, and export throughput. Preview metric schema v2 separates
+  Gaussian Blur and Color Adjustment timing without recording layer names or
+  content.
   This diagnostic logging does not replace representative-project profiling or
   cross-platform validation.
 - [-] Extend actionable local error logging and automated coverage for the

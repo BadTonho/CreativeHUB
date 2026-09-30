@@ -23,6 +23,12 @@ enum class PreviewTimingStage : std::size_t {
     Count
 };
 
+enum class PreviewEffectKind : std::size_t {
+    GaussianBlur,
+    ColorAdjustment,
+    Count
+};
+
 struct TimingSummary {
     std::uint64_t count = 0;
     std::uint64_t total_nanoseconds = 0;
@@ -38,6 +44,8 @@ struct PreviewMetricsSnapshot {
     std::uint64_t stale_results = 0;
     std::array<TimingSummary,
                static_cast<std::size_t>(PreviewTimingStage::Count)> timings{};
+    std::array<TimingSummary,
+               static_cast<std::size_t>(PreviewEffectKind::Count)> effect_timings{};
 
     [[nodiscard]] bool hasActivity() const noexcept;
 };
@@ -73,6 +81,8 @@ public:
     void recordRenderedFrame() noexcept;
     void recordTiming(PreviewTimingStage stage,
                       std::uint64_t duration_nanoseconds) noexcept;
+    void recordEffectTiming(PreviewEffectKind effect,
+                            std::uint64_t duration_nanoseconds) noexcept;
     void recordViewerPaint(std::uint64_t generation) noexcept;
 
     [[nodiscard]] std::optional<PreviewMetricsSnapshot>
@@ -95,9 +105,12 @@ private:
     std::uint64_t stale_results_ = 0;
     std::array<TimingBucket,
                static_cast<std::size_t>(PreviewTimingStage::Count)> timings_{};
+    std::array<TimingBucket,
+               static_cast<std::size_t>(PreviewEffectKind::Count)> effect_timings_{};
     std::map<std::uint64_t, std::chrono::steady_clock::time_point> request_started_;
 };
 
 [[nodiscard]] const char* previewTimingStageName(PreviewTimingStage stage) noexcept;
+[[nodiscard]] const char* previewEffectKindName(PreviewEffectKind effect) noexcept;
 
 } // namespace motion::diagnostics

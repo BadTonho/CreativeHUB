@@ -220,8 +220,10 @@ memory; canvas dimensions and exact frame-rate numerator/denominator; layer and
 effect counts; request, rendered-frame, coalesced-request, and stale-result
 counters; and count, average, maximum, p95, and p99 durations for video decode,
 text/shape rasterization, effects, CPU composition, total frame render, and
-request-to-viewer-paint latency. A bounded sample window is used for percentile
-estimates.
+request-to-viewer-paint latency. Schema v2 also reports actual application
+counts and separate timing summaries for Gaussian Blur and Color Adjustment.
+The configured effect count remains distinct from per-interval application
+counts. A bounded sample window is used for percentile estimates.
 
 The cross-platform CPU and memory sampler is owned by the shared
 `creative-suite::system-monitor` library and is consumed by both editors. The
