@@ -87,9 +87,11 @@ both levels.
 ### Layer effects
 
 Motion Studio owns the effect types, parameter validation, ordered per-layer
-stacks, inspector controls, edit history, and CPU processing. The current
-effects are Gaussian Blur and Color Adjustment; stacks may repeat effect types
-and disabled effects are retained. The renderer applies enabled effects to a
+stacks, inspector controls, drag-and-drop and Up/Down reordering, edit history,
+and CPU processing. Reordering an effect preserves its enabled state and
+parameters, updates the live preview, and records one composition history
+action. Current effects are Gaussian Blur and Color Adjustment; stacks may
+repeat effect types and disabled effects are retained. The renderer applies enabled effects to a
 layer's RGBA8 frame before its transform and shared raster composition. It
 serves preview, playback, and export, so each output path uses the same effect
 order and parameter behavior. Blur uses a bounded three-pass box approximation

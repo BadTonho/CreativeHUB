@@ -252,6 +252,34 @@ void sendMouseDrag(QWidget* target, const QPoint& from, const QPoint& to)
     QApplication::sendEvent(target, &release);
 }
 
+bool moveListWidgetItem(QListWidget* list, int source_row, int destination_row)
+{
+    list->setCurrentRow(source_row);
+    const auto* source_item = list->item(source_row);
+    const auto* target_item = list->item(destination_row);
+    if (source_item == nullptr || target_item == nullptr) return false;
+    QMimeData payload;
+    payload.setData(QStringLiteral("application/x-motion-studio-effect-index"),
+                    source_item->data(Qt::UserRole).toString().toUtf8());
+    const auto target_rect = list->visualItemRect(target_item);
+    if (!target_rect.isValid()) return false;
+    const QPoint target_position(target_rect.left() + target_rect.width() / 2,
+        destination_row <= source_row ? target_rect.top() + 1 : target_rect.bottom() - 1);
+    auto* viewport = list->viewport();
+    QDragEnterEvent enter(target_position, Qt::MoveAction, &payload,
+                          Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(viewport, &enter);
+    if (!enter.isAccepted()) return false;
+    QDragMoveEvent move(target_position, Qt::MoveAction, &payload,
+                        Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(viewport, &move);
+    if (!move.isAccepted()) return false;
+    QDropEvent drop(QPointF(target_position), Qt::MoveAction, &payload,
+                    Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(viewport, &drop);
+    return drop.isAccepted();
+}
+
 void sendControlWheel(QWidget* target, int delta)
 {
     const QPointF point(target->rect().center());
@@ -1164,9 +1192,18 @@ void testMotionLayerEffects()
 {
     QTemporaryDir recovery_directory;
     require(recovery_directory.isValid(), "effect test recovery directory is available");
+    QTemporaryDir project_directory;
+    require(project_directory.isValid(), "effect order project directory is available");
+    const auto project_path = pathFromQString(project_directory.path()) / "effect-order.motion";
     MainWindow window(nullptr, pathFromQString(recovery_directory.path()), "layer-effects-ui");
     createComposition(window, 320, 180, 2);
+    auto* viewer = dynamic_cast<motion::ui::CompositionViewer*>(
+        findWidget<QWidget>(&window, "motion-composition-viewer"));
+    require(viewer != nullptr, "the effect stack test has a composition preview");
     action(window, "motion-new-rectangle-layer-action")->trigger();
+    QTimer::singleShot(0, [&] { chooseDocumentFile(project_path, QDialogButtonBox::Save); });
+    action(window, "motion-save-composition-as-action")->trigger();
+    require(!window.isWindowModified(), "the initial layer stack is saved as a clean baseline");
     auto* inspector_tabs = findWidget<QTabWidget>(&window, "motion-inspector-tabs");
     const int effects_tab = inspector_tabs->indexOf(
         findWidget<QWidget>(&window, "motion-effects-inspector"));
@@ -1239,6 +1276,110 @@ void testMotionLayerEffects()
     require(inspector_tabs->currentWidget() == findWidget<QWidget>(
                 &window, "motion-effects-inspector"),
             "effect edits keep the Effects inspector active");
+
+    const auto preview_before_duplicate = viewer->renderedFrame();
+    add_color->trigger();
+    brightness->setValue(55.0);
+    effects->item(2)->setCheckState(Qt::Unchecked);
+    require(waitFor([&] {
+                return viewer->renderedFrame() != nullptr &&
+                    viewer->renderedFrame() != preview_before_duplicate;
+            }),
+            "editing the effect stack refreshes the composition preview");
+    const auto before_drag = window.compositionDocument()->layers().back().effects;
+    require(before_drag.size() == 3 &&
+                std::get<motion::model::ColorAdjustmentEffect>(before_drag[2]).brightness == 55.0 &&
+                !std::get<motion::model::ColorAdjustmentEffect>(before_drag[2]).enabled,
+            "the stack permits repeated effects with independent parameters and enabled state");
+    action(window, "motion-save-composition-action")->trigger();
+    require(!window.isWindowModified(), "saving the stack makes it a clean reorder baseline");
+
+    const auto preview_before_reorder = viewer->renderedFrame();
+    require(moveListWidgetItem(effects, 2, 0),
+            "the effect list model accepts an internal drag to the top row");
+    QCoreApplication::processEvents();
+    require(waitFor([&] {
+                return viewer->renderedFrame() != nullptr &&
+                    viewer->renderedFrame() != preview_before_reorder;
+            }),
+            "dragging effects refreshes the composition preview");
+    const auto after_drag = window.compositionDocument()->layers().back().effects;
+    require(after_drag.size() == 3 &&
+                std::get<motion::model::ColorAdjustmentEffect>(after_drag[0]).brightness == 55.0 &&
+                !std::get<motion::model::ColorAdjustmentEffect>(after_drag[0]).enabled &&
+                std::get<motion::model::GaussianBlurEffect>(after_drag[1]) ==
+                    motion::model::GaussianBlurEffect{} &&
+                std::get<motion::model::ColorAdjustmentEffect>(after_drag[2]) == edited_color,
+            "dragging moves the exact effect record and retains the complete stack order");
+    require(effects->currentRow() == 0 && brightness->value() == 55.0 &&
+                effects->item(0)->checkState() == Qt::Unchecked && window.isWindowModified(),
+            "selection, parameters, enabled state, and dirty state follow the dragged effect");
+    action(window, "motion-undo-action")->trigger();
+    require(window.compositionDocument()->layers().back().effects == before_drag,
+            "one Undo restores the entire pre-drag order");
+    action(window, "motion-redo-action")->trigger();
+    require(window.compositionDocument()->layers().back().effects == after_drag,
+            "Redo reapplies the dragged effect order");
+
+    require(moveListWidgetItem(effects, 0, 2),
+            "the effect list accepts a drag to a lower row");
+    QCoreApplication::processEvents();
+    require(window.compositionDocument()->layers().back().effects == before_drag &&
+                effects->currentRow() == 2 && brightness->value() == 55.0 &&
+                effects->item(2)->checkState() == Qt::Unchecked,
+            "dragging down restores the original order and keeps the moved duplicate selected");
+    action(window, "motion-undo-action")->trigger();
+    require(window.compositionDocument()->layers().back().effects == after_drag,
+            "Undo reverses one downward drag");
+    action(window, "motion-redo-action")->trigger();
+    require(window.compositionDocument()->layers().back().effects == before_drag,
+            "Redo restores one downward drag");
+    require(moveListWidgetItem(effects, 2, 0),
+            "the effect list can drag the repeated effect back to the top");
+    QCoreApplication::processEvents();
+    require(window.compositionDocument()->layers().back().effects == after_drag,
+            "dragging the effect back up restores its independent settings");
+
+    require(moveListWidgetItem(effects, 0, 0),
+            "the effect list accepts a same-position drop without changing order");
+    QCoreApplication::processEvents();
+    require(window.compositionDocument()->layers().back().effects == after_drag,
+            "dropping an effect at its current position is a no-op");
+    action(window, "motion-undo-action")->trigger();
+    require(window.compositionDocument()->layers().back().effects == before_drag,
+            "a same-position drop creates no extra history entry");
+    action(window, "motion-redo-action")->trigger();
+
+    auto* down = findWidget<QPushButton>(&window, "motion-effect-down");
+    down->click();
+    require(std::get<motion::model::GaussianBlurEffect>(
+                window.compositionDocument()->layers().back().effects[0]) ==
+                motion::model::GaussianBlurEffect{},
+            "the Up/Down controls remain available alongside drag reordering");
+    action(window, "motion-undo-action")->trigger();
+    require(window.compositionDocument()->layers().back().effects == after_drag,
+            "Undo restores the order after button-based movement");
+
+    action(window, "motion-save-composition-action")->trigger();
+    const auto persisted = motion::persistence::MotionDocumentStore::load(project_path);
+    require(persisted.layers.back().effects == after_drag,
+            "the dragged order is preserved by the native document round trip");
+
+    QTemporaryDir reopened_recovery_directory;
+    require(reopened_recovery_directory.isValid(),
+            "reopened effect-order project recovery directory is available");
+    MainWindow reopened(nullptr, pathFromQString(reopened_recovery_directory.path()),
+                        "layer-effects-reopen");
+    reopened.show();
+    QTimer::singleShot(0, [&] { chooseDocumentFile(project_path, QDialogButtonBox::Open); });
+    action(reopened, "motion-open-composition-action")->trigger();
+    require(reopened.compositionDocument() != nullptr &&
+                reopened.compositionDocument()->layers().back().effects == after_drag,
+            "opening the saved document restores the dragged effect order");
+    reopened.close();
+
+    effects->item(0)->setCheckState(Qt::Checked);
+    require(window.isWindowModified(), "a later effect edit still marks the document dirty");
 
     QTimer::singleShot(0, [] {
         auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());

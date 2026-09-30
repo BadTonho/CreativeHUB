@@ -130,10 +130,13 @@ private:
     void resetCurveEditor();
     void syncLayerContentInspector(const model::CompositionLayer* selected);
     void syncEffectsInspector(const model::CompositionLayer* selected);
+    void syncSelectedEffectInspector(const model::CompositionLayer* selected,
+                                     int selected_row);
     void addLayerEffect(int kind);
     void editSelectedEffectParameters();
     void applySelectedEffectStack(std::vector<model::LayerEffect> effects,
                                   bool coalesce_parameters = false);
+    void reorderEffectsFromList(std::size_t source_index, int insertion_row);
     void moveSelectedEffect(int direction);
     void removeSelectedEffect();
     void selectEffectRow(int row);

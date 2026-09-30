@@ -23,17 +23,21 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QColorDialog>
-#include <QKeySequence>
-#include <QDoubleSpinBox>
 #include <QDialog>
 #include <QDesktopServices>
 #include <QDockWidget>
+#include <QDrag>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDoubleSpinBox>
+#include <QDropEvent>
 #include <QEvent>
 #include <QFontComboBox>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QKeySequence>
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
@@ -41,6 +45,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMetaObject>
+#include <QMimeData>
 #include <QPointer>
 #include <QProgressDialog>
 #include <QPushButton>
@@ -60,6 +65,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <map>
@@ -71,6 +77,98 @@
 
 namespace motion::ui {
 namespace {
+
+class ReorderableEffectList final : public QListWidget {
+public:
+    using ReorderCallback = std::function<void(std::size_t, int)>;
+    static constexpr auto kEffectIndexMimeType = "application/x-motion-studio-effect-index";
+
+    explicit ReorderableEffectList(QWidget* parent = nullptr)
+        : QListWidget(parent)
+    {
+    }
+
+    void setReorderCallback(ReorderCallback callback)
+    {
+        reorder_callback_ = std::move(callback);
+    }
+
+protected:
+    void startDrag(Qt::DropActions) override
+    {
+        const auto selected = selectedItems();
+        if (selected.empty()) return;
+        auto* payload = new QMimeData;
+        payload->setData(QString::fromLatin1(kEffectIndexMimeType),
+                         selected.front()->data(Qt::UserRole).toString().toUtf8());
+        auto* drag = new QDrag(this);
+        drag->setMimeData(payload);
+        (void)drag->exec(Qt::MoveAction, Qt::MoveAction);
+    }
+
+    void dragEnterEvent(QDragEnterEvent* event) override
+    {
+        if (hasEffectPayload(event->mimeData())) {
+            event->setDropAction(Qt::MoveAction);
+            event->accept();
+            return;
+        }
+        QListWidget::dragEnterEvent(event);
+    }
+
+    void dragMoveEvent(QDragMoveEvent* event) override
+    {
+        if (hasEffectPayload(event->mimeData())) {
+            QListWidget::dragMoveEvent(event);
+            event->setDropAction(Qt::MoveAction);
+            event->accept();
+            return;
+        }
+        QListWidget::dragMoveEvent(event);
+    }
+
+    void dropEvent(QDropEvent* event) override
+    {
+        if (!hasEffectPayload(event->mimeData())) {
+            QListWidget::dropEvent(event);
+            return;
+        }
+
+        bool source_valid = false;
+        const auto source_index = event->mimeData()
+            ->data(QString::fromLatin1(kEffectIndexMimeType)).toULongLong(&source_valid);
+        if (!source_valid) {
+            event->ignore();
+            return;
+        }
+
+        const auto position = event->position().toPoint();
+        const auto target_index = indexAt(position);
+        int insertion_row = count();
+        if (target_index.isValid()) {
+            const auto target_rect = visualRect(target_index);
+            insertion_row = target_index.row() +
+                (position.y() >= target_rect.center().y() ? 1 : 0);
+        }
+        event->setDropAction(Qt::MoveAction);
+        event->accept();
+        if (!reorder_callback_) return;
+
+        QTimer::singleShot(0, this, [this, source = static_cast<std::size_t>(source_index),
+                                     insertion_row] {
+            if (reorder_callback_) reorder_callback_(source, insertion_row);
+        });
+    }
+
+private:
+    bool hasEffectPayload(const QMimeData* mime_data) const
+    {
+        return mime_data != nullptr &&
+            mime_data->hasFormat(QString::fromLatin1(kEffectIndexMimeType));
+    }
+
+    ReorderCallback reorder_callback_;
+};
 
 std::filesystem::path pathFromQString(const QString& value)
 {
@@ -1717,9 +1815,18 @@ void MainWindow::createWorkspace()
     effects_toolbar->addWidget(effect_down_button_);
     effects_toolbar->addWidget(remove_effect_button_);
     effects_layout->addLayout(effects_toolbar);
-    layer_effect_list_ = new QListWidget(effects_inspector_);
+    auto* reorderable_effect_list = new ReorderableEffectList(effects_inspector_);
+    layer_effect_list_ = reorderable_effect_list;
     layer_effect_list_->setObjectName(QStringLiteral("motion-layer-effects"));
     layer_effect_list_->setSelectionMode(QAbstractItemView::SingleSelection);
+    layer_effect_list_->setDragEnabled(true);
+    layer_effect_list_->setAcceptDrops(true);
+    layer_effect_list_->setDropIndicatorShown(true);
+    layer_effect_list_->setDragDropMode(QAbstractItemView::InternalMove);
+    layer_effect_list_->setDefaultDropAction(Qt::MoveAction);
+    layer_effect_list_->setDragDropOverwriteMode(false);
+    layer_effect_list_->setToolTip(
+        QStringLiteral("Drag effects to change their order. Effects apply from top to bottom."));
     effects_layout->addWidget(layer_effect_list_, 1);
     effect_parameter_pages_ = new QStackedWidget(effects_inspector_);
     effect_parameter_pages_->setObjectName(QStringLiteral("motion-effect-parameters"));
@@ -1782,6 +1889,10 @@ void MainWindow::createWorkspace()
             [this] { removeSelectedEffect(); });
     connect(layer_effect_list_, &QListWidget::currentRowChanged,
             this, [this](int row) { selectEffectRow(row); });
+    reorderable_effect_list->setReorderCallback(
+        [this](std::size_t source_index, int insertion_row) {
+            reorderEffectsFromList(source_index, insertion_row);
+        });
     connect(layer_effect_list_, &QListWidget::itemChanged, this,
             [this](QListWidgetItem* item) {
                 if (item == nullptr || !document_ || selected_layer_id_ == 0) return;
@@ -2547,12 +2658,16 @@ void MainWindow::syncEffectsInspector(const model::CompositionLayer* selected)
     const QSignalBlocker list_blocker(layer_effect_list_);
     layer_effect_list_->clear();
     if (selected != nullptr) {
-        for (const auto& effect : selected->effects) {
-            const bool enabled = std::visit([](const auto& value) { return value.enabled; }, effect);
+        for (std::size_t index = 0; index < selected->effects.size(); ++index) {
+            const auto& effect = selected->effects[index];
+            const bool enabled = std::visit(
+                [](const auto& value) { return value.enabled; }, effect);
             const QString name = std::holds_alternative<model::GaussianBlurEffect>(effect)
                 ? QStringLiteral("Gaussian Blur") : QStringLiteral("Color Adjustment");
             auto* item = new QListWidgetItem(name, layer_effect_list_);
-            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setData(Qt::UserRole, static_cast<qulonglong>(index));
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable |
+                           Qt::ItemIsDragEnabled);
             item->setCheckState(enabled ? Qt::Checked : Qt::Unchecked);
         }
     }
@@ -2562,6 +2677,13 @@ void MainWindow::syncEffectsInspector(const model::CompositionLayer* selected)
     }
     if (selected_row >= 0) layer_effect_list_->setCurrentRow(selected_row);
 
+    syncSelectedEffectInspector(selected, selected_row);
+}
+
+void MainWindow::syncSelectedEffectInspector(
+    const model::CompositionLayer* selected,
+    int selected_row)
+{
     const bool has_effect = selected != nullptr && selected_row >= 0 &&
         static_cast<std::size_t>(selected_row) < selected->effects.size();
     effect_up_button_->setEnabled(has_effect && selected_row > 0);
@@ -2599,7 +2721,8 @@ void MainWindow::selectEffectRow(int row)
             document_->layers().end(), [this](const auto& layer) {
                 return layer.id == selected_layer_id_;
             }) : std::vector<model::CompositionLayer>::const_iterator{};
-        syncEffectsInspector(document_ && found != document_->layers().end() ? &*found : nullptr);
+        syncSelectedEffectInspector(
+            document_ && found != document_->layers().end() ? &*found : nullptr, -1);
         return;
     }
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
@@ -2607,11 +2730,11 @@ void MainWindow::selectEffectRow(int row)
     if (found == document_->layers().end() ||
         static_cast<std::size_t>(row) >= found->effects.size()) {
         selected_effect_.reset();
-        syncEffectsInspector(found == document_->layers().end() ? nullptr : &*found);
+        syncSelectedEffectInspector(found == document_->layers().end() ? nullptr : &*found, -1);
         return;
     }
     selected_effect_ = std::pair{selected_layer_id_, static_cast<std::size_t>(row)};
-    syncEffectsInspector(&*found);
+    syncSelectedEffectInspector(&*found, row);
 }
 
 void MainWindow::addLayerEffect(int kind)
@@ -2691,6 +2814,43 @@ void MainWindow::editSelectedEffectParameters()
         color.saturation_percent = effect_saturation_field_->value();
     }
     applySelectedEffectStack(std::move(effects), true);
+}
+
+void MainWindow::reorderEffectsFromList(std::size_t source_index, int insertion_row)
+{
+    finishPendingTransformEdit();
+    if (!document_ || selected_layer_id_ == 0 || layer_effect_list_ == nullptr) return;
+    const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
+        [this](const auto& layer) { return layer.id == selected_layer_id_; });
+    if (found == document_->layers().end() || source_index >= found->effects.size() ||
+        layer_effect_list_->count() != static_cast<int>(found->effects.size())) {
+        if (found != document_->layers().end()) syncEffectsInspector(&*found);
+        return;
+    }
+
+    const auto size = found->effects.size();
+    auto destination_index = static_cast<std::size_t>(
+        std::clamp(insertion_row, 0, layer_effect_list_->count()));
+    if (destination_index > source_index) --destination_index;
+    if (destination_index >= size) destination_index = size - 1;
+    if (destination_index == source_index) return;
+
+    auto reordered = found->effects;
+    auto moved_effect = std::move(reordered[source_index]);
+    reordered.erase(reordered.begin() + static_cast<std::ptrdiff_t>(source_index));
+    reordered.insert(reordered.begin() + static_cast<std::ptrdiff_t>(destination_index),
+                     std::move(moved_effect));
+
+    auto before = captureEditState();
+    if (!document_->setLayerEffects(selected_layer_id_, reordered)) {
+        syncEffectsInspector(&*found);
+        return;
+    }
+    selected_effect_ = std::pair{selected_layer_id_, destination_index};
+    (void)recordCompositionEdit(std::move(before));
+    syncEffectsInspector(&*found);
+    updateDocumentState();
+    requestPreview();
 }
 
 void MainWindow::moveSelectedEffect(int direction)

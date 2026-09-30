@@ -342,8 +342,8 @@ multiline Unicode text, change its font, size, alignment, box dimensions, and
 alpha color; create
 rectangles and ellipses, edit their dimensions, fill, optional stroke, and alpha;
 use the Effects inspector tab to add Gaussian Blur and Color Adjustment to
-different layers, adjust parameters, toggle, reorder, and remove effects, then
-verify preview, playback, export,
+different layers, adjust parameters, toggle, drag effects above and below other
+rows, and remove effects, then verify preview, playback, export,
 Undo/Redo, and save/reopen preserve the stack and order;
 animate a text or shape transform, save and reopen it, and confirm content and
 keys persist; use **Edit > Undo** and **Edit > Redo** on layer insertion,
