@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/app-icon">
+        <file alias="icon.png">../../../docs/assets/app-icons/motion-studio.png</file>
+    </qresource>
+</RCC>

@@ -139,6 +139,8 @@ the Motion Studio implementation choices are finalized.
   outside this initial list.
 - [x] Match the Video Editor's Help menu pattern with **System** (application
   version and executable path), **Open Log Folder**, and **About Motion Studio**.
+- [x] Apply the existing Motion Studio PNG icon to the application window and
+  its Windows executable.
 - [x] Add manual Open, Save, and Save As for the full composition and Media
   Pool using an atomic, versioned `.motion` JSON document. Reject malformed and
   future-version documents without replacing the current composition or
@@ -301,7 +303,8 @@ shared compositor handles their layer order, transforms, opacity, and alpha.
 Text glyphs and shape fills/strokes are static; only their existing transform
 properties are animated. Source in-points and audio remain unsupported.
 
-Manual Windows validation remains pending: open **Help > System** and confirm
+Manual Windows validation remains pending: confirm the Motion Studio icon on
+the application window and executable; open **Help > System** and confirm
 it displays **Beta 0.1.0** and the executable path; open **Help > Open Log
 Folder** and confirm the Motion Studio log directory opens, then verify the
 About text; verify the centered empty-state

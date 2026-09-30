@@ -64,6 +64,7 @@ target_compile_features(creative-suite-motion-editor-core PUBLIC cxx_std_20)
 
 add_executable(creative-suite-motion-editor
     src/main.cpp
+    resources/app_icon.qrc
 )
 target_link_libraries(creative-suite-motion-editor PRIVATE
     creative-suite-motion-editor-core
@@ -84,6 +85,18 @@ set_target_properties(creative-suite-motion-editor PROPERTIES
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE
 )
+
+if(WIN32)
+    set(APP_ICON_FILE "${CMAKE_SOURCE_DIR}/docs/assets/app-icons/motion-studio.ico")
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/cmake/windows_app_icon.rc.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/motion_studio_app_icon.rc"
+        @ONLY
+    )
+    target_sources(creative-suite-motion-editor PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}/motion_studio_app_icon.rc"
+    )
+endif()
 
 install(TARGETS creative-suite-motion-editor
     BUNDLE DESTINATION .
