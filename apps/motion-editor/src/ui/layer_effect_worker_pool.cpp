@@ -3,11 +3,14 @@
 #include <QSemaphore>
 #include <QThreadPool>
 #include <QRunnable>
+#include <QByteArray>
 
 #include <algorithm>
 #include <atomic>
+#include <charconv>
 #include <exception>
 #include <mutex>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -15,6 +18,8 @@ namespace motion::ui::detail {
 namespace {
 
 constexpr std::size_t maximum_effect_threads = 8;
+constexpr char effect_workers_environment_variable[] =
+    "CREATIVE_SUITE_MOTION_EFFECT_WORKERS";
 
 std::size_t recommendedThreadCount() noexcept
 {
@@ -42,6 +47,38 @@ void saveException(TaskGroup& group, std::exception_ptr error) noexcept
 }
 
 } // namespace
+
+std::size_t resolveLayerEffectWorkerCount(
+    const char* override_value,
+    std::size_t automatic_recommendation) noexcept
+{
+    const auto fallback = std::clamp<std::size_t>(
+        automatic_recommendation, 1, maximum_effect_threads);
+    if (override_value == nullptr) return fallback;
+
+    const std::string_view value(override_value);
+    if (value.empty()) return fallback;
+
+    unsigned int requested = 0;
+    const auto [end, error] = std::from_chars(
+        value.data(), value.data() + value.size(), requested);
+    if (error != std::errc{} || end != value.data() + value.size() ||
+        requested < 1U || requested > maximum_effect_threads) {
+        return fallback;
+    }
+    return static_cast<std::size_t>(requested);
+}
+
+std::size_t configuredLayerEffectWorkerCount() noexcept
+{
+    static const std::size_t count = [] {
+        const auto override_value = qgetenv(effect_workers_environment_variable);
+        return resolveLayerEffectWorkerCount(
+            override_value.isNull() ? nullptr : override_value.constData(),
+            recommendedThreadCount());
+    }();
+    return count;
+}
 
 LayerEffectWorkerPool::LayerEffectWorkerPool(std::size_t maximum_threads)
     : maximum_threads_(std::clamp<std::size_t>(maximum_threads, 1, maximum_effect_threads))
@@ -139,7 +176,7 @@ bool LayerEffectWorkerPool::parallelFor(
 
 LayerEffectWorkerPool& sharedLayerEffectWorkerPool()
 {
-    static LayerEffectWorkerPool pool(recommendedThreadCount());
+    static LayerEffectWorkerPool pool(configuredLayerEffectWorkerCount());
     return pool;
 }
 

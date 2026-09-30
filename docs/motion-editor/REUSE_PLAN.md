@@ -101,21 +101,22 @@ accumulation and equivalent rounding, with the vertical pass traversed in
 premultiplication, horizontal rows, vertical tiles, and final alpha conversion;
 each horizontal/vertical pair is synchronized before the next blur pass. The
 pool caps at eight workers, reserves a reported logical core when possible,
-and falls back to one worker when core count is unknown. Single- and
-multi-worker tests compare bytes against the prior implementation and cover
-concurrent calls and cancellation. Neutral Color Adjustment skips pixel
-processing and preserves RGBA bytes exactly, while still recording per-effect
-timings. Each blur timing is one wall-clock duration for the full effect,
+and falls back to one worker when core count is unknown. The temporary
+`CREATIVE_SUITE_MOTION_EFFECT_WORKERS` environment override accepts values from
+1 through 8 for controlled playback comparisons; absent or invalid values keep
+the automatic policy. The effective count is included in Motion preview metric
+schema v3. Single- and multi-worker tests compare bytes against the prior
+implementation and cover concurrent calls and cancellation. Neutral Color
+Adjustment skips pixel processing and preserves RGBA bytes exactly, while still
+recording per-effect timings. Each blur timing is one wall-clock duration for the full effect,
 including worker scheduling and pass synchronization. Non-neutral
 color adjustment operates on RGBA8 channel values and preserves alpha. These
 are static, Motion Studio-only effects; no shared effects engine or Video
-Editor API is introduced. The target performance gain remains subject to the
-documented Windows measurement in [ROADMAP.md](ROADMAP.md).
-That check uses three 10-second runs of the same 1920 × 1080, 60 fps radius-10
-blur composition, comparing the latest 238.429 ms serial average with a target
-of at most 178.8 ms per blur application while confirming rendered/coalesced
-frame counts and pixel equality. The benchmark has not yet been run after
-parallelization.
+Editor API is introduced. Compare automatic mode and worker limits 1, 2, 4, and
+8 with three 10-second runs per setting, as documented in [ROADMAP.md](ROADMAP.md).
+The worker limit is read once per process and logged with each active preview
+sample. Keep the automatic policy until the comparison shows a repeatable
+playback-wide improvement.
 
 Version 4 of `.motion` persists each layer's effect stack. Versions 1 through
 3 load with empty stacks, and the version 1 recovery wrapper accepts nested

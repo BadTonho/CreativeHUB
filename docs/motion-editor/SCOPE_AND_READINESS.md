@@ -235,10 +235,11 @@ memory; canvas dimensions and exact frame-rate numerator/denominator; layer and
 effect counts; request, rendered-frame, coalesced-request, and stale-result
 counters; and count, average, maximum, p95, and p99 durations for video decode,
 text/shape rasterization, effects, CPU composition, total frame render, and
-request-to-viewer-paint latency. Schema v2 also reports actual application
-counts and separate timing summaries for Gaussian Blur and Color Adjustment.
-The configured effect count remains distinct from per-interval application
-counts. A bounded sample window is used for percentile estimates.
+request-to-viewer-paint latency. Schema v3 reports actual application counts
+and separate timing summaries for Gaussian Blur and Color Adjustment, plus the
+effective effect-worker count. The configured effect count remains distinct
+from per-interval application counts. A bounded sample window is used for
+percentile estimates.
 
 The cross-platform CPU and memory sampler is owned by the shared
 `creative-suite::system-monitor` library and is consumed by both editors. The
@@ -257,13 +258,16 @@ and heavy compositions, cross-platform resource behavior, startup, seek/paint
 latency, memory limits, and export throughput still require measured validation.
 On Windows, toggle the option, seek and play compositions, export a job, then
 use **Help > Open Log Folder** to inspect samples and job summaries.
-The blur parallelization has automated byte-equivalence coverage, but its
-performance target still needs a Windows measurement: use the same 1920 × 1080,
-60 fps composition for three 10-second runs with radius-10 Gaussian Blur and
-neutral Color Adjustment. Compare effect averages and rendered/coalesced request
-counts with the latest 238.429 ms serial blur average; target at most 178.8 ms
-per blur application (at least 25% lower), below 1 ms for neutral adjustment,
-and no pixel changes. This timing target is not yet verified on Windows.
+For a controlled Windows comparison, use the same 1920 × 1080, 60 fps
+composition with radius-10 Gaussian Blur and neutral Color Adjustment in
+automatic mode and with `CREATIVE_SUITE_MOTION_EFFECT_WORKERS` set to `1`, `2`,
+`4`, and `8`. Restart the app for each setting, allow playback to warm up, and
+collect three 10-second runs. Compare weighted blur and total frame-render
+averages, decode time, rendered frames, coalesced requests, and CPU use. The
+selected count appears in each active preview sample. The temporary override
+is diagnostic-only; invalid values fall back to the automatic policy. Keep the
+automatic default until playback-wide results show a repeatable improvement,
+and confirm output remains byte-identical.
 
 ## Native Format and Compatibility Policy
 

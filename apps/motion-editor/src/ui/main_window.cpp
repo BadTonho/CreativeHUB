@@ -12,6 +12,7 @@
 #include "general_settings_dialog.h"
 #include "shortcut_settings_dialog.h"
 #include "timeline_navigator.h"
+#include "layer_effect_worker_pool.h"
 #include "../settings/autosave_preferences.h"
 
 #include <creative_suite/animation/animation.h>
@@ -1694,6 +1695,8 @@ void MainWindow::flushPreviewPerformanceMetrics()
         for (const auto& layer : document_->layers())
             metadata.effect_count += layer.effects.size();
     }
+    metadata.effect_worker_count =
+        motion::ui::detail::configuredLayerEffectWorkerCount();
     const auto context = diagnostics::makePreviewPerformanceContext(
         *snapshot, resources, metadata);
 

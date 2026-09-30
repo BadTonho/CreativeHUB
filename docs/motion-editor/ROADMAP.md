@@ -199,9 +199,9 @@ the Motion Studio implementation choices are finalized.
   export summaries. The shared system-monitor library provides best-effort
   process CPU and memory readings; Motion Studio records render-stage timing,
   request-to-viewer-paint latency, coalesced/stale work, per-effect application
-  counts and timings, and export throughput. Preview metric schema v2 separates
-  Gaussian Blur and Color Adjustment timing without recording layer names or
-  content.
+  counts and timings, and export throughput. Preview metric schema v3 separates
+  Gaussian Blur and Color Adjustment timing and records the effective effect
+  worker count without recording layer names or content.
   This diagnostic logging does not replace representative-project profiling or
   cross-platform validation.
 - [x] Make neutral Color Adjustment an exact byte-preserving no-op while
@@ -215,10 +215,12 @@ the Motion Studio implementation choices are finalized.
   least one worker; unknown core counts fall back to one worker. Single- and
   multi-worker differential tests compare bytes against the previous
   algorithm; concurrent calls, cancellation, and per-effect timing are covered.
-- [-] Verify the blur speed target on Windows with three 10-second runs of the
-  same 1920 × 1080, 60 fps radius-10 composition and neutral Color Adjustment.
-  Compare the 238.429 ms serial average against the 178.8 ms target, check
-  rendered/coalesced request counts, and confirm pixel equality.
+- [-] Compare effect worker limits on Windows using the same 1920 × 1080,
+  60 fps composition with radius-10 Gaussian Blur and neutral Color Adjustment.
+  Measure automatic mode and limits 1, 2, 4, and 8 in three 10-second runs each;
+  compare blur and total frame-render averages, decode time, rendered/coalesced
+  requests, and CPU use. Keep the automatic default unless playback-wide results
+  show a repeatable improvement. Confirm pixel equality.
 - [-] Extend actionable local error logging and automated coverage for the
   remaining document, rendering, and application boundaries. Save/open and
   export failures are logged before concise user feedback.
@@ -409,13 +411,14 @@ resolution and quality profile, export overlapping image, video, text, and
 shape layers with a blank lead-in, and play the result in a media player. Cancel
 another export and verify an existing destination remains unchanged; choose an
 unavailable encoder if one is offered and confirm a detailed log entry appears.
-For effect performance, use the same 1920 × 1080, 60 fps composition for three
-10-second runs with Gaussian Blur at radius 10 and neutral Color Adjustment;
-check logged per-effect averages and rendered/coalesced counts, target under
-1 ms for neutral Color Adjustment and no more than 178.8 ms per blur application
-(at least 25% below the latest 238.429 ms serial average), and confirm the
-preview pixels match the pre-parallelization render. The automated tests verify
-byte equality but do not establish this Windows performance target.
+For effect performance, use the same 1920 × 1080, 60 fps composition with
+Gaussian Blur at radius 10 and neutral Color Adjustment. Compare automatic mode
+with `CREATIVE_SUITE_MOTION_EFFECT_WORKERS` set to `1`, `2`, `4`, and `8`,
+restarting the app for each setting. After warm-up, collect three 10-second runs
+per setting. Compare logged blur and full-frame render averages, decode timing,
+rendered/coalesced counts, and CPU use; confirm the worker count in each sample
+and that preview pixels remain identical. The override is temporary and does
+not change the automatic default.
 Motion Studio export is opaque and video-only; audio and alpha export remain
 open. Then close the application. Overshoot-capable curves, additional
 interpolation modes, advanced effects, platform validation, and performance

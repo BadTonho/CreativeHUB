@@ -223,7 +223,7 @@ creative_suite::diagnostics::Context makePreviewPerformanceContext(
         return value.has_value() ? std::to_string(*value) : std::string("N/A");
     };
     creative_suite::diagnostics::Context context{
-        {"schema_version", "2"},
+        {"schema_version", "3"},
         {"interval_ms", "1000"},
         {"process_cpu_percent", optionalNumber(resources.process_cpu_percent)},
         {"process_working_set_bytes", optionalNumber(resources.process_working_set_bytes)},
@@ -239,7 +239,8 @@ creative_suite::diagnostics::Context makePreviewPerformanceContext(
         {"frame_rate_numerator", std::to_string(metadata.frame_rate_numerator)},
         {"frame_rate_denominator", std::to_string(metadata.frame_rate_denominator)},
         {"layer_count", std::to_string(metadata.layer_count)},
-        {"effect_count", std::to_string(metadata.effect_count)}};
+        {"effect_count", std::to_string(metadata.effect_count)},
+        {"effect_worker_count", std::to_string(metadata.effect_worker_count)}};
 
     for (std::size_t index = 0; index < metrics.timings.size(); ++index) {
         const auto& timing = metrics.timings[index];

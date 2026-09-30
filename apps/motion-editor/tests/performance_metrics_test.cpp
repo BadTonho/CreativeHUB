@@ -102,7 +102,7 @@ int main(int argc, char* argv[])
     resources.process_working_set_bytes = 123456;
     resources.system_total_bytes = 987654;
     motion::diagnostics::PreviewLogMetadata metadata{
-        1920, 1080, 30000, 1001, 4, 3};
+        1920, 1080, 30000, 1001, 4, 3, 4};
     const auto log_context = motion::diagnostics::makePreviewPerformanceContext(
         *snapshot, resources, metadata);
     std::ostringstream serialized_context;
@@ -110,7 +110,7 @@ int main(int argc, char* argv[])
         serialized_context << key << '=' << value << '\n';
     const auto context_text = serialized_context.str();
     require(context_text.find("process_cpu_percent=27.500000") != std::string::npos &&
-                context_text.find("schema_version=2") != std::string::npos &&
+                context_text.find("schema_version=3") != std::string::npos &&
                 context_text.find("decode_p95_ms=") != std::string::npos &&
                 context_text.find("gaussian_blur_apply_count=2") != std::string::npos &&
                 context_text.find("gaussian_blur_average_ms=20.000000") != std::string::npos &&
@@ -118,7 +118,8 @@ int main(int argc, char* argv[])
                 context_text.find("color_adjustment_average_ms=2.000000") != std::string::npos &&
                 context_text.find("request_to_viewer_paint_count=1") != std::string::npos &&
                 context_text.find("canvas_width=1920") != std::string::npos &&
-                context_text.find("effect_count=3") != std::string::npos,
+                context_text.find("effect_count=3") != std::string::npos &&
+                context_text.find("effect_worker_count=4") != std::string::npos,
             "preview log context includes resource, timing, latency, and workload fields");
     require(context_text.find("C:\\private-project") == std::string::npos &&
                 context_text.find("private-media.mov") == std::string::npos &&

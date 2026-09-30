@@ -35,4 +35,14 @@ private:
 
 [[nodiscard]] LayerEffectWorkerPool& sharedLayerEffectWorkerPool();
 
+// Resolves the optional CREATIVE_SUITE_MOTION_EFFECT_WORKERS override.
+// Values outside 1..8 are ignored and the automatic recommendation is used.
+[[nodiscard]] std::size_t resolveLayerEffectWorkerCount(
+    const char* override_value,
+    std::size_t automatic_recommendation) noexcept;
+
+// Reads the process override once and returns the worker count used by both
+// the shared pool and Motion Studio performance records.
+[[nodiscard]] std::size_t configuredLayerEffectWorkerCount() noexcept;
+
 } // namespace motion::ui::detail

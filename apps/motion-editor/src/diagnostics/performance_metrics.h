@@ -57,6 +57,7 @@ struct PreviewLogMetadata {
     std::int64_t frame_rate_denominator = 0;
     std::size_t layer_count = 0;
     std::size_t effect_count = 0;
+    std::size_t effect_worker_count = 0;
 };
 
 [[nodiscard]] creative_suite::diagnostics::Context makePreviewPerformanceContext(

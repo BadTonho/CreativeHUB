@@ -9,6 +9,7 @@
 #include <QGuiApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <QByteArray>
 #include <QTemporaryDir>
 #include <QThread>
 
@@ -230,15 +231,34 @@ int main(int argc, char* argv[])
     motion::ui::detail::LayerEffectWorkerPool parallel_effect_pool(4);
     motion::ui::detail::LayerEffectWorkerPool capped_effect_pool(100);
     const auto logical_core_count = std::thread::hardware_concurrency();
-    const auto expected_shared_workers = logical_core_count == 0
+    const auto automatic_workers = logical_core_count == 0
         ? 1U
         : std::min(8U, logical_core_count > 1 ? logical_core_count - 1U : 1U);
+    const auto environment_override = qgetenv(
+        "CREATIVE_SUITE_MOTION_EFFECT_WORKERS");
+    const auto expected_configured_workers =
+        motion::ui::detail::resolveLayerEffectWorkerCount(
+            environment_override.isNull() ? nullptr : environment_override.constData(),
+            automatic_workers);
     require(serial_effect_pool.maximumThreadCount() == 1 &&
                 parallel_effect_pool.maximumThreadCount() == 4 &&
                 capped_effect_pool.maximumThreadCount() == 8 &&
                 motion::ui::detail::sharedLayerEffectWorkerPool().maximumThreadCount() ==
-                    expected_shared_workers,
-            "effect pools honor single/multi-worker limits, the cap, and reserved-core policy");
+                    expected_configured_workers &&
+                motion::ui::detail::configuredLayerEffectWorkerCount() ==
+                    expected_configured_workers,
+            "effect pools honor single/multi-worker limits, the cap, and configured count");
+    const auto resolve_workers = motion::ui::detail::resolveLayerEffectWorkerCount;
+    require(resolve_workers(nullptr, automatic_workers) == automatic_workers &&
+                resolve_workers("1", automatic_workers) == 1 &&
+                resolve_workers("2", automatic_workers) == 2 &&
+                resolve_workers("4", automatic_workers) == 4 &&
+                resolve_workers("8", automatic_workers) == 8,
+            "the worker override accepts absent automatic mode and limits 1, 2, 4, and 8");
+    for (const char* invalid : {"", "0", "9", "abc", "2x", "-1"}) {
+        require(resolve_workers(invalid, automatic_workers) == automatic_workers,
+                "invalid worker overrides fall back to the automatic recommendation");
+    }
     for (const auto& test_case : std::array<std::array<int, 4>, 4>{
              std::array<int, 4>{5, 3, 0, 0},
              std::array<int, 4>{7, 5, 1, 0},
