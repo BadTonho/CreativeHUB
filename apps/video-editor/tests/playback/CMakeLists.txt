@@ -34,13 +34,13 @@ endif()
 
 copy_ffmpeg_test_runtime(creative-suite-main-editor-video-playback-tests)
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-video-playback-errors
     COMMAND creative-suite-main-editor-video-playback-tests
 )
 
 if(EXISTS "${REFERENCE_VIDEO}")
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-video-playback-reference
     COMMAND creative-suite-main-editor-video-playback-tests "${REFERENCE_VIDEO}"
 )
@@ -152,13 +152,13 @@ endif()
 copy_ffmpeg_test_runtime(creative-suite-main-editor-audio-playback-tests)
 deploy_qt_test_runtime(creative-suite-main-editor-audio-playback-tests)
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-audio-playback
     COMMAND creative-suite-main-editor-audio-playback-tests
 )
 
 if(EXISTS "${REFERENCE_VIDEO}")
-    add_test(
+    add_creative_suite_test(
         NAME creative-suite-main-editor-audio-playback-reference
         COMMAND creative-suite-main-editor-audio-playback-tests "${REFERENCE_VIDEO}"
     )
@@ -167,7 +167,7 @@ endif()
 copy_ffmpeg_test_runtime(creative-suite-main-editor-playback-worker-tests)
 deploy_qt_test_runtime(creative-suite-main-editor-playback-worker-tests)
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-playback-worker-errors
     COMMAND creative-suite-main-editor-playback-worker-tests
 )
@@ -194,7 +194,7 @@ endif()
 copy_ffmpeg_test_runtime(creative-suite-main-editor-playback-controller-tests)
 deploy_qt_test_runtime(creative-suite-main-editor-playback-controller-tests)
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-playback-controller
     COMMAND creative-suite-main-editor-playback-controller-tests
 )
@@ -203,7 +203,7 @@ set_tests_properties(creative-suite-main-editor-playback-controller PROPERTIES
 )
 
 if(EXISTS "${REFERENCE_VIDEO}")
-    add_test(
+    add_creative_suite_test(
         NAME creative-suite-main-editor-playback-worker-reference
         COMMAND creative-suite-main-editor-playback-worker-tests "${REFERENCE_VIDEO}"
     )
@@ -230,7 +230,7 @@ else()
     target_compile_options(creative-suite-main-editor-playback-deadline-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-playback-deadline
     COMMAND creative-suite-main-editor-playback-deadline-tests
 )
@@ -257,7 +257,7 @@ else()
     target_compile_options(creative-suite-main-editor-frame-step-navigation-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-frame-step-navigation
     COMMAND creative-suite-main-editor-frame-step-navigation-tests
 )
@@ -278,7 +278,7 @@ if(MSVC)
 else()
     target_compile_options(creative-suite-main-editor-timeline-audio-mix-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-timeline-audio-mix
     COMMAND creative-suite-main-editor-timeline-audio-mix-tests
 )

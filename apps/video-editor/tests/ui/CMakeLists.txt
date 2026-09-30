@@ -56,7 +56,7 @@ if(WIN32)
     )
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-media-browser-list-widget
     COMMAND creative-suite-main-editor-media-browser-list-widget-tests
 )
@@ -120,7 +120,7 @@ if(WIN32)
     )
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-media-browser-bin-tree
     COMMAND creative-suite-main-editor-media-browser-bin-tree-tests
 )
@@ -196,7 +196,7 @@ if(WIN32)
     )
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-preview
     COMMAND creative-suite-main-editor-preview-tests
 )
@@ -222,7 +222,7 @@ endif()
 copy_ffmpeg_test_runtime(creative-suite-main-editor-workspace-page-switch-tests)
 deploy_qt_test_runtime(creative-suite-main-editor-workspace-page-switch-tests)
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-workspace-page-switch
     COMMAND creative-suite-main-editor-workspace-page-switch-tests
 )
@@ -245,7 +245,7 @@ else()
 endif()
 copy_ffmpeg_test_runtime(creative-suite-main-editor-render-queue-tests)
 deploy_qt_test_runtime(creative-suite-main-editor-render-queue-tests)
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-render-queue
     COMMAND creative-suite-main-editor-render-queue-tests
 )
@@ -268,7 +268,7 @@ else()
 endif()
 copy_ffmpeg_test_runtime(creative-suite-main-editor-render-export-tests)
 deploy_qt_test_runtime(creative-suite-main-editor-render-export-tests)
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-render-export
     COMMAND creative-suite-main-editor-render-export-tests
 )
@@ -291,7 +291,7 @@ else()
 endif()
 copy_ffmpeg_test_runtime(creative-suite-main-editor-edit-workspace-controller-tests)
 deploy_qt_test_runtime(creative-suite-main-editor-edit-workspace-controller-tests)
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-edit-workspace-controller
     COMMAND creative-suite-main-editor-edit-workspace-controller-tests
 )

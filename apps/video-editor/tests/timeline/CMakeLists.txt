@@ -23,7 +23,7 @@ else()
     target_compile_options(creative-suite-main-editor-timeline-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-timeline
     COMMAND creative-suite-main-editor-timeline-tests
 )
@@ -64,7 +64,7 @@ else()
     target_compile_options(creative-suite-main-editor-timeline-command-service-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-timeline-command-service
     COMMAND creative-suite-main-editor-timeline-command-service-tests
 )
@@ -91,7 +91,7 @@ else()
     target_compile_options(creative-suite-main-editor-timeline-trim-gesture-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-timeline-trim-gesture
     COMMAND creative-suite-main-editor-timeline-trim-gesture-tests
 )
@@ -170,7 +170,7 @@ if(WIN32)
     )
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-timeline-widget
     COMMAND creative-suite-main-editor-timeline-widget-tests
 )
@@ -201,7 +201,7 @@ if(MSVC)
 else()
     target_compile_options(creative-suite-main-editor-timeline-geometry-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-timeline-geometry
     COMMAND creative-suite-main-editor-timeline-geometry-tests
 )
@@ -235,7 +235,7 @@ else()
     target_compile_options(creative-suite-main-editor-timeline-interaction-controller-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-timeline-interaction-controller
     COMMAND creative-suite-main-editor-timeline-interaction-controller-tests
 )
@@ -262,7 +262,7 @@ else()
     target_compile_options(creative-suite-main-editor-timeline-end-buttons-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-timeline-end-buttons
     COMMAND creative-suite-main-editor-timeline-end-buttons-tests
 )

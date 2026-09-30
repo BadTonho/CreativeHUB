@@ -20,7 +20,7 @@ else()
     target_compile_options(creative-suite-main-editor-system-memory-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-system-memory
     COMMAND creative-suite-main-editor-system-memory-tests
 )
@@ -49,7 +49,7 @@ endif()
 
 target_compile_features(creative-suite-main-editor-performance-usage-tests PRIVATE cxx_std_20)
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-performance-usage
     COMMAND creative-suite-main-editor-performance-usage-tests
 )
@@ -117,7 +117,7 @@ if(WIN32)
     )
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-system-memory-details
     COMMAND creative-suite-main-editor-system-memory-details-tests
 )

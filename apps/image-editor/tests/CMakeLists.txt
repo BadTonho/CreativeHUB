@@ -8,7 +8,9 @@ target_link_libraries(creative-suite-image-editor-core-tests PRIVATE
 )
 target_compile_features(creative-suite-image-editor-core-tests PRIVATE cxx_std_20)
 
-add_test(NAME creative-suite-image-editor-core COMMAND creative-suite-image-editor-core-tests)
+add_creative_suite_test(
+    NAME creative-suite-image-editor-core
+    COMMAND creative-suite-image-editor-core-tests)
 
 add_executable(creative-suite-image-editor-format-tests
     image_editor_format_test.cpp
@@ -18,9 +20,10 @@ target_link_libraries(creative-suite-image-editor-format-tests PRIVATE
     Qt6::Gui
 )
 target_compile_features(creative-suite-image-editor-format-tests PRIVATE cxx_std_20)
-add_test(NAME creative-suite-image-editor-image-formats
-    COMMAND creative-suite-image-editor-format-tests)
-set_tests_properties(creative-suite-image-editor-image-formats PROPERTIES SKIP_RETURN_CODE 77)
+add_creative_suite_test(
+    NAME creative-suite-image-editor-image-formats
+    COMMAND creative-suite-image-editor-format-tests
+    SKIP_RETURN_CODE 77)
 
 add_executable(creative-suite-image-editor-ui-tests
     image_editor_ui_test.cpp
@@ -64,7 +67,9 @@ else()
     target_compile_options(creative-suite-image-editor-ui-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(NAME creative-suite-image-editor-ui COMMAND creative-suite-image-editor-ui-tests)
+add_creative_suite_test(
+    NAME creative-suite-image-editor-ui
+    COMMAND creative-suite-image-editor-ui-tests)
 set_tests_properties(creative-suite-image-editor-ui PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
@@ -107,7 +112,8 @@ if(MSVC)
 else()
     target_compile_options(creative-suite-image-editor-export-ui-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
-add_test(NAME creative-suite-image-editor-export-ui
+add_creative_suite_test(
+    NAME creative-suite-image-editor-export-ui
     COMMAND creative-suite-image-editor-export-ui-tests)
 set_tests_properties(creative-suite-image-editor-export-ui PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"

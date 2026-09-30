@@ -11,7 +11,9 @@ else()
     target_compile_options(creative-suite-media-assets-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(NAME creative-suite-media-assets COMMAND creative-suite-media-assets-tests)
+add_creative_suite_test(
+    NAME creative-suite-media-assets
+    COMMAND creative-suite-media-assets-tests)
 
 add_executable(creative-suite-video-encoder-tests
     video_encoder_test.cpp
@@ -27,4 +29,6 @@ else()
     target_compile_options(creative-suite-video-encoder-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 creative_suite_deploy_media_runtime(creative-suite-video-encoder-tests)
-add_test(NAME creative-suite-video-encoder COMMAND creative-suite-video-encoder-tests)
+add_creative_suite_test(
+    NAME creative-suite-video-encoder
+    COMMAND creative-suite-video-encoder-tests)

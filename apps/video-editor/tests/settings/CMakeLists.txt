@@ -55,7 +55,7 @@ if(WIN32)
     )
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-settings-dialog
     COMMAND creative-suite-main-editor-settings-dialog-tests
 )
@@ -121,7 +121,7 @@ if(WIN32)
     )
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-shortcut-manager
     COMMAND creative-suite-main-editor-shortcut-manager-tests
 )

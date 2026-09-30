@@ -7,6 +7,7 @@ if(WIN32)
 endif()
 
 include(CTest)
+include("${PROJECT_SOURCE_DIR}/cmake/AddIsolatedTest.cmake")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

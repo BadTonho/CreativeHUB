@@ -28,7 +28,7 @@ endif()
 
 deploy_qt_test_runtime(creative-suite-main-editor-effects-panel-tests)
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-effects-panel
     COMMAND creative-suite-main-editor-effects-panel-tests
 )

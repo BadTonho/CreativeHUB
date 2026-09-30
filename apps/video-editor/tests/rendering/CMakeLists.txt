@@ -22,7 +22,7 @@ else()
     target_compile_options(creative-suite-main-editor-transform-compositor-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-transform-compositor
     COMMAND creative-suite-main-editor-transform-compositor-tests
 )
@@ -85,7 +85,7 @@ endif()
 
 deploy_qt_test_runtime(creative-suite-main-editor-text-compositor-tests)
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-text-compositor
     COMMAND creative-suite-main-editor-text-compositor-tests
 )
@@ -115,7 +115,7 @@ else()
     target_compile_options(creative-suite-main-editor-preview-performance-metrics-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-preview-performance-metrics
     COMMAND creative-suite-main-editor-preview-performance-metrics-tests
 )

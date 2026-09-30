@@ -3,14 +3,18 @@ add_executable(creative-suite-animation-tests
 )
 target_link_libraries(creative-suite-animation-tests PRIVATE creative-suite::animation)
 target_compile_features(creative-suite-animation-tests PRIVATE cxx_std_20)
-add_test(NAME creative-suite-animation COMMAND creative-suite-animation-tests)
+add_creative_suite_test(
+    NAME creative-suite-animation
+    COMMAND creative-suite-animation-tests)
 
 add_executable(creative-suite-composition-tests
     composition_test.cpp
 )
 target_link_libraries(creative-suite-composition-tests PRIVATE creative-suite::composition)
 target_compile_features(creative-suite-composition-tests PRIVATE cxx_std_20)
-add_test(NAME creative-suite-composition COMMAND creative-suite-composition-tests)
+add_creative_suite_test(
+    NAME creative-suite-composition
+    COMMAND creative-suite-composition-tests)
 
 if(TARGET creative-suite::shortcuts)
     find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Test Widgets)
@@ -21,7 +25,9 @@ if(TARGET creative-suite::shortcuts)
         Qt6::Widgets
     )
     target_compile_features(creative-suite-shortcuts-tests PRIVATE cxx_std_20)
-    add_test(NAME creative-suite-shortcuts COMMAND creative-suite-shortcuts-tests)
+    add_creative_suite_test(
+        NAME creative-suite-shortcuts
+        COMMAND creative-suite-shortcuts-tests)
     set_tests_properties(creative-suite-shortcuts PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     if(WIN32)

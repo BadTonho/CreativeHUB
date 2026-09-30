@@ -17,7 +17,7 @@ endif()
 copy_ffmpeg_test_runtime(creative-suite-main-editor-main-window-tests)
 deploy_qt_test_runtime(creative-suite-main-editor-main-window-tests)
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-main-window
     COMMAND creative-suite-main-editor-main-window-tests
         "${PROJECT_SOURCE_DIR}/prototypes/testdata/reference.mkv"
@@ -41,7 +41,7 @@ else()
 endif()
 copy_ffmpeg_test_runtime(creative-suite-main-editor-application-media-tests)
 deploy_qt_test_runtime(creative-suite-main-editor-application-media-tests)
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-application-media
     COMMAND creative-suite-main-editor-application-media-tests
 )

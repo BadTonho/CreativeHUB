@@ -16,7 +16,7 @@ else()
     target_compile_options(creative-suite-main-editor-logger-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-logger
     COMMAND creative-suite-main-editor-logger-tests
 )

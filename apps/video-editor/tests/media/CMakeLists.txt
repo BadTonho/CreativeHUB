@@ -41,13 +41,13 @@ endif()
 copy_ffmpeg_test_runtime(creative-suite-main-editor-video-decoder-tests)
 deploy_qt_test_runtime(creative-suite-main-editor-video-decoder-tests)
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-video-decoder-errors
     COMMAND creative-suite-main-editor-video-decoder-tests
 )
 
 if(EXISTS "${REFERENCE_VIDEO}")
-    add_test(
+    add_creative_suite_test(
         NAME creative-suite-main-editor-video-decoder-reference
         COMMAND creative-suite-main-editor-video-decoder-tests "${REFERENCE_VIDEO}" 640 360
     )
@@ -75,7 +75,7 @@ else()
     target_compile_options(creative-suite-main-editor-media-library-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-media-library
     COMMAND creative-suite-main-editor-media-library-tests
 )

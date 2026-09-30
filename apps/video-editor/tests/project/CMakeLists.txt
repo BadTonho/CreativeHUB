@@ -45,7 +45,7 @@ if(WIN32)
     )
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-project
     COMMAND creative-suite-main-editor-project-tests
 )
@@ -101,7 +101,7 @@ if(WIN32)
     )
 endif()
 
-add_test(
+add_creative_suite_test(
     NAME creative-suite-main-editor-autosave
     COMMAND creative-suite-main-editor-autosave-tests
 )
