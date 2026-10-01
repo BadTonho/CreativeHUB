@@ -207,8 +207,8 @@ Important decisions must be recorded in the documentation, indicating whether th
 - Keep the project organized into clear categories and subcategories. Avoid introducing an unnecessary monorepo structure; prefer a single coherent repository organized by modules and folders unless a concrete technical or organizational need justifies otherwise.
 - Do not add dependencies without justifying the need and license.
 - Do not delete, reset, or overwrite existing work without explicit authorization.
+- Treat documentation as part of the implementation. Keep it aligned with the current code, architecture, behavior, and decisions, and update every affected document in the same change whenever code, UI, behavior, an API, a data format, build configuration, dependency, or project status changes. Verify the updated documentation against the implementation before considering the work complete.
 - Update the documentation whenever an architectural decision is made.
-- Keep all project documentation up to date with the current implementation, architecture, behavior, and decisions. Update the relevant documentation in the same change whenever the documented state changes.
 - Document every user-facing keyboard shortcut in `docs/video-editor/SHORTCUTS.md` and
   update that file in the same change whenever a shortcut is added, removed, or
   changed.
@@ -217,10 +217,10 @@ Important decisions must be recorded in the documentation, indicating whether th
 
 ### Mandatory Git and Security Review
 
-Before any commit, pull request, or submission to a remote repository:
+Before staging files for publication, creating a commit, opening a pull request, pushing, releasing, or otherwise submitting anything to GitHub or another remote repository:
 
-- Check the repository status, including modified, staged, untracked, and relevant ignored files.
-- Review the complete diff and confirm that every change is intentional.
+- Check the repository status, including modified, staged, untracked, and relevant ignored files. Identify the exact files that will be included in the commit or remote submission; do not assume the staged list or `.gitignore` tells the whole story.
+- Review the complete staged diff, unstaged diff, and contents of every untracked or explicitly included ignored file. Confirm that every change is intentional and belongs in the submission.
 - Check that there are no passwords, tokens, private keys, certificates, `.env` files, credentials, personal data, or local configuration files.
 - Check that there are no large files, generated files, caches, builds, private media, or artifacts that should not be sent to GitHub.
 - Update `.gitignore` when necessary, without using `.gitignore` to hide a change that should be reviewed.
