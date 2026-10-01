@@ -181,9 +181,12 @@ and required manual validation pass.
   Dropping on the Media Browser imports; dropping on the Timeline uses the
   existing media-drop behavior. Keep the import dialog and Media Browser drag
   workflow available.
+- [x] Repeatedly migrate the same long-lived `.csp` project when advancing
+  persisted-format versions. The owner reports doing this since the application
+  was created and says the migrations have worked.
 - [ ] Validate project save/reopen, autosave, recovery, offline media, and
   failure handling with representative small, medium, and heavy projects,
-  including portrait projects and migration of `.csp` versions 1 through 12.
+  including portrait projects.
   For the typical 1080p, 15-minute, three-track project, target 30 fps playback
   on the maintainer's reference PC using 1080p sources. Measure
   4K-source and higher-frame-rate playback separately without a real-time

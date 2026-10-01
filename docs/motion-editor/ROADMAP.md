@@ -286,7 +286,7 @@ readiness checks remain in this roadmap and
 | --- | --- | --- |
 | Composition model, validation, layer data, and timing | `composition_document_test.cpp` (`creative-suite-motion-editor-document`) | Pending manual composition and supported-layer checks remain part of MVP acceptance. |
 | Undo/Redo and edit history | `composition_history_test.cpp` (`creative-suite-motion-editor-history`) | Pending manual validation: confirm interactive edit sequences during the broader Windows UI checklist. |
-| `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist. The owner reports that the requested basic persistence/recovery checks worked on the Windows 11 reference PC on 2026-10-01; migration, invalid-file, and cross-platform file/path results are not recorded. |
+| `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist. The owner reports repeatedly migrating the same long-lived project across persisted-format versions and says the migrations have worked. Invalid-file and cross-platform file/path results are not recorded. |
 | Autosave and restart recovery | `motion_recovery_store_test.cpp` (`creative-suite-motion-editor-recovery`), `motion_editor_ui_test.cpp` | Automated snapshots and UI recovery paths exist. Basic recovery was reported working on the Windows 11 reference PC on 2026-10-01; detailed restart/recovery scenarios remain pending (**P0 validation**). |
 | Preview, transforms, curves, and layer effects | `preview_renderer_test.cpp` (`creative-suite-motion-editor-preview`), `motion_editor_ui_test.cpp`; shared evaluator coverage in `libs/tests/animation_test.cpp` and `libs/tests/composition_test.cpp` | Offscreen tests cover preview and interaction behavior; real-hardware visual output and graphics-driver validation remain pending (**P2 validation**). |
 | Performance diagnostics | `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`) | Tests cover metrics aggregation, not actual playback throughput. The 1080p/30 fps, 10-second, five-layer benchmark on the reference PC and other systems remains pending (**P2 validation**). |
@@ -299,10 +299,12 @@ readiness checks remain in this roadmap and
 - **P0 — critical paths mapped:** composition validation,
   persistence/migration, startup, and automated recovery each have registered
   test sources. This inventory did not identify a specific P0 behavior with
-  neither automated nor documented manual coverage. The owner reports that
-  the requested basic persistence/recovery checks worked on the Windows 11
-  reference PC on 2026-10-01; detailed restart, migration, invalid-file, and
-  recovery scenarios still need individual results for full acceptance.
+  neither automated nor documented manual coverage. The owner reports
+  repeatedly migrating the same long-lived project across persisted-format
+  versions and says the requested basic persistence/recovery checks worked on
+  the Windows 11 reference PC, with migrations treated as passed. Detailed
+  restart, invalid-file, and recovery scenarios still need individual results
+  for full acceptance.
 - **P1 — export acceptance:** automated export behavior is covered; codec
   availability and the supported output profile still require real packaged
   builds and cross-platform validation.

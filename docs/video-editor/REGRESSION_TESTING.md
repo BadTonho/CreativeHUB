@@ -136,7 +136,7 @@ and its subdirectories; shared-library tests are registered in
 | Shared animation, composition, media assets, encoding, and shortcuts | `libs/tests/animation_test.cpp`, `composition_test.cpp`, `shortcuts_test.cpp`; `libs/media/tests/media_assets_test.cpp`, `video_encoder_test.cpp` | Encoder exception message and error-code access are asserted; the [roadmap](ROADMAP.md) tracks cross-platform runtime, codec availability, and packaged dependency checks. |
 | Logging and system metrics | `tests/logging/logger_test.cpp`; `tests/system/system_memory_usage_test.cpp`, `system_memory_details_dialog_test.cpp`, `performance_usage_test.cpp` | The manual checklist documents checking the app log folder and platform resource values; runtime and platform results remain pending. |
 | Media import, probing, decode, and Media Pool | `tests/media/video_decoder_test.cpp`, `media_library_test.cpp`; `tests/application/application_media_services_test.cpp`; `tests/ui/media_browser_list_widget_test.cpp`, `media_browser_bin_tree_widget_test.cpp` | Packaged UI, image plugins, media paths, and codec checks remain pending; see the [roadmap](ROADMAP.md). |
-| Project data, validation, migration, autosave, and recovery | `tests/project/project_file_test.cpp`, `autosave_manager_test.cpp`; `tests/application/main_window_integration_test.cpp` | **P0 pending validation:** complete the representative save/reopen, recovery, and failure workflows documented in this guide and the [roadmap](ROADMAP.md). |
+| Project data, validation, migration, autosave, and recovery | `tests/project/project_file_test.cpp`, `autosave_manager_test.cpp`; `tests/application/main_window_integration_test.cpp` | The owner reports repeatedly migrating the same long-lived `.csp` project as persisted-format versions advance. The requested save/reopen, autosave-recovery, and invalid-project-preservation checks also worked on Windows 11; representative project-size and detailed failure workflows remain pending. |
 | Timeline model, commands, geometry, gestures, and widgets | `tests/timeline/timeline_model_test.cpp`, `timeline_command_service_test.cpp`, `timeline_geometry_test.cpp`, `timeline_interaction_controller_test.cpp`, `timeline_trim_gesture_test.cpp`, `timeline_widget_test.cpp`, `timeline_end_buttons_test.cpp` | Manual UI validation is documented; rendering, pointer feel, scaling, and accessibility checks remain pending. |
 | Playback, seeking, frame stepping, transitions, and audio | `tests/playback/video_playback_test.cpp`, `playback_worker_test.cpp`, `playback_controller_test.cpp`, `playback_deadline_scheduler_test.cpp`, `frame_step_navigation_test.cpp`, `timeline_audio_mix_test.cpp`, `audio_playback_test.cpp` | The focused controller and main-window activation tests passed 10 repeated Debug runs; the controller also passed 10 Release runs on 2026-10-01. Driver/audio-device behavior and the approved reference workload still require manual validation. 4K-source and higher-rate performance are measured separately. |
 | Rendering, transforms, text, and preview metrics | `tests/rendering/transform_compositor_test.cpp`, `text_compositor_test.cpp`, `preview_performance_metrics_test.cpp`; `tests/ui/preview_widget_test.cpp`, `opengl_preview_test.cpp` (`creative-suite-main-editor-opengl-preview`) | The native OpenGL integration test checks framebuffer output and CPU fallback on a valid context; it skips only if the platform cannot create a valid context. Real-driver visual and platform checks remain manual. |
@@ -148,11 +148,13 @@ and its subdirectories; shared-library tests are registered in
 
 - **P0 — critical paths mapped:** project persistence, migration, rejection of
   invalid data, autosave, and recovery have automated evidence and documented
-  manual workflows. The owner reported that the requested save/reopen,
-  autosave-recovery, and invalid-project preservation checks worked on the
-  Windows 11 reference PC (Ryzen 5 3600, 32 GB RAM, GTX 1660 Super 6 GB) on
-  2026-10-01. Individual fixtures and detailed results were not recorded, so
-  broader project-size, migration, and failure-case acceptance remains pending.
+  manual workflows. The owner reports repeatedly migrating the same long-lived
+  `.csp` project as persisted-format versions advance and confirmed that the
+  requested save/reopen, autosave-recovery, and invalid-project preservation
+  checks worked on the Windows 11 reference PC (Ryzen 5 3600, 32 GB RAM,
+  GTX 1660 Super 6 GB). Migration across the persisted-format versions in use
+  is treated as passed; representative project-size and detailed failure-case
+  acceptance remains pending.
   This source-level inventory does not prove the tests pass or exhaustively
   review every assertion.
 - **P1 — pending validation:** complete offline-media and export workflows.
