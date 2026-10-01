@@ -16,14 +16,24 @@ add_executable(creative-suite-image-editor-format-tests
     image_editor_format_test.cpp
 )
 target_link_libraries(creative-suite-image-editor-format-tests PRIVATE
+    creative-suite-image-editor-core
     Qt6::Core
     Qt6::Gui
 )
 target_compile_features(creative-suite-image-editor-format-tests PRIVATE cxx_std_20)
 add_creative_suite_test(
     NAME creative-suite-image-editor-image-formats
-    COMMAND creative-suite-image-editor-format-tests
-    SKIP_RETURN_CODE 77)
+    COMMAND creative-suite-image-editor-format-tests)
+
+if(WIN32)
+    add_dependencies(
+        creative-suite-image-editor-format-tests
+        creative-suite-image-editor)
+    add_creative_suite_test(
+        NAME creative-suite-image-editor-deployed-image-formats
+        COMMAND creative-suite-image-editor-format-tests
+            --plugin-root "$<TARGET_FILE_DIR:creative-suite-image-editor>")
+endif()
 
 add_executable(creative-suite-image-editor-ui-tests
     image_editor_ui_test.cpp
@@ -141,5 +151,6 @@ if(WIN32)
                 "$<TARGET_FILE:${TEST_TARGET}>"
             VERBATIM
         )
+        creative_suite_deploy_qt_imageformat_plugins(${TEST_TARGET})
     endforeach()
 endif()

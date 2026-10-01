@@ -5,10 +5,24 @@
 #include <QImageWriter>
 #include <QTemporaryDir>
 
+#include "image_document_session.h"
+
 #include <iostream>
 
 int main(int argc, char* argv[]) {
     QCoreApplication application(argc, argv);
+    QString plugin_root;
+    const auto arguments = application.arguments();
+    for (qsizetype index = 1; index + 1 < arguments.size(); ++index) {
+        if (arguments.at(index) == QStringLiteral("--plugin-root")) {
+            plugin_root = arguments.at(index + 1);
+            break;
+        }
+    }
+    if (!plugin_root.isEmpty()) {
+        QCoreApplication::setLibraryPaths({plugin_root});
+    }
+
     const auto supported = QImageReader::supportedImageFormats();
     const QList<QByteArray> required = {
         QByteArray("png"), QByteArray("jpeg"), QByteArray("bmp"),
@@ -20,7 +34,7 @@ int main(int argc, char* argv[]) {
     if (!missing.isEmpty()) {
         std::cerr << "Qt image format plugins are unavailable: "
                   << missing.join(QStringLiteral(", ")).toStdString() << '\n';
-        return 77;
+        return 1;
     }
 
     QTemporaryDir temporary;
@@ -38,6 +52,14 @@ int main(int argc, char* argv[]) {
         QImageReader reader(path);
         if (reader.read().isNull()) {
             std::cerr << "Qt could not decode test format: " << format.constData() << '\n';
+            return 1;
+        }
+        image_editor::ImageDocumentSession session;
+        QString import_error;
+        if (!session.openImage(path, &import_error) || !session.hasSource()) {
+            std::cerr << "Image Editor could not import test format: "
+                      << format.constData() << ": "
+                      << import_error.toStdString() << '\n';
             return 1;
         }
     }

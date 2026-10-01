@@ -6,12 +6,17 @@ run.
 
 ## Validation record
 
-On 2026-09-27, the user confirmed on Windows that the Release build works,
-Paint and Eraser work after using Shapes, and export, `.cimg` save/reopen,
-editable shapes, general object selection, and layer groups work. macOS and
-Linux validation is deferred. Windows packaging and the remaining detailed
-recovery, image-format plugin, and linked-image checks are still tracked in the
-roadmap.
+On 2026-10-01, the owner reported that all currently implemented Image Editor
+workflows had been exercised on Windows 11. A subsequent attempt to open a
+WebP image showed an `Unsupported image format` error in the application. The
+cause was missing `qwebp` and `qtiff` plugins in the app runtime and install
+directories; the format test had been using a separately populated test
+directory. Windows deployment now copies the Qt-version-matched plugins, and
+the automated import test checks the Image Editor importer against the app's
+plugin directory in Debug and Release. The full Image Editor CTest group
+passed in Debug and Release (5/5 each), and the full Release suite passed
+(61/61). The affected image has not yet been reopened manually in the rebuilt
+UI. macOS and Linux packaging checks remain deferred.
 
 ## Standalone editing and recovery
 
@@ -236,13 +241,14 @@ roadmap.
 
 ### Recorded standalone validation
 
-- [x] User confirms the standalone workflow above was validated for the current
-  baseline implementation, including a restart and recovery check, on Windows
-  on 2026-09-27. The Qt version and scenario-by-scenario results were not
-  recorded.
-- [ ] Record scenario-by-scenario results for JPEG options, responsive export,
-  selected-item Quick Export, shape/selection/group edge cases, and the detailed
-  recovery scenarios above.
+- [x] On 2026-10-01, the owner reported that all currently implemented Image
+  Editor workflows had been tested on Windows 11. Per-scenario results and the
+  Qt version were not recorded.
+- [x] The Windows Debug and Release builds now run format/import tests against
+  the deployed app plugins; the full Image Editor CTest group passed 5/5 in
+  both configurations, and the full Release suite passed 61/61.
+- [ ] Reopen the WebP image that showed the unsupported-format dialog in the
+  rebuilt application UI.
 - [ ] Cross-platform packaging and interaction checks below still need
   platform-specific records.
 

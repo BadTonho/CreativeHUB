@@ -107,12 +107,59 @@ qt_generate_deploy_app_script(
 install(SCRIPT ${image_editor_deploy_script})
 
 if(WIN32)
+    set(CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR "" CACHE PATH
+        "Directory containing Qt image format plugins qwebp and qtiff for the active Qt build")
+
     get_target_property(QT_IMAGE_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
     if(NOT QT_IMAGE_CORE_DLL)
         get_target_property(QT_IMAGE_CORE_DLL Qt6::Core IMPORTED_LOCATION)
     endif()
     get_filename_component(QT_IMAGE_BIN_DIR "${QT_IMAGE_CORE_DLL}" DIRECTORY)
     find_program(QT_IMAGE_DEPLOY_TOOL windeployqt HINTS "${QT_IMAGE_BIN_DIR}" REQUIRED)
+
+    if(NOT CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR)
+        set(_qt_imageformats_candidates
+            "${QT_IMAGE_BIN_DIR}/../plugins/imageformats")
+        if(VCPKG_INSTALLED_DIR)
+            list(APPEND _qt_imageformats_candidates
+                "${VCPKG_INSTALLED_DIR}/plugins/imageformats")
+        endif()
+        foreach(_prefix IN LISTS CMAKE_PREFIX_PATH)
+            list(APPEND _qt_imageformats_candidates
+                "${_prefix}/plugins/imageformats")
+        endforeach()
+        foreach(_candidate IN LISTS _qt_imageformats_candidates)
+            if(EXISTS "${_candidate}/qwebp.dll"
+                    AND EXISTS "${_candidate}/qtiff.dll"
+                    AND EXISTS "${_candidate}/qwebpd.dll"
+                    AND EXISTS "${_candidate}/qtiffd.dll")
+                set(CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR "${_candidate}")
+                break()
+            endif()
+        endforeach()
+    endif()
+
+    foreach(_plugin IN ITEMS qwebp.dll qtiff.dll qwebpd.dll qtiffd.dll)
+        if(NOT EXISTS "${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/${_plugin}")
+            message(FATAL_ERROR
+                "Required Qt image format plugin '${_plugin}' was not found in "
+                "'${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}'. Install the "
+                "Qt Image Formats add-on matching the active Qt version and "
+                "MSVC runtime, or set CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR.")
+        endif()
+    endforeach()
+
+    function(creative_suite_deploy_qt_imageformat_plugins target_name)
+        add_custom_command(TARGET "${target_name}" POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E make_directory
+                "$<TARGET_FILE_DIR:${target_name}>/imageformats"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "$<IF:$<CONFIG:Debug>,${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qwebpd.dll,${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qwebp.dll>"
+                "$<IF:$<CONFIG:Debug>,${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qtiffd.dll,${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qtiff.dll>"
+                "$<TARGET_FILE_DIR:${target_name}>/imageformats"
+            VERBATIM
+        )
+    endfunction()
 
     add_custom_command(TARGET creative-suite-image-editor POST_BUILD
         COMMAND "${QT_IMAGE_DEPLOY_TOOL}"
@@ -121,6 +168,20 @@ if(WIN32)
             --add-plugin-types imageformats
             "$<TARGET_FILE:creative-suite-image-editor>"
         VERBATIM
+    )
+    creative_suite_deploy_qt_imageformat_plugins(creative-suite-image-editor)
+
+    install(FILES
+        "${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qwebp.dll"
+        "${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qtiff.dll"
+        DESTINATION plugins/imageformats
+        CONFIGURATIONS Release RelWithDebInfo MinSizeRel
+    )
+    install(FILES
+        "${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qwebpd.dll"
+        "${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qtiffd.dll"
+        DESTINATION plugins/imageformats
+        CONFIGURATIONS Debug
     )
 endif()
 

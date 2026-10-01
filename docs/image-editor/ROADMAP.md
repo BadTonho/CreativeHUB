@@ -90,10 +90,11 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
   switching after Shapes, export, `.cimg` save/reopen, editable shapes, general
   object selection, and layer groups.
 - [-] Complete the remaining manual workflow in
-  [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md), including restart/recovery
-  and deployed image-format plugin checks.
-- [ ] Validate Windows packaging with PNG, JPEG, BMP, WebP, and TIFF plugins;
-  macOS and Linux builds and interaction checks are deferred.
+  [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md) by reopening the affected
+  WebP image in the rebuilt application UI.
+- [x] Validate Windows Debug and Release build/install deployment and import
+  of PNG, JPEG, BMP, WebP, and TIFF; macOS and Linux builds and interaction
+  checks are deferred.
 
 **Exit criteria:** the application builds independently, opens and edits a
 raster image without changing its source, saves and reopens `.cimg`, exports
@@ -166,35 +167,42 @@ Automated evidence below is registered in
 Manual cases and their recorded status are in
 [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md).
 
+**Owner-reported Windows status (2026-10-01):** all currently implemented
+Image Editor workflows had been exercised on Windows 11. A later WebP import
+attempt exposed a runtime deployment regression. Matching Qt image-format
+plugins are now copied into the application build and install layouts, and
+Debug/Release regression tests pass through the deployed application plugin
+path. The Image Editor tests passed 5/5 in both configurations; the full
+Release suite passed 61/61. Reopening the affected WebP in the rebuilt UI and
+other-platform package validation remain outstanding.
+
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
-| Document editing, canvas, layers, groups, shapes, object selection, transforms, undo/redo | `image_editor_core_test.cpp` (`creative-suite-image-editor-core`) | Basic Release, Paint/Eraser switching, export, save/reopen, shapes, object selection, and groups were confirmed on Windows. The checklist's exhaustive gestures and edge cases remain pending. |
-| `.cimg` persistence, validation, and backward compatibility | `image_editor_core_test.cpp`; legacy v1–v7 compatibility fixtures and current v8 round trips | Standalone steps 4, 9, 12–14; the owner reports repeatedly migrating the same long-lived project across persisted-format versions and says the migrations have worked. Invalid-document, detailed recovery, failure-case, and platform results are not recorded. |
-| Recovery, relinking, and error logging | `image_editor_core_test.cpp` | Standalone steps 4, 12–14; basic recovery was reported working on the Windows 11 reference PC on 2026-10-01. Scenario-level results, failure cases, and platform acceptance remain pending. |
-| Import formats and image decoding | `image_editor_core_test.cpp`, `image_editor_format_test.cpp` (`creative-suite-image-editor-image-formats`) | The 2026-10-01 Windows Debug coverage and Release regression runs passed with PNG, JPEG, BMP, WebP, and TIFF encoded and decoded using local Qt 6.7.2/MSVC2019 plugins. Missing plugins can still yield CTest skip code 77 in other environments. Normal Windows packaging and macOS/Linux checks remain pending (**P1 validation**). |
-| Flattened export, Quick Export, and export dialogs | `image_editor_core_test.cpp`, `image_editor_export_ui_test.cpp` (`creative-suite-image-editor-export-ui`) | Standalone step 5 and shape/group export steps; full release recovery/export workflow remains pending. |
-| Canvas, tools, layers, shortcuts, and UI interactions | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`) | Standalone steps 2–12 plus shapes and groups; recent Windows checks are recorded, and cross-platform visual checks are pending. |
-| Video Editor linked-image producer/consumer workflow | Producer: `image_editor_ui_test.cpp`; consumer: Video Editor `apps/video-editor/tests/application/application_media_services_test.cpp`, `apps/video-editor/tests/application/main_window_integration_test.cpp`, `apps/video-editor/tests/project/project_file_test.cpp` | Linked-image checklist: the basic save-and-refresh smoke test is confirmed; transparent assets, repeated uses, clip variants, reopen, large files, and platform coverage remain pending (**P1 validation**). |
+| Document editing, canvas, layers, groups, shapes, object selection, transforms, undo/redo | `image_editor_core_test.cpp` (`creative-suite-image-editor-core`) | The owner reports all current Image Editor workflows were exercised on Windows 11; scenario-level gestures and edge results are not itemized. Cross-platform visual checks remain pending. |
+| `.cimg` persistence, validation, and backward compatibility | `image_editor_core_test.cpp`; legacy v1–v7 compatibility fixtures and current v8 round trips | The owner reports repeatedly migrating the same long-lived project across persisted-format versions, with migrations working. Cross-platform validation remains pending. |
+| Recovery, relinking, and error logging | `image_editor_core_test.cpp` | The owner reports current recovery workflows working on Windows; the per-scenario record is not maintained. Cross-platform validation remains pending. |
+| Import formats and image decoding | `image_editor_core_test.cpp`, `image_editor_format_test.cpp` (`creative-suite-image-editor-image-formats`), `creative-suite-image-editor-deployed-image-formats` | Debug and Release tests encode and import PNG, JPEG, BMP, WebP, and TIFF through the application importer using the app's deployed plugin directory. This exposed and now guards against missing `qwebp`/`qtiff`; reopening the user's affected WebP in the rebuilt UI remains pending. Other-platform packaging remains pending (**P1 validation**). |
+| Flattened export, Quick Export, and export dialogs | `image_editor_core_test.cpp`, `image_editor_export_ui_test.cpp` (`creative-suite-image-editor-export-ui`) | The owner reports current export workflows exercised on Windows 11; cross-platform package checks remain pending. |
+| Canvas, tools, layers, shortcuts, and UI interactions | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`) | The owner reports current UI workflows exercised on Windows 11; cross-platform visual checks remain pending. |
+| Video Editor linked-image producer/consumer workflow | Producer: `image_editor_ui_test.cpp`; consumer: Video Editor `apps/video-editor/tests/application/application_media_services_test.cpp`, `apps/video-editor/tests/application/main_window_integration_test.cpp`, `apps/video-editor/tests/project/project_file_test.cpp` | The owner reports current Image Editor workflows exercised on Windows; producer/consumer scenario details and cross-platform acceptance remain tracked separately (**P1 validation**). |
 | First-release editable text | No test yet; text is not implemented | Planned feature. Add automated edit/history/persistence/export coverage and manual visual checks when implemented; not a current coverage gap. |
 
 ### Current coverage gaps and pending validation
 
-- **P0 — critical paths mapped:** `.cimg` save/open, legacy migration,
-  invalid-document rejection, core edits, and recovery have automated test
-  sources. The owner reports repeatedly migrating the same long-lived project
-  across persisted-format versions and says the requested basic
-  persistence/recovery checks worked on the Windows 11 reference PC, with
-  migrations treated as passed. Invalid-document rejection, detailed recovery,
-  and failure scenarios still need individual results before full manual
-  acceptance.
-- **P1 — pending plugin validation and automation improvement:** the format
-  test can be reported as skipped with return code 77; this run did not skip,
-  but it does not prove required plugins are present in each packaged
-  application. Complete the documented packaging check and decide whether
-  environments without those plugins should keep a skippable test result.
+- **P0 — current Windows workflows:** the owner reports all currently
+  implemented Image Editor flows have been exercised. Detailed per-scenario
+  records and other-platform acceptance are not available. The WebP regression
+  reported on 2026-10-01 is fixed in build and install deployment; the owner
+  still needs to reopen the affected image in the rebuilt UI.
+- **P1 — image-format packaging:** Windows CMake configuration now requires
+  Qt-version-matched WebP and TIFF plugins, deploys them beside the app and in
+  install layouts, and registers an unskippable test against the app runtime.
+  Debug and Release tests passed locally; macOS/Linux package validation
+  remains pending.
 - **P1 — linked-image acceptance:** automated coverage exists on both sides,
-  but the full producer/consumer scenarios listed above have not been manually
-  accepted.
+  and the owner reports current Image Editor workflows tested on Windows.
+  Producer/consumer scenario-level and cross-platform acceptance remain
+  tracked separately.
 - **P2 — platform and visual validation:** Windows package checks and
   macOS/Linux build, packaging, and interaction records remain incomplete.
 - **Planned, not implemented:** basic editable text and future retouching or
