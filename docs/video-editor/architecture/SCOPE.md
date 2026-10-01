@@ -1,6 +1,10 @@
 # Current Scope and Non-goals
 
-Status: provisional.
+Status: the current implementation and approved foundation direction are
+documented separately below. Planned foundation capabilities are not yet
+implemented or release-validated.
+
+## Implemented today
 
 The Video Editor currently includes:
 
@@ -9,14 +13,16 @@ The Video Editor currently includes:
 - provisional Qt OpenGL preview with CPU fallback and grayscale;
 - CPU playback with worker-thread frame stepping and playback;
 - multiple video tracks with stable identifiers, absolute positions, gaps,
-  cross-track overlap, direct selection, track management, and positional drops;
+  cross-track overlap, direct selection, track management, and positional
+  drops from the Media Browser;
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned .csp persistence through version 12, including migration from
+- versioned `.csp` persistence through version 12, including migration from
   versions 1 through 11, a rational Timeline rate and separate source/Timeline
-  clip durations, video/image/text media kinds, per-project timeline
-  zoom, track-row height, and optional shared/clip-specific Image Editor links;
+  clip durations, video/image/text media kinds, per-project timeline zoom,
+  track-row height, and optional shared/clip-specific Image Editor links. The
+  current canvas is fixed at 1920x1080 and new projects default to 30 fps;
 - embedded audio playback synchronized with video, per-clip and per-track
   gain/mute, and the video fallback path;
 - basic layers, normalized 2D transformations, linear keyframes, worker-side
@@ -35,24 +41,62 @@ The Video Editor currently includes:
 - atomic project autosave and recovery snapshots with configurable global
   interval and retention;
 - offline FFmpeg video export with embedded audio, configurable output
-  settings, progress, and cancellation;
+  settings, progress, and cancellation, but no YouTube-named preset;
 - local structured diagnostic logging;
 - Edit and Fusion workspace pages in the same window; Fusion currently reuses
   the Edit Preview as its Viewer and replaces the Timeline dock with a
   visual-only Node Editor, alongside an Inspector placeholder.
 
-The current application does not include:
+## Approved foundation direction (planned, not yet implemented)
+
+- Serve content creators broadly, with YouTube long-form videos and Shorts as
+  the initial priority. Keep the interface easy to explore and retain shortcuts
+  for frequent editing tasks; the foundation does not promise parity with
+  advanced post-production tools.
+- Support 1920x1080 (16:9) and 1080x1920 (9:16) project canvases. Default new
+  projects to 16:9 at 30 fps. Offer Timeline rates of 24, 25, 30, 48, 50, and
+  60 fps. Other aspect ratios are not part of this foundation scope.
+- Preserve opening existing `.csp` versions 1 through 12 as 16:9 projects.
+  The current v12 format only permits a 1920x1080 canvas. Before implementing
+  portrait canvases, define and test the versioned persistence change without
+  breaking older projects.
+- Accept 4K source media in 1080p projects, but do not promise real-time
+  playback for 4K sources. Target 30 fps real-time playback for a typical
+  1080p/30 fps project using 1080p sources on a mainstream notebook with
+  integrated graphics. Measure 48/50/60 fps separately.
+- Use a representative project of up to 15 minutes with three video tracks,
+  text, essential transitions, and embedded video audio. Record the CPU, RAM,
+  and integrated GPU of the reference machine; determine numeric minimum
+  hardware requirements from measurements.
+- Add operating-system file drops using the existing media importer. A drop on
+  the Media Browser imports supported files there; a drop on the Timeline
+  imports and inserts using the existing Timeline media-drop behavior. Keep the
+  import dialog and Media Browser drag workflow available.
+- Add one adjustable YouTube export preset that follows the project canvas and
+  Timeline rate. The planned 1080p SDR profile uses MP4/H.264, AAC-LC stereo at
+  48 kHz and 192 kbps, Fast Start, BT.709 color, and VBR video at 8 Mbps for
+  24–30 fps or 12 Mbps for 48–60 fps. Keep generic export settings available.
+  If a shipped build lacks the required codecs, explain that the preset is
+  unavailable rather than silently substituting another codec. Revalidate
+  exact defaults, encoder availability, and license configuration for each
+  shipped FFmpeg build before release. See [YouTube's recommended upload encoding
+  settings](https://support.google.com/youtube/answer/1722171?hl=en) and
+  [audio guidance](https://support.google.com/youtube/answer/58134?hl=en).
+
+## Deferred beyond the foundation
 
 - audio-only sources, independent audio tracks, advanced mixing, waveforms,
-  automation, recording, image sequences, SRT import, automatic captions,
-  rich text, or animated text content;
-- advanced compositing, GPU per-layer playback, easing, masks, 3D layers,
-  audio crossfades, and transition effects beyond the essential pair;
+  automation, recording, audio crossfades, and advanced audio effects;
+- image sequences, SRT import, automatic captions, rich text, and animated text
+  content;
+- advanced compositing, GPU per-layer playback, easing, masks, 3D layers, and
+  transition effects beyond the essential pair;
 - advanced ripple editing, automatic gap management, or history covering every
   project subsystem;
-- thumbnails, proxies, or complete relinking;
+- thumbnails, proxies, complete relinking, and project-size-independent
+  performance guarantees;
 - Fusion node graphs, composition editing, and Fusion-specific processing;
-- linked Motion Studio composition handoff or Rust integration.
+- linked Motion Studio composition handoff and Rust integration.
 
 The Video Editor owns its project format, timeline policy, and UI. It also uses
 focused shared libraries for media, animation, composition, diagnostics,

@@ -1,8 +1,10 @@
 # Video Editor Roadmap
 
 This roadmap tracks the Video Editor through its foundation exit gate. It
-separates implemented capabilities, release gates, open product decisions, and
-later expansion. Update it when implementation, scope, or a decision changes.
+separates implemented capabilities, approved foundation scope, release gates,
+open technical validation, and later expansion. A completed product-decision
+item records an agreed direction; it does not mean its feature is implemented.
+Update it when implementation, scope, or a decision changes.
 
 ## Current direction
 
@@ -43,24 +45,46 @@ later expansion. Update it when implementation, scope, or a decision changes.
 ## 1. Product decisions
 
 These decisions set the boundaries for the Video Editor foundation and the
-release work that follows it.
-The scope below is a working proposal based on the existing application, not a
-final product commitment.
+release work that follows it. These are approved product directions for the
+foundation; platform packaging, shipped codec availability, numeric hardware
+requirements, and implementation details still require validation below.
 
 - [x] Set the product direction: build an open creative suite that gives people
   locally usable tools and reduces reliance on proprietary creative software.
-- [ ] Define the initial target audience and the main editing workflows.
-- [ ] Confirm the Video Editor foundation scope and explicitly list deferred
-  workflows.
-- [ ] Define minimum hardware and representative project sizes.
+- [x] Define the initial target audience and main workflow: content creators
+  broadly, with YouTube long-form videos and Shorts as the first priority. Keep
+  the interface easy to explore and provide shortcuts for frequent tasks;
+  foundation scope does not promise parity with advanced post-production tools.
+- [x] Confirm the foundation scope and deferred workflows. Target a typical
+  project up to 1080p and 15 minutes, with three video tracks, text, essential
+  transitions, and embedded video audio. Independent audio workflows, advanced
+  grading/compositing, proxies, and plugins remain later work.
+- [x] Define the reference hardware class and representative workload: a
+  mainstream notebook with integrated graphics and the typical project above.
+  Determine numeric CPU and memory requirements from measurements rather than
+  claiming an unvalidated minimum.
+- [x] Include 16:9 (1920x1080) and 9:16 (1080x1920) project canvases, with 16:9
+  and 30 fps as defaults. Offer 24, 25, 30, 48, 50, and 60 fps. The typical
+  1080p/30 fps project is the real-time playback target; measure higher rates
+  separately.
+- [x] Accept 4K source media in 1080p projects, without promising real-time
+  playback for 4K sources.
 - [x] Choose a broad media-compatibility policy: do not impose a fixed
   application-level format allow-list; seek the broadest practical support
   from the shipped FFmpeg build and Qt image-format plugins.
 - [x] Choose the default clip-deletion behavior: keep following clips at their
   positions and leave a gap; provide a separate Ripple Delete / Close Gap
   command when the user wants following clips to move earlier.
-- [ ] Decide whether direct operating-system file drops are required for the
-  foundation.
+- [x] Include direct operating-system file drops. Dropping on the Media Browser
+  imports media; dropping on the Timeline imports and inserts it using the
+  existing Timeline media-drop behavior. Use the existing import pipeline and
+  its supported media types.
+- [x] Include one adjustable YouTube export preset that follows the project
+  canvas and frame rate. Its planned 1080p SDR defaults are MP4/H.264, AAC-LC
+  stereo at 48 kHz and 192 kbps, Fast Start, BT.709 color, and VBR video at
+  8 Mbps for 24–30 fps or 12 Mbps for 48–60 fps. Keep generic export controls
+  available. If a shipped build lacks the required codecs, explain that the
+  preset is unavailable rather than silently substituting another codec.
 - [x] Set Windows 10 and Windows 11 as Windows targets and Qt 6.12 as the
   planned Qt baseline. Apply the dependency update when the stable release and
   compatible package are available.
@@ -71,20 +95,24 @@ final product commitment.
   made.
 - [x] Choose the open-source license: GPL-3.0-or-later.
 
-### Working foundation proposal
+### Approved foundation scope
 
-Use the current Video Editor foundation as the starting point: local media
-import and organization; multi-track clip assembly, movement, splitting,
-trimming, and deletion; preview and playback; basic transforms, keyframes,
-text, essential transitions, embedded video audio controls; project save/open,
-Undo/Redo, autosave, and recovery. Add a defined export workflow and complete
-the release gates below. Audience, supported media limits, export controls,
-platform packaging, and direct operating-system file drops remain open.
+Build on the implemented local-media, multitrack-editing, preview/playback,
+transform, keyframe, text, essential-transition, embedded-audio, project
+save/open, Undo/Redo, autosave, and recovery workflows. Complete the release
+gates below and add the approved portrait canvas, project-rate choices,
+operating-system file drops, and adjustable YouTube preset. Preserve a clear,
+discoverable interface with shortcuts for frequent actions.
 
-Advanced color grading, independent audio tracks and mixing, masks, proxy
-workflows, advanced compositing, and plugin support are candidates for later
-milestones unless product validation promotes a specific workflow into the
-foundation scope.
+The current project format still accepts only a 1920x1080 canvas. Future
+implementation of portrait canvases and project-rate choices must preserve
+opening existing `.csp` projects as 16:9; define and validate any required
+format migration before changing persistence.
+
+Audio-only sources, independent audio tracks, waveforms, recording, advanced
+mixing, automatic captions, advanced color grading, masks, 3D layers, proxies,
+advanced compositing, plugins, and full Fusion processing remain outside the
+foundation. Continue evaluating these only as later milestones.
 
 ## 2. Implemented foundation
 
@@ -133,18 +161,32 @@ and required manual validation pass.
   project/settings snapshots, CPU composition, dynamically discovered FFmpeg
   muxer and encoder choices, progress, cancellation, failure reporting, and
   temporary-file verification before publishing.
+- [ ] Add the adjustable YouTube preset for 1080p SDR using the approved
+  project canvas and frame rate. Validate its MP4/H.264 and AAC-LC combination,
+  Fast Start, default bitrates, encoder availability, license constraints, and
+  unavailable-preset message against each shipped FFmpeg build. Keep generic
+  export options available when the preset cannot run.
 - [ ] Validate practical export compatibility across the intended shipped
   FFmpeg builds and supported platforms. Measure quality and performance,
   verify hardware-encoder combinations, and complete manual export validation
   with representative video, image, text, transition, and audio projects.
 - [ ] Add the explicit Ripple Delete / Close Gap command. Ordinary deletion
   must keep subsequent clips in place and leave the gap.
-- [ ] Decide and, if included, implement direct operating-system file drops.
-  The existing import dialog and drag from the Media Browser remain available.
+- [ ] Add project creation choices for the approved 16:9 and 9:16 canvases and
+  24/25/30/48/50/60 fps rates, defaulting to 16:9 at 30 fps. Preserve the
+  existing behavior of `.csp` versions 1 through 12 as 16:9 when opening them;
+  define and test the versioned persistence change before implementation.
+- [ ] Implement direct operating-system file drops as decided in section 1.
+  Dropping on the Media Browser imports; dropping on the Timeline uses the
+  existing media-drop behavior. Keep the import dialog and Media Browser drag
+  workflow available.
 - [ ] Validate project save/reopen, autosave, recovery, offline media, and
-  failure handling with representative small, medium, and heavy projects.
-  Record the project fixtures and acceptance criteria when hardware and media
-  limits are defined.
+  failure handling with representative small, medium, and heavy projects,
+  including portrait projects and migration of `.csp` versions 1 through 12.
+  For the typical 1080p, 15-minute, three-track project, target 30 fps playback
+  on the integrated-graphics reference notebook using 1080p sources. Measure
+  4K-source and higher-frame-rate playback separately without a real-time
+  guarantee. Record fixtures, exact test-machine CPU/RAM/GPU, and results.
 - [ ] Build and run automated and manual release workflows on Windows, macOS,
   and Linux. Validate paths, permissions, fonts, color behavior, audio devices,
   and documented keyboard shortcuts on each supported platform. Windows 10 and
@@ -202,12 +244,13 @@ performance measurements, and Video Editor stability as the decision criteria.
   measurements show a need.
 - [ ] Profile representative projects and address measured performance and
   memory bottlenecks.
-- [ ] Establish startup, memory, and playback/preview baselines after minimum
-  hardware and representative project sizes are defined.
+- [ ] Establish startup, memory, and playback/preview baselines on the chosen
+  reference notebook; set numeric minimum hardware requirements from those
+  measurements.
 - [ ] Consider per-layer GPU composition or another rendering backend only
   when measured needs justify the added implementation and deployment cost.
-- [ ] Revisit plugin architecture, presets, and templates after stable public
-  workflows and extension points are known.
+- [ ] Revisit plugin architecture, additional export presets, and templates
+  after stable public workflows and extension points are known.
 
 ## 6. Deferred technical and ecosystem work
 
