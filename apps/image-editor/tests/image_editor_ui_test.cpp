@@ -57,6 +57,17 @@
 
 namespace {
 
+class ShortcutOverrideDeliveryProbe final : public QObject {
+public:
+    bool received = false;
+
+protected:
+    bool eventFilter(QObject*, QEvent* event) override {
+        if (event->type() == QEvent::ShortcutOverride) received = true;
+        return false;
+    }
+};
+
 int layerRowCount(const QTreeWidget* tree) {
     return tree->topLevelItemCount();
 }
@@ -356,9 +367,12 @@ bool testEditableTextUi(const QString& directory) {
              std::pair{Qt::Key_B, QStringLiteral("b")}}) {
         QKeyEvent shortcut_override(QEvent::ShortcutOverride, key,
                                     Qt::NoModifier, QString{});
+        ShortcutOverrideDeliveryProbe delivery_probe;
+        text_editor->installEventFilter(&delivery_probe);
         QApplication::sendEvent(text_editor, &shortcut_override);
-        if (!shortcut_override.isAccepted()) {
-            std::cerr << "A printable key was not protected from a tool shortcut.\n";
+        text_editor->removeEventFilter(&delivery_probe);
+        if (!shortcut_override.isAccepted() || !delivery_probe.received) {
+            std::cerr << "A shortcut override was blocked without reaching the text editor.\n";
             return false;
         }
         QTest::keyClick(text_editor, key);

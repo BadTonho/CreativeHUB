@@ -1486,7 +1486,9 @@ bool ImageCanvas::eventFilter(QObject* watched, QEvent* event) {
         // prevents one-key window shortcuts from swallowing typed characters.
         if (text_editor_has_focus && (!command_modifier || altgr) && !menu_modifier) {
             key_event->accept();
-            return true;
+            // Accept the override so Qt does not activate a shortcut, but let
+            // the event reach the focused widget and continue its key handling.
+            return false;
         }
     }
     if (watched == text_editor_ && event->type() == QEvent::KeyPress) {
