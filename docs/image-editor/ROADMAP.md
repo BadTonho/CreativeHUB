@@ -11,8 +11,9 @@ packaging checks in Milestone 1. This gate orders Image Editor acceptance
 milestones; the three application tracks may be developed in parallel.
 The approved first editing-release direction is thumbnails and social-media
 art, with basic editable text. Its reference workload is a 1080p document with
-up to five layers and one group on a mainstream notebook with integrated
-graphics. This profile is for validation, not a new canvas-size limit; exact
+up to five layers and one group, measured on the maintainer's reference PC:
+AMD Ryzen 5 3600, 32 GB RAM, NVIDIA GeForce GTX 1660 SUPER with 6 GB VRAM, and
+Windows 11. This profile is for validation, not a new canvas-size limit; exact
 hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Principles
@@ -154,9 +155,9 @@ validated contracts and producer/consumer regression coverage.
 
 - [ ] Revisit masks, retouching, color adjustments, and larger effect sets only
   when user workflows and performance measurements justify them.
-- [ ] Profile the representative 1080p document on a mainstream integrated-
-  graphics notebook; record the exact CPU, memory, and results before setting
-  numerical hardware requirements.
+- [ ] Profile the representative 1080p document on the maintainer's reference
+  PC; record test conditions and results before setting numerical hardware
+  requirements. Use additional systems before generalizing those requirements.
 
 ## Status legend
 

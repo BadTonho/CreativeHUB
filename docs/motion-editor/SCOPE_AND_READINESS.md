@@ -73,11 +73,12 @@ validation remain open technical work.
 Use a 1920x1080 composition at 30 fps, up to 10 seconds and five layers, as the
 reference workload. Exercise a representative mix of image, video, text, and
 shape layers, transform keyframes, and the existing layer effects. Use the
-suite's mainstream notebook with integrated graphics as the hardware class;
-record the exact CPU, GPU, and memory of each measured system. This is a
-benchmark profile, not a maximum supported canvas, duration, layer count, or
-frame rate. Do not claim numeric minimum hardware requirements or playback
-throughput until measurements have been recorded.
+maintainer's current PC as the reference test machine: AMD Ryzen 5 3600,
+32 GB RAM, NVIDIA GeForce GTX 1660 SUPER with 6 GB VRAM, and Windows 11.
+Record test conditions and results with each run. This is a benchmark profile,
+not a maximum supported canvas, duration, layer count, or frame rate. Do not
+claim numeric minimum hardware requirements or playback throughput until
+measurements on this and additional systems have been recorded.
 
 After the 2D MVP passes its performance and cross-platform validation, audio-
 reactive 2D animation is the first expansion to investigate. It is not part of

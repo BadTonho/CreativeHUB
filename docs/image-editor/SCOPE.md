@@ -47,10 +47,12 @@ The approved representative document is 1920x1080 with up to five layers and
 one group. It is a validation workload, not a maximum canvas size, layer count,
 or group count. Keep standard and custom canvas dimensions available.
 
-Use a mainstream notebook with integrated graphics as the reference hardware
-class. Record the exact CPU, GPU, memory, operating system, and results when
-profiling. Set numerical minimum requirements only after measurements; no
-real-time or performance guarantee is approved yet.
+Use the maintainer's current PC as the reference test machine: AMD Ryzen 5
+3600, 32 GB RAM, NVIDIA GeForce GTX 1660 SUPER with 6 GB VRAM, and Windows 11.
+Record test conditions and results when profiling. This defines the initial
+validation system, not a minimum hardware requirement; set numerical minimums
+only after measurements on this and additional systems. No real-time or
+performance guarantee is approved yet.
 
 ## Compatibility and Release Order
 

@@ -59,10 +59,11 @@ requirements, and implementation details still require validation below.
   project up to 1080p and 15 minutes, with three video tracks, text, essential
   transitions, and embedded video audio. Independent audio workflows, advanced
   grading/compositing, proxies, and plugins remain later work.
-- [x] Define the reference hardware class and representative workload: a
-  mainstream notebook with integrated graphics and the typical project above.
-  Determine numeric CPU and memory requirements from measurements rather than
-  claiming an unvalidated minimum.
+- [x] Set the maintainer's current PC as the reference test machine for the
+  representative workload above: AMD Ryzen 5 3600, 32 GB RAM, NVIDIA GeForce
+  GTX 1660 SUPER with 6 GB VRAM, and Windows 11. Record test conditions and
+  results during validation; derive numeric requirements from measurements
+  rather than claiming an unvalidated minimum.
 - [x] Include 16:9 (1920x1080) and 9:16 (1080x1920) project canvases, with 16:9
   and 30 fps as defaults. Offer 24, 25, 30, 48, 50, and 60 fps. The typical
   1080p/30 fps project is the real-time playback target; measure higher rates
@@ -184,7 +185,7 @@ and required manual validation pass.
   failure handling with representative small, medium, and heavy projects,
   including portrait projects and migration of `.csp` versions 1 through 12.
   For the typical 1080p, 15-minute, three-track project, target 30 fps playback
-  on the integrated-graphics reference notebook using 1080p sources. Measure
+  on the maintainer's reference PC using 1080p sources. Measure
   4K-source and higher-frame-rate playback separately without a real-time
   guarantee. Record fixtures, exact test-machine CPU/RAM/GPU, and results.
 - [ ] Build and run automated and manual release workflows on Windows, macOS,
@@ -244,9 +245,9 @@ performance measurements, and Video Editor stability as the decision criteria.
   measurements show a need.
 - [ ] Profile representative projects and address measured performance and
   memory bottlenecks.
-- [ ] Establish startup, memory, and playback/preview baselines on the chosen
-  reference notebook; set numeric minimum hardware requirements from those
-  measurements.
+- [ ] Establish startup, memory, and playback/preview baselines on the
+  maintainer's reference PC and additional systems; set numeric minimum
+  hardware requirements from those measurements.
 - [ ] Consider per-layer GPU composition or another rendering backend only
   when measured needs justify the added implementation and deployment cost.
 - [ ] Revisit plugin architecture, additional export presets, and templates

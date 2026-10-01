@@ -61,13 +61,14 @@ The Video Editor currently includes:
   portrait canvases, define and test the versioned persistence change without
   breaking older projects.
 - Accept 4K source media in 1080p projects, but do not promise real-time
-  playback for 4K sources. Target 30 fps real-time playback for a typical
-  1080p/30 fps project using 1080p sources on a mainstream notebook with
-  integrated graphics. Measure 48/50/60 fps separately.
+  playback for 4K sources. Use the maintainer's current PC as the reference
+  test machine for the 30 fps real-time target on a typical 1080p/30 fps
+  project using 1080p sources. Measure 48/50/60 fps separately.
 - Use a representative project of up to 15 minutes with three video tracks,
-  text, essential transitions, and embedded video audio. Record the CPU, RAM,
-  and integrated GPU of the reference machine; determine numeric minimum
-  hardware requirements from measurements.
+  text, essential transitions, and embedded video audio. The reference PC is
+  an AMD Ryzen 5 3600 with 32 GB RAM, an NVIDIA GeForce GTX 1660 SUPER with
+  6 GB VRAM, and Windows 11. Determine numeric minimum hardware requirements
+  from measurements on this and additional systems.
 - Add operating-system file drops using the existing media importer. A drop on
   the Media Browser imports supported files there; a drop on the Timeline
   imports and inserts using the existing Timeline media-drop behavior. Keep the

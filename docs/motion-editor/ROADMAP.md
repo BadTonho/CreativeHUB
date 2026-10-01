@@ -60,9 +60,11 @@ technically clear.
   cross-application reference compatibility rules.
 - [x] Confirm the first MVP remains standalone 2D composition with opaque,
   silent video export. Set the reference workload to 1080p/30 fps, up to
-  10 seconds and five layers on the suite's mainstream integrated-graphics
-  notebook class. Audio-reactive 2D animation is the first expansion to
-  investigate after the MVP is validated; it is not part of the MVP.
+  10 seconds and five layers on the maintainer's PC: AMD Ryzen 5 3600, 32 GB
+  RAM, NVIDIA GeForce GTX 1660 SUPER with 6 GB VRAM, and Windows 11. Record
+  test conditions and results during validation. Audio-reactive 2D animation
+  is the first expansion to investigate after the MVP is validated; it is not
+  part of the MVP.
 
 **Exit criteria:** the MVP and application boundary, later handoff, capability
 ownership and extraction gates, and format compatibility policy are documented
@@ -90,7 +92,9 @@ this readiness work.
 - [ ] Measure startup, memory, timeline/seek response, preview latency, and
   render performance for representative small, medium, and heavy compositions.
   Include the approved 1080p/30 fps, 10-second, five-layer reference workload;
-  record the exact test machine and document measured targets and unmet limits.
+  use the maintainer's PC as the reference system, and document measured
+  targets and unmet limits. Validate additional systems before generalizing
+  hardware requirements.
 - [ ] Record dependency and asset licenses, output profile/codec findings, and
   alternatives needed to resolve the identified gaps before choosing a
   renderer or other technology.
