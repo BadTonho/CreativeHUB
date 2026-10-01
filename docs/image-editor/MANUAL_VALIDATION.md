@@ -155,11 +155,11 @@ Video Editor linked-image acceptance milestone.
 
 1. Open a disposable image or canvas and activate **Text**. Confirm the initial
    style is 48 px Sans Serif, opaque black, and left-aligned. Click an empty
-   canvas location and type; confirm editing starts without a drag. In another
-   location, drag horizontally to set a custom initial width. Type a long line
-   and confirm the box grows horizontally; at the canvas edge, confirm text
-   wraps and the box grows
-   vertically. Include `b` and `e` in the text and confirm they do not switch to
+   canvas location and type; confirm editing starts without a drag. Click outside
+   to commit, then use a new click or horizontal drag to start another text
+   object. Type a long line and confirm the box grows horizontally; at the
+   canvas edge, confirm text wraps and the box grows vertically. Include `b`
+   and `e` in the text and confirm they do not switch to
    Paint or Eraser. Enter must insert a line break, while Ctrl+Enter commits.
    Start another empty text frame and click outside to commit; start one more
    and press Esc, confirming that no `Text N` layer remains.

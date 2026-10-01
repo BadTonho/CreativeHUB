@@ -1069,6 +1069,10 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton && text_editor_ != nullptr &&
         text_editor_->isVisible() && !text_editor_->geometry().contains(event->position().toPoint())) {
         finishTextEditing(true);
+        if (text_creation_mode_ && imageTargetRect().contains(event->position())) {
+            event->accept();
+            return;
+        }
     }
     if (event->button() == Qt::MiddleButton) {
         panning_ = true;
@@ -1460,14 +1464,15 @@ void ImageCanvas::mouseDoubleClickEvent(QMouseEvent* event) {
 bool ImageCanvas::eventFilter(QObject* watched, QEvent* event) {
     if (watched == text_editor_ && event->type() == QEvent::ShortcutOverride) {
         auto* key_event = static_cast<QKeyEvent*>(event);
-        const QString input = key_event->text();
         const auto modifiers = key_event->modifiers();
-        const bool printable = !input.isEmpty() && input.front().isPrint();
         const bool altgr = modifiers.testFlag(Qt::GroupSwitchModifier);
         const bool command_modifier =
             modifiers.testFlag(Qt::ControlModifier) || modifiers.testFlag(Qt::MetaModifier);
         const bool menu_modifier = modifiers.testFlag(Qt::AltModifier) && !altgr;
-        if (printable && (!command_modifier || altgr) && !menu_modifier) {
+        // Unmodified key presses belong to the focused text editor even when a
+        // platform sends ShortcutOverride without the corresponding text. This
+        // prevents one-key window shortcuts from swallowing typed characters.
+        if ((!command_modifier || altgr) && !menu_modifier) {
             key_event->accept();
             return true;
         }

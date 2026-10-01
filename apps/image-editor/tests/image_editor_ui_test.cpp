@@ -355,7 +355,7 @@ bool testEditableTextUi(const QString& directory) {
              std::pair{Qt::Key_E, QStringLiteral("e")},
              std::pair{Qt::Key_B, QStringLiteral("b")}}) {
         QKeyEvent shortcut_override(QEvent::ShortcutOverride, key,
-                                    Qt::NoModifier, character);
+                                    Qt::NoModifier, QString{});
         QApplication::sendEvent(text_editor, &shortcut_override);
         if (!shortcut_override.isAccepted()) {
             std::cerr << "A printable key was not protected from a tool shortcut.\n";
@@ -536,13 +536,14 @@ bool testEditableTextUi(const QString& directory) {
     }
 
     const int layers_before_empty_cancel = layerRowCount(layer_tree);
-    const QPoint empty_start = widgetPoint(205, 160);
-    const QPoint empty_end = widgetPoint(280, 160);
-    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, empty_start);
-    QTest::mouseMove(canvas, empty_end);
-    QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, empty_end);
+    const QPoint empty_start = widgetPoint(20, 160);
+    if (!text_tool->isChecked()) text_tool->click();
+    QTest::mouseClick(canvas, Qt::LeftButton, Qt::NoModifier, empty_start);
     QCoreApplication::processEvents();
-    if (!text_editor->isVisible()) return false;
+    if (!text_editor->isVisible()) {
+        std::cerr << "Clicking empty canvas did not start the new text editor.\n";
+        return false;
+    }
     QTest::keyClick(text_editor, Qt::Key_Escape);
     QCoreApplication::processEvents();
     if (layerRowCount(layer_tree) != layers_before_empty_cancel) {
