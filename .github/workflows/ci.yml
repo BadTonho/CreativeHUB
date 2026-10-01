@@ -40,6 +40,11 @@ jobs:
         shell: bash
         run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
+      - name: Install macOS vcpkg build tools
+        if: runner.os == 'macOS'
+        shell: bash
+        run: brew install autoconf
+
       - name: Install Linux FFmpeg build tools
         if: runner.os == 'Linux'
         shell: bash
