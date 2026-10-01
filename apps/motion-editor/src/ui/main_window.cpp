@@ -10,8 +10,10 @@
 #include "motion_video_export.h"
 #include "motion_video_export_dialog.h"
 #include "general_settings_dialog.h"
+#include "inspector/inspector_widget.h"
 #include "shortcut_settings_dialog.h"
 #include "timeline_navigator.h"
+#include "workspace/motion_workspace.h"
 #include "layer_effect_worker_pool.h"
 #include "../settings/autosave_preferences.h"
 
@@ -25,20 +27,13 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QColorDialog>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDesktopServices>
 #include <QDockWidget>
-#include <QDrag>
-#include <QDragEnterEvent>
-#include <QDragMoveEvent>
-#include <QDoubleSpinBox>
-#include <QDropEvent>
-#include <QEvent>
-#include <QFontComboBox>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QKeySequence>
 #include <QLabel>
@@ -48,25 +43,20 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMetaObject>
-#include <QMimeData>
 #include <QPointer>
 #include <QProgressDialog>
 #include <QPushButton>
-#include <QSpinBox>
 #include <QSignalBlocker>
 #include <QSettings>
-#include <QStackedWidget>
 #include <QStatusBar>
-#include <QTabWidget>
 #include <QTimer>
-#include <QToolButton>
-#include <QTextEdit>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QRunnable>
 #include <QThreadPool>
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <functional>
 #include <iterator>
@@ -80,98 +70,6 @@
 
 namespace motion::ui {
 namespace {
-
-class ReorderableEffectList final : public QListWidget {
-public:
-    using ReorderCallback = std::function<void(std::size_t, int)>;
-    static constexpr auto kEffectIndexMimeType = "application/x-motion-studio-effect-index";
-
-    explicit ReorderableEffectList(QWidget* parent = nullptr)
-        : QListWidget(parent)
-    {
-    }
-
-    void setReorderCallback(ReorderCallback callback)
-    {
-        reorder_callback_ = std::move(callback);
-    }
-
-protected:
-    void startDrag(Qt::DropActions) override
-    {
-        const auto selected = selectedItems();
-        if (selected.empty()) return;
-        auto* payload = new QMimeData;
-        payload->setData(QString::fromLatin1(kEffectIndexMimeType),
-                         selected.front()->data(Qt::UserRole).toString().toUtf8());
-        auto* drag = new QDrag(this);
-        drag->setMimeData(payload);
-        (void)drag->exec(Qt::MoveAction, Qt::MoveAction);
-    }
-
-    void dragEnterEvent(QDragEnterEvent* event) override
-    {
-        if (hasEffectPayload(event->mimeData())) {
-            event->setDropAction(Qt::MoveAction);
-            event->accept();
-            return;
-        }
-        QListWidget::dragEnterEvent(event);
-    }
-
-    void dragMoveEvent(QDragMoveEvent* event) override
-    {
-        if (hasEffectPayload(event->mimeData())) {
-            QListWidget::dragMoveEvent(event);
-            event->setDropAction(Qt::MoveAction);
-            event->accept();
-            return;
-        }
-        QListWidget::dragMoveEvent(event);
-    }
-
-    void dropEvent(QDropEvent* event) override
-    {
-        if (!hasEffectPayload(event->mimeData())) {
-            QListWidget::dropEvent(event);
-            return;
-        }
-
-        bool source_valid = false;
-        const auto source_index = event->mimeData()
-            ->data(QString::fromLatin1(kEffectIndexMimeType)).toULongLong(&source_valid);
-        if (!source_valid) {
-            event->ignore();
-            return;
-        }
-
-        const auto position = event->position().toPoint();
-        const auto target_index = indexAt(position);
-        int insertion_row = count();
-        if (target_index.isValid()) {
-            const auto target_rect = visualRect(target_index);
-            insertion_row = target_index.row() +
-                (position.y() >= target_rect.center().y() ? 1 : 0);
-        }
-        event->setDropAction(Qt::MoveAction);
-        event->accept();
-        if (!reorder_callback_) return;
-
-        QTimer::singleShot(0, this, [this, source = static_cast<std::size_t>(source_index),
-                                     insertion_row] {
-            if (reorder_callback_) reorder_callback_(source, insertion_row);
-        });
-    }
-
-private:
-    bool hasEffectPayload(const QMimeData* mime_data) const
-    {
-        return mime_data != nullptr &&
-            mime_data->hasFormat(QString::fromLatin1(kEffectIndexMimeType));
-    }
-
-    ReorderCallback reorder_callback_;
-};
 
 std::filesystem::path pathFromQString(const QString& value)
 {
@@ -193,11 +91,6 @@ QString pathForDisplay(const std::filesystem::path& path)
                              static_cast<qsizetype>(encoded.size()));
 }
 
-QString layerName(const model::CompositionLayer& layer)
-{
-    return QString::fromUtf8(layer.name.data(), static_cast<qsizetype>(layer.name.size()));
-}
-
 QColor qColor(const model::ColorRgba& color)
 {
     return QColor(color[0], color[1], color[2], color[3]);
@@ -209,20 +102,6 @@ model::ColorRgba modelColor(const QColor& color)
             static_cast<std::uint8_t>(color.green()),
             static_cast<std::uint8_t>(color.blue()),
             static_cast<std::uint8_t>(color.alpha())};
-}
-
-void setColorButton(QPushButton* button, const model::ColorRgba& color)
-{
-    if (button == nullptr) return;
-    const QColor value = qColor(color);
-    button->setText(value.name(QColor::HexArgb));
-    button->setStyleSheet(QStringLiteral("QPushButton { background-color: %1; }")
-                              .arg(value.name(QColor::HexArgb)));
-}
-
-QString qString(const std::string& value)
-{
-    return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
 }
 
 std::string utf8String(const QString& value)
@@ -242,9 +121,6 @@ constexpr std::array<TransformProperty, 5> kTransformProperties{{
     TransformProperty::Rotation,
     TransformProperty::Opacity,
 }};
-
-constexpr int kDockLayoutVersion = 1;
-constexpr auto kDockLayoutSettingsKey = "workspace/dock_layout_state";
 
 std::pair<InterpolationMode, CubicBezierEasing> easingForPreset(int preset_index)
 {
@@ -734,8 +610,8 @@ void MainWindow::createNewComposition()
     timeline_->setLayers(document_->layers());
     timeline_->setSelectedLayerId(0);
     viewer_->setComposition(document_->canvasSize(), std::nullopt);
-    media_details_->setMedia(nullptr);
-    inspector_tabs_->setCurrentWidget(media_details_);
+    inspector_->setMedia(nullptr);
+    inspector_->selectMediaTab();
     syncTransformInspector();
     updateDocumentState();
     requestPreview();
@@ -1266,8 +1142,8 @@ void MainWindow::finishOpen(std::uint64_t generation,
         timeline_->setLayers(document_->layers());
         timeline_->setSelectedLayerId(0);
         viewer_->setComposition(document_->canvasSize(), std::nullopt);
-        media_details_->setMedia(nullptr);
-        inspector_tabs_->setCurrentWidget(media_details_);
+        inspector_->setMedia(nullptr);
+        inspector_->selectMediaTab();
         syncTransformInspector();
         if (recovered) saved_data_.reset();
         else saved_data_ = projectData();
@@ -1719,324 +1595,49 @@ void MainWindow::createWorkspace()
     media_pool_->setContentChangedHandler([this] { updateDocumentState(); });
     viewer_ = new CompositionViewer(this);
     viewer_->setObjectName(QStringLiteral("motion-composition-viewer"));
-    media_details_ = new MediaDetailsWidget(this);
-
-    inspector_tabs_ = new QTabWidget(this);
-    inspector_tabs_->setObjectName(QStringLiteral("motion-inspector-tabs"));
-    inspector_tabs_->setMinimumWidth(250);
-    inspector_tabs_->addTab(media_details_, QStringLiteral("Media"));
-
-    layer_content_inspector_ = new QWidget(inspector_tabs_);
-    layer_content_inspector_->setObjectName(QStringLiteral("motion-layer-content-inspector"));
-    auto* content_layout = new QVBoxLayout(layer_content_inspector_);
-    auto* content_title = new QLabel(QStringLiteral("Selected Layer Content"),
-                                     layer_content_inspector_);
-    content_title->setObjectName(QStringLiteral("motion-layer-content-title"));
-    content_layout->addWidget(content_title);
-    layer_content_pages_ = new QStackedWidget(layer_content_inspector_);
-    layer_content_pages_->setObjectName(QStringLiteral("motion-layer-content-pages"));
-    auto* empty_content_page = new QLabel(
-        QStringLiteral("Select a text or shape layer to edit its content."),
-        layer_content_pages_);
-    empty_content_page->setObjectName(QStringLiteral("motion-layer-content-empty"));
-    empty_content_page->setWordWrap(true);
-    empty_content_page->setAlignment(Qt::AlignTop | Qt::AlignLeft);
-    layer_content_pages_->addWidget(empty_content_page);
-
-    text_content_page_ = new QWidget(layer_content_pages_);
-    text_content_page_->setObjectName(QStringLiteral("motion-text-content-page"));
-    auto* text_layout = new QVBoxLayout(text_content_page_);
-    auto* text_form = new QFormLayout();
-    text_content_field_ = new QTextEdit(text_content_page_);
-    text_content_field_->setObjectName(QStringLiteral("motion-text-content"));
-    text_content_field_->setAcceptRichText(false);
-    text_content_field_->setMaximumHeight(112);
-    text_form->addRow(QStringLiteral("Text"), text_content_field_);
-
-    text_font_field_ = new QFontComboBox(text_content_page_);
-    text_font_field_->setObjectName(QStringLiteral("motion-text-font-family"));
-    text_form->addRow(QStringLiteral("Font"), text_font_field_);
-
-    text_font_size_field_ = new QSpinBox(text_content_page_);
-    text_font_size_field_->setObjectName(QStringLiteral("motion-text-font-size"));
-    text_font_size_field_->setRange(1, 4096);
-    text_font_size_field_->setSuffix(QStringLiteral(" px"));
-    text_form->addRow(QStringLiteral("Size"), text_font_size_field_);
-
-    text_color_button_ = new QPushButton(text_content_page_);
-    text_color_button_->setObjectName(QStringLiteral("motion-text-color"));
-    text_form->addRow(QStringLiteral("Color"), text_color_button_);
-
-    text_alignment_field_ = new QComboBox(text_content_page_);
-    text_alignment_field_->setObjectName(QStringLiteral("motion-text-alignment"));
-    text_alignment_field_->addItem(QStringLiteral("Left"),
-        static_cast<int>(model::TextAlignment::Left));
-    text_alignment_field_->addItem(QStringLiteral("Center"),
-        static_cast<int>(model::TextAlignment::Center));
-    text_alignment_field_->addItem(QStringLiteral("Right"),
-        static_cast<int>(model::TextAlignment::Right));
-    text_form->addRow(QStringLiteral("Alignment"), text_alignment_field_);
-
-    text_box_width_field_ = new QSpinBox(text_content_page_);
-    text_box_width_field_->setObjectName(QStringLiteral("motion-text-box-width"));
-    text_box_width_field_->setRange(1, 32768);
-    text_box_width_field_->setSuffix(QStringLiteral(" px"));
-    text_form->addRow(QStringLiteral("Box width"), text_box_width_field_);
-
-    text_box_height_field_ = new QSpinBox(text_content_page_);
-    text_box_height_field_->setObjectName(QStringLiteral("motion-text-box-height"));
-    text_box_height_field_->setRange(1, 32768);
-    text_box_height_field_->setSuffix(QStringLiteral(" px"));
-    text_form->addRow(QStringLiteral("Box height"), text_box_height_field_);
-    text_layout->addLayout(text_form);
-    text_layout->addStretch(1);
-    layer_content_pages_->addWidget(text_content_page_);
-
-    shape_content_page_ = new QWidget(layer_content_pages_);
-    shape_content_page_->setObjectName(QStringLiteral("motion-shape-content-page"));
-    auto* shape_layout = new QVBoxLayout(shape_content_page_);
-    auto* shape_form = new QFormLayout();
-    shape_width_field_ = new QSpinBox(shape_content_page_);
-    shape_width_field_->setObjectName(QStringLiteral("motion-shape-width"));
-    shape_width_field_->setRange(1, 32768);
-    shape_width_field_->setSuffix(QStringLiteral(" px"));
-    shape_form->addRow(QStringLiteral("Width"), shape_width_field_);
-    shape_height_field_ = new QSpinBox(shape_content_page_);
-    shape_height_field_->setObjectName(QStringLiteral("motion-shape-height"));
-    shape_height_field_->setRange(1, 32768);
-    shape_height_field_->setSuffix(QStringLiteral(" px"));
-    shape_form->addRow(QStringLiteral("Height"), shape_height_field_);
-    shape_fill_button_ = new QPushButton(shape_content_page_);
-    shape_fill_button_->setObjectName(QStringLiteral("motion-shape-fill-color"));
-    shape_form->addRow(QStringLiteral("Fill"), shape_fill_button_);
-    shape_stroke_button_ = new QPushButton(shape_content_page_);
-    shape_stroke_button_->setObjectName(QStringLiteral("motion-shape-stroke-color"));
-    shape_form->addRow(QStringLiteral("Stroke"), shape_stroke_button_);
-    shape_stroke_width_field_ = new QSpinBox(shape_content_page_);
-    shape_stroke_width_field_->setObjectName(QStringLiteral("motion-shape-stroke-width"));
-    shape_stroke_width_field_->setRange(0, 4096);
-    shape_stroke_width_field_->setSuffix(QStringLiteral(" px"));
-    shape_form->addRow(QStringLiteral("Stroke width"), shape_stroke_width_field_);
-    shape_layout->addLayout(shape_form);
-    shape_layout->addStretch(1);
-    layer_content_pages_->addWidget(shape_content_page_);
-    content_layout->addWidget(layer_content_pages_, 1);
-    layer_content_tab_index_ = inspector_tabs_->addTab(
-        layer_content_inspector_, QStringLiteral("Layer"));
-    inspector_tabs_->setTabEnabled(layer_content_tab_index_, false);
-
-    text_content_field_->installEventFilter(this);
-    text_font_field_->installEventFilter(this);
-    text_alignment_field_->installEventFilter(this);
-    for (auto* field : {text_font_size_field_, text_box_width_field_,
-                        text_box_height_field_, shape_width_field_,
-                        shape_height_field_, shape_stroke_width_field_}) {
-        field->installEventFilter(this);
-        connect(field, &QSpinBox::valueChanged, this, [this](int) {
-            editSelectedLayerContent();
-        });
-        connect(field, &QSpinBox::editingFinished,
-                this, [this] { finishPendingContentEdit(); });
-    }
-    connect(text_content_field_, &QTextEdit::textChanged,
-            this, [this] { editSelectedLayerContent(); });
-    connect(text_font_field_, &QFontComboBox::currentFontChanged,
-            this, [this](const QFont&) { editSelectedLayerContent(); });
-    connect(text_alignment_field_, qOverload<int>(&QComboBox::currentIndexChanged),
-            this, [this](int) { editSelectedLayerContent(); });
-    connect(text_color_button_, &QPushButton::clicked, this, [this] {
-        chooseSelectedLayerColor(true, false);
-    });
-    connect(shape_fill_button_, &QPushButton::clicked, this, [this] {
-        chooseSelectedLayerColor(false, false);
-    });
-    connect(shape_stroke_button_, &QPushButton::clicked, this, [this] {
-        chooseSelectedLayerColor(false, true);
-    });
-
-    transform_inspector_ = new QWidget(inspector_tabs_);
-    transform_inspector_->setObjectName(QStringLiteral("motion-transform-inspector"));
-    auto* transform_layout = new QVBoxLayout(transform_inspector_);
-    auto* transform_title = new QLabel(QStringLiteral("Selected Layer Transform"),
-                                       transform_inspector_);
-    transform_title->setObjectName(QStringLiteral("motion-transform-inspector-title"));
-    transform_layout->addWidget(transform_title);
-    auto* transform_form = new QFormLayout();
-    const std::array<std::pair<QString, QString>, 5> transform_rows{{
-        {QStringLiteral("Position X (normalized)"), QStringLiteral("motion-transform-position-x")},
-        {QStringLiteral("Position Y (normalized)"), QStringLiteral("motion-transform-position-y")},
-        {QStringLiteral("Scale"), QStringLiteral("motion-transform-scale")},
-        {QStringLiteral("Rotation (degrees)"), QStringLiteral("motion-transform-rotation")},
-        {QStringLiteral("Opacity (0-1)"), QStringLiteral("motion-transform-opacity")},
-    }};
-    for (std::size_t index = 0; index < transform_rows.size(); ++index) {
-        auto* property_row = new QWidget(transform_inspector_);
-        auto* property_layout = new QHBoxLayout(property_row);
-        property_layout->setContentsMargins(0, 0, 0, 0);
-        property_layout->setSpacing(4);
-        auto* field = new QDoubleSpinBox(transform_inspector_);
-        field->setObjectName(transform_rows[index].second);
-        field->setDecimals(6);
-        field->setKeyboardTracking(false);
-        if (index == 0 || index == 1) {
-            field->setRange(-1'000'000.0, 1'000'000.0);
-        } else if (index == 2) {
-            field->setRange(0.000001, 1'000'000.0);
-        } else if (index == 3) {
-            field->setRange(-1'000'000'000.0, 1'000'000'000.0);
-        } else {
-            field->setRange(0.0, 1.0);
-        }
-        transform_fields_[index] = field;
-        property_layout->addWidget(field, 1);
-        auto* key_button = new QToolButton(property_row);
-        key_button->setObjectName(QStringLiteral("motion-transform-keyframe-%1")
-            .arg(transform_rows[index].second.mid(QStringLiteral("motion-transform-").size())));
-        key_button->setText(QStringLiteral("◇"));
-        key_button->setToolTip(QStringLiteral("Add or remove a keyframe at the current frame"));
-        transform_key_buttons_[index] = key_button;
-        property_layout->addWidget(key_button);
-        transform_form->addRow(transform_rows[index].first, property_row);
-        connect(field, &QDoubleSpinBox::valueChanged, this, [this, index](double) {
-            editSelectedLayerTransform(index);
-        });
-        connect(field, &QDoubleSpinBox::editingFinished,
-                this, [this] { finishPendingTransformEdit(); });
-        connect(key_button, &QToolButton::clicked, this, [this, index] {
-            toggleSelectedLayerKeyframe(index);
-        });
-    }
-    transform_layout->addLayout(transform_form);
-    transform_layout->addStretch(1);
-    inspector_tabs_->addTab(transform_inspector_, QStringLiteral("Transform"));
-
-    effects_inspector_ = new QWidget(inspector_tabs_);
-    effects_inspector_->setObjectName(QStringLiteral("motion-effects-inspector"));
-    auto* effects_layout = new QVBoxLayout(effects_inspector_);
-    auto* effects_toolbar = new QHBoxLayout();
-    add_layer_effect_button_ = new QPushButton(QStringLiteral("Add Effect"), effects_inspector_);
-    add_layer_effect_button_->setObjectName(QStringLiteral("motion-add-effect"));
-    auto* add_effect_menu = new QMenu(add_layer_effect_button_);
-    auto* add_blur_action = add_effect_menu->addAction(QStringLiteral("Gaussian Blur"));
-    add_blur_action->setObjectName(QStringLiteral("motion-add-gaussian-blur"));
-    auto* add_color_action = add_effect_menu->addAction(QStringLiteral("Color Adjustment"));
-    add_color_action->setObjectName(QStringLiteral("motion-add-color-adjustment"));
-    add_layer_effect_button_->setMenu(add_effect_menu);
-    effects_toolbar->addWidget(add_layer_effect_button_);
-    effect_up_button_ = new QPushButton(QStringLiteral("Up"), effects_inspector_);
-    effect_up_button_->setObjectName(QStringLiteral("motion-effect-up"));
-    effect_down_button_ = new QPushButton(QStringLiteral("Down"), effects_inspector_);
-    effect_down_button_->setObjectName(QStringLiteral("motion-effect-down"));
-    remove_effect_button_ = new QPushButton(QStringLiteral("Remove"), effects_inspector_);
-    remove_effect_button_->setObjectName(QStringLiteral("motion-effect-remove"));
-    effects_toolbar->addWidget(effect_up_button_);
-    effects_toolbar->addWidget(effect_down_button_);
-    effects_toolbar->addWidget(remove_effect_button_);
-    effects_layout->addLayout(effects_toolbar);
-    auto* reorderable_effect_list = new ReorderableEffectList(effects_inspector_);
-    layer_effect_list_ = reorderable_effect_list;
-    layer_effect_list_->setObjectName(QStringLiteral("motion-layer-effects"));
-    layer_effect_list_->setSelectionMode(QAbstractItemView::SingleSelection);
-    layer_effect_list_->setDragEnabled(true);
-    layer_effect_list_->setAcceptDrops(true);
-    layer_effect_list_->setDropIndicatorShown(true);
-    layer_effect_list_->setDragDropMode(QAbstractItemView::InternalMove);
-    layer_effect_list_->setDefaultDropAction(Qt::MoveAction);
-    layer_effect_list_->setDragDropOverwriteMode(false);
-    layer_effect_list_->setToolTip(
-        QStringLiteral("Drag effects to change their order. Effects apply from top to bottom."));
-    effects_layout->addWidget(layer_effect_list_, 1);
-    effect_parameter_pages_ = new QStackedWidget(effects_inspector_);
-    effect_parameter_pages_->setObjectName(QStringLiteral("motion-effect-parameters"));
-    auto* no_effect_page = new QLabel(
-        QStringLiteral("Select an effect to edit its parameters."), effect_parameter_pages_);
-    no_effect_page->setObjectName(QStringLiteral("motion-effect-empty"));
-    no_effect_page->setWordWrap(true);
-    no_effect_page->setAlignment(Qt::AlignTop | Qt::AlignLeft);
-    effect_parameter_pages_->addWidget(no_effect_page);
-
-    auto* blur_page = new QWidget(effect_parameter_pages_);
-    blur_page->setObjectName(QStringLiteral("motion-gaussian-blur-parameters"));
-    auto* blur_form = new QFormLayout(blur_page);
-    blur_radius_field_ = new QDoubleSpinBox(blur_page);
-    blur_radius_field_->setObjectName(QStringLiteral("motion-effect-blur-radius"));
-    blur_radius_field_->setRange(0.0, 100.0);
-    blur_radius_field_->setDecimals(1);
-    blur_radius_field_->setSingleStep(0.5);
-    blur_radius_field_->setSuffix(QStringLiteral(" px"));
-    blur_radius_field_->setKeyboardTracking(false);
-    blur_form->addRow(QStringLiteral("Radius (sigma)"), blur_radius_field_);
-    effect_parameter_pages_->addWidget(blur_page);
-
-    auto* color_page = new QWidget(effect_parameter_pages_);
-    color_page->setObjectName(QStringLiteral("motion-color-adjustment-parameters"));
-    auto* color_form = new QFormLayout(color_page);
-    effect_brightness_field_ = new QDoubleSpinBox(color_page);
-    effect_brightness_field_->setObjectName(QStringLiteral("motion-effect-brightness"));
-    effect_brightness_field_->setRange(-100.0, 100.0);
-    effect_brightness_field_->setDecimals(1);
-    effect_brightness_field_->setKeyboardTracking(false);
-    color_form->addRow(QStringLiteral("Brightness"), effect_brightness_field_);
-    effect_contrast_field_ = new QDoubleSpinBox(color_page);
-    effect_contrast_field_->setObjectName(QStringLiteral("motion-effect-contrast"));
-    effect_contrast_field_->setRange(0.0, 200.0);
-    effect_contrast_field_->setDecimals(1);
-    effect_contrast_field_->setSuffix(QStringLiteral(" %"));
-    effect_contrast_field_->setKeyboardTracking(false);
-    color_form->addRow(QStringLiteral("Contrast"), effect_contrast_field_);
-    effect_saturation_field_ = new QDoubleSpinBox(color_page);
-    effect_saturation_field_->setObjectName(QStringLiteral("motion-effect-saturation"));
-    effect_saturation_field_->setRange(0.0, 200.0);
-    effect_saturation_field_->setDecimals(1);
-    effect_saturation_field_->setSuffix(QStringLiteral(" %"));
-    effect_saturation_field_->setKeyboardTracking(false);
-    color_form->addRow(QStringLiteral("Saturation"), effect_saturation_field_);
-    effect_parameter_pages_->addWidget(color_page);
-    effects_layout->addWidget(effect_parameter_pages_);
-    effects_tab_index_ = inspector_tabs_->addTab(
-        effects_inspector_, QStringLiteral("Effects"));
-    inspector_tabs_->setTabEnabled(effects_tab_index_, false);
-
-    connect(add_blur_action, &QAction::triggered, this, [this] { addLayerEffect(0); });
-    connect(add_color_action, &QAction::triggered, this, [this] { addLayerEffect(1); });
-    connect(effect_up_button_, &QPushButton::clicked, this,
-            [this] { moveSelectedEffect(-1); });
-    connect(effect_down_button_, &QPushButton::clicked, this,
-            [this] { moveSelectedEffect(1); });
-    connect(remove_effect_button_, &QPushButton::clicked, this,
-            [this] { removeSelectedEffect(); });
-    connect(layer_effect_list_, &QListWidget::currentRowChanged,
-            this, [this](int row) { selectEffectRow(row); });
-    reorderable_effect_list->setReorderCallback(
-        [this](std::size_t source_index, int insertion_row) {
-            reorderEffectsFromList(source_index, insertion_row);
-        });
-    connect(layer_effect_list_, &QListWidget::itemChanged, this,
-            [this](QListWidgetItem* item) {
-                if (item == nullptr || !document_ || selected_layer_id_ == 0) return;
-                const auto row = layer_effect_list_->row(item);
+    inspector_ = new InspectorWidget(this);
+    connect(inspector_, &InspectorWidget::layerContentEdited,
+            this, &MainWindow::editSelectedLayerContent);
+    connect(inspector_, &InspectorWidget::layerContentEditFinished,
+            this, &MainWindow::finishPendingContentEdit);
+    connect(inspector_, &InspectorWidget::layerColorSelectionRequested,
+            this, &MainWindow::chooseSelectedLayerColor);
+    connect(inspector_, &InspectorWidget::transformValueEdited, this,
+            [this](int index) { editSelectedLayerTransform(static_cast<std::size_t>(index)); });
+    connect(inspector_, &InspectorWidget::transformEditFinished,
+            this, &MainWindow::finishPendingTransformEdit);
+    connect(inspector_, &InspectorWidget::keyframeToggleRequested, this,
+            [this](int index) { toggleSelectedLayerKeyframe(static_cast<std::size_t>(index)); });
+    connect(inspector_, &InspectorWidget::effectAddRequested,
+            this, &MainWindow::addLayerEffect);
+    connect(inspector_, &InspectorWidget::effectMoveRequested,
+            this, &MainWindow::moveSelectedEffect);
+    connect(inspector_, &InspectorWidget::effectRemoveRequested,
+            this, &MainWindow::removeSelectedEffect);
+    connect(inspector_, &InspectorWidget::effectRowSelected,
+            this, &MainWindow::selectEffectRow);
+    connect(inspector_, &InspectorWidget::effectParametersEdited,
+            this, &MainWindow::editSelectedEffectParameters);
+    connect(inspector_, &InspectorWidget::effectParametersEditFinished,
+            this, &MainWindow::finishPendingEffectEdit);
+    connect(inspector_, &InspectorWidget::effectReorderRequested, this,
+            [this](qulonglong source, int insertion) {
+                reorderEffectsFromList(static_cast<std::size_t>(source), insertion);
+            });
+    connect(inspector_, &InspectorWidget::effectEnabledChanged, this,
+            [this](int row, bool enabled) {
+                if (!document_ || selected_layer_id_ == 0 || row < 0) return;
                 const auto found = std::find_if(document_->layers().begin(),
                     document_->layers().end(), [this](const auto& layer) {
                         return layer.id == selected_layer_id_;
                     });
-                if (found == document_->layers().end() || row < 0 ||
+                if (found == document_->layers().end() ||
                     static_cast<std::size_t>(row) >= found->effects.size()) return;
                 auto effects = found->effects;
-                std::visit([item](auto& effect) {
-                    effect.enabled = item->checkState() == Qt::Checked;
-                }, effects[static_cast<std::size_t>(row)]);
+                std::visit([enabled](auto& effect) { effect.enabled = enabled; },
+                           effects[static_cast<std::size_t>(row)]);
                 applySelectedEffectStack(std::move(effects));
             });
-    for (auto* field : {blur_radius_field_, effect_brightness_field_,
-                        effect_contrast_field_, effect_saturation_field_}) {
-        field->installEventFilter(this);
-        connect(field, &QDoubleSpinBox::valueChanged, this, [this](double) {
-            editSelectedEffectParameters();
-        });
-        connect(field, &QDoubleSpinBox::editingFinished,
-                this, [this] { finishPendingEffectEdit(); });
-    }
-
     timeline_ = new TimelineNavigator(this);
     timeline_->setShortcutActions(
         play_pause_action_, previous_frame_action_, next_frame_action_, loop_action_,
@@ -2149,33 +1750,6 @@ void MainWindow::createWorkspace()
                 syncTransformInspector();
                 requestPreview(timeline_ != nullptr && timeline_->isPlaying());
             });
-    connect(timeline_, &TimelineNavigator::graphEditorToggled,
-            this, [this](bool open) {
-                if (timeline_dock_ == nullptr || graph_editor_dock_ == nullptr) return;
-                const bool tabbed =
-                    tabifiedDockWidgets(timeline_dock_).contains(graph_editor_dock_) ||
-                    tabifiedDockWidgets(graph_editor_dock_).contains(timeline_dock_);
-                if (tabbed) {
-                    if (open) {
-                        active_timeline_graph_dock_ = graph_editor_dock_;
-                        timeline_->setGraphEditorOpen(true);
-                        graph_editor_dock_->show();
-                        graph_editor_dock_->raise();
-                        refreshCurveEditor();
-                    } else {
-                        active_timeline_graph_dock_ = timeline_dock_;
-                        timeline_->setGraphEditorOpen(false);
-                        timeline_dock_->show();
-                        timeline_dock_->raise();
-                    }
-                    return;
-                }
-                active_timeline_graph_dock_ = open ? graph_editor_dock_ : timeline_dock_;
-                graph_editor_dock_->setVisible(open);
-                timeline_->setGraphEditorOpen(open);
-                if (open) refreshCurveEditor();
-            });
-
     curve_editor_panel_ = new QWidget(this);
     curve_editor_panel_->setObjectName(QStringLiteral("motion-graph-editor-panel"));
     curve_editor_panel_->setMinimumHeight(168);
@@ -2217,44 +1791,13 @@ void MainWindow::createWorkspace()
             this, [this](int index) { applyCurvePreset(index); });
     curve_panel_layout->addWidget(curve_editor_, 1);
 
-    setDockNestingEnabled(true);
-    setDockOptions(QMainWindow::AllowNestedDocks | QMainWindow::AllowTabbedDocks);
-    setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
-    setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
-    setCentralWidget(viewer_);
-
-    const auto create_dock = [this](QWidget* content, const QString& title,
-                                    const QString& object_name) {
-        auto* dock = new QDockWidget(title, this);
-        dock->setObjectName(object_name);
-        dock->setFeatures(QDockWidget::DockWidgetClosable |
-                          QDockWidget::DockWidgetMovable |
-                          QDockWidget::DockWidgetFloatable);
-        dock->setWidget(content);
-        return dock;
-    };
-    media_pool_dock_ = create_dock(
-        media_pool_, QStringLiteral("Media Pool"),
-        QStringLiteral("motion-media-pool-dock"));
-    inspector_dock_ = create_dock(
-        inspector_tabs_, QStringLiteral("Inspector"),
-        QStringLiteral("motion-inspector-dock"));
-    timeline_dock_ = create_dock(
-        timeline_, QStringLiteral("Timeline"),
-        QStringLiteral("motion-timeline-dock"));
-    graph_editor_dock_ = create_dock(
-        curve_editor_panel_, QStringLiteral("Graph Editor"),
-        QStringLiteral("motion-graph-editor-dock"));
-
-    addDockWidget(Qt::LeftDockWidgetArea, media_pool_dock_);
-    addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
-    addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
-    addDockWidget(Qt::BottomDockWidgetArea, graph_editor_dock_);
-    tabifyDockWidget(timeline_dock_, graph_editor_dock_);
-    graph_editor_dock_->show();
-    timeline_dock_->raise();
-    active_timeline_graph_dock_ = timeline_dock_;
-    timeline_->setGraphEditorOpen(false);
+    workspace_ = new MotionWorkspace(
+        this, viewer_, media_pool_, inspector_, timeline_, curve_editor_panel_, timeline_);
+    media_pool_dock_ = workspace_->mediaPoolDock();
+    inspector_dock_ = workspace_->inspectorDock();
+    timeline_dock_ = workspace_->timelineDock();
+    graph_editor_dock_ = workspace_->graphEditorDock();
+    workspace_->setGraphEditorRefreshHandler([this] { refreshCurveEditor(); });
 
     const auto add_panel_action = [this](QDockWidget* dock,
                                          const QString& action_object_name) {
@@ -2268,38 +1811,15 @@ void MainWindow::createWorkspace()
     add_panel_action(graph_editor_dock_, QStringLiteral("motion-view-graph-editor-action"));
     connect(graph_editor_dock_->toggleViewAction(), &QAction::triggered,
             this, [this](bool visible) {
-                if (visible && graph_editor_dock_ != nullptr && timeline_ != nullptr) {
-                    active_timeline_graph_dock_ = graph_editor_dock_;
-                    timeline_->setGraphEditorOpen(true);
+                if (visible && graph_editor_dock_ != nullptr) {
                     graph_editor_dock_->show();
                     graph_editor_dock_->raise();
+                    timeline_->setGraphEditorOpen(true);
+                    refreshCurveEditor();
                 }
             });
     view_menu_->addSeparator();
     reset_panel_layout_action_->setEnabled(true);
-
-    connect(graph_editor_dock_, &QDockWidget::visibilityChanged,
-            this, [this](bool visible) {
-                const bool tabbed = timeline_dock_ != nullptr &&
-                    (tabifiedDockWidgets(timeline_dock_).contains(graph_editor_dock_) ||
-                     tabifiedDockWidgets(graph_editor_dock_).contains(timeline_dock_));
-                if (!tabbed && visible) {
-                    active_timeline_graph_dock_ = graph_editor_dock_;
-                    if (timeline_ != nullptr) timeline_->setGraphEditorOpen(true);
-                    refreshCurveEditor();
-                } else if (graph_editor_dock_->isHidden()) {
-                    active_timeline_graph_dock_ = timeline_dock_;
-                    if (timeline_ != nullptr) timeline_->setGraphEditorOpen(false);
-                }
-            });
-    connect(this, &QMainWindow::tabifiedDockWidgetActivated,
-            this, [this](QDockWidget* activated) {
-                if (activated != timeline_dock_ && activated != graph_editor_dock_) return;
-                active_timeline_graph_dock_ = activated;
-                if (timeline_ != nullptr)
-                    timeline_->setGraphEditorOpen(activated == graph_editor_dock_);
-                if (activated == graph_editor_dock_) refreshCurveEditor();
-            });
     restoreWorkspaceLayout();
     empty_state_ = nullptr;
     empty_state_new_composition_button_ = nullptr;
@@ -2329,118 +1849,18 @@ void MainWindow::createWorkspace()
 
 void MainWindow::restoreWorkspaceLayout()
 {
-    if (media_pool_dock_ == nullptr || inspector_dock_ == nullptr ||
-        timeline_dock_ == nullptr || graph_editor_dock_ == nullptr) {
-        return;
-    }
-
-    QSettings settings;
-    const auto saved_state = settings.value(
-        QString::fromLatin1(kDockLayoutSettingsKey)).toByteArray();
-    if (saved_state.isEmpty() || !restoreState(saved_state, kDockLayoutVersion)) {
-        restoreDefaultPanelLayout();
-    } else {
-        const std::array<QDockWidget*, 4> docks{{
-            media_pool_dock_, inspector_dock_, timeline_dock_, graph_editor_dock_}};
-        bool has_tab_groups = false;
-        for (std::size_t first = 0; first < docks.size(); ++first) {
-            for (std::size_t second = first + 1; second < docks.size(); ++second) {
-                has_tab_groups = has_tab_groups ||
-                    tabifiedDockWidgets(docks[first]).contains(docks[second]) ||
-                    tabifiedDockWidgets(docks[second]).contains(docks[first]);
-            }
-        }
-        const bool old_default_layout =
-            !has_tab_groups &&
-            std::all_of(docks.begin(), docks.end(), [](const QDockWidget* dock) {
-                return !dock->isFloating();
-            }) &&
-            dockWidgetArea(media_pool_dock_) == Qt::LeftDockWidgetArea &&
-            dockWidgetArea(inspector_dock_) == Qt::RightDockWidgetArea &&
-            dockWidgetArea(timeline_dock_) == Qt::BottomDockWidgetArea &&
-            dockWidgetArea(graph_editor_dock_) == Qt::BottomDockWidgetArea &&
-            !media_pool_dock_->isHidden() && !inspector_dock_->isHidden() &&
-            !timeline_dock_->isHidden() && graph_editor_dock_->isHidden();
-        if (old_default_layout) {
-            tabifyDockWidget(timeline_dock_, graph_editor_dock_);
-            graph_editor_dock_->show();
-            timeline_dock_->show();
-            timeline_dock_->raise();
-            active_timeline_graph_dock_ = timeline_dock_;
-        }
-    }
-
-    const bool tabbed =
-        tabifiedDockWidgets(timeline_dock_).contains(graph_editor_dock_) ||
-        tabifiedDockWidgets(graph_editor_dock_).contains(timeline_dock_);
-    if (tabbed) {
-        if (active_timeline_graph_dock_ != graph_editor_dock_)
-            active_timeline_graph_dock_ = timeline_dock_;
-        if (timeline_ != nullptr)
-            timeline_->setGraphEditorOpen(active_timeline_graph_dock_ == graph_editor_dock_);
-    } else {
-        active_timeline_graph_dock_ = graph_editor_dock_->isVisible()
-            ? graph_editor_dock_ : timeline_dock_;
-        if (timeline_ != nullptr)
-            timeline_->setGraphEditorOpen(active_timeline_graph_dock_ == graph_editor_dock_);
-    }
+    if (workspace_ != nullptr) workspace_->restoreLayout();
 }
 
 void MainWindow::saveWorkspaceLayout()
 {
-    if (media_pool_dock_ == nullptr || inspector_dock_ == nullptr ||
-        timeline_dock_ == nullptr || graph_editor_dock_ == nullptr) {
-        return;
-    }
-
-    QSettings settings;
-    settings.setValue(QString::fromLatin1(kDockLayoutSettingsKey),
-                      saveState(kDockLayoutVersion));
-    settings.sync();
-    if (settings.status() == QSettings::NoError) return;
-
-    creative_suite::diagnostics::Logger::instance().log(
-        creative_suite::diagnostics::Level::Warning,
-        "motion_workspace", "save_panel_layout",
-        "The workspace panel layout could not be saved.",
-        {{"settings_key", kDockLayoutSettingsKey}});
+    if (workspace_ != nullptr) workspace_->saveLayout();
 }
 
 void MainWindow::restoreDefaultPanelLayout()
 {
-    if (media_pool_dock_ == nullptr || inspector_dock_ == nullptr ||
-        timeline_dock_ == nullptr || graph_editor_dock_ == nullptr) {
-        return;
-    }
-
-    const std::array<QDockWidget*, 4> docks{{
-        media_pool_dock_, inspector_dock_, timeline_dock_, graph_editor_dock_}};
-    for (auto* dock : docks) {
-        if (dock->isFloating()) dock->setFloating(false);
-        removeDockWidget(dock);
-    }
-
-    setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
-    setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
-    addDockWidget(Qt::LeftDockWidgetArea, media_pool_dock_);
-    addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
-    addDockWidget(Qt::BottomDockWidgetArea, timeline_dock_);
-    addDockWidget(Qt::BottomDockWidgetArea, graph_editor_dock_);
-    tabifyDockWidget(timeline_dock_, graph_editor_dock_);
-    for (auto* dock : docks) {
-        if (dock->isFloating()) dock->setFloating(false);
-    }
-    media_pool_dock_->show();
-    inspector_dock_->show();
-    timeline_dock_->show();
-    graph_editor_dock_->show();
-    timeline_dock_->raise();
-    active_timeline_graph_dock_ = timeline_dock_;
-    resizeDocks({media_pool_dock_, inspector_dock_}, {270, 300}, Qt::Horizontal);
-    resizeDocks({timeline_dock_}, {240}, Qt::Vertical);
-    if (timeline_ != nullptr) timeline_->setGraphEditorOpen(false);
+    if (workspace_ != nullptr) workspace_->restoreDefaultLayout();
 }
-
 void MainWindow::openMedia()
 {
     if (!document_.has_value() || media_pool_ == nullptr) return;
@@ -2463,9 +1883,9 @@ void MainWindow::openMedia()
 
 void MainWindow::updateMediaDetails()
 {
-    if (media_pool_ == nullptr || media_details_ == nullptr) return;
-    media_details_->setMedia(media_pool_->selectedMedia());
-    if (inspector_tabs_ != nullptr) inspector_tabs_->setCurrentWidget(media_details_);
+    if (media_pool_ == nullptr || inspector_ == nullptr) return;
+    inspector_->setMedia(media_pool_->selectedMedia());
+    inspector_->selectMediaTab();
 }
 
 void MainWindow::refreshTimeline()
@@ -2615,9 +2035,9 @@ void MainWindow::selectLayer(model::LayerId id)
     }
     syncTransformInspector();
     if (found->kind == model::LayerKind::Text || found->kind == model::LayerKind::Shape) {
-        inspector_tabs_->setCurrentWidget(layer_content_inspector_);
+        inspector_->selectLayerTab();
     } else {
-        inspector_tabs_->setCurrentWidget(transform_inspector_);
+        inspector_->selectTransformTab();
     }
 }
 
@@ -2665,7 +2085,7 @@ void MainWindow::createContentLayer(model::LayerKind kind, model::ShapeKind shap
     (void)recordCompositionEdit(std::move(before));
     refreshTimeline();
     syncTransformInspector();
-    inspector_tabs_->setCurrentWidget(layer_content_inspector_);
+    inspector_->selectLayerTab();
     updateDocumentState();
     requestPreview();
 }
@@ -2680,11 +2100,29 @@ void MainWindow::syncTransformInspector()
         });
         if (found != layers.end()) selected = &*found;
     }
-    if (transform_inspector_ != nullptr) transform_inspector_->setEnabled(selected != nullptr);
-    syncLayerContentInspector(selected);
-    syncEffectsInspector(selected);
+
+    int effect_row = -1;
+    if (selected_effect_.has_value() &&
+        (selected == nullptr || selected_effect_->first != selected->id)) {
+        selected_effect_.reset();
+    }
+    if (selected != nullptr && selected_effect_.has_value()) {
+        if (selected_effect_->second < selected->effects.size()) {
+            effect_row = static_cast<int>(selected_effect_->second);
+        } else {
+            selected_effect_.reset();
+        }
+    }
+    if (selected != nullptr && effect_row < 0 && !selected->effects.empty()) {
+        effect_row = 0;
+        selected_effect_ = std::pair{selected->id, std::size_t{0}};
+    }
+
+    if (inspector_ != nullptr)
+        inspector_->syncLayer(selected, timeline_ != nullptr ? timeline_->currentFrame() : 0,
+                              effect_row);
     if (selected == nullptr) {
-        viewer_->setSelectedLayerAnchor(std::nullopt);
+        if (viewer_ != nullptr) viewer_->setSelectedLayerAnchor(std::nullopt);
         return;
     }
     const auto frame = timeline_ != nullptr ? timeline_->currentFrame() : 0;
@@ -2694,149 +2132,26 @@ void MainWindow::syncTransformInspector()
         : std::int64_t{0};
     const auto evaluated = creative_suite::animation::evaluateTransform(
         selected->transform, selected->keyframes, local_frame);
-    const bool current_frame_in_layer = raw_local_frame >= 0 &&
-        raw_local_frame < selected->duration_frames;
-    for (std::size_t index = 0; index < transform_fields_.size(); ++index) {
-        const auto property = kTransformProperties[index];
-        const auto& frames = creative_suite::animation::keyframesFor(
-            selected->keyframes, property);
-        const bool current_key = current_frame_in_layer &&
-            containsKeyframeAt(selected->keyframes, property, raw_local_frame);
-        const QSignalBlocker blocker(transform_fields_[index]);
-        transform_fields_[index]->setValue(transformPropertyValue(evaluated, property));
-        transform_fields_[index]->setReadOnly(!frames.empty() && !current_key);
-        transform_key_buttons_[index]->setEnabled(current_frame_in_layer);
-        transform_key_buttons_[index]->setText(current_key
-            ? QStringLiteral("◆") : QStringLiteral("◇"));
-        transform_key_buttons_[index]->setToolTip(current_key
-            ? QStringLiteral("Remove the keyframe at the current frame")
-            : QStringLiteral("Add a keyframe at the current frame"));
-    }
-    viewer_->setSelectedLayerAnchor(selected->visible
+    if (viewer_ != nullptr) viewer_->setSelectedLayerAnchor(selected->visible
         ? std::optional<QPointF>(QPointF(evaluated.position_x, evaluated.position_y))
         : std::nullopt);
 }
 
-void MainWindow::syncLayerContentInspector(const model::CompositionLayer* selected)
+void MainWindow::syncLayerContentInspector(const model::CompositionLayer*)
 {
-    if (layer_content_pages_ == nullptr || inspector_tabs_ == nullptr) return;
-    const auto* text = selected != nullptr
-        ? std::get_if<model::TextLayerContent>(&selected->content) : nullptr;
-    const auto* shape = selected != nullptr
-        ? std::get_if<model::ShapeLayerContent>(&selected->content) : nullptr;
-    const bool supports_content = text != nullptr || shape != nullptr;
-    inspector_tabs_->setTabEnabled(layer_content_tab_index_, supports_content);
-    if (text != nullptr) {
-        layer_content_pages_->setCurrentIndex(1);
-        const QSignalBlocker text_blocker(text_content_field_);
-        const QSignalBlocker font_blocker(text_font_field_);
-        const QSignalBlocker size_blocker(text_font_size_field_);
-        const QSignalBlocker alignment_blocker(text_alignment_field_);
-        const QSignalBlocker width_blocker(text_box_width_field_);
-        const QSignalBlocker height_blocker(text_box_height_field_);
-        text_content_field_->setPlainText(qString(text->text));
-        text_font_field_->setCurrentFont(QFont(qString(text->font_family)));
-        text_font_size_field_->setValue(text->font_size_pixels);
-        text_alignment_field_->setCurrentIndex(text_alignment_field_->findData(
-            static_cast<int>(text->alignment)));
-        text_box_width_field_->setValue(text->box_width);
-        text_box_height_field_->setValue(text->box_height);
-        setColorButton(text_color_button_, text->color);
-        return;
-    }
-    if (shape != nullptr) {
-        layer_content_pages_->setCurrentIndex(2);
-        const QSignalBlocker width_blocker(shape_width_field_);
-        const QSignalBlocker height_blocker(shape_height_field_);
-        const QSignalBlocker stroke_width_blocker(shape_stroke_width_field_);
-        shape_width_field_->setValue(shape->width);
-        shape_height_field_->setValue(shape->height);
-        shape_stroke_width_field_->setValue(shape->stroke_width_pixels);
-        setColorButton(shape_fill_button_, shape->fill_color);
-        setColorButton(shape_stroke_button_, shape->stroke_color);
-        return;
-    }
-    layer_content_pages_->setCurrentIndex(0);
+    syncTransformInspector();
 }
 
-void MainWindow::syncEffectsInspector(const model::CompositionLayer* selected)
+void MainWindow::syncEffectsInspector(const model::CompositionLayer*)
 {
-    if (effects_inspector_ == nullptr || layer_effect_list_ == nullptr) return;
-    const bool has_layer = selected != nullptr;
-    effects_inspector_->setEnabled(has_layer);
-    if (inspector_tabs_ != nullptr && effects_tab_index_ >= 0)
-        inspector_tabs_->setTabEnabled(effects_tab_index_, has_layer);
-    if (selected_effect_.has_value() &&
-        (!has_layer || selected_effect_->first != selected->id)) {
-        selected_effect_.reset();
-    }
-
-    int selected_row = -1;
-    if (selected != nullptr && selected_effect_.has_value()) {
-        if (selected_effect_->second < selected->effects.size()) {
-            selected_row = static_cast<int>(selected_effect_->second);
-        } else {
-            selected_effect_.reset();
-        }
-    }
-    const QSignalBlocker list_blocker(layer_effect_list_);
-    layer_effect_list_->clear();
-    if (selected != nullptr) {
-        for (std::size_t index = 0; index < selected->effects.size(); ++index) {
-            const auto& effect = selected->effects[index];
-            const bool enabled = std::visit(
-                [](const auto& value) { return value.enabled; }, effect);
-            const QString name = std::holds_alternative<model::GaussianBlurEffect>(effect)
-                ? QStringLiteral("Gaussian Blur") : QStringLiteral("Color Adjustment");
-            auto* item = new QListWidgetItem(name, layer_effect_list_);
-            item->setData(Qt::UserRole, static_cast<qulonglong>(index));
-            item->setFlags(item->flags() | Qt::ItemIsUserCheckable |
-                           Qt::ItemIsDragEnabled);
-            item->setCheckState(enabled ? Qt::Checked : Qt::Unchecked);
-        }
-    }
-    if (selected_row < 0 && selected != nullptr && !selected->effects.empty()) {
-        selected_row = 0;
-        selected_effect_ = std::pair{selected->id, std::size_t{0}};
-    }
-    if (selected_row >= 0) layer_effect_list_->setCurrentRow(selected_row);
-
-    syncSelectedEffectInspector(selected, selected_row);
+    syncTransformInspector();
 }
 
 void MainWindow::syncSelectedEffectInspector(
-    const model::CompositionLayer* selected,
-    int selected_row)
+    const model::CompositionLayer* selected, int selected_row)
 {
-    const bool has_effect = selected != nullptr && selected_row >= 0 &&
-        static_cast<std::size_t>(selected_row) < selected->effects.size();
-    effect_up_button_->setEnabled(has_effect && selected_row > 0);
-    effect_down_button_->setEnabled(has_effect &&
-        static_cast<std::size_t>(selected_row + 1) < selected->effects.size());
-    remove_effect_button_->setEnabled(has_effect);
-    effect_parameter_pages_->setEnabled(has_effect);
-    if (!has_effect) {
-        effect_parameter_pages_->setCurrentIndex(0);
-        return;
-    }
-
-    const auto& effect = selected->effects[static_cast<std::size_t>(selected_row)];
-    if (const auto* blur = std::get_if<model::GaussianBlurEffect>(&effect)) {
-        effect_parameter_pages_->setCurrentIndex(1);
-        const QSignalBlocker blocker(blur_radius_field_);
-        blur_radius_field_->setValue(blur->radius_pixels);
-    } else {
-        const auto& color = std::get<model::ColorAdjustmentEffect>(effect);
-        effect_parameter_pages_->setCurrentIndex(2);
-        const QSignalBlocker brightness_blocker(effect_brightness_field_);
-        const QSignalBlocker contrast_blocker(effect_contrast_field_);
-        const QSignalBlocker saturation_blocker(effect_saturation_field_);
-        effect_brightness_field_->setValue(color.brightness);
-        effect_contrast_field_->setValue(color.contrast_percent);
-        effect_saturation_field_->setValue(color.saturation_percent);
-    }
+    if (inspector_ != nullptr) inspector_->syncSelectedEffect(selected, selected_row);
 }
-
 void MainWindow::selectEffectRow(int row)
 {
     if (!document_ || selected_layer_id_ == 0 || row < 0) {
@@ -2877,7 +2192,7 @@ void MainWindow::addLayerEffect(int kind)
     selected_effect_ = std::pair{selected_layer_id_, new_index};
     (void)recordCompositionEdit(std::move(before));
     syncEffectsInspector(&*found);
-    inspector_tabs_->setCurrentWidget(effects_inspector_);
+    inspector_->selectEffectsTab();
     updateDocumentState();
     requestPreview();
 }
@@ -2928,33 +2243,26 @@ void MainWindow::editSelectedEffectParameters()
     if (found == document_->layers().end() || selected_effect_->second >= found->effects.size())
         return;
     auto effects = found->effects;
-    auto& effect = effects[selected_effect_->second];
-    if (auto* blur = std::get_if<model::GaussianBlurEffect>(&effect)) {
-        blur->radius_pixels = blur_radius_field_->value();
-    } else {
-        auto& color = std::get<model::ColorAdjustmentEffect>(effect);
-        color.brightness = effect_brightness_field_->value();
-        color.contrast_percent = effect_contrast_field_->value();
-        color.saturation_percent = effect_saturation_field_->value();
-    }
+    effects[selected_effect_->second] = inspector_->editedEffect(
+        std::move(effects[selected_effect_->second]));
     applySelectedEffectStack(std::move(effects), true);
 }
 
 void MainWindow::reorderEffectsFromList(std::size_t source_index, int insertion_row)
 {
     finishPendingTransformEdit();
-    if (!document_ || selected_layer_id_ == 0 || layer_effect_list_ == nullptr) return;
+    if (!document_ || selected_layer_id_ == 0 || inspector_ == nullptr) return;
     const auto found = std::find_if(document_->layers().begin(), document_->layers().end(),
         [this](const auto& layer) { return layer.id == selected_layer_id_; });
     if (found == document_->layers().end() || source_index >= found->effects.size() ||
-        layer_effect_list_->count() != static_cast<int>(found->effects.size())) {
+        inspector_->effectCount() != static_cast<int>(found->effects.size())) {
         if (found != document_->layers().end()) syncEffectsInspector(&*found);
         return;
     }
 
     const auto size = found->effects.size();
     auto destination_index = static_cast<std::size_t>(
-        std::clamp(insertion_row, 0, layer_effect_list_->count()));
+        std::clamp(insertion_row, 0, inspector_->effectCount()));
     if (destination_index > source_index) --destination_index;
     if (destination_index >= size) destination_index = size - 1;
     if (destination_index == source_index) return;
@@ -3043,23 +2351,15 @@ void MainWindow::editSelectedLayerContent()
     bool changed = false;
     bool rejected = false;
     if (is_text) {
-        auto content = std::get<model::TextLayerContent>(found->content);
-        content.text = utf8String(text_content_field_->toPlainText());
-        content.font_family = utf8String(text_font_field_->currentFont().family());
-        content.font_size_pixels = text_font_size_field_->value();
-        content.alignment = static_cast<model::TextAlignment>(
-            text_alignment_field_->currentData().toInt());
-        content.box_width = text_box_width_field_->value();
-        content.box_height = text_box_height_field_->value();
+        auto content = inspector_->editedTextContent(
+            std::get<model::TextLayerContent>(found->content));
         if (content != std::get<model::TextLayerContent>(found->content)) {
             changed = document_->setTextLayerContent(selected_layer_id_, content);
             rejected = !changed;
         }
     } else {
-        auto content = std::get<model::ShapeLayerContent>(found->content);
-        content.width = shape_width_field_->value();
-        content.height = shape_height_field_->value();
-        content.stroke_width_pixels = shape_stroke_width_field_->value();
+        auto content = inspector_->editedShapeContent(
+            std::get<model::ShapeLayerContent>(found->content));
         if (content != std::get<model::ShapeLayerContent>(found->content)) {
             changed = document_->setShapeLayerContent(selected_layer_id_, content);
             rejected = !changed;
@@ -3128,7 +2428,7 @@ void MainWindow::chooseSelectedLayerColor(bool text_color, bool stroke_color)
 
 void MainWindow::editSelectedLayerTransform(std::size_t property_index)
 {
-    if (!document_ || selected_layer_id_ == 0 || property_index >= transform_fields_.size()) return;
+    if (!document_ || selected_layer_id_ == 0 || property_index >= kTransformProperties.size()) return;
     const auto edit_identity = std::pair{selected_layer_id_, property_index};
     const bool coalescing = active_transform_edit_ == edit_identity;
     if (!coalescing) finishPendingTransformEdit();
@@ -3142,7 +2442,7 @@ void MainWindow::editSelectedLayerTransform(std::size_t property_index)
     const auto raw_local_frame = (timeline_ != nullptr ? timeline_->currentFrame() : 0) -
         found->timeline_start_frame;
     const auto& frames = creative_suite::animation::keyframesFor(found->keyframes, property);
-    const double new_value = transform_fields_[property_index]->value();
+    const double new_value = inspector_->transformFieldValue(property_index);
     bool changed = false;
     if (frames.empty()) {
         auto transform = found->transform;
@@ -3282,7 +2582,7 @@ void MainWindow::handleMediaDrop(const std::filesystem::path& path,
     updateDocumentState();
     refreshTimeline();
     syncTransformInspector();
-    inspector_tabs_->setCurrentWidget(transform_inspector_);
+    inspector_->selectTransformTab();
     requestPreview();
 }
 
@@ -3317,24 +2617,6 @@ void MainWindow::requestPreview(bool playback_tick)
     (void)preview_renderer_->submit(
         std::move(request),
         playback_tick ? PreviewRequestMode::Playback : PreviewRequestMode::Interactive);
-}
-
-bool MainWindow::eventFilter(QObject* watched, QEvent* event)
-{
-    if (event != nullptr && event->type() == QEvent::FocusOut &&
-        (watched == text_content_field_ || watched == text_font_field_ ||
-         watched == text_alignment_field_ || watched == text_font_size_field_ ||
-         watched == text_box_width_field_ || watched == text_box_height_field_ ||
-         watched == shape_width_field_ || watched == shape_height_field_ ||
-         watched == shape_stroke_width_field_)) {
-        finishPendingContentEdit();
-    }
-    if (event != nullptr && event->type() == QEvent::FocusOut &&
-        (watched == blur_radius_field_ || watched == effect_brightness_field_ ||
-         watched == effect_contrast_field_ || watched == effect_saturation_field_)) {
-        finishPendingEffectEdit();
-    }
-    return QMainWindow::eventFilter(watched, event);
 }
 
 } // namespace motion::ui

@@ -11,7 +11,6 @@
 
 #include <QMainWindow>
 
-#include <array>
 #include <atomic>
 #include <cstdint>
 #include <exception>
@@ -27,26 +26,19 @@ class QDockWidget;
 class QLabel;
 class QMenu;
 class QPushButton;
-class QDoubleSpinBox;
-class QListWidget;
 class QCloseEvent;
 class QProgressDialog;
-class QStackedWidget;
-class QTabWidget;
-class QTextEdit;
-class QToolButton;
 class QTimer;
-class QFontComboBox;
 class QComboBox;
-class QSpinBox;
 
 namespace creative_suite::media { struct MediaImportBatchResult; }
 
 namespace motion::ui {
 
 class CompositionViewer;
-class MediaDetailsWidget;
+class InspectorWidget;
 class MediaPoolWidget;
+class MotionWorkspace;
 class PropertyCurveEditor;
 class PreviewRenderer;
 class TimelineNavigator;
@@ -155,7 +147,6 @@ private:
                          model::LayerId before_layer_id);
     void requestPreview(bool playback_tick = false);
     void closeEvent(QCloseEvent* event) override;
-    bool eventFilter(QObject* watched, QEvent* event) override;
 
     std::optional<model::CompositionDocument> document_;
     QLabel* empty_state_ = nullptr;
@@ -186,47 +177,14 @@ private:
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
     QDockWidget* graph_editor_dock_ = nullptr;
-    QDockWidget* active_timeline_graph_dock_ = nullptr;
     MediaPoolWidget* media_pool_ = nullptr;
     CompositionViewer* viewer_ = nullptr;
-    MediaDetailsWidget* media_details_ = nullptr;
-    QTabWidget* inspector_tabs_ = nullptr;
-    QWidget* transform_inspector_ = nullptr;
-    QWidget* effects_inspector_ = nullptr;
-    QListWidget* layer_effect_list_ = nullptr;
-    QPushButton* add_layer_effect_button_ = nullptr;
-    QPushButton* effect_up_button_ = nullptr;
-    QPushButton* effect_down_button_ = nullptr;
-    QPushButton* remove_effect_button_ = nullptr;
-    QStackedWidget* effect_parameter_pages_ = nullptr;
-    QDoubleSpinBox* blur_radius_field_ = nullptr;
-    QDoubleSpinBox* effect_brightness_field_ = nullptr;
-    QDoubleSpinBox* effect_contrast_field_ = nullptr;
-    QDoubleSpinBox* effect_saturation_field_ = nullptr;
-    int effects_tab_index_ = -1;
+    InspectorWidget* inspector_ = nullptr;
+    MotionWorkspace* workspace_ = nullptr;
     QWidget* curve_editor_panel_ = nullptr;
     PropertyCurveEditor* curve_editor_ = nullptr;
     QComboBox* curve_preset_combo_ = nullptr;
     QLabel* curve_custom_label_ = nullptr;
-    QWidget* layer_content_inspector_ = nullptr;
-    QStackedWidget* layer_content_pages_ = nullptr;
-    QWidget* text_content_page_ = nullptr;
-    QWidget* shape_content_page_ = nullptr;
-    QTextEdit* text_content_field_ = nullptr;
-    QFontComboBox* text_font_field_ = nullptr;
-    QSpinBox* text_font_size_field_ = nullptr;
-    QPushButton* text_color_button_ = nullptr;
-    QComboBox* text_alignment_field_ = nullptr;
-    QSpinBox* text_box_width_field_ = nullptr;
-    QSpinBox* text_box_height_field_ = nullptr;
-    QSpinBox* shape_width_field_ = nullptr;
-    QSpinBox* shape_height_field_ = nullptr;
-    QPushButton* shape_fill_button_ = nullptr;
-    QPushButton* shape_stroke_button_ = nullptr;
-    QSpinBox* shape_stroke_width_field_ = nullptr;
-    int layer_content_tab_index_ = -1;
-    std::array<QDoubleSpinBox*, 5> transform_fields_{};
-    std::array<QToolButton*, 5> transform_key_buttons_{};
     TimelineNavigator* timeline_ = nullptr;
     std::unique_ptr<PreviewRenderer> preview_renderer_;
     std::optional<std::filesystem::path> document_path_;

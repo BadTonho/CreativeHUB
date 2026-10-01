@@ -33,6 +33,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/shortcut_settings_dialog.h
     src/ui/general_settings_dialog.cpp
     src/ui/general_settings_dialog.h
+    src/ui/inspector/inspector_widget.cpp
+    src/ui/inspector/inspector_widget.h
     src/ui/preview_renderer.cpp
     src/ui/preview_renderer.h
     src/ui/property_curve_editor.cpp
@@ -52,6 +54,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/timeline_navigator.cpp
     src/ui/timeline_navigator.h
     src/ui/timeline_navigator_math.h
+    src/ui/workspace/motion_workspace.cpp
+    src/ui/workspace/motion_workspace.h
 )
 target_include_directories(creative-suite-motion-editor-core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
