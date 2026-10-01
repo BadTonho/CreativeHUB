@@ -43,14 +43,15 @@ jobs:
       - name: Install macOS vcpkg build tools
         if: runner.os == 'macOS'
         shell: bash
-        run: brew install autoconf
+        run: brew install autoconf autoconf-archive automake libtool nasm
 
-      - name: Install Linux FFmpeg build tools
+      - name: Install Linux vcpkg and FFmpeg build tools
         if: runner.os == 'Linux'
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends nasm
+          sudo apt-get install --yes --no-install-recommends \
+            autoconf autoconf-archive automake libtool nasm
 
       - name: Configure on Windows
         if: runner.os == 'Windows'

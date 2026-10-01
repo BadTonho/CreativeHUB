@@ -15,10 +15,12 @@ externally supplied `CMAKE_PREFIX_PATH`; source files must not contain an
 absolute developer-machine path.
 
 The current vcpkg Qt baseline enables the PostgreSQL SQL driver by default,
-which builds `libpq` and requires Autoconf on macOS. The GitHub Actions macOS
-job installs it with Homebrew before CMake runs vcpkg. If the Qt feature
-selection changes, revisit this prerequisite and remove it only after the
-macOS dependency graph no longer builds `libpq`.
+which builds `libpq` and requires Autoconf on macOS. The pinned `gperf` port
+also requires Autoconf, Autoconf Archive, Automake, and Libtool on Linux and
+macOS. GitHub Actions installs these host build tools with Homebrew on macOS
+and `apt` on Linux; Linux also installs NASM for FFmpeg. If the vcpkg feature
+selection or port dependencies change, revisit these prerequisites against a
+clean build on both platforms.
 
 ## Qt version and platform baselines
 
