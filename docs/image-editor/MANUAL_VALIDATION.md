@@ -9,8 +9,9 @@ run.
 On 2026-09-27, the user confirmed on Windows that the Release build works,
 Paint and Eraser work after using Shapes, and export, `.cimg` save/reopen,
 editable shapes, general object selection, and layer groups work. macOS and
-Linux validation is deferred. Windows packaging and the remaining recovery,
-image-format plugin, and linked-image checks are still tracked in the roadmap.
+Linux validation is deferred. Windows packaging and the remaining detailed
+recovery, image-format plugin, and linked-image checks are still tracked in the
+roadmap.
 
 ## Standalone editing and recovery
 
@@ -236,12 +237,12 @@ image-format plugin, and linked-image checks are still tracked in the roadmap.
 ### Recorded standalone validation
 
 - [x] User confirms the standalone workflow above was validated for the current
-  baseline implementation, including the restart and recovery check. The
-  platform, Qt version, run date, and scenario-by-scenario results were not
+  baseline implementation, including a restart and recovery check, on Windows
+  on 2026-09-27. The Qt version and scenario-by-scenario results were not
   recorded.
-- [ ] Validate the JPEG options, responsive export, selected-item Quick
-  Export, editable-shape, general selection, and layer-group steps added after
-  that confirmation.
+- [ ] Record scenario-by-scenario results for JPEG options, responsive export,
+  selected-item Quick Export, shape/selection/group edge cases, and the detailed
+  recovery scenarios above.
 - [ ] Cross-platform packaging and interaction checks below still need
   platform-specific records.
 

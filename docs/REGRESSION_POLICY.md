@@ -32,6 +32,37 @@ Coverage is measured against documented behavior and interfaces, not a target
 percentage of source lines. Tests may cover several closely related behaviors
 when the assertions remain clear and failures are diagnosable.
 
+## Coverage Status and Priorities
+
+Use the following statuses in each application's feature-to-verification
+index:
+
+- **Automated coverage present:** a registered test directly exercises the
+  behavior; name its source file and link to the CMake registration, including
+  the CTest target name when that adds useful traceability.
+- **Manual check documented:** a repeatable checklist exists for behavior that
+  requires a running application, hardware, a driver, or a packaged runtime.
+- **Pending validation:** required manual or platform validation has no recorded
+  result. This is distinct from missing automated coverage.
+- **Coverage gap (P0/P1/P2):** an implemented behavior has no direct automated
+  test or documented manual check.
+- **Planned, not implemented:** the behavior is not part of the current
+  implementation and is not counted as a regression-coverage gap.
+
+Assign P0/P1/P2 to uncovered behaviors and pending validation actions by
+impact, while keeping their status distinct:
+
+- **P0:** data integrity, startup, project open/save/recovery, and supported
+  format compatibility.
+- **P1:** core editing, import/export, playback/rendering, and cross-application
+  workflows.
+- **P2:** secondary interface behavior and quality, performance, or platform
+  validation.
+
+Do not mark a test as passing based only on its presence in the test tree. The
+index records evidence and validation state; test execution results belong in
+the CI run or manual validation record.
+
 ## Test Layers
 
 Use the narrowest reliable test that protects the behavior, and add broader
@@ -113,10 +144,9 @@ only from repeatable measurements on the reference PC and additional systems.
 ## Application Test Guides
 
 - [Video Editor regression testing](video-editor/REGRESSION_TESTING.md)
-- [Image Editor manual validation](image-editor/MANUAL_VALIDATION.md) and its
-  automated tests under `apps/image-editor/tests/`
-- [Motion Studio roadmap and validation](motion-editor/ROADMAP.md) and its
-  automated tests under `apps/motion-editor/tests/`
+- [Image Editor roadmap and coverage index](image-editor/ROADMAP.md), with the
+  detailed [manual validation checklist](image-editor/MANUAL_VALIDATION.md)
+- [Motion Studio roadmap and coverage index](motion-editor/ROADMAP.md)
 
 These app-level guides provide detailed test cases. This policy defines the
 shared minimum that applies across all applications and future modules.

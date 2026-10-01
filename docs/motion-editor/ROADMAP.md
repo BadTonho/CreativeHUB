@@ -274,6 +274,43 @@ preservation, dialog defaults, and unchanged dirty state. Shared encoder tests
 cover capability discovery and encode/decode; the Video Editor export
 regression continues to cover its optional audio path.
 
+## Regression coverage index
+
+The automated targets are registered in
+[`apps/motion-editor/tests/CMakeLists.txt`](../../apps/motion-editor/tests/CMakeLists.txt).
+This map ties current MVP behaviors to their test sources; detailed manual
+readiness checks remain in this roadmap and
+[`SCOPE_AND_READINESS.md`](SCOPE_AND_READINESS.md).
+
+| Behavior group | Automated evidence | Manual evidence and status |
+| --- | --- | --- |
+| Composition model, validation, layer data, and timing | `composition_document_test.cpp` (`creative-suite-motion-editor-document`) | Pending manual composition and supported-layer checks remain part of MVP acceptance. |
+| Undo/Redo and edit history | `composition_history_test.cpp` (`creative-suite-motion-editor-history`) | Pending manual validation: confirm interactive edit sequences during the broader Windows UI checklist. |
+| `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist; Windows workflow acceptance and cross-platform file/path checks remain pending. |
+| Autosave and restart recovery | `motion_recovery_store_test.cpp` (`creative-suite-motion-editor-recovery`), `motion_editor_ui_test.cpp` | Automated snapshots and UI recovery paths exist. Manual Windows restart/recovery scenarios remain pending (**P0 validation**). |
+| Preview, transforms, curves, and layer effects | `preview_renderer_test.cpp` (`creative-suite-motion-editor-preview`), `motion_editor_ui_test.cpp`; shared evaluator coverage in `libs/tests/animation_test.cpp` and `libs/tests/composition_test.cpp` | Offscreen tests cover preview and interaction behavior; real-hardware visual output and graphics-driver validation remain pending (**P2 validation**). |
+| Performance diagnostics | `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`) | Tests cover metrics aggregation, not actual playback throughput. The 1080p/30 fps, 10-second, five-layer benchmark on the reference PC and other systems remains pending (**P2 validation**). |
+| Opaque video export and export controls | `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), shared `libs/media/tests/video_encoder_test.cpp` | Automated output, cancellation, and failure coverage exists; throughput, installed codecs, output profiles, and cross-platform behavior remain pending (**P1/P2 validation**). |
+| Startup and application UI | `motion_editor_startup_test.cpp` (`creative-suite-motion-editor-startup`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Startup has offscreen coverage; broader visual, graphics-driver, and platform checks remain pending (**P2 validation**). |
+| Motion Studio to Video Editor editable handoff | No current integration test; handoff remains a later roadmap milestone | Planned, not implemented. Define producer/consumer tests when the contract is implemented; not a current regression gap. |
+
+### Current coverage gaps and pending validation
+
+- **P0 — critical paths mapped:** composition validation,
+  persistence/migration, startup, and automated recovery each have registered
+  test sources. This inventory did not identify a specific P0 behavior with
+  neither automated nor documented manual coverage; Windows restart/recovery
+  acceptance remains pending.
+- **P1 — export acceptance:** automated export behavior is covered; codec
+  availability and the supported output profile still require real packaged
+  builds and cross-platform validation.
+- **P2 — performance and platform acceptance:** metrics tests do not substitute
+  for a controlled benchmark. Record the approved workload on the reference PC
+  and complete the remaining Windows, macOS, and Linux checks.
+- **Planned, not implemented:** audio-reactive 2D animation and linked editing
+  from the Video Editor are future work, not missing tests for current
+  behavior.
+
 Frame rates are stored as exact rational values from the supported common-rate
 list. Creating a composition does not ask for or set its duration. The ruler
 starts with a one-hour navigation range, calculated from the selected exact
