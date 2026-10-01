@@ -342,7 +342,7 @@ void ImageCanvas::beginTextEditing(const ImageTextData& text, bool existing) {
         application->installEventFilter(this);
     }
     text_editor_->setFocus(Qt::OtherFocusReason);
-    text_editor_->moveCursor(QTextCursor::End);
+    text_editor_->moveCursor(existing ? QTextCursor::Start : QTextCursor::End);
     emit textEditingStarted(text_editing_, existing);
 }
 
@@ -1502,15 +1502,6 @@ void ImageCanvas::mouseDoubleClickEvent(QMouseEvent* event) {
     selected_object_ids_ = {placement.operation.text.id};
     emit objectsSelected(selected_object_ids_, placement.layer_id);
     beginTextEditing(placement.operation.text, true);
-    if (text_editor_ != nullptr && text_editor_->isVisible()) {
-        // beginTextEditing moves to the end; reset the scroll origin before
-        // mapping the double-click into the editor's viewport coordinates.
-        text_editor_->moveCursor(QTextCursor::Start);
-        text_editor_->ensureCursorVisible();
-        const QPoint viewport_position = text_editor_->viewport()->mapFrom(
-            this, event->position().toPoint());
-        text_editor_->setTextCursor(text_editor_->cursorForPosition(viewport_position));
-    }
     event->accept();
 }
 

@@ -494,7 +494,7 @@ bool testEditableTextUi(const QString& directory) {
     }
 
     QTest::mouseDClick(canvas, Qt::LeftButton, Qt::NoModifier,
-                       widgetPoint(first_text.position.x() + 4,
+                       widgetPoint(first_text.position.x() + first_text.box_width - 5,
                                    first_text.position.y() + 4));
     QCoreApplication::processEvents();
     if (!text_editor->isVisible()) {
@@ -502,21 +502,17 @@ bool testEditableTextUi(const QString& directory) {
         return false;
     }
     if (text_editor->textCursor().position() != 0) {
-        const QPoint clicked = widgetPoint(first_text.position.x() + 4,
+        const QPoint clicked = widgetPoint(first_text.position.x() + first_text.box_width - 5,
                                            first_text.position.y() + 4);
-        const QPoint viewport_position = text_editor->viewport()->mapFrom(canvas, clicked);
         std::cerr << "Reopening text placed the caret at "
                   << text_editor->textCursor().position()
-                  << " instead of the double-click position; click=" << clicked.x() << ','
-                  << clicked.y() << ", editor=" << text_editor->geometry().x() << ','
-                  << text_editor->geometry().y() << ' ' << text_editor->width() << 'x'
-                  << text_editor->height() << ", viewport point=" << viewport_position.x()
-                  << ',' << viewport_position.y() << ".\n";
+                  << " instead of the beginning after reopening at " << clicked.x() << ','
+                  << clicked.y() << ".\n";
         return false;
     }
     QTest::keyClicks(text_editor, QStringLiteral("X"));
     if (!text_editor->toPlainText().startsWith(QStringLiteral("XThis exceptionally"))) {
-        std::cerr << "Typing after double-click did not insert at the clicked beginning.\n";
+        std::cerr << "Typing after reopening did not insert at the beginning.\n";
         return false;
     }
     text_size->setValue(22);
