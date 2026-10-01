@@ -113,6 +113,7 @@ private:
     void clearObjectInteraction();
     void updateTextEditorContentAndGeometry();
     void updateTextEditorGeometry();
+    void hideTextEditorGlyphs();
     void applyTextEditorStyle();
     void finishTextEditing(bool commit);
 

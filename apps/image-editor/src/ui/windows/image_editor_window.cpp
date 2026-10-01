@@ -218,6 +218,9 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             [this](const ImageTextData& text, bool existing) {
                 handleTextEditingStarted(text, existing);
             });
+    connect(canvas_, &ImageCanvas::textEditingCancelled, this, [this]() {
+        canvas_->setTransientImage({});
+    });
     connect(canvas_, &ImageCanvas::objectsSelected, this,
             [this](const QStringList& object_ids, const QString& layer_id) {
                 selected_object_ids_ = object_ids;
@@ -936,7 +939,9 @@ void ImageEditorWindow::handleShapeCreated(const ImageShapeData& shape) {
 }
 
 void ImageEditorWindow::handleTextEditingStarted(const ImageTextData& text, bool existing) {
-    Q_UNUSED(existing);
+    if (existing) {
+        canvas_->setTransientImage(session_.renderedImageWithoutObjects({text.id}));
+    }
     text_style_.font_family = text.font_family;
     text_style_.font_pixel_size = text.font_pixel_size;
     text_style_.color = text.color;

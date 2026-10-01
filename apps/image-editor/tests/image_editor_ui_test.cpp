@@ -76,6 +76,22 @@ QTreeWidgetItem* layerRowItem(QTreeWidget* tree, int row) {
     return tree->topLevelItem(row);
 }
 
+int darkPixelCount(const QImage& image) {
+    const QImage pixels = image.convertToFormat(QImage::Format_ARGB32);
+    int count = 0;
+    for (int y = 0; y < pixels.height(); ++y) {
+        const auto* row = reinterpret_cast<const QRgb*>(pixels.constScanLine(y));
+        for (int x = 0; x < pixels.width(); ++x) {
+            const QColor pixel = QColor::fromRgba(row[x]);
+            if (pixel.alpha() > 200 && pixel.red() < 96 && pixel.green() < 96 &&
+                pixel.blue() < 96) {
+                ++count;
+            }
+        }
+    }
+    return count;
+}
+
 int currentLayerRow(const QTreeWidget* tree) {
     return tree->indexOfTopLevelItem(tree->currentItem());
 }
@@ -360,8 +376,17 @@ bool testEditableTextUi(const QString& directory) {
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, first_end);
     QCoreApplication::processEvents();
     if (!text_editor->isVisible()) return false;
+    const auto liveTextInk = [canvas, text_editor]() {
+        const QRect region = text_editor->geometry().adjusted(3, 3, -3, -3);
+        return darkPixelCount(canvas->grab().toImage().copy(region));
+    };
     const int initial_text_editor_width = text_editor->width();
     const int initial_text_editor_height = text_editor->height();
+    QTest::keyClicks(text_editor, QStringLiteral("d"));
+    QCoreApplication::processEvents();
+    const int single_character_ink = liveTextInk();
+    text_editor->clear();
+    QCoreApplication::processEvents();
     for (const auto& [key, character] : {
              std::pair{Qt::Key_E, QStringLiteral("e")},
              std::pair{Qt::Key_B, QStringLiteral("b")}}) {
@@ -398,6 +423,13 @@ bool testEditableTextUi(const QString& directory) {
                       << " of the heading or the expanding editor left the canvas.\n";
             return false;
         }
+    }
+    const int expanded_text_ink = liveTextInk();
+    if (expanded_text_ink <= single_character_ink * 3) {
+        std::cerr << "The live editor did not render the full typed heading (single-character "
+                  << single_character_ink << " dark pixels, heading " << expanded_text_ink
+                  << ").\n";
+        return false;
     }
     const int maximum_editor_width = qRound((320.0 - 70.0) * canvas->zoomFactor());
     if (text_editor->width() <= initial_text_editor_width ||
@@ -476,6 +508,11 @@ bool testEditableTextUi(const QString& directory) {
     QCoreApplication::processEvents();
     if (text_editor->isVisible() || window.windowTitle().startsWith(QLatin1Char('*'))) {
         std::cerr << "Esc did not cancel an existing text edit without dirtying the document.\n";
+        return false;
+    }
+    if (darkPixelCount(canvas->grab().toImage().copy(
+            text_editor->geometry().adjusted(3, 3, -3, -3))) == 0) {
+        std::cerr << "Cancelling an existing text edit did not restore its rendered text.\n";
         return false;
     }
     if (!image_editor::ImageDocumentStore::loadDocument(document_path, &document, &error) ||

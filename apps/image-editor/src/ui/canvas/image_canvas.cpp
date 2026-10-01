@@ -844,7 +844,7 @@ void ImageCanvas::applyTextEditorStyle() {
     font.setPixelSize(std::max(1, qRound(text_editing_.font_pixel_size * zoom_)));
     text_editor_->setFont(font);
     text_editor_->setStyleSheet(QStringLiteral(
-        "QPlainTextEdit { color: %1; background: rgba(255,255,255,150); "
+        "QPlainTextEdit { color: %1; background: rgba(255,255,255,24); "
         "border: 1px solid #299bea; padding: 0px; selection-background-color: #359bdc; }")
         .arg(text_editing_.color.name(QColor::HexArgb)));
     QTextOption option = text_editor_->document()->defaultTextOption();
@@ -853,6 +853,20 @@ void ImageCanvas::applyTextEditorStyle() {
         ? Qt::AlignHCenter : (text_editing_.alignment == ImageTextAlignment::Right
             ? Qt::AlignRight : Qt::AlignLeft));
     text_editor_->document()->setDefaultTextOption(option);
+    hideTextEditorGlyphs();
+}
+
+void ImageCanvas::hideTextEditorGlyphs() {
+    if (text_editor_ == nullptr) return;
+    QTextCharFormat transparent_text;
+    transparent_text.setForeground(QColor(0, 0, 0, 0));
+    QTextCursor document_cursor(text_editor_->document());
+    document_cursor.select(QTextCursor::Document);
+    document_cursor.mergeCharFormat(transparent_text);
+
+    QTextCursor insertion_cursor = text_editor_->textCursor();
+    insertion_cursor.mergeCharFormat(transparent_text);
+    text_editor_->setTextCursor(insertion_cursor);
 }
 
 void ImageCanvas::updateTextEditorGeometry() {
@@ -911,7 +925,11 @@ void ImageCanvas::updateTextEditorContentAndGeometry() {
         text_editor_geometry_update_pending_ = true;
         QMetaObject::invokeMethod(this, [this]() {
             text_editor_geometry_update_pending_ = false;
+            hideTextEditorGlyphs();
             updateTextEditorGeometry();
+            if (text_editor_ != nullptr && text_editor_->isVisible()) {
+                text_editor_->viewport()->repaint();
+            }
         }, Qt::QueuedConnection);
     }
     update();
@@ -965,6 +983,12 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     }
     painter.restore();
     painter.drawImage(target, transient_image_.isNull() ? image_ : transient_image_);
+    if (text_editor_ != nullptr && text_editor_->isVisible() &&
+        !text_editing_.content.isEmpty()) {
+        // Draw live text with the committed canvas renderer; the editor widget
+        // remains responsible for keyboard input and its caret.
+        drawTextOverlay(painter, text_editing_);
+    }
 
     if (crop_mode_ && selecting_crop_) {
         const QRectF selection = crop_selection_.normalized().intersected(target);
