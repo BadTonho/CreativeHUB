@@ -391,9 +391,11 @@ bool testEditableTextUi(const QString& directory) {
         QTest::keyClicks(text_editor, QString(long_heading.at(index)));
         QCoreApplication::processEvents();
         if (!text_editor->isVisible() || QApplication::focusWidget() != text_editor ||
-            text_editor->toPlainText() != long_heading.left(index + 1)) {
+            text_editor->toPlainText() != long_heading.left(index + 1) ||
+            text_editor->textCursor().position() != index + 1 ||
+            !text_editor->geometry().intersects(canvas->rect())) {
             std::cerr << "Typing stopped after character " << (index + 1)
-                      << " of the heading.\n";
+                      << " of the heading or the expanding editor left the canvas.\n";
             return false;
         }
     }

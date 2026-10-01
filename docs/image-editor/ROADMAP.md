@@ -198,12 +198,15 @@ has keyboard focus, a temporary application-level filter keeps unmodified keys
 from triggering window shortcuts such as Paint (`B`) or Eraser (`E`), including
 shortcut events without text payloads. While typing, the box
 grows to fit its longest line up to the canvas edge, then wraps and expands
-vertically. Clicking an empty canvas location starts editing with the default
+vertically. The editor's geometry is updated after the key event completes so
+resizing does not interrupt text layout or cursor handling. Clicking an empty
+canvas location starts editing with the default
 box width; a horizontal drag sets a custom initial width. Reopening unchanged
 text keeps its saved width. The UI test verifies that a shortcut override
 without a text payload is accepted and still reaches the text editor; it also
-covers click-to-create and click-outside confirmation. It passed 1/1 in Debug
-and Release. The click-to-create visual review remains pending.
+covers click-to-create, cursor advancement, editor visibility during expansion,
+and click-outside confirmation. It passed 1/1 in Debug and Release. The
+click-to-create visual review remains pending.
 
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |

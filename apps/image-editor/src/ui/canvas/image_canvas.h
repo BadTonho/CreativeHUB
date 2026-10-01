@@ -157,6 +157,7 @@ private:
     ImageTextData text_editing_;
     QPlainTextEdit* text_editor_ = nullptr;
     bool text_editing_existing_ = false;
+    bool text_editor_geometry_update_pending_ = false;
     qreal text_editing_initial_box_width_ = 1.0;
     bool creating_text_frame_ = false;
     QPointF text_frame_start_;

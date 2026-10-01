@@ -11,6 +11,7 @@
 #include <QFontMetricsF>
 #include <QKeyEvent>
 #include <QLineF>
+#include <QMetaObject>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -403,6 +404,7 @@ void ImageCanvas::fitToWindow() {
     zoom_ = std::clamp(std::min(width_scale, height_scale), 0.01, 16.0);
     pan_ = {};
     fit_to_window_ = true;
+    updateTextEditorGeometry();
     update();
 }
 
@@ -902,7 +904,16 @@ void ImageCanvas::updateTextEditorContentAndGeometry() {
         content_width > 0.0 ? content_width + kTextEditorHorizontalInset : minimum_width);
     text_editing_.box_width = std::clamp(desired_width, minimum_width, available_width);
 
-    updateTextEditorGeometry();
+    // Resizing QPlainTextEdit synchronously from its textChanged signal can
+    // interrupt its active layout/key handling. Apply the latest geometry
+    // after the input event finishes instead.
+    if (!text_editor_geometry_update_pending_) {
+        text_editor_geometry_update_pending_ = true;
+        QMetaObject::invokeMethod(this, [this]() {
+            text_editor_geometry_update_pending_ = false;
+            updateTextEditorGeometry();
+        }, Qt::QueuedConnection);
+    }
     update();
 }
 
@@ -936,7 +947,6 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     }
 
     const QRectF target = imageTargetRect();
-    updateTextEditorGeometry();
     painter.fillRect(target.adjusted(-2, -2, 2, 2), QColor(18, 19, 22));
     constexpr qreal checker_size = 16.0;
     painter.save();
@@ -1219,6 +1229,7 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
     if (panning_) {
         pan_ = initial_pan_ + event->position() - pan_start_;
         fit_to_window_ = false;
+        updateTextEditorGeometry();
         update();
         event->accept();
         return;
@@ -1448,6 +1459,7 @@ void ImageCanvas::wheelEvent(QWheelEvent* event) {
                            (height() - scaled.height()) / 2.0);
     pan_ = cursor - relative * zoom_ - centered;
     fit_to_window_ = false;
+    updateTextEditorGeometry();
     update();
     event->accept();
 }
