@@ -16,6 +16,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontComboBox>
+#include <QFontDatabase>
 #include <QImage>
 #include <QImageWriter>
 #include <QJsonArray>
@@ -29,6 +31,7 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPushButton>
+#include <QPlainTextEdit>
 #include <QScrollBar>
 #include <QScreen>
 #include <QSettings>
@@ -299,6 +302,258 @@ bool testLayerGroupContextMenu(const QString& directory) {
     return true;
 }
 
+bool testEditableTextUi(const QString& directory) {
+    const QString source_path = directory + QStringLiteral("/editable-text-source.png");
+    const QString document_path = directory + QStringLiteral("/editable-text-linked.cimg");
+    const QString output_path = directory + QStringLiteral("/editable-text-published.png");
+    QImage source(320, 240, QImage::Format_ARGB32_Premultiplied);
+    source.fill(Qt::white);
+    if (!source.save(source_path, "PNG")) return false;
+
+    image_editor::ImageEditorWindow window;
+    window.resize(1100, 800);
+    window.show();
+    if (!window.openLinkedImage(source_path, document_path, output_path)) return false;
+    QCoreApplication::processEvents();
+    auto* canvas = window.findChild<image_editor::ImageCanvas*>();
+    auto* text_tool = window.findChild<QToolButton*>(QStringLiteral("textToolButton"));
+    auto* selection_tool = window.findChild<QToolButton*>(
+        QStringLiteral("selectShapesToolButton"));
+    auto* text_size = window.findChild<QSpinBox*>(QStringLiteral("textSizeSpinBox"));
+    auto* text_font = window.findChild<QFontComboBox*>(QStringLiteral("textFontComboBox"));
+    auto* text_color = window.findChild<QPushButton*>(QStringLiteral("textColorButton"));
+    auto* text_alignment = window.findChild<QComboBox*>(
+        QStringLiteral("textAlignmentComboBox"));
+    auto* text_editor = window.findChild<QPlainTextEdit*>(
+        QStringLiteral("imageCanvasTextEditor"));
+    auto* layer_tree = window.findChild<QTreeWidget*>(QStringLiteral("imageLayerTree"));
+    auto* save = window.findChild<QAction*>(QStringLiteral("saveDocumentAction"));
+    auto* undo = window.findChild<QAction*>(QStringLiteral("undoAction"));
+    if (canvas == nullptr || text_tool == nullptr || selection_tool == nullptr ||
+        text_size == nullptr || text_font == nullptr || text_color == nullptr ||
+        text_alignment == nullptr || text_editor == nullptr || layer_tree == nullptr ||
+        save == nullptr || undo == nullptr) return false;
+    text_tool->click();
+    text_size->setValue(18);
+    const auto widgetPoint = [canvas](qreal x, qreal y) {
+        const qreal zoom = canvas->zoomFactor();
+        return QPoint(qRound((canvas->width() - 320.0 * zoom) / 2.0 + x * zoom),
+                      qRound((canvas->height() - 240.0 * zoom) / 2.0 + y * zoom));
+    };
+    const QPoint first_start = widgetPoint(70, 80);
+    const QPoint first_end = widgetPoint(160, 80);
+    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, first_start);
+    QTest::mouseMove(canvas, first_end);
+    QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, first_end);
+    QCoreApplication::processEvents();
+    if (!text_editor->isVisible()) return false;
+    QTest::keyClicks(text_editor, QStringLiteral("First line"));
+    QTest::keyClick(text_editor, Qt::Key_Return);
+    QTest::keyClicks(text_editor, QStringLiteral("Second line"));
+    if (!text_editor->toPlainText().contains(QLatin1Char('\n'))) return false;
+    QTest::keyClick(text_editor, Qt::Key_Return, Qt::ControlModifier);
+    QCoreApplication::processEvents();
+    if (text_editor->isVisible() || layerRowCount(layer_tree) != 3) {
+        std::cerr << "Ctrl+Enter did not commit a multiline text layer.\n";
+        return false;
+    }
+    save->trigger();
+    image_editor::ImageDocumentData document;
+    QString error;
+    if (!image_editor::ImageDocumentStore::loadDocument(document_path, &document, &error)) {
+        std::cerr << "The linked text document could not be loaded: "
+                  << error.toStdString() << '\n';
+        return false;
+    }
+    const auto findText = [](const image_editor::ImageDocumentData& data,
+                             const QString& id, image_editor::ImageTextData* text) {
+        for (const auto& layer : data.layers) {
+            for (const auto& operation : layer.operations) {
+                if (operation.kind == image_editor::OperationKind::Text &&
+                    operation.text.id == id) {
+                    if (text != nullptr) *text = operation.text;
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    image_editor::ImageTextData first_text;
+    QString first_text_id;
+    for (const auto& layer : document.layers) {
+        if (layer.operations.isEmpty() || layer.operations.front().kind !=
+            image_editor::OperationKind::Text) continue;
+        first_text_id = layer.operations.front().text.id;
+        first_text = layer.operations.front().text;
+        if (layer.name != QStringLiteral("Text 1")) return false;
+        break;
+    }
+    QImage published(output_path);
+    if (first_text_id.isEmpty() || first_text.content != QStringLiteral("First line\nSecond line") ||
+        first_text.font_pixel_size != 18 || published.isNull() || published == source) {
+        std::cerr << "Saving linked text did not persist and publish its multiline content.\n";
+        return false;
+    }
+
+    QTest::mouseDClick(canvas, Qt::LeftButton, Qt::NoModifier,
+                       widgetPoint(first_text.position.x() + 4,
+                                   first_text.position.y() + 4));
+    QCoreApplication::processEvents();
+    if (!text_editor->isVisible()) {
+        std::cerr << "Double-click did not reopen an existing text operation.\n";
+        return false;
+    }
+    text_size->setValue(22);
+    QTest::keyClick(text_editor, Qt::Key_A, Qt::ControlModifier);
+    QTest::keyClicks(text_editor, QStringLiteral("Cancelled edit"));
+    QTest::keyClick(text_editor, Qt::Key_Escape);
+    QCoreApplication::processEvents();
+    if (text_editor->isVisible() || window.windowTitle().startsWith(QLatin1Char('*'))) {
+        std::cerr << "Esc did not cancel an existing text edit without dirtying the document.\n";
+        return false;
+    }
+    if (!image_editor::ImageDocumentStore::loadDocument(document_path, &document, &error) ||
+        !findText(document, first_text_id, &first_text) || first_text.font_pixel_size != 18 ||
+        first_text.content != QStringLiteral("First line\nSecond line")) return false;
+
+    QTest::mouseDClick(canvas, Qt::LeftButton, Qt::NoModifier,
+                       widgetPoint(first_text.position.x() + 4,
+                                   first_text.position.y() + 4));
+    QCoreApplication::processEvents();
+    if (!text_editor->isVisible()) return false;
+    text_size->setValue(22);
+    QString expected_font_family = first_text.font_family;
+    for (const QString& family : QFontDatabase::families()) {
+        if (family.compare(first_text.font_family, Qt::CaseInsensitive) == 0) continue;
+        text_font->setCurrentFont(QFont(family));
+        expected_font_family = text_font->currentFont().family();
+        break;
+    }
+    text_alignment->setCurrentIndex(1);
+    QTimer::singleShot(0, []() {
+        if (auto* dialog = qobject_cast<QColorDialog*>(QApplication::activeModalWidget())) {
+            dialog->setCurrentColor(QColor(120, 10, 220, 190));
+            dialog->accept();
+        }
+    });
+    text_color->click();
+    QTest::keyClick(text_editor, Qt::Key_A, Qt::ControlModifier);
+    QTest::keyClicks(text_editor, QStringLiteral("Updated caption"));
+    QTest::keyClick(text_editor, Qt::Key_Return);
+    QTest::keyClicks(text_editor, QStringLiteral("second row"));
+    QTest::keyClick(text_editor, Qt::Key_Return, Qt::ControlModifier);
+    save->trigger();
+    if (!image_editor::ImageDocumentStore::loadDocument(document_path, &document, &error) ||
+        !findText(document, first_text_id, &first_text) ||
+        first_text.content != QStringLiteral("Updated caption\nsecond row") ||
+        first_text.font_pixel_size != 22 ||
+        first_text.font_family != expected_font_family ||
+        first_text.alignment != image_editor::ImageTextAlignment::Center ||
+        first_text.color != QColor(120, 10, 220, 190)) {
+        std::cerr << "Confirming an edit did not persist text formatting: family="
+                  << first_text.font_family.toStdString() << "/"
+                  << expected_font_family.toStdString() << ", size="
+                  << first_text.font_pixel_size << ", alignment="
+                  << static_cast<int>(first_text.alignment) << ", color="
+                  << first_text.color.name(QColor::HexArgb).toStdString() << '\n';
+        return false;
+    }
+
+    QTest::mouseDClick(canvas, Qt::LeftButton, Qt::NoModifier,
+                       widgetPoint(first_text.position.x() + 4,
+                                   first_text.position.y() + 4));
+    QCoreApplication::processEvents();
+    if (!text_editor->isVisible()) return false;
+    QTest::keyClick(text_editor, Qt::Key_A, Qt::ControlModifier);
+    QTest::keyClick(text_editor, Qt::Key_Backspace);
+    QTest::keyClick(text_editor, Qt::Key_Return, Qt::ControlModifier);
+    save->trigger();
+    if (!image_editor::ImageDocumentStore::loadDocument(document_path, &document, &error) ||
+        findText(document, first_text_id, nullptr)) {
+        std::cerr << "Confirming empty text did not remove its operation.\n";
+        return false;
+    }
+    undo->trigger();
+    save->trigger();
+    if (!image_editor::ImageDocumentStore::loadDocument(document_path, &document, &error) ||
+        !findText(document, first_text_id, &first_text) ||
+        first_text.content != QStringLiteral("Updated caption\nsecond row")) {
+        std::cerr << "Undo did not restore text removed by confirming an empty edit.\n";
+        return false;
+    }
+
+    const int layers_before_empty_cancel = layerRowCount(layer_tree);
+    const QPoint empty_start = widgetPoint(205, 160);
+    const QPoint empty_end = widgetPoint(280, 160);
+    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, empty_start);
+    QTest::mouseMove(canvas, empty_end);
+    QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, empty_end);
+    QCoreApplication::processEvents();
+    if (!text_editor->isVisible()) return false;
+    QTest::keyClick(text_editor, Qt::Key_Escape);
+    QCoreApplication::processEvents();
+    if (layerRowCount(layer_tree) != layers_before_empty_cancel) {
+        std::cerr << "Cancelling a new empty text frame left a layer behind.\n";
+        return false;
+    }
+
+    const QPoint second_start = widgetPoint(190, 40);
+    const QPoint second_end = widgetPoint(260, 40);
+    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, second_start);
+    QTest::mouseMove(canvas, second_end);
+    QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, second_end);
+    QCoreApplication::processEvents();
+    QTest::keyClicks(text_editor, QStringLiteral("Outside click"));
+    QTimer::singleShot(0, []() {
+        if (auto* message = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            message->accept();
+        }
+    });
+    QTest::mouseClick(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(300, 220));
+    QCoreApplication::processEvents();
+    if (text_editor->isVisible() || layerRowCount(layer_tree) != layers_before_empty_cancel + 1) {
+        std::cerr << "Clicking outside the editor did not commit a new text layer.\n";
+        return false;
+    }
+    save->trigger();
+    if (!image_editor::ImageDocumentStore::loadDocument(document_path, &document, &error)) return false;
+    image_editor::ImageTextData second_text;
+    QString second_text_id;
+    for (const auto& layer : document.layers) {
+        if (layer.name != QStringLiteral("Text 2") || layer.operations.isEmpty()) continue;
+        second_text_id = layer.operations.front().text.id;
+        second_text = layer.operations.front().text;
+    }
+    if (second_text_id.isEmpty() || second_text.content != QStringLiteral("Outside click")) {
+        std::cerr << "The click-outside commit was not saved in the second text layer.\n";
+        return false;
+    }
+
+    selection_tool->click();
+    QTest::mouseClick(canvas, Qt::LeftButton, Qt::NoModifier,
+                      widgetPoint(second_text.position.x() + 3,
+                                  second_text.position.y() + 3));
+    const QRectF second_bounds = image_editor::imageTextBounds(second_text);
+    const QPoint resize_start = widgetPoint(second_bounds.right(), second_bounds.center().y());
+    const QPoint resize_end = widgetPoint(second_bounds.right() + 25, second_bounds.center().y());
+    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, resize_start);
+    QTest::mouseMove(canvas, resize_end);
+    QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, resize_end);
+    save->trigger();
+    if (!image_editor::ImageDocumentStore::loadDocument(document_path, &document, &error) ||
+        !findText(document, second_text_id, &second_text) ||
+        second_text.box_width <= second_bounds.width() || second_text.font_pixel_size != 22) {
+        std::cerr << "The side resize handle did not change only the text box width.\n";
+        return false;
+    }
+    published = QImage(output_path);
+    if (published.isNull() || published == source) {
+        std::cerr << "Linked publishing did not include the committed text image.\n";
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 bool testGeneralCanvasSelection() {
@@ -539,6 +794,10 @@ int main(int argc, char* argv[]) {
     }
     if (!testLayerGroupContextMenu(temporary.path())) {
         std::cerr << "Layer group context menu, selection rules, or actions failed.\n";
+        return 1;
+    }
+    if (!testEditableTextUi(temporary.path())) {
+        std::cerr << "Editable text creation, editing, cancellation, or linked publication failed.\n";
         return 1;
     }
 
@@ -1001,7 +1260,7 @@ int main(int argc, char* argv[]) {
         tool_options_toolbar == nullptr || paint_options_action == nullptr ||
         paint_size_options == nullptr ||
         brush_size_slider == nullptr || brush_size == nullptr || redo_action == nullptr ||
-        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 5 ||
+        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 6 ||
         paint_button->isChecked() || paint_options_action->isVisible() ||
         paint_size_options->isVisible() ||
         !tool_options_toolbar->isVisible() || tool_options_toolbar->height() < 40 ||
@@ -1943,13 +2202,13 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    if (shape_document_json.value("version").toInt() != 8 ||
+    if (shape_document_json.value("version").toInt() != 9 ||
         persisted_shape_layer.isEmpty() ||
         !persisted_shape_layer.value("name").toString().startsWith("Shape ") ||
         persisted_shape_layer.value("operations").toArray().size() != 1 ||
         persisted_shape.value("kind").toString() != "shape" ||
         persisted_shape.value("fill_enabled").toBool()) {
-        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in v8: version="
+        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in v9: version="
                   << shape_document_json.value("version").toInt()
                   << " operations=" << persisted_shape_layer.value("operations").toArray().size()
                   << " layer=" << persisted_shape_layer.value("name").toString().toStdString()

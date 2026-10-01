@@ -9,6 +9,9 @@
 #include <QJsonParseError>
 #include <QSaveFile>
 #include <QSet>
+#include <QFont>
+#include <QTextLayout>
+#include <QTextOption>
 #include <QUuid>
 
 #include <algorithm>
@@ -26,7 +29,8 @@ constexpr int kEraseDocumentVersion = 5;
 constexpr int kShapeDocumentVersion = 6;
 constexpr int kObjectIdentityDocumentVersion = 7;
 constexpr int kLayerGroupsDocumentVersion = 8;
-constexpr int kDocumentVersion = 8;
+constexpr int kEditableTextDocumentVersion = 9;
+constexpr int kDocumentVersion = 9;
 constexpr int kRecoveryVersion = 1;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr auto kRecoveryFormat = "creative-suite-image-recovery";
@@ -58,6 +62,7 @@ QString objectId(const ImageOperation& operation) {
     case OperationKind::PaintStroke: return operation.paint_stroke.id;
     case OperationKind::EraseStroke: return operation.erase_stroke.id;
     case OperationKind::Shape: return operation.shape.id;
+    case OperationKind::Text: return operation.text.id;
     default: return {};
     }
 }
@@ -158,6 +163,21 @@ QJsonObject encodeOperation(const ImageOperation& operation) {
         encoded.insert("stroke_width", shape.stroke_width);
         encoded.insert("fill_enabled", shape.fill_enabled);
         encoded.insert("fill_color", shape.fill_color.name(QColor::HexArgb));
+        break;
+    }
+    case OperationKind::Text: {
+        const auto& text = operation.text;
+        encoded.insert("kind", "text");
+        encoded.insert("id", text.id);
+        encoded.insert("content", text.content);
+        encoded.insert("font_family", text.font_family);
+        encoded.insert("font_pixel_size", text.font_pixel_size);
+        encoded.insert("color", text.color.name(QColor::HexArgb));
+        encoded.insert("alignment", text.alignment == ImageTextAlignment::Center
+            ? "center" : (text.alignment == ImageTextAlignment::Right ? "right" : "left"));
+        encoded.insert("x", text.position.x());
+        encoded.insert("y", text.position.y());
+        encoded.insert("box_width", text.box_width);
         break;
     }
     }
@@ -342,6 +362,37 @@ bool decodeOperations(const QJsonValue& value,
             operation.shape.fill_enabled = object.value("fill_enabled").toBool();
             operation.shape.fill_color = fill_color;
             if (!ImageDocumentStore::isValidShape(operation.shape, *current_size, error)) {
+                return false;
+            }
+        } else if (kind == "text" && version >= kEditableTextDocumentVersion && fixed_canvas) {
+            const QString alignment = object.value("alignment").toString();
+            const QString color_text = object.value("color").toString();
+            const QColor color(color_text);
+            int font_pixel_size = 0;
+            const auto x = object.value("x");
+            const auto y = object.value("y");
+            const auto box_width = object.value("box_width");
+            if (!object.value("content").isString() ||
+                !object.value("font_family").isString() ||
+                !isInteger(object.value("font_pixel_size"), &font_pixel_size) ||
+                !isArgbHexColor(color_text) || !color.isValid() ||
+                !x.isDouble() || !y.isDouble() || !box_width.isDouble() ||
+                (alignment != "left" && alignment != "center" && alignment != "right")) {
+                assignError(error, QStringLiteral("The document contains invalid text data."));
+                return false;
+            }
+            operation.kind = OperationKind::Text;
+            operation.text.id = object.value("id").toString();
+            operation.text.content = object.value("content").toString();
+            operation.text.font_family = object.value("font_family").toString();
+            operation.text.font_pixel_size = font_pixel_size;
+            operation.text.color = color;
+            operation.text.alignment = alignment == "center" ? ImageTextAlignment::Center
+                : (alignment == "right" ? ImageTextAlignment::Right
+                                         : ImageTextAlignment::Left);
+            operation.text.position = QPointF(x.toDouble(), y.toDouble());
+            operation.text.box_width = box_width.toDouble();
+            if (!ImageDocumentStore::isValidText(operation.text, *current_size, error)) {
                 return false;
             }
         } else {
@@ -950,6 +1001,35 @@ bool ImageDocumentStore::isValidShape(const ImageShapeData& shape,
     return true;
 }
 
+bool ImageDocumentStore::isValidText(const ImageTextData& text,
+                                     const QSize& canvas_size,
+                                     QString* error) {
+    const QUuid uuid(text.id);
+    const bool valid_id = !uuid.isNull() &&
+        uuid.toString(QUuid::WithoutBraces).compare(text.id, Qt::CaseInsensitive) == 0;
+    const auto valid_alignment = text.alignment == ImageTextAlignment::Left ||
+        text.alignment == ImageTextAlignment::Center ||
+        text.alignment == ImageTextAlignment::Right;
+    if (!valid_id || text.content.isEmpty() || text.content.size() > kMaximumTextLength ||
+        text.content.contains(QChar::Null) || text.font_family.trimmed().isEmpty() ||
+        text.font_family.size() > kMaximumFontFamilyLength ||
+        text.font_pixel_size < 1 || text.font_pixel_size > kMaximumTextFontPixelSize ||
+        !text.color.isValid() || !valid_alignment ||
+        !std::isfinite(text.position.x()) || !std::isfinite(text.position.y()) ||
+        !std::isfinite(text.box_width) || text.position.x() < 0.0 || text.position.y() < 0.0 ||
+        text.position.x() >= canvas_size.width() || text.position.y() >= canvas_size.height() ||
+        text.box_width < 1.0 || text.box_width > canvas_size.width() - text.position.x()) {
+        assignError(error, QStringLiteral("The text content, layout, or style is invalid."));
+        return false;
+    }
+    const QRectF bounds = imageTextBounds(text);
+    if (bounds.height() <= 0.0 || bounds.bottom() > canvas_size.height() + 0.01) {
+        assignError(error, QStringLiteral("The text layout extends beyond the canvas."));
+        return false;
+    }
+    return true;
+}
+
 QStringList ImageDocumentStore::supportedImageExtensions() {
     return {QStringLiteral("*.png"), QStringLiteral("*.PNG"),
             QStringLiteral("*.jpg"), QStringLiteral("*.JPG"),
@@ -958,6 +1038,34 @@ QStringList ImageDocumentStore::supportedImageExtensions() {
             QStringLiteral("*.webp"), QStringLiteral("*.WEBP"),
             QStringLiteral("*.tif"), QStringLiteral("*.TIF"),
             QStringLiteral("*.tiff"), QStringLiteral("*.TIFF")};
+}
+
+} // namespace image_editor
+
+namespace image_editor {
+
+QRectF imageTextBounds(const ImageTextData& text) {
+    QFont font(text.font_family);
+    font.setPixelSize(std::clamp(text.font_pixel_size, 1,
+        ImageDocumentStore::kMaximumTextFontPixelSize));
+    QTextOption option;
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    option.setAlignment(text.alignment == ImageTextAlignment::Center
+        ? Qt::AlignHCenter : (text.alignment == ImageTextAlignment::Right
+            ? Qt::AlignRight : Qt::AlignLeft));
+    QTextLayout layout(text.content, font);
+    layout.setTextOption(option);
+    layout.beginLayout();
+    qreal height = 0.0;
+    while (true) {
+        QTextLine line = layout.createLine();
+        if (!line.isValid()) break;
+        line.setLineWidth(std::max<qreal>(1.0, text.box_width));
+        line.setPosition(QPointF(0.0, height));
+        height += line.height();
+    }
+    layout.endLayout();
+    return QRectF(text.position, QSizeF(text.box_width, height));
 }
 
 } // namespace image_editor

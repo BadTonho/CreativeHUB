@@ -3,7 +3,7 @@
 #include "image_editor_logger.h"
 #include "recovery_store.h"
 
-#include <QCoreApplication>
+#include <QGuiApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -190,9 +190,9 @@ void testCanvasCreationPersistenceAndRecovery(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The saved canvas document could not be read."));
     const auto document_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(document_json.value("version").toInt() == 8 &&
+    require(document_json.value("version").toInt() == 9 &&
                 document_json.value("base").toObject().value("kind").toString() == "canvas",
-            QStringLiteral("Canvas save did not use the version 8 grouped-layer representation."));
+            QStringLiteral("Canvas save did not use the version 9 grouped-layer representation."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -275,8 +275,8 @@ void testLegacyVersionOneDocument(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 1 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 8,
-            QStringLiteral("Saving a version 1 document did not upgrade it to version 8."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 9,
+            QStringLiteral("Saving a version 1 document did not upgrade it to version 9."));
 }
 
 void testVersionTwoDocumentCompatibility(const QString& root) {
@@ -309,8 +309,8 @@ void testVersionTwoDocumentCompatibility(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 2 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 8,
-            QStringLiteral("Saving a version 2 document did not upgrade it to version 8."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 9,
+            QStringLiteral("Saving a version 2 document did not upgrade it to version 9."));
 
     base.remove("path");
     base.insert("kind", "canvas");
@@ -382,8 +382,8 @@ void testVersionThreeMigrationToBackground(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The migrated version 3 document could not be reopened."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 8,
-            QStringLiteral("Saving a version 3 document did not upgrade it to version 8."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 9,
+            QStringLiteral("Saving a version 3 document did not upgrade it to version 9."));
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(path, &error) && reopened.renderedImage() == original_render,
             QStringLiteral("Upgrading a version 3 document changed its visible pixels."));
@@ -472,10 +472,10 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     const int serialized_maximum_diameter = maximum_brush_json.value("layers").toArray()
         .at(1).toObject().value("operations").toArray()
         .at(0).toObject().value("diameter").toInt();
-    require(maximum_brush_json.value("version").toInt() == 8 &&
+    require(maximum_brush_json.value("version").toInt() == 9 &&
                 serialized_maximum_diameter ==
                     image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter,
-            QStringLiteral("The 1024 px paint diameter was not saved in version 8."));
+            QStringLiteral("The 1024 px paint diameter was not saved in version 9."));
     image_editor::ImageDocumentSession reopened_maximum_brush;
     require(reopened_maximum_brush.openDocument(maximum_brush_path, &error), error);
     require(reopened_maximum_brush.data() == maximum_brush_session.data() &&
@@ -495,11 +495,11 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The painted document could not be read."));
     const QJsonObject saved_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(saved_json.value("version").toInt() == 8 &&
+    require(saved_json.value("version").toInt() == 9 &&
                 saved_json.value("layers").toArray().at(1).toObject()
                     .value("operations").toArray().at(0).toObject()
                     .value("kind").toString() == "paint_stroke",
-            QStringLiteral("Paint was not serialized in the version 8 layer operations."));
+            QStringLiteral("Paint was not serialized in the version 9 layer operations."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -585,6 +585,12 @@ void testEraseStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     require(v4_reopened.openDocument(v4_path, &error) &&
                 v4_reopened.renderedImage() == painted,
             QStringLiteral("A version 4 layered document did not remain readable."));
+    require(v4_reopened.saveDocument(v4_path, &error), error);
+    QFile migrated_v4_file(v4_path);
+    require(migrated_v4_file.open(QIODevice::ReadOnly) &&
+                QJsonDocument::fromJson(migrated_v4_file.readAll()).object()
+                        .value("version").toInt() == 9,
+            QStringLiteral("Saving a version 4 document did not migrate it to v9."));
 
     const QVector<QPointF> erase_points{QPointF(8, 6)};
     const auto before_preview = session.data();
@@ -640,10 +646,10 @@ void testEraseStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     const QJsonObject maximum_json = QJsonDocument::fromJson(maximum_file.readAll()).object();
     const auto operations = maximum_json.value("layers").toArray().at(1).toObject()
         .value("operations").toArray();
-    require(maximum_json.value("version").toInt() == 8 && operations.size() == 2 &&
+    require(maximum_json.value("version").toInt() == 9 && operations.size() == 2 &&
                 operations.at(1).toObject().value("kind").toString() == "erase_stroke" &&
                 operations.at(1).toObject().value("diameter").toInt() == 1024,
-            QStringLiteral("A maximum-size erase stroke was not serialized as version 8."));
+            QStringLiteral("A maximum-size erase stroke was not serialized as version 9."));
     QJsonObject version_four_with_erase = maximum_json;
     version_four_with_erase.insert("version", 4);
     const QString invalid_v4_path = root + QStringLiteral("/version-four-erase.cimg");
@@ -852,7 +858,7 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     require(session.saveDocument(document_path, &error), error);
     QFile document_file(document_path);
     require(document_file.open(QIODevice::ReadOnly),
-            QStringLiteral("The version 8 shape document could not be read."));
+            QStringLiteral("The version 9 shape document could not be read."));
     QJsonObject document_json = QJsonDocument::fromJson(document_file.readAll()).object();
     document_file.close();
     const auto saved_layers = document_json.value("layers").toArray();
@@ -860,17 +866,17 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
         saved_layers.cbegin(), saved_layers.cend(), [&rectangle_layer](const QJsonValue& value) {
             return value.toObject().value("id").toString() == rectangle_layer;
         });
-    require(document_json.value("version").toInt() == 8 &&
+    require(document_json.value("version").toInt() == 9 &&
                 saved_rectangle_layer != saved_layers.cend() &&
                 (*saved_rectangle_layer).toObject().value("name").toString() == "Shape 1" &&
                 (*saved_rectangle_layer).toObject().value("operations").toArray().size() == 1 &&
                 (*saved_rectangle_layer).toObject().value("operations").toArray().at(0)
                     .toObject().value("kind").toString() == "shape",
-            QStringLiteral("Shapes were not stored in individual v8 layer operation sequences."));
+            QStringLiteral("Shapes were not stored in individual v9 layer operation sequences."));
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error) &&
                 reopened.data() == session.data() && reopened.renderedImage() == session.renderedImage(),
-            QStringLiteral("Editable shapes did not round-trip through the v8 document."));
+            QStringLiteral("Editable shapes did not round-trip through the v9 document."));
 
     QJsonObject version_five = document_json;
     version_five.insert("version", 5);
@@ -891,6 +897,12 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     require(v5_reopened.openDocument(v5_path, &error) &&
                 v5_reopened.visibleShapes().isEmpty(),
             QStringLiteral("A v5 document did not load with its pre-shape appearance."));
+    require(v5_reopened.saveDocument(v5_path, &error), error);
+    QFile migrated_v5_file(v5_path);
+    require(migrated_v5_file.open(QIODevice::ReadOnly) &&
+                QJsonDocument::fromJson(migrated_v5_file.readAll()).object()
+                        .value("version").toInt() == 9,
+            QStringLiteral("Saving a version 5 document did not migrate it to v9."));
 
     image_editor::ImageDocumentSession background_shape_session;
     require(background_shape_session.createCanvas(
@@ -966,13 +978,13 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     image_editor::ImageDocumentSession recovered;
     require(recovered.restoreRecovery(snapshot_path, &error) &&
                 recovered.data() == session.data() && recovered.renderedImage() == session.renderedImage(),
-            QStringLiteral("Recovery did not preserve version 8 shape operations."));
+            QStringLiteral("Recovery did not preserve version 9 shape operations."));
     QFile recovery_file(snapshot_path);
     require(recovery_file.open(QIODevice::ReadOnly),
             QStringLiteral("The shape recovery wrapper could not be read."));
     const QJsonObject recovery_json = QJsonDocument::fromJson(recovery_file.readAll()).object();
     require(recovery_json.value("version").toInt() == 1 &&
-                recovery_json.value("document").toObject().value("version").toInt() == 8,
+                recovery_json.value("document").toObject().value("version").toInt() == 9,
             QStringLiteral("Shape recovery changed the recovery wrapper version."));
 
     image_editor::ImageDocumentSession transformed;
@@ -1037,6 +1049,280 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
             QStringLiteral("A shape after an eraser was not preserved in operation order."));
     require(!session.selectedLayerId().isEmpty() && lower_layer != upper_layer,
             QStringLiteral("The shape test layer setup became invalid."));
+}
+
+void testEditableTextRenderingPersistenceAndHistory(const QString& root) {
+    image_editor::ImageDocumentSession session;
+    QString error;
+    require(session.createCanvas(QSize(180, 400), QColor(0, 0, 0, 0), &error), error);
+
+    const image_editor::ImageTextData default_text;
+    require(default_text.font_family == QStringLiteral("Sans Serif") &&
+                default_text.font_pixel_size == 48 && default_text.color == QColor(Qt::black) &&
+                default_text.alignment == image_editor::ImageTextAlignment::Left,
+            QStringLiteral("The default text style does not match the approved defaults."));
+
+    image_editor::ImageTextData text;
+    text.content = QStringLiteral("Editable text wraps automatically");
+    text.font_family = QStringLiteral("Sans Serif");
+    text.font_pixel_size = 18;
+    text.color = QColor(12, 24, 220, 255);
+    text.alignment = image_editor::ImageTextAlignment::Left;
+    text.position = QPointF(8, 6);
+    text.box_width = 60;
+    const QString text_id = session.addText(text, &error);
+    require(!text_id.isEmpty(), error);
+    text.id = text_id;
+    QString text_layer;
+    image_editor::ImageTextData stored;
+    require(session.findText(text_id, &stored, &text_layer) && stored == text &&
+                session.data().layers.size() == 3 &&
+                session.data().layers.back().name == QStringLiteral("Text 1") &&
+                session.data().layers.back().operations.size() == 1 &&
+                session.selectedLayerId() == text_layer,
+            QStringLiteral("New text did not persist in its own selected Text 1 layer."));
+    require(session.undo() && session.data().layers.size() == 2 &&
+                session.visibleObjects().isEmpty() && session.redo() &&
+                session.findText(text_id, &stored, &text_layer) && stored == text &&
+                session.selectedLayerId() == text_layer,
+            QStringLiteral("Creating a text layer was not reversible as one edit."));
+
+    const QRectF wrapped_bounds = image_editor::imageTextBounds(text);
+    auto wide_text = text;
+    wide_text.box_width = 160;
+    const QRectF wide_bounds = image_editor::imageTextBounds(wide_text);
+    require(wrapped_bounds.height() > wide_bounds.height() &&
+                wrapped_bounds.height() >= text.font_pixel_size * 2,
+            QStringLiteral("Text wrapping did not grow its layout height."));
+    const auto inkBounds = [](const QImage& image) {
+        QRect bounds;
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                if (image.pixelColor(x, y).alpha() == 0) continue;
+                bounds = bounds.isNull() ? QRect(x, y, 1, 1) : bounds.united(QRect(x, y, 1, 1));
+            }
+        }
+        return bounds;
+    };
+    const auto renderAlignment = [&](image_editor::ImageTextAlignment alignment) {
+        image_editor::ImageDocumentSession aligned;
+        QString aligned_error;
+        if (!aligned.createCanvas(QSize(150, 60), Qt::transparent, &aligned_error)) return QImage{};
+        image_editor::ImageTextData sample;
+        sample.content = QStringLiteral("I");
+        sample.font_pixel_size = 20;
+        sample.color = Qt::black;
+        sample.position = QPointF(5, 5);
+        sample.box_width = 130;
+        sample.alignment = alignment;
+        if (aligned.addText(sample, &aligned_error).isEmpty()) return QImage{};
+        return aligned.renderedImage();
+    };
+    const QRect left_ink = inkBounds(renderAlignment(image_editor::ImageTextAlignment::Left));
+    const QRect center_ink = inkBounds(renderAlignment(image_editor::ImageTextAlignment::Center));
+    const QRect right_ink = inkBounds(renderAlignment(image_editor::ImageTextAlignment::Right));
+    require(!left_ink.isEmpty() && !center_ink.isEmpty() && !right_ink.isEmpty() &&
+                left_ink.center().x() < center_ink.center().x() &&
+                center_ink.center().x() < right_ink.center().x(),
+            QStringLiteral("Left, center, and right text alignment did not affect rendering."));
+
+    const QImage rendered = session.renderedImage();
+    require(!rendered.isNull() && inkBounds(rendered).width() > 0 &&
+                session.visibleObjects().size() == 1 &&
+                session.visibleObjects().front().operation.kind ==
+                    image_editor::OperationKind::Text &&
+                !session.renderedLayerThumbnails(QSize(64, 64)).value(text_layer).isNull(),
+            QStringLiteral("Text was missing from the composite, selection model, or layer thumbnail."));
+
+    require(session.updateText(stored, &error) == false && error.isEmpty(),
+            QStringLiteral("An unchanged text operation unexpectedly created an edit."));
+    stored.content += QStringLiteral("\nSecond line");
+    stored.font_family = QStringLiteral("CreativeSuiteMissingFontForFallbackTest");
+    stored.color = QColor(200, 20, 30, 255);
+    stored.alignment = image_editor::ImageTextAlignment::Center;
+    require(session.updateText(stored, &error) && session.findText(text_id, &text) &&
+                text == stored && !inkBounds(session.renderedImage()).isEmpty() &&
+                session.undo() && session.findText(text_id, &text) &&
+                text.content == QStringLiteral("Editable text wraps automatically") &&
+                session.redo() && session.findText(text_id, &text) && text == stored,
+            QStringLiteral("Text content, fallback font, and formatting did not round-trip through Undo/Redo."));
+
+    auto placements = session.visibleObjects();
+    require(placements.size() == 1, QStringLiteral("The editable text placement disappeared."));
+    auto resized = placements.front();
+    const int original_font_size = resized.operation.text.font_pixel_size;
+    resized.operation.text.box_width = 80;
+    resized.operation.text.position.setX(12);
+    require(session.updateObjectsRendered({resized}, &error) &&
+                session.visibleObjects().front().operation.text.box_width == 80 &&
+                session.visibleObjects().front().operation.text.position.x() == 12 &&
+                session.visibleObjects().front().operation.text.font_pixel_size == original_font_size &&
+                session.undo() && session.visibleObjects().front().operation.text.box_width == 60 &&
+                session.redo() && session.visibleObjects().front().operation.text.box_width == 80,
+            QStringLiteral("Resizing text width changed its font or failed Undo/Redo."));
+
+    const QString export_path = root + QStringLiteral("/editable-text.png");
+    require(session.exportImage(export_path, &error), error);
+    require(!inkBounds(QImage(export_path)).isEmpty(),
+            QStringLiteral("Flattened export omitted editable text."));
+    image_editor::ImageExportOptions selected_options;
+    selected_options.scope = image_editor::ImageExportScope::SelectedLayer;
+    require(session.selectedLayerId() == text_layer || session.selectLayer(text_layer),
+            QStringLiteral("Could not select the text layer."));
+    const QString quick_export_path = root + QStringLiteral("/selected-text.png");
+    require(session.exportImage(quick_export_path, selected_options, &error), error);
+    require(!inkBounds(QImage(quick_export_path)).isEmpty(),
+            QStringLiteral("Selected-layer Quick Export omitted editable text."));
+
+    const QString document_path = root + QStringLiteral("/editable-text.cimg");
+    require(session.saveDocument(document_path, &error), error);
+    QFile document_file(document_path);
+    require(document_file.open(QIODevice::ReadOnly),
+            QStringLiteral("Could not read the v9 text document."));
+    QJsonObject document_json = QJsonDocument::fromJson(document_file.readAll()).object();
+    document_file.close();
+    const auto saved_text_layers = document_json.value("layers").toArray();
+    const auto text_layer_json = std::find_if(
+        saved_text_layers.cbegin(), saved_text_layers.cend(), [&text_layer](const QJsonValue& value) {
+            return value.toObject().value("id").toString() == text_layer;
+        });
+    require(document_json.value("version").toInt() == 9 &&
+                text_layer_json != saved_text_layers.cend() &&
+                text_layer_json->toObject().value("operations").toArray().at(0)
+                    .toObject().value("kind").toString() == "text",
+            QStringLiteral("Editable text was not serialized as a version 9 operation."));
+
+    QJsonObject invalid_text_document = document_json;
+    auto invalid_text_layers = invalid_text_document.value("layers").toArray();
+    bool corrupted_text = false;
+    for (qsizetype index = 0; index < invalid_text_layers.size(); ++index) {
+        auto layer = invalid_text_layers.at(index).toObject();
+        if (layer.value("id").toString() != text_layer) continue;
+        auto operations = layer.value("operations").toArray();
+        auto text_operation = operations.at(0).toObject();
+        text_operation.insert("font_pixel_size",
+                              image_editor::ImageDocumentStore::kMaximumTextFontPixelSize + 1);
+        operations.replace(0, text_operation);
+        layer.insert("operations", operations);
+        invalid_text_layers.replace(index, layer);
+        corrupted_text = true;
+        break;
+    }
+    require(corrupted_text, QStringLiteral("Could not create an invalid text document fixture."));
+    invalid_text_document.insert("layers", invalid_text_layers);
+    const QString invalid_text_path = root + QStringLiteral("/invalid-editable-text.cimg");
+    QFile invalid_text_file(invalid_text_path);
+    require(invalid_text_file.open(QIODevice::WriteOnly),
+            QStringLiteral("Could not write an invalid text document fixture."));
+    invalid_text_file.write(QJsonDocument(invalid_text_document).toJson());
+    invalid_text_file.close();
+    image_editor::ImageDocumentData rejected_text_document;
+    require(!image_editor::ImageDocumentStore::loadDocument(
+                invalid_text_path, &rejected_text_document, &error) && !error.isEmpty(),
+            QStringLiteral("A v9 document with an out-of-range text size was accepted."));
+
+    image_editor::ImageDocumentSession reopened;
+    require(reopened.openDocument(document_path, &error) && reopened.data() == session.data() &&
+                reopened.renderedImage() == session.renderedImage(),
+            QStringLiteral("Text formatting or rendering changed after reopening v9."));
+
+    image_editor::RecoveryStore recovery(root + QStringLiteral("/text-recovery"));
+    require(session.setLayerOpacity(text_layer, 85),
+            QStringLiteral("Could not create pending changes before the text recovery snapshot."));
+    require(recovery.save(session, &error), error);
+    const QString recovery_path = recovery.pathFor(session);
+    image_editor::ImageDocumentSession restored;
+    require(restored.restoreRecovery(recovery_path, &error) && restored.data() == session.data() &&
+                restored.renderedImage() == session.renderedImage(),
+            QStringLiteral("Recovery did not accept and restore an inner v9 text document."));
+    QFile recovery_file(recovery_path);
+    require(recovery_file.open(QIODevice::ReadOnly),
+            QStringLiteral("Could not read the v9 recovery wrapper."));
+    const QJsonObject recovery_json = QJsonDocument::fromJson(recovery_file.readAll()).object();
+    require(recovery_json.value("version").toInt() == 1 &&
+                recovery_json.value("document").toObject().value("version").toInt() == 9,
+            QStringLiteral("Text recovery changed the wrapper version or omitted the v9 payload."));
+
+    image_editor::ImageDocumentSession legacy;
+    require(legacy.createCanvas(QSize(24, 24), Qt::transparent, &error), error);
+    const QString legacy_path = root + QStringLiteral("/legacy-v8.cimg");
+    require(legacy.saveDocument(legacy_path, &error), error);
+    QFile legacy_file(legacy_path);
+    require(legacy_file.open(QIODevice::ReadOnly),
+            QStringLiteral("Could not read a no-text compatibility document."));
+    QJsonObject legacy_json = QJsonDocument::fromJson(legacy_file.readAll()).object();
+    legacy_file.close();
+    legacy_json.insert("version", 8);
+    require(legacy_file.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            QStringLiteral("Could not write the v8 compatibility fixture."));
+    legacy_file.write(QJsonDocument(legacy_json).toJson());
+    legacy_file.close();
+    image_editor::ImageDocumentSession migrated;
+    require(migrated.openDocument(legacy_path, &error) && migrated.saveDocument({}, &error), error);
+    require(legacy_file.open(QIODevice::ReadOnly) &&
+                QJsonDocument::fromJson(legacy_file.readAll()).object().value("version").toInt() == 9,
+            QStringLiteral("Saving a version 8 document did not migrate its envelope to v9."));
+
+    image_editor::ImageDocumentSession grouped_text_session;
+    require(grouped_text_session.createCanvas(QSize(180, 90), Qt::transparent, &error), error);
+    image_editor::ImageTextData grouped_text;
+    grouped_text.content = QStringLiteral("Grouped text");
+    grouped_text.font_pixel_size = 20;
+    grouped_text.position = QPointF(8, 8);
+    grouped_text.box_width = 160;
+    const QString grouped_text_id = grouped_text_session.addText(grouped_text, &error);
+    QString grouped_text_layer;
+    require(!grouped_text_id.isEmpty() && grouped_text_session.findText(
+                grouped_text_id, nullptr, &grouped_text_layer), error);
+    const QString sibling_layer = grouped_text_session.addLayer();
+    const QString group_id = grouped_text_session.groupLayers(
+        {grouped_text_layer, sibling_layer}, &error);
+    require(!group_id.isEmpty(), error);
+    const QImage full_opacity_group = grouped_text_session.renderedImage();
+    const QRect group_ink = inkBounds(full_opacity_group);
+    require(!group_ink.isEmpty() && grouped_text_session.setGroupOpacity(group_id, 40),
+            QStringLiteral("Text could not be rendered and grouped under opacity control."));
+    QPoint group_sample;
+    bool found_group_sample = false;
+    for (int y = 0; y < full_opacity_group.height() && !found_group_sample; ++y) {
+        for (int x = 0; x < full_opacity_group.width(); ++x) {
+            if (full_opacity_group.pixelColor(x, y).alpha() == 0) continue;
+            group_sample = QPoint(x, y);
+            found_group_sample = true;
+            break;
+        }
+    }
+    require(found_group_sample,
+            QStringLiteral("Could not find a visible sample pixel in the text group."));
+    require(grouped_text_session.renderedImage().pixelColor(group_sample).alpha() <
+                full_opacity_group.pixelColor(group_sample).alpha() &&
+                grouped_text_session.renderedLayerThumbnails(QSize(64, 64)).contains(group_id),
+            QStringLiteral("Group opacity or thumbnails omitted the text layer."));
+    require(grouped_text_session.selectedGroupId() == group_id ||
+                grouped_text_session.selectGroup(group_id),
+            QStringLiteral("Could not select the text-containing group."));
+    const QString grouped_export_path = root + QStringLiteral("/grouped-text.png");
+    image_editor::ImageExportOptions group_options;
+    group_options.scope = image_editor::ImageExportScope::SelectedGroup;
+    require(grouped_text_session.exportImage(grouped_export_path, group_options, &error), error);
+    require(!inkBounds(QImage(grouped_export_path)).isEmpty(),
+            QStringLiteral("Selected-group Quick Export omitted editable text."));
+
+    image_editor::ImageTextData invalid = stored;
+    invalid.font_pixel_size = image_editor::ImageDocumentStore::kMaximumTextFontPixelSize + 1;
+    require(!image_editor::ImageDocumentStore::isValidText(invalid, QSize(180, 400), &error) &&
+                !error.isEmpty(),
+            QStringLiteral("An out-of-range text font size was accepted."));
+    invalid = stored;
+    invalid.content = QString(image_editor::ImageDocumentStore::kMaximumTextLength + 1, QLatin1Char('x'));
+    require(!image_editor::ImageDocumentStore::isValidText(invalid, QSize(180, 400), &error),
+            QStringLiteral("Text larger than the safe content limit was accepted."));
+
+    placements = session.visibleObjects();
+    require(session.deleteObjects({text_id}) && session.visibleObjects().isEmpty() &&
+                session.undo() && session.visibleObjects().size() == 1 &&
+                session.redo() && session.visibleObjects().isEmpty(),
+            QStringLiteral("Deleting text was not a reversible object edit."));
 }
 
 void testCropNoOpAndInvalidOperations(const QString& root) {
@@ -1189,8 +1475,8 @@ void testGeneralObjectOperations(const QString& root) {
     require(v8_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the v8 object document."));
     const QJsonObject v8 = QJsonDocument::fromJson(v8_file.readAll()).object();
     v8_file.close();
-    require(v8.value("version").toInt() == 8,
-            QStringLiteral("The document did not migrate to cimg v8."));
+    require(v8.value("version").toInt() == 9,
+            QStringLiteral("The document did not migrate to cimg v9."));
     QJsonObject v7 = v8;
     v7.insert("version", 7);
     const QString v7_path = root + QStringLiteral("/general-objects-v7.cimg");
@@ -1201,6 +1487,12 @@ void testGeneralObjectOperations(const QString& root) {
     image_editor::ImageDocumentSession migrated_v7;
     require(migrated_v7.openDocument(v7_path, &error) &&
                 migrated_v7.renderedImage() == session.renderedImage(), error);
+    require(migrated_v7.saveDocument(v7_path, &error), error);
+    QFile migrated_v7_file(v7_path);
+    require(migrated_v7_file.open(QIODevice::ReadOnly) &&
+                QJsonDocument::fromJson(migrated_v7_file.readAll()).object()
+                        .value("version").toInt() == 9,
+            QStringLiteral("Saving a version 7 document did not migrate it to v9."));
     const auto layer_array = v7.value("layers").toArray();
     const auto operation_array = layer_array.at(1).toObject().value("operations").toArray();
     bool paint_id_persisted = false;
@@ -1254,8 +1546,8 @@ void testGeneralObjectOperations(const QString& root) {
     require(migrated.saveDocument(v6_path, &error), error);
     QFile resaved_v6(v6_path);
     require(resaved_v6.open(QIODevice::ReadOnly) &&
-                QJsonDocument::fromJson(resaved_v6.readAll()).object().value("version").toInt() == 8,
-            QStringLiteral("Saving a v6 document did not upgrade it to v8."));
+                QJsonDocument::fromJson(resaved_v6.readAll()).object().value("version").toInt() == 9,
+            QStringLiteral("Saving a v6 document did not upgrade it to v9."));
 }
 
 void testLayerManagementTransformsAndOpacity(const QString& root) {
@@ -1770,9 +2062,9 @@ void testLayerGroups(const QString& root) {
     QFile v8_file(v8_path);
     require(v8_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the v8 group document."));
     const QJsonObject v8_json = QJsonDocument::fromJson(v8_file.readAll()).object();
-    require(v8_json.value("version").toInt() == 8 &&
+    require(v8_json.value("version").toInt() == 9 &&
                 v8_json.value("layers").toArray().size() == structure.data().root_stack.size(),
-            QStringLiteral("Group save did not write the v8 ordered stack."));
+            QStringLiteral("Group save did not write the v9 ordered stack."));
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(v8_path, &error) &&
                 reopened.data() == structure.data() &&
@@ -1787,8 +2079,8 @@ void testLayerGroups(const QString& root) {
             QStringLiteral("The group recovery snapshot could not be read."));
     const QJsonObject recovery_json = QJsonDocument::fromJson(recovery_file.readAll()).object();
     require(recovery_json.value("version").toInt() == 1 &&
-                recovery_json.value("document").toObject().value("version").toInt() == 8,
-            QStringLiteral("Group recovery changed its wrapper version or lost the v8 payload."));
+                recovery_json.value("document").toObject().value("version").toInt() == 9,
+            QStringLiteral("Group recovery changed its wrapper version or lost the v9 payload."));
 
     image_editor::ImageDocumentData invalid = structure.data();
     invalid.groups.front().layer_ids.append(invalid.layers.front().id);
@@ -2020,7 +2312,7 @@ void testInvalidDocument(const QString& root) {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    QCoreApplication application(argc, argv);
+    QGuiApplication application(argc, argv);
     QTemporaryDir temporary;
     if (!temporary.isValid()) {
         std::cerr << "Could not create a temporary test directory.\n";
@@ -2036,6 +2328,7 @@ int main(int argc, char* argv[]) {
         testPaintStrokesPersistenceUndoRedoAndValidation(root);
         testEraseStrokesPersistenceUndoRedoAndValidation(root);
         testEditableShapesRenderingPersistenceAndHistory(root);
+        testEditableTextRenderingPersistenceAndHistory(root);
         testCropNoOpAndInvalidOperations(root);
         testGeneralObjectOperations(root);
         testLayerManagementTransformsAndOpacity(root);

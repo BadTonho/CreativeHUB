@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QPointF>
 #include <QRect>
+#include <QRectF>
 #include <QString>
 #include <QStringList>
 #include <QSize>
@@ -23,6 +24,7 @@ enum class OperationKind {
     PaintStroke,
     EraseStroke,
     Shape,
+    Text,
 };
 
 enum class ImageShapeKind {
@@ -62,6 +64,25 @@ struct ImageShapeData {
     bool operator==(const ImageShapeData&) const = default;
 };
 
+enum class ImageTextAlignment {
+    Left,
+    Center,
+    Right,
+};
+
+struct ImageTextData {
+    QString id;
+    QString content;
+    QString font_family = QStringLiteral("Sans Serif");
+    int font_pixel_size = 48;
+    QColor color = Qt::black;
+    ImageTextAlignment alignment = ImageTextAlignment::Left;
+    QPointF position;
+    qreal box_width = 240.0;
+
+    bool operator==(const ImageTextData&) const = default;
+};
+
 struct ImageShapePlacement {
     ImageShapeData shape;
     QString layer_id;
@@ -75,6 +96,7 @@ struct ImageOperation {
     ImagePaintStroke paint_stroke;
     ImageEraseStroke erase_stroke;
     ImageShapeData shape;
+    ImageTextData text;
 
     bool operator==(const ImageOperation&) const = default;
 };
@@ -147,6 +169,9 @@ public:
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
     static constexpr int kMaximumPaintBrushDiameter = 1024;
     static constexpr int kMaximumShapeStrokeWidth = 1024;
+    static constexpr int kMaximumTextFontPixelSize = 1024;
+    static constexpr qsizetype kMaximumTextLength = 16'384;
+    static constexpr qsizetype kMaximumFontFamilyLength = 256;
     static constexpr qsizetype kMaximumLayers = 512;
     static constexpr qsizetype kMaximumLayerNameLength = 128;
     static constexpr qsizetype kMaximumOperations = 100'000;
@@ -155,6 +180,9 @@ public:
     [[nodiscard]] static bool isValidShape(const ImageShapeData& shape,
                                            const QSize& canvas_size,
                                            QString* error = nullptr);
+    [[nodiscard]] static bool isValidText(const ImageTextData& text,
+                                          const QSize& canvas_size,
+                                          QString* error = nullptr);
 
     [[nodiscard]] static bool saveDocument(
         const QString& document_path,
@@ -178,5 +206,7 @@ public:
 
     [[nodiscard]] static QStringList supportedImageExtensions();
 };
+
+[[nodiscard]] QRectF imageTextBounds(const ImageTextData& text);
 
 } // namespace image_editor

@@ -13,6 +13,7 @@
 #include <QButtonGroup>
 #include <QCryptographicHash>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QColorDialog>
 #include <QCoreApplication>
 #include <QCloseEvent>
@@ -22,6 +23,7 @@
 #include <QFileDialog>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontComboBox>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -54,6 +56,16 @@
 
 namespace image_editor {
 namespace {
+
+QString imageObjectId(const ImageOperation& operation) {
+    switch (operation.kind) {
+    case OperationKind::PaintStroke: return operation.paint_stroke.id;
+    case OperationKind::EraseStroke: return operation.erase_stroke.id;
+    case OperationKind::Shape: return operation.shape.id;
+    case OperationKind::Text: return operation.text.id;
+    default: return {};
+    }
+}
 
 QString imageFilter() {
     return QStringLiteral("Images (%1)").arg(
@@ -198,6 +210,14 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             });
     connect(canvas_, &ImageCanvas::shapeCreated, this,
             [this](const ImageShapeData& shape) { handleShapeCreated(shape); });
+    connect(canvas_, &ImageCanvas::textCommitted, this,
+            [this](const ImageTextData& text, bool existing) {
+                handleTextCommitted(text, existing);
+            });
+    connect(canvas_, &ImageCanvas::textEditingStarted, this,
+            [this](const ImageTextData& text, bool existing) {
+                handleTextEditingStarted(text, existing);
+            });
     connect(canvas_, &ImageCanvas::objectsSelected, this,
             [this](const QStringList& object_ids, const QString& layer_id) {
                 selected_object_ids_ = object_ids;
@@ -209,15 +229,14 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
                     updateSelectionContext();
                 }
                 for (const auto& placement : session_.visibleObjects()) {
-                    if (!selected_object_ids_.contains(
-                            placement.operation.kind == OperationKind::Shape
-                                ? placement.operation.shape.id
-                                : (placement.operation.kind == OperationKind::PaintStroke
-                                    ? placement.operation.paint_stroke.id
-                                    : placement.operation.erase_stroke.id))) continue;
+                    if (!selected_object_ids_.contains(imageObjectId(placement.operation))) continue;
                     if (placement.operation.kind == OperationKind::Shape) {
                         shape_style_ = placement.operation.shape;
                         canvas_->setShapeStyle(shape_style_);
+                        break;
+                    } else if (placement.operation.kind == OperationKind::Text) {
+                        text_style_ = placement.operation.text;
+                        canvas_->setTextStyle(text_style_);
                         break;
                     }
                 }
@@ -475,6 +494,46 @@ void ImageEditorWindow::createToolOptionsBar() {
     tool_options_toolbar_->addAction(shape_options_action_);
     shape_options_action_->setVisible(false);
 
+    text_options_widget_ = new QWidget(tool_options_toolbar_);
+    text_options_widget_->setObjectName(QStringLiteral("textOptionsWidget"));
+    auto* text_layout = new QHBoxLayout(text_options_widget_);
+    text_layout->setContentsMargins(8, 3, 8, 3);
+    text_layout->setSpacing(7);
+    text_font_combo_ = new QFontComboBox(text_options_widget_);
+    text_font_combo_->setObjectName(QStringLiteral("textFontComboBox"));
+    text_font_combo_->setAccessibleName(QStringLiteral("Text font family"));
+    text_font_combo_->setCurrentFont(QFont(text_style_.font_family));
+    text_font_combo_->setMinimumWidth(150);
+    text_layout->addWidget(text_font_combo_);
+    text_size_spin_ = new QSpinBox(text_options_widget_);
+    text_size_spin_->setObjectName(QStringLiteral("textSizeSpinBox"));
+    text_size_spin_->setAccessibleName(QStringLiteral("Text size in pixels"));
+    text_size_spin_->setRange(1, ImageDocumentStore::kMaximumTextFontPixelSize);
+    text_size_spin_->setValue(text_style_.font_pixel_size);
+    text_size_spin_->setSuffix(QStringLiteral(" px"));
+    text_size_spin_->setFixedWidth(88);
+    text_layout->addWidget(text_size_spin_);
+    text_color_button_ = new QPushButton(QStringLiteral("Color"), text_options_widget_);
+    text_color_button_->setObjectName(QStringLiteral("textColorButton"));
+    text_color_button_->setAccessibleName(QStringLiteral("Text color"));
+    text_color_button_->setFixedWidth(70);
+    text_layout->addWidget(text_color_button_);
+    text_alignment_combo_ = new QComboBox(text_options_widget_);
+    text_alignment_combo_->setObjectName(QStringLiteral("textAlignmentComboBox"));
+    text_alignment_combo_->setAccessibleName(QStringLiteral("Text alignment"));
+    text_alignment_combo_->addItem(QStringLiteral("Left"),
+        static_cast<int>(ImageTextAlignment::Left));
+    text_alignment_combo_->addItem(QStringLiteral("Center"),
+        static_cast<int>(ImageTextAlignment::Center));
+    text_alignment_combo_->addItem(QStringLiteral("Right"),
+        static_cast<int>(ImageTextAlignment::Right));
+    text_layout->addWidget(text_alignment_combo_);
+    text_options_action_ = new QWidgetAction(tool_options_toolbar_);
+    text_options_action_->setObjectName(QStringLiteral("textOptionsAction"));
+    text_options_action_->setDefaultWidget(text_options_widget_);
+    tool_options_toolbar_->addAction(text_options_action_);
+    text_options_action_->setVisible(false);
+
     const auto refreshColorButton = [](QPushButton* button, const QColor& color) {
         button->setStyleSheet(QStringLiteral("background-color: %1;").arg(
             color.name(QColor::HexArgb)));
@@ -482,6 +541,12 @@ void ImageEditorWindow::createToolOptionsBar() {
     };
     refreshColorButton(shape_stroke_color_button_, shape_style_.stroke_color);
     refreshColorButton(shape_fill_color_button_, shape_style_.fill_color);
+    const auto refreshTextColor = [this]() {
+        text_color_button_->setStyleSheet(QStringLiteral("background-color: %1;").arg(
+            text_style_.color.name(QColor::HexArgb)));
+        text_color_button_->setToolTip(text_style_.color.name(QColor::HexArgb));
+    };
+    refreshTextColor();
 
     connect(brush_size_slider_, &QSlider::valueChanged,
             brush_size_spin_, &QSpinBox::setValue);
@@ -545,6 +610,36 @@ void ImageEditorWindow::createToolOptionsBar() {
                 shape_style_.stroke_width = width;
                 canvas_->setShapeStyle(shape_style_);
                 applyShapeStyleToSelection();
+            });
+    connect(text_font_combo_, &QFontComboBox::currentFontChanged, this,
+            [this](const QFont& font) {
+                text_style_.font_family = font.family();
+                canvas_->setTextStyle(text_style_);
+                applyTextStyleToSelection();
+            });
+    connect(text_size_spin_, qOverload<int>(&QSpinBox::valueChanged), this,
+            [this](int size) {
+                text_style_.font_pixel_size = size;
+                canvas_->setTextStyle(text_style_);
+                applyTextStyleToSelection();
+            });
+    connect(text_color_button_, &QPushButton::clicked, this,
+            [this, refreshTextColor]() {
+                const QColor color = QColorDialog::getColor(
+                    text_style_.color, this, QStringLiteral("Text Color"),
+                    QColorDialog::ShowAlphaChannel);
+                if (!color.isValid()) return;
+                text_style_.color = color;
+                refreshTextColor();
+                canvas_->setTextStyle(text_style_);
+                applyTextStyleToSelection();
+            });
+    connect(text_alignment_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this](int index) {
+                text_style_.alignment = static_cast<ImageTextAlignment>(
+                    text_alignment_combo_->itemData(index).toInt());
+                canvas_->setTextStyle(text_style_);
+                applyTextStyleToSelection();
             });
     connect(delete_selected_shape_button_, &QPushButton::clicked,
             this, [this]() { deleteSelectedObjects(); });
@@ -629,7 +724,33 @@ void ImageEditorWindow::updateToolOptions() {
         (tool == ToolSidebar::Tool::Select && has_selected_shape);
     shape_options_action_->setVisible(tool_active && shapes_active);
     shape_options_widget_->setVisible(tool_active && shapes_active);
+    const bool has_selected_text = std::any_of(
+        placements.cbegin(), placements.cend(),
+        [this](const ImageObjectPlacement& placement) {
+            return placement.operation.kind == OperationKind::Text &&
+                selected_object_ids_.contains(placement.operation.text.id);
+        });
+    const bool text_options_active = tool == ToolSidebar::Tool::Text ||
+        (tool == ToolSidebar::Tool::Select && has_selected_text);
+    text_options_action_->setVisible(tool_active && text_options_active);
+    text_options_widget_->setVisible(tool_active && text_options_active);
+    updateTextOptions();
     updateShapeOptions();
+}
+
+void ImageEditorWindow::updateTextOptions() {
+    if (text_options_widget_ == nullptr) return;
+    const QSignalBlocker font_blocker(text_font_combo_);
+    const QSignalBlocker size_blocker(text_size_spin_);
+    const QSignalBlocker alignment_blocker(text_alignment_combo_);
+    text_font_combo_->setCurrentFont(QFont(text_style_.font_family));
+    text_size_spin_->setValue(text_style_.font_pixel_size);
+    const int alignment_index = text_alignment_combo_->findData(
+        static_cast<int>(text_style_.alignment));
+    if (alignment_index >= 0) text_alignment_combo_->setCurrentIndex(alignment_index);
+    text_color_button_->setStyleSheet(QStringLiteral("background-color: %1;").arg(
+        text_style_.color.name(QColor::HexArgb)));
+    text_color_button_->setToolTip(text_style_.color.name(QColor::HexArgb));
 }
 
 void ImageEditorWindow::updateShapeOptions() {
@@ -746,10 +867,7 @@ void ImageEditorWindow::updateObjectPlacements() {
         const bool visible = std::any_of(placements.cbegin(), placements.cend(),
             [&id](const ImageObjectPlacement& placement) {
                 const auto& operation = placement.operation;
-                const QString object_id = operation.kind == OperationKind::Shape
-                    ? operation.shape.id
-                    : (operation.kind == OperationKind::PaintStroke
-                        ? operation.paint_stroke.id : operation.erase_stroke.id);
+                const QString object_id = imageObjectId(operation);
                 return object_id == id;
             });
         if (!visible) selected_object_ids_.removeAt(index - 1);
@@ -772,6 +890,33 @@ void ImageEditorWindow::applyShapeStyleToSelection(bool include_kind) {
     else if (!error.isEmpty()) reportError(QStringLiteral("update_shape_style"), error);
 }
 
+void ImageEditorWindow::applyTextStyleToSelection() {
+    if (canvas_ == nullptr || canvas_->textEditing()) return;
+    QVector<ImageObjectPlacement> updated;
+    for (auto placement : session_.visibleObjects()) {
+        auto& operation = placement.operation;
+        if (operation.kind != OperationKind::Text ||
+            !selected_object_ids_.contains(operation.text.id)) continue;
+        operation.text.font_family = text_style_.font_family;
+        operation.text.font_pixel_size = text_style_.font_pixel_size;
+        operation.text.color = text_style_.color;
+        operation.text.alignment = text_style_.alignment;
+        updated.append(std::move(placement));
+    }
+    if (updated.isEmpty()) return;
+    QString error;
+    if (session_.updateObjectsRendered(updated, &error)) updateView(true);
+    else if (!error.isEmpty()) {
+        reportError(QStringLiteral("update_text_style"), error);
+        ImageTextData stored;
+        if (session_.findText(updated.front().operation.text.id, &stored)) {
+            text_style_ = stored;
+            canvas_->setTextStyle(text_style_);
+            updateTextOptions();
+        }
+    }
+}
+
 void ImageEditorWindow::handleShapeCreated(const ImageShapeData& shape) {
     if (session_.data().layers.size() + session_.data().groups.size() >=
         ImageDocumentStore::kMaximumLayers) {
@@ -790,6 +935,61 @@ void ImageEditorWindow::handleShapeCreated(const ImageShapeData& shape) {
     statusBar()->showMessage(QStringLiteral("Shape created"), 1800);
 }
 
+void ImageEditorWindow::handleTextEditingStarted(const ImageTextData& text, bool existing) {
+    Q_UNUSED(existing);
+    text_style_.font_family = text.font_family;
+    text_style_.font_pixel_size = text.font_pixel_size;
+    text_style_.color = text.color;
+    text_style_.alignment = text.alignment;
+    canvas_->setTextStyle(text_style_);
+    updateTextOptions();
+}
+
+void ImageEditorWindow::handleTextCommitted(const ImageTextData& text, bool existing) {
+    if (text.content.isEmpty()) {
+        if (existing && session_.deleteObjects({text.id})) {
+            selected_object_ids_.removeAll(text.id);
+            updateView(true);
+            statusBar()->showMessage(QStringLiteral("Text removed"), 1800);
+        }
+        return;
+    }
+    if (existing) {
+        QVector<ImageObjectPlacement> updated;
+        for (auto placement : session_.visibleObjects()) {
+            if (placement.operation.kind != OperationKind::Text ||
+                placement.operation.text.id != text.id) continue;
+            placement.operation.text = text;
+            updated.append(std::move(placement));
+            break;
+        }
+        QString error;
+        if (!session_.updateObjectsRendered(updated, &error)) {
+            if (!error.isEmpty()) reportError(QStringLiteral("edit_text"), error);
+            return;
+        }
+        selected_object_ids_ = {text.id};
+        updateView(true);
+        statusBar()->showMessage(QStringLiteral("Text updated"), 1800);
+        return;
+    }
+    if (session_.data().layers.size() + session_.data().groups.size() >=
+        ImageDocumentStore::kMaximumLayers) {
+        statusBar()->showMessage(
+            QStringLiteral("Cannot create text: the 512-layer limit has been reached."), 4000);
+        return;
+    }
+    QString error;
+    const QString id = session_.addText(text, &error);
+    if (id.isEmpty()) {
+        if (!error.isEmpty()) reportError(QStringLiteral("create_text"), error);
+        return;
+    }
+    selected_object_ids_ = {id};
+    updateView(true);
+    statusBar()->showMessage(QStringLiteral("Text created"), 1800);
+}
+
 void ImageEditorWindow::handleObjectsGeometryChanged(
     const QVector<ImageObjectPlacement>& objects) {
     QString error;
@@ -802,6 +1002,7 @@ void ImageEditorWindow::handleObjectsGeometryChanged(
 }
 
 void ImageEditorWindow::deleteSelectedObjects() {
+    if (canvas_ != nullptr) canvas_->commitTextEditing();
     if (selected_object_ids_.isEmpty() || !session_.deleteObjects(selected_object_ids_)) return;
     selected_object_ids_.clear();
     updateView(true);
@@ -836,6 +1037,10 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool) {
         const QSignalBlocker blocker(shapes_tool_action_);
         shapes_tool_action_->setChecked(tool == ToolSidebar::Tool::Shapes);
     }
+    if (text_tool_action_ != nullptr) {
+        const QSignalBlocker blocker(text_tool_action_);
+        text_tool_action_->setChecked(tool == ToolSidebar::Tool::Text);
+    }
     if (select_tool_action_ != nullptr) {
         const QSignalBlocker blocker(select_tool_action_);
         select_tool_action_->setChecked(tool == ToolSidebar::Tool::Select);
@@ -852,32 +1057,44 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool) {
     // Mode setters also update the cursor, so disable the other modes before
     // enabling the selected one; otherwise a later disable can hide its cursor.
     if (tool == ToolSidebar::Tool::Paint && has_source) {
+        canvas_->setTextCreationMode(false);
         canvas_->setEraserMode(false);
         canvas_->setShapeCreationMode(false);
         canvas_->setObjectSelectionMode(false);
         canvas_->setPaintMode(true);
     } else if (tool == ToolSidebar::Tool::Eraser && has_source) {
+        canvas_->setTextCreationMode(false);
         canvas_->setPaintMode(false);
         canvas_->setShapeCreationMode(false);
         canvas_->setObjectSelectionMode(false);
         canvas_->setEraserMode(true);
     } else if (tool == ToolSidebar::Tool::Shapes && has_source) {
+        canvas_->setTextCreationMode(false);
         canvas_->setPaintMode(false);
         canvas_->setEraserMode(false);
         canvas_->setObjectSelectionMode(false);
         canvas_->setShapeCreationMode(true);
     } else if (tool == ToolSidebar::Tool::Select && has_source) {
+        canvas_->setTextCreationMode(false);
         canvas_->setPaintMode(false);
         canvas_->setEraserMode(false);
         canvas_->setShapeCreationMode(false);
         canvas_->setObjectSelectionMode(true);
+    } else if (tool == ToolSidebar::Tool::Text && has_source) {
+        canvas_->setPaintMode(false);
+        canvas_->setEraserMode(false);
+        canvas_->setShapeCreationMode(false);
+        canvas_->setObjectSelectionMode(false);
+        canvas_->setTextCreationMode(true);
     } else {
+        canvas_->setTextCreationMode(false);
         canvas_->setPaintMode(false);
         canvas_->setEraserMode(false);
         canvas_->setShapeCreationMode(false);
         canvas_->setObjectSelectionMode(false);
     }
     canvas_->setShapeStyle(shape_style_);
+    canvas_->setTextStyle(text_style_);
     canvas_->setEraserPreviewEnabled(eraser_preview_check_->isChecked());
     const int diameter = tool == ToolSidebar::Tool::Eraser
         ? eraser_diameter_ : paint_diameter_;
@@ -925,29 +1142,35 @@ void ImageEditorWindow::createActions() {
 
     undo_action_ = makeAction(
         QStringLiteral("Undo"), QKeySequence::Undo, [this]() {
+            canvas_->commitTextEditing();
             if (session_.undo()) updateView();
         });
     undo_action_->setObjectName(QStringLiteral("undoAction"));
     redo_action_ = makeAction(
         QStringLiteral("Redo"), QKeySequence::Redo, [this]() {
+            canvas_->commitTextEditing();
             if (session_.redo()) updateView();
         });
     redo_action_->setObjectName(QStringLiteral("redoAction"));
     rotate_left_action_ = makeAction(
         QStringLiteral("Rotate Left 90°"), {}, [this]() {
+            canvas_->commitTextEditing();
             if (session_.hasSource()) { session_.rotateLeft(); updateView(); }
         });
     rotate_right_action_ = makeAction(
         QStringLiteral("Rotate Right 90°"), {}, [this]() {
+            canvas_->commitTextEditing();
             if (session_.hasSource()) { session_.rotateRight(); updateView(); }
         });
     rotate_right_action_->setObjectName(QStringLiteral("rotateRightAction"));
     flip_horizontal_action_ = makeAction(
         QStringLiteral("Flip Horizontal"), {}, [this]() {
+            canvas_->commitTextEditing();
             if (session_.hasSource()) { session_.flipHorizontal(); updateView(); }
         });
     flip_vertical_action_ = makeAction(
         QStringLiteral("Flip Vertical"), {}, [this]() {
+            canvas_->commitTextEditing();
             if (session_.hasSource()) { session_.flipVertical(); updateView(); }
         });
     crop_action_ = new QAction(QStringLiteral("Crop Selection"), this);
@@ -1043,6 +1266,17 @@ void ImageEditorWindow::createActions() {
         const auto current = tool_sidebar_->activeTool();
         tool_sidebar_->setActiveTool(active ? ToolSidebar::Tool::Shapes
             : (current == ToolSidebar::Tool::Shapes ? ToolSidebar::Tool::None : current));
+    });
+
+    text_tool_action_ = new QAction(QStringLiteral("Text"), this);
+    text_tool_action_->setObjectName(QStringLiteral("textToolAction"));
+    text_tool_action_->setCheckable(true);
+    registerShortcutAction(text_tool_action_, {});
+    addAction(text_tool_action_);
+    connect(text_tool_action_, &QAction::toggled, this, [this](bool active) {
+        const auto current = tool_sidebar_->activeTool();
+        tool_sidebar_->setActiveTool(active ? ToolSidebar::Tool::Text
+            : (current == ToolSidebar::Tool::Text ? ToolSidebar::Tool::None : current));
     });
 
     select_tool_action_ = new QAction(QStringLiteral("Selection"), this);
@@ -1236,6 +1470,7 @@ void ImageEditorWindow::updateSelectionContext() {
         if (paint_tool_action_ != nullptr) paint_tool_action_->setEnabled(false);
         if (eraser_tool_action_ != nullptr) eraser_tool_action_->setEnabled(false);
         if (shapes_tool_action_ != nullptr) shapes_tool_action_->setEnabled(false);
+        if (text_tool_action_ != nullptr) text_tool_action_->setEnabled(false);
         if (select_tool_action_ != nullptr) select_tool_action_->setEnabled(false);
         if (delete_objects_action_ != nullptr) delete_objects_action_->setEnabled(false);
         return;
@@ -1254,6 +1489,7 @@ void ImageEditorWindow::updateSelectionContext() {
     paint_tool_action_->setEnabled(selected_layer_editable);
     eraser_tool_action_->setEnabled(selected_layer_editable);
     shapes_tool_action_->setEnabled(true);
+    text_tool_action_->setEnabled(true);
     select_tool_action_->setEnabled(true);
     delete_objects_action_->setEnabled(!selected_object_ids_.isEmpty() &&
         tool_sidebar_->activeTool() == ToolSidebar::Tool::Select);
@@ -1275,6 +1511,7 @@ void ImageEditorWindow::createNewCanvas() {
 }
 
 bool ImageEditorWindow::confirmDiscardOrSave() {
+    if (canvas_ != nullptr) canvas_->commitTextEditing();
     if (!session_.isDirty()) return true;
     QMessageBox prompt(QMessageBox::Warning,
                        QStringLiteral("Unsaved image edits"),
@@ -1426,6 +1663,7 @@ void ImageEditorWindow::relinkSource() {
 }
 
 bool ImageEditorWindow::saveToPath(QString path) {
+    if (canvas_ != nullptr) canvas_->commitTextEditing();
     const QString previous_recovery = recovery_store_.pathFor(session_);
     std::unique_ptr<QLockFile> linked_write_lock;
     if (!linked_document_path_.isEmpty()) {
@@ -1507,6 +1745,7 @@ void ImageEditorWindow::saveDocumentAs() {
 }
 
 void ImageEditorWindow::exportImage(bool quick_export) {
+    canvas_->commitTextEditing();
     QString selected_filter;
     const QString path = QFileDialog::getSaveFileName(
         this, quick_export ? QStringLiteral("Quick Export Selected Layer")

@@ -1,10 +1,11 @@
 # Image Editor Document Format
 
-Status: **provisional version 8**. The `.cimg` extension is temporary until a
+Status: **provisional version 9**. The `.cimg` extension is temporary until a
 later format review. Version 4 added editable raster layers; version 5 adds
 eraser strokes; version 6 adds editable line, rectangle, and ellipse shapes;
 version 7 adds stable IDs to paint and eraser strokes; version 8 adds
-one-level layer groups. Versions 1 through 7 remain readable.
+one-level layer groups; version 9 adds editable text operations. Versions 1
+through 8 remain readable.
 
 ## Document contents
 
@@ -13,7 +14,7 @@ A `.cimg` file is UTF-8 JSON with these top-level fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite-image-document`. |
-| `version` | integer | Current version is `8`. |
+| `version` | integer | Current version is `9`. |
 | `base` | object | A linked source image or a self-contained canvas. |
 | `operations` | array | Version 1–3 edits retained as Background content. |
 | `layers` | array | Version 4 and later layer stack ordered bottom-to-top. |
@@ -53,7 +54,7 @@ combined pixels, and group opacity is applied once to that result.
 ```json
 {
   "format": "creative-suite-image-document",
-  "version": 8,
+  "version": 9,
   "base": {
     "kind": "canvas",
     "width": 1920,
@@ -107,7 +108,7 @@ group to preserve the one-level rule.
 
 The top-level `operations` array preserves the ordered, non-destructive edits
 from versions 1–3 and renders them as part of `Background`. This keeps old
-documents visually unchanged when they are opened and later saved as version 8.
+documents visually unchanged when they are opened and later saved as version 9.
 New edits are stored in the selected raster layer's `operations` array.
 
 Each layer operation is evaluated on the fixed document canvas. Crop keeps the
@@ -123,8 +124,8 @@ field and reveals visible content in lower layers. Version 6 adds a `shape`
 operation to editable layer sequences. Shape operations retain their position
 among paint, erase, crop, rotate, and flip operations. Version 7 gives every
 paint and erase stroke a stable canonical UUID in its `id` field. Version 8
-adds the group tree without changing operation IDs. Object IDs are unique
-across paint, erase, and shape operations.
+adds the group tree without changing operation IDs. Version 9 adds editable
+text. Object IDs are unique across paint, erase, shape, and text operations.
 
 ```json
 {
@@ -161,6 +162,35 @@ editable layers. Background cannot contain shape operations.
 }
 ```
 
+Version 9 adds a `text` operation to editable raster layers. Text content is a
+plain UTF-8 string with newline-separated lines. `font_family` stores only the
+requested family name; fonts are not embedded, and the system font fallback is
+used if that family is unavailable. `font_pixel_size` is a canvas-pixel size
+from 1 through 1024. `color` uses `#AARRGGBB`; new text defaults to opaque
+black, 48 pixels, `Sans Serif`, and left alignment. `alignment` is `left`,
+`center`, or `right`. The `x` and `y` coordinates and `box_width` are floating
+point canvas pixels. Text wraps at word boundaries or between characters when
+needed; its layout height grows to fit its content. The text ID is a unique
+canonical UUID across all editable object operations. Content is limited to
+16,384 characters, font family names to 256 characters, and the text geometry
+must fit within the canvas. Text is stored only in version 9 or later and is
+not allowed in Background or legacy top-level operations.
+
+```json
+{
+  "kind": "text",
+  "id": "402f47e8-6e6a-452a-80d0-0e37bcd0268d",
+  "content": "Video title\nSecond line",
+  "font_family": "Sans Serif",
+  "font_pixel_size": 48,
+  "color": "#FF000000",
+  "alignment": "left",
+  "x": 96.0,
+  "y": 72.0,
+  "box_width": 640.0
+}
+```
+
 For legacy top-level operations, crops use the current image bounds and change
 the rendered Background size; rotations may swap its dimensions. This behavior
 is retained only to read and preserve documents created by versions 1–3.
@@ -169,8 +199,11 @@ Version 1 uses the legacy `source` object. Version 2 adds canvas bases. Version
 layer-local eraser strokes. Version 6 adds editable shapes to layer operations.
 Version 7 adds IDs to paint and eraser operations. When reading versions 1–6,
 the loader generates in-memory IDs for operations that do not contain them;
-the next save writes those IDs in version 8. Versions 1 through 7 remain
-visually compatible. Saving any supported version writes version 8.
+the next save writes those IDs in version 9. Versions 1 through 8 remain
+visually compatible. Saving any supported version writes version 9. New text
+layers are named `Text N` and inserted using the same stack placement rule as
+shape layers; they can be grouped, hidden, assigned opacity, selected, moved,
+resized by changing their box width, and deleted as editable operations.
 
 Undo and redo history are in memory and are not stored in `.cimg`. A save writes
 to a temporary file and atomically replaces the destination. Export is a
@@ -195,7 +228,7 @@ showing the options dialog.
 Recovery snapshots use a separate `creative-suite-image-recovery` JSON wrapper
 with the document payload, intended `.cimg` destination, and a session identity
 for unsaved canvases. Recovery wrapper version 1 accepts document payloads in
-versions 1 through 8. Autosave and recovery preserve root order, group
+versions 1 through 9. Autosave and recovery preserve root order, group
 children, properties, IDs, and operations.
 
 Unsupported versions, invalid layer stacks, and invalid operation data are

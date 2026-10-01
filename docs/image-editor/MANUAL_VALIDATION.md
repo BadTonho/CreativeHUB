@@ -147,6 +147,43 @@ Windows UI. macOS and Linux packaging checks remain deferred.
     confirm the temporary output is discarded. Repeat with an existing
     destination and confirm its contents remain unchanged after cancellation.
 
+### Editable text
+
+These manual checks are pending. The automated producer test also covers
+publishing an image containing text, but does not complete the manual
+Video Editor linked-image acceptance milestone.
+
+1. Open a disposable image or canvas and activate **Text**. Confirm the initial
+   style is 48 px Sans Serif, opaque black, and left-aligned. Drag on the canvas
+   to define the initial text width. Type multiple lines: Enter must insert a
+   line break, while Ctrl+Enter commits. Start another empty text frame and
+   click outside to commit; start one more and press Esc, confirming that no
+   `Text N` layer remains.
+2. Double-click an existing text object. Change its content, family, pixel
+   size, color (including alpha), and alignment. Confirm and verify the text
+   changes on the canvas. Reopen it, make a temporary edit, press Esc, and
+   confirm the saved text remains unchanged. If a chosen font family is not
+   installed, confirm the system substitutes a readable font while the
+   requested family name remains in the document.
+3. Select the text object, move it, and drag each side handle. Confirm the box
+   width changes, the font size stays fixed, and wrapping adjusts the layout
+   height. Use Undo/Redo after creation, formatting, movement, resizing, and
+   deletion. Change the text layer's visibility and opacity, put it in a group,
+   and confirm the composite, thumbnails, and group opacity remain correct.
+4. Save as `.cimg`, close, and reopen. Confirm the text remains editable and
+   retains content, font family name, size, color, alignment, width, layer
+   placement, and rendered appearance. Create a recovery snapshot and confirm
+   its wrapper stays version 1 and its document payload is version 9. Open
+   copies of supported v1-v8 documents and confirm they retain their previous
+   appearance; save each copy and confirm it is upgraded to v9.
+5. Export the full composite and Quick Export the text layer and a group that
+   contains text. Confirm the saved raster outputs contain the expected text,
+   respect visibility and opacity, and keep the canvas dimensions. In linked
+   mode, save a text edit and confirm the published PNG contains it. Then
+   manually confirm in the Video Editor that the linked image refreshes after
+   save; keep Milestone 2 acceptance pending until its complete checklist is
+   recorded.
+
 ### Editable shapes and general object selection
 
 1. Click **Shapes**. Confirm a movable palette opens next
@@ -249,6 +286,9 @@ Windows UI. macOS and Linux packaging checks remain deferred.
   both configurations, and the full Release suite passed 61/61.
 - [x] The owner reopened the WebP image that showed the unsupported-format
   dialog in the rebuilt Windows application UI; it opened successfully.
+- [ ] Editable text has automated regression coverage, but its manual visual
+  checks above have not yet been recorded. The linked-image acceptance gate
+  remains pending separately.
 - [ ] Cross-platform packaging and interaction checks below still need
   platform-specific records.
 

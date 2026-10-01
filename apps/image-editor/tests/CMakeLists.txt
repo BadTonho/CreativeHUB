@@ -11,6 +11,9 @@ target_compile_features(creative-suite-image-editor-core-tests PRIVATE cxx_std_2
 add_creative_suite_test(
     NAME creative-suite-image-editor-core
     COMMAND creative-suite-image-editor-core-tests)
+set_tests_properties(creative-suite-image-editor-core PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
 
 add_executable(creative-suite-image-editor-format-tests
     image_editor_format_test.cpp

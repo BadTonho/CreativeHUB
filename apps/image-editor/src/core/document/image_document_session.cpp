@@ -10,6 +10,9 @@
 #include <QSet>
 #include <QTransform>
 #include <QDir>
+#include <QFont>
+#include <QTextLayout>
+#include <QTextOption>
 #include <QUuid>
 
 #include <cmath>
@@ -103,6 +106,34 @@ QImage drawShape(QImage image, const ImageShapeData& shape) {
     return image;
 }
 
+QImage drawText(QImage image, const ImageTextData& text) {
+    image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    QPainter painter(&image);
+    QFont font(text.font_family);
+    font.setPixelSize(text.font_pixel_size);
+    painter.setFont(font);
+    painter.setPen(text.color);
+    QTextOption option;
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    option.setAlignment(text.alignment == ImageTextAlignment::Center
+        ? Qt::AlignHCenter : (text.alignment == ImageTextAlignment::Right
+            ? Qt::AlignRight : Qt::AlignLeft));
+    QTextLayout layout(text.content, font);
+    layout.setTextOption(option);
+    layout.beginLayout();
+    qreal height = 0.0;
+    while (true) {
+        QTextLine line = layout.createLine();
+        if (!line.isValid()) break;
+        line.setLineWidth(text.box_width);
+        line.setPosition(QPointF(0.0, height));
+        height += line.height();
+    }
+    layout.endLayout();
+    layout.draw(&painter, text.position);
+    return image;
+}
+
 QPointF transformShapePoint(QPointF point,
                             const ImageOperation& operation,
                             const QSize& canvas_size,
@@ -128,6 +159,7 @@ QString operationObjectId(const ImageOperation& operation) {
     case OperationKind::PaintStroke: return operation.paint_stroke.id;
     case OperationKind::EraseStroke: return operation.erase_stroke.id;
     case OperationKind::Shape: return operation.shape.id;
+    case OperationKind::Text: return operation.text.id;
     default: return {};
     }
 }
@@ -180,6 +212,18 @@ void transformObjectGeometry(ImageOperation* operation,
         operation->shape.end = transformShapePoint(
             operation->shape.end, transform, canvas_size, inverse);
         break;
+    case OperationKind::Text: {
+        const QPointF top_left = transformShapePoint(
+            operation->text.position, transform, canvas_size, inverse);
+        const QPointF bottom_right = transformShapePoint(
+            operation->text.position + QPointF(operation->text.box_width, 0.0),
+            transform, canvas_size, inverse);
+        operation->text.position = QPointF(std::min(top_left.x(), bottom_right.x()),
+                                           std::min(top_left.y(), bottom_right.y()));
+        operation->text.box_width = std::max<qreal>(1.0,
+            std::abs(bottom_right.x() - top_left.x()));
+        break;
+    }
     default:
         break;
     }
@@ -241,6 +285,9 @@ QImage applyOperations(QImage image,
             break;
         case OperationKind::Shape:
             image = drawShape(std::move(image), operation.shape);
+            break;
+        case OperationKind::Text:
+            image = drawText(std::move(image), operation.text);
             break;
         }
     }
@@ -519,6 +566,14 @@ QImage renderLayerThumbnail(QImage image,
             scaled_operation.shape.end.setY(operation.shape.end.y() * scale_y);
             scaled_operation.shape.stroke_width = std::max(
                 1, qRound(operation.shape.stroke_width * std::min(scale_x, scale_y)));
+            break;
+        case OperationKind::Text:
+            scaled_operation.text.position.setX(operation.text.position.x() * scale_x);
+            scaled_operation.text.position.setY(operation.text.position.y() * scale_y);
+            scaled_operation.text.box_width = std::max<qreal>(1.0,
+                operation.text.box_width * scale_x);
+            scaled_operation.text.font_pixel_size = std::max(1,
+                qRound(operation.text.font_pixel_size * std::min(scale_x, scale_y)));
             break;
         case OperationKind::FlipHorizontal:
         case OperationKind::FlipVertical:
@@ -941,7 +996,8 @@ QVector<ImageObjectPlacement> ImageDocumentSession::visibleObjects() const {
             const auto& operation = layer.operations.at(index - 1);
             if (operation.kind != OperationKind::PaintStroke &&
                 operation.kind != OperationKind::EraseStroke &&
-                operation.kind != OperationKind::Shape) continue;
+                operation.kind != OperationKind::Shape &&
+                operation.kind != OperationKind::Text) continue;
             ImageObjectPlacement placement;
             placement.operation = operation;
             placement.layer_id = layer.id;
@@ -1044,6 +1100,8 @@ bool ImageDocumentSession::updateObjectsRendered(
             }
         } else if (stored.kind == OperationKind::Shape) {
             valid = ImageDocumentStore::isValidShape(stored.shape, size, error);
+        } else if (stored.kind == OperationKind::Text) {
+            valid = ImageDocumentStore::isValidText(stored.text, size, error);
         }
         if (!valid) {
             if (error == nullptr || error->isEmpty()) {
@@ -1443,6 +1501,131 @@ QString ImageDocumentSession::addShape(ImageShapeData shape, QString* error) {
     rebuildLayerOrder();
     layer_thumbnail_cache_.clear();
     return shape_id;
+}
+
+QString ImageDocumentSession::addText(ImageTextData text, QString* error) {
+    if (error != nullptr) error->clear();
+    if (!hasSource()) {
+        assignError(error, QStringLiteral("Open or relink an image before creating text."));
+        return {};
+    }
+    if (totalStackItemCount() >= ImageDocumentStore::kMaximumLayers) {
+        assignError(error, QStringLiteral(
+            "The document has reached the maximum of 512 stack items."));
+        return {};
+    }
+    if (text.id.isEmpty()) text.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    if (!ImageDocumentStore::isValidText(text, renderedSize(), error)) return {};
+    for (const auto& layer : data_.layers) {
+        for (const auto& operation : layer.operations) {
+            if (operationObjectId(operation).compare(text.id, Qt::CaseInsensitive) == 0) {
+                assignError(error, QStringLiteral("An object with this ID already exists."));
+                return {};
+            }
+        }
+    }
+
+    int suffix = 1;
+    QString layer_name;
+    const auto nameExists = [this](const QString& candidate) {
+        const bool layer_match = std::any_of(data_.layers.cbegin(), data_.layers.cend(),
+            [&candidate](const ImageLayerData& layer) {
+                return layer.name.compare(candidate, Qt::CaseInsensitive) == 0;
+            });
+        const bool group_match = std::any_of(data_.groups.cbegin(), data_.groups.cend(),
+            [&candidate](const ImageGroupData& group) {
+                return group.name.compare(candidate, Qt::CaseInsensitive) == 0;
+            });
+        return layer_match || group_match;
+    };
+    do {
+        layer_name = QStringLiteral("Text %1").arg(suffix++);
+    } while (nameExists(layer_name));
+
+    ImageLayerData text_layer;
+    text_layer.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    text_layer.name = layer_name;
+    const QString parent_group_id = selected_group_id_.isEmpty()
+        ? parentGroupForLayer(selected_layer_id_) : QString{};
+    text_layer.parent_group_id = parent_group_id;
+    ImageOperation operation;
+    operation.kind = OperationKind::Text;
+    operation.text = std::move(text);
+    const QString text_id = operation.text.id;
+
+    pushEdit();
+    if (!parent_group_id.isEmpty()) {
+        auto* parent = findGroup(data_, parent_group_id);
+        const qsizetype selected_index = parent->layer_ids.indexOf(selected_layer_id_);
+        parent->layer_ids.insert(selected_index < 0 ? parent->layer_ids.size()
+                                                  : selected_index + 1,
+                                 text_layer.id);
+    } else {
+        qsizetype insertion_index = data_.root_stack.size();
+        if (!selected_group_id_.isEmpty()) {
+            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
+                if (data_.root_stack.at(index).group &&
+                    data_.root_stack.at(index).id == selected_group_id_) {
+                    insertion_index = index + 1;
+                    break;
+                }
+            }
+        } else {
+            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
+                if (!data_.root_stack.at(index).group &&
+                    data_.root_stack.at(index).id == selected_layer_id_) {
+                    insertion_index = index + 1;
+                    break;
+                }
+            }
+        }
+        data_.root_stack.insert(insertion_index, {text_layer.id, false});
+    }
+    const QString new_layer_id = text_layer.id;
+    data_.layers.append(std::move(text_layer));
+    findLayer(data_, new_layer_id)->operations.append(std::move(operation));
+    selected_layer_id_ = new_layer_id;
+    selected_group_id_.clear();
+    rebuildLayerOrder();
+    layer_thumbnail_cache_.clear();
+    return text_id;
+}
+
+bool ImageDocumentSession::updateText(const ImageTextData& text, QString* error) {
+    if (error != nullptr) error->clear();
+    if (!ImageDocumentStore::isValidText(text, renderedSize(), error)) return false;
+    for (qsizetype layer_index = 0; layer_index < data_.layers.size(); ++layer_index) {
+        auto& layer = data_.layers[layer_index];
+        if (layer.background) continue;
+        for (qsizetype operation_index = 0;
+             operation_index < layer.operations.size(); ++operation_index) {
+            auto& operation = layer.operations[operation_index];
+            if (operation.kind != OperationKind::Text || operation.text.id != text.id) continue;
+            if (operation.text == text) return false;
+            pushEdit();
+            data_.layers[layer_index].operations[operation_index].text = text;
+            layer_thumbnail_cache_.clear();
+            return true;
+        }
+    }
+    assignError(error, QStringLiteral("The selected text no longer exists."));
+    return false;
+}
+
+bool ImageDocumentSession::findText(const QString& text_id,
+                                    ImageTextData* text,
+                                    QString* layer_id) const {
+    for (const auto& layer : data_.layers) {
+        if (layer.background) continue;
+        for (auto operation = layer.operations.crbegin();
+             operation != layer.operations.crend(); ++operation) {
+            if (operation->kind != OperationKind::Text || operation->text.id != text_id) continue;
+            if (text != nullptr) *text = operation->text;
+            if (layer_id != nullptr) *layer_id = layer.id;
+            return true;
+        }
+    }
+    return false;
 }
 
 bool ImageDocumentSession::updateShape(const ImageShapeData& shape, QString* error) {

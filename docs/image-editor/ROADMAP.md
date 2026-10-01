@@ -1,8 +1,8 @@
 # Image Editor Roadmap
 
-Status: **standalone minimum implemented; baseline and recent editing workflows
-user-confirmed on Windows; packaging and linked-image acceptance remain in progress;
-macOS and Linux validation deferred**.
+Status: **standalone minimum implemented; basic editable text and regression
+coverage implemented; manual text validation, packaging, and linked-image
+acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.2**.
 This roadmap covers the independent application under `apps/image-editor/`.
 The Video Editor handoff implementation already exists as a bounded prototype,
@@ -26,9 +26,11 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
   editable raster layers, and one-level layer groups. Defer masks, retouching,
   color adjustment, and effect systems until they are justified by validated
   workflows.
-- Add basic editable text in the first editing release: content, font family,
-  size, color, alignment, move/resize, and save/reopen. Advanced typography,
-  text outlines, and text effects remain deferred.
+- Basic editable text is implemented for the first editing release: multiline
+  content, font family, pixel size, color, alignment, move/width resize,
+  wrapping, Undo/Redo, `.cimg` save/reopen, recovery, and export. Manual visual
+  validation remains pending. Advanced typography, text outlines, and text
+  effects remain deferred.
 - Use Qt image I/O and deploy the plugins required for the documented input
   formats. Track Qt Image Formats and its codec notices for distribution.
 - Keep compatibility with the Video Editor as an independently testable
@@ -139,11 +141,15 @@ separate from this release.
   thumbnails and social-media art, including editable text, using a
   representative 1920x1080 document with up to five layers and one group.
   Keep custom canvas sizes; this profile is not a maximum-size policy.
-- [ ] Add basic editable text with content, font family, size, color,
-  alignment, move/resize, Undo/Redo, and `.cimg` save/reopen. Preserve
-  compatibility with existing `.cimg` versions 1 through 8.
-- [ ] Add automated regression coverage and manual visual validation for text
-  editing, selection, transforms, export, and persistence.
+- [x] Implement basic editable text with multiline content, font family, size,
+  color, alignment, move/width resize, Undo/Redo, and `.cimg` save/reopen.
+  Preserve reading versions 1 through 8 and migrate them to v9 on save.
+- [x] Add automated regression coverage for text editing, rendering,
+  selection, transforms, export, persistence, recovery, and linked PNG
+  publication in `image_editor_core_test.cpp` and `image_editor_ui_test.cpp`.
+- [ ] Complete the manual visual text checks in
+  [`MANUAL_VALIDATION.md`](MANUAL_VALIDATION.md). Their pending status does not
+  block continuing implementation work.
 - [ ] Validate recovery, export, and linked asset handoff as a complete
   workflow.
 
@@ -176,16 +182,25 @@ path. The Image Editor tests passed 5/5 in both configurations; the full
 Release suite passed 61/61. The owner confirmed the affected WebP opens in the
 rebuilt Windows UI. Other-platform package validation remains outstanding.
 
+**Automated text and linked-image regression run (2026-10-01):** the Image
+Editor application builds in Debug and Release. All five Image Editor CTest
+tests and three Video Editor consumer tests passed in both configurations
+(8/8 each). This run covers the Image Editor core/UI producer, the deployed
+image formats, export UI, linked-image refresh in the Video Editor main window,
+application media preparation, and `.csp` persistence. The complete Release
+CTest suite also passed 61/61. These automated results do not complete the
+pending manual text review or linked-image acceptance checklist.
+
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
 | Document editing, canvas, layers, groups, shapes, object selection, transforms, undo/redo | `image_editor_core_test.cpp` (`creative-suite-image-editor-core`) | The owner reports all current Image Editor workflows were exercised on Windows 11; scenario-level gestures and edge results are not itemized. Cross-platform visual checks remain pending. |
-| `.cimg` persistence, validation, and backward compatibility | `image_editor_core_test.cpp`; legacy v1–v7 compatibility fixtures and current v8 round trips | The owner reports repeatedly migrating the same long-lived project across persisted-format versions, with migrations working. Cross-platform validation remains pending. |
+| `.cimg` persistence, validation, and backward compatibility | `image_editor_core_test.cpp`; read-and-save migration fixtures for v1–v8, v9 text validation and recovery | The owner reports repeatedly migrating the same long-lived project across persisted-format versions, with migrations working. Cross-platform validation remains pending. |
 | Recovery, relinking, and error logging | `image_editor_core_test.cpp` | The owner reports current recovery workflows working on Windows; the per-scenario record is not maintained. Cross-platform validation remains pending. |
 | Import formats and image decoding | `image_editor_core_test.cpp`, `image_editor_format_test.cpp` (`creative-suite-image-editor-image-formats`), `creative-suite-image-editor-deployed-image-formats` | Debug and Release tests encode and import PNG, JPEG, BMP, WebP, and TIFF through the application importer using the app's deployed plugin directory. This exposed and now guards against missing `qwebp`/`qtiff`; the owner confirmed the affected WebP opens in the rebuilt Windows UI. Other-platform packaging remains pending (**P1 validation**). |
 | Flattened export, Quick Export, and export dialogs | `image_editor_core_test.cpp`, `image_editor_export_ui_test.cpp` (`creative-suite-image-editor-export-ui`) | The owner reports current export workflows exercised on Windows 11; cross-platform package checks remain pending. |
 | Canvas, tools, layers, shortcuts, and UI interactions | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`) | The owner reports current UI workflows exercised on Windows 11; cross-platform visual checks remain pending. |
-| Video Editor linked-image producer/consumer workflow | Producer: `image_editor_ui_test.cpp`; consumer: Video Editor `apps/video-editor/tests/application/application_media_services_test.cpp`, `apps/video-editor/tests/application/main_window_integration_test.cpp`, `apps/video-editor/tests/project/project_file_test.cpp` | The owner reports current Image Editor workflows exercised on Windows; producer/consumer scenario details and cross-platform acceptance remain tracked separately (**P1 validation**). |
-| First-release editable text | No test yet; text is not implemented | Planned feature. Add automated edit/history/persistence/export coverage and manual visual checks when implemented; not a current coverage gap. |
+| Video Editor linked-image producer/consumer workflow | Producer: `image_editor_ui_test.cpp`; consumers: `application_media_services_test.cpp` (`creative-suite-main-editor-application-media`), `main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`), and `project_file_test.cpp` (`creative-suite-main-editor-project`) | Automated producer/consumer regression tests pass in Debug and Release. The owner reports the basic linked edit/save workflow working on Windows, but the full scenario and cross-platform acceptance remain pending (**P1 validation**). |
+| First-release editable text | `image_editor_core_test.cpp` and `image_editor_ui_test.cpp`; CTest `creative-suite-image-editor-core` and `creative-suite-image-editor-ui` | Manual visual editing checks are listed in `MANUAL_VALIDATION.md` and remain pending (**P2 validation**). Linked PNG producer and Video Editor consumer regression tests are present; manual cross-application acceptance remains pending (**P1 validation**). |
 
 ### Current coverage gaps and pending validation
 
@@ -205,8 +220,11 @@ rebuilt Windows UI. Other-platform package validation remains outstanding.
   tracked separately.
 - **P2 — platform and visual validation:** macOS/Linux build, packaging, and
   interaction records remain incomplete.
-- **Planned, not implemented:** basic editable text and future retouching or
-  effects are excluded from current coverage until their implementation begins.
+- **P2 — editable text visual validation:** automated editing, rendering,
+  formatting, transform, history, persistence, export, recovery, and publication
+  checks are implemented; the manual canvas and visual review is pending.
+- **Planned, not implemented:** future masks, retouching, and advanced effects
+  are excluded from current coverage until their implementation begins.
 
 ## Status legend
 

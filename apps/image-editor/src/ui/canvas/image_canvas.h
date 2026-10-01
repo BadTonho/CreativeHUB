@@ -16,6 +16,7 @@ class QEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QPainter;
+class QPlainTextEdit;
 class QWheelEvent;
 
 namespace image_editor {
@@ -31,8 +32,13 @@ public:
     void setPaintMode(bool enabled);
     void setEraserMode(bool enabled);
     void setShapeCreationMode(bool enabled);
+    void setTextCreationMode(bool enabled);
     void setObjectSelectionMode(bool enabled);
     void setShapeStyle(const ImageShapeData& style);
+    void setTextStyle(const ImageTextData& style);
+    void beginTextEditing(const ImageTextData& text, bool existing);
+    void commitTextEditing();
+    [[nodiscard]] bool textEditing() const noexcept;
     void setObjectPlacements(QVector<ImageObjectPlacement> placements,
                              QStringList selected_object_ids);
     void setEraserPreviewEnabled(bool enabled);
@@ -54,6 +60,9 @@ signals:
     void eraseStrokeSelected(const QVector<QPointF>& image_points, int diameter);
     void brushDiameterChanged(int diameter);
     void shapeCreated(const image_editor::ImageShapeData& shape);
+    void textCommitted(const image_editor::ImageTextData& text, bool existing);
+    void textEditingStarted(const image_editor::ImageTextData& text, bool existing);
+    void textEditingCancelled();
     void objectsSelected(const QStringList& object_ids, const QString& active_layer_id);
     void objectTransformStarted(const QStringList& object_ids);
     void objectsGeometryChanged(
@@ -69,6 +78,8 @@ protected:
     void leaveEvent(QEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void keyReleaseEvent(QKeyEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     [[nodiscard]] QRectF imageTargetRect() const;
@@ -92,11 +103,17 @@ private:
     void drawShapeOverlay(QPainter& painter,
                           const ImageShapeData& shape,
                           int opacity = 100) const;
+    void drawTextOverlay(QPainter& painter,
+                         const ImageTextData& text,
+                         int opacity = 100) const;
     void drawObjectOverlay(QPainter& painter,
                            const ImageObjectPlacement& object) const;
     void beginObjectTransform(bool resize, int handle, const QPointF& image_point);
     void updateObjectTransform(const QPointF& image_point, bool freeform);
     void clearObjectInteraction();
+    void updateTextEditorGeometry();
+    void applyTextEditorStyle();
+    void finishTextEditing(bool commit);
 
     QImage image_;
     QImage transient_image_;
@@ -107,6 +124,7 @@ private:
     bool paint_mode_ = false;
     bool eraser_mode_ = false;
     bool shape_creation_mode_ = false;
+    bool text_creation_mode_ = false;
     bool object_selection_mode_ = false;
     bool eraser_preview_enabled_ = false;
     bool selecting_crop_ = false;
@@ -120,6 +138,7 @@ private:
     bool selection_toggle_ = false;
     bool transforming_objects_ = false;
     bool resizing_objects_ = false;
+    bool resizing_text_width_ = false;
     bool moved_interaction_ = false;
     int resizing_handle_ = -1;
     QPointF crop_start_;
@@ -133,6 +152,13 @@ private:
     int brush_resize_initial_diameter_ = 12;
     QVector<QPointF> paint_points_;
     ImageShapeData shape_style_;
+    ImageTextData text_style_;
+    ImageTextData text_editing_;
+    QPlainTextEdit* text_editor_ = nullptr;
+    bool text_editing_existing_ = false;
+    bool creating_text_frame_ = false;
+    QPointF text_frame_start_;
+    QPointF text_frame_current_;
     ImageShapeData shape_interaction_current_;
     QVector<ImageObjectPlacement> object_placements_;
     QStringList selected_object_ids_;

@@ -39,6 +39,11 @@ public:
     [[nodiscard]] QString addShape(ImageShapeData shape, QString* error = nullptr);
     [[nodiscard]] bool updateShape(const ImageShapeData& shape,
                                    QString* error = nullptr);
+    [[nodiscard]] QString addText(ImageTextData text, QString* error = nullptr);
+    [[nodiscard]] bool updateText(const ImageTextData& text, QString* error = nullptr);
+    [[nodiscard]] bool findText(const QString& text_id,
+                                ImageTextData* text,
+                                QString* layer_id = nullptr) const;
     [[nodiscard]] bool updateShapeRendered(const ImageShapeData& shape,
                                            QString* error = nullptr);
     [[nodiscard]] bool deleteShape(const QString& shape_id);
