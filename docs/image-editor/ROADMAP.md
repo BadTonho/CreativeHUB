@@ -207,9 +207,9 @@ location starts editing with the default box width; a horizontal drag sets a
 custom initial width. Reopening unchanged text keeps its saved width. The UI
 test verifies live rendered pixels, cursor advancement, editor visibility
 during expansion, cancellation restoration, insertion at the beginning when
-reopening existing text, click-to-create, and click-outside confirmation. It
-passed 1/1 in Debug and Release. The click-to-create visual review remains
-pending.
+reopening existing text, input order after click-to-create, and click-outside
+confirmation. It passed 1/1 in Debug and Release. The click-to-create visual
+review remains pending.
 
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |

@@ -609,6 +609,13 @@ bool testEditableTextUi(const QString& directory) {
         std::cerr << "Clicking empty canvas did not start the new text editor.\n";
         return false;
     }
+    QTest::keyClicks(text_editor, QStringLiteral("ABC"));
+    QCoreApplication::processEvents();
+    if (text_editor->toPlainText() != QStringLiteral("ABC") ||
+        text_editor->textCursor().position() != 3) {
+        std::cerr << "Typing into a click-created empty text box did not preserve input order.\n";
+        return false;
+    }
     QTest::keyClick(text_editor, Qt::Key_Escape);
     QCoreApplication::processEvents();
     if (layerRowCount(layer_tree) != layers_before_empty_cancel) {
