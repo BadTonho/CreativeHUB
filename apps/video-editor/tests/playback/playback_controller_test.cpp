@@ -95,11 +95,7 @@ public:
             return;
         }
         emit mediaReady(generation);
-        const auto trace_id = state_->emit_traced_frame.load(std::memory_order_acquire)
-            ? rendering::PreviewPerformanceMetrics::instance().createFrameDeliveryTrace(
-                generation, 0)
-            : 0U;
-        emit frameReady(makeFrame(0), 0, generation, trace_id);
+        emit frameReady(makeFrame(0), 0, generation, deliveryTraceId(generation, 0));
     }
 
     void play() override {
@@ -178,7 +174,9 @@ public:
             this,
             [this, frame, generation]() {
                 generation_.store(generation, std::memory_order_release);
-                emit frameReady(makeFrame(static_cast<int>(frame)), frame, generation, 0);
+                emit frameReady(
+                    makeFrame(static_cast<int>(frame)), frame, generation,
+                    deliveryTraceId(generation, frame));
             },
             Qt::QueuedConnection);
     }
@@ -226,6 +224,14 @@ public:
     }
 
 private:
+    [[nodiscard]] std::uint64_t deliveryTraceId(
+        quint64 generation,
+        qint64 frame) const {
+        if (!state_->emit_traced_frame.load(std::memory_order_acquire)) return 0;
+        return rendering::PreviewPerformanceMetrics::instance().createFrameDeliveryTrace(
+            generation, frame);
+    }
+
     static playback::VideoFramePtr makeFrame(int value) {
         auto frame = std::make_shared<media::VideoFrame>();
         frame->width = 1;
@@ -393,7 +399,9 @@ void runPendingActivationCancellationTests() {
     const auto second_source = std::filesystem::temp_directory_path() /
         "playback-cancel-second.mkv";
     const auto first_media = makeMedia(first_source);
-    const auto second_media = makeMedia(second_source);
+    // Leave time after the delayed clip activation so this test measures retry
+    // behavior instead of racing the end of its six-frame fixture.
+    const auto second_media = makeLongMedia(second_source, 30.0, 60);
     require(media_controller.commitImported(first_media).changed() &&
                 media_controller.commitImported(second_media).changed(),
             "Could not seed the cancellation fixture media.");

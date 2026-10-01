@@ -171,7 +171,7 @@ Manual cases and their recorded status are in
 | Document editing, canvas, layers, groups, shapes, object selection, transforms, undo/redo | `image_editor_core_test.cpp` (`creative-suite-image-editor-core`) | Basic Release, Paint/Eraser switching, export, save/reopen, shapes, object selection, and groups were confirmed on Windows. The checklist's exhaustive gestures and edge cases remain pending. |
 | `.cimg` persistence, validation, and backward compatibility | `image_editor_core_test.cpp`; legacy v1–v7 compatibility fixtures and current v8 round trips | Standalone steps 4, 9, 12–14; save/reopen is user-confirmed, while recovery details, failure cases, and platform acceptance remain pending. |
 | Recovery, relinking, and error logging | `image_editor_core_test.cpp` | Standalone steps 4, 12–14; a basic restart/recovery workflow was user-confirmed, but scenario-level results and failure cases remain unrecorded. |
-| Import formats and image decoding | `image_editor_core_test.cpp`, `image_editor_format_test.cpp` (`creative-suite-image-editor-image-formats`) | Standalone step 6 and packaging checks. **P1 pending validation:** CTest treats return code 77 as skipped, so missing deployed plugins may not fail the automated gate. The documented package check has no recorded result yet; macOS/Linux checks also remain pending. |
+| Import formats and image decoding | `image_editor_core_test.cpp`, `image_editor_format_test.cpp` (`creative-suite-image-editor-image-formats`) | The 2026-10-01 Windows Debug coverage and Release regression runs passed with PNG, JPEG, BMP, WebP, and TIFF encoded and decoded using local Qt 6.7.2/MSVC2019 plugins. Missing plugins can still yield CTest skip code 77 in other environments. Normal Windows packaging and macOS/Linux checks remain pending (**P1 validation**). |
 | Flattened export, Quick Export, and export dialogs | `image_editor_core_test.cpp`, `image_editor_export_ui_test.cpp` (`creative-suite-image-editor-export-ui`) | Standalone step 5 and shape/group export steps; full release recovery/export workflow remains pending. |
 | Canvas, tools, layers, shortcuts, and UI interactions | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`) | Standalone steps 2–12 plus shapes and groups; recent Windows checks are recorded, and cross-platform visual checks are pending. |
 | Video Editor linked-image producer/consumer workflow | Producer: `image_editor_ui_test.cpp`; consumer: Video Editor `apps/video-editor/tests/application/application_media_services_test.cpp`, `apps/video-editor/tests/application/main_window_integration_test.cpp`, `apps/video-editor/tests/project/project_file_test.cpp` | Linked-image checklist: the basic save-and-refresh smoke test is confirmed; transparent assets, repeated uses, clip variants, reopen, large files, and platform coverage remain pending (**P1 validation**). |
@@ -185,10 +185,10 @@ Manual cases and their recorded status are in
   2026-09-27, but not the Qt version or individual scenario results; detailed
   recovery scenarios remain pending manual acceptance.
 - **P1 — pending plugin validation and automation improvement:** the format
-  test can be reported as skipped with return code 77; it does not prove
-  required plugins are present in each packaged application. Complete the
-  documented packaging check and consider making missing required plugins fail
-  an automated gate.
+  test can be reported as skipped with return code 77; this run did not skip,
+  but it does not prove required plugins are present in each packaged
+  application. Complete the documented packaging check and decide whether
+  environments without those plugins should keep a skippable test result.
 - **P1 — linked-image acceptance:** automated coverage exists on both sides,
   but the full producer/consumer scenarios listed above have not been manually
   accepted.

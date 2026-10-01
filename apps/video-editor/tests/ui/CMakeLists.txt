@@ -50,7 +50,7 @@ if(WIN32)
             --no-compiler-runtime
             "$<TARGET_FILE:creative-suite-main-editor-media-browser-list-widget-tests>"
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${QT_BIN_DIR}/../plugins/platforms/qoffscreen.dll"
+                "${QT_BIN_DIR}/../plugins/platforms/$<IF:$<CONFIG:Debug>,qoffscreend.dll,qoffscreen.dll>"
             "$<TARGET_FILE_DIR:creative-suite-main-editor-media-browser-list-widget-tests>/platforms"
         VERBATIM
     )
@@ -114,7 +114,7 @@ if(WIN32)
             --no-compiler-runtime
             "$<TARGET_FILE:creative-suite-main-editor-media-browser-bin-tree-tests>"
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${QT_BIN_DIR}/../plugins/platforms/qoffscreen.dll"
+                "${QT_BIN_DIR}/../plugins/platforms/$<IF:$<CONFIG:Debug>,qoffscreend.dll,qoffscreen.dll>"
             "$<TARGET_FILE_DIR:creative-suite-main-editor-media-browser-bin-tree-tests>/platforms"
         VERBATIM
     )
@@ -190,7 +190,7 @@ if(WIN32)
             --no-compiler-runtime
             "$<TARGET_FILE:creative-suite-main-editor-preview-tests>"
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${QT_BIN_DIR}/../plugins/platforms/qoffscreen.dll"
+                "${QT_BIN_DIR}/../plugins/platforms/$<IF:$<CONFIG:Debug>,qoffscreend.dll,qoffscreen.dll>"
             "$<TARGET_FILE_DIR:creative-suite-main-editor-preview-tests>/platforms"
         VERBATIM
     )

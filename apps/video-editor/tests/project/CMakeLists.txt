@@ -24,25 +24,12 @@ target_link_libraries(creative-suite-main-editor-project-tests PRIVATE
 
 target_compile_features(creative-suite-main-editor-project-tests PRIVATE cxx_std_20)
 creative_suite_deploy_media_runtime(creative-suite-main-editor-project-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-project-tests)
 
 if(MSVC)
     target_compile_options(creative-suite-main-editor-project-tests PRIVATE /W4 /permissive-)
 else()
     target_compile_options(creative-suite-main-editor-project-tests PRIVATE -Wall -Wextra -Wpedantic)
-endif()
-
-if(WIN32)
-    get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
-    if(NOT QT_CORE_DLL)
-        get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION)
-    endif()
-
-    add_custom_command(TARGET creative-suite-main-editor-project-tests POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${QT_CORE_DLL}"
-            "$<TARGET_FILE_DIR:creative-suite-main-editor-project-tests>"
-        VERBATIM
-    )
 endif()
 
 add_creative_suite_test(
@@ -80,25 +67,12 @@ target_link_libraries(creative-suite-main-editor-autosave-tests PRIVATE
 
 target_compile_features(creative-suite-main-editor-autosave-tests PRIVATE cxx_std_20)
 creative_suite_deploy_media_runtime(creative-suite-main-editor-autosave-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-autosave-tests)
 
 if(MSVC)
     target_compile_options(creative-suite-main-editor-autosave-tests PRIVATE /W4 /permissive-)
 else()
     target_compile_options(creative-suite-main-editor-autosave-tests PRIVATE -Wall -Wextra -Wpedantic)
-endif()
-
-if(WIN32)
-    get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
-    if(NOT QT_CORE_DLL)
-        get_target_property(QT_CORE_DLL Qt6::Core IMPORTED_LOCATION)
-    endif()
-
-    add_custom_command(TARGET creative-suite-main-editor-autosave-tests POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${QT_CORE_DLL}"
-            "$<TARGET_FILE_DIR:creative-suite-main-editor-autosave-tests>"
-        VERBATIM
-    )
 endif()
 
 add_creative_suite_test(

@@ -2193,17 +2193,23 @@ int main(int argc, char* argv[])
     timeline->setCurrentFrame(0);
     timeline->setCurrentFrame(120);
     timeline->setCurrentFrame(0);
+    const auto is_final_still_frame = [](const auto& frame) {
+        if (frame == nullptr || frame->width != 640 || frame->height != 360 ||
+            frame->stride < 640 * 4) {
+            return false;
+        }
+        const auto center = static_cast<std::size_t>(
+            180 * frame->stride + 320 * 4);
+        return frame->rgba_pixels.size() >= center + 3 &&
+            frame->rgba_pixels[center] == 20 &&
+            frame->rgba_pixels[center + 1] == 140 &&
+            frame->rgba_pixels[center + 2] == 210;
+    };
     require(waitFor([&] {
-        const auto frame = viewer->renderedFrame();
-        return frame != nullptr && frame != video_preview_frame &&
-               frame->width == 640 && frame->height == 360;
+        return is_final_still_frame(viewer->renderedFrame());
     }), "rapid timeline seeks settle on the newest composition preview");
     const auto settled_preview = viewer->renderedFrame();
-    const auto settled_center = static_cast<std::size_t>(
-        180 * settled_preview->stride + 320 * 4);
-    require(settled_preview->rgba_pixels[settled_center] == 20 &&
-                settled_preview->rgba_pixels[settled_center + 1] == 140 &&
-                settled_preview->rgba_pixels[settled_center + 2] == 210,
+    require(is_final_still_frame(settled_preview),
             "a stale video seek cannot replace the final still-image seek result");
     const auto frame_before_layer_operations = timeline->currentFrame();
     const auto video_layer_id = window.compositionDocument()->layers().back().id;

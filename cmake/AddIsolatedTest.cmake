@@ -1,3 +1,23 @@
+function(creative_suite_attach_msvc_test_diagnostics target_name)
+    if(NOT MSVC OR NOT TARGET "${target_name}")
+        return()
+    endif()
+
+    get_target_property(_diagnostics_attached
+        "${target_name}" CREATIVE_SUITE_MSVC_DIAGNOSTICS_ATTACHED)
+    if(_diagnostics_attached)
+        return()
+    endif()
+
+    get_target_property(_target_type "${target_name}" TYPE)
+    if(_target_type STREQUAL "EXECUTABLE")
+        target_sources("${target_name}" PRIVATE
+            "${PROJECT_SOURCE_DIR}/cmake/test_support/msvc_runtime_diagnostics.cpp")
+        set_property(TARGET "${target_name}" PROPERTY
+            CREATIVE_SUITE_MSVC_DIAGNOSTICS_ATTACHED TRUE)
+    endif()
+endfunction()
+
 function(add_creative_suite_test)
     cmake_parse_arguments(PARSE_ARGV 0 TEST "" "NAME;SKIP_RETURN_CODE" "COMMAND")
 
@@ -11,6 +31,7 @@ function(add_creative_suite_test)
     set(_test_command ${TEST_COMMAND})
     list(POP_FRONT _test_command _test_target)
     if(TARGET "${_test_target}")
+        creative_suite_attach_msvc_test_diagnostics("${_test_target}")
         set(_test_executable "$<TARGET_FILE:${_test_target}>")
     else()
         set(_test_executable "${_test_target}")
@@ -34,7 +55,10 @@ function(add_creative_suite_test)
         COMMAND "${CMAKE_COMMAND}"
             "-DTEST_EXECUTABLE=${_test_executable}"
             "-DTEST_TEMP_ROOT=${CMAKE_BINARY_DIR}/ctest-temp"
+            "-DTEST_LOG_ROOT=${CMAKE_BINARY_DIR}/ctest-logs"
             "-DTEST_NAME=${TEST_NAME}"
+            "-DTEST_TIMEOUT_SECONDS=120"
+            "-DTEST_DEBUG_DIAGNOSTICS=$<IF:$<CONFIG:Debug>,1,0>"
             "-DTEST_ARGUMENT_COUNT=${_test_argument_count}"
             ${_test_argument_definitions}
             ${_test_wrapper_arguments}

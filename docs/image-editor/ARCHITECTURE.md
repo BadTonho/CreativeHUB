@@ -185,7 +185,10 @@ persistence, and recovery.
 
 The application reads PNG, JPEG, BMP, WebP, and TIFF through Qt's image I/O
 system. WebP and TIFF require the optional Qt Image Formats plugins, which are
-listed in the vcpkg manifest and deployed with the application. The official
+not currently provided by this repository's vcpkg manifest. For the Windows
+regression coverage run, matching Qt Image Formats 6.7.2/MSVC2019 plugins were
+deployed only into the Git-ignored local test output. This does not complete
+normal application packaging. The official
 [Qt Image Formats module documentation](https://doc.qt.io/qt-6/qtimageformats-index.html)
 describes the plugin model and its bundled codec notices. The module is
 available under LGPLv3 or GPLv2; its bundled TIFF codec uses the libtiff

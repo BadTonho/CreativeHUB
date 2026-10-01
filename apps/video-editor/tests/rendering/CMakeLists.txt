@@ -77,7 +77,7 @@ if(FALSE)
             --no-compiler-runtime
             "$<TARGET_FILE:creative-suite-main-editor-text-compositor-tests>"
         COMMAND "\${CMAKE_COMMAND}" -E copy_if_different
-            "\${QT_TEXT_BIN_DIR}/../plugins/platforms/qoffscreen.dll"
+            "\${QT_TEXT_BIN_DIR}/../plugins/platforms/$<IF:$<CONFIG:Debug>,qoffscreend.dll,qoffscreen.dll>"
             "$<TARGET_FILE_DIR:creative-suite-main-editor-text-compositor-tests>/platforms"
         VERBATIM
     )

@@ -34,6 +34,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 namespace {
 
@@ -550,28 +551,62 @@ public:
                     "The round-trip project lost a track or clip.");
 
             window.clearActiveTimelineSelection();
-            require(window.playback_controller_ != nullptr &&
-                        window.playback_controller_->activateClip(1, 0, false) ==
+            require(window.playback_controller_ != nullptr,
+                    "The MainWindow playback controller was unavailable.");
+            bool activation_terminal = false;
+            bool activation_committed = false;
+            std::string activation_observed_events;
+            std::string activation_outcome = "no terminal activation event";
+            const auto activation_wait_started = std::chrono::steady_clock::now();
+            window.playback_controller_->setEventHandler(
+                [&](const playback::PlaybackControllerEvent& event) {
+                    if (!activation_observed_events.empty()) activation_observed_events += ",";
+                    activation_observed_events += std::to_string(event.index());
+                    if (const auto* activation =
+                            std::get_if<playback::PlaybackActivationEvent>(&event);
+                        activation != nullptr && activation->clip_id == 1 &&
+                        activation->phase != playback::PlaybackActivationPhase::Pending) {
+                        activation_terminal = true;
+                        activation_committed = activation->phase ==
+                            playback::PlaybackActivationPhase::Committed;
+                        activation_outcome = activation_committed
+                            ? "committed"
+                            : "discarded";
+                    } else if (const auto* error =
+                                   std::get_if<playback::PlaybackErrorEvent>(&event);
+                               error != nullptr &&
+                               error->activation_clip_id == std::optional<timeline::ClipId>{1}) {
+                        activation_terminal = true;
+                        activation_outcome =
+                            "worker error: " + error->message.toStdString();
+                    }
+                    window.handlePlaybackEvent(event);
+                });
+            require(window.playback_controller_->activateClip(1, 0, false) ==
                             playback::PlaybackCommandResult::Pending,
                     "The playback controller did not accept a stable-identity activation.");
-            QEventLoop activation_loop;
-            QTimer activation_timeout;
-            activation_timeout.setSingleShot(true);
-            QObject::connect(&activation_timeout, &QTimer::timeout,
-                             &activation_loop, &QEventLoop::quit);
-            QTimer activation_poll;
-            QObject::connect(&activation_poll, &QTimer::timeout, &activation_loop, [&]() {
-                if (window.playback_controller_ == nullptr ||
-                    !window.playback_activation_loading_) {
-                    activation_loop.quit();
-                }
-            });
-            activation_timeout.start(30000);
-            activation_poll.start(10);
-            activation_loop.exec();
+            const auto activation_deadline = activation_wait_started +
+                std::chrono::seconds(30);
+            while (!activation_terminal &&
+                   std::chrono::steady_clock::now() < activation_deadline) {
+                QApplication::processEvents(QEventLoop::AllEvents, 10);
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            window.playback_controller_->setEventHandler(
+                [&window](const playback::PlaybackControllerEvent& event) {
+                    window.handlePlaybackEvent(event);
+                });
+            const auto activation_wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - activation_wait_started).count();
+            if (!activation_terminal) {
+                activation_outcome += " after " + std::to_string(activation_wait_ms) +
+                    "; events=" + activation_observed_events;
+            }
             require(window.playback_controller_ != nullptr &&
+                        activation_terminal && activation_committed &&
                         !window.playback_activation_loading_,
-                    "The controller activation did not leave its pending state.");
+                    "The controller activation did not commit; terminal result: " +
+                        activation_outcome);
             require(window.active_timeline_track_id_ == 1 &&
                         window.active_timeline_clip_id_ == 1 &&
                         window.active_timeline_track_index_cache_ == 0 &&
@@ -836,6 +871,7 @@ public:
 
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
+    application.setQuitOnLastWindowClosed(false);
     if (argc != 3) {
         std::cerr << "Expected two media fixture paths.\n";
         return 1;
