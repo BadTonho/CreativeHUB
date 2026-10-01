@@ -206,9 +206,9 @@ its old rendered copy, and cancelling restores it. Clicking an empty canvas
 location starts editing with the default box width; a horizontal drag sets a
 custom initial width. Reopening unchanged text keeps its saved width. The UI
 test verifies live rendered pixels, cursor advancement, editor visibility
-during expansion, cancellation restoration, click-to-create, and click-outside
-confirmation. It passed 1/1 in Debug and Release. The click-to-create visual
-review remains pending.
+during expansion, cancellation restoration, insertion at the double-click
+location, click-to-create, and click-outside confirmation. It passed 1/1 in
+Debug and Release. The click-to-create visual review remains pending.
 
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |

@@ -501,9 +501,25 @@ bool testEditableTextUi(const QString& directory) {
         std::cerr << "Double-click did not reopen an existing text operation.\n";
         return false;
     }
+    if (text_editor->textCursor().position() != 0) {
+        const QPoint clicked = widgetPoint(first_text.position.x() + 4,
+                                           first_text.position.y() + 4);
+        const QPoint viewport_position = text_editor->viewport()->mapFrom(canvas, clicked);
+        std::cerr << "Reopening text placed the caret at "
+                  << text_editor->textCursor().position()
+                  << " instead of the double-click position; click=" << clicked.x() << ','
+                  << clicked.y() << ", editor=" << text_editor->geometry().x() << ','
+                  << text_editor->geometry().y() << ' ' << text_editor->width() << 'x'
+                  << text_editor->height() << ", viewport point=" << viewport_position.x()
+                  << ',' << viewport_position.y() << ".\n";
+        return false;
+    }
+    QTest::keyClicks(text_editor, QStringLiteral("X"));
+    if (!text_editor->toPlainText().startsWith(QStringLiteral("XThis exceptionally"))) {
+        std::cerr << "Typing after double-click did not insert at the clicked beginning.\n";
+        return false;
+    }
     text_size->setValue(22);
-    QTest::keyClick(text_editor, Qt::Key_A, Qt::ControlModifier);
-    QTest::keyClicks(text_editor, QStringLiteral("Cancelled edit"));
     QTest::keyClick(text_editor, Qt::Key_Escape);
     QCoreApplication::processEvents();
     if (text_editor->isVisible() || window.windowTitle().startsWith(QLatin1Char('*'))) {
