@@ -1,6 +1,7 @@
 # Motion Studio Scope and Readiness
 
-Status: **provisional product scope; Milestone 0 complete**. A standalone
+Status: **approved 2D MVP product boundary; technical acceptance and
+cross-platform validation remain in progress**. A standalone
 Motion Studio shell and in-memory composition/layer model have started using
 provisional C++ and Qt 6. Its workspace creates in-memory canvases and has an
 application-owned Media Pool connected to timeline rows for image and video
@@ -62,11 +63,26 @@ The first Motion Studio MVP is a 2D composition workflow with:
   recovery appropriate to the supported workflow.
 
 The MVP does not include audio editing or mixing, animated masks, advanced
-effect graphs, nested compositions, 3D, node-based workflows, or particles. Video
-sources are visual layers; the MVP does not promise audio playback or audio in
-the export. Transparent export is not a requirement established by this
-scope. Codecs, output profiles, and any later alpha-channel support remain for
-technical validation.
+effect graphs, nested compositions, 3D, node-based workflows, or particles.
+Video sources are visual layers; the approved MVP output is opaque video without
+audio. Alpha-channel export is outside this MVP. Codec and output-profile
+validation remain open technical work.
+
+## Approved Validation Profile
+
+Use a 1920x1080 composition at 30 fps, up to 10 seconds and five layers, as the
+reference workload. Exercise a representative mix of image, video, text, and
+shape layers, transform keyframes, and the existing layer effects. Use the
+suite's mainstream notebook with integrated graphics as the hardware class;
+record the exact CPU, GPU, and memory of each measured system. This is a
+benchmark profile, not a maximum supported canvas, duration, layer count, or
+frame rate. Do not claim numeric minimum hardware requirements or playback
+throughput until measurements have been recorded.
+
+After the 2D MVP passes its performance and cross-platform validation, audio-
+reactive 2D animation is the first expansion to investigate. It is not part of
+the approved MVP. 3D, nested compositions, node-based workflows, particles,
+animated masks, and advanced effect graphs remain later research.
 
 ### MVP acceptance
 

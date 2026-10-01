@@ -1,10 +1,11 @@
 # Motion Studio Roadmap
 
-Status: **provisional; MVP implementation is substantially complete, with
-acceptance and cross-platform validation in progress**. The standalone Motion
-Studio shell, in-memory composition/layer model, navigation timeline, Media Pool,
-image/video/text/shape layers, CPU preview, versioned native save/open, and
-first-pass rendered video export are implemented under `apps/motion-editor/`.
+Status: **2D MVP product scope approved; implementation is substantially
+complete, with acceptance and cross-platform validation in progress**. The
+standalone Motion Studio shell, in-memory composition/layer model, navigation
+timeline, Media Pool, image/video/text/shape layers, CPU preview, versioned
+native save/open, and first-pass rendered video export are implemented under
+`apps/motion-editor/`.
 Configurable preview performance metrics and per-job export summaries are also
 written to the Motion Studio diagnostics log.
 Its per-layer CPU effects currently include ordered Gaussian Blur and Color
@@ -57,6 +58,11 @@ technically clear.
   both consumers validate them.
 - [x] Define native format separation, versioning, migration, and
   cross-application reference compatibility rules.
+- [x] Confirm the first MVP remains standalone 2D composition with opaque,
+  silent video export. Set the reference workload to 1080p/30 fps, up to
+  10 seconds and five layers on the suite's mainstream integrated-graphics
+  notebook class. Audio-reactive 2D animation is the first expansion to
+  investigate after the MVP is validated; it is not part of the MVP.
 
 **Exit criteria:** the MVP and application boundary, later handoff, capability
 ownership and extraction gates, and format compatibility policy are documented
@@ -82,8 +88,9 @@ this readiness work.
   record GPU runtime support separately from GPU presentation of CPU-composed
   frames.
 - [ ] Measure startup, memory, timeline/seek response, preview latency, and
-  render performance for representative small, medium, and heavy compositions;
-  document targets and any unmet limits.
+  render performance for representative small, medium, and heavy compositions.
+  Include the approved 1080p/30 fps, 10-second, five-layer reference workload;
+  record the exact test machine and document measured targets and unmet limits.
 - [ ] Record dependency and asset licenses, output profile/codec findings, and
   alternatives needed to resolve the identified gaps before choosing a
   renderer or other technology.
@@ -487,6 +494,9 @@ gate.
 
 ### 5. Future research
 
+- [ ] After the 2D MVP passes its performance and cross-platform validation,
+  investigate audio-reactive 2D animation as the first expansion. Define its
+  product boundary separately before implementation.
 - [ ] Revisit animated masks, advanced effects and effect graphs, nested
   compositions, particles, 3D features, and node-based workflows only after the core 2D motion workflows
   meet their performance targets and a clear use case justifies their added

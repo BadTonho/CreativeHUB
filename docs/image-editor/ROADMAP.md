@@ -9,6 +9,11 @@ The Video Editor handoff implementation already exists as a bounded prototype,
 but its acceptance is gated on passing the standalone manual and Windows
 packaging checks in Milestone 1. This gate orders Image Editor acceptance
 milestones; the three application tracks may be developed in parallel.
+The approved first editing-release direction is thumbnails and social-media
+art, with basic editable text. Its reference workload is a 1080p document with
+up to five layers and one group on a mainstream notebook with integrated
+graphics. This profile is for validation, not a new canvas-size limit; exact
+hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Principles
 
@@ -20,6 +25,9 @@ milestones; the three application tracks may be developed in parallel.
   editable raster layers, and one-level layer groups. Defer masks, retouching,
   color adjustment, and effect systems until they are justified by validated
   workflows.
+- Add basic editable text in the first editing release: content, font family,
+  size, color, alignment, move/resize, and save/reopen. Advanced typography,
+  text outlines, and text effects remain deferred.
 - Use Qt image I/O and deploy the plugins required for the documented input
   formats. Track Qt Image Formats and its codec notices for distribution.
 - Keep compatibility with the Video Editor as an independently testable
@@ -125,10 +133,15 @@ or leaving stale previews. Unsaved live preview streaming remains out of scope.
 Proceed after the compatibility milestone. Keep advanced image workflows
 separate from this release.
 
-- [ ] Confirm the release workflow list and supported image sizes from user
-  validation.
-- [ ] Add only the next approved editing capabilities, with automated
-  regression coverage and manual visual validation.
+- [x] Confirm the first-release workflow and validation profile: create
+  thumbnails and social-media art, including editable text, using a
+  representative 1920x1080 document with up to five layers and one group.
+  Keep custom canvas sizes; this profile is not a maximum-size policy.
+- [ ] Add basic editable text with content, font family, size, color,
+  alignment, move/resize, Undo/Redo, and `.cimg` save/reopen. Preserve
+  compatibility with existing `.cimg` versions 1 through 8.
+- [ ] Add automated regression coverage and manual visual validation for text
+  editing, selection, transforms, export, and persistence.
 - [ ] Validate recovery, export, and linked asset handoff as a complete
   workflow.
 
@@ -141,6 +154,9 @@ validated contracts and producer/consumer regression coverage.
 
 - [ ] Revisit masks, retouching, color adjustments, and larger effect sets only
   when user workflows and performance measurements justify them.
+- [ ] Profile the representative 1080p document on a mainstream integrated-
+  graphics notebook; record the exact CPU, memory, and results before setting
+  numerical hardware requirements.
 
 ## Status legend
 
