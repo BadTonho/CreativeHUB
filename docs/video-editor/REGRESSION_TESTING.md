@@ -79,7 +79,7 @@ and its subdirectories; shared-library tests are registered in
 | Shared animation, composition, media assets, encoding, and shortcuts | `libs/tests/animation_test.cpp`, `composition_test.cpp`, `shortcuts_test.cpp`; `libs/media/tests/media_assets_test.cpp`, `video_encoder_test.cpp` | The [roadmap](ROADMAP.md) tracks cross-platform runtime, codec availability, and packaged dependency checks; results remain pending. |
 | Logging and system metrics | `tests/logging/logger_test.cpp`; `tests/system/system_memory_usage_test.cpp`, `system_memory_details_dialog_test.cpp`, `performance_usage_test.cpp` | The manual checklist documents checking the app log folder and platform resource values; runtime and platform results remain pending. |
 | Media import, probing, decode, and Media Pool | `tests/media/video_decoder_test.cpp`, `media_library_test.cpp`; `tests/application/application_media_services_test.cpp`; `tests/ui/media_browser_list_widget_test.cpp`, `media_browser_bin_tree_widget_test.cpp` | Packaged UI, image plugins, media paths, and codec checks remain pending; see the [roadmap](ROADMAP.md). |
-| Project data, validation, migration, autosave, and recovery | `tests/project/project_file_test.cpp`, `autosave_manager_test.cpp`; `tests/application/main_window_integration_test.cpp` | Full project save/reopen, recovery, and failure workflows are in this guide and the [roadmap](ROADMAP.md); release validation remains pending. |
+| Project data, validation, migration, autosave, and recovery | `tests/project/project_file_test.cpp`, `autosave_manager_test.cpp`; `tests/application/main_window_integration_test.cpp` | **P0 pending validation:** complete the representative save/reopen, recovery, and failure workflows documented in this guide and the [roadmap](ROADMAP.md). |
 | Timeline model, commands, geometry, gestures, and widgets | `tests/timeline/timeline_model_test.cpp`, `timeline_command_service_test.cpp`, `timeline_geometry_test.cpp`, `timeline_interaction_controller_test.cpp`, `timeline_trim_gesture_test.cpp`, `timeline_widget_test.cpp`, `timeline_end_buttons_test.cpp` | Manual UI validation is documented; rendering, pointer feel, scaling, and accessibility checks remain pending. |
 | Playback, seeking, frame stepping, transitions, and audio | `tests/playback/video_playback_test.cpp`, `playback_worker_test.cpp`, `playback_controller_test.cpp`, `playback_deadline_scheduler_test.cpp`, `frame_step_navigation_test.cpp`, `timeline_audio_mix_test.cpp`, `audio_playback_test.cpp` | Driver/audio-device behavior and the approved reference workload require manual validation. 4K-source and higher-rate performance are measured separately. |
 | Rendering, transforms, text, and preview metrics | `tests/rendering/transform_compositor_test.cpp`, `text_compositor_test.cpp`, `preview_performance_metrics_test.cpp`; `tests/ui/preview_widget_test.cpp` | Manual GPU presentation, CPU fallback selection, visual output, and playback performance checks are documented; results remain pending. |
@@ -89,14 +89,14 @@ and its subdirectories; shared-library tests are registered in
 
 ### Current coverage gaps and pending validation
 
-- **P0 — critical paths mapped:** project persistence, migration, rejection of
-  invalid data, autosave, and recovery each have automated evidence and
-  documented manual workflows. This source-level inventory did not identify a
-  specific P0 behavior with neither form of coverage; it does not re-run or
+- **P0 — critical paths mapped, manual acceptance pending:** project
+  persistence, migration, rejection of invalid data, autosave, and recovery
+  each have automated evidence and documented manual workflows. Run and record
+  those workflows; this source-level inventory does not prove the tests pass or
   exhaustively review every assertion.
-- **P1 — pending validation:** complete the representative project save/reopen,
-  recovery, offline-media, and export workflows. Image Editor linked handoff
-  remains behind its standalone and cross-application acceptance gates.
+- **P1 — pending validation:** complete offline-media and export workflows.
+  Image Editor linked handoff remains behind its standalone and
+  cross-application acceptance gates.
 - **P2 — pending validation:** record Windows release checks and complete
   macOS/Linux, graphics-driver, audio-device, and reference-PC performance
   results as access to those environments allows.
