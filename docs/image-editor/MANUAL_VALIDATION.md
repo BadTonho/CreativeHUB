@@ -15,8 +15,8 @@ directory. Windows deployment now copies the Qt-version-matched plugins, and
 the automated import test checks the Image Editor importer against the app's
 plugin directory in Debug and Release. The full Image Editor CTest group
 passed in Debug and Release (5/5 each), and the full Release suite passed
-(61/61). The affected image has not yet been reopened manually in the rebuilt
-UI. macOS and Linux packaging checks remain deferred.
+(61/61). The owner then reopened the affected WebP successfully in the rebuilt
+Windows UI. macOS and Linux packaging checks remain deferred.
 
 ## Standalone editing and recovery
 
@@ -247,8 +247,8 @@ UI. macOS and Linux packaging checks remain deferred.
 - [x] The Windows Debug and Release builds now run format/import tests against
   the deployed app plugins; the full Image Editor CTest group passed 5/5 in
   both configurations, and the full Release suite passed 61/61.
-- [ ] Reopen the WebP image that showed the unsupported-format dialog in the
-  rebuilt application UI.
+- [x] The owner reopened the WebP image that showed the unsupported-format
+  dialog in the rebuilt Windows application UI; it opened successfully.
 - [ ] Cross-platform packaging and interaction checks below still need
   platform-specific records.
 
