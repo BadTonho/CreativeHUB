@@ -146,11 +146,15 @@ and its subdirectories; shared-library tests are registered in
 
 ### Current coverage gaps and pending validation
 
-- **P0 — critical paths mapped, manual acceptance pending:** project
-  persistence, migration, rejection of invalid data, autosave, and recovery
-  each have automated evidence and documented manual workflows. Run and record
-  those workflows; this source-level inventory does not prove the tests pass or
-  exhaustively review every assertion.
+- **P0 — critical paths mapped:** project persistence, migration, rejection of
+  invalid data, autosave, and recovery have automated evidence and documented
+  manual workflows. The owner reported that the requested save/reopen,
+  autosave-recovery, and invalid-project preservation checks worked on the
+  Windows 11 reference PC (Ryzen 5 3600, 32 GB RAM, GTX 1660 Super 6 GB) on
+  2026-10-01. Individual fixtures and detailed results were not recorded, so
+  broader project-size, migration, and failure-case acceptance remains pending.
+  This source-level inventory does not prove the tests pass or exhaustively
+  review every assertion.
 - **P1 — pending validation:** complete offline-media and export workflows.
   Image Editor linked handoff remains behind its standalone and
   cross-application acceptance gates.
