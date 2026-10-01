@@ -1317,14 +1317,16 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         creating_text_frame_ = false;
         update();
         const qreal width = std::abs(end.x() - start.x());
-        if (width >= 4.0) {
-            ImageTextData text = text_style_;
-            text.id.clear();
-            text.content.clear();
-            text.position = QPointF(std::min(start.x(), end.x()), start.y());
-            text.box_width = std::max<qreal>(1.0, width);
-            beginTextEditing(text, false);
-        }
+        ImageTextData text = text_style_;
+        text.id.clear();
+        text.content.clear();
+        const bool dragged_to_set_width = width >= 4.0;
+        const qreal left = dragged_to_set_width ? std::min(start.x(), end.x()) : start.x();
+        text.position = QPointF(left, start.y());
+        const qreal available_width = std::max<qreal>(1.0, image_.width() - left);
+        const qreal initial_width = dragged_to_set_width ? width : text_style_.box_width;
+        text.box_width = std::clamp(initial_width, 1.0, available_width);
+        beginTextEditing(text, false);
         event->accept();
         return;
     }

@@ -43,11 +43,13 @@ Drag on empty canvas to select every object whose visible geometry intersects
 the marquee. Drag a selected object to move the selection, or drag a corner
 handle to scale it with proportions preserved. Hold Alt during resize for
 independent horizontal and vertical scaling. Text can be reopened for editing
-with a double-click; while editing it, Enter inserts a line break, Ctrl+Enter
-confirms, and Esc cancels. Clicking outside the text editor
-also confirms. Side handles resize the text box width without changing the font
-size. Printable letters go into the text while the editor has focus; the Paint
-(`B`) and Eraser (`E`) shortcuts do not switch tools during text entry. Commands
+with a double-click. To create text, click an empty canvas location and start
+typing; a horizontal drag instead sets the initial text box width. While editing,
+Enter inserts a line break, Ctrl+Enter confirms, and Esc cancels. Clicking
+outside the text editor also confirms. Side handles resize the text box width
+without changing the font size. Printable letters go into the text while the
+editor has focus; the Paint (`B`) and Eraser (`E`) shortcuts do not switch tools
+during text entry. Commands
 listed as unassigned can be given a shortcut in the settings dialog.
 
 With Paint or Eraser active and an editable layer selected, hold `Ctrl+Alt`,

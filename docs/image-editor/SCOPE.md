@@ -46,7 +46,8 @@ Basic editable text is implemented with these capabilities:
 
 - edit multiline content, font family, pixel size, color, and horizontal
   alignment;
-- create a `Text N` layer by dragging on the canvas and edit its text directly;
+- create a `Text N` layer by clicking an empty canvas location and edit its text
+  directly; a horizontal drag can set a custom initial text box width;
 - confirm with Ctrl+Enter or a click outside the editor, insert line breaks with
   Enter, cancel with Esc, and reopen an existing text object with a double-click;
 - move text and resize its width without changing the font size; while editing,
