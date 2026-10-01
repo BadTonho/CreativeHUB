@@ -3,18 +3,19 @@
 Status: **provisional**.
 
 The Video Editor's Media Pool UI and project integration use the shared,
-Qt-independent catalog and media import services in `libs/media/`. Each
-catalog entry contains a canonical source path, a project-owned display name,
-a hierarchical bin path, a media kind, and an online/offline state. Image
+application-independent catalog and media import services in `libs/media/`.
+Each catalog entry contains a canonical source path, a project-owned display
+name, a hierarchical bin path, a media kind, and an online/offline state. Image
 Editor link references remain in the Video Editor project adapter, outside
 the shared catalog. The default bin is
 `Unsorted`; bin paths use `/`, and selecting a parent bin includes all of its
 sub-bins.
 
 Motion Studio uses the same catalog and import processor in its own standalone
-Media Pool. It has a separate UI and an in-memory pool tied to the current
-composition. Imported files are not inserted into the Motion Studio timeline
-in this milestone.
+Media Pool. It has a separate UI and stores pool contents with the current
+composition. Importing an item does not place it automatically; dragging an
+image or video from the Media Pool to the timeline creates a new composition
+layer at the drop position.
 
 Renaming changes only the label stored in the project. It never renames the
 physical file. Removing an item from the Browser marks it offline, keeps it

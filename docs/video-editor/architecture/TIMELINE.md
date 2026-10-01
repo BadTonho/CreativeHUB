@@ -302,12 +302,13 @@ Undo/Redo snapshots. Snapshots restore tracks, order, names, clip identifiers,
 positions, active track and clip, selected media, and playhead. Decoded frames,
 FFmpeg sessions, and GPU resources are never stored.
 
-The versioned .csp project format stores the same track, clip, optional audio
-parameter, and per-project timeline zoom and uniform track-row-height
-structure. Version 1 sequential clips migrate to Video 1 when opened.
-Advanced ripple
-editing, multiple media types, audio-only sources, project-wide history, and
-export remain future work.
+The versioned `.csp` project format stores tracks, clips, optional audio
+parameters, and per-project timeline zoom and uniform track-row height.
+Version 1 sequential clips migrate to Video 1 when opened. Video, still-image,
+and text media, plus offline video/audio export, are implemented. Audio-only
+sources and independent audio tracks remain future work; advanced ripple
+editing, automatic gap management, and history for every project subsystem are
+outside the current Timeline scope. See [Current Scope and Non-goals](SCOPE.md).
 
 ## Layers, transformations, and keyframes
 

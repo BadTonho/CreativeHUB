@@ -3,9 +3,11 @@
 Status: provisional.
 
 Qt 6 Widgets owns the Video Editor window, menus, actions, dialogs, dock
-layout, focus, and user input. Qt-specific types stay inside the application
-UI and rendering layers. Future shared interfaces use standard C++ types and
-do not expose QObject, QString, Qt containers, or Qt signals.
+layout, focus, and user input. Widgets and application interaction stay in the
+UI layer. Focused shared libraries may depend on Qt Core or Qt Gui for
+non-widget services, but do not own application panels or workflows. Public
+interfaces remain explicit about their Qt dependencies and do not expose Qt
+types unless that dependency is part of the documented contract.
 
 UI components live under `apps/video-editor/src/ui/`, grouped into `effects`,
 `functions`, `media_browser`, `preview`, `system`, `timeline`, and `workspace`.

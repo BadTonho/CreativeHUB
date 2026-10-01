@@ -1,138 +1,105 @@
-# Auditoria da Timeline
+# Video Editor Timeline Audit
 
-> **Atualização de 26/09/2026:** o problema prioritário 1 foi corrigido. O projeto agora salva a base de tempo racional da Timeline no formato 11; projetos novos usam 30/1 FPS; playback, edição e exportação convertem posições entre frames da Timeline e da mídia de origem por funções compartilhadas. Projetos antigos inferem a taxa pelo primeiro vídeo online, usam 30/1 como fallback e convertem clips offline quando a mídia é reconectada. Os testes de migração, edição e exportação foram ampliados. A compilação Release e os 43 testes CTest passaram; um teste opcional do Image Editor foi ignorado pela própria configuração da suíte.
+**Status:** Active investigation notes; last reconciled on 2026-09-30. The
+performance observations below are code-level hypotheses or dated log samples,
+not a current benchmark. Recheck them against fresh code and measurements
+before starting an optimization.
 
-## Objetivo e escopo
+## Confirmed corrections
 
-Este documento preserva os resultados de uma revisão estática da Timeline do Video Editor, do playback, da composição do Preview, da exportação offline, do áudio, da persistência do projeto e dos testes relacionados. É um registro de diagnóstico para orientar o trabalho seguinte; por si só, não altera o comportamento do produto.
+The project-timebase issue identified in the earlier audit is fixed. `.csp`
+version 11 introduced a reduced rational Timeline frame rate and separate source
+and Timeline clip durations. New projects use 30/1 FPS. Playback, editing,
+audio, and export use shared conversion helpers for mapping Timeline time to
+source time. Versions 1 through 10 migrate their rate from the first online
+video, falling back to 30/1; offline source durations are converted when their
+media is restored. Version 12 migrates Cross Dissolves to real overlaps.
+See [Project Document and Persistence](PROJECT.md).
 
-A revisão inspecionou a implementação, a documentação, os testes e as métricas de playback mais recentes disponíveis durante a análise. Nenhuma compilação ou suíte de testes foi executada como parte desta auditoria. As observações sobre os caminhos do código são estáticas; o impacto no desempenho e os sintomas em tempo de execução ainda precisam de medições reproduzíveis, exceto quando houver evidências explícitas na amostra de log registrada abaixo.
+Overlapping embedded audio is mixed in preview and export using the shared
+sample-range planner. This covers source and Timeline rates, trims, gain, mute,
+and the Cross Dissolve cut. Audio does not crossfade during a Cross Dissolve,
+and audio-only clips or tracks are not part of the current model.
 
-## Pontos fortes existentes
+## Remaining correctness and scalability questions
 
-- Tracks e clips têm IDs estáveis, que dão às operações e à seleção uma identidade confiável.
-- As alterações da Timeline usam comandos tipados e um histórico limitado de Undo/Redo, em vez de cada interação da interface modificar o modelo diretamente.
-- O tratamento de gestos está separado dos comandos do modelo na interface da Timeline.
-- Edit, Fusion e Render compartilham a mesma sessão do projeto, o Preview e a Timeline, sem duplicar o estado da Timeline.
-- Os diagnósticos de playback já separam várias etapas do worker, da decodificação, da composição e da entrega de frames, agregando eventos em vez de registrar cada frame.
-- A exportação offline tem caminhos próprios de composição e codificação, que podem ser testados independentemente do playback em tempo real.
+These points describe potential costs or coverage gaps from the prior static
+review. They are not confirmed performance bottlenecks.
 
-## Riscos de correção prioritários
+1. **Active-layer preparation:** the playback worker may rebuild and order
+   active composition requests for each frame. Measure with large timelines
+   before considering an interval index or immutable prepared ordering.
+2. **Decoder-session count:** composition setup may open a decoder for each
+   video clip occurrence, including repeated uses of one source. Measure setup
+   time, open sessions, memory, and file handles before introducing a bounded
+   decoder cache.
+3. **Repeated still-image buffers:** verify whether repeated image clips share
+   immutable decoded pixels or create separate owning frame buffers.
+4. **Timeline lookup:** `TimelineModel::clipAt` and `topClipAt` may scan tracks
+   and clips linearly. Profile representative project sizes before adding an
+   active-clip index.
+5. **Timeline painting:** measure visible-item traversal and paint duration.
+   Consider viewport-limited drawing and narrower invalidation only if the UI
+   measurements show a problem.
+6. **Track-state projection:** `TimelineWidget::setTracks` receives track data
+   by value. Measure the frequency and cost of broad state updates before
+   changing ownership or introducing shared mutable state.
+7. **Undo memory:** the timeline history is bounded to 100 states. Measure
+   snapshot memory on a large project and after long editing sessions; decoded
+   frame buffers are not part of those snapshots.
 
-### 1. A base de tempo da Timeline e o mapeamento de frames de origem diferem entre Preview e exportação
+## Variable-frame-rate media
 
-O projeto não persiste a taxa de frames da Timeline. `ProjectDocument` armazena canvas e dados de layout da Timeline, mídias, bins e tracks, mas não uma base de tempo do projeto. A taxa da Timeline é inferida a partir do primeiro clip válido encontrado, com fallback para 30 FPS. Portanto, o resultado pode depender da ordem dos clips e de os metadados da mídia estarem disponíveis quando o projeto é aberto.
+The renderer maps frames using source-rate and timestamp conversion. Variable
+frame-rate media may not have a constant frame duration, so seeking or
+conversion can land on a neighboring presentation frame. The supported VFR
+accuracy has not been established by a dedicated fixture. Add a known VFR
+sample and verify sequential playback, seek accuracy, edit points, and export
+before making a stronger support claim.
 
-O Preview e a exportação offline também mapeiam as posições da Timeline para frames de origem de maneiras diferentes:
+## Diagnostics and prior measurements
 
-- O caminho de playback composto avança de `source_start_frame` pela diferença de frames locais da Timeline, tratando, na prática, cada frame da Timeline como um frame de origem.
-- A exportação offline converte o tempo decorrido na Timeline entre as taxas de frames da Timeline e da mídia de origem antes de escolher o frame de origem.
-- O cálculo da duração da Timeline usa a quantidade de frames da origem ou a duração da mídia e sua taxa de frames; a quantidade de frames da Timeline usa a taxa inferida.
+The previous audit recorded one slow 24 FPS playback sample: a 41.67 ms frame
+budget, 63.88 ms total worker time, 58.26 ms composition time, 56.26 ms
+rasterization/blending, and 5.62 ms decoding. Other slow samples showed decode
+costs around 42–120 ms. Those figures are historical observations from that
+log, not a fresh or controlled baseline. They suggested both CPU composition
+spikes and occasional decode spikes but did not isolate their causes.
 
-Por exemplo, uma mídia de origem a 60 FPS com 600 frames pode ocupar 20 segundos, segundo o cálculo de duração, em uma Timeline a 30 FPS. O mapeamento um para um do Preview consome 600 frames de origem ao longo desses 20 segundos, enquanto a conversão da exportação pode solicitar posições correspondentes a cerca de 1.200 frames de origem. Para uma mídia a 24 FPS, pode ocorrer a divergência inversa: o Preview pode avançar os números dos frames de origem rápido demais, enquanto a exportação amostra de acordo com o tempo decorrido.
+The existing worker metrics do not by themselves measure physical display
+latency or prove which compositor fast paths were used. Capture a new baseline
+with the same project, machine, cache conditions, and repeated runs before
+attributing a result to an optimization. Include worker frame percentiles,
+decode and composition stages, coalesced/dropped frames, Timeline paint time,
+composition setup time, and memory where available.
 
-Se os metadados da mídia estiverem ausentes quando um projeto for aberto, um clip pode ficar sem uma taxa de frames utilizável; outro clip ou o fallback de 30 FPS pode então definir a taxa da Timeline. Reabrir o projeto com a mídia disponível pode, portanto, mudar a taxa inferida.
+## Test coverage to review
 
-**Recomendação:** definir e persistir uma base de tempo explícita para o projeto/Timeline, de preferência como uma taxa racional. Adicionar uma política de migração para projetos antigos. Centralizar o mapeamento entre tempo da Timeline e tempo/frame de origem e usá-lo no Preview, na sincronização de áudio e na exportação. Definir o comportamento quando os metadados estiverem ausentes ou a mídia estiver offline, para que a reabertura não mude silenciosamente o relógio do projeto.
+- Keep model and playback coverage for differing source rates and nonzero
+  source in-points.
+- Add or confirm a deterministic pixel comparison between preview and export
+  for 24, 30, and 60 FPS sources. Existing rate-conversion tests do not
+  necessarily prove that both complete pipelines select the same source frame.
+- Add a VFR fixture and document the measured seek/export accuracy.
+- Retain deterministic tests for overlapping embedded audio and a manual
+  listening check using distinct sources, including a visually covered track.
+- Add scale tests for large timelines and memory tests for long undo histories
+  if those project sizes are part of the expected workload.
 
-### 2. Áudio de todos os clips de vídeo ativos é mixado no Preview e na exportação
+## Follow-up order
 
-Corrigido: o Preview agora mistura o áudio embutido de todos os clips de vídeo ativos na posição global da Timeline, inclusive em tracks visualmente cobertas. Preview e exportação usam o mesmo planejador de intervalos de amostras para taxas de origem/Timeline, trims, ganhos, mutes e o corte de áudio do Cross Dissolve. O dissolve continua sem crossfade de áudio: a saída toca até o corte original e a entrada começa nesse corte, na posição de origem correspondente ao frame local D. O teste determinístico do mixer cobre fontes sobrepostas, soma antes do clipping, gaps, taxas diferentes, ganhos/mutes e o corte; o teste de exportação valida áudio embutido e a semântica do dissolve. O modelo ainda não oferece clips ou tracks somente de áudio; isso permanece fora do escopo atual.
+1. Confirm the remaining test gaps above against the current test suite.
+2. Add VFR accuracy coverage and preview/export source-frame equivalence where
+   coverage is missing.
+3. Collect current playback and Timeline-paint measurements on small, medium,
+   and large projects, with cold and warm caches.
+4. Use those measurements to decide whether active-clip indexing, decoder
+   reuse, immutable still-frame sharing, or viewport-limited painting is
+   worthwhile.
+5. Measure memory for the 100-state history before changing its design.
 
-## Riscos de desempenho e escalabilidade
+## Validation record
 
-Estes são riscos de custo observados no código, não afirmações de que cada um já seja um gargalo medido.
-
-### 3. As camadas ativas do playback são reconstruídas e ordenadas em cada frame composto
-
-`PlaybackWorker::decodeCompositionLayers` percorre as sessões da composição, monta coleções de requisições/camadas e as ordena durante o processamento do frame. O trabalho cresce com todas as sessões de clips preparadas, mesmo quando poucas estão ativas na posição atual, e cria contêineres temporários no caminho de cada frame.
-
-**Recomendação:** medir esse caminho depois de corrigir os problemas de consistência. Se o custo for relevante, manter um índice de clips ativos ordenado por tempo ou preparar a ordenação imutável da composição quando ela mudar, para que cada frame só precise localizar os clips ativos naquele instante.
-
-### 4. A preparação da composição abre uma sessão para cada ocorrência de clip de vídeo
-
-`PlaybackWorker::setComposition` prepara sessões para cada clip de vídeo. Usos repetidos da mesma mídia podem abri-la mais de uma vez. Atualizar a composição após alterações na Timeline pode repetir essa preparação, aumentando o tempo de inicialização, o uso de memória e a quantidade de decodificadores/arquivos abertos em Timelines grandes.
-
-**Recomendação:** medir o tempo de preparação da composição, a quantidade de sessões e o uso de memória em projetos que repetem as mesmas mídias. Avaliar abertura sob demanda e um cache limitado de decodificadores reutilizáveis por identidade da mídia, mantendo estados de busca independentes quando necessário.
-
-### 5. Buffers de imagens estáticas podem ser copiados para ocorrências repetidas de clips
-
-Durante a atualização da composição, o controller pode criar um novo `VideoFrame` compartilhado a partir de um frame de imagem estática para clips sem substituição. Assim, usos repetidos da mesma imagem na Timeline podem duplicar o buffer de pixels em vez de compartilhar os pixels decodificados imutáveis.
-
-**Recomendação:** compartilhar frames de imagem imutáveis por identidade da mídia e invalidá-los somente quando a mídia de origem ou as configurações de decodificação relevantes mudarem. Confirmar propriedade e tempo de vida dos buffers antes de alterar o cache.
-
-### 6. As consultas de posição na Timeline percorrem tracks e clips linearmente
-
-`TimelineModel::clipAt` e `topClipAt` fazem buscas lineares. O relógio do playback consulta a Timeline repetidamente, então esse custo cresce com a quantidade de tracks e clips.
-
-**Recomendação:** comparar projetos pequenos, médios e pesados. Se o custo das consultas aparecer nas medições, usar a ordenação temporal existente para localizar clips candidatos por intervalo e adicionar um índice dos clips ativos de maior prioridade.
-
-### 7. A pintura da Timeline percorre clips e transições a cada atualização
-
-`TimelineWidget::paintEvent` percorre o conteúdo da Timeline para desenhar clips, transições, rótulos e elementos relacionados a keyframes. O desenho de transições também faz buscas por clips, o que pode aumentar o trabalho conforme cresce a quantidade de conteúdo. Uma atualização do playhead pode provocar trabalho de pintura da interface independentemente da decodificação e da composição da mídia.
-
-**Recomendação:** adicionar medições agregadas e limitadas da duração da pintura da Timeline e da quantidade de itens percorridos/desenhados. Depois, considerar limitar a pintura à área visível, invalidar somente a região do playhead e pré-indexar as referências entre transições e clips, se as medições justificarem essas mudanças.
-
-### 8. A atualização do estado da Timeline copia os dados das tracks
-
-`TimelineWidget::setTracks` recebe e armazena coleções de tracks por valor. Isso não acontece a cada atualização do relógio do playback, mas atualizações amplas do estado podem copiar metadados e strings da Timeline.
-
-**Recomendação:** medir a frequência das atualizações e o custo das cópias em projetos pesados antes de mudar a propriedade dos dados. Evitar introduzir estado mutável compartilhado apenas para eliminar uma cópia ainda não medida.
-
-### 9. O Undo/Redo mantém até 100 estados da Timeline
-
-O histórico tem limite de 100 estados. Esses snapshots mantêm principalmente metadados da Timeline, strings e keyframes, e não pixels de imagens decodificadas; ainda assim, o uso de memória cresce com o tamanho do projeto e a frequência das edições.
-
-**Recomendação:** medir o uso de memória em projetos pesados e após sessões longas de edição. Manter o limite atual enquanto não houver pressão relevante; se houver, registrar primeiro o tamanho dos snapshots e o uso de memória do histórico antes de redesenhar comandos ou snapshots.
-
-## Risco de temporização de mídia: taxa de frames variável
-
-A implementação de reprodução de vídeo usa uma taxa de frames estimada e conversões entre frame e timestamp para mapear os frames. A decodificação sequencial incrementa os números dos frames, enquanto buscas usam conversão de timestamp. Em mídias com taxa de frames variável (VFR), esses mapeamentos podem ser aproximados e fazer buscas ou conversões entre Timeline e origem caírem em um frame vizinho.
-
-**Recomendação:** documentar o nível atual de suporte a VFR. Adicionar uma mídia VFR conhecida para conferir reprodução sequencial, precisão de busca, pontos de corte e exportação. Se a precisão não for aceitável, usar timestamps de apresentação ou um índice de timestamps para selecionar frames, em vez de assumir uma duração constante por frame.
-
-## O que os logs de playback disponíveis indicam
-
-O log mais recente analisado incluía um frame lento perto do frame 476, a 24 FPS:
-
-- Orçamento do frame: aproximadamente 41,67 ms.
-- Processamento total no worker: aproximadamente 63,88 ms.
-- Composição: aproximadamente 58,26 ms.
-- Rasterização/blend: aproximadamente 56,26 ms.
-- Decodificação: aproximadamente 5,62 ms.
-
-Outras amostras lentas mostraram custos de decodificação na faixa de aproximadamente 42–120 ms. As evidências apontam para pelo menos dois fatores distintos: picos de composição/blend na CPU e picos ocasionais de avanço da decodificação. Os dados não mostram que alguma otimização discutida anteriormente tenha produzido um ganho estável entre as execuções; os tempos variaram entre capturas, e não foi registrada uma comparação controlada antes/depois.
-
-Os diagnósticos atuais não informam quantos pixels usaram o caminho de cópia direta opaca, portanto os logs não permitem confirmar o uso nem medir a contribuição desse caminho. Eles também não isolam o tempo de `TimelineWidget::paintEvent`; assim, as métricas do worker não bastam para descartar o custo da interface da Timeline.
-
-**Limite da interpretação:** o log identifica etapas caras do worker em frames amostrados, mas não é um benchmark controlado e não mede a varredura física do monitor. Antes de atribuir uma mudança a uma otimização, comparar execuções repetidas com cache frio e aquecido, usando o mesmo projeto e a mesma máquina.
-
-## Lacunas de cobertura de testes identificadas
-
-- Não foi encontrado um teste direto de equivalência entre Preview e exportação para mídias com taxas de origem diferentes, como 24, 30 e 60 FPS.
-- Existe um teste de conversão da taxa de frames da exportação, e um teste do relógio do controller de playback alterna entre clips com taxas de origem diferentes. O teste do controller usa um worker falso e não verifica o mapeamento real dos frames de origem.
-- Não foi identificada uma fixture de projeto VFR para conferir a precisão de busca e exportação.
-- A mixagem sobreposta agora tem cobertura determinística no planejador compartilhado pelo Preview e pela exportação. A validação manual ainda deve confirmar a saída audível em um dispositivo real com clips de áudio distintos e uma track de vídeo visualmente coberta.
-- Não foi identificado um benchmark de escalabilidade para Timelines com centenas ou milhares de clips, mídias repetidas ou muitas tracks.
-- Os testes existentes do compositor conferem a correção dos pixels em caminhos importantes de blend e transformação; por si só, eles não provam qual caminho rápido um projeto real usa nem quantificam seu desempenho.
-
-## Ordem de trabalho recomendada
-
-1. **Definir a base de tempo da Timeline e o mapeamento para a origem.** Persistir uma taxa de frames explícita do projeto com migração para projetos antigos e, em seguida, compartilhar o mesmo mapeamento entre tempo da Timeline e tempo/frame de origem no Preview, no áudio e na exportação.
-2. **Concluído — alinhar o áudio em sobreposições.** Preview e exportação agora misturam todos os clips de vídeo ativos usando o mesmo planejador de amostras e têm cobertura determinística compartilhada.
-3. **Adicionar casos determinísticos de correção.** Cobrir mídias de origem a 24/30/60 FPS, cortes com ponto de origem diferente de zero, reabertura com mídia online/offline, equivalência de frames do Preview e da exportação e áudio sobreposto.
-4. **Preencher as lacunas de observabilidade.** Adicionar medições agregadas da pintura da Timeline e contadores de uso dos caminhos rápidos do compositor, respeitando a preferência existente de métricas e evitando logs por frame.
-5. **Estabelecer medições de desempenho reproduzíveis.** Usar projetos pequenos, médios e pesados, com cache frio e aquecido, e relatar tempo de frame P50/P95, frames descartados/coalescidos, decodificação, composição, pintura da Timeline, preparação da composição e memória.
-6. **Otimizar com base nessas medições.** Priorizar busca de clips ativos e ordenações repetidas por frame, pintura limitada à área visível, reutilização de decodificadores ou compartilhamento de frames imutáveis de imagens somente quando o custo medido justificar a complexidade adicional.
-7. **Medir a memória do histórico.** Conferir projetos pesados e sessões longas antes de redesenhar a estrutura atual de histórico com 100 estados.
-
-## Checklist para acompanhamento
-
-- [ ] Escolher a representação da base de tempo do projeto e a política de migração.
-- [ ] Adicionar testes compartilhados de mapeamento de frames de origem para Preview e exportação.
-- [x] Definir e testar a semântica do áudio em sobreposições; falta apenas a validação manual de escuta descrita acima.
-- [ ] Adicionar uma fixture VFR e documentar a precisão suportada.
-- [ ] Adicionar diagnósticos agregados da pintura da Timeline e dos caminhos rápidos do compositor.
-- [ ] Registrar uma referência de desempenho reproduzível antes da próxima otimização.
-- [ ] Reavaliar índice de clips ativos, reutilização de decodificadores e compartilhamento de frames de imagem com base nessa referência.
-- [ ] Medir o uso de memória do Undo/Redo em um projeto pesado.
+The 2026-09-26 record reported a Release build and 43 passing CTest tests; an
+optional Image Editor test was skipped by the configured suite. That result is
+kept as a dated historical record and is not validation of later changes.

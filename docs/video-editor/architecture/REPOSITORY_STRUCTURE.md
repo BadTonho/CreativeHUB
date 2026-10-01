@@ -1,6 +1,6 @@
 # Repository Structure
 
-Status: **provisional**.
+Status: **provisional; reflects the current repository layout**.
 
 The project uses one repository organized by applications, modules, and
 documentation. It does not create separate repositories or an unnecessary
@@ -10,33 +10,33 @@ monorepo structure.
 
 ```text
 apps/
-  video-editor/      # Active audiovisual editor
-  motion-editor/     # Placeholder for the future Motion Studio
-  image-editor/      # Placeholder for the future Image Editor
-libs/                # Shared libraries added only when multiple apps need them
-platform/            # Platform adapters when a shared abstraction requires them
+  video-editor/      # Multitrack video and audio editor
+  image-editor/      # Layered raster image editor
+  motion-editor/     # Motion design and compositing editor
+libs/
+  animation/         # Shared keyframe and curve evaluation
+  composition/       # Shared CPU frame composition
+  diagnostics/       # Structured logging
+  media/             # Media assets, playback, and video encoding
+  shortcuts/         # Shared shortcut registration and persistence
+  system-monitor/    # Process and system resource sampling
 prototypes/          # Isolated technical experiments and references
-docs/
-  video-editor/      # Current audiovisual editor documentation
-  motion-editor/     # Future Motion Studio documentation
-  image-editor/      # Future Image Editor documentation
+docs/                # Product, format, architecture, and validation docs
 ```
 
-The first real application is located at `apps/video-editor/`. The archived
-technical prototypes remain under `prototypes/` and are not application
-dependencies. The motion and image editor application directories are empty
-placeholders and are not wired into CMake yet. Their documentation folders
-contain provisional roadmaps only.
+The three applications have separate CMake targets and can be selected
+independently through the root build options. They share focused libraries
+where behavior and data contracts are common; project formats, application
+workflows, and UI remain app-owned. The prototypes under `prototypes/` are
+references and are not application dependencies.
 
 ## Module boundaries
 
-The Video Editor and Motion Studio are expected to share core responsibilities
-without duplicating media, rendering, or animation engines. A shared library is
-created only when it has a second real consumer and a documented responsibility.
-
-The initial application keeps media, timeline, playback, logging, project
-persistence, and UI code application-local. This avoids premature abstractions
-while the product boundaries are still being validated.
+The Video Editor, Image Editor, and Motion Studio share focused capabilities
+without sharing their complete editing workflows. Current shared libraries
+include media assets/playback/encoding, animation, composition, diagnostics,
+shortcut management, and system monitoring. Project schemas, document stores,
+timeline models, editors, and panels remain application-owned.
 
 ## Video Editor organization
 
@@ -95,11 +95,11 @@ subfolders group effects, functions, media-browser, system-memory, timeline,
 and workspace widgets. Each test subfolder has its own CMake registration file;
 `tests/CMakeLists.txt` holds shared helpers and adds those groups.
 
-`MainWindow` remains the application coordinator: its files are separate
-translation units, not independent controllers or ownership boundaries. Media,
-timeline, playback, project, and rendering modules remain the lower-level
-boundaries that the coordinator connects. This organization creates no shared
-library and does not change the application API or runtime behavior.
+`MainWindow` coordinates the Video Editor UI and connects its session and
+application controllers. `EditorSession`, the project and media controllers,
+`PlaybackController`, and `TimelineCommandService` own their documented state
+and operations. Shared libraries remain below these app-specific controllers;
+they do not own project lifecycle or UI behavior.
 
 An internal Qt-independent `frame_step_navigation` helper under `main_window/`
 now returns the boundary decision for Previous/Next Frame. The window still

@@ -50,16 +50,21 @@ capabilities. Define their contracts after the project establishes the
 relevant color pipeline and confirms that multiple applications need the same
 behavior.
 
-## First Shared Capability to Validate
+## Existing Shared Libraries and Boundaries
 
-Start with small, application-independent capabilities. The Video Editor's
-RGBA frame model, FFmpeg playback session, CPU compositor, transform evaluator,
-structured logger, media catalog, probes, decoders, and per-file import
-processor have focused CMake targets under `libs/`. Motion Studio now consumes
-the shared media asset library in its own Media Pool, and Video Editor media
-and `.csp` regressions cover the application adapter boundary. These APIs
-remain provisional until both consumers have appropriate regression coverage.
-The libraries do not include application timeline, document, or UI types.
+The repository already has focused CMake targets under `libs/`: `media-frame`,
+`animation`, `composition`, `diagnostics`, `system-monitor`, `shortcuts`, and
+the media targets `video-media`, `video-encoding`, and `media-assets`. The
+Video Editor and Motion Studio consume shared media, animation, and composition
+capabilities; both also use shared diagnostics and system monitoring. Shortcut
+registration is shared by all three editors. Each application keeps its own
+timeline, project/document model, task orchestration, panels, and editing
+workflow. The shared libraries do not own application documents or widgets.
+
+These APIs remain provisional and should continue to gain focused tests for
+their shared behavior and each consumer boundary. In particular, new
+cross-application handoffs still require producer/consumer regression coverage
+and documented compatibility behavior.
 
 The API contract should document:
 
@@ -69,8 +74,9 @@ The API contract should document:
 - errors and the context that must be logged;
 - serialization and compatibility expectations, if the data is persisted.
 
-Keep keyframe and curve evaluation as a separate capability so applications
-can adopt it according to their needs.
+Keyframe and curve evaluation is already a separate shared capability in
+`creative-suite::animation`; applications can use that evaluator without
+sharing their document or timeline models.
 
 ## Extraction Criteria and Build Shape
 
@@ -145,10 +151,10 @@ coordination, resource-lifetime rules, and stale-frame handling.
 
 ### Motion composition workflow
 
-- **Deferred until after the standalone Motion Studio MVP.** From a supported
-  timeline clip, the user can open or create a linked composition in Motion
-  Studio. From a Media Pool item, the user can create a composition based on
-  that resource.
+- **Deferred until the standalone Motion Studio MVP passes its documented
+  acceptance criteria and a stable handoff contract is validated.** The
+  standalone editor is implemented, but opening or creating a linked
+  composition from a Video Editor clip or Media Pool item is not available yet.
 - Before insertion, the composition's duration, frame rate, canvas, and media
   dependency behavior must be explicit.
 - Saving a supported composition publishes a new saved revision to the Video

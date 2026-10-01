@@ -20,8 +20,11 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 ## Cross-cutting rules
 
 - The architecture is provisional and must reflect the current implementation.
-- Qt-specific types remain inside the application UI layer.
-- Shared libraries are introduced only when a second real consumer exists.
+- Widgets and application interaction types remain in application UI code.
+  Focused shared libraries may use Qt Core or Qt Gui where an implementation
+  needs them, but they do not own application widgets or workflows.
+- Introduce a shared library when multiple applications need the same stable,
+  documented behavior; keep each application's document and UI decisions local.
 - Media frames, buffers, and GPU resources must cross boundaries through
   explicit ownership rules and without hidden expensive copies.
 - Failure-prone modules must report actionable errors through the local logger;
@@ -31,10 +34,11 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 
 ## Current product direction
 
-The first real application is the Video Editor under `apps/video-editor/`.
-Motion Studio and the future Image Editor remain separate product areas. The
-archived technical prototypes under `prototypes/` are references and are not
-application dependencies.
+The Video Editor is the suite's audiovisual application under
+`apps/video-editor/`. Motion Studio and Image Editor are also implemented as
+separate application targets under `apps/`, each with its own product scope and
+roadmap. The technical prototypes under `prototypes/` are references and are
+not application dependencies.
 
 The current implementation direction is C++20 with Qt 6 Widgets and FFmpeg.
 This is a provisional application direction, not a final project-wide language

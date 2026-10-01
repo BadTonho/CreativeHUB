@@ -14,14 +14,14 @@ CMake discovers these dependencies through the selected toolchain or an
 externally supplied `CMAKE_PREFIX_PATH`; source files must not contain an
 absolute developer-machine path.
 
-## Planned Qt baseline
+## Qt version and platform baselines
 
-The selected target is Qt 6.12.0 for Windows 10 and Windows 11 support. This is
-a planned baseline, not yet the active dependency pin. Update the CMake/vcpkg
-configuration after the stable Qt 6.12.0 release and a compatible package are
-available, then validate the Windows deployment. Qt's current Windows support
-notes identify Qt 6.12 as the last Qt 6 release planned to support Windows 10
-([Qt for Windows](https://doc.qt.io/qt-6/windows.html)).
+The root vcpkg manifest resolves Qt through its configured registry baseline;
+there is no separate Qt 6.12.0 package pin. Qt 6.12 was previously proposed as
+a target baseline to preserve Windows 10 support, but that proposal has not
+been validated as the suite's minimum version. Recheck Qt's current platform
+support and the selected vcpkg packages before changing the baseline or making
+release support claims.
 
 Linux and macOS remain required product targets. Their distribution and OS
 version baselines, architectures, and release validation remain open until

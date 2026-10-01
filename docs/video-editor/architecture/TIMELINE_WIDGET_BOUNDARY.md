@@ -1,6 +1,7 @@
 # Timeline Widget Boundary
 
-Status: **provisional**. This document records the Stage 7 implementation in the [refactoring risk audit](REFACTORING_RISK_AUDIT.md).
+Status: **provisional**. This document describes the current Timeline widget
+boundary and its regression coverage.
 
 ## Ownership
 

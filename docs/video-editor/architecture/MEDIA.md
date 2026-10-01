@@ -46,9 +46,10 @@ thread; no Qt audio object crosses into the media module.
 Motion Studio compiles the same media asset library into its standalone
 executable. Its Media Pool has its own UI, asynchronous task orchestration,
 selection details, and composition lifecycle. Items reference original files
-and keep cached first frames; pool state is in memory and is cleared when a
-composition is replaced. Importing media does not create a timeline clip in
-this slice.
+and keep cached first frames; pool contents are saved with the composition and
+are cleared when a composition is replaced. Importing media alone does not
+create a layer; dragging an item to the timeline creates a timed composition
+layer at the drop position.
 
 Still images are represented by `MediaKind::Image`. They use a synthetic
 default timing of 30 FPS for five seconds (150 frames), have no audio stream,

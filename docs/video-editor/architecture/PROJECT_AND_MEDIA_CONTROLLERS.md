@@ -1,6 +1,7 @@
 # Project and Media Controllers
 
-Status: **provisional**. This boundary is the Stage 5 implementation recorded in the [refactoring risk audit](REFACTORING_RISK_AUDIT.md).
+Status: **provisional**. This document describes the current project and media
+controller boundaries and their regression coverage.
 
 ## Ownership and responsibilities
 

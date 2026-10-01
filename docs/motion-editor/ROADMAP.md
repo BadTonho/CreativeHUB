@@ -1,7 +1,8 @@
 # Motion Studio Roadmap
 
-Status: **provisional; implementation started**. The standalone Motion Studio
-shell, in-memory composition/layer model, navigation timeline, Media Pool,
+Status: **provisional; MVP implementation is substantially complete, with
+acceptance and cross-platform validation in progress**. The standalone Motion
+Studio shell, in-memory composition/layer model, navigation timeline, Media Pool,
 image/video/text/shape layers, CPU preview, versioned native save/open, and
 first-pass rendered video export are implemented under `apps/motion-editor/`.
 Configurable preview performance metrics and per-job export summaries are also

@@ -1,6 +1,7 @@
 # Playback Controller
 
-Status: **provisional**. This boundary is the Stage 6 implementation recorded in the [refactoring risk audit](REFACTORING_RISK_AUDIT.md).
+Status: **provisional**. This document describes the current application-owned
+playback boundary and its regression coverage.
 
 ## Ownership
 

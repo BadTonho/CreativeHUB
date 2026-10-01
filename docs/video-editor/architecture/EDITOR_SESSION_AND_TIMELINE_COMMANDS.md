@@ -1,6 +1,9 @@
 # Editor Session and Timeline Commands
 
-Status: **provisional**. This document records the application boundary introduced by Stages 4 and 5 of the [refactoring risk audit](REFACTORING_RISK_AUDIT.md).
+Status: **provisional**. This document describes the current application
+boundary for session state and timeline commands. Project/media lifecycle is
+described in [Project and Media Controllers](PROJECT_AND_MEDIA_CONTROLLERS.md);
+playback ownership is described in [Playback Controller](PLAYBACK_CONTROLLER.md).
 
 ## Ownership
 

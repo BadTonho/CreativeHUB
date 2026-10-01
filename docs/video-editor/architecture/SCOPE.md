@@ -34,7 +34,9 @@ The Video Editor currently includes:
   timeline image variants, with saved PNG refresh and no unsaved live preview;
 - atomic project autosave and recovery snapshots with configurable global
   interval and retention;
-- local structured diagnostic logging.
+- offline FFmpeg video export with embedded audio, configurable output
+  settings, progress, and cancellation;
+- local structured diagnostic logging;
 - Edit and Fusion workspace pages in the same window; Fusion currently reuses
   the Edit Preview as its Viewer and replaces the Timeline dock with a
   visual-only Node Editor, alongside an Inspector placeholder.
@@ -42,15 +44,19 @@ The Video Editor currently includes:
 The current application does not include:
 
 - audio-only sources, independent audio tracks, advanced mixing, waveforms,
-  automation, recording, image sequences, SRT import,
-  automatic captions, rich text,
-  animated text content, or export;
+  automation, recording, image sequences, SRT import, automatic captions,
+  rich text, or animated text content;
 - advanced compositing, GPU per-layer playback, easing, masks, 3D layers,
   audio crossfades, and transition effects beyond the essential pair;
-- ripple editing, automatic gap management, or project-wide history;
+- advanced ripple editing, automatic gap management, or history covering every
+  project subsystem;
 - thumbnails, proxies, or complete relinking;
 - Fusion node graphs, composition editing, and Fusion-specific processing;
-- Motion Studio or Rust integration.
+- linked Motion Studio composition handoff or Rust integration.
 
-The architecture remains application-local until a second real consumer
-justifies a shared library.
+The Video Editor owns its project format, timeline policy, and UI. It also uses
+focused shared libraries for media, animation, composition, diagnostics,
+encoding, shortcuts, and system monitoring. See
+[Repository Structure](REPOSITORY_STRUCTURE.md) and the
+[cross-application compatibility proposal](../../CROSS_APPLICATION_COMPATIBILITY.md)
+for the current library boundaries.

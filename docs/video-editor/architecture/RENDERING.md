@@ -402,12 +402,12 @@ be introduced only after a concrete need and measurements justify it.
 
 ## Timeline composition
 
-The current layer compositor is application-local and Qt-independent. The
-playback worker decodes each online clip visible at the global playhead, applies
-its normalized position, uniform scale, rotation, opacity, and local keyframe
-evaluation, then blends the layers from the bottom track to the top track into
-a 1920x1080 RGBA8 frame. The UI receives only the owning composed frame and
-does not decode or transform media.
+The Video Editor and Motion Studio use the shared, Qt-independent CPU
+compositor in `libs/composition/` for layer transforms and RGBA frame blending.
+Scheduling remains application-owned: the Video Editor's playback worker
+selects active timeline clips, while Motion Studio's renderer evaluates its
+composition layers for preview and export. Each application transfers an
+owning composed frame to its UI; widgets do not decode or transform media.
 
 The OpenGL surface remains a presentation backend for that final frame. This
 keeps the first composition milestone deterministic while leaving per-layer GPU

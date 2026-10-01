@@ -2,9 +2,12 @@
 
 Status: **provisional**.
 
-The Video Editor owns the first application-local logger under
-`apps/video-editor/src/logging/`. It uses only the C++ standard library and does
-not expose Qt types.
+The logger implementation is shared in `libs/diagnostics/` as
+`creative_suite::diagnostics::Logger`. The Video Editor's
+`apps/video-editor/src/logging/` files provide compatibility aliases to that
+implementation. Motion Studio also uses the shared logger while keeping its
+own metric schemas and application context. Logging policy and configuration
+remain application-specific.
 
 ## Policy
 

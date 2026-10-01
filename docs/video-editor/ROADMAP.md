@@ -108,8 +108,9 @@ tasks.
 - [x] Automated regression coverage for current media, playback, timeline,
   project, logging, and UI boundaries, plus a documented manual validation
   matrix. See [Regression Testing](REGRESSION_TESTING.md).
-- [x] Document the current application-local module boundaries and the CPU
-  composition/Qt OpenGL presentation split.
+- [x] Document the application module boundaries and the CPU
+  composition/Qt OpenGL presentation split. Current shared-library boundaries
+  are maintained in [Repository Structure](architecture/REPOSITORY_STRUCTURE.md).
 
 The detailed implemented scope and deferred behaviors are recorded in
 [Current Scope and Non-goals](architecture/SCOPE.md). The active `.csp` schema
