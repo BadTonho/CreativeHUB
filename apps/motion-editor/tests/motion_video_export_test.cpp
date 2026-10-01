@@ -356,6 +356,11 @@ int main(int argc, char* argv[])
 {
     QApplication application(argc, argv);
     try {
+        const motion::ui::MotionExportCancelled cancellation_exception;
+        require(std::string(cancellation_exception.what()) ==
+                    "Motion Studio video export was canceled.",
+                "the export cancellation exception preserves its user-facing cause");
+
         testSettingsDialog();
 
         const auto [container, encoder] = chooseOutput();

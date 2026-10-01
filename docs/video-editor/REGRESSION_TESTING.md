@@ -24,11 +24,12 @@ The GitHub Actions workflow runs the same build and CTest gate on Windows,
 macOS, and Linux. Local results only validate the operating system on which
 they were run; cross-platform support is validated when all matrix jobs pass.
 
-## MSVC Debug diagnostics and local coverage baseline
+## MSVC Debug diagnostics and local coverage measurement
 
-The following baseline was collected on Windows 11 on 2026-10-01 in the
-separate, Git-ignored `build/coverage-msvc/` build. It records one local run;
-it is not a CI result or a coverage threshold.
+The following measurement was collected on Windows 11 on 2026-10-01 in the
+separate, Git-ignored `build/coverage-msvc/` build after adding focused tests
+for the previously uncovered exception and OpenGL preview behavior. It records
+one local run; it is not a CI result or a coverage threshold.
 
 MSVC test executables install test-only handlers for `_RTC` runtime checks and
 CRT reports. Debug runtime checks remain enabled. A reported error is written
@@ -54,24 +55,30 @@ log, and CTest JUnit result are kept in `build/coverage-msvc/`.
 
 | Configuration | CTest result | Notes |
 | --- | --- | --- |
-| Debug with coverage | 60 passed, 0 failed, 0 skipped | Includes the runtime diagnostics probe and Image Editor five-format test. |
-| Release regression | 59 passed, 0 failed, 0 skipped | The Debug-only diagnostics probe is not registered in Release. |
+| Debug with coverage | 61 passed, 0 failed, 0 skipped | Includes the runtime diagnostics probe, Image Editor five-format test, and OpenGL preview integration test; OpenGL context creation and rendering passed. |
+| Release regression | 60 passed, 0 failed, 0 skipped | Includes the OpenGL preview integration test; the Debug-only diagnostics probe is not registered in Release. |
 | Repeated Debug checks | 10 runs each passed for `creative-suite-main-editor-main-window`, `creative-suite-main-editor-playback-controller`, and `creative-suite-motion-editor-ui` | These were the UI/playback cases investigated for intermittent failures. |
 | Repeated Release check | 10 runs passed for `creative-suite-main-editor-playback-controller` | Rechecked the playback activation fixture in Release. |
 
-The Cobertura report records **56,789 of 161,071 lines (35.26%)** and **6,895
-of 17,339 methods with hits (39.77%)** across 190 source files. Four files had
-no covered executable lines in this run:
-
-- `apps/motion-editor/src/ui/motion_video_export.h`
-- `libs/media/include/creative_suite/media/video_encoder.h`
-- `apps/video-editor/src/rendering/opengl_preview_surface.cpp`
-- `apps/video-editor/src/rendering/opengl_preview_surface.h`
+The Cobertura report records **57,414 of 162,089 lines (35.42%)** and **6,952
+of 17,441 methods with hits (39.86%)** across 190 source files. Every included
+source file had at least one covered line; many individual lines and methods
+remain uncovered. The local report is at
+`build/coverage-msvc/coverage.cobertura.xml` (ignored by Git). The reported
+executable lines in `video_encoder.h` and `motion_video_export.h` all have hits.
+The OpenGL surface has hits on 188 of 245 reported executable lines; the
+remaining zero-hit lines in `opengl_preview_surface.cpp` are 54,
+77, 79, 81, 84, 98–99, 102–103, 107–108, 112–117, 122–123, 162–163, 169–170,
+177, 179, 184, 186, 189, 191, 200, 202, 239, 253, 261, 266–270, 330–331, 348,
+387–391, 418–422, and 427–431 in this report. These include additional setup,
+error-handling, and cleanup paths; the full report identifies each line and
+hit count.
 
 These source metrics help find unexercised code; they do not establish that all
 user-visible behaviors work. Keep the feature-to-test indexes and manual
-validation requirements below current. No percentage target is set from this
-first baseline.
+validation requirements below current. The OpenGL integration test ran with a
+valid context on the reference PC; repeat visual checks on other supported
+hardware and drivers. No percentage target is set from this measurement.
 
 ## Automated coverage
 
@@ -126,13 +133,13 @@ and its subdirectories; shared-library tests are registered in
 | Behavior group | Automated evidence | Manual evidence and open validation |
 | --- | --- | --- |
 | MSVC Debug test diagnostics | Root `CMakeLists.txt` (`creative-suite-msvc-runtime-diagnostics`); `cmake/test_support/msvc_runtime_diagnostics.cpp`, `msvc_runtime_diagnostics_probe.cpp`, and `verify_msvc_runtime_diagnostics.cmake` | The Windows-only Debug probe validates RTC and CRT failure details and nonzero exits without a modal dialog. The local 2026-10-01 run passed; Release does not register this Debug-specific probe. |
-| Shared animation, composition, media assets, encoding, and shortcuts | `libs/tests/animation_test.cpp`, `composition_test.cpp`, `shortcuts_test.cpp`; `libs/media/tests/media_assets_test.cpp`, `video_encoder_test.cpp` | The [roadmap](ROADMAP.md) tracks cross-platform runtime, codec availability, and packaged dependency checks; results remain pending. |
+| Shared animation, composition, media assets, encoding, and shortcuts | `libs/tests/animation_test.cpp`, `composition_test.cpp`, `shortcuts_test.cpp`; `libs/media/tests/media_assets_test.cpp`, `video_encoder_test.cpp` | Encoder exception message and error-code access are asserted; the [roadmap](ROADMAP.md) tracks cross-platform runtime, codec availability, and packaged dependency checks. |
 | Logging and system metrics | `tests/logging/logger_test.cpp`; `tests/system/system_memory_usage_test.cpp`, `system_memory_details_dialog_test.cpp`, `performance_usage_test.cpp` | The manual checklist documents checking the app log folder and platform resource values; runtime and platform results remain pending. |
 | Media import, probing, decode, and Media Pool | `tests/media/video_decoder_test.cpp`, `media_library_test.cpp`; `tests/application/application_media_services_test.cpp`; `tests/ui/media_browser_list_widget_test.cpp`, `media_browser_bin_tree_widget_test.cpp` | Packaged UI, image plugins, media paths, and codec checks remain pending; see the [roadmap](ROADMAP.md). |
 | Project data, validation, migration, autosave, and recovery | `tests/project/project_file_test.cpp`, `autosave_manager_test.cpp`; `tests/application/main_window_integration_test.cpp` | **P0 pending validation:** complete the representative save/reopen, recovery, and failure workflows documented in this guide and the [roadmap](ROADMAP.md). |
 | Timeline model, commands, geometry, gestures, and widgets | `tests/timeline/timeline_model_test.cpp`, `timeline_command_service_test.cpp`, `timeline_geometry_test.cpp`, `timeline_interaction_controller_test.cpp`, `timeline_trim_gesture_test.cpp`, `timeline_widget_test.cpp`, `timeline_end_buttons_test.cpp` | Manual UI validation is documented; rendering, pointer feel, scaling, and accessibility checks remain pending. |
 | Playback, seeking, frame stepping, transitions, and audio | `tests/playback/video_playback_test.cpp`, `playback_worker_test.cpp`, `playback_controller_test.cpp`, `playback_deadline_scheduler_test.cpp`, `frame_step_navigation_test.cpp`, `timeline_audio_mix_test.cpp`, `audio_playback_test.cpp` | The focused controller and main-window activation tests passed 10 repeated Debug runs; the controller also passed 10 Release runs on 2026-10-01. Driver/audio-device behavior and the approved reference workload still require manual validation. 4K-source and higher-rate performance are measured separately. |
-| Rendering, transforms, text, and preview metrics | `tests/rendering/transform_compositor_test.cpp`, `text_compositor_test.cpp`, `preview_performance_metrics_test.cpp`; `tests/ui/preview_widget_test.cpp` | Manual GPU presentation, CPU fallback selection, visual output, and playback performance checks are documented; results remain pending. |
+| Rendering, transforms, text, and preview metrics | `tests/rendering/transform_compositor_test.cpp`, `text_compositor_test.cpp`, `preview_performance_metrics_test.cpp`; `tests/ui/preview_widget_test.cpp`, `opengl_preview_test.cpp` (`creative-suite-main-editor-opengl-preview`) | The native OpenGL integration test checks framebuffer output and CPU fallback on a valid context; it skips only if the platform cannot create a valid context. Real-driver visual and platform checks remain manual. |
 | Effects, workspace, settings, shortcuts, and main-window flows | `tests/effects/effects_panel_test.cpp`; `tests/settings/settings_dialog_test.cpp`, `shortcut_manager_test.cpp`; `tests/ui/workspace_page_switch_test.cpp`, `edit_workspace_controller_test.cpp`; `tests/application/main_window_integration_test.cpp` | The [manual UI checklist](#manual-ui-validation) documents visual layout and interaction checks; cross-platform release checks remain open in the [roadmap](ROADMAP.md). |
 | Render queue and export | `tests/ui/render_queue_model_test.cpp`, `render_export_test.cpp`; `libs/media/tests/video_encoder_test.cpp` | Manual validation documents encoder, profile, cancellation, and rendered-appearance checks; release results remain pending in the [roadmap](ROADMAP.md). |
 | Image Editor linked media | `tests/project/project_file_test.cpp`, `tests/application/application_media_services_test.cpp`, `tests/application/main_window_integration_test.cpp`, `tests/timeline/timeline_widget_test.cpp`; producer-side checks in `apps/image-editor/tests/image_editor_ui_test.cpp` | Full two-app validation is listed in [`docs/image-editor/MANUAL_VALIDATION.md`](../image-editor/MANUAL_VALIDATION.md); acceptance of remaining linked-image scenarios is pending. |

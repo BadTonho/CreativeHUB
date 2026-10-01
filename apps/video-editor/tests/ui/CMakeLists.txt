@@ -204,6 +204,50 @@ set_tests_properties(creative-suite-main-editor-preview PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1"
 )
 
+add_executable(creative-suite-main-editor-opengl-preview-tests
+    opengl_preview_test.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/preview/preview_widget.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/ui/preview/preview_widget.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/rendering/opengl_preview_surface.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/rendering/opengl_preview_surface.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/rendering/preview_performance_metrics.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/rendering/preview_performance_metrics.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/video_frame.h
+)
+target_include_directories(creative-suite-main-editor-opengl-preview-tests PRIVATE
+    ${VIDEO_EDITOR_SOURCE_DIR}
+)
+target_link_libraries(creative-suite-main-editor-opengl-preview-tests PRIVATE
+    Qt6::Widgets
+    Qt6::OpenGL
+    Qt6::OpenGLWidgets
+)
+target_compile_features(creative-suite-main-editor-opengl-preview-tests PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-opengl-preview-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-opengl-preview-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+deploy_qt_test_runtime(creative-suite-main-editor-opengl-preview-tests)
+add_creative_suite_test(
+    NAME creative-suite-main-editor-opengl-preview
+    SKIP_RETURN_CODE 77
+    COMMAND creative-suite-main-editor-opengl-preview-tests
+)
+if(WIN32)
+    set_tests_properties(creative-suite-main-editor-opengl-preview PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=windows"
+    )
+elseif(APPLE)
+    set_tests_properties(creative-suite-main-editor-opengl-preview PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=cocoa"
+    )
+else()
+    set_tests_properties(creative-suite-main-editor-opengl-preview PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+endif()
+
 add_executable(creative-suite-main-editor-workspace-page-switch-tests
     workspace_page_switch_test.cpp
 )

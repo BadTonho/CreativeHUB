@@ -69,6 +69,12 @@ std::pair<creative_suite::media::VideoContainerOption,
 int main()
 {
     try {
+        const creative_suite::media::VideoEncodingError encoding_error(
+            "controlled encoder failure", -734);
+        require(std::string(encoding_error.what()) == "controlled encoder failure" &&
+                    encoding_error.errorCode() == -734,
+                "video encoding errors preserve their message and FFmpeg error code");
+
         const auto containers = creative_suite::media::availableVideoContainers();
         require(!containers.empty(), "FFmpeg discovers at least one video container");
         for (const auto& container : containers) {
