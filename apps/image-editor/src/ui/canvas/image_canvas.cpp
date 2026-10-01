@@ -4,6 +4,8 @@
 #include "../transparency_checkerboard.h"
 
 #include <QEvent>
+#include <QApplication>
+#include <QCoreApplication>
 #include <QCursor>
 #include <QFrame>
 #include <QFontMetricsF>
@@ -335,6 +337,9 @@ void ImageCanvas::beginTextEditing(const ImageTextData& text, bool existing) {
     text_editor_->show();
     text_editor_->raise();
     updateTextEditorGeometry();
+    if (auto* application = QCoreApplication::instance()) {
+        application->installEventFilter(this);
+    }
     text_editor_->setFocus(Qt::OtherFocusReason);
     text_editor_->moveCursor(QTextCursor::End);
     emit textEditingStarted(text_editing_, existing);
@@ -906,6 +911,9 @@ void ImageCanvas::finishTextEditing(bool commit) {
     text_editing_.content = text_editor_->toPlainText();
     const ImageTextData text = text_editing_;
     const bool existing = text_editing_existing_;
+    if (auto* application = QCoreApplication::instance()) {
+        application->removeEventFilter(this);
+    }
     text_editor_->hide();
     text_editor_->clear();
     text_editing_ = {};
@@ -1462,7 +1470,11 @@ void ImageCanvas::mouseDoubleClickEvent(QMouseEvent* event) {
 }
 
 bool ImageCanvas::eventFilter(QObject* watched, QEvent* event) {
-    if (watched == text_editor_ && event->type() == QEvent::ShortcutOverride) {
+    if (event->type() == QEvent::ShortcutOverride && text_editor_ != nullptr &&
+        text_editor_->isVisible()) {
+        QWidget* focus_widget = QApplication::focusWidget();
+        const bool text_editor_has_focus = focus_widget == text_editor_ ||
+            (focus_widget != nullptr && text_editor_->isAncestorOf(focus_widget));
         auto* key_event = static_cast<QKeyEvent*>(event);
         const auto modifiers = key_event->modifiers();
         const bool altgr = modifiers.testFlag(Qt::GroupSwitchModifier);
@@ -1472,7 +1484,7 @@ bool ImageCanvas::eventFilter(QObject* watched, QEvent* event) {
         // Unmodified key presses belong to the focused text editor even when a
         // platform sends ShortcutOverride without the corresponding text. This
         // prevents one-key window shortcuts from swallowing typed characters.
-        if ((!command_modifier || altgr) && !menu_modifier) {
+        if (text_editor_has_focus && (!command_modifier || altgr) && !menu_modifier) {
             key_event->accept();
             return true;
         }

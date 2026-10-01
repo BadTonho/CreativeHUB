@@ -194,15 +194,15 @@ CTest suite also passed 61/61. These automated results do not complete the
 pending manual text review or linked-image acceptance checklist.
 
 **Text editor typing and sizing regression (2026-10-01):** while the text editor
-is active, unmodified keys are kept by the editor instead of triggering
-window-level shortcuts such as Paint (`B`) or Eraser (`E`), including shortcut
-events without text payloads. While typing, the box grows to fit its longest
-line up to the canvas edge, then wraps and expands vertically. Clicking an empty
-canvas location starts editing with the default box width; a horizontal drag
-sets a custom initial width. Reopening unchanged text keeps its saved width.
-The UI test now covers a shortcut override without a text payload, click-to-
-create, and click-outside confirmation; it passed 1/1 in Debug and Release.
-The click-to-create visual review remains pending.
+has keyboard focus, a temporary application-level filter keeps unmodified keys
+from triggering window shortcuts such as Paint (`B`) or Eraser (`E`), including
+shortcut events without text payloads. While typing, the box
+grows to fit its longest line up to the canvas edge, then wraps and expands
+vertically. Clicking an empty canvas location starts editing with the default
+box width; a horizontal drag sets a custom initial width. Reopening unchanged
+text keeps its saved width. The UI test covers a shortcut override without a
+text payload, click-to-create, and click-outside confirmation; it passed 1/1 in
+Debug and Release. The click-to-create visual review remains pending.
 
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
