@@ -610,10 +610,42 @@ bool testEditableTextUi(const QString& directory) {
         return false;
     }
     QTest::keyClicks(text_editor, QStringLiteral("ABC"));
+    QTest::keyClicks(text_editor, QStringLiteral("DE"));
     QCoreApplication::processEvents();
-    if (text_editor->toPlainText() != QStringLiteral("ABC") ||
-        text_editor->textCursor().position() != 3) {
+    if (text_editor->toPlainText() != QStringLiteral("ABCDE") ||
+        text_editor->textCursor().position() != 5) {
         std::cerr << "Typing into a click-created empty text box did not preserve input order.\n";
+        return false;
+    }
+
+    // Reset the test text, then click before the first character before the
+    // deferred preview/geometry update has run. The queued resize must retain
+    // the insertion point chosen by the click.
+    QTest::keyClick(text_editor, Qt::Key_A, Qt::ControlModifier);
+    QTest::keyClicks(text_editor, QStringLiteral("ABC"));
+    const QPoint canvas_text_origin = text_editor->mapTo(canvas, QPoint(0, 0));
+    const QPoint canvas_click_position = canvas_text_origin +
+        QPoint(1, text_editor->fontMetrics().height() / 2);
+    QWidget* click_target = canvas->childAt(canvas_click_position);
+    if (click_target == nullptr ||
+        (click_target != text_editor && !text_editor->isAncestorOf(click_target))) {
+        std::cerr << "Clicking at the visible start of new text is not routed to its editor; "
+                  << "target=" << (click_target != nullptr
+                      ? click_target->metaObject()->className() : "null") << ".\n";
+        return false;
+    }
+    QTest::mouseClick(click_target, Qt::LeftButton, Qt::NoModifier,
+                      click_target->mapFrom(canvas, canvas_click_position));
+    QCoreApplication::processEvents();
+    if (text_editor->textCursor().position() != 0) {
+        std::cerr << "Clicking before the first character did not move the insertion cursor.\n";
+        return false;
+    }
+    QTest::keyClicks(text_editor, QStringLiteral("DE"));
+    QCoreApplication::processEvents();
+    if (text_editor->toPlainText() != QStringLiteral("DEABC") ||
+        text_editor->textCursor().position() != 2) {
+        std::cerr << "Typing after moving the cursor to the beginning did not insert there.\n";
         return false;
     }
     QTest::keyClick(text_editor, Qt::Key_Escape);

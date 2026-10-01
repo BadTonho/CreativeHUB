@@ -889,9 +889,11 @@ void ImageCanvas::updateTextEditorGeometry() {
         text_editor_->setGeometry(editor_geometry);
     }
     if (text_editor_->font() != font) text_editor_->setFont(font);
-    if (keep_focus && !text_editor_->hasFocus()) {
-        text_editor_->setFocus(Qt::OtherFocusReason);
-        text_editor_->setTextCursor(cursor);
+    if (keep_focus) {
+        if (!text_editor_->hasFocus()) text_editor_->setFocus(Qt::OtherFocusReason);
+        // Relayout after a resize or font change must not discard the caret or
+        // selection placed by the latest mouse or keyboard input.
+        if (text_editor_->textCursor() != cursor) text_editor_->setTextCursor(cursor);
     }
 }
 

@@ -207,9 +207,9 @@ location starts editing with the default box width; a horizontal drag sets a
 custom initial width. Reopening unchanged text keeps its saved width. The UI
 test verifies live rendered pixels, cursor advancement, editor visibility
 during expansion, cancellation restoration, insertion at the beginning when
-reopening existing text, input order after click-to-create, and click-outside
-confirmation. It passed 1/1 in Debug and Release. The click-to-create visual
-review remains pending.
+reopening existing text, and caret repositioning during click-to-create (`ABC`,
+click before `A`, then `DE` produces `DEABC`). It passed 1/1 in Debug and
+Release. The click-to-create visual review remains pending.
 
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
@@ -220,7 +220,7 @@ review remains pending.
 | Flattened export, Quick Export, and export dialogs | `image_editor_core_test.cpp`, `image_editor_export_ui_test.cpp` (`creative-suite-image-editor-export-ui`) | The owner reports current export workflows exercised on Windows 11; cross-platform package checks remain pending. |
 | Canvas, tools, layers, shortcuts, and UI interactions | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`) | The owner reports current UI workflows exercised on Windows 11; cross-platform visual checks remain pending. |
 | Video Editor linked-image producer/consumer workflow | Producer: `image_editor_ui_test.cpp`; consumers: `application_media_services_test.cpp` (`creative-suite-main-editor-application-media`), `main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`), and `project_file_test.cpp` (`creative-suite-main-editor-project`) | Automated producer/consumer regression tests pass in Debug and Release. The owner reports the basic linked edit/save workflow working on Windows, but the full scenario and cross-platform acceptance remain pending (**P1 validation**). |
-| First-release editable text | `image_editor_core_test.cpp` and `image_editor_ui_test.cpp`; CTest `creative-suite-image-editor-core` and `creative-suite-image-editor-ui` (one-key shortcut interception, focus retention, click-to-create, horizontal growth, canvas-edge wrapping, and multiline height growth) | Manual visual editing checks, including click-to-create and click-outside confirmation, are listed in `MANUAL_VALIDATION.md` and remain pending (**P2 validation**). Linked PNG producer and Video Editor consumer regression tests are present; manual cross-application acceptance remains pending (**P1 validation**). |
+| First-release editable text | `image_editor_core_test.cpp` and `image_editor_ui_test.cpp`; CTest `creative-suite-image-editor-core` and `creative-suite-image-editor-ui` (one-key shortcut interception, focus retention, click-to-create, click-to-position caret and insert text at that position, horizontal growth, canvas-edge wrapping, and multiline height growth) | Manual visual editing checks, including click-to-create and click-outside confirmation, are listed in `MANUAL_VALIDATION.md` and remain pending (**P2 validation**). Linked PNG producer and Video Editor consumer regression tests are present; manual cross-application acceptance remains pending (**P1 validation**). |
 
 ### Current coverage gaps and pending validation
 
