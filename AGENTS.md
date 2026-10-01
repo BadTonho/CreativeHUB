@@ -159,6 +159,10 @@ Pay special attention to:
   coverage in the same change. Use automated tests whenever the behavior is
   deterministic; for visual or full-application interactions, add a
   documented manual validation step and keep the automated boundary tests.
+- Apply the repository-wide requirements in
+  [`docs/REGRESSION_POLICY.md`](docs/REGRESSION_POLICY.md) to every existing
+  application, shared module, and future application. Keep each app's
+  feature-to-verification index current.
 - When a change can affect interoperability between applications—such as shared
   project or document formats, media paths or identities, published assets,
   shared-core APIs, launch arguments, or handoff and refresh workflows—add

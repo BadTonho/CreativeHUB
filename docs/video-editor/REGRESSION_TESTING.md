@@ -1,8 +1,10 @@
 # Regression Testing
 
-This document defines the local regression gate for the Video Editor. Every
-implemented rule should have either an automated test or a documented manual
-validation step before the related change is considered complete.
+This document defines detailed regression coverage for the Video Editor.
+The required policy for every current and future application is in
+[`../REGRESSION_POLICY.md`](../REGRESSION_POLICY.md). Every implemented rule
+should have either an automated test or a documented manual validation step
+before the related change is considered complete.
 
 ## Local gate
 

@@ -196,6 +196,8 @@ Before contributing, please read the project guidelines outlined in [`AGENTS.md`
 | [Video Editor architecture](docs/video-editor/ARCHITECTURE.md) | Video Editor structure and modules. |
 | [Video Editor subsystem docs](docs/video-editor/architecture/) | Technical boundaries and subsystem behavior. |
 | [Video Editor roadmap](docs/video-editor/ROADMAP.md) | Current work and release gates. |
+| [Regression prevention policy](docs/REGRESSION_POLICY.md) | Required test coverage and gates for all current and future applications. |
+| [Video Editor regression tests](docs/video-editor/REGRESSION_TESTING.md) | Detailed automated coverage and local validation checklist. |
 | [Image Editor scope](docs/image-editor/SCOPE.md) | Approved first editing-release workflow, current boundary, and validation profile. |
 | [Image Editor roadmap](docs/image-editor/ROADMAP.md) | Image Editor milestones and validation. |
 | [Motion Studio scope and readiness](docs/motion-editor/SCOPE_AND_READINESS.md) | Initial users, MVP boundary, capability ownership, and compatibility policy. |
