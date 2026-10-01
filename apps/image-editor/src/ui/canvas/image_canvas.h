@@ -111,6 +111,7 @@ private:
     void beginObjectTransform(bool resize, int handle, const QPointF& image_point);
     void updateObjectTransform(const QPointF& image_point, bool freeform);
     void clearObjectInteraction();
+    void updateTextEditorContentAndGeometry();
     void updateTextEditorGeometry();
     void applyTextEditorStyle();
     void finishTextEditing(bool commit);
@@ -156,6 +157,7 @@ private:
     ImageTextData text_editing_;
     QPlainTextEdit* text_editor_ = nullptr;
     bool text_editing_existing_ = false;
+    qreal text_editing_initial_box_width_ = 1.0;
     bool creating_text_frame_ = false;
     QPointF text_frame_start_;
     QPointF text_frame_current_;

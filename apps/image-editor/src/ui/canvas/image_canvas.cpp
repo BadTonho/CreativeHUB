@@ -4,8 +4,9 @@
 #include "../transparency_checkerboard.h"
 
 #include <QEvent>
-#include <QFrame>
 #include <QCursor>
+#include <QFrame>
+#include <QFontMetricsF>
 #include <QKeyEvent>
 #include <QLineF>
 #include <QMouseEvent>
@@ -17,6 +18,7 @@
 #include <QTextLayout>
 #include <QTextCursor>
 #include <QTextOption>
+#include <QSignalBlocker>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -138,7 +140,7 @@ ImageCanvas::ImageCanvas(QWidget* parent) : QWidget(parent) {
     text_editor_->installEventFilter(this);
     text_editor_->hide();
     connect(text_editor_, &QPlainTextEdit::textChanged, this, [this]() {
-        updateTextEditorGeometry();
+        updateTextEditorContentAndGeometry();
     });
 }
 
@@ -316,7 +318,7 @@ void ImageCanvas::setTextStyle(const ImageTextData& style) {
         text_editing_.position = position;
         text_editing_.box_width = box_width;
         applyTextEditorStyle();
-        updateTextEditorGeometry();
+        updateTextEditorContentAndGeometry();
     }
     update();
 }
@@ -326,6 +328,8 @@ void ImageCanvas::beginTextEditing(const ImageTextData& text, bool existing) {
     if (text_editor_->isVisible()) finishTextEditing(true);
     text_editing_ = text;
     text_editing_existing_ = existing;
+    text_editing_initial_box_width_ = std::max<qreal>(1.0, text.box_width);
+    const QSignalBlocker blocker(text_editor_);
     text_editor_->setPlainText(text.content);
     applyTextEditorStyle();
     text_editor_->show();
@@ -861,6 +865,33 @@ void ImageCanvas::updateTextEditorGeometry() {
     if (text_editor_->font() != font) text_editor_->setFont(font);
 }
 
+void ImageCanvas::updateTextEditorContentAndGeometry() {
+    if (text_editor_ == nullptr || !text_editor_->isVisible() || image_.isNull()) return;
+
+    text_editing_.content = text_editor_->toPlainText();
+
+    QFont font(text_editing_.font_family);
+    font.setPixelSize(std::clamp(text_editing_.font_pixel_size, 1, 1024));
+    const QFontMetricsF metrics(font);
+    qreal content_width = 0.0;
+    const QStringList lines = text_editing_.content.split(QLatin1Char('\n'),
+                                                          Qt::KeepEmptyParts);
+    for (const QString& line : lines) {
+        content_width = std::max(content_width, metrics.horizontalAdvance(line));
+    }
+
+    const qreal available_width = std::max<qreal>(1.0,
+        image_.width() - text_editing_.position.x());
+    const qreal minimum_width = std::min(text_editing_initial_box_width_, available_width);
+    constexpr qreal kTextEditorHorizontalInset = 4.0;
+    const qreal desired_width = std::max(minimum_width,
+        content_width > 0.0 ? content_width + kTextEditorHorizontalInset : minimum_width);
+    text_editing_.box_width = std::clamp(desired_width, minimum_width, available_width);
+
+    updateTextEditorGeometry();
+    update();
+}
+
 void ImageCanvas::finishTextEditing(bool commit) {
     if (text_editor_ == nullptr || !text_editor_->isVisible()) return;
     text_editing_.content = text_editor_->toPlainText();
@@ -870,6 +901,7 @@ void ImageCanvas::finishTextEditing(bool commit) {
     text_editor_->clear();
     text_editing_ = {};
     text_editing_existing_ = false;
+    text_editing_initial_box_width_ = 1.0;
     if (commit) emit textCommitted(text, existing);
     else emit textEditingCancelled();
     update();

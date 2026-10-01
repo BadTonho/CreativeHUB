@@ -15,8 +15,9 @@ opacity, ordering, crop, quarter-turn rotation, flips, painting, erasing,
 editable line/rectangle/ellipse shapes, editable text, object selection and
 transforms, Undo/Redo, local autosave and recovery, and bounded technical error
 logging. Text supports multiline content, family, pixel size, color, horizontal
-alignment, movement, and width resizing with automatic wrapping and height
-growth. Text is kept editable in its own `Text N` layer.
+alignment, movement, and width resizing. While editing, its box grows
+horizontally to fit the longest line up to the canvas edge, then wraps and grows
+vertically. Text is kept editable in its own `Text N` layer.
 
 Documents use the provisional `.cimg` version 9 format. The application reads
 versions 1 through 8 and writes version 9, migrating older documents on save;
@@ -48,8 +49,9 @@ Basic editable text is implemented with these capabilities:
 - create a `Text N` layer by dragging on the canvas and edit its text directly;
 - confirm with Ctrl+Enter or a click outside the editor, insert line breaks with
   Enter, cancel with Esc, and reopen an existing text object with a double-click;
-- move text and resize its width without changing the font size; text wraps and
-  its height grows to fit;
+- move text and resize its width without changing the font size; while editing,
+  the box grows to fit the longest line up to the canvas edge, then text wraps
+  and its height grows to fit;
 - include text in layer visibility and opacity, groups, selection, deletion,
   Undo/Redo, flattened and Quick Export, save/reopen, and recovery;
 - save only the requested font family name, using the system fallback if the

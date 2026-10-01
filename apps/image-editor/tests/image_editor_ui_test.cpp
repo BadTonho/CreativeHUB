@@ -347,10 +347,27 @@ bool testEditableTextUi(const QString& directory) {
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, first_end);
     QCoreApplication::processEvents();
     if (!text_editor->isVisible()) return false;
-    QTest::keyClicks(text_editor, QStringLiteral("First line"));
+    const int initial_text_editor_width = text_editor->width();
+    const int initial_text_editor_height = text_editor->height();
+    QTest::keyClicks(text_editor,
+        QStringLiteral("This exceptionally long heading continues beyond canvas edge"));
+    QCoreApplication::processEvents();
+    const int maximum_editor_width = qRound((320.0 - 70.0) * canvas->zoomFactor());
+    if (text_editor->width() <= initial_text_editor_width ||
+        text_editor->width() > maximum_editor_width ||
+        text_editor->height() <= initial_text_editor_height) {
+        std::cerr << "Typing a long line did not grow to the canvas edge and wrap.\n";
+        return false;
+    }
+    const int wrapped_text_editor_height = text_editor->height();
     QTest::keyClick(text_editor, Qt::Key_Return);
     QTest::keyClicks(text_editor, QStringLiteral("Second line"));
     if (!text_editor->toPlainText().contains(QLatin1Char('\n'))) return false;
+    QCoreApplication::processEvents();
+    if (text_editor->height() <= wrapped_text_editor_height) {
+        std::cerr << "Typing another line did not grow the text box vertically.\n";
+        return false;
+    }
     QTest::keyClick(text_editor, Qt::Key_Return, Qt::ControlModifier);
     QCoreApplication::processEvents();
     if (text_editor->isVisible() || layerRowCount(layer_tree) != 3) {
@@ -389,7 +406,9 @@ bool testEditableTextUi(const QString& directory) {
         break;
     }
     QImage published(output_path);
-    if (first_text_id.isEmpty() || first_text.content != QStringLiteral("First line\nSecond line") ||
+    if (first_text_id.isEmpty() ||
+        first_text.content != QStringLiteral(
+            "This exceptionally long heading continues beyond canvas edge\nSecond line") ||
         first_text.font_pixel_size != 18 || published.isNull() || published == source) {
         std::cerr << "Saving linked text did not persist and publish its multiline content.\n";
         return false;
@@ -414,7 +433,10 @@ bool testEditableTextUi(const QString& directory) {
     }
     if (!image_editor::ImageDocumentStore::loadDocument(document_path, &document, &error) ||
         !findText(document, first_text_id, &first_text) || first_text.font_pixel_size != 18 ||
-        first_text.content != QStringLiteral("First line\nSecond line")) return false;
+        first_text.content != QStringLiteral(
+            "This exceptionally long heading continues beyond canvas edge\nSecond line")) {
+        return false;
+    }
 
     QTest::mouseDClick(canvas, Qt::LeftButton, Qt::NoModifier,
                        widgetPoint(first_text.position.x() + 4,
@@ -497,8 +519,8 @@ bool testEditableTextUi(const QString& directory) {
         return false;
     }
 
-    const QPoint second_start = widgetPoint(190, 40);
-    const QPoint second_end = widgetPoint(260, 40);
+    const QPoint second_start = widgetPoint(0, 40);
+    const QPoint second_end = widgetPoint(70, 40);
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, second_start);
     QTest::mouseMove(canvas, second_end);
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, second_end);
@@ -543,7 +565,9 @@ bool testEditableTextUi(const QString& directory) {
     if (!image_editor::ImageDocumentStore::loadDocument(document_path, &document, &error) ||
         !findText(document, second_text_id, &second_text) ||
         second_text.box_width <= second_bounds.width() || second_text.font_pixel_size != 22) {
-        std::cerr << "The side resize handle did not change only the text box width.\n";
+        std::cerr << "The side resize handle did not change only the text box width: saved="
+                  << second_text.box_width << ", before=" << second_bounds.width()
+                  << ", font=" << second_text.font_pixel_size << ".\n";
         return false;
     }
     published = QImage(output_path);

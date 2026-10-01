@@ -169,8 +169,11 @@ used if that family is unavailable. `font_pixel_size` is a canvas-pixel size
 from 1 through 1024. `color` uses `#AARRGGBB`; new text defaults to opaque
 black, 48 pixels, `Sans Serif`, and left alignment. `alignment` is `left`,
 `center`, or `right`. The `x` and `y` coordinates and `box_width` are floating
-point canvas pixels. Text wraps at word boundaries or between characters when
-needed; its layout height grows to fit its content. The text ID is a unique
+point canvas pixels. While editing, the box grows horizontally to fit the
+longest line, up to the canvas's right edge; text wraps at word boundaries or
+between characters at that edge, and the layout height grows to fit its
+content. A text box reopened without a text or font-size change keeps its saved
+width. The text ID is a unique
 canonical UUID across all editable object operations. Content is limited to
 16,384 characters, font family names to 256 characters, and the text geometry
 must fit within the canvas. Text is stored only in version 9 or later and is
