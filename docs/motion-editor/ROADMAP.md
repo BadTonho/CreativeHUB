@@ -345,7 +345,10 @@ v4 reports actual timestamp-seek outcomes and time, forward-decode attempts,
 completions and fallbacks, and discarded intermediate frames. These counters
 are diagnostics; they do not change the automatic effect-worker policy.
 
-Manual Windows validation remains pending: confirm the Motion Studio icon on
+The timeline UI component refactor passed a manual Windows check: playback
+controls, ruler seeking, zoom and scrolling, layer editing, and keyframe
+interactions worked. The broader manual Windows validation remains pending:
+confirm the Motion Studio icon on
 the application window and executable; open **Help > System** and confirm
 it displays **Beta 0.1.0** and the executable path; open **Help > Open Log
 Folder** and confirm the Motion Studio log directory opens, then verify the
