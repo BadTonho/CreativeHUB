@@ -8,6 +8,7 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 
 | Area | Document | Responsibility |
 | --- | --- | --- |
+| Product distribution | [Product and Distribution Architecture (Portuguese planning document)](../PRODUCT_DISTRIBUTION.md) | Provisional boundaries for the editors, future Hub, integrated and standalone recovery, and GitHub-based releases |
 | Repository | [Repository Structure](architecture/REPOSITORY_STRUCTURE.md) | Applications, modules, shared libraries, and folder boundaries |
 | UI | [UI Boundary](architecture/UI.md) | Qt Widgets, desktop interaction, and UI-only responsibilities |
 | Media | [Media Boundary](architecture/MEDIA.md) | FFmpeg probing, decoding, playback sessions, and ownership |

@@ -54,7 +54,7 @@ regression coverage.
 ## 3. Mandatory Principles
 
 - The project must be open source.
-- All project documentation must be written in English, including the README, guides, specifications, architectural decisions, and comments intended for users or contributors.
+- Project documentation must be written in English, including the README, guides, specifications, architectural decisions, and comments intended for users or contributors. A maintainer may explicitly request a Portuguese owner-only planning document; mark it as provisional and keep the other documentation in English unless separately requested.
 - The software must be lightweight, efficient, and responsive.
 - Performance, memory usage, and startup time are important requirements.
 - Support for Windows, macOS, and Linux must be considered from the beginning.

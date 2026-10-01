@@ -189,7 +189,7 @@ Common shortcuts in the Video Editor:
 
 ## Documentation and Contribution
 
-Before contributing, please read the project guidelines outlined in [`AGENTS.md`](AGENTS.md). All project documentation, commit notes, and code comments must be written in English.
+Before contributing, please read the project guidelines outlined in [`AGENTS.md`](AGENTS.md). Project and contributor documentation normally uses English. The suite distribution proposal linked below is a Portuguese planning note requested by the maintainer.
 
 | Guide | What it covers |
 | --- | --- |
@@ -202,6 +202,7 @@ Before contributing, please read the project guidelines outlined in [`AGENTS.md`
 | [Motion Studio native format](docs/motion-editor/FORMAT.md) | Provisional `.motion` version 4 JSON layout, v1-v3 migration, curve and effect data, and save/open behavior. |
 | [Motion Studio roadmap](docs/motion-editor/ROADMAP.md) | Provisional scope and technical milestones. |
 | [Cross-application compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md) | Shared interfaces and handoff contracts. |
+| [Product and distribution architecture (Portuguese planning document)](docs/PRODUCT_DISTRIBUTION.md) | Provisional boundaries for the future Hub, its integrated recovery feature and standalone recovery tool, and GitHub releases. |
 | [Technical prototype comparison](docs/video-editor/TECHNICAL_PROTOTYPE_COMPARISON.md) | Language and technology evaluation. |
 
 ## License
