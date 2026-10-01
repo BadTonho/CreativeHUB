@@ -28,6 +28,9 @@ selects its tab, while View and the dock close control can hide or restore it.
 Motion Studio stores the layout in application settings, independently of each
 composition, migrates the previous uncustomized default arrangement to the
 tabbed layout, and offers a command to restore the first-run arrangement.
+The timeline UI is split into controls, ruler, and layer-track components;
+`TimelineNavigator` coordinates navigation and playback state, while
+`MainWindow` owns document edits and history.
 This document records the agreed starting scope; it does not finalize a
 renderer, programming language, native file extension, codec, or implementation
 architecture.

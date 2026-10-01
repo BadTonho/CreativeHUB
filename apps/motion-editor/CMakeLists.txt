@@ -51,7 +51,17 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/layer_effect_processor.h
     src/ui/layer_effect_worker_pool.cpp
     src/ui/layer_effect_worker_pool.h
-    src/ui/timeline_navigator.cpp
+    src/ui/timeline/timeline_controls.cpp
+    src/ui/timeline/timeline_controls.h
+    src/ui/timeline/timeline_layer_tracks.cpp
+    src/ui/timeline/timeline_layer_tracks.h
+    src/ui/timeline/timeline_navigator.cpp
+    src/ui/timeline/timeline_navigator.h
+    src/ui/timeline/timeline_navigator_math.h
+    src/ui/timeline/timeline_ruler.cpp
+    src/ui/timeline/timeline_ruler.h
+    src/ui/timeline/timeline_types.h
+    src/ui/timeline/timeline_view_mapping.h
     src/ui/timeline_navigator.h
     src/ui/timeline_navigator_math.h
     src/ui/workspace/motion_workspace.cpp

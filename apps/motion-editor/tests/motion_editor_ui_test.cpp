@@ -1915,6 +1915,8 @@ int main(int argc, char* argv[])
             "a new composition starts with an empty Media Pool");
     require(findWidget<QWidget>(&window, "motion-media-pool") != nullptr &&
                 findWidget<QWidget>(&window, "motion-media-details") != nullptr &&
+                findWidget<QWidget>(&window, "motion-timeline-controls") != nullptr &&
+                findWidget<QWidget>(&window, "motion-timeline-layer-tracks") != nullptr &&
                 findWidget<QWidget>(&window, "motion-timeline-layer-rows") != nullptr &&
                 findWidget<QWidget>(&window, "motion-transform-inspector") != nullptr &&
                 window.findChild<QWidget*>(QStringLiteral("motion-layer-list")) == nullptr &&

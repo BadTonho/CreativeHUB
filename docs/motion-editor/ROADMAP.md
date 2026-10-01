@@ -167,6 +167,10 @@ the Motion Studio implementation choices are finalized.
   control show or hide it. Preserve customized layouts, migrate the previous
   uncustomized default layout, and persist panel state globally in Motion Studio
   settings.
+- [x] Organize the timeline UI into separate controls, ruler, and layer-track
+  components under `src/ui/timeline/`. Keep navigation and playback state in
+  `TimelineNavigator`, and document edits and history in `MainWindow`; preserve
+  existing Qt object names and interaction behavior.
 - [x] Add bounded Undo/Redo for composition edits, including layer timing,
   order, visibility, transforms, and keyframes. Media Pool operations remain
   outside the history.
@@ -363,7 +367,9 @@ and restore that tab. Restart the app to verify layout restoration, then use
 **View > Reset Panel Layout** and confirm Timeline is selected with both tabs
 available. Confirm the previous uncustomized default layout migrates to the
 tabbed layout while a customized layout remains intact. Then confirm the
-one-hour navigation range, stepping, and separate drag extensions; import
+one-hour navigation range, stepping, and separate drag extensions; confirm the
+timeline controls, ruler, and layer tracks still work after their component
+refactor; import
 images and videos, organize bins, switch pool views, and restore offline items;
 drag media to empty space and existing rows; verify snapping and front-to-back
 order; select, move, hide, resize, and remove layers; edit transforms; seek
