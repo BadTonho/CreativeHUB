@@ -157,9 +157,10 @@ Video Editor linked-image acceptance milestone.
    style is 48 px Sans Serif, opaque black, and left-aligned. Drag on the canvas
    to define the initial text width. Type a long line and confirm the box grows
    horizontally; at the canvas edge, confirm text wraps and the box grows
-   vertically. Enter must insert a line break, while Ctrl+Enter commits. Start
-   another empty text frame and click outside to commit; start one more and
-   press Esc, confirming that no `Text N` layer remains.
+   vertically. Include `b` and `e` in the text and confirm they do not switch to
+   Paint or Eraser. Enter must insert a line break, while Ctrl+Enter commits.
+   Start another empty text frame and click outside to commit; start one more
+   and press Esc, confirming that no `Text N` layer remains.
 2. Double-click an existing text object. Change its content, family, pixel
    size, color (including alpha), and alignment. Confirm and verify the text
    changes on the canvas. Reopen it, make a temporary edit, press Esc, and

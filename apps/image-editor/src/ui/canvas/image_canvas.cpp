@@ -859,10 +859,19 @@ void ImageCanvas::updateTextEditorGeometry() {
     const int pixel_height = std::max(24, qRound(height * zoom_));
     const int left = qRound(target.left() + text_editing_.position.x() * zoom_);
     const int top = qRound(target.top() + text_editing_.position.y() * zoom_);
-    text_editor_->setGeometry(left, top, width, pixel_height);
+    const QRect editor_geometry(left, top, width, pixel_height);
     QFont font(text_editing_.font_family);
     font.setPixelSize(std::max(1, qRound(text_editing_.font_pixel_size * zoom_)));
+    const bool keep_focus = text_editor_->hasFocus();
+    const QTextCursor cursor = text_editor_->textCursor();
+    if (text_editor_->geometry() != editor_geometry) {
+        text_editor_->setGeometry(editor_geometry);
+    }
     if (text_editor_->font() != font) text_editor_->setFont(font);
+    if (keep_focus && !text_editor_->hasFocus()) {
+        text_editor_->setFocus(Qt::OtherFocusReason);
+        text_editor_->setTextCursor(cursor);
+    }
 }
 
 void ImageCanvas::updateTextEditorContentAndGeometry() {
@@ -1447,6 +1456,20 @@ void ImageCanvas::mouseDoubleClickEvent(QMouseEvent* event) {
 }
 
 bool ImageCanvas::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == text_editor_ && event->type() == QEvent::ShortcutOverride) {
+        auto* key_event = static_cast<QKeyEvent*>(event);
+        const QString input = key_event->text();
+        const auto modifiers = key_event->modifiers();
+        const bool printable = !input.isEmpty() && input.front().isPrint();
+        const bool altgr = modifiers.testFlag(Qt::GroupSwitchModifier);
+        const bool command_modifier =
+            modifiers.testFlag(Qt::ControlModifier) || modifiers.testFlag(Qt::MetaModifier);
+        const bool menu_modifier = modifiers.testFlag(Qt::AltModifier) && !altgr;
+        if (printable && (!command_modifier || altgr) && !menu_modifier) {
+            key_event->accept();
+            return true;
+        }
+    }
     if (watched == text_editor_ && event->type() == QEvent::KeyPress) {
         auto* key_event = static_cast<QKeyEvent*>(event);
         if (key_event->key() == Qt::Key_Escape) {

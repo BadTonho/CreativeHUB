@@ -193,13 +193,14 @@ application media preparation, and `.csp` persistence. The complete Release
 CTest suite also passed 61/61. These automated results do not complete the
 pending manual text review or linked-image acceptance checklist.
 
-**Text editor sizing regression (2026-10-01):** while typing, the text box now
-grows to fit its longest line up to the canvas edge, then wraps and expands
-vertically. The original dragged width remains the minimum starting width;
-reopening an unchanged text keeps its saved width. The focused UI test passed
-in Debug and Release, the Release Image Editor/Video Editor boundary tests
-passed 5/5, and the complete Release suite passed 61/61. Manual visual review
-remains pending.
+**Text editor typing and sizing regression (2026-10-01):** printable letters
+are kept by the text editor instead of triggering window-level Paint (`B`) or
+Eraser (`E`) shortcuts. While typing, the box grows to fit its longest line up
+to the canvas edge, then wraps and expands vertically. The original dragged
+width remains the minimum starting width; reopening unchanged text keeps its
+saved width. The focused UI test passed in Debug and Release, the Release Image
+Editor/Video Editor boundary tests passed 5/5, and the complete Release suite
+passed 61/61. Manual visual review remains pending.
 
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
@@ -210,7 +211,7 @@ remains pending.
 | Flattened export, Quick Export, and export dialogs | `image_editor_core_test.cpp`, `image_editor_export_ui_test.cpp` (`creative-suite-image-editor-export-ui`) | The owner reports current export workflows exercised on Windows 11; cross-platform package checks remain pending. |
 | Canvas, tools, layers, shortcuts, and UI interactions | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`) | The owner reports current UI workflows exercised on Windows 11; cross-platform visual checks remain pending. |
 | Video Editor linked-image producer/consumer workflow | Producer: `image_editor_ui_test.cpp`; consumers: `application_media_services_test.cpp` (`creative-suite-main-editor-application-media`), `main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`), and `project_file_test.cpp` (`creative-suite-main-editor-project`) | Automated producer/consumer regression tests pass in Debug and Release. The owner reports the basic linked edit/save workflow working on Windows, but the full scenario and cross-platform acceptance remain pending (**P1 validation**). |
-| First-release editable text | `image_editor_core_test.cpp` and `image_editor_ui_test.cpp`; CTest `creative-suite-image-editor-core` and `creative-suite-image-editor-ui` (horizontal growth, canvas-edge wrapping, and multiline height growth) | Manual visual editing checks are listed in `MANUAL_VALIDATION.md` and remain pending (**P2 validation**). Linked PNG producer and Video Editor consumer regression tests are present; manual cross-application acceptance remains pending (**P1 validation**). |
+| First-release editable text | `image_editor_core_test.cpp` and `image_editor_ui_test.cpp`; CTest `creative-suite-image-editor-core` and `creative-suite-image-editor-ui` (printable shortcut conflicts, focus retention, horizontal growth, canvas-edge wrapping, and multiline height growth) | Manual visual editing checks are listed in `MANUAL_VALIDATION.md` and remain pending (**P2 validation**). Linked PNG producer and Video Editor consumer regression tests are present; manual cross-application acceptance remains pending (**P1 validation**). |
 
 ### Current coverage gaps and pending validation
 

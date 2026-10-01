@@ -23,6 +23,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QKeyEvent>
 #include <QKeySequenceEdit>
 #include <QLabel>
 #include <QListWidget>
@@ -47,6 +48,7 @@
 
 #include <algorithm>
 #include <array>
+#include <utility>
 #include <QTest>
 #include <QSignalSpy>
 #include <QUuid>
@@ -349,9 +351,38 @@ bool testEditableTextUi(const QString& directory) {
     if (!text_editor->isVisible()) return false;
     const int initial_text_editor_width = text_editor->width();
     const int initial_text_editor_height = text_editor->height();
-    QTest::keyClicks(text_editor,
-        QStringLiteral("This exceptionally long heading continues beyond canvas edge"));
-    QCoreApplication::processEvents();
+    for (const auto& [key, character] : {
+             std::pair{Qt::Key_E, QStringLiteral("e")},
+             std::pair{Qt::Key_B, QStringLiteral("b")}}) {
+        QKeyEvent shortcut_override(QEvent::ShortcutOverride, key,
+                                    Qt::NoModifier, character);
+        QApplication::sendEvent(text_editor, &shortcut_override);
+        if (!shortcut_override.isAccepted()) {
+            std::cerr << "A printable key was not protected from a tool shortcut.\n";
+            return false;
+        }
+        QTest::keyClick(text_editor, key);
+        QCoreApplication::processEvents();
+        if (!text_editor->isVisible() || !text_tool->isChecked() ||
+            text_editor->toPlainText() != character) {
+            std::cerr << "A Paint/Eraser shortcut interrupted text input.\n";
+            return false;
+        }
+        text_editor->clear();
+        QCoreApplication::processEvents();
+    }
+    const QString long_heading = QStringLiteral(
+        "This exceptionally long heading continues beyond canvas edge");
+    for (qsizetype index = 0; index < long_heading.size(); ++index) {
+        QTest::keyClicks(text_editor, QString(long_heading.at(index)));
+        QCoreApplication::processEvents();
+        if (!text_editor->isVisible() || QApplication::focusWidget() != text_editor ||
+            text_editor->toPlainText() != long_heading.left(index + 1)) {
+            std::cerr << "Typing stopped after character " << (index + 1)
+                      << " of the heading.\n";
+            return false;
+        }
+    }
     const int maximum_editor_width = qRound((320.0 - 70.0) * canvas->zoomFactor());
     if (text_editor->width() <= initial_text_editor_width ||
         text_editor->width() > maximum_editor_width ||
