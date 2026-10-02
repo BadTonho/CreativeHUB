@@ -92,6 +92,22 @@ int darkPixelCount(const QImage& image) {
     return count;
 }
 
+int selectionHighlightPixelCount(const QImage& image) {
+    const QImage pixels = image.convertToFormat(QImage::Format_ARGB32);
+    int count = 0;
+    for (int y = 0; y < pixels.height(); ++y) {
+        const auto* row = reinterpret_cast<const QRgb*>(pixels.constScanLine(y));
+        for (int x = 0; x < pixels.width(); ++x) {
+            const QColor pixel = QColor::fromRgba(row[x]);
+            if (pixel.alpha() > 200 && pixel.blue() > 140 && pixel.green() > 90 &&
+                pixel.blue() > pixel.red() * 1.35 && pixel.green() > pixel.red() * 1.2) {
+                ++count;
+            }
+        }
+    }
+    return count;
+}
+
 int currentLayerRow(const QTreeWidget* tree) {
     return tree->indexOfTopLevelItem(tree->currentItem());
 }
@@ -424,6 +440,32 @@ bool testEditableTextUi(const QString& directory) {
             return false;
         }
     }
+    QTest::keyClick(text_editor, Qt::Key_Home, Qt::ControlModifier);
+    for (int index = 0; index < QStringLiteral("This").size(); ++index) {
+        QTest::keyClick(text_editor, Qt::Key_Right, Qt::ShiftModifier);
+    }
+    QCoreApplication::processEvents();
+    if (text_editor->textCursor().selectedText() != QStringLiteral("This")) {
+        std::cerr << "Selecting text in the expanded editor did not select the word.\n";
+        return false;
+    }
+    if (selectionHighlightPixelCount(canvas->grab().toImage().copy(
+            text_editor->geometry().adjusted(2, 2, -2, -2))) < 10) {
+        std::cerr << "The native text selection highlight was not visible.\n";
+        return false;
+    }
+    QTest::keyClicks(text_editor, QStringLiteral("This"));
+    if (text_editor->toPlainText() != long_heading ||
+        text_editor->textCursor().position() != QStringLiteral("This").size()) {
+        std::cerr << "Typing over selected text did not replace the selection.\n";
+        return false;
+    }
+    QTest::keyClick(text_editor, Qt::Key_End, Qt::ControlModifier);
+    if (text_editor->textCursor().position() != long_heading.size()) {
+        std::cerr << "Ctrl+End did not return the cursor to the end of the expanded text.\n";
+        return false;
+    }
+    QCoreApplication::processEvents();
     const int expanded_text_ink = liveTextInk();
     if (expanded_text_ink <= single_character_ink * 3) {
         std::cerr << "The live editor did not render the full typed heading (single-character "
@@ -490,6 +532,10 @@ bool testEditableTextUi(const QString& directory) {
             "This exceptionally long heading continues beyond canvas edge\nSecond line") ||
         first_text.font_pixel_size != 18 || published.isNull() || published == source) {
         std::cerr << "Saving linked text did not persist and publish its multiline content.\n";
+        std::cerr << "Saved text='" << first_text.content.toStdString() << "', size="
+                  << first_text.font_pixel_size << ", id='" << first_text_id.toStdString()
+                  << "', published-null=" << published.isNull()
+                  << ", published-equals-source=" << (published == source) << ".\n";
         return false;
     }
 

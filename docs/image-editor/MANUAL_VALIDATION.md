@@ -159,7 +159,10 @@ Video Editor linked-image acceptance milestone.
    click immediately before the `A` inside the active text box, and type `DE`;
    confirm the result is `DEABC` and the insertion point follows `DE`. Click
    outside to commit, then use a new click or horizontal drag to start another
-   text object. Type a long line and confirm the box grows horizontally; at the
+   text object. Type several words until the box grows, drag across one word,
+   and confirm the selected characters and blue selection highlight stay aligned
+   with the text and the selection can be replaced by typing. Continue with a
+   long line and confirm the box grows horizontally; at the
    canvas edge, confirm text wraps and the box grows vertically. Include `b`
    and `e` in the text and confirm they do not switch to
    Paint or Eraser. Enter must insert a line break, while Ctrl+Enter commits.
