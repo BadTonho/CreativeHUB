@@ -6,6 +6,14 @@
 
 namespace settings {
 
+bool gpuCompositionEnabled() {
+    return QSettings().value(kGpuCompositionEnabledKey, false).toBool();
+}
+
+void setGpuCompositionEnabled(bool enabled) {
+    QSettings().setValue(kGpuCompositionEnabledKey, enabled);
+}
+
 bool previewPerformanceMetricsEnabled() {
     constexpr bool default_enabled = true;
     QSettings settings;

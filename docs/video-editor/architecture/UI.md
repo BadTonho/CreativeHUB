@@ -26,6 +26,13 @@ playback without stopping it and recomposes the current Timeline frame while
 paused. GPU failures preserve the current frame, switch to CPU rendering, show
 a short status message, and write a detailed rendering log.
 
+Settings > General also offers **Use GPU for timeline preview (Experimental)**,
+disabled by default and persisted globally. It applies immediately through the
+playback controller, recomposes a paused Timeline frame and keeps playback
+running. This selects layer composition separately from the viewer's GPU
+presentation; CPU fallback remains available. Export and project data are
+unchanged. See [the composition boundary](RENDERING.md#timeline-composition).
+
 ## Media Browser and projects
 
 The Media Browser belongs to the logical `Media Pool` group. `Bins` and

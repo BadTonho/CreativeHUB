@@ -61,6 +61,14 @@ registration is shared by all three editors. Each application keeps its own
 timeline, project/document model, task orchestration, panels, and editing
 workflow. The shared libraries do not own application documents or widgets.
 
+The optional `creative-suite::composition-opengl` adapter now provides worker
+GPU composition/readback for the existing ordered RGBA frame contract. Video
+Editor is its first consumer, behind a global experimental preference; Motion
+Studio adoption remains planned and Image Editor requires its own transparent
+output contract. The CPU compositor remains Qt independent. This adds no native
+format or handoff change. Native tests compare masked PNG producer output and
+consumer refresh through the Video worker. See [delivery evidence](video-editor/GPU_COMPOSITION_RESULTS.md).
+
 These APIs remain provisional and should continue to gain focused tests for
 their shared behavior and each consumer boundary. In particular, new
 cross-application handoffs still require producer/consumer regression coverage

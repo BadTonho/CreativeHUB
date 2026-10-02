@@ -10,7 +10,8 @@ The Video Editor currently includes:
 
 - Qt 6 desktop shell with dockable workspace panels;
 - FFmpeg metadata import and first-frame decoding;
-- provisional Qt OpenGL preview with CPU fallback and grayscale;
+- provisional Qt OpenGL presentation with CPU fallback and grayscale, plus
+  optional shared GPU timeline composition (Settings > General, default off);
 - CPU playback with worker-thread frame stepping and playback;
 - multiple video tracks with stable identifiers, absolute positions, gaps,
   cross-track overlap, direct selection, track management, and positional
@@ -90,7 +91,7 @@ The Video Editor currently includes:
   automation, recording, audio crossfades, and advanced audio effects;
 - image sequences, SRT import, automatic captions, rich text, and animated text
   content;
-- advanced compositing, GPU per-layer playback, easing, masks, 3D layers, and
+- advanced compositing, GPU effects/texture delivery/export, easing, masks, 3D layers, and
   transition effects beyond the essential pair;
 - advanced ripple editing, automatic gap management, or history covering every
   project subsystem;

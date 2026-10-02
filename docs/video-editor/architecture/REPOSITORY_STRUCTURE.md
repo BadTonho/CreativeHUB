@@ -15,7 +15,7 @@ apps/
   motion-editor/     # Motion design and compositing editor
 libs/
   animation/         # Shared keyframe and curve evaluation
-  composition/       # Shared CPU frame composition
+  composition/       # Shared CPU composition and optional Qt/OpenGL adapter
   diagnostics/       # Structured logging
   media/             # Media assets, playback, and video encoding
   shortcuts/         # Shared shortcut registration and persistence
@@ -37,6 +37,10 @@ without sharing their complete editing workflows. Current shared libraries
 include media assets/playback/encoding, animation, composition, diagnostics,
 shortcut management, and system monitoring. Project schemas, document stores,
 timeline models, editors, and panels remain application-owned.
+
+`creative-suite::composition` stays Qt independent. Its separate optional
+`creative-suite::composition-opengl` target owns worker GPU resources and frame
+readback. Video Editor is the first consumer; Motion Studio adoption is planned.
 
 ## Video Editor organization
 
@@ -90,7 +94,8 @@ main_window/
 ```
 
 `ui/preview/preview_widget.*` contains the preview container, while its OpenGL
-surface and composition implementations remain in `rendering/`. The other UI
+presentation surface and CPU composition adapter remain in `rendering/`; the
+optional GPU composition backend lives in `libs/composition/`. The other UI
 subfolders group effects, functions, media-browser, system-memory, timeline,
 and workspace widgets. Each test subfolder has its own CMake registration file;
 `tests/CMakeLists.txt` holds shared helpers and adds those groups.

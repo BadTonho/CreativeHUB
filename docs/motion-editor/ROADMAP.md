@@ -48,8 +48,9 @@ technically clear.
 
 The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records four future
 deliveries: layer composition, GPU effects, preview/export integration, and
-adoption by the other applications. The first proposed experiment is an
-optional shared OpenGL compositor for Motion Studio with CPU fallback.
+adoption by the other applications. Video Editor is the first consumer of the
+implemented optional shared OpenGL compositor; Motion's later integration will
+reuse it with CPU fallback.
 
 **Status: documentation only; implementation deferred.** Motion Studio still
 uses CPU composition and CPU effects. The plan records existing diagnostic

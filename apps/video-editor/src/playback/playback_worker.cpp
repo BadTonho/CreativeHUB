@@ -103,10 +103,11 @@ void recordPacingCatchup(
 
 } // namespace
 
-PlaybackWorker::PlaybackWorker(QObject* parent)
-    : QObject(parent) {}
+PlaybackWorker::PlaybackWorker(QObject* parent, GpuCompose gpu_compose)
+    : QObject(parent), gpu_compose_(std::move(gpu_compose)) {}
 
 PlaybackWorker::~PlaybackWorker() {
+    gpu_compositor_.reset();
     if (timer_ != nullptr) timer_->stop();
     cancelTransitionPreroll();
     if (transition_preroll_thread_.joinable()) {
@@ -465,6 +466,16 @@ void PlaybackWorker::setMonitorVolume(double gain) {
     if (audio_output_ != nullptr) {
         audio_output_->setVolume(monitor_volume_gain_);
     }
+}
+
+void PlaybackWorker::setGpuCompositionEnabled(bool enabled, QOffscreenSurface* surface) {
+    if (enabled == gpu_composition_enabled_ && surface == gpu_surface_) return;
+    gpu_compositor_.reset();
+    gpu_surface_ = surface;
+    gpu_composition_enabled_ = enabled;
+    gpu_composition_failed_ = false;
+    gpu_warning_reported_ = false;
+    clearCompositionCache();
 }
 
 void PlaybackWorker::setPreviewQuality(PreviewQuality quality) {
@@ -847,17 +858,18 @@ void PlaybackWorker::renderCompositionFrame(
                 rendering::PreviewTiming::Composition);
             composed = composeCompositionLayers(
                 *decoded_layers,
+                should_cancel,
                 collect_slow_frame ? &composition_timings : nullptr);
         }
         const auto composition_elapsed = collect_slow_frame
             ? std::chrono::duration_cast<std::chrono::nanoseconds>(
                 Clock::now() - composition_started)
             : std::chrono::nanoseconds::zero();
-        if (should_cancel()) return;
+        if (should_cancel() || last_composition_cancelled_) return;
         if (!composed.has_value()) {
             throw media::MediaError("The timeline composition could not produce a frame.");
         }
-        if (collect_slow_frame) {
+        if (collect_slow_frame && !last_composition_gpu_) {
             metrics.recordBlendLookupComposition(composition_timings);
         }
 
@@ -876,6 +888,7 @@ void PlaybackWorker::renderCompositionFrame(
 
         if (collect_slow_frame) {
             rendering::SlowFrameSample sample;
+            sample.gpu_composition = last_composition_gpu_;
             sample.playback_generation = generation_;
             sample.timeline_frame = global_frame;
             const auto clock_frame_rate = playbackFrameRate();
@@ -2447,8 +2460,13 @@ PlaybackWorker::decodeCompositionLayers(
 
 std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     const std::vector<DecodedCompositionLayer>& decoded_layers,
+    const media::VideoPlaybackSession::CancellationPredicate& should_cancel,
     rendering::FrameCompositionTimings* timings) {
-    const auto adapter_started = timings != nullptr ? Clock::now() : Clock::time_point{};
+    using namespace creative_suite::composition;
+    last_composition_gpu_ = false;
+    last_composition_cancelled_ = false;
+    if (timings) *timings = {};
+    auto adapter_started = timings != nullptr ? Clock::now() : Clock::time_point{};
     int width = 1920;
     int height = 1080;
     switch (preview_quality_) {
@@ -2472,6 +2490,69 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
             decoded.frame.get(),
             decoded.transform,
             decoded.alpha_coverage};
+        layers.push_back(std::move(layer));
+    }
+    if (gpu_composition_enabled_ && !gpu_composition_failed_) {
+        OpenGlCompositionTimings gpu_timings;
+        OpenGlCompositionResult gpu_result;
+        try {
+            if (gpu_compose_) {
+                gpu_result = gpu_compose_(width, height, layers, should_cancel, &gpu_timings);
+            } else {
+                if (!gpu_compositor_)
+                    gpu_compositor_ = std::make_unique<OpenGlFrameCompositor>(gpu_surface_);
+                gpu_result = gpu_compositor_->compose(width, height, layers, should_cancel, &gpu_timings);
+            }
+        } catch (const std::exception& error) {
+            gpu_result = {OpenGlCompositionStatus::Failed, {}, "compose", error.what(), -1};
+        }
+        if (should_cancel() || gpu_result.status == OpenGlCompositionStatus::Cancelled) {
+            metrics.recordGpuCompositionWork(gpu_timings);
+            last_composition_cancelled_ = true;
+            return {};
+        }
+        if (gpu_result.status == OpenGlCompositionStatus::Complete && gpu_result.frame) {
+            last_composition_gpu_ = true;
+            metrics.recordCompositionBackend(true, gpu_timings);
+            if (timings) {
+                timings->canvas_width = width;
+                timings->canvas_height = height;
+            }
+            return std::move(gpu_result.frame);
+        }
+        metrics.recordGpuCompositionWork(gpu_timings);
+        if (gpu_result.status == OpenGlCompositionStatus::Complete) {
+            gpu_result = {OpenGlCompositionStatus::Failed, {}, "compose",
+                "The GPU backend returned no completed frame.", -1};
+        }
+        const bool failed = gpu_result.status != OpenGlCompositionStatus::Unsupported;
+        if (failed) {
+            gpu_composition_failed_ = true;
+            metrics.recordGpuCompositionFailure();
+            gpu_compositor_.reset();
+        }
+        if (!gpu_warning_reported_ || failed) {
+            gpu_warning_reported_ = true;
+            logging::Logger::instance().log(
+                failed ? logging::Level::Error : logging::Level::Warning,
+                "gpu-composition", gpu_result.operation, gpu_result.cause,
+                {{"error_code", std::to_string(gpu_result.error_code)},
+                 {"canvas_width", std::to_string(width)}, {"canvas_height", std::to_string(height)},
+                 {"timeline_frame", std::to_string(current_timeline_frame_)},
+                 {"generation", std::to_string(generation_)},
+                 {"track_index", std::to_string(track_index_)}, {"clip_index", std::to_string(clip_index_)},
+                 {"layer_count", std::to_string(layers.size())}, {"fallback", "cpu"}});
+            emit compositionWarning(
+                "GPU preview is unavailable for this request. Using CPU.",
+                gpu_result.error_code, generation_);
+        }
+    }
+    if (should_cancel()) return {};
+    if (gpu_composition_enabled_ && timings) adapter_started = Clock::now();
+    // Only the CPU path prepares and reports CPU text raster fast paths.
+    for (std::size_t index = 0; index < decoded_layers.size(); ++index) {
+        const auto& decoded = decoded_layers[index];
+        auto& layer = layers[index];
         if (decoded.kind == timeline::ClipKind::Text &&
             decoded.composition_session_index < composition_sessions_.size()) {
             auto& composition =
@@ -2490,7 +2571,6 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
             rendering::FrameCompositor::canUseAlphaCoverageFastPath(layer)) {
             metrics.recordTextCompositionFastPathHit();
         }
-        layers.push_back(std::move(layer));
     }
     const auto adapter_elapsed = timings != nullptr
         ? std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -2502,6 +2582,8 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
         height,
         layers,
         timings);
+    if (composed && !should_cancel())
+        metrics.recordCompositionBackend(false, {}, gpu_composition_enabled_);
     if (timings != nullptr) {
         timings->layer_list_setup_nanoseconds = adapter_elapsed <= 0
             ? 0U

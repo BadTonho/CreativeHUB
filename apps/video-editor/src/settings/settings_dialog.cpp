@@ -73,6 +73,18 @@ QWidget* SettingsDialog::createGeneralPage() {
     layout->addWidget(metrics_check);
     layout->addWidget(description);
 
+    auto* gpu_check = new QCheckBox(
+        "Use GPU for timeline preview (Experimental)", page);
+    gpu_check->setObjectName("gpuCompositionCheckBox");
+    gpu_check->setToolTip("Applies immediately. Falls back to CPU when needed. Export is unchanged.");
+    gpu_check->setAccessibleDescription(gpu_check->toolTip());
+    gpu_check->setChecked(settings::gpuCompositionEnabled());
+    layout->addWidget(gpu_check);
+    connect(gpu_check, &QCheckBox::toggled, this, [this](bool enabled) {
+        settings::setGpuCompositionEnabled(enabled);
+        emit gpuCompositionEnabledChanged(enabled);
+    });
+
     auto* autosave_check = new QCheckBox(
         "Enable project autosave", page);
     autosave_check->setObjectName("projectAutosaveCheckBox");

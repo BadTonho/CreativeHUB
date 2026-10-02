@@ -26,9 +26,9 @@ Update it when implementation, scope, or a decision changes.
   consumer. Extract a focused shared library only when another application has
   a real use for the same behavior and a stable API can serve both. See the
   [cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
-- The current compositor runs on the CPU and Qt OpenGL presents the final
-  frame. Keep this implementation until profiling or a concrete
-  second backend justifies a broader renderer abstraction. See the
+- CPU composition remains the default. An experimental shared OpenGL 3.2 Core
+  backend is available for timeline preview through Settings > General, with
+  CPU fallback and worker readback. Qt OpenGL presents the final frame. See the
   [rendering boundary](architecture/RENDERING.md).
 - The Image Editor's standalone acceptance gate comes before acceptance of
   its linked-image workflow. Motion Studio development may proceed in
@@ -39,15 +39,16 @@ Update it when implementation, scope, or a decision changes.
 
 ## GPU acceleration planning
 
-The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records future stages
-for optional timeline composition, playback/texture delivery, offline export,
-covered effect reuse/linked assets, and measured platform acceptance. It reuses
-the proposed shared Motion Studio backend and preserves Video Editor's timing,
-audio, transitions, queue, and project responsibilities.
+The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records the implemented
+optional timeline composition stage and future texture delivery, offline export,
+effects and platform acceptance. Video Editor is the first consumer of the
+shared backend; Motion Studio and Image Editor adoption remain planned.
 
-**Status: documentation only; implementation deferred.** Existing OpenGL
-presentation remains implemented; per-layer composition and offline export
-remain on the CPU. The plan introduces no renderer or project-format change.
+**Status: Stage 1 implemented, experimental, disabled by default.** Existing
+presentation remains in use, including CPU fallback; export remains CPU.
+Native parity/benchmark and build/test evidence is recorded in
+[GPU_COMPOSITION_RESULTS.md](GPU_COMPOSITION_RESULTS.md). Further OS/driver and
+human audio/visual acceptance remain pending; formats and versions are unchanged.
 
 ## Status legend
 
@@ -267,8 +268,8 @@ performance measurements, and Video Editor stability as the decision criteria.
 - [ ] Establish startup, memory, and playback/preview baselines on the
   maintainer's reference PC and additional systems; set numeric minimum
   hardware requirements from those measurements.
-- [ ] Consider per-layer GPU composition or another rendering backend only
-  when measured needs justify the added implementation and deployment cost.
+- [x] Add experimental per-layer GPU composition with CPU fallback and transfer
+  measurements. Keep default and platform acceptance tied to recorded evidence.
 - [ ] Revisit plugin architecture, additional export presets, and templates
   after stable public workflows and extension points are known.
 

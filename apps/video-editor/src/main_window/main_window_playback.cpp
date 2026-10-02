@@ -5,6 +5,7 @@
 #include "ui/preview/preview_widget.h"
 #include "project/project_file.h"
 #include "rendering/preview_performance_metrics.h"
+#include "settings/user_preferences.h"
 #include "timeline/timeline_time.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
@@ -130,7 +131,20 @@ timeline::FrameRate slowFrameRate(
 void appendPerformanceContext(
     logging::Context& context,
     const PreviewPerformanceSnapshot& snapshot) {
-    context.emplace_back("metrics_schema_version", "7");
+    context.emplace_back("metrics_schema_version", "8");
+    context.emplace_back("composition_backend", snapshot.gpu_composition_frames > 0
+        ? (snapshot.cpu_composition_frames > 0 ? "mixed" : "opengl")
+        : (snapshot.cpu_composition_frames > 0 ? "cpu" : "none"));
+    context.emplace_back("cpu_composition_frames", std::to_string(snapshot.cpu_composition_frames));
+    context.emplace_back("gpu_composition_frames", std::to_string(snapshot.gpu_composition_frames));
+    context.emplace_back("gpu_composition_fallbacks", std::to_string(snapshot.gpu_composition_fallbacks));
+    context.emplace_back("gpu_composition_failures", std::to_string(snapshot.gpu_composition_failures));
+    context.emplace_back("gpu_composition_uploaded_bytes", std::to_string(snapshot.gpu_composition_uploaded_bytes));
+    context.emplace_back("gpu_composition_readback_bytes", std::to_string(snapshot.gpu_composition_readback_bytes));
+    context.emplace_back("gpu_composition_uploaded_layers", std::to_string(snapshot.gpu_composition_uploaded_layers));
+    appendTimingContext(context, "gpu_composition_upload", snapshot.gpu_composition_upload);
+    appendTimingContext(context, "gpu_composition_draw_submission", snapshot.gpu_composition_draw_submission);
+    appendTimingContext(context, "gpu_composition_readback", snapshot.gpu_composition_readback);
     context.emplace_back(
         "timeline_fps_numerator",
         std::to_string(snapshot.timeline_frame_rate_numerator));
@@ -562,7 +576,8 @@ void appendSlowFrameContext(
     const rendering::PreviewPerformanceSnapshot& snapshot) {
     if (!snapshot.worst_slow_frame.has_value()) return;
     const auto& frame = *snapshot.worst_slow_frame;
-    context.emplace_back("diagnostic_schema_version", "7");
+    context.emplace_back("diagnostic_schema_version", "8");
+    context.emplace_back("composition_backend", frame.gpu_composition ? "opengl" : "cpu");
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back("sample_origin_thread_role", "playback_worker");
     context.emplace_back(
@@ -990,6 +1005,7 @@ void MainWindow::initializePlayback() {
         [this](const playback::PlaybackControllerEvent& event) {
             handlePlaybackEvent(event);
         });
+    playback_controller_->setGpuCompositionEnabled(settings::gpuCompositionEnabled());
     if (editUi().monitor_volume != nullptr) {
         applyMonitorVolumePercent(editUi().monitor_volume->value());
     }
@@ -1190,6 +1206,8 @@ void MainWindow::handlePlaybackEvent(
             handlePlaybackFinished(value.during_playback, value.gap);
         } else if constexpr (std::is_same_v<Event, playback::PlaybackErrorEvent>) {
             handlePlaybackError(value);
+        } else if constexpr (std::is_same_v<Event, playback::PlaybackCompositionWarningEvent>) {
+            statusBar()->showMessage(value.message, 5000);
         } else if constexpr (std::is_same_v<Event, playback::PlaybackAudioWarningEvent>) {
             statusBar()->showMessage(
                 "Audio unavailable; continuing with video playback.");

@@ -187,6 +187,7 @@ target_link_libraries(creative-suite-main-editor-core PUBLIC
     ${FFMPEG_LIBRARIES}
     creative-suite::animation
     creative-suite::composition
+    creative-suite::composition-opengl
     creative-suite::diagnostics
     creative-suite::media-frame
     creative-suite::video-media

@@ -51,6 +51,8 @@ into the rendering contract/adapter, layer-mask-group composition, interactive
 editing/presentation, export/linked PNG publication, and measured acceptance.
 It coordinates reuse with the Motion Studio and Video Editor plans while
 preserving Image Editor's transparent output and editable operations.
+Video Editor is the first consumer of the implemented shared OpenGL adapter;
+Image Editor adoption remains planned.
 
 **Status: documentation only; implementation deferred.** Current image
 rendering remains on the CPU. No GPU editing, export gain, or driver acceptance

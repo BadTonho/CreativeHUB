@@ -7,6 +7,7 @@
 #include "ui/workspace/pages/render/render_workspace.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
+#include "settings/settings_dialog.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
 #if defined(CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS)
@@ -30,6 +31,7 @@
 #include <QStandardPaths>
 #include <QTimer>
 #include <QMessageBox>
+#include <QCheckBox>
 
 #include <chrono>
 #include <filesystem>
@@ -142,6 +144,20 @@ public:
                     "Selecting Quarter must persist and check the selected Playback Preview Quality.");
             require(render_window.project_dirty_ == dirty_before_quality_change,
                     "Changing Playback Preview Quality must not dirty the project.");
+            bool gpu_ui_forwarded = false;
+            QTimer::singleShot(0, [&] {
+                auto* dialog = qobject_cast<settings::SettingsDialog*>(QApplication::activeModalWidget());
+                auto* checkbox = dialog ? dialog->findChild<QCheckBox*>("gpuCompositionCheckBox") : nullptr;
+                if (checkbox) {
+                    checkbox->setChecked(true);
+                    gpu_ui_forwarded = settings::gpuCompositionEnabled() &&
+                        render_window.playback_controller_->gpuCompositionEnabled();
+                }
+                if (dialog) dialog->accept();
+            });
+            render_window.showSettingsDialog();
+            require(gpu_ui_forwarded && render_window.project_dirty_ == dirty_before_quality_change,
+                    "Settings GPU checkbox did not reach controller or modified project.");
             const std::array<QDockWidget*, 7> docks{
                 render_window.bins_dock_, render_window.media_dock_,
                 render_window.toolbox_dock_, render_window.favorites_dock_,
@@ -183,6 +199,10 @@ public:
                         reopened_full_quality != nullptr,
                     "Playback Preview Quality must persist across application restarts.");
             reopened_full_quality->trigger();
+            require(reopened_window.playback_controller_->gpuCompositionEnabled(),
+                    "Persisted GPU preference was not applied at startup.");
+            settings::setGpuCompositionEnabled(false);
+            reopened_window.playback_controller_->setGpuCompositionEnabled(false);
             QApplication::processEvents();
             require(QSettings().value("preview/playback_quality").toInt() == 0,
                     "The Full Playback Preview Quality selection was not persisted.");

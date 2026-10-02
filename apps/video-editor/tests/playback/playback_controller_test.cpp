@@ -57,6 +57,8 @@ struct FakeWorkerState {
     std::atomic<quint64> render_request_generation{0};
     std::atomic<int> render_request_count{0};
     std::atomic<int> preview_quality_value{-1};
+    std::atomic<int> gpu_setting_changes{0};
+    std::atomic_bool gpu_enabled{false};
     std::atomic<qint64> last_active_composition_global_frame{-1};
     std::atomic<quint64> seek_request_generation{0};
     std::atomic<qint64> last_seek_frame{-1};
@@ -126,6 +128,10 @@ public:
             track_index, clip_index, track_gain, track_muted, clip_gain, clip_muted});
     }
     void setMonitorVolume(double) override {}
+    void setGpuCompositionEnabled(bool enabled, QOffscreenSurface*) override {
+        state_->gpu_enabled.store(enabled);
+        ++state_->gpu_setting_changes;
+    }
     void setPreviewQuality(playback::PreviewQuality quality) override {
         state_->preview_quality_value.store(
             static_cast<int>(quality), std::memory_order_release);
@@ -673,6 +679,15 @@ void runControllerTests() {
     require(session.projectDirty() == dirty_before_quality_change &&
                 session.playheadFrame() == playhead_before_quality_change,
             "Changing preview quality modified the project or playhead.");
+    const auto renders_before_gpu = fake_state->render_request_count.load();
+    controller.setGpuCompositionEnabled(true);
+    require(waitUntil([&] { return fake_state->gpu_enabled.load() &&
+        fake_state->render_request_count.load() > renders_before_gpu; }),
+        "GPU preference did not reach worker and recompose paused frame.");
+    require(controller.gpuCompositionEnabled() && session.projectDirty() == dirty_before_quality_change &&
+        session.playheadFrame() == playhead_before_quality_change, "GPU toggle changed project/playhead.");
+    controller.setGpuCompositionEnabled(true);
+    require(fake_state->gpu_setting_changes.load() == 1, "Duplicate GPU toggle reactivated resources.");
     require(std::none_of(events.begin(), events.end(), [](const auto& event) {
         const auto* frame = std::get_if<playback::PlaybackFrameEvent>(&event);
         return frame != nullptr && frame->clip_id == 1;
@@ -698,6 +713,10 @@ void runControllerTests() {
                 session.projectDirty() == dirty_during_playback_quality_change,
             "Changing preview quality interrupted playback or dirtied the project.");
     const auto play_generation = fake_worker->currentGeneration();
+    controller.setGpuCompositionEnabled(false);
+    require(waitUntil([&] { return !fake_state->gpu_enabled.load(); }) && controller.isPlaying() &&
+        session.projectDirty() == dirty_during_playback_quality_change,
+        "GPU toggle interrupted playback or dirtied project.");
     const auto frames_before_invalidation = std::count_if(
         events.begin(), events.end(), [](const auto& event) {
             return std::holds_alternative<playback::PlaybackFrameEvent>(event);

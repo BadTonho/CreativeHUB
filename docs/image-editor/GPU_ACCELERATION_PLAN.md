@@ -1,7 +1,9 @@
 # Image Editor GPU Acceleration Plan
 
-Status: **provisional plan, saved on 2026-10-02; implementation deferred**.
-This delivery contains documentation only. All stages below are planned.
+Status: **provisional Image Editor integration plan, saved on 2026-10-02;
+Image Editor GPU implementation deferred**.
+All Image Editor GPU stages below are planned. Video Editor is the first
+consumer of the now implemented shared optional compositor.
 
 ## Current implementation and shared direction
 
@@ -12,13 +14,15 @@ composition. The canvas displays the composed image; standalone exports render
 immutable snapshots on a worker, while linked PNG publication remains
 synchronous. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
-The [Motion Studio plan](../motion-editor/GPU_ACCELERATION_PLAN.md) proposes
-the first shared GPU compositor experiment. Reuse its resource/backend services
+The [Video Editor plan](../video-editor/GPU_ACCELERATION_PLAN.md) establishes
+Video Editor as the first consumer of the shared OpenGL compositor. Reuse its resource/backend services
 when their contract fits; Image Editor needs transparent output, document pixel
 coordinates, affine image transforms, and different sampling behavior. The
 current shared video compositor's opaque black output, aspect fit, and nearest
 sampling cannot be applied unchanged to image documents. Extend the shared
 boundary without changing its existing consumers' defaults.
+The Video backend is now available as an optional Qt adapter; Image Editor
+integration remains planned and requires its own transparent-output contract.
 
 GPU rendering is a runtime implementation choice. Keep `.cimg` v11, its
 supported older versions, recovery wrapper v1, and the Video Editor's `.csp`

@@ -246,6 +246,9 @@ void PreviewPerformanceMetrics::recordTiming(
     case PreviewTiming::CpuSurface: storage = &cpu_surface_; break;
     case PreviewTiming::GpuUpload: storage = &gpu_upload_; break;
     case PreviewTiming::GpuPaint: storage = &gpu_paint_; break;
+    case PreviewTiming::GpuCompositionUpload: storage = &gpu_composition_upload_; break;
+    case PreviewTiming::GpuCompositionDrawSubmission: storage = &gpu_composition_draw_submission_; break;
+    case PreviewTiming::GpuCompositionReadback: storage = &gpu_composition_readback_; break;
     case PreviewTiming::PacingLag: storage = &pacing_lag_; break;
     case PreviewTiming::MediaOpen: storage = &media_open_; break;
     case PreviewTiming::AudioSetup: storage = &audio_setup_; break;
@@ -285,6 +288,32 @@ void PreviewPerformanceMetrics::recordSlowFrame(
             worst_slow_frame_->processing_nanoseconds) {
         worst_slow_frame_ = sample;
     }
+}
+
+void PreviewPerformanceMetrics::recordCompositionBackend(bool gpu,
+    const creative_suite::composition::OpenGlCompositionTimings& timings,
+    bool fallback) noexcept {
+    if (!isEnabled()) return;
+    (gpu ? gpu_composition_frames_ : cpu_composition_frames_).fetch_add(1, std::memory_order_relaxed);
+    if (fallback) gpu_composition_fallbacks_.fetch_add(1, std::memory_order_relaxed);
+    if (!gpu) return;
+    recordGpuCompositionWork(timings);
+}
+
+void PreviewPerformanceMetrics::recordGpuCompositionWork(
+    const creative_suite::composition::OpenGlCompositionTimings& timings) noexcept {
+    if (!isEnabled() || (timings.uploaded_bytes == 0 && timings.readback_bytes == 0 &&
+        timings.draw_submission_nanoseconds == 0)) return;
+    gpu_composition_uploaded_bytes_.fetch_add(timings.uploaded_bytes, std::memory_order_relaxed);
+    gpu_composition_readback_bytes_.fetch_add(timings.readback_bytes, std::memory_order_relaxed);
+    gpu_composition_uploaded_layers_.fetch_add(timings.uploaded_layers, std::memory_order_relaxed);
+    recordTiming(PreviewTiming::GpuCompositionUpload, std::chrono::nanoseconds(timings.upload_nanoseconds));
+    recordTiming(PreviewTiming::GpuCompositionDrawSubmission, std::chrono::nanoseconds(timings.draw_submission_nanoseconds));
+    recordTiming(PreviewTiming::GpuCompositionReadback, std::chrono::nanoseconds(timings.readback_nanoseconds));
+}
+
+void PreviewPerformanceMetrics::recordGpuCompositionFailure() noexcept {
+    if (isEnabled()) gpu_composition_failures_.fetch_add(1, std::memory_order_relaxed);
 }
 
 void PreviewPerformanceMetrics::recordBlendLookupComposition(
@@ -822,6 +851,16 @@ PreviewTimingSnapshot PreviewPerformanceMetrics::takeTimingSnapshot(
 
 PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noexcept {
     PreviewPerformanceSnapshot snapshot;
+    snapshot.cpu_composition_frames = cpu_composition_frames_.exchange(0);
+    snapshot.gpu_composition_frames = gpu_composition_frames_.exchange(0);
+    snapshot.gpu_composition_fallbacks = gpu_composition_fallbacks_.exchange(0);
+    snapshot.gpu_composition_failures = gpu_composition_failures_.exchange(0);
+    snapshot.gpu_composition_uploaded_bytes = gpu_composition_uploaded_bytes_.exchange(0);
+    snapshot.gpu_composition_readback_bytes = gpu_composition_readback_bytes_.exchange(0);
+    snapshot.gpu_composition_uploaded_layers = gpu_composition_uploaded_layers_.exchange(0);
+    snapshot.gpu_composition_upload = takeTimingSnapshot(gpu_composition_upload_);
+    snapshot.gpu_composition_draw_submission = takeTimingSnapshot(gpu_composition_draw_submission_);
+    snapshot.gpu_composition_readback = takeTimingSnapshot(gpu_composition_readback_);
     const auto now = nowNanoseconds();
     const auto enabled = isEnabled();
     const auto enabled_at = enabled_started_nanoseconds_.load(std::memory_order_relaxed);

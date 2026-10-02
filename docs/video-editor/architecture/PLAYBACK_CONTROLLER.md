@@ -23,9 +23,30 @@ When the clock enters another clip, the controller requests activation while kee
 
 On shutdown, the controller stops the worker on its thread, quits and joins the thread, and clears the frame mailbox. Calls made after shutdown are ignored.
 
+## Experimental composition preference
+
+`setGpuCompositionEnabled` forwards the global Settings preference to the worker.
+The controller creates and retains the offscreen surface on the GUI thread;
+the worker owns all composition contexts and resources. Paused Timeline frames
+are recomposed after a toggle; active playback applies it on the next queued
+worker operation. Duplicate values do not reactivate resources. Decoded/text
+caches are retained, while the final composition cache is invalidated. Neither
+project data, history nor the playhead changes.
+
+Generation-filtered `PlaybackCompositionWarningEvent` reports a logged fallback
+through a brief status message. It does not stop playback. The controller joins
+the worker before destroying the surface. See [the rendering contract](RENDERING.md#timeline-composition)
+for request limits, precision requirements, cancellation and retry semantics.
+
 ## Regression coverage
 
 `creative-suite-main-editor-playback-controller` runs without constructing `MainWindow` and uses a substitutable worker factory to exercise controller commands, delayed activation, a nonzero source in-point, global-frame propagation across a cut, seek-to-current-position before resuming, and dirty-state preservation. `creative-suite-main-editor-playback-worker-errors` also runs a deterministic 491-frame composition with a 150-frame text layer beginning at frame 294, switches the active clip during playback, and verifies that the worker reaches the composition end rather than finishing at the text layer's end. `creative-suite-main-editor-main-window` verifies that an accepted activation updates the visible timeline and media-browser selection. Existing playback worker tests continue to cover decoding, audio, composition, and pacing.
+
+The controller/settings/main-window tests also cover live preference forwarding,
+paused refresh, playback continuity, persistence and project-state preservation.
+The native GPU timeline test covers real worker activation/toggle/shutdown;
+follow the [GPU manual checklist](../GPU_COMPOSITION_RESULTS.md#reproducible-manual-checklist)
+for platform, visual and physical audio checks.
 
 ## Manual validation
 

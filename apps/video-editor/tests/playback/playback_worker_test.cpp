@@ -10,6 +10,9 @@
 #include <QEventLoop>
 #include <QThread>
 #include <QTimer>
+#include <QTemporaryDir>
+#include <QFileInfo>
+#include <fstream>
 
 #include <algorithm>
 #include <array>
@@ -1834,10 +1837,117 @@ void validateGlobalCompositionClockAcrossTextOverlay(
 
 } // namespace
 
+void validateGpuComposition() {
+    using namespace creative_suite::composition;
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    metrics.setEnabled(true); metrics.reset();
+    int attempts = 0, warnings = 0, errors = 0;
+    auto mode = OpenGlCompositionStatus::Complete;
+    std::vector<playback::VideoFramePtr> frames;
+    const media::VideoFrame* borrowed_still = nullptr;
+    playback::PlaybackWorker worker(nullptr,
+        [&](int w, int h, const std::vector<rendering::CompositionLayer>& layers,
+            const OpenGlFrameCompositor::CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
+            ++attempts;
+            require(!cancel(), "Fresh GPU request already cancelled.");
+            require(layers.size() == 2 && std::any_of(layers.begin(), layers.end(),
+                [&](const auto& layer) { return layer.frame == borrowed_still; }),
+                "GPU adapter copied/replaced decoded pixels or omitted text.");
+            if (mode != OpenGlCompositionStatus::Complete)
+                return OpenGlCompositionResult{mode, {}, "injected-operation", "injected GPU cause", 123};
+            *timings = {100, 200, 300, 400, 500, 2};
+            return OpenGlCompositionResult{mode, rendering::FrameCompositor::compose(w, h, layers)};
+        });
+    QObject::connect(&worker, &playback::PlaybackWorker::frameReady,
+        [&](playback::VideoFramePtr f, qint64, quint64, quint64) { frames.push_back(std::move(f)); });
+    QObject::connect(&worker, &playback::PlaybackWorker::playbackError,
+        [&](QString, qint64, quint64) { ++errors; });
+    QObject::connect(&worker, &playback::PlaybackWorker::compositionWarning,
+        [&](QString, qint64 code, quint64) {
+            std::ifstream log(logging::Logger::instance().log_path());
+            const std::string content((std::istreambuf_iterator<char>(log)), {});
+            require(code == 123 && content.find("gpu-composition") != std::string::npos &&
+                content.find("injected GPU cause") != std::string::npos &&
+                content.find("timeline_frame") != std::string::npos,
+                "GPU fallback warned before logging actionable context.");
+            ++warnings;
+        });
+    auto still = std::make_shared<const media::VideoFrame>(media::VideoFrame{2, 1, 8,
+        {90, 60, 30, 255, 40, 80, 120, 128}});
+    borrowed_still = still.get();
+    playback::CompositionLayerSpec image;
+    image.kind = timeline::ClipKind::Image; image.still_frame = still;
+    image.track_index = 0; image.clip_index = 0; image.segment_frame_count = 150;
+    image.keyframes.position_x = {{0, .3}, {100, .7}};
+    playback::CompositionLayerSpec text = image;
+    text.kind = timeline::ClipKind::Text; text.still_frame.reset(); text.track_index = 1;
+    text.text.content = "GPU text"; text.text.font_size_pixels = 24;
+    text.transform.scale = .2;
+    worker.setPreviewQuality(playback::PreviewQuality::Quarter);
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition({image, text}, {}, 801);
+    worker.renderCompositionFrame(0, 0, 801);
+    require(attempts == 0 && frames.size() == 1, "Default composition used GPU.");
+    const auto cpu = frames.back();
+    worker.setGpuCompositionEnabled(true, nullptr);
+    worker.renderCompositionFrame(0, 0, 801);
+    require(attempts == 1 && frames.size() == 2 && errors == 0 && warnings == 0 &&
+        frames.back()->rgba_pixels == cpu->rgba_pixels,
+        "Enabling GPU did not invalidate final composition cache or preserve transforms/text.");
+    worker.renderCompositionFrame(0, 0, 801);
+    require(attempts == 1, "Composed GPU frame was not cached.");
+    auto snapshot = metrics.takeSnapshotAndReset();
+    require(snapshot.gpu_composition_frames == 1 && snapshot.cpu_composition_frames == 1 &&
+        snapshot.gpu_composition_fallbacks == 0 && snapshot.text_cache_hits > 0,
+        "GPU metrics or preserved text cache are incorrect: gpu=" + std::to_string(snapshot.gpu_composition_frames) +
+        " cpu=" + std::to_string(snapshot.cpu_composition_frames) + " text=" + std::to_string(snapshot.text_cache_hits));
+    mode = OpenGlCompositionStatus::Unsupported;
+    worker.renderCompositionFrame(1, 1, 801);
+    worker.renderCompositionFrame(2, 2, 801);
+    require(attempts == 3 && warnings == 1 && errors == 0, "Limits disabled GPU or interrupted fallback.");
+    mode = OpenGlCompositionStatus::Failed;
+    worker.renderCompositionFrame(3, 3, 801);
+    worker.renderCompositionFrame(4, 4, 801);
+    require(attempts == 4 && warnings == 2 && errors == 0,
+        "Technical GPU failure did not latch CPU fallback.");
+    worker.setGpuCompositionEnabled(false, nullptr);
+    worker.setGpuCompositionEnabled(true, nullptr);
+    mode = OpenGlCompositionStatus::Cancelled;
+    const auto before = frames.size();
+    worker.renderCompositionFrame(5, 5, 801);
+    require(attempts == 5 && frames.size() == before && errors == 0 && warnings == 2,
+        "Cancelled GPU request emitted a frame or failure.");
+    mode = OpenGlCompositionStatus::Complete;
+    worker.renderCompositionFrame(5, 5, 801);
+    require(attempts == 6 && frames.size() == before + 1, "Off/on did not retry GPU.");
+    worker.setPreviewQuality(playback::PreviewQuality::Half);
+    worker.renderCompositionFrame(5, 5, 801);
+    require(frames.back()->width == 960 && frames.back()->height == 540,
+        "GPU request ignored preview quality.");
+    // Updating a producer's published still changes only the shared source; no
+    // GPU-specific media cache may keep the previous PNG pixels alive.
+    image.still_frame = std::make_shared<const media::VideoFrame>(media::VideoFrame{2, 1, 8,
+        {200, 1, 2, 255, 3, 4, 5, 255}});
+    borrowed_still = image.still_frame.get();
+    worker.setComposition({image, text}, {}, 802);
+    worker.renderCompositionFrame(5, 5, 802);
+    require(frames.back()->rgba_pixels != cpu->rgba_pixels, "Updated published still was not consumed.");
+    snapshot = metrics.takeSnapshotAndReset();
+    require(snapshot.gpu_composition_failures == 1 && snapshot.gpu_composition_fallbacks == 4 &&
+        snapshot.gpu_composition_frames == 3 && snapshot.composition_failures == 0,
+        "Fallback metrics credited CPU frames as GPU.");
+    worker.setGpuCompositionEnabled(false, nullptr);
+    metrics.setEnabled(false);
+}
+
 int main(int argc, char* argv[]) {
     QGuiApplication application(argc, argv);
 
     try {
+        QTemporaryDir gpu_logs;
+        require(gpu_logs.isValid() && logging::Logger::instance().initialize(
+            QFileInfo(gpu_logs.path()).filesystemFilePath()), "GPU test log unavailable.");
+        validateGpuComposition();
         validateTransitionPlan();
         validatePlaybackDecodeGapPolicy();
         validateWorkerDiagnostics(application);

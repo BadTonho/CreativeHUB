@@ -50,9 +50,32 @@ if(TARGET creative-suite::shortcuts)
     endif()
 endif()
 
+if(TARGET creative-suite::composition-opengl)
+    add_executable(creative-suite-composition-opengl-tests opengl_composition_test.cpp)
+    target_link_libraries(creative-suite-composition-opengl-tests PRIVATE creative-suite::composition-opengl)
+    add_creative_suite_test(NAME creative-suite-composition-opengl
+        SKIP_RETURN_CODE 77
+        COMMAND creative-suite-composition-opengl-tests)
+    if(WIN32)
+        set_tests_properties(creative-suite-composition-opengl PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
+    elseif(APPLE)
+        set_tests_properties(creative-suite-composition-opengl PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
+    else()
+        set_tests_properties(creative-suite-composition-opengl PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    endif()
+    if(WIN32)
+        add_custom_command(TARGET creative-suite-composition-opengl-tests POST_BUILD
+            COMMAND "${QT_SHORTCUT_TEST_DEPLOY_TOOL}"
+                --no-translations --no-compiler-runtime
+                "$<TARGET_FILE:creative-suite-composition-opengl-tests>"
+            VERBATIM)
+    endif()
+endif()
+
 foreach(shared_test IN ITEMS
         creative-suite-animation-tests
         creative-suite-composition-tests
+        creative-suite-composition-opengl-tests
         creative-suite-shortcuts-tests)
     if(NOT TARGET ${shared_test})
         continue()

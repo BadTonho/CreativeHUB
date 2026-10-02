@@ -1,19 +1,23 @@
 # Video Editor GPU Acceleration Plan
 
-Status: **provisional plan, saved on 2026-10-02; implementation deferred**.
-This delivery contains documentation only. All stages below are planned.
+Status: **Stage 1 implemented as an opt-in experiment on 2026-10-02;
+cross-platform acceptance and later stages pending**.
+Video Editor is the first consumer of the shared compositor. Motion Studio and
+Image Editor adoption follow their separate plans.
 
 ## Current implementation and shared direction
 
 Timeline playback collects ordered decoded layers and evaluated transforms on
-the worker, then uses the shared CPU compositor. Qt OpenGL presents the completed
-RGBA frame through `QOpenGLWidget`; it currently performs no per-layer GPU
-composition. CPU presentation remains available. Offline export also composes
-on the CPU. See [the rendering boundary](architecture/RENDERING.md).
+the worker, then uses the shared CPU compositor by default. Settings > General
+offers **Use GPU for timeline preview (Experimental)**, disabled by default,
+stored globally as `performance/gpu_composition_enabled`. The separate public
+Qt/OpenGL 3.2 Core adapter composes those layers on the worker and reads back the
+RGBA frame for the existing viewer. CPU fallback and CPU export remain available.
+See [the rendering boundary](architecture/RENDERING.md).
 
-The [Motion Studio plan](../motion-editor/GPU_ACCELERATION_PLAN.md) proposes
-the first shared GPU compositor experiment. Adopt that backend through the
-existing layer-preparation boundary after its relevant contracts are covered.
+The [Motion Studio plan](../motion-editor/GPU_ACCELERATION_PLAN.md) will adopt
+this shared backend through its existing layer-preparation boundary after its
+relevant contracts are covered.
 Keep timeline scheduling, source timing, decoding, transitions, audio, history,
 and render-queue ownership in Video Editor. Avoid a separate composition engine
 or a dependency on the Motion Studio executable.
@@ -22,7 +26,7 @@ GPU selection is runtime state. Preserve the current `.csp` format, older
 supported migrations, recovery, and image/Motion handoff contracts. This plan
 does not create a new persistence version or an editable Motion handoff.
 
-## Stage 1 — Optional GPU timeline composition
+## Stage 1 — Optional GPU timeline composition (implemented; acceptance pending)
 
 - Use current decode/composition/payload/presentation diagnostics to profile
   representative timelines before adding complex GPU optimizations. Separate
@@ -35,9 +39,26 @@ does not create a new persistence version or an editable Motion handoff.
 - Retain the CPU compositor and existing presentation fallback. A composition
   failure must fall back without mutating project state; if both paths fail,
   preserve the last valid preview and log track/clip/frame/source context.
-- Define a new composition opt-in separately from the existing diagnostic
+- Implement a new composition opt-in separately from the existing diagnostic
   `CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1`, which currently controls presentation.
-  Document and cover their interaction before introducing the new setting.
+  The variable continues to control presentation only; the native timeline test
+  explicitly uses it while requiring actual GPU composition.
+
+The GUI creates the offscreen surface; the worker owns context, shader, reusable
+source texture, output framebuffer and the bounded geometry lookup. Toggle
+invalidates the final-frame cache only and recomposes a paused position. Request
+limits fall back individually; technical failures latch CPU until off/on. Errors
+are logged before a nonmodal status warning. Preference/project data are preserved.
+Cancellation returns no frame. Aggregate metrics schema 8 distinguishes actual
+CPU/GPU composition, uploads, draw submission, readback, bytes and fallback from
+the existing presentation metrics. Export, GPU effects/decode/encode and direct
+texture delivery are deferred.
+
+Exact rotated nearest sampling additionally requires the optional
+`ARB_gpu_shader_fp64` and `ARB_gpu_shader5` extensions. Without them, rotated
+requests use CPU; unrotated requests keep the OpenGL 3.2 Core lookup path.
+The native suite exercises both automatic and core-only capability policies.
+See [precision and limits](architecture/RENDERING.md#timeline-composition).
 
 **Exit:** a covered optional timeline backend preserves CPU composition
 semantics; initialization/limits/context-loss cases have a defined fallback.
@@ -130,7 +151,7 @@ justify the chosen default without compromising Video Editor stability.
 
 ## Provisional technology and alternatives
 
-The proposed starting point is the shared Qt/OpenGL experiment, reusing Video
+The implemented starting point is the shared Qt/OpenGL experiment, reusing Video
 Editor's existing OpenGL deployment. Benefits are incremental adoption and
 shared frame/transform contracts. Costs include driver variation, shader
 rounding, transfers, synchronization, and maintaining fallback paths.
@@ -140,13 +161,20 @@ Vulkan/Metal/Direct3D backends if platform needs or profiling justify their
 compatibility, dependency, licensing, and maintenance costs. No final renderer
 choice or new package is accepted by this documentation.
 
-## Future regression and manual evidence
+## Regression and manual evidence
 
 Extend the existing shared compositor, transform/text, playback/transition/
 audio, native OpenGL presentation, metrics, render queue/export, and main-window
 linked-image checks listed in [REGRESSION_TESTING.md](REGRESSION_TESTING.md).
-Existing OpenGL presentation coverage does not prove per-layer GPU composition.
-Add deterministic backend/fallback tests and native driver checks with the code.
+`creative-suite-composition-opengl` compares CPU/GPU with exact alpha and geometry
+and at most two RGB levels of rounding difference. It covers order, transparency,
+aspect fit, transforms, text rasters, edge clipping, padded strides, empty canvas,
+cancellation, limits and repeated worker teardown. Worker/controller/settings/
+metrics tests cover preference persistence, cache, live toggle, failure latching,
+retry, logging and cancellation. `creative-suite-main-editor-gpu-timeline` uses
+the real backend for text/keyframes/transitions/quality/playback and a masked PNG
+producer/consumer refresh when Image Editor is built. Context-unavailable skips
+are explicitly distinct from driver approval.
 
 Manually compare CPU/GPU at clip boundaries and transition frames, rapidly seek,
 change quality while playing, activate media, refresh a linked PNG, export/cancel
@@ -157,7 +185,7 @@ Follow the repository [regression policy](../REGRESSION_POLICY.md).
 ## Resuming and delivery record
 
 Read `AGENTS.md`, this plan, the rendering architecture and regression guide;
-inspect the current shared backend and repository before starting Stage 1.
+inspect the current shared backend and repository before the next stage.
 After each delivery, record implemented items, build/test results, platform
 evidence, unresolved issues, and the next stage here.
 
@@ -165,3 +193,8 @@ evidence, unresolved issues, and the next stage here.
   remain planned. Existing GPU presentation remains in place. Coordinate shared
   work with the [Motion Studio](../motion-editor/GPU_ACCELERATION_PLAN.md) and
   [Image Editor](../image-editor/GPU_ACCELERATION_PLAN.md) plans.
+
+- 2026-10-02: Stage 1 code added with Video Editor as first consumer. Windows
+  native parity and timeline/PNG checks passed on NVIDIA GTX 1660 SUPER, OpenGL
+  3.2, driver 616.92. See [measurement and delivery evidence](GPU_COMPOSITION_RESULTS.md)
+  for repeat measurements, builds, tests and remaining platform/manual gates.

@@ -31,7 +31,9 @@ coverage in both the producer and consumer applications.
 
 - **Video Editor:** the desktop shell, multitrack timeline, FFmpeg playback,
   audio mixing, transforms, keyframes, transitions, text overlays, and `.csp`
-  project persistence are implemented. See the [Video Editor roadmap](docs/video-editor/ROADMAP.md).
+  project persistence are implemented. Experimental GPU timeline composition is
+  available in Settings > General, disabled by default with CPU fallback;
+  export remains CPU. See the [Video Editor roadmap](docs/video-editor/ROADMAP.md).
 - **Image Editor:** Windows users have confirmed the current Release workflow,
   including layers and groups, editable shapes, object selection, save/reopen,
   and export. Imported images support movement, scaling, free rotation, and fixed
@@ -197,7 +199,7 @@ Before contributing, please read the project guidelines outlined in [`AGENTS.md`
 | [Video Editor architecture](docs/video-editor/ARCHITECTURE.md) | Video Editor structure and modules. |
 | [Video Editor subsystem docs](docs/video-editor/architecture/) | Technical boundaries and subsystem behavior. |
 | [Video Editor roadmap](docs/video-editor/ROADMAP.md) | Current work and release gates. |
-| [Video Editor GPU plan](docs/video-editor/GPU_ACCELERATION_PLAN.md) | Planned timeline composition, playback, GPU export, shared capabilities, and acceptance stages; implementation deferred. |
+| [Video Editor GPU plan](docs/video-editor/GPU_ACCELERATION_PLAN.md) | First consumer of the shared compositor: optional timeline GPU composition implemented; texture delivery, GPU export, and platform acceptance pending. |
 | [Regression prevention policy](docs/REGRESSION_POLICY.md) | Required test coverage and gates for all current and future applications. |
 | [Video Editor regression tests](docs/video-editor/REGRESSION_TESTING.md) | Detailed automated coverage and local validation checklist. |
 | [Image Editor scope](docs/image-editor/SCOPE.md) | Approved first editing-release workflow, current boundary, and validation profile. |

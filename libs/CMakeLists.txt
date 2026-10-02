@@ -43,6 +43,17 @@ target_link_libraries(creative-suite-composition PUBLIC
 )
 target_compile_features(creative-suite-composition PUBLIC cxx_std_20)
 
+if(BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
+    find_package(Qt6 CONFIG REQUIRED COMPONENTS Gui OpenGL)
+    add_library(creative-suite-composition-opengl STATIC
+        composition/src/opengl_frame_compositor.cpp
+        composition/include/creative_suite/composition/opengl_frame_compositor.h)
+    add_library(creative-suite::composition-opengl ALIAS creative-suite-composition-opengl)
+    target_link_libraries(creative-suite-composition-opengl PUBLIC
+        creative-suite::composition Qt6::Gui Qt6::OpenGL)
+    target_compile_features(creative-suite-composition-opengl PUBLIC cxx_std_20)
+endif()
+
 add_library(creative-suite-diagnostics STATIC
     diagnostics/src/logger.cpp
     diagnostics/include/creative_suite/diagnostics/logger.h
@@ -79,8 +90,12 @@ endif()
 foreach(shared_target IN ITEMS
         creative-suite-animation
         creative-suite-composition
+        creative-suite-composition-opengl
         creative-suite-diagnostics
         creative-suite-system-monitor)
+    if(NOT TARGET ${shared_target})
+        continue()
+    endif()
     if(MSVC)
         target_compile_options(${shared_target} PRIVATE /W4 /permissive-)
     else()

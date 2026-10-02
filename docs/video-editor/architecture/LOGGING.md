@@ -26,3 +26,14 @@ crash dumps are not implemented in this phase.
 
 Passwords, tokens, private keys, unnecessary personal data, and media contents
 must never be written to the log.
+
+## Experimental GPU composition
+
+The playback adapter logs `gpu-composition` failures before emitting its nonmodal
+fallback warning. Entries include operation/cause/code, canvas dimensions,
+Timeline frame, generation, track/clip indexes, layer count and `fallback=cpu`.
+Request limits or missing precision capabilities report a warning once per
+activation; a technical failure is logged and latches CPU until the option is
+switched off/on. Cancellation is ordinary control flow and adds no error entry.
+Presentation retains its separate `rendering/gpu_preview` diagnostics. Composition
+and presentation costs are separated in [metrics schema 8](RENDERING.md#gpu-composition-metrics-schema-8).

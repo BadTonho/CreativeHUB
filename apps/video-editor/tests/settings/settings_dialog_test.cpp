@@ -86,6 +86,30 @@ int main(int argc, char* argv[]) {
         require(metrics_check->isChecked(),
                 "Preview metrics must be enabled by default.");
 
+        auto* gpu_check = dialog.findChild<QCheckBox*>("gpuCompositionCheckBox");
+        require(gpu_check && !gpu_check->isChecked() && !settings::gpuCompositionEnabled(),
+                "GPU composition must be disabled by default.");
+        require(gpu_check->text() == "Use GPU for timeline preview (Experimental)" &&
+                !gpu_check->accessibleDescription().isEmpty(), "GPU setting label/accessibility missing.");
+        int gpu_changes = 0;
+        QObject::connect(&dialog, &settings::SettingsDialog::gpuCompositionEnabledChanged,
+            [&](bool enabled) {
+                ++gpu_changes;
+                require(settings::gpuCompositionEnabled() == enabled,
+                        "GPU signal preceded persistence.");
+            });
+        gpu_check->setChecked(true);
+        settings.sync();
+        require(gpu_changes == 1 && settings.value(settings::kGpuCompositionEnabledKey).toBool(),
+                "GPU preference was not applied/persisted immediately.");
+        {
+            settings::SettingsDialog reopened(nullptr, shortcut_manager);
+            require(reopened.findChild<QCheckBox*>("gpuCompositionCheckBox")->isChecked(),
+                    "Reopened Settings lost the GPU preference.");
+        }
+        gpu_check->setChecked(false);
+        require(gpu_changes == 2 && !settings::gpuCompositionEnabled(), "GPU preference did not disable.");
+
         auto* autosave_check = dialog.findChild<QCheckBox*>(
             "projectAutosaveCheckBox");
         require(autosave_check != nullptr,

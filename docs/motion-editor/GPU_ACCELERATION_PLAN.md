@@ -1,15 +1,22 @@
 # GPU Acceleration Plan
 
-Status: **provisional plan, saved on 2026-10-02; implementation deferred**.
-The first consumer is Motion Studio. Each stage has a separate delivery and
+Status: **provisional Motion integration plan, saved on 2026-10-02;
+Motion implementation deferred**.
+The first consumer of the shared GPU compositor is Video Editor. Each stage has a separate delivery and
 acceptance gate; completing one stage does not imply that the whole renderer
 has moved to the GPU.
 
-This delivery contains documentation only. GPU composition and GPU effects
-have not been implemented. The current Motion Studio renderer remains on the
-CPU. Resume from Stage 1A when implementation is requested.
+Motion Studio GPU integration and effects remain planned. The shared OpenGL
+adapter is implemented for the Video Editor's opt-in timeline preview; the
+current Motion Studio renderer remains on CPU. Resume from Stage 1A by adopting
+that adapter when Motion integration is requested, without creating another
+composition engine. See [Video Editor's delivery](../video-editor/GPU_ACCELERATION_PLAN.md).
 
 ## Current evidence and priorities
+
+The shared adapter's native Windows parity/measurements are recorded in
+[Video Editor results](../video-editor/GPU_COMPOSITION_RESULTS.md). They do not
+approve Motion effects, its viewer/export lifecycle, or macOS/Linux drivers.
 
 The current pipeline rasterizes text/shapes and applies effects on the preview
 worker, then calls the shared CPU compositor. Offline export uses the same
@@ -29,8 +36,9 @@ files are included in this plan.
 
 ### 1A — Experimental backend and preview integration (planned)
 
-- Add an optional OpenGL 3.2 Core compositor under `libs/composition/`, using
-  the existing shared frame, transform, and ordered-layer contracts.
+- Adopt the optional OpenGL 3.2 Core compositor under `libs/composition/`, using
+  the existing shared frame, transform, and ordered-layer contracts established
+  by the Video Editor's first delivery.
 - Compose position, uniform scale, rotation, opacity, and straight source alpha
   over the existing opaque black canvas. Preserve aspect fit and nearest
   sampling. Keep animation evaluation and content rasterization in their

@@ -36,6 +36,7 @@ public:
         const std::vector<AutosaveSnapshotItem>& snapshots);
 
 signals:
+    void gpuCompositionEnabledChanged(bool enabled);
     void previewPerformanceMetricsEnabledChanged(bool enabled);
     void projectAutosaveSettingsChanged(
         bool enabled,

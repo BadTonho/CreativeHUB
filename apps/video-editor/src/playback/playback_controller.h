@@ -83,6 +83,11 @@ struct PlaybackAudioWarningEvent {
     qint64 error_code = -1;
 };
 
+struct PlaybackCompositionWarningEvent {
+    QString message;
+    qint64 error_code = -1;
+};
+
 using PlaybackControllerEvent = std::variant<
     PlaybackActivationEvent,
     PlaybackFrameEvent,
@@ -90,7 +95,8 @@ using PlaybackControllerEvent = std::variant<
     PlaybackStateEvent,
     PlaybackFinishedEvent,
     PlaybackErrorEvent,
-    PlaybackAudioWarningEvent>;
+    PlaybackAudioWarningEvent,
+    PlaybackCompositionWarningEvent>;
 
 class PlaybackController final : public QObject {
 public:
@@ -114,6 +120,8 @@ public:
 
     void refreshComposition();
     void setPreviewQuality(PreviewQuality quality);
+    void setGpuCompositionEnabled(bool enabled);
+    [[nodiscard]] bool gpuCompositionEnabled() const noexcept { return gpu_composition_enabled_; }
     void setMonitorVolume(double gain);
     void setAudioParametersForActiveClip();
     void invalidate(bool stop_worker);
@@ -201,6 +209,8 @@ private:
     bool timeline_clock_active_ = false;
     bool composition_ready_ = false;
     PreviewQuality preview_quality_ = PreviewQuality::Full;
+    bool gpu_composition_enabled_ = false;
+    std::unique_ptr<QOffscreenSurface> gpu_surface_;
     std::optional<timeline::ClipId> ready_clip_id_;
     std::atomic<quint64> composition_revision_{0};
     quint64 generation_ = 0;

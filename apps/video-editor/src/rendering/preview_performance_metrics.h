@@ -1,6 +1,7 @@
 #pragma once
 
 #include "frame_compositor.h"
+#include <creative_suite/composition/opengl_frame_compositor.h>
 
 #include <array>
 #include <atomic>
@@ -27,6 +28,9 @@ enum class PreviewTiming {
     CpuSurface,
     GpuUpload,
     GpuPaint,
+    GpuCompositionUpload,
+    GpuCompositionDrawSubmission,
+    GpuCompositionReadback,
     PacingLag,
     MediaOpen,
     AudioSetup,
@@ -110,6 +114,7 @@ struct SlowFrameLayerSample {
 };
 
 struct SlowFrameSample {
+    bool gpu_composition = false;
     std::uint64_t playback_generation = 0;
     std::int64_t timeline_frame = -1;
     std::uint64_t frame_rate_milli = 0;
@@ -204,6 +209,16 @@ void addSlowFrameLayer(
     const SlowFrameLayerSample& layer) noexcept;
 
 struct PreviewPerformanceSnapshot {
+    std::uint64_t cpu_composition_frames = 0;
+    std::uint64_t gpu_composition_frames = 0;
+    std::uint64_t gpu_composition_fallbacks = 0;
+    std::uint64_t gpu_composition_failures = 0;
+    std::uint64_t gpu_composition_uploaded_bytes = 0;
+    std::uint64_t gpu_composition_readback_bytes = 0;
+    std::uint64_t gpu_composition_uploaded_layers = 0;
+    PreviewTimingSnapshot gpu_composition_upload;
+    PreviewTimingSnapshot gpu_composition_draw_submission;
+    PreviewTimingSnapshot gpu_composition_readback;
     std::uint64_t decoded_frames = 0;
     std::uint64_t decode_discarded_frames = 0;
     std::uint64_t stale_frames_discarded = 0;
@@ -300,6 +315,12 @@ public:
     void recordSlowFrame(const SlowFrameSample& sample) noexcept;
     void recordBlendLookupComposition(
         const FrameCompositionTimings& timings) noexcept;
+    void recordCompositionBackend(bool gpu,
+        const creative_suite::composition::OpenGlCompositionTimings& timings = {},
+        bool fallback = false) noexcept;
+    void recordGpuCompositionFailure() noexcept;
+    void recordGpuCompositionWork(
+        const creative_suite::composition::OpenGlCompositionTimings& timings) noexcept;
     [[nodiscard]] std::uint64_t createFrameDeliveryTrace(
         std::uint64_t playback_generation,
         std::int64_t timeline_frame) noexcept;
@@ -390,6 +411,16 @@ private:
     [[nodiscard]] PreviewFrameDeliverySnapshot takeFrameDeliverySnapshotAndReset() noexcept;
 
     std::atomic_bool enabled_{false};
+    std::atomic<std::uint64_t> cpu_composition_frames_{0};
+    std::atomic<std::uint64_t> gpu_composition_frames_{0};
+    std::atomic<std::uint64_t> gpu_composition_fallbacks_{0};
+    std::atomic<std::uint64_t> gpu_composition_failures_{0};
+    std::atomic<std::uint64_t> gpu_composition_uploaded_bytes_{0};
+    std::atomic<std::uint64_t> gpu_composition_readback_bytes_{0};
+    std::atomic<std::uint64_t> gpu_composition_uploaded_layers_{0};
+    TimingStorage gpu_composition_upload_;
+    TimingStorage gpu_composition_draw_submission_;
+    TimingStorage gpu_composition_readback_;
     std::atomic<std::uint64_t> enabled_started_nanoseconds_{0};
     std::atomic<std::uint64_t> active_started_nanoseconds_{0};
     std::atomic<std::uint64_t> playback_active_nanoseconds_{0};

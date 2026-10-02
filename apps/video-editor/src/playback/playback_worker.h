@@ -8,6 +8,7 @@
 #include "../rendering/preview_performance_metrics.h"
 #include "../timeline/timeline_model.h"
 #include "audio_output.h"
+#include <creative_suite/composition/opengl_frame_compositor.h>
 #include "playback_audio_pacing.h"
 #include "playback_deadline_scheduler.h"
 
@@ -95,7 +96,11 @@ class PlaybackWorker : public QObject {
     Q_OBJECT
 
 public:
-    explicit PlaybackWorker(QObject* parent = nullptr);
+    using GpuCompose = std::function<creative_suite::composition::OpenGlCompositionResult(
+        int, int, const std::vector<rendering::CompositionLayer>&,
+        const creative_suite::composition::OpenGlFrameCompositor::CancellationPredicate&,
+        creative_suite::composition::OpenGlCompositionTimings*)>;
+    explicit PlaybackWorker(QObject* parent = nullptr, GpuCompose gpu_compose = {});
     ~PlaybackWorker() override;
 
     // Thread-safe entry point used by the UI to replace an older pending seek.
@@ -132,6 +137,7 @@ public slots:
         bool clip_audio_muted);
     virtual void setMonitorVolume(double gain);
     virtual void setPreviewQuality(PreviewQuality quality);
+    virtual void setGpuCompositionEnabled(bool enabled, QOffscreenSurface* surface);
     virtual void setComposition(
         QVector<CompositionLayerSpec> layers,
         QVector<CompositionTransitionSpec> transitions,
@@ -160,6 +166,7 @@ signals:
     void playbackFinished(quint64 generation, bool during_playback);
     void playbackError(QString message, qint64 error_code, quint64 generation);
     void audioWarning(QString message, qint64 error_code, quint64 generation);
+    void compositionWarning(QString message, qint64 error_code, quint64 generation);
 
 private slots:
     void decodeTick();
@@ -194,6 +201,7 @@ private:
         const media::VideoPlaybackSession::CancellationPredicate& should_cancel);
     [[nodiscard]] std::optional<media::VideoFrame> composeCompositionLayers(
         const std::vector<DecodedCompositionLayer>& layers,
+        const media::VideoPlaybackSession::CancellationPredicate& should_cancel,
         rendering::FrameCompositionTimings* timings = nullptr);
     void clearCompositionCache() noexcept;
     void reportFailure(
@@ -271,6 +279,14 @@ private:
     bool playing_ = false;
     bool diagnostics_logged_ = false;
     PreviewQuality preview_quality_ = PreviewQuality::Full;
+    GpuCompose gpu_compose_;
+    std::unique_ptr<creative_suite::composition::OpenGlFrameCompositor> gpu_compositor_;
+    QOffscreenSurface* gpu_surface_ = nullptr;
+    bool gpu_composition_enabled_ = false;
+    bool gpu_composition_failed_ = false;
+    bool gpu_warning_reported_ = false;
+    bool last_composition_gpu_ = false;
+    bool last_composition_cancelled_ = false;
     using Clock = std::chrono::steady_clock;
     detail::PlaybackDeadlineScheduler playback_scheduler_;
     detail::AudioPacingPolicy audio_pacing_policy_;

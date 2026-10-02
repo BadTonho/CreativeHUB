@@ -2,8 +2,10 @@
 
 #include "frame_step_navigation.h"
 #include "rendering/preview_performance_metrics.h"
+#include "logging/logger.h"
 
 #include <QMetaObject>
+#include <QOffscreenSurface>
 
 #include <algorithm>
 #include <cmath>
@@ -111,6 +113,11 @@ PlaybackController::PlaybackController(
         },
         Qt::QueuedConnection);
 
+    QObject::connect(worker_, &PlaybackWorker::compositionWarning, this,
+        [this](const QString& message, qint64 code, quint64 generation) {
+            if (generation == generation_)
+                emitEvent(PlaybackCompositionWarningEvent{message, code});
+        }, Qt::QueuedConnection);
     worker_thread_.start();
 }
 
@@ -143,6 +150,7 @@ void PlaybackController::shutdown() noexcept {
         worker_thread_.wait();
     }
     worker_ = nullptr;
+    gpu_surface_.reset();
 }
 
 bool PlaybackController::available() const noexcept {
@@ -301,6 +309,30 @@ void PlaybackController::refreshComposition() {
         worker.setActiveCompositionClip(
             active_track, active_clip, static_cast<qint64>(global_timeline_frame));
     });
+}
+
+void PlaybackController::setGpuCompositionEnabled(bool enabled) {
+    if (!available() || enabled == gpu_composition_enabled_) return;
+    gpu_composition_enabled_ = enabled;
+    if (enabled && !gpu_surface_) {
+        try {
+            gpu_surface_ = creative_suite::composition::OpenGlFrameCompositor::createSurface();
+        } catch (const std::exception& error) {
+            logging::Logger::instance().log(logging::Level::Error,
+                "gpu-composition", "create-surface", error.what(), {{"fallback", "cpu"}});
+        }
+    }
+    // The borrowed surface survives every queued operation and worker shutdown.
+    queueWorker([enabled, surface = gpu_surface_.get()](PlaybackWorker& worker) {
+        worker.setGpuCompositionEnabled(enabled, surface);
+    });
+    if (playing_ || pending_activation_.has_value()) return;
+    const auto global_frame = timelineFrame();
+    const auto destination = session_.timeline().topClipAt(global_frame);
+    if (!destination) return;
+    const auto& clip = session_.timeline().tracks()[destination->track_index]
+        .clips[destination->clip_index];
+    renderCompositionFrame(global_frame, global_frame - clip.timeline_start_frame);
 }
 
 void PlaybackController::setPreviewQuality(PreviewQuality quality) {

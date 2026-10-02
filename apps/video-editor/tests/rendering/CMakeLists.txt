@@ -1,3 +1,23 @@
+add_executable(creative-suite-main-editor-gpu-timeline-tests gpu_timeline_composition_test.cpp)
+target_link_libraries(creative-suite-main-editor-gpu-timeline-tests PRIVATE creative-suite-main-editor-core)
+if(BUILD_IMAGE_EDITOR)
+    target_link_libraries(creative-suite-main-editor-gpu-timeline-tests PRIVATE creative-suite-image-editor-core)
+    target_compile_definitions(creative-suite-main-editor-gpu-timeline-tests PRIVATE CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS=1)
+endif()
+copy_ffmpeg_test_runtime(creative-suite-main-editor-gpu-timeline-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-gpu-timeline-tests)
+add_creative_suite_test(NAME creative-suite-main-editor-gpu-timeline
+    SKIP_RETURN_CODE 77 COMMAND creative-suite-main-editor-gpu-timeline-tests)
+set_tests_properties(creative-suite-main-editor-gpu-timeline PROPERTIES
+    ENVIRONMENT "CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1")
+if(WIN32)
+    set_property(TEST creative-suite-main-editor-gpu-timeline APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=windows")
+elseif(APPLE)
+    set_property(TEST creative-suite-main-editor-gpu-timeline APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
+else()
+    set_property(TEST creative-suite-main-editor-gpu-timeline APPEND PROPERTY ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
+
 add_executable(creative-suite-main-editor-transform-compositor-tests
     transform_compositor_test.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/media/video_frame.h

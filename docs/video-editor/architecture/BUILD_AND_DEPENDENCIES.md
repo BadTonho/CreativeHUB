@@ -41,6 +41,13 @@ Qt DLLs and platform plugin. CMake installation also generates a self-contained
 deployment directory for supported desktop platforms.
 
 Qt and FFmpeg are currently used under their open-source licensing terms.
+The optional `creative-suite::composition-opengl` target uses the existing Qt
+Gui/OpenGL modules and public OpenGL 3.2 Core APIs, adding no third-party package
+or license. `creative-suite::composition` remains usable without Qt. Native
+composition tests deploy the same Qt runtime and report unavailable contexts as
+skipped; a headless skip is not driver acceptance. Video Editor is the first
+consumer; Motion Studio's renderer continues to use CPU composition.
+
 Before distributing binaries, the project must record the exact modules,
 codecs, licenses, deployment files, and source/relinking obligations required
 by the chosen configuration.
@@ -49,3 +56,6 @@ When `BUILD_IMAGE_EDITOR` is enabled, the Video Editor main-window test links
 the Image Editor core to generate a real masked PNG producer fixture. The
 Video Editor application itself gains no Image Editor dependency. The fixture
 is omitted from Video Editor-only builds while existing linked PNG checks stay.
+The native `creative-suite-main-editor-gpu-timeline` test also links that producer
+fixture to compare masked PNG consumption and refresh through the real worker
+GPU backend. This adds no Image Editor dependency to the Video Editor executable.

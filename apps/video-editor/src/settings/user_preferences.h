@@ -2,6 +2,10 @@
 
 namespace settings {
 
+inline constexpr char kGpuCompositionEnabledKey[] = "performance/gpu_composition_enabled";
+[[nodiscard]] bool gpuCompositionEnabled();
+void setGpuCompositionEnabled(bool enabled);
+
 inline constexpr char kPreviewMetricsEnabledKey[] =
     "performance/preview_metrics_enabled";
 inline constexpr char kProjectAutosaveEnabledKey[] =

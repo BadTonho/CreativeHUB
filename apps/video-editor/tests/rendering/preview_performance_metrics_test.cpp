@@ -19,7 +19,31 @@ int main() {
     try {
         rendering::PreviewPerformanceMetrics metrics;
 
+        metrics.setEnabled(true);
+        creative_suite::composition::OpenGlCompositionTimings gpu_timings{100, 200, 300, 400, 500, 2};
+        metrics.recordCompositionBackend(true, gpu_timings);
+        metrics.recordCompositionBackend(false, {}, true);
+        metrics.recordGpuCompositionFailure();
+        const auto gpu_snapshot = metrics.takeSnapshotAndReset();
+        require(gpu_snapshot.gpu_composition_frames == 1 && gpu_snapshot.cpu_composition_frames == 1 &&
+                gpu_snapshot.gpu_composition_fallbacks == 1 && gpu_snapshot.gpu_composition_failures == 1 &&
+                gpu_snapshot.gpu_composition_uploaded_bytes == 400 && gpu_snapshot.gpu_composition_readback_bytes == 500 &&
+                gpu_snapshot.gpu_composition_uploaded_layers == 2 && gpu_snapshot.gpu_composition_upload.total_nanoseconds == 100 &&
+                gpu_snapshot.gpu_composition_draw_submission.total_nanoseconds == 200 &&
+                gpu_snapshot.gpu_composition_readback.total_nanoseconds == 300 &&
+                gpu_snapshot.gpu_upload.count == 0 && gpu_snapshot.gpu_paint.count == 0 &&
+                gpu_snapshot.blend_lookup_composition_frames == 0,
+                "GPU composition metrics mixed presentation or CPU paths.");
+        require(metrics.takeSnapshotAndReset().gpu_composition_uploaded_bytes == 0, "GPU metrics did not reset.");
+        metrics.recordGpuCompositionWork(gpu_timings);
+        const auto cancelled_work = metrics.takeSnapshotAndReset();
+        require(cancelled_work.gpu_composition_frames == 0 && cancelled_work.gpu_composition_uploaded_bytes == 400,
+                "Cancelled/failed GPU work credited a completed frame or lost transfers.");
+
         metrics.setEnabled(false);
+        metrics.recordCompositionBackend(true, gpu_timings);
+        metrics.recordGpuCompositionFailure();
+        require(metrics.takeSnapshotAndReset().gpu_composition_frames == 0, "Disabled GPU metrics collected work.");
         metrics.recordDecodedFrame();
         metrics.recordDecodeDiscardedFrame();
         metrics.recordTiming(

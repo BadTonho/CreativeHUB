@@ -91,6 +91,7 @@ target_link_directories(creative-suite-main-editor-playback-worker-tests PRIVATE
 )
 
 target_link_libraries(creative-suite-main-editor-playback-worker-tests PRIVATE
+    creative-suite::composition-opengl
     Qt6::Core
     Qt6::Gui
     creative-suite::video-media
