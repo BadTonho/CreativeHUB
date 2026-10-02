@@ -7,7 +7,8 @@ acceptance gate; completing one stage does not imply that the whole renderer
 has moved to the GPU.
 
 Motion Studio GPU integration and effects remain planned. The shared OpenGL
-adapter is implemented for the Video Editor's opt-in timeline preview; the
+adapter is implemented for the Video Editor's opt-in timeline preview and per-job
+offline export through 4K; the
 current Motion Studio renderer remains on CPU. Resume from Stage 1A by adopting
 that adapter when Motion integration is requested, without creating another
 composition engine. See [Video Editor's delivery](../video-editor/GPU_ACCELERATION_PLAN.md).
@@ -17,6 +18,11 @@ composition engine. See [Video Editor's delivery](../video-editor/GPU_ACCELERATI
 The shared adapter's native Windows parity/measurements are recorded in
 [Video Editor results](../video-editor/GPU_COMPOSITION_RESULTS.md). They do not
 approve Motion effects, its viewer/export lifecycle, or macOS/Linux drivers.
+Video Editor's [export contract](../video-editor/GPU_EXPORT.md) now covers isolated
+per-job worker resources, CPU fallback and separate schema-1 metrics. Shared RGBA
+and direct paths use two 16 KiB axis lookup buffers for UHD/portrait 4K. Its
+[export measurements](../video-editor/GPU_EXPORT_RESULTS.md) are additional reuse
+evidence; Motion Studio preview/effects/export remain CPU until its own integration.
 
 The current pipeline rasterizes text/shapes and applies effects on the preview
 worker, then calls the shared CPU compositor. Offline export uses the same

@@ -13,7 +13,7 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 | UI | [UI Boundary](architecture/UI.md) | Qt Widgets, desktop interaction, and UI-only responsibilities |
 | Media | [Media Boundary](architecture/MEDIA.md) | FFmpeg probing, decoding, playback sessions, and ownership |
 | Timeline | [Timeline Boundary](architecture/TIMELINE.md) | Timeline model, visual timeline, seeking, and media insertion |
-| Rendering | [Rendering Boundary](architecture/RENDERING.md) | CPU preview, playback frames, and future renderer abstraction |
+| Rendering | [Rendering Boundary](architecture/RENDERING.md) | CPU default, shared experimental GPU preview/export, texture delivery, 4K geometry and resource ownership |
 | Logging | [Logging Boundary](architecture/LOGGING.md) | Structured diagnostics, retention, and error policy |
 | Build | [Build and Dependencies](architecture/BUILD_AND_DEPENDENCIES.md) | CMake, vcpkg, deployment, and licensing tracking |
 | Scope | [Current Scope and Non-goals](architecture/SCOPE.md) | Implemented capabilities and intentionally deferred work |

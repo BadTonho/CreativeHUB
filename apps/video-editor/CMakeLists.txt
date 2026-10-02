@@ -54,6 +54,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/rendering/frame_compositor.cpp
     src/rendering/frame_compositor.h
     src/rendering/offline_export_renderer.cpp
+    src/rendering/export_composition.cpp
+    src/rendering/export_composition.h
     src/rendering/offline_export_renderer.h
     src/rendering/preview_performance_metrics.cpp
     src/rendering/preview_performance_metrics.h

@@ -34,7 +34,8 @@ coverage in both the producer and consumer applications.
   project persistence are implemented. Experimental GPU timeline composition is
   available in Settings > General, disabled by default with automatic direct
   texture delivery when supported and RGBA/CPU fallbacks;
-  export remains CPU. See the [Video Editor roadmap](docs/video-editor/ROADMAP.md).
+  export defaults to CPU with independent experimental GPU composition per queue
+  item, including 4K UHD. See the [Video Editor roadmap](docs/video-editor/ROADMAP.md).
 - **Image Editor:** Windows users have confirmed the current Release workflow,
   including layers and groups, editable shapes, object selection, save/reopen,
   and export. Imported images support movement, scaling, free rotation, and fixed
@@ -200,7 +201,9 @@ Before contributing, please read the project guidelines outlined in [`AGENTS.md`
 | [Video Editor architecture](docs/video-editor/ARCHITECTURE.md) | Video Editor structure and modules. |
 | [Video Editor subsystem docs](docs/video-editor/architecture/) | Technical boundaries and subsystem behavior. |
 | [Video Editor roadmap](docs/video-editor/ROADMAP.md) | Current work and release gates. |
-| [Video Editor GPU plan](docs/video-editor/GPU_ACCELERATION_PLAN.md) | First consumer of the shared compositor: optional timeline GPU composition and direct texture delivery implemented; GPU export and platform acceptance pending. |
+| [Video Editor GPU plan](docs/video-editor/GPU_ACCELERATION_PLAN.md) | First consumer of the shared compositor: optional timeline composition, direct texture delivery and per-job GPU export through 4K implemented; broader platform acceptance pending. |
+| [Video Editor GPU export](docs/video-editor/GPU_EXPORT.md) | Per-job selection, resource ownership, CPU fallback and independent export metrics. |
+| [GPU export results](docs/video-editor/GPU_EXPORT_RESULTS.md) | Native parity, builds/tests, repeated CPU/GPU measurements and remaining platform checks. |
 | [Direct GPU preview delivery](docs/video-editor/GPU_TEXTURE_DELIVERY.md) | Shared contexts, texture leases, bounded buffers, fences, asynchronous recovery and diagnostics. |
 | [Regression prevention policy](docs/REGRESSION_POLICY.md) | Required test coverage and gates for all current and future applications. |
 | [Video Editor regression tests](docs/video-editor/REGRESSION_TESTING.md) | Detailed automated coverage and local validation checklist. |

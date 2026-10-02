@@ -56,16 +56,17 @@ uniform GEOMETRY_VEC2 displayed_size;
 uniform GEOMETRY_VEC2 rotation_cs;
 uniform float opacity;
 uniform bool axis_aligned;
-uniform int lookup_y_offset;
-layout(std140) uniform SourceLookup { ivec4 lookup[1024]; };
+layout(std140) uniform SourceLookupX { ivec4 lookup_x[1024]; };
+layout(std140) uniform SourceLookupY { ivec4 lookup_y[1024]; };
 out vec4 color;
-int mapped(int i) { return lookup[i / 4][i % 4]; }
+int mappedX(int i) { return lookup_x[i / 4][i % 4]; }
+int mappedY(int i) { return lookup_y[i / 4][i % 4]; }
 void main() {
     ivec2 size = textureSize(source_image, 0);
     ivec2 pixel;
     if (axis_aligned) {
-        pixel = ivec2(mapped(int(gl_FragCoord.x)),
-            mapped(lookup_y_offset + int(canvas_height - gl_FragCoord.y)));
+        pixel = ivec2(mappedX(int(gl_FragCoord.x)),
+            mappedY(int(canvas_height - gl_FragCoord.y)));
         if (any(lessThan(pixel, ivec2(0)))) discard;
     } else {
         PRECISE GEOMETRY_VEC2 d = GEOMETRY_VEC2(gl_FragCoord.x, canvas_height - gl_FragCoord.y) - center;
@@ -168,7 +169,8 @@ struct OpenGlFrameCompositor::Impl {
     std::unique_ptr<QOpenGLFramebufferObject> output;
     GLuint texture = 0;
     GLuint vao = 0;
-    GLuint lookup_buffer = 0;
+    GLuint lookup_buffers[2]{};
+    std::uint64_t peak_known_bytes = 0;
     std::vector<GLint> source_lookup;
     int source_width = 0;
     int source_height = 0;
@@ -218,7 +220,7 @@ struct OpenGlFrameCompositor::Impl {
             program.reset();
             if (texture) gl->glDeleteTextures(1, &texture);
             if (vao) gl->glDeleteVertexArrays(1, &vao);
-            if (lookup_buffer) gl->glDeleteBuffers(1, &lookup_buffer);
+            gl->glDeleteBuffers(2, lookup_buffers);
             context->doneCurrent();
         }
         for (auto& target : targets) {
@@ -274,11 +276,21 @@ struct OpenGlFrameCompositor::Impl {
         gl->glGetIntegerv(GL_MAX_TEXTURE_SIZE, &texture_limit);
         gl->glGenTextures(1, &texture);
         gl->glGenVertexArrays(1, &vao);
-        gl->glGenBuffers(1, &lookup_buffer);
-        gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffer);
-        gl->glBufferData(GL_UNIFORM_BUFFER, 16384, nullptr, GL_DYNAMIC_DRAW);
-        const auto block = gl->glGetUniformBlockIndex(program->programId(), "SourceLookup");
-        gl->glUniformBlockBinding(program->programId(), block, 0);
+        GLint block_size = 0, fragment_blocks = 0;
+        gl->glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &block_size);
+        gl->glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_BLOCKS, &fragment_blocks);
+        if (block_size < 16384 || fragment_blocks < 2)
+            return result(OpenGlCompositionStatus::Failed, "check-uniform-limits",
+                "Two 16 KiB geometry uniform blocks are required.");
+        gl->glGenBuffers(2, lookup_buffers);
+        for (unsigned axis = 0; axis < 2; ++axis) {
+            gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[axis]);
+            gl->glBufferData(GL_UNIFORM_BUFFER, 16384, nullptr, GL_DYNAMIC_DRAW);
+            const auto block = gl->glGetUniformBlockIndex(program->programId(),
+                axis == 0 ? "SourceLookupX" : "SourceLookupY");
+            gl->glUniformBlockBinding(program->programId(), block, axis);
+        }
+        rememberResourcePeak();
         return result(OpenGlCompositionStatus::Complete);
     }
     OpenGlCompositionResult activate() {
@@ -324,6 +336,14 @@ struct OpenGlFrameCompositor::Impl {
         return target.state.use_count() == 1 && !target.state->producer &&
             target.state->consumers.empty() && !target.state->unsafe;
     }
+    OpenGlResourceUsage resources() const noexcept {
+        std::uint64_t bytes = static_cast<std::uint64_t>(source_width) * source_height * 4;
+        if (output && output->isValid()) bytes += static_cast<std::uint64_t>(output->width()) * output->height() * 4;
+        for (const auto& target : targets) if (target.output && target.output->isValid()) bytes += target.bytes;
+        const std::uint64_t geometry = (lookup_buffers[0] ? 16384ULL : 0) + (lookup_buffers[1] ? 16384ULL : 0);
+        return {bytes, geometry, std::max(peak_known_bytes, bytes + geometry)};
+    }
+    void rememberResourcePeak() noexcept { peak_known_bytes = resources().peak_known_bytes; }
 };
 
 std::unique_ptr<QOffscreenSurface> OpenGlFrameCompositor::createSurface() {
@@ -407,6 +427,7 @@ OpenGlTextureCompositionResult OpenGlFrameCompositor::composeTexture(int width, 
             target.output = std::make_unique<QOpenGLFramebufferObject>(width, height, format);
             if (!target.output->isValid()) return {OpenGlCompositionStatus::Failed, {},
                 "allocate-texture-target", "Cannot allocate a shared RGBA8 target."};
+            p.rememberResourcePeak();
         }
         target.state = std::make_shared<OpenGlTextureFrame::State>();
         // Allocate the bounded consumer registry on the worker, never while drawing.
@@ -513,6 +534,7 @@ unsigned OpenGlFrameCompositor::texturePoolOccupancy() const {
     return static_cast<unsigned>(std::count_if(impl_->targets.begin(), impl_->targets.end(),
         [](const auto& t) { return t.state && t.state.use_count() > 1; }));
 }
+OpenGlResourceUsage OpenGlFrameCompositor::resourceUsage() const noexcept { return impl_->resources(); }
 
 OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
     const std::vector<CompositionLayer>& layers, const CancellationPredicate& cancel,
@@ -548,9 +570,9 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                 return result(OpenGlCompositionStatus::Unsupported, "check-limits",
                     "Source exceeds the device texture limit or 256 MiB texture budget.");
             if (usable(layer) && layer.transform.rotation_degrees == 0.0 &&
-                static_cast<std::int64_t>(width) + height > 4096)
+                (width > 4096 || height > 4096))
                 return result(OpenGlCompositionStatus::Unsupported, "check-limits",
-                    "Exact nearest sampling exceeds the 4096-entry geometry lookup budget.");
+                    "Exact nearest sampling exceeds the 4096-entry lookup budget for an axis.");
             if (usable(layer)) {
                 const auto& t = layer.transform;
                 const auto& f = *layer.frame;
@@ -575,6 +597,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             p.output = std::make_unique<QOpenGLFramebufferObject>(width, height, format);
             if (!p.output->isValid()) return result(OpenGlCompositionStatus::Failed,
                 "allocate-framebuffer", "Cannot allocate the output RGBA8 framebuffer.");
+            p.rememberResourcePeak();
         }
         auto* output = read_output ? p.output.get() : p.selected_output;
         const auto setup_started = Clock::now();
@@ -597,7 +620,8 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         gl->glBindVertexArray(p.vao);
         gl->glActiveTexture(GL_TEXTURE0);
         gl->glBindTexture(GL_TEXTURE_2D, p.texture);
-        gl->glBindBufferBase(GL_UNIFORM_BUFFER, 0, p.lookup_buffer);
+        gl->glBindBufferBase(GL_UNIFORM_BUFFER, 0, p.lookup_buffers[0]);
+        gl->glBindBufferBase(GL_UNIFORM_BUFFER, 1, p.lookup_buffers[1]);
         p.program->setUniformValue("source_image", 0);
         p.program->setUniformValue("canvas_height", static_cast<float>(height));
         measured.draw_submission_nanoseconds += elapsed(setup_started);
@@ -611,6 +635,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                     GL_UNSIGNED_BYTE, nullptr);
                 p.source_width = f.width;
                 p.source_height = f.height;
+                p.rememberResourcePeak();
                 gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
                 gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
                 gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -646,7 +671,8 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                 // Double-precision geometry matches the CPU's nearest sampling
                 // exactly at texel boundaries. Only O(width+height) indices are
                 // transferred, never rasterized pixels or another source texture.
-                p.source_lookup.resize(static_cast<std::size_t>((width + height + 3) / 4) * 4);
+                const int y_offset = (width + 3) / 4 * 4;
+                p.source_lookup.resize(static_cast<std::size_t>(y_offset + (height + 3) / 4 * 4));
                 const auto map = [&](int count, double center, double displayed, int source, int offset) {
                     for (int i = 0; i < count; ++i) {
                         const double d = i + .5 - center;
@@ -655,14 +681,17 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                     }
                 };
                 map(width, t.position_x * width, displayed_width, f.width, 0);
-                map(height, t.position_y * height, displayed_height, f.height, width);
+                map(height, t.position_y * height, displayed_height, f.height, y_offset);
                 const auto geometry_upload_started = Clock::now();
-                gl->glBindBuffer(GL_UNIFORM_BUFFER, p.lookup_buffer);
+                gl->glBindBuffer(GL_UNIFORM_BUFFER, p.lookup_buffers[0]);
                 gl->glBufferSubData(GL_UNIFORM_BUFFER, 0,
-                    static_cast<GLsizeiptr>(p.source_lookup.size() * sizeof(GLint)), p.source_lookup.data());
+                    static_cast<GLsizeiptr>(y_offset * sizeof(GLint)), p.source_lookup.data());
+                gl->glBindBuffer(GL_UNIFORM_BUFFER, p.lookup_buffers[1]);
+                gl->glBufferSubData(GL_UNIFORM_BUFFER, 0,
+                    static_cast<GLsizeiptr>((p.source_lookup.size() - y_offset) * sizeof(GLint)),
+                    p.source_lookup.data() + y_offset);
                 geometry_upload_ns = elapsed(geometry_upload_started);
                 measured.upload_nanoseconds += geometry_upload_ns;
-                p.program->setUniformValue("lookup_y_offset", width);
                 measured.uploaded_bytes += p.source_lookup.size() * sizeof(GLint);
             }
             const auto set_geometry = [&](const char* name, double x, double y) {

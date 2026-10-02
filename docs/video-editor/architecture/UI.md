@@ -31,8 +31,19 @@ disabled by default and persisted globally. It applies immediately through the
 playback controller, recomposes a paused Timeline frame and keeps playback
 running. It automatically enables direct texture delivery when sharing is
 available, with RGBA and CPU fallbacks. No additional UI setting is required.
-See [the delivery contract](../GPU_TEXTURE_DELIVERY.md). Export and project data are
-unchanged. See [the composition boundary](RENDERING.md#timeline-composition).
+See [the delivery contract](../GPU_TEXTURE_DELIVERY.md). This preview preference
+does not change export settings or project data. See
+[the composition boundary](RENDERING.md#timeline-composition).
+
+Render > Video independently offers **Use GPU for export (Experimental)** with
+an accessible description of composition acceleration and automatic CPU fallback.
+It starts unchecked on launch and retains its current choice for subsequent items
+in the session. Add to Render Queue captures the choice in each item's settings;
+changing the panel never changes prepared items, history or dirty state. Queue
+tooltips show the requested composition mode. A fallback warning appears in the
+Video panel for five seconds, without a modal dialog or stopping the queue.
+This choice is not stored in `QSettings`; retry preserves the item's snapshot.
+See [the export contract](../GPU_EXPORT.md).
 
 ## Media Browser and projects
 

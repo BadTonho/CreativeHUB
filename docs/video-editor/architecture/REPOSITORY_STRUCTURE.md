@@ -41,7 +41,16 @@ timeline models, editors, and panels remain application-owned.
 `creative-suite::composition` stays Qt independent. Its separate optional
 `creative-suite::composition-opengl` target owns worker GPU resources and frame
 readback, shared GPU frame leases, fences and bounded output reservations.
-Video Editor is the first consumer; Motion Studio adoption is planned.
+The shared adapter uses separate 16 KiB axis lookup buffers for 4K geometry and
+reports known resource storage without claiming driver-memory measurements.
+Video Editor is the first consumer for preview and offline export; Motion Studio
+and Image Editor adoption are planned.
+
+`apps/video-editor/src/rendering/export_composition.*` adapts prepared export layers
+to the shared CPU/OpenGL backends, owns per-job fallback and schema-1 diagnostics,
+and exposes an injectable adapter boundary for fault tests. The export renderer
+owns source preparation and FFmpeg submission; the queue owns the GUI surface and
+worker lifecycle. Export resources do not share the preview's texture pool.
 
 ## Video Editor organization
 

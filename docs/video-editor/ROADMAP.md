@@ -29,7 +29,9 @@ Update it when implementation, scope, or a decision changes.
 - CPU composition remains the default. An experimental shared OpenGL 3.2 Core
   backend is available for timeline preview through Settings > General, with
   CPU fallback and automatic shared-texture delivery, retaining worker readback
-  when required. Qt OpenGL presents the final frame. See the
+  when required. Offline export independently offers per-job experimental GPU
+  composition through 4K, with RGBA readback and CPU fallback. Qt OpenGL presents
+  the final preview frame. See the
   [rendering boundary](architecture/RENDERING.md).
 - The Image Editor's standalone acceptance gate comes before acceptance of
   its linked-image workflow. Motion Studio development may proceed in
@@ -41,15 +43,17 @@ Update it when implementation, scope, or a decision changes.
 ## GPU acceleration planning
 
 The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records the implemented
-optional timeline composition and direct-delivery stages, followed by offline export,
-effects and platform acceptance. Video Editor is the first consumer of the
+optional timeline composition, direct delivery and offline export stages, followed
+by effects and platform acceptance. Video Editor is the first consumer of the
 shared backend; Motion Studio and Image Editor adoption remain planned.
 
-**Status: Stages 1 and 2 implemented, experimental, disabled by default.** Direct
-texture presentation has RGBA and CPU fallbacks; export remains CPU. See the
-[delivery contract](GPU_TEXTURE_DELIVERY.md).
+**Status: Stages 1–3 implemented, experimental, disabled by default.** Direct
+texture presentation has RGBA and CPU fallbacks. Export has its own per-job choice
+in Render > Video, with readback and CPU fallback. See the
+[delivery contract](GPU_TEXTURE_DELIVERY.md) and [export contract](GPU_EXPORT.md).
 Native parity/benchmark and build/test evidence is recorded in
-[GPU_COMPOSITION_RESULTS.md](GPU_COMPOSITION_RESULTS.md). Further OS/driver and
+[GPU_COMPOSITION_RESULTS.md](GPU_COMPOSITION_RESULTS.md) and
+[GPU_EXPORT_RESULTS.md](GPU_EXPORT_RESULTS.md). Further OS/driver and
 human audio/visual acceptance remain pending; formats and versions are unchanged.
 
 ## Status legend
@@ -274,6 +278,10 @@ performance measurements, and Video Editor stability as the decision criteria.
   asynchronous recovery and transfer diagnostics; platform acceptance pending.
 - [x] Add experimental per-layer GPU composition with CPU fallback and transfer
   measurements. Keep default and platform acceptance tied to recorded evidence.
+- [x] Add independent per-job experimental GPU offline export through 4K, with
+  readback, CPU fallback, transactional output and separate export metrics.
+  Broader platform/driver/codec and human acceptance remain pending; see
+  [GPU_EXPORT_RESULTS.md](GPU_EXPORT_RESULTS.md).
 - [ ] Revisit plugin architecture, additional export presets, and templates
   after stable public workflows and extension points are known.
 

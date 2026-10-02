@@ -44,6 +44,8 @@ The Video Editor currently includes:
   interval and retention;
 - offline FFmpeg video export with embedded audio, configurable output
   settings, progress, and cancellation, but no YouTube-named preset;
+- independent per-job experimental GPU export composition (Render > Video,
+  default off), supporting 1080p, 1440p and 4K UHD with RGBA readback and CPU fallback;
 - local structured diagnostic logging;
 - Edit and Fusion workspace pages in the same window; Fusion currently reuses
   the Edit Preview as its Viewer and replaces the Timeline dock with a
@@ -92,7 +94,7 @@ The Video Editor currently includes:
   automation, recording, audio crossfades, and advanced audio effects;
 - image sequences, SRT import, automatic captions, rich text, and animated text
   content;
-- advanced compositing, GPU effects/export, easing, masks, 3D layers, and
+- advanced compositing, GPU effects/decoding/encoding, easing, masks, 3D layers, and
   transition effects beyond the essential pair;
 - advanced ripple editing, automatic gap management, or history covering every
   project subsystem;

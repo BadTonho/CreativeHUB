@@ -36,6 +36,13 @@ struct OpenGlCompositionResult {
     std::int64_t error_code = 0;
 };
 
+// Known storage requested by this compositor, not driver-measured VRAM.
+struct OpenGlResourceUsage {
+    std::uint64_t texture_bytes = 0;
+    std::uint64_t geometry_buffer_bytes = 0;
+    std::uint64_t peak_known_bytes = 0;
+};
+
 // Shared by active and retiring compositors. Reservations include retired
 // targets, and are released only by the owning worker's resource cleanup.
 class OpenGlTexturePoolBudget final {
@@ -125,6 +132,7 @@ public:
     [[nodiscard]] bool hasPendingTextureFrames() const;
     [[nodiscard]] std::uint64_t texturePoolBytes() const noexcept;
     [[nodiscard]] unsigned texturePoolOccupancy() const;
+    [[nodiscard]] OpenGlResourceUsage resourceUsage() const noexcept;
 
 private:
     struct Impl;

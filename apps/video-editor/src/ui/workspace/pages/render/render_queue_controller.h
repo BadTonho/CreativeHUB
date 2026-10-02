@@ -7,6 +7,9 @@
 #include <atomic>
 #include <thread>
 #include <vector>
+#include <memory>
+
+class QOffscreenSurface;
 
 namespace ui {
 
@@ -27,6 +30,7 @@ signals:
     void jobCompleted(qulonglong job_id);
     void jobFailed(qulonglong job_id, QString message, QString error_code);
     void jobCanceled(qulonglong job_id);
+    void jobWarning(qulonglong job_id, QString message, QString error_code);
     void queueFinished(bool canceled);
 
 private:
@@ -35,6 +39,7 @@ private:
     std::atomic_bool cancel_requested_{false};
     std::atomic_bool running_{false};
     std::thread worker_thread_;
+    std::unique_ptr<QOffscreenSurface> gpu_surface_;
 };
 
 }  // namespace ui

@@ -1,6 +1,6 @@
 # Video Editor GPU Acceleration Plan
 
-Status: **Stages 1 and 2 implemented as an opt-in experiment on 2026-10-02;
+Status: **Stages 1–3 implemented as opt-in experiments on 2026-10-02;
 cross-platform acceptance and later stages pending**.
 Video Editor is the first consumer of the shared compositor. Motion Studio and
 Image Editor adoption follow their separate plans.
@@ -12,7 +12,10 @@ the worker, then uses the shared CPU compositor by default. Settings > General
 offers **Use GPU for timeline preview (Experimental)**, disabled by default,
 stored globally as `performance/gpu_composition_enabled`. The separate public
 Qt/OpenGL 3.2 Core adapter composes those layers on the worker and automatically
-delivers shared textures when supported, retaining RGBA readback as fallback. CPU fallback and CPU export remain available.
+delivers shared textures when supported, retaining RGBA readback as fallback.
+Export defaults to CPU and offers independent per-job GPU composition through
+Render > Video. Its RGBA readback path supports 1080p, 1440p and 4K UHD; see
+[the export contract](GPU_EXPORT.md) and [results](GPU_EXPORT_RESULTS.md).
 See [the rendering boundary](architecture/RENDERING.md).
 
 The [Motion Studio plan](../motion-editor/GPU_ACCELERATION_PLAN.md) will adopt
@@ -51,8 +54,8 @@ limits fall back individually; technical failures latch CPU until off/on. Errors
 are logged before a nonmodal status warning. Preference/project data are preserved.
 Cancellation returns no frame. Aggregate metrics schema 9 distinguishes actual
 CPU/GPU composition, uploads, draw submission, readback, bytes and fallback from
-the existing presentation metrics. Export and GPU effects/decode/encode remain
-deferred. Stage 2 now adds automatic direct delivery.
+the existing presentation metrics. Stage 2 adds automatic direct delivery and
+Stage 3 adds independent offline export. GPU effects/decode/encode remain deferred.
 
 Exact rotated nearest sampling additionally requires the optional
 `ARB_gpu_shader_fp64` and `ARB_gpu_shader5` extensions. Without them, rotated
@@ -95,7 +98,22 @@ The existing preference controls this automatically; no new setting was added.
 **Exit:** playback, seeking, transitions, audio synchronization, quality changes,
 and delivery/fallback behave correctly under real-driver lifecycle checks.
 
-## Stage 3 — GPU offline export
+## Stage 3 — GPU offline export (implemented; acceptance pending)
+
+Render > Video exposes **Use GPU for export (Experimental)**, default off on
+application launch, retained in the panel during the session and captured in each
+queue item. It is independent of the global preview setting. The queue creates a
+GUI-owned surface; each job owns an isolated worker compositor/context. Shared
+RGBA/direct composition now uses two 16 KiB geometry lookup buffers, each with
+4096 indices, covering UHD and portrait 4K without changing the preview pool budget.
+
+`OfflineExportOptions` supplies the borrowed surface, warning/summary callbacks
+and a test adapter factory. Unsupported requests fall back on the same prepared
+layers; technical failure latches CPU for the item, with a fresh backend on retry.
+Export diagnostics schema 1 is independent of preview 9/3 and includes every
+outcome, transfers, encoding and known allocation peaks. The
+[implementation contract](GPU_EXPORT.md) defines ownership, cancellation and
+logging; [dated results](GPU_EXPORT_RESULTS.md) record native tests and measurements.
 
 - Use the shared backend in `OfflineExportRenderer`, with independent worker
   resources and the queue's immutable project/settings snapshots.
@@ -208,5 +226,13 @@ evidence, unresolved issues, and the next stage here.
 
 - 2026-10-02: Stage 2 adds automatic direct texture delivery with public Qt sharing,
   bounded leases/fences, asynchronous RGBA recovery and separate diagnostics.
-  Video Editor remains the first consumer; Motion/Image adoption and GPU export
+  Video Editor remains the first consumer; at this delivery, Motion/Image adoption and GPU export
   remain later work. Native and build/test results are recorded with Stage 1 evidence.
+
+- 2026-10-02: Stage 3 adds per-job experimental offline GPU composition and shared
+  4K lookup buffers, with isolated export contexts, same-frame CPU fallback and
+  schema-1 summaries. Debug/Release focused and full Release checks plus three
+  sequential CPU/GPU measurements per resolution are recorded in
+  [GPU_EXPORT_RESULTS.md](GPU_EXPORT_RESULTS.md). Video Editor remains the first
+  consumer. Broader driver/platform and human acceptance, effects/decode/encode
+  and Motion/Image integration remain pending.

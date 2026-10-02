@@ -42,3 +42,20 @@ Direct delivery failures use `gpu-delivery` operation/cause/code/context entries
 before a brief warning. Busy/cancellation/reference returns are expected control
 flow, not error logs. Aggregate/slow schema 9 and delivery schema 3 distinguish
 texture acceptance, synchronization, pool reservations and RGBA transfers.
+
+## Experimental GPU export
+
+`export-gpu` records cause, operation, error code, job, output/timeline frame,
+dimensions, sources, encoder and destination before the brief nonmodal warning.
+Unsupported limits produce a diagnostic warning; technical failure produces an
+error and disables GPU for the remainder of the item. Retry has a new backend.
+Cancellation remains ordinary control flow. Callback failures are logged under
+`export/warning_callback` or `export/metrics_callback`.
+
+Every render attempt logs `export/performance_metrics` schema 1, including failure
+and cancellation. It distinguishes requested/effective backend, CPU/GPU/encoded
+frames, fallback, source preparation, upload, draw submission, readback, encoding,
+audio, finalization, total wall time and transfer bytes. Allocation peaks describe
+known source/output buffers and textures, not process memory or actual driver VRAM.
+See [the field definitions](../GPU_EXPORT.md#export-diagnostics-schema-1).
+Preview aggregate/slow schema 9 and delivery schema 3 retain their meanings.

@@ -4,6 +4,7 @@
 #include "ui/workspace/workspace_host.h"
 #include "ui/workspace/pages/fusion/fusion_workspace.h"
 #include "ui/workspace/pages/render/render_queue_model.h"
+#include "ui/workspace/pages/render/render_queue_controller.h"
 #include "ui/workspace/pages/render/render_workspace.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
@@ -19,6 +20,7 @@
 #include <QEventLoop>
 #include <QDockWidget>
 #include <QLineEdit>
+#include <QLabel>
 #include <QImage>
 #include <QImageWriter>
 #include <QMenu>
@@ -393,6 +395,10 @@ public:
                 ->findChild<QLineEdit*>("renderOutputPath");
             auto* add_render_job = window.render_workspace_->centralPage()
                 ->findChild<QPushButton*>("renderAddToQueueButton");
+            auto* gpu_export = window.render_workspace_->centralPage()->findChild<QCheckBox*>("renderGpuCompositionCheck");
+            require(gpu_export && !gpu_export->isChecked() && !gpu_export->accessibleDescription().isEmpty(),
+                "Render GPU option must default off and describe fallback accessibly.");
+            gpu_export->setChecked(true);
             require(window.workspace_host_->renderPage()->findChild<QWidget*>(
                         "renderSettingsPanel") != nullptr &&
                         window.workspace_host_->renderPage()->findChild<QWidget*>(
@@ -411,8 +417,19 @@ public:
             require(window.render_workspace_->queueModel()->jobCount() == 1 &&
                         queued_render_job != nullptr &&
                         queued_render_job->project_snapshot == project_before_queue_add &&
+                        queued_render_job->settings.gpu_composition_enabled &&
                         !window.project_dirty_,
                     "Preparing a queued Render job must snapshot the project without marking it dirty.");
+            gpu_export->setChecked(false);
+            require(queued_render_job->settings.gpu_composition_enabled && !window.project_dirty_ &&
+                window.currentProjectDocument() == project_before_queue_add,
+                "Changing the GPU export option mutated the prepared job or project.");
+            auto* export_controller = window.render_workspace_->findChild<ui::RenderQueueController*>();
+            auto* gpu_warning = window.render_workspace_->centralPage()->findChild<QLabel*>("renderGpuWarning");
+            require(export_controller && gpu_warning && gpu_warning->isHidden(), "GPU warning must start hidden.");
+            export_controller->jobWarning(queued_render_job->id, "Export is continuing with CPU fallback.", "-37");
+            require(!gpu_warning->isHidden() && gpu_warning->text().contains("CPU fallback") &&
+                QApplication::activeModalWidget() == nullptr, "Export fallback must show a nonmodal warning.");
             require(window.workspace_host_->currentPage() ==
                             ui::WorkspacePageId::Render &&
                         window.workspace_host_->lowerWorkspacePanel()->currentWidget() ==

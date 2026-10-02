@@ -23,6 +23,12 @@ sampling cannot be applied unchanged to image documents. Extend the shared
 boundary without changing its existing consumers' defaults.
 The Video backend is now available as an optional Qt adapter; Image Editor
 integration remains planned and requires its own transparent-output contract.
+Video Editor Stage 3 also delivers per-job offline GPU composition with isolated
+worker resources and two 16 KiB axis lookup buffers for UHD/portrait 4K. The
+[export contract](../video-editor/GPU_EXPORT.md) and
+[measurements](../video-editor/GPU_EXPORT_RESULTS.md) provide reuse evidence.
+Image Editor export/publication remains CPU; transparent-output and mask semantics
+still require its own covered adapter integration.
 
 GPU rendering is a runtime implementation choice. Keep `.cimg` v11, its
 supported older versions, recovery wrapper v1, and the Video Editor's `.csp`

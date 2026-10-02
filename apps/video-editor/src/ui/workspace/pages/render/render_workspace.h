@@ -21,6 +21,7 @@ class QPushButton;
 class QScrollArea;
 class QSpinBox;
 class QSplitter;
+class QTimer;
 class QWidget;
 
 namespace ui {
@@ -93,6 +94,9 @@ private:
     QComboBox* container_combo_ = nullptr;
     QComboBox* video_encoder_combo_ = nullptr;
     QCheckBox* export_audio_check_ = nullptr;
+    QCheckBox* gpu_composition_check_ = nullptr;
+    QLabel* gpu_warning_ = nullptr;
+    QTimer* gpu_warning_timer_ = nullptr;
     QComboBox* audio_encoder_combo_ = nullptr;
     QComboBox* resolution_combo_ = nullptr;
     QSpinBox* custom_width_ = nullptr;

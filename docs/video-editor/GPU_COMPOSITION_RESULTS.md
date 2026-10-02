@@ -214,6 +214,12 @@ speedup. The preference remains experimental and disabled by default.
 
 ## Remaining acceptance
 
+Stage 3 now adds independent per-job GPU export and expands shared axis lookups
+for 4K. Its tests and measurements are recorded separately in
+[GPU_EXPORT_RESULTS.md](GPU_EXPORT_RESULTS.md). The measurements above describe
+the Stage 1/2 implementation at the time they were collected; preview schemas 9/3
+and the output-pool budget remain unchanged.
+
 - Native macOS/Linux builds, graphics drivers and packaged fallback: pending;
   Windows evidence does not approve those platforms.
 - Human visual checks and physical audio synchronization on the reference
@@ -232,7 +238,8 @@ speedup. The preference remains experimental and disabled by default.
 3. Toggle while playing, change quality, seek/step quickly and inspect transition
    boundaries/black gaps. Confirm appearance, freshness and continuous audio.
 4. Publish and republish a masked imported image in Image Editor; refresh the
-   linked PNG in Video Editor. Compare CPU/GPU preview and the CPU export.
+   linked PNG in Video Editor. Compare CPU/GPU preview and both export modes;
+   follow the independent [export checklist](GPU_EXPORT_RESULTS.md#manual-acceptance-checklist).
 5. Force unsupported context/limits where the driver permits; verify logged
    context, brief status warning, continued CPU playback and preserved setting.
    Off/on retries technical failures. A texture synchronization failure should

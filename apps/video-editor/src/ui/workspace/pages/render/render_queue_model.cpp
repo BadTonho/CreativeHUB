@@ -44,7 +44,7 @@ QVariant RenderQueueModel::data(const QModelIndex& index, int role) const {
     }
     if (role == Qt::ToolTipRole) {
         return QStringLiteral(
-                   "%1\nOutput: %2\nVideo: %3\nAudio: %4%5")
+                   "%1\nOutput: %2\nVideo: %3\nAudio: %4%5\nComposition: %6")
             .arg(renderJobStatusName(job->status))
             .arg(job->settings.output_path,
                  job->settings.video_encoder_name,
@@ -53,7 +53,9 @@ QVariant RenderQueueModel::data(const QModelIndex& index, int role) const {
                      : QStringLiteral("Disabled"),
                  job->error_message.isEmpty()
                      ? QString{}
-                     : QStringLiteral("\nError: ") + job->error_message);
+                     : QStringLiteral("\nError: ") + job->error_message)
+            .arg(job->settings.gpu_composition_enabled ? QStringLiteral("GPU requested (Experimental)")
+                                                       : QStringLiteral("CPU"));
     }
     if (role == Qt::UserRole) {
         return QVariant::fromValue<qulonglong>(job->id);

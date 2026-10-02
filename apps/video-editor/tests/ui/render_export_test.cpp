@@ -3,6 +3,10 @@
 #include "rendering/offline_export_renderer.h"
 #include "ui/workspace/pages/render/render_output_capabilities.h"
 #include "ui/workspace/pages/render/render_queue_controller.h"
+#include "logging/logger.h"
+#ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
+#include "image_document_session.h"
+#endif
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -17,6 +21,8 @@ extern "C" {
 #include <QImage>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QOffscreenSurface>
+#include <QSurfaceFormat>
 
 #include <algorithm>
 #include <atomic>
@@ -28,11 +34,57 @@ extern "C" {
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <thread>
+#include <exception>
 
 namespace {
 
 void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
+}
+
+bool native_gpu_mode = false;
+bool compare_before_encoding = true;
+rendering::OfflineExportOptions native_options;
+rendering::OfflineExportMetrics last_metrics;
+
+class CheckedNativeGpu final : public rendering::ExportGpuCompositor {
+public:
+    explicit CheckedNativeGpu(QOffscreenSurface* surface) : gpu_(surface) {}
+    creative_suite::composition::OpenGlCompositionResult compose(int width, int height,
+        const std::vector<creative_suite::composition::CompositionLayer>& layers,
+        const creative_suite::composition::OpenGlFrameCompositor::CancellationPredicate& cancel,
+        creative_suite::composition::OpenGlCompositionTimings* timings) override {
+        auto result = gpu_.compose(width, height, layers, cancel, timings);
+        if (result.frame && compare_before_encoding) {
+            auto cpu = creative_suite::composition::FrameCompositor::compose(width, height, layers);
+            require(cpu && cpu->rgba_pixels.size() == result.frame->rgba_pixels.size(), "Pre-encoding GPU geometry differs.");
+            for (std::size_t i = 0; i < cpu->rgba_pixels.size(); ++i)
+                require(std::abs(int(cpu->rgba_pixels[i]) - int(result.frame->rgba_pixels[i])) <= (i % 4 == 3 ? 0 : 2),
+                    "Pre-encoding CPU/GPU parity failed.");
+        }
+        return result;
+    }
+    creative_suite::composition::OpenGlResourceUsage resourceUsage() const noexcept override { return gpu_.resourceUsage(); }
+private:
+    creative_suite::composition::OpenGlFrameCompositor gpu_;
+};
+
+void renderJob(const ui::RenderJob& job, const std::atomic_bool& canceled,
+    rendering::OfflineExportRenderer::ProgressCallback progress = {}) {
+    auto options = native_options;
+    options.metrics_callback = [](const auto& metrics) { last_metrics = metrics; };
+    std::exception_ptr failure;
+    const auto run = [&] {
+        try { rendering::OfflineExportRenderer::render(job, canceled, progress, options); }
+        catch (...) { failure = std::current_exception(); }
+    };
+    if (native_gpu_mode) { std::thread worker(run); worker.join(); } else run();
+    if (failure) std::rethrow_exception(failure);
+    if (native_gpu_mode && job.settings.gpu_composition_enabled)
+        require(last_metrics.gpu_frames == last_metrics.encoded_frames && last_metrics.cpu_frames == 0 &&
+            last_metrics.gpu_frames > 0 && last_metrics.readback_bytes > 0,
+            "Native export silently used CPU fallback.");
 }
 
 std::filesystem::path pathFromQString(const QString& value) {
@@ -69,7 +121,11 @@ OutputChoice chooseOutput() {
         return left.name == "matroska" && right.name != "matroska";
     });
     for (const auto& container : containers) {
-        for (const auto& video : container.video_encoders) {
+        auto encoders = container.video_encoders;
+        std::stable_sort(encoders.begin(), encoders.end(), [](const auto& a, const auto& b) {
+            return a.name == "ffv1" && b.name != "ffv1";
+        });
+        for (const auto& video : encoders) {
             if (!softwareEncoder(video.name)) continue;
             for (const auto& audio : container.audio_encoders) {
                 if (ui::RenderOutputCapabilities::supportsAudioEncoder(container, audio.name)) {
@@ -268,6 +324,7 @@ ui::RenderJob makeImageJob(
     job.settings.video_bitrate_mbps = 1.0;
     job.settings.audio_bitrate_kbps = 128;
     job.settings.export_audio = true;
+    job.settings.gpu_composition_enabled = native_gpu_mode;
     project::ProjectTrack track;
     track.track_id = 1;
     track.name = "V1";
@@ -343,7 +400,7 @@ void validateDirectExport(
         0, 1, timeline::TransitionKind::CrossDissolve, 2});
     std::vector<int> progress;
     std::atomic_bool cancel{false};
-    rendering::OfflineExportRenderer::render(
+    renderJob(
         job, cancel, [&progress](int value) { progress.push_back(value); });
     require(std::filesystem::is_regular_file(target),
             "A completed render did not publish its output file.");
@@ -362,11 +419,12 @@ void validateDirectExport(
     std::atomic_bool already_canceled{true};
     bool canceled = false;
     try {
-        rendering::OfflineExportRenderer::render(canceled_job, already_canceled);
+        renderJob(canceled_job, already_canceled);
     } catch (const rendering::ExportCanceled&) {
         canceled = true;
     }
-    require(canceled, "A canceled export did not stop before publishing.");
+    require(canceled && last_metrics.outcome == rendering::ExportOutcome::Canceled && last_metrics.encoded_frames == 0,
+            "A canceled export did not stop before publishing or emit its summary.");
     std::ifstream preserved(sentinel_path, std::ios::binary);
     const std::string preserved_contents{
         std::istreambuf_iterator<char>(preserved), std::istreambuf_iterator<char>()};
@@ -382,11 +440,13 @@ void validateDirectExport(
     std::atomic_bool not_canceled{false};
     bool failed = false;
     try {
-        rendering::OfflineExportRenderer::render(failed_job, not_canceled);
+        renderJob(failed_job, not_canceled);
     } catch (const std::exception&) {
         failed = true;
     }
-    require(failed, "An offline source must fail the export.");
+    require(failed && last_metrics.outcome == rendering::ExportOutcome::Failed &&
+            last_metrics.encoded_frames == 0 && last_metrics.total_nanoseconds > 0,
+            "An offline source must fail the export and emit its summary.");
     std::ifstream preserved_after_failure(sentinel_path, std::ios::binary);
     const std::string after_failure{
         std::istreambuf_iterator<char>(preserved_after_failure),
@@ -410,6 +470,8 @@ void validateQueueContinuesAfterFailure(
         : output.container.extensions.substr(0, output.container.extensions.find(','));
     auto failed = makeImageJob(output, root / "missing.png", root / ("failure." + extension), 201);
     auto next = makeImageJob(output, image_path, root / ("queue-success." + extension), 202);
+    auto cpu_next = makeImageJob(output, image_path, root / ("queue-cpu." + extension), 203);
+    cpu_next.settings.gpu_composition_enabled = false;
     auto already_completed = makeImageJob(
         output, root / "completed-source.png", root / ("already-done." + extension), 200);
     already_completed.status = ui::RenderJobStatus::Completed;
@@ -442,13 +504,13 @@ void validateQueueContinuesAfterFailure(
                      &loop, [&progress_ids](qulonglong id, int) { progress_ids.push_back(id); });
     QObject::connect(&controller, &ui::RenderQueueController::queueFinished,
                      &loop, &QEventLoop::quit);
-    require(controller.start({already_completed, failed, next}), "The render queue did not start.");
+    require(controller.start({already_completed, failed, next, cpu_next}), "The render queue did not start.");
     QTimer::singleShot(30000, &loop, &QEventLoop::quit);
     loop.exec();
     require(!controller.isRunning(), "The render queue worker did not finish.");
-    require(started == std::vector<qulonglong>{201, 202} &&
+    require(started == std::vector<qulonglong>{201, 202, 203} &&
                 failed_ids == std::vector<qulonglong>{201} &&
-                completed == std::vector<qulonglong>{202},
+                completed == std::vector<qulonglong>{202, 203},
             "Completed jobs must be skipped and a failed job must not stop later jobs.");
     require(std::find(progress_ids.begin(), progress_ids.end(), 202) != progress_ids.end(),
             "The successful queued job did not report progress.");
@@ -487,7 +549,7 @@ void validateGapsTextAndKeyframes(
     after_gap.duration_frames = 1;
     after_gap.kind = timeline::ClipKind::Image;
     gaps.project_snapshot.timeline_tracks.front().clips.push_back(after_gap);
-    rendering::OfflineExportRenderer::render(gaps, canceled);
+    renderJob(gaps, canceled);
     const auto gap_frames = decodeFrames(pathFromQString(gaps.settings.output_path));
     require(gap_frames.size() == 8 &&
                 centerPixel(*gap_frames[2], 0) < 60 &&
@@ -500,7 +562,7 @@ void validateGapsTextAndKeyframes(
     keyed.settings.export_audio = false;
     auto& keyed_clip = keyed.project_snapshot.timeline_tracks.front().clips.front();
     keyed_clip.keyframes.position_x = {{0, 0.5}, {3, 0.0}};
-    rendering::OfflineExportRenderer::render(keyed, canceled);
+    renderJob(keyed, canceled);
     const auto keyed_frames = decodeFrames(pathFromQString(keyed.settings.output_path));
     require(keyed_frames.size() == 8 &&
                 centerPixel(*keyed_frames[0], 0) > 80 &&
@@ -519,7 +581,7 @@ void validateGapsTextAndKeyframes(
     title.text.content = "Render";
     title.text.font_size_pixels = 16.0;
     text_clips.push_back(title);
-    rendering::OfflineExportRenderer::render(text, canceled);
+    renderJob(text, canceled);
     const auto text_frames = decodeFrames(pathFromQString(text.settings.output_path));
     require(!text_frames.empty(), "A text-only Timeline did not produce video frames.");
     bool visible_text = false;
@@ -632,7 +694,7 @@ void validateEmbeddedAudioMixing(
     track.clips.front().source_duration_frames = 30;
     track.clips.front().audio_gain = 0.5;
     std::atomic_bool canceled{false};
-    rendering::OfflineExportRenderer::render(job, canceled);
+    renderJob(job, canceled);
     auto video_decoder = media::VideoPlaybackSession::open(
         pathFromQString(job.settings.output_path));
     std::vector<media::VideoFramePtr> output_frames;
@@ -669,7 +731,7 @@ void validateEmbeddedAudioMixing(
     dissolve_track.clips.push_back(incoming);
     dissolve_track.transitions.push_back(project::ProjectTransition{
         0, 1, timeline::TransitionKind::CrossDissolve, 8});
-    rendering::OfflineExportRenderer::render(dissolve_job, canceled);
+    renderJob(dissolve_job, canceled);
     const auto dissolve_path = pathFromQString(dissolve_job.settings.output_path);
     const auto before_cut_rms = decodedAudioRmsRange(dissolve_path, 28800, 14400);
     const auto after_cut_rms = decodedAudioRmsRange(dissolve_path, 50400, 24000);
@@ -680,7 +742,7 @@ void validateEmbeddedAudioMixing(
     track.audio_muted = true;
     job.id = 402;
     job.settings.output_path = pathToQString(root / ("audio-muted." + extension));
-    rendering::OfflineExportRenderer::render(job, canceled);
+    renderJob(job, canceled);
     require(decodedAudioRms(pathFromQString(job.settings.output_path)) < 0.001,
             "A muted audio track still contributed samples to the export.");
 }
@@ -694,30 +756,268 @@ void validateConfiguredFullResolutionExport(
         : output.container.extensions.substr(0, output.container.extensions.find(','));
     auto job = makeImageJob(
         output, image_path, root / ("full-resolution." + extension), 104, 1);
-    job.settings.width = 1920;
-    job.settings.height = 1080;
+    for (const auto size : native_gpu_mode ? std::vector<QSize>{{1920, 1080}, {2560, 1440}, {3840, 2160}, {2160, 3840}}
+                                          : std::vector<QSize>{{1920, 1080}}) {
+    job.settings.width = size.width();
+    job.settings.height = size.height();
     job.settings.export_audio = false;
     job.project_snapshot.canvas_width = 1920;
     job.project_snapshot.canvas_height = 1080;
 
     std::atomic_bool canceled{false};
-    rendering::OfflineExportRenderer::render(job, canceled);
+    renderJob(job, canceled);
     auto decoder = media::VideoPlaybackSession::open(
         pathFromQString(job.settings.output_path));
     const auto first_frame = decoder->decode_next_frame();
     require(first_frame.has_value() && *first_frame != nullptr &&
-                (*first_frame)->width == 1920 && (*first_frame)->height == 1080,
+                (*first_frame)->width == size.width() && (*first_frame)->height == size.height(),
             "Playback Preview Quality must not reduce the configured offline export resolution.");
+    }
+}
+
+class FaultGpu final : public rendering::ExportGpuCompositor {
+public:
+    FaultGpu(std::vector<creative_suite::composition::OpenGlCompositionStatus> statuses, int& calls, bool malformed = false)
+        : statuses_(std::move(statuses)), calls_(calls), malformed_(malformed) {}
+    creative_suite::composition::OpenGlCompositionResult compose(int width, int height,
+        const std::vector<creative_suite::composition::CompositionLayer>& layers,
+        const creative_suite::composition::OpenGlFrameCompositor::CancellationPredicate&,
+        creative_suite::composition::OpenGlCompositionTimings*) override {
+        using Status = creative_suite::composition::OpenGlCompositionStatus;
+        const auto status = calls_ < static_cast<int>(statuses_.size()) ? statuses_[calls_] : Status::Complete;
+        ++calls_;
+        if (malformed_) return {Status::Complete, creative_suite::media::RgbaFrame{width, height, 1, {}}};
+        if (status == Status::Complete) return {status, creative_suite::composition::FrameCompositor::compose(width, height, layers)};
+        return {status, {}, "controlled-export-fault", "Controlled export GPU failure.", -37};
+    }
+private:
+    std::vector<creative_suite::composition::OpenGlCompositionStatus> statuses_;
+    int& calls_;
+    bool malformed_;
+};
+
+void validateGpuFallback(const OutputChoice& output, const std::filesystem::path& image, const std::filesystem::path& root) {
+    using Status = creative_suite::composition::OpenGlCompositionStatus;
+    auto job = makeImageJob(output, image, root / "gpu-fault.mkv", 400);
+    job.settings.gpu_composition_enabled = true;
+    std::atomic_bool canceled{false};
+    for (auto statuses : {std::vector{Status::Unsupported}, std::vector{Status::Failed},
+                          std::vector{Status::Complete, Status::Failed}, std::vector{Status::Busy}, std::vector{Status::Cancelled}}) {
+        int calls = 0, warnings = 0, summaries = 0;
+        bool warning_logged = false, warning_code_valid = false;
+        rendering::OfflineExportMetrics metrics;
+        rendering::OfflineExportOptions options;
+        options.gpu_factory = [&](QOffscreenSurface*) { return std::make_unique<FaultGpu>(statuses, calls); };
+        options.warning_callback = [&](const auto&, auto code) {
+            ++warnings; warning_code_valid = code == -37 || statuses[0] == Status::Busy;
+            std::ifstream log(logging::Logger::instance().log_path());
+            const std::string contents{std::istreambuf_iterator<char>(log), {}};
+            warning_logged = contents.find("controlled-export-fault") != std::string::npos || statuses[0] == Status::Busy;
+        };
+        options.metrics_callback = [&](const auto& result) { metrics = result; ++summaries; };
+        std::ofstream(job.settings.output_path.toStdString(), std::ios::binary) << "previous output";
+        bool was_canceled = false;
+        try { rendering::OfflineExportRenderer::render(job, canceled, {}, options); }
+        catch (const rendering::ExportCanceled&) { was_canceled = true; }
+        require(summaries == 1 && metrics.total_nanoseconds > 0, "Export failed to summarize an outcome.");
+        if (statuses[0] == Status::Cancelled) {
+            std::ifstream previous(job.settings.output_path.toStdString());
+            const std::string contents{std::istreambuf_iterator<char>(previous), {}};
+            require(was_canceled && warnings == 0 && metrics.outcome == rendering::ExportOutcome::Canceled &&
+                contents == "previous output", "GPU cancellation damaged previous output or reported an error.");
+        } else {
+            const bool unsupported = statuses[0] == Status::Unsupported;
+            const bool mid_failure = statuses[0] == Status::Complete;
+            require(!was_canceled && warning_logged && warning_code_valid && metrics.outcome == rendering::ExportOutcome::Completed && warnings == 1 &&
+                metrics.encoded_frames == 8 && metrics.cpu_frames + metrics.gpu_frames == 8 &&
+                metrics.cpu_frames == (unsupported ? 1 : mid_failure ? 7 : 8) && metrics.fallback_frames == metrics.cpu_frames &&
+                calls == (unsupported ? 8 : mid_failure ? 2 : 1) &&
+                metrics.gpu_failures == (unsupported ? 0 : 1), "GPU fallback dropped frames or retried a technical failure.");
+        }
+    }
+    // Default adapter with no GUI surface must keep exporting through CPU.
+    rendering::OfflineExportOptions unavailable;
+    rendering::OfflineExportMetrics unavailable_metrics;
+    unavailable.metrics_callback = [&](const auto& metrics) { unavailable_metrics = metrics; };
+    rendering::OfflineExportRenderer::render(job, canceled, {}, unavailable);
+    require(unavailable_metrics.cpu_frames == 8 && unavailable_metrics.gpu_failures == 1,
+        "Missing export context did not latch CPU fallback.");
+    int factories = 0, calls = 0;
+    rendering::OfflineExportOptions retry;
+    retry.gpu_factory = [&](QOffscreenSurface*) {
+        ++factories; calls = 0;
+        return std::make_unique<FaultGpu>(factories == 1 ? std::vector{Status::Failed} : std::vector<Status>{}, calls);
+    };
+    rendering::OfflineExportRenderer::render(job, canceled, {}, retry);
+    rendering::OfflineExportRenderer::render(job, canceled, {}, retry);
+    require(factories == 2 && calls == 8, "A retry did not create a fresh export GPU adapter.");
+    rendering::OfflineExportOptions throwing;
+    throwing.gpu_factory = [](QOffscreenSurface*) -> std::unique_ptr<rendering::ExportGpuCompositor> {
+        throw std::runtime_error("Controlled adapter construction failure.");
+    };
+    throwing.metrics_callback = [&](const auto& metrics) { unavailable_metrics = metrics; };
+    rendering::OfflineExportRenderer::render(job, canceled, {}, throwing);
+    require(unavailable_metrics.gpu_failures == 1 && unavailable_metrics.cpu_frames == 8,
+        "Adapter construction exception prevented CPU fallback.");
+    calls = 0;
+    rendering::OfflineExportOptions malformed;
+    malformed.gpu_factory = [&](QOffscreenSurface*) { return std::make_unique<FaultGpu>(std::vector<Status>{}, calls, true); };
+    malformed.metrics_callback = [&](const auto& metrics) { unavailable_metrics = metrics; };
+    malformed.warning_callback = [](const auto&, auto) { throw std::runtime_error("Controlled warning callback failure."); };
+    rendering::OfflineExportRenderer::render(job, canceled, {}, malformed);
+    require(calls == 1 && unavailable_metrics.cpu_frames == 8 && unavailable_metrics.gpu_failures == 1,
+        "An incomplete GPU frame or warning callback failure broke export fallback.");
+    malformed.metrics_callback = [](const auto&) { throw std::runtime_error("Controlled metrics callback failure."); };
+    rendering::OfflineExportRenderer::render(job, canceled, {}, malformed);
+    std::ofstream(job.settings.output_path.toStdString(), std::ios::binary) << "previous output";
+    rendering::OfflineExportMetrics cancellation;
+    rendering::OfflineExportOptions cancel_options;
+    cancel_options.metrics_callback = [&](const auto& metrics) { cancellation = metrics; };
+    bool canceled_after_frame = false;
+    try {
+        rendering::OfflineExportRenderer::render(job, canceled, [&](int) { canceled.store(true); }, cancel_options);
+    } catch (const rendering::ExportCanceled&) { canceled_after_frame = true; }
+    canceled.store(false);
+    require(canceled_after_frame && cancellation.outcome == rendering::ExportOutcome::Canceled && cancellation.encoded_frames == 1,
+        "Cancellation after frame submission omitted its partial summary.");
+}
+
+void validateActiveQueueShutdown(const OutputChoice& output, const std::filesystem::path& image, const std::filesystem::path& root) {
+    auto job = makeImageJob(output, image, root / "closed-queue.mkv", 450, 100000);
+    std::ofstream(job.settings.output_path.toStdString(), std::ios::binary) << "previous output";
+    QEventLoop loop;
+    bool first_frame = false;
+    {
+        ui::RenderQueueController controller;
+        QObject::connect(&controller, &ui::RenderQueueController::jobProgress, &loop,
+            [&](qulonglong, int) { first_frame = true; loop.quit(); });
+        require(controller.start({job}), "Shutdown fixture did not start.");
+        QTimer::singleShot(30000, &loop, &QEventLoop::quit); loop.exec();
+        require(first_frame && controller.isRunning(), "Shutdown fixture did not retain active worker resources.");
+    }
+    QCoreApplication::processEvents();
+    std::ifstream previous(job.settings.output_path.toStdString());
+    const std::string contents{std::istreambuf_iterator<char>(previous), {}};
+    require(contents == "previous output", "Closing a render queue replaced the prior output.");
+}
+
+void validateLosslessParity(const OutputChoice& output, const std::filesystem::path& image, const std::filesystem::path& root) {
+    if (!native_gpu_mode) return;
+    require(output.video.name == "ffv1", "Native pixel export comparison requires the available FFV1 lossless encoder.");
+    auto cpu = makeImageJob(output, image, root / "lossless-cpu.mkv", 550);
+    cpu.settings.gpu_composition_enabled = false;
+    cpu.project_snapshot.timeline_tracks[0].clips[0].transform.rotation_degrees = 23;
+    auto gpu = cpu; gpu.id = 551; gpu.settings.output_path = pathToQString(root / "lossless-gpu.mkv");
+    gpu.settings.gpu_composition_enabled = true;
+    std::atomic_bool cancel{false}; renderJob(cpu, cancel); renderJob(gpu, cancel);
+    auto a = media::VideoPlaybackSession::open(pathFromQString(cpu.settings.output_path));
+    auto b = media::VideoPlaybackSession::open(pathFromQString(gpu.settings.output_path));
+    int frames = 0;
+    while (const auto expected = a->decode_next_frame()) {
+        const auto actual = b->decode_next_frame();
+        require(actual && *actual && (*expected)->width == (*actual)->width && (*expected)->height == (*actual)->height,
+            "Lossless GPU output duration or geometry differs.");
+        for (std::size_t i = 0; i < (*expected)->rgba_pixels.size(); ++i)
+            require(std::abs(int((*expected)->rgba_pixels[i]) - int((*actual)->rgba_pixels[i])) <= (i % 4 == 3 ? 0 : 6),
+                "Decoded lossless CPU/GPU output differs after encoder color conversion.");
+        ++frames;
+    }
+    require(frames == 8 && !b->decode_next_frame(), "Lossless export dropped or duplicated frames.");
+}
+
+#ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
+void validatePublishedImage(const OutputChoice& output, const std::filesystem::path& root) {
+    const auto source = root / "producer-source.png", published = root / "published.png";
+    QImage pixels(16, 16, QImage::Format_RGBA8888); pixels.fill(QColor(150, 90, 230));
+    require(pixels.save(pathToQString(source)), "Producer source save failed.");
+    image_editor::ImageDocumentSession producer;
+    QString error;
+    require(producer.createCanvas(QSize(16, 16), Qt::transparent, &error) &&
+        producer.importRasterImages(image_editor::prepareRasterImport({pathToQString(source)}).images, {}, &error) &&
+        producer.addLayerMask(producer.selectedLayerId()) &&
+        producer.applyLayerMaskEraseStroke({QPointF(8, 8)}, 4, &error) && producer.exportImage(pathToQString(published), &error),
+        "Masked PNG publication failed.");
+    auto job = makeImageJob(output, published, root / "published-export.mkv", 500, 1);
+    // The original source remains unchanged; export resolves the linked publication.
+    job.project_snapshot.timeline_tracks[0].clips[0].source_path = source;
+    job.project_snapshot.timeline_tracks[0].clips[0].image_editor_variant = media::LinkedImageReference{
+        "export-publication", root / "producer.cimg", published};
+    std::atomic_bool cancel{false};
+    renderJob(job, cancel);
+    auto decoder = media::VideoPlaybackSession::open(pathFromQString(job.settings.output_path));
+    auto old = *decoder->decode_next_frame(); decoder.reset();
+    require(producer.applyLayerMaskEraseStroke({QPointF(3, 3)}, 7, &error) && producer.exportImage(pathToQString(published), &error),
+        "Masked PNG republication failed.");
+    renderJob(job, cancel);
+    decoder = media::VideoPlaybackSession::open(pathFromQString(job.settings.output_path));
+    auto refreshed = *decoder->decode_next_frame();
+    require(old->rgba_pixels != refreshed->rgba_pixels, "Export reused stale published Image Editor pixels.");
+}
+#endif
+
+void benchmarkExport(const OutputChoice& output, const std::filesystem::path& image, const std::filesystem::path& root) {
+    compare_before_encoding = false;
+    QImage background(1920, 1080, QImage::Format_RGBA8888);
+    QImage transparent(1280, 720, QImage::Format_RGBA8888);
+    for (auto* frame : {&background, &transparent}) for (int y = 0; y < frame->height(); ++y) for (int x = 0; x < frame->width(); ++x) {
+        auto* p = frame->scanLine(y) + x * 4;
+        p[0] = static_cast<uchar>((x * 17 + y * 23) % 256);
+        p[1] = static_cast<uchar>((x * 37 + y * 3) % 256);
+        p[2] = static_cast<uchar>((x * 7 + y * 41) % 256);
+        p[3] = frame == &background ? 255 : static_cast<uchar>((x * 29 + y * 31) % 256);
+    }
+    const auto background_path = root / "benchmark-background.png", overlay_path = root / "benchmark-overlay.png";
+    require(background.save(pathToQString(background_path)) && transparent.save(pathToQString(overlay_path)), "Benchmark fixtures failed.");
+    (void)image;
+    for (const auto size : {QSize(1920, 1080), QSize(2560, 1440), QSize(3840, 2160)}) for (bool gpu : {false, true}) {
+        auto job = makeImageJob(output, background_path, root / (gpu ? "bench-gpu.mkv" : "bench-cpu.mkv"), 600, 6);
+        job.settings.width = size.width(); job.settings.height = size.height();
+        job.settings.frame_rate = 30; job.settings.export_audio = false; job.settings.gpu_composition_enabled = gpu;
+        auto overlay = job.project_snapshot.timeline_tracks[0].clips[0];
+        overlay.source_path = overlay_path;
+        overlay.transform.scale = .72; overlay.transform.opacity = .6;
+        project::ProjectTrack track; track.track_id = 2; track.clips.push_back(overlay);
+        job.project_snapshot.timeline_tracks.insert(job.project_snapshot.timeline_tracks.begin(), track);
+        overlay.transform.rotation_degrees = 23;
+        track.track_id = 3; track.clips = {overlay};
+        job.project_snapshot.timeline_tracks.insert(job.project_snapshot.timeline_tracks.begin(), track);
+        std::atomic_bool cancel{false};
+        renderJob(job, cancel);
+        const auto& m = last_metrics;
+        std::printf("export_benchmark output=%dx%d backend=%s frames=%llu total_ms=%.3f preparation_ms=%.3f composition_ms=%.3f encoding_ms=%.3f upload_ms=%.3f draw_ms=%.3f readback_ms=%.3f upload_bytes=%llu readback_bytes=%llu gpu_peak_bytes=%llu cpu_frame_peak_bytes=%llu sources_peak_bytes=%llu encoder=%s\n",
+            size.width(), size.height(), gpu ? "gpu" : "cpu", static_cast<unsigned long long>(m.encoded_frames),
+            m.total_nanoseconds / 1e6, m.preparation_nanoseconds / 1e6, m.composition_nanoseconds / 1e6, m.encoding_nanoseconds / 1e6,
+            m.upload_nanoseconds / 1e6, m.draw_submission_nanoseconds / 1e6, m.readback_nanoseconds / 1e6,
+            static_cast<unsigned long long>(m.uploaded_bytes), static_cast<unsigned long long>(m.readback_bytes),
+            static_cast<unsigned long long>(m.peak_known_gpu_bytes), static_cast<unsigned long long>(m.peak_cpu_frame_bytes),
+            static_cast<unsigned long long>(m.peak_prepared_source_bytes), job.settings.video_encoder_name.toUtf8().constData());
+    }
 }
 
 }  // namespace
 
 int main(int argc, char* argv[]) {
+    native_gpu_mode = argc > 1 && (std::string(argv[1]) == "--native-gpu" || std::string(argv[1]) == "--benchmark");
+    QSurfaceFormat format; format.setVersion(3, 2); format.setProfile(QSurfaceFormat::CoreProfile);
+    QSurfaceFormat::setDefaultFormat(format);
     QApplication application(argc, argv);
     try {
         QTemporaryDir temporary_directory;
         require(temporary_directory.isValid(), "Could not create a temporary export-test directory.");
         const auto root = pathFromQString(temporary_directory.path());
+        require(logging::Logger::instance().initialize(root), "Export test log unavailable.");
+        auto surface = native_gpu_mode ? creative_suite::composition::OpenGlFrameCompositor::createSurface() : nullptr;
+        if (native_gpu_mode) {
+            if (!surface) return 77;
+            creative_suite::composition::OpenGlCompositionResult probe;
+            std::thread worker([&] {
+                creative_suite::composition::OpenGlFrameCompositor gpu(surface.get()); probe = gpu.compose(8, 8, {});
+            }); worker.join();
+            if (!probe.frame && (probe.operation == "create-context" || probe.operation == "check-context")) return 77;
+            require(probe.frame.has_value(), "Native export GPU probe failed on an available context.");
+            native_options.gpu_surface = surface.get();
+            native_options.gpu_factory = [](QOffscreenSurface* value) { return std::make_unique<CheckedNativeGpu>(value); };
+        }
         const auto image_path = root / "source.png";
         const auto green_image_path = root / "green.png";
         QImage source(4, 4, QImage::Format_RGBA8888);
@@ -735,6 +1035,13 @@ int main(int argc, char* argv[]) {
         validateQueueCancellationStopsLaterJobs(output, image_path, root);
         validateConfiguredFullResolutionExport(output, image_path, root);
         validateEmbeddedAudioMixing(output, root);
+        validateGpuFallback(output, image_path, root);
+        validateActiveQueueShutdown(output, image_path, root);
+        validateLosslessParity(output, image_path, root);
+#ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
+        validatePublishedImage(output, root);
+#endif
+        if (argc > 1 && std::string(argv[1]) == "--benchmark") benchmarkExport(output, image_path, root);
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

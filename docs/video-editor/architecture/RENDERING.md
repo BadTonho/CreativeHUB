@@ -429,9 +429,12 @@ source texture, one legacy readback framebuffer and up to three shared output
 framebuffers under a combined 64 MiB budget. Disabling retires leased resources;
 the surface survives queued work and is destroyed on the GUI thread after worker
 shutdown. Source/output dimensions are bounded by `GL_MAX_TEXTURE_SIZE` and a
-256 MiB budget per texture. Unrotated layers also use a reusable 16 KiB uniform
-buffer (4096 indices) to match CPU double-precision nearest sampling at texel
-boundaries; canvas width plus height must fit that budget for those layers.
+256 MiB budget per texture. Unrotated layers use independent reusable horizontal
+and vertical 16 KiB uniform buffers (4096 indices each) to match CPU
+double-precision nearest sampling at texel boundaries. Each canvas axis may reach
+4096 independently, including 3840×2160 and 2160×3840. The backend checks block
+size and fragment block count as well as texture limits. Both RGBA and direct
+texture composition use these lookup buffers.
 Unrepresentable shader geometry or incompatible limits use CPU for that request.
 
 Rotated nearest sampling uses double uniforms and `precise` shader arithmetic
@@ -462,7 +465,8 @@ timeline frame, generation and active clip context before a five-second status
 message. Fallback does not emit a playback error or stop the audio clock. If CPU
 also fails, existing playback error handling retains the previous valid preview.
 Motion Studio remains on CPU; it can adopt the shared adapter later. Offline
-export remains on CPU. See the [staged GPU plan](../GPU_ACCELERATION_PLAN.md).
+export defaults to CPU and independently offers per-job GPU composition with
+RGBA readback. See the [staged GPU plan](../GPU_ACCELERATION_PLAN.md).
 
 The Video Editor and Motion Studio use the shared, Qt-independent CPU
 compositor in `libs/composition/` for layer transforms and RGBA frame blending.
@@ -530,8 +534,10 @@ the session-only queue model. Queue jobs contain a project-document snapshot
 and settings snapshot, while source media remains referenced by its path.
 Exporting does not alter the open project, its history, or its dirty state.
 
-`OfflineExportRenderer` uses the CPU `FrameCompositor` to compose frames at the
-configured output dimensions. It uses the project's persisted rational
+`OfflineExportRenderer` prepares one set of ordered layers and uses either the
+CPU `FrameCompositor` or optional `OpenGlFrameCompositor::compose` at the configured
+output dimensions. Decoded frame references retain source storage through
+composition/fallback without an additional pixel copy. It uses the project's persisted rational
 Timeline rate (30/1 FPS for new projects) and maps each output frame to a
 Timeline position at that rate. Every video layer then maps its local Timeline
 position to the source frame using the clip's source rate, source in-point, and
@@ -552,7 +558,9 @@ sources.
 
 Containers and compatible encoders come from the active FFmpeg build. The
 selected video and audio encoders remain FFmpeg's responsibility, including
-hardware encoders exposed by that build; frame composition remains on the CPU.
+hardware encoders exposed by that build. Frame composition defaults to CPU;
+the per-job experimental option selects the shared GPU adapter independently
+of encoding and the preview preference.
 Hardware availability and accepted pixel formats depend on the installed
 FFmpeg build and system. Each job writes to a uniquely named temporary file in
 the destination directory, closes the muxer, reopens the file with FFmpeg to
@@ -570,7 +578,19 @@ destinations are rejected before starting, and one confirmation covers all
 existing destinations in the pending jobs. The queue and its states are not
 persisted across application sessions.
 
-This is the initial CPU composition and FFmpeg export implementation. Codec
+The queue creates a GUI-owned offscreen surface for a run with GPU items. Each
+item owns its compositor/context on the worker; resources are independent of
+preview and are destroyed before the worker exits. The GUI joins the worker
+before releasing the surface. `OfflineExportOptions` preserves existing calls
+and adds a borrowed surface, warning/metrics callbacks and a test factory.
+Unsupported composition uses CPU for that frame. Technical failure uses CPU
+for that frame and the remainder of the item; retry creates a fresh backend.
+Fallback reuses prepared layers, logs detailed context before one brief nonmodal
+warning per item, and never drops output frames. Cancellation retains its existing
+transactional behavior. [GPU_EXPORT.md](../GPU_EXPORT.md) documents this contract
+and the independent export diagnostics schema 1; preview schemas remain 9/3.
+
+This is the CPU/default and experimental GPU composition FFmpeg export implementation. Codec
 compatibility, quality, performance, platform-specific hardware paths, and
 large-project resource use still require broader validation before release.
 

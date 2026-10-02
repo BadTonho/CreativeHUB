@@ -1,4 +1,5 @@
 #include "rendering/offline_export_renderer.h"
+#include "rendering/export_composition.h"
 
 #include "logging/logger.h"
 #include "media/audio_playback.h"
@@ -209,63 +210,74 @@ std::optional<media::VideoFrame> composeFrame(
     const std::vector<RenderTransition>& transitions,
     std::int64_t timeline_frame,
     timeline::FrameRate timeline_frame_rate,
-    int width,
-    int height,
+    detail::ExportComposition& compositor,
+    std::int64_t output_frame,
+    OfflineExportMetrics& metrics,
     const std::atomic_bool& canceled) {
     std::vector<rendering::CompositionLayer> layers;
-    std::vector<media::VideoFrame> decoded_frames;
-    const auto requests = activeClipRequests(clips, transitions, timeline_frame);
-    decoded_frames.reserve(requests.size());
-    layers.reserve(requests.size());
-    for (const auto& request : requests) {
-        checkCanceled(canceled);
-        auto& render_clip = clips[request.clip_index];
-        const auto& clip = *render_clip.clip;
-        const auto local_frame = request.local_frame >= 0
-            ? request.local_frame
-            : timeline_frame - clip.timeline_start_frame;
-        const auto local_transform = timeline::evaluateTransform(
-            clip.transform, clip.keyframes, local_frame);
-        auto transform = local_transform;
-        setFrameOpacity(transform, request.opacity);
+    std::vector<media::VideoFramePtr> decoded_frames;
+    {
+        detail::ExportTimedScope preparation(metrics.preparation_nanoseconds);
+        const auto requests = activeClipRequests(clips, transitions, timeline_frame);
+        decoded_frames.reserve(requests.size());
+        layers.reserve(requests.size());
+        for (const auto& request : requests) {
+            checkCanceled(canceled);
+            auto& render_clip = clips[request.clip_index];
+            const auto& clip = *render_clip.clip;
+            const auto local_frame = request.local_frame >= 0
+                ? request.local_frame
+                : timeline_frame - clip.timeline_start_frame;
+            const auto local_transform = timeline::evaluateTransform(
+                clip.transform, clip.keyframes, local_frame);
+            auto transform = local_transform;
+            setFrameOpacity(transform, request.opacity);
 
-        if (clip.kind == timeline::ClipKind::Text) {
-            if (!render_clip.text.has_value()) {
-                auto text = rendering::renderText(clip.text);
-                if (!text.has_value()) {
-                    throw std::runtime_error("A text clip could not be rasterized.");
+            if (clip.kind == timeline::ClipKind::Text) {
+                if (!render_clip.text.has_value()) {
+                    auto text = rendering::renderText(clip.text);
+                    if (!text.has_value()) {
+                        throw std::runtime_error("A text clip could not be rasterized.");
+                    }
+                    render_clip.text = std::move(*text);
                 }
-                render_clip.text = std::move(*text);
+                layers.push_back({&*render_clip.text, transform, {}});
+            } else if (clip.kind == timeline::ClipKind::Image) {
+                if (!render_clip.still.has_value()) {
+                    throw std::runtime_error("An image clip has no decoded source frame.");
+                }
+                layers.push_back({&*render_clip.still, transform, {}});
+            } else {
+                const auto source_offset = timeline::sourceFrameOffsetForTimelineFrame(
+                    local_frame, render_clip.source_fps, timeline_frame_rate,
+                    clip.source_duration_frames);
+                if (!source_offset.has_value() || *source_offset < 0 ||
+                    clip.source_start_frame > std::numeric_limits<std::int64_t>::max() -
+                        *source_offset) {
+                    throw std::runtime_error("A source frame index exceeded the supported range.");
+                }
+                const auto source_frame = clip.source_start_frame + *source_offset;
+                auto decoded = render_clip.video->decode_frame_at(
+                    source_frame,
+                    [&canceled] { return canceled.load(std::memory_order_acquire); });
+                if (!decoded.has_value() || *decoded == nullptr) {
+                    checkCanceled(canceled);
+                    throw std::runtime_error(
+                        "A video frame could not be decoded from " + pathUtf8(clipPath(clip)));
+                }
+                decoded_frames.push_back(*decoded);
+                layers.push_back({decoded_frames.back().get(), transform, {}});
             }
-            layers.push_back({&*render_clip.text, transform, {}});
-        } else if (clip.kind == timeline::ClipKind::Image) {
-            if (!render_clip.still.has_value()) {
-                throw std::runtime_error("An image clip has no decoded source frame.");
-            }
-            layers.push_back({&*render_clip.still, transform, {}});
-        } else {
-            const auto source_offset = timeline::sourceFrameOffsetForTimelineFrame(
-                local_frame, render_clip.source_fps, timeline_frame_rate,
-                clip.source_duration_frames);
-            if (!source_offset.has_value() || *source_offset < 0 ||
-                clip.source_start_frame > std::numeric_limits<std::int64_t>::max() -
-                    *source_offset) {
-                throw std::runtime_error("A source frame index exceeded the supported range.");
-            }
-            const auto source_frame = clip.source_start_frame + *source_offset;
-            auto decoded = render_clip.video->decode_frame_at(
-                source_frame,
-                [&canceled] { return canceled.load(std::memory_order_acquire); });
-            if (!decoded.has_value() || *decoded == nullptr) {
-                checkCanceled(canceled);
-                throw std::runtime_error(
-                    "A video frame could not be decoded from " + pathUtf8(clipPath(clip)));
-            }
-            decoded_frames.push_back(**decoded);
-            layers.push_back({&decoded_frames.back(), transform, {}});
         }
+        std::uint64_t resident = 0;
+        for (const auto& decoded : decoded_frames) resident += decoded->rgba_pixels.size();
+        for (const auto& clip : clips) {
+            if (clip.still) resident += clip.still->rgba_pixels.size();
+            if (clip.text) resident += clip.text->rgba_pixels.size();
+        }
+        metrics.peak_prepared_source_bytes = std::max(metrics.peak_prepared_source_bytes, resident);
     }
-    return FrameCompositor::compose(width, height, layers);
+    return compositor.compose(layers, output_frame, timeline_frame, canceled);
 }
 
 std::filesystem::path makeTemporaryPath(const std::filesystem::path& target, std::uint64_t id) {
@@ -526,7 +538,11 @@ bool verifyOutput(const std::filesystem::path& path, bool expect_audio) {
 void OfflineExportRenderer::render(
     const ui::RenderJob& job,
     const std::atomic_bool& cancel_requested,
-    ProgressCallback report_progress) {
+    ProgressCallback report_progress,
+    const OfflineExportOptions& options) {
+    detail::ExportMetricsScope summary(job, options);
+    auto& metrics = summary.metrics;
+    if (cancel_requested.load()) { metrics.outcome = ExportOutcome::Canceled; throw ExportCanceled{}; }
     const auto target_utf8 = job.settings.output_path.toUtf8();
     auto target_u8 = std::u8string(
         reinterpret_cast<const char8_t*>(target_utf8.constData()),
@@ -559,7 +575,11 @@ void OfflineExportRenderer::render(
     };
     try {
         double timeline_fps = 30.0;
-        auto clips = prepareClips(job.project_snapshot, timeline_fps, job, cancel_requested);
+        auto clips = [&] {
+            detail::ExportTimedScope preparation(metrics.preparation_nanoseconds);
+            return prepareClips(job.project_snapshot, timeline_fps, job, cancel_requested);
+        }();
+        detail::ExportComposition compositor(job, options, metrics);
         const auto transitions = collectTransitions(job.project_snapshot);
         const auto audio_clips = audioMixClips(clips);
         const auto audio_transitions = audioMixTransitions(transitions);
@@ -571,8 +591,10 @@ void OfflineExportRenderer::render(
         if (output_frame_count <= 0 || output_frame_count > 100000000) {
             throw std::runtime_error("The calculated output duration is outside the supported range.");
         }
-        OutputEncoder encoder(job, temporary,
-                              job.settings.frame_rate, job.settings.export_audio);
+        auto encoder = [&] {
+            detail::ExportTimedScope encoding(metrics.encoding_nanoseconds);
+            return OutputEncoder(job, temporary, job.settings.frame_rate, job.settings.export_audio);
+        }();
         for (std::int64_t frame_index = 0; frame_index < output_frame_count; ++frame_index) {
             checkCanceled(cancel_requested);
             const auto timeline_frame = static_cast<std::int64_t>(std::floor(
@@ -581,9 +603,16 @@ void OfflineExportRenderer::render(
             auto frame = composeFrame(
                 clips, transitions, timeline_frame,
                 job.project_snapshot.timeline_frame_rate,
-                job.settings.width, job.settings.height, cancel_requested);
+                compositor, frame_index, metrics, cancel_requested);
             if (!frame.has_value()) throw std::runtime_error("Composing an output frame failed.");
-            encoder.writeVideo(*frame, frame_index);
+            checkCanceled(cancel_requested);
+            metrics.peak_cpu_frame_bytes = std::max(metrics.peak_cpu_frame_bytes,
+                static_cast<std::uint64_t>(frame->rgba_pixels.size()));
+            {
+                detail::ExportTimedScope encoding(metrics.encoding_nanoseconds);
+                encoder.writeVideo(*frame, frame_index);
+            }
+            ++metrics.encoded_frames;
             reportProgress(static_cast<int>(
                 (frame_index + 1) * (job.settings.export_audio ? 80 : 99) /
                 output_frame_count));
@@ -598,9 +627,15 @@ void OfflineExportRenderer::render(
             while (sample < total_samples) {
                 checkCanceled(cancel_requested);
                 const auto block_count = encoder.nextAudioInputSampleCount();
-                mixAudioBlock(clips, audio_clips, audio_transitions, timeline_fps,
-                              sample, block_count, mixed, cancel_requested);
-                encoder.writeAudio(mixed, block_count);
+                {
+                    detail::ExportTimedScope audio(metrics.audio_nanoseconds);
+                    mixAudioBlock(clips, audio_clips, audio_transitions, timeline_fps,
+                                  sample, block_count, mixed, cancel_requested);
+                }
+                {
+                    detail::ExportTimedScope encoding(metrics.encoding_nanoseconds);
+                    encoder.writeAudio(mixed, block_count);
+                }
                 sample += block_count;
                 if (total_samples > 0) {
                     reportProgress(static_cast<int>(std::min<std::int64_t>(
@@ -609,16 +644,30 @@ void OfflineExportRenderer::render(
             }
         }
         checkCanceled(cancel_requested);
-        encoder.finish();
-        if (!verifyOutput(temporary, job.settings.export_audio)) {
-            throw std::runtime_error("FFmpeg could not verify the completed output file and its configured streams.");
+        {
+            detail::ExportTimedScope encoding(metrics.encoding_nanoseconds);
+            encoder.finish();
         }
-        checkCanceled(cancel_requested);
-        if (!publishFile(temporary, target)) {
-            throw std::runtime_error("The completed output could not replace the destination file.");
+        {
+            detail::ExportTimedScope finalization(metrics.finalization_nanoseconds);
+            if (!verifyOutput(temporary, job.settings.export_audio)) {
+                throw std::runtime_error("FFmpeg could not verify the completed output file and its configured streams.");
+            }
+            checkCanceled(cancel_requested);
+            if (!publishFile(temporary, target)) {
+                throw std::runtime_error("The completed output could not replace the destination file.");
+            }
+            published = true;
         }
-        published = true;
         reportProgress(100);
+        metrics.outcome = ExportOutcome::Completed;
+    } catch (const ExportCanceled&) {
+        metrics.outcome = ExportOutcome::Canceled;
+        if (!published) {
+            std::error_code cleanup_error;
+            std::filesystem::remove(temporary, cleanup_error);
+        }
+        throw;
     } catch (const creative_suite::media::VideoEncodingError& error) {
         if (!published) {
             std::error_code cleanup_error;

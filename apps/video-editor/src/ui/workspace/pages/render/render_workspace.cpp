@@ -36,6 +36,7 @@
 #include <QVariant>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QTimer>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -209,6 +210,12 @@ void RenderWorkspace::createPanels(QWidget* parent) {
                     static_cast<std::uint64_t>(id), RenderJobStatus::Canceled, 0));
                 updateQueueActions();
             });
+    connect(queue_controller_, &RenderQueueController::jobWarning, this,
+        [this](qulonglong, const QString& message, const QString&) {
+            gpu_warning_->setText(message);
+            gpu_warning_->show();
+            gpu_warning_timer_->start(5000);
+        });
     connect(queue_controller_, &RenderQueueController::queueFinished,
             this, [this](bool canceled) { handleQueueFinished(canceled); });
     createSettingsPanel();
@@ -452,6 +459,23 @@ void RenderWorkspace::createSettingsPanel() {
     video_bitrate_spin_->setSingleStep(0.5);
     video_bitrate_spin_->setSuffix(QStringLiteral(" Mbps"));
     video_form->addRow(QStringLiteral("Video bitrate"), video_bitrate_spin_);
+    gpu_composition_check_ = new QCheckBox(QStringLiteral("Use GPU for export (Experimental)"), video_group);
+    gpu_composition_check_->setObjectName("renderGpuCompositionCheck");
+    gpu_composition_check_->setAccessibleName(QStringLiteral("Use GPU for export (Experimental)"));
+    const auto gpu_description = QStringLiteral(
+        "Accelerates layer composition for this queued export. Uses CPU automatically when needed. "
+        "The selected video encoder is unchanged.");
+    gpu_composition_check_->setAccessibleDescription(gpu_description);
+    gpu_composition_check_->setToolTip(gpu_description);
+    video_form->addRow(gpu_composition_check_);
+    gpu_warning_ = new QLabel(video_group);
+    gpu_warning_->setObjectName("renderGpuWarning");
+    gpu_warning_->setWordWrap(true);
+    gpu_warning_->hide();
+    video_form->addRow(gpu_warning_);
+    gpu_warning_timer_ = new QTimer(this);
+    gpu_warning_timer_->setSingleShot(true);
+    connect(gpu_warning_timer_, &QTimer::timeout, gpu_warning_, &QWidget::hide);
     content_layout->addWidget(video_group);
 
     auto* audio_group = new QGroupBox(QStringLiteral("Audio"), content);
@@ -1029,6 +1053,7 @@ void RenderWorkspace::addCurrentJob() {
         resolution = QSize(custom_width_->value(), custom_height_->value());
     }
     job.settings.width = resolution.width();
+    job.settings.gpu_composition_enabled = gpu_composition_check_->isChecked();
     job.settings.height = resolution.height();
     job.settings.frame_rate = frame_rate_spin_->value();
     job.settings.video_bitrate_mbps = video_bitrate_spin_->value();

@@ -285,6 +285,20 @@ void retirementCapacity(QOffscreenSurface* surface) {
     require(next.frame && budget->targets() == 2 && frames[0]->valid(),
         "A held previous preview starved direct delivery after reactivation.");
 }
+
+void highResolution(OpenGlFrameCompositor& gpu) {
+    auto opaque = fixture(29, 17, false, 3);
+    auto alpha = fixture(19, 13, true, 12);
+    animation::Transform2D transform; transform.position_x = .42; transform.scale = .71; transform.opacity = .6;
+    for (const auto size : {std::pair{1920, 1080}, {2560, 1440}, {3840, 2160}, {2160, 3840}})
+        compare(gpu, size.first, size.second, {{&opaque}, {&alpha, transform}}, "high resolution split lookup");
+    const auto usage = gpu.resourceUsage();
+    require(usage.geometry_buffer_bytes == 32768 && usage.texture_bytes > 0 &&
+        usage.peak_known_bytes >= usage.texture_bytes + usage.geometry_buffer_bytes, "GPU resource accounting omitted split lookup buffers.");
+    require(gpu.compose(4097, 1, {{&opaque}}).status == OpenGlCompositionStatus::Unsupported &&
+        gpu.compose(1, 4097, {{&opaque}}).status == OpenGlCompositionStatus::Unsupported,
+        "Axis lookup limit was not enforced independently.");
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -331,6 +345,7 @@ int main(int argc, char** argv) {
                     require(initial.status == OpenGlCompositionStatus::Complete,
                         "native initialization failed: " + initial.operation + ": " + initial.cause);
                     parity(gpu);
+                    if (activation == 0) highResolution(gpu);
                     cancellationAndLimits(gpu);
                     directCancellation(gpu);
                     textureLeases(surface.get());

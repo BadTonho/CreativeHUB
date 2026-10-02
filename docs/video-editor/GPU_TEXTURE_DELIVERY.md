@@ -2,7 +2,8 @@
 
 Status: **implemented experimental stage 2, 2026-10-02; platform acceptance pending**.
 Video Editor is the first consumer. The preference remains **Settings > General >
-Use GPU for timeline preview (Experimental)**, default off. Export remains CPU.
+Use GPU for timeline preview (Experimental)**, default off. Export independently
+offers default-off per-job [GPU composition](GPU_EXPORT.md); it uses RGBA readback.
 Formats, application versions and shortcuts are unchanged.
 
 ## Public shared backend
@@ -108,4 +109,5 @@ not driver-measured GPU memory.
 See [regression coverage](REGRESSION_TESTING.md) and [native results and remaining
 manual/platform checks](GPU_COMPOSITION_RESULTS.md). Successful context creation or
 a skipped graphical test does not approve a driver. Motion Studio and Image Editor
-adoption, GPU effects, decode/encode and offline export remain later stages.
+adoption, GPU effects and decode/encode remain later stages. Offline export now
+uses the shared RGBA path with isolated per-job resources; see [GPU_EXPORT.md](GPU_EXPORT.md).

@@ -306,6 +306,10 @@ add_executable(creative-suite-main-editor-render-export-tests
 target_link_libraries(creative-suite-main-editor-render-export-tests PRIVATE
     creative-suite-main-editor-core
 )
+if(TARGET creative-suite-image-editor-core)
+    target_link_libraries(creative-suite-main-editor-render-export-tests PRIVATE creative-suite-image-editor-core)
+    target_compile_definitions(creative-suite-main-editor-render-export-tests PRIVATE CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS=1)
+endif()
 target_compile_features(creative-suite-main-editor-render-export-tests PRIVATE cxx_std_20)
 if(MSVC)
     target_compile_options(creative-suite-main-editor-render-export-tests PRIVATE /W4 /permissive-)
@@ -321,6 +325,15 @@ add_creative_suite_test(
 set_tests_properties(creative-suite-main-editor-render-export PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
+add_creative_suite_test(NAME creative-suite-main-editor-gpu-export SKIP_RETURN_CODE 77
+    COMMAND creative-suite-main-editor-render-export-tests --native-gpu)
+if(WIN32)
+    set_tests_properties(creative-suite-main-editor-gpu-export PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
+elseif(APPLE)
+    set_tests_properties(creative-suite-main-editor-gpu-export PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
+else()
+    set_tests_properties(creative-suite-main-editor-gpu-export PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
 
 preserve_video_editor_test_working_directory()
 add_executable(creative-suite-main-editor-edit-workspace-controller-tests

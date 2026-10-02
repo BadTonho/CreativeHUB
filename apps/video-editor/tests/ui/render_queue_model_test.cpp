@@ -70,6 +70,13 @@ int main(int argc, char* argv[]) {
         first_job.project_snapshot.timeline_tracks.push_back(track);
 
         const auto first_id = queue.addJob(first_job);
+        require(!queue.jobAt(0)->settings.gpu_composition_enabled, "Export GPU must default off.");
+        first_job.settings.gpu_composition_enabled = true;
+        const auto gpu_id = queue.addJob(first_job);
+        require(queue.jobAt(1)->settings.gpu_composition_enabled &&
+            queue.data(queue.index(1, 0), Qt::ToolTipRole).toString().contains("GPU requested"),
+            "GPU job choice/tooltip was not captured.");
+        require(queue.removeJobAt(1) && gpu_id != first_id, "GPU snapshot fixture cleanup failed.");
         first_job.project_snapshot.timeline_tracks.front().name = "Changed source";
         require(first_id != 0 && queue.jobCount() == 1 &&
                     queue.rowCount() == 1 && queue.jobAt(0) != nullptr &&
