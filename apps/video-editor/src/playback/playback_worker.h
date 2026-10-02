@@ -6,6 +6,7 @@
 #include "../media/timeline_audio_mix.h"
 #include "../rendering/frame_compositor.h"
 #include "../rendering/preview_performance_metrics.h"
+#include "../rendering/preview_frame_payload.h"
 #include "../timeline/timeline_model.h"
 #include "audio_output.h"
 #include <creative_suite/composition/opengl_frame_compositor.h>
@@ -31,6 +32,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <unordered_set>
 
 class QTimer;
 
@@ -138,6 +140,9 @@ public slots:
     virtual void setMonitorVolume(double gain);
     virtual void setPreviewQuality(PreviewQuality quality);
     virtual void setGpuCompositionEnabled(bool enabled, QOffscreenSurface* surface);
+    virtual void setGpuTextureDelivery(bool enabled, quint64 epoch, QOpenGLContext* share_context);
+    virtual void recoverPreviewFrame(rendering::PreviewFramePayload frame, qint64 local_frame,
+        quint64 generation, quint64 epoch);
     virtual void setComposition(
         QVector<CompositionLayerSpec> layers,
         QVector<CompositionTransitionSpec> transitions,
@@ -156,6 +161,8 @@ public slots:
     virtual void seekToFrame(qint64 frame_index, quint64 generation);
 
 signals:
+    void previewFrameReady(rendering::PreviewFramePayload frame, qint64 frame_index,
+        quint64 generation, quint64 delivery_trace_id);
     void frameReady(
         VideoFramePtr frame,
         qint64 frame_index,
@@ -194,6 +201,11 @@ private:
     void ensureTimer();
     void finishPlayback();
     void emitFrame(std::optional<media::VideoFramePtr> frame);
+    void publishPreviewFrame(rendering::PreviewFramePayload frame, qint64 index,
+        quint64 generation, quint64 trace);
+    void retireGpuCompositor();
+    void ensureGpuMaintenance();
+    void collectGpuResources();
     void emitComposedFrame();
     [[nodiscard]] std::optional<std::vector<DecodedCompositionLayer>>
         decodeCompositionLayers(
@@ -287,6 +299,24 @@ private:
     bool gpu_warning_reported_ = false;
     bool last_composition_gpu_ = false;
     bool last_composition_cancelled_ = false;
+    bool last_composition_busy_ = false;
+    creative_suite::composition::OpenGlTextureFramePtr last_composition_texture_;
+    bool gpu_texture_delivery_enabled_ = false;
+    bool gpu_texture_delivery_failed_ = false;
+    bool gpu_texture_warning_reported_ = false;
+    quint64 delivery_epoch_ = 0;
+    QOpenGLContext* gpu_share_context_ = nullptr;
+    std::shared_ptr<creative_suite::composition::OpenGlTexturePoolBudget> gpu_texture_budget_ =
+        std::make_shared<creative_suite::composition::OpenGlTexturePoolBudget>();
+    std::vector<std::unique_ptr<creative_suite::composition::OpenGlFrameCompositor>> retiring_gpu_compositors_;
+    std::unordered_set<const void*> failed_gpu_collectors_;
+    QTimer* gpu_maintenance_timer_ = nullptr;
+    QTimer* gpu_busy_timer_ = nullptr;
+    struct PendingGpuFrame {
+        qint64 global_frame, local_frame;
+        quint64 generation, epoch, revision, seek_sequence;
+    };
+    std::optional<PendingGpuFrame> pending_gpu_frame_;
     using Clock = std::chrono::steady_clock;
     detail::PlaybackDeadlineScheduler playback_scheduler_;
     detail::AudioPacingPolicy audio_pacing_policy_;
@@ -346,7 +376,7 @@ private:
     bool composition_position_initialized_ = false;
     quint64 cached_composition_generation_ = 0;
     std::int64_t cached_composition_global_frame_ = -1;
-    VideoFramePtr cached_composition_frame_;
+    rendering::PreviewFramePayload cached_composition_frame_;
 };
 
 } // namespace playback

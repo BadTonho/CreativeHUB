@@ -73,7 +73,18 @@ struct FakeWorkerState {
 class FakePlaybackWorker final : public playback::PlaybackWorker {
 public:
     explicit FakePlaybackWorker(std::shared_ptr<FakeWorkerState> state)
-        : state_(std::move(state)) {}
+        : state_(std::move(state)) {
+        connect(this, &playback::PlaybackWorker::frameReady, this,
+            [this](media::VideoFramePtr frame, qint64 index, quint64 generation, quint64 trace) {
+                rendering::PreviewFramePayload payload{std::move(frame)};
+                payload.delivery_epoch = fake_delivery_epoch_.load();
+                emit previewFrameReady(std::move(payload), index, generation, trace);
+            }, Qt::DirectConnection);
+    }
+    void setGpuTextureDelivery(bool, quint64 epoch, QOpenGLContext*) override {
+        fake_delivery_epoch_.store(epoch);
+    }
+    std::atomic<quint64> fake_delivery_epoch_{0};
 
     void setMedia(
         QString,
@@ -688,6 +699,27 @@ void runControllerTests() {
         session.playheadFrame() == playhead_before_quality_change, "GPU toggle changed project/playhead.");
     controller.setGpuCompositionEnabled(true);
     require(fake_state->gpu_setting_changes.load() == 1, "Duplicate GPU toggle reactivated resources.");
+    const auto old_epoch = fake_worker->fake_delivery_epoch_.load();
+    const auto before_capability = std::count_if(events.begin(), events.end(), [](const auto& event) {
+        return std::holds_alternative<playback::PlaybackFrameEvent>(event);
+    });
+    controller.setGpuTextureDeliveryAvailable(true);
+    require(waitUntil([&] { return fake_worker->fake_delivery_epoch_.load() > old_epoch; }),
+        "Viewer capability did not invalidate the delivery epoch.");
+    require(waitUntil([&] { return std::count_if(events.begin(), events.end(), [](const auto& event) {
+        return std::holds_alternative<playback::PlaybackFrameEvent>(event);
+    }) > before_capability; }), "Paused capability change did not recompose the latest position.");
+    const auto delivered_before_stale = std::count_if(events.begin(), events.end(), [](const auto& event) {
+        return std::holds_alternative<playback::PlaybackFrameEvent>(event);
+    });
+    rendering::PreviewFramePayload stale{std::make_shared<const media::VideoFrame>(media::VideoFrame{
+        1, 1, 4, {40, 50, 60, 255}})};
+    stale.delivery_epoch = old_epoch;
+    fake_worker->previewFrameReady(std::move(stale), session.playheadFrame(), fake_worker->currentGeneration(), 0);
+    QCoreApplication::processEvents();
+    require(std::count_if(events.begin(), events.end(), [](const auto& event) {
+        return std::holds_alternative<playback::PlaybackFrameEvent>(event);
+    }) == delivered_before_stale, "An old delivery epoch reached the viewer.");
     require(std::none_of(events.begin(), events.end(), [](const auto& event) {
         const auto* frame = std::get_if<playback::PlaybackFrameEvent>(&event);
         return frame != nullptr && frame->clip_id == 1;

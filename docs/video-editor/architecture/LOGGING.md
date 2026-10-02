@@ -36,4 +36,9 @@ Request limits or missing precision capabilities report a warning once per
 activation; a technical failure is logged and latches CPU until the option is
 switched off/on. Cancellation is ordinary control flow and adds no error entry.
 Presentation retains its separate `rendering/gpu_preview` diagnostics. Composition
-and presentation costs are separated in [metrics schema 8](RENDERING.md#gpu-composition-metrics-schema-8).
+and presentation costs are separated in [metrics schema 9](RENDERING.md#gpu-composition-metrics-schema-9).
+
+Direct delivery failures use `gpu-delivery` operation/cause/code/context entries
+before a brief warning. Busy/cancellation/reference returns are expected control
+flow, not error logs. Aggregate/slow schema 9 and delivery schema 3 distinguish
+texture acceptance, synchronization, pool reservations and RGBA transfers.

@@ -29,8 +29,9 @@ a short status message, and write a detailed rendering log.
 Settings > General also offers **Use GPU for timeline preview (Experimental)**,
 disabled by default and persisted globally. It applies immediately through the
 playback controller, recomposes a paused Timeline frame and keeps playback
-running. This selects layer composition separately from the viewer's GPU
-presentation; CPU fallback remains available. Export and project data are
+running. It automatically enables direct texture delivery when sharing is
+available, with RGBA and CPU fallbacks. No additional UI setting is required.
+See [the delivery contract](../GPU_TEXTURE_DELIVERY.md). Export and project data are
 unchanged. See [the composition boundary](RENDERING.md#timeline-composition).
 
 ## Media Browser and projects

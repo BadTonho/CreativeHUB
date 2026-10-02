@@ -7,9 +7,9 @@ The preview container is implemented in
 under `apps/video-editor/src/rendering/`. The Video Editor currently uses Qt
 OpenGL for preview presentation. This is an
 application-local validation backend, not the final product renderer. The
-preview requests an OpenGL 3.2 Core context through `QOpenGLWidget`, uploads
-the media layer's owned RGBA8 pixels to a linear-filtered texture, and draws a
-letterboxed textured rectangle. The vertex and fragment shaders are embedded
+application configures OpenGL 3.2 Core and Qt global context sharing before
+`QApplication`. `QOpenGLWidget` presents either a shared composed texture or an
+uploaded RGBA frame as a linear-filtered, letterboxed rectangle. The vertex and fragment shaders are embedded
 in `apps/video-editor/src/rendering/`.
 
 The fragment shader includes the optional `View > Grayscale Preview` effect.
@@ -18,9 +18,11 @@ fallback applies the same luminance coefficients to the cached `QImage` when
 OpenGL is unavailable or fails.
 
 The preview container keeps the GPU surface and CPU fallback separate. A
-context, shader, resource, upload, or rendering failure switches to the CPU
-path, preserves the current frame, reports a short status message, and writes
-one detailed `rendering/gpu_preview` log entry. The diagnostic environment
+context, shader, resource, upload, or rendering failure requests asynchronous
+RGBA recovery when the current frame is a texture, then switches to CPU
+presentation. A shared-texture fence failure keeps the RGBA GPU viewer available.
+Recovery preserves the last preview until replacement, reports a short status
+message, and logs the detailed cause. The diagnostic environment
 variable `CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1` selects the CPU path without
 logging an error.
 
@@ -36,8 +38,8 @@ Media decoding, timeline state, frame ownership, and GPU resource management
 remain separate from the UI widget. Decoding stays on the playback worker;
 Presentation resource creation, texture uploads, and drawing stay on the
 UI/OpenGL thread. Optional layer composition owns separate worker resources.
-The OpenGL surface retains the shared payload until upload, and only
-the CPU fallback creates a copied image. Non-contiguous rows use a reusable
+The OpenGL surface retains RGBA until upload or a GPU lease through every draw;
+only the CPU fallback creates a copied image. Non-contiguous rows use a reusable
 staging buffer instead of allocating a new buffer for every upload.
 
 Composed Preview playback mixes embedded audio from every video clip active at
@@ -111,7 +113,7 @@ existing modules; the viewer never makes timeline decisions.
 
 Static text layers are rasterized once per composition session while their
 style and content remain unchanged. The worker also retains the last final
-composed payload, keyed by composition generation and global frame, so a
+composed payload, keyed by generation, global frame, revision, quality and delivery epoch, so a
 repeated request can be emitted without decoding or blending again. Both
 caches are cleared when the media or composition generation changes.
 
@@ -146,7 +148,8 @@ several opacities, including transformed opaque layers. Rotated or unsupported
 layers retain the general transform, rotation, opacity, and alpha path. The
 result is still one final RGBA frame sent to the viewer. These optimizations
 describe the default CPU path; the experimental GPU path blends layers in its
-worker framebuffer and reads back the same final-frame contract.
+worker framebuffer and delivers a shared texture where supported, retaining
+RGBA readback as a fallback.
 
 Other valid layers without rotation use an axis-aligned path. It computes the
 visible rectangular bounds and horizontal/vertical nearest-neighbor source
@@ -178,7 +181,7 @@ When enabled, the application aggregates data for one-second intervals and
 writes at most one summary per interval through the existing logger using the
 `preview/performance_metrics` operation. `metrics_schema_version` identifies
 the current field set while existing fields retain their previous meaning. The
-current schema version is `8`. The summary includes
+current schema version is `9`. The summary includes
 `timeline_fps_numerator` and `timeline_fps_denominator` for the active project
 Timeline; `0/0` means standalone media playback, which has no project Timeline
 rate. `target_fps` is the rate used by the worker in the current mode: the
@@ -215,7 +218,7 @@ During composed Timeline playback, frames whose worker processing time exceeds
 the target-FPS frame budget contribute to a bounded slow-frame summary. The UI
 timer writes at most one additional `playback/slow_frame` event per metrics
 interval, and only when that interval contains a slow frame. Its
-`diagnostic_schema_version` is `8`; it reports the slow-frame count and the
+`diagnostic_schema_version` is `9`; it reports the slow-frame count and the
 slowest frame's timeline position, generation, target FPS, budget, processing,
 decode, composition, and payload timings. It also reports compositor timings
 for adapter/list setup, output-buffer allocation, background initialization,
@@ -226,7 +229,7 @@ active layers are ranked by combined decode/preparation and compositor time,
 with stable track/clip IDs, current indices, source frame, layer kind, decode
 path, and per-layer setup, raster/blend, and copy timings. The compositor does
 not have a separate effects stage, so this diagnostic does not create one.
-For each reported slow layer, schema `8` also records the composition canvas,
+For each reported slow layer, schema `9` also records the composition canvas,
 source dimensions and stride, transform values, and the selected raster path.
 Individual full-frame-copy checks report whether source dimensions, stride,
 center position, unit scale, zero rotation, and full opacity matched. The alpha
@@ -250,7 +253,7 @@ refreshes, seeks, isolated media previews, and offline export do not collect
 this per-layer data. UI and GPU presentation timings remain in the existing
 aggregate sample and can be compared with the slow-frame event.
 
-For video layers that perform forward catch-up, schema `8` also records the
+For video layers that perform forward catch-up, schema `9` also records the
 decoder frame before the request, requested source frame, number of discarded
 intermediate frames, and total forward-call time. It separates accumulated
 packet read/send, decoder receive, and requested-frame pixel conversion time;
@@ -263,7 +266,7 @@ trace ID. The ID follows the shared frame reference through the one-slot
 mailbox, controller delivery, MainWindow callback, Preview submission, and the
 active presentation backend. With performance metrics enabled, the application
 writes an aggregated `playback/frame_delivery` event with
-`diagnostic_schema_version` `2`, at most once per metrics interval. It records
+`diagnostic_schema_version` `3`, at most once per metrics interval. It records
 counts and bounded latency summaries for worker-to-mailbox, mailbox wait,
 controller-to-window, window-to-Preview, GPU upload, GPU draw, and Qt frame swap;
 the CPU fallback records its paint event instead. A Qt `frameSwapped` signal is
@@ -285,12 +288,12 @@ evicted. No
 media path or frame content is included. Disabling `Enable preview performance
 metrics` stops collection and clears retained delivery traces. The delivery
 and slow-frame events keep their own schemas; the aggregate
-`preview/performance_metrics` schema is version `8`.
+`preview/performance_metrics` schema is version `9`.
 
 The worker retains only the slowest over-budget frame and a count for the
 current metrics interval; it does not log each frame. Neither event contains
 media paths or frame contents. The aggregate `preview/performance_metrics`
-schema is version `8`.
+schema is version `9`.
 
 Each timing summary contains count, average, maximum, and bounded-histogram
 approximations for the p95 and p99 milliseconds. The timings cover decoding,
@@ -422,7 +425,8 @@ sampling, transforms, opacity and source-over blending on opaque black.
 
 The controller creates a `QOffscreenSurface` on the GUI thread on first activation.
 The worker lazily creates, uses and destroys its context, shader, one reusable
-source texture and one output framebuffer. Disabling releases worker resources;
+source texture, one legacy readback framebuffer and up to three shared output
+framebuffers under a combined 64 MiB budget. Disabling retires leased resources;
 the surface survives queued work and is destroyed on the GUI thread after worker
 shutdown. Source/output dimensions are bounded by `GL_MAX_TEXTURE_SIZE` and a
 256 MiB budget per texture. Unrotated layers also use a reusable 16 KiB uniform
@@ -446,8 +450,11 @@ Uploads account for padded row strides, including strides not divisible by four.
 Composition checks cancellation before resource work, between layers, after
 upload and before/after readback. Readback yields top-down RGBA rows and the same
 immutable shared frame payload as CPU. Cancellation publishes no partial frame;
-existing seek/generation and mailbox checks discard obsolete results. This stage
-still reads the output back and uploads it again in the viewer.
+seek/generation/revision/quality/delivery-epoch checks discard obsolete results.
+Normal shared-texture delivery avoids both output readback and viewer upload.
+The RGBA path remains available for unsupported sharing/limits and recovery.
+See [the direct delivery contract](../GPU_TEXTURE_DELIVERY.md) for leases, fences,
+Busy retries, shared reservations and context cleanup.
 
 Technical failures latch CPU fallback for the activation session. Off/on retries;
 the persisted preference remains chosen. Log operation/cause/code, canvas,
@@ -483,7 +490,7 @@ Text is rendered only while visible at the global playhead. Rasterization and
 composition failures preserve the last valid preview and are reported with
 the affected track, clip, frame, and rendering context. Text rasters enter the
 chosen CPU or experimental GPU composition backend; the viewer presents the
-final RGBA frame through its independent presentation path.
+final RGBA frame or leased GPU texture through its independent presentation path.
 
 ## Essential transitions
 
@@ -567,7 +574,7 @@ This is the initial CPU composition and FFmpeg export implementation. Codec
 compatibility, quality, performance, platform-specific hardware paths, and
 large-project resource use still require broader validation before release.
 
-## GPU composition metrics (schema 8)
+## GPU composition metrics (schema 9)
 
 `composition_backend` identifies actual work in the interval (`cpu`, `opengl`,
 `mixed`, or `none`). `cpu_composition_frames` and `gpu_composition_frames` count
@@ -581,5 +588,13 @@ and `gpu_composition_readback` timing summaries retain average/max/p95/p99.
 Submission measures CPU work, not device execution; synchronous readback includes
 the wait and top-down row conversion. These fields do not change the meanings of
 the presentation-only `gpu_upload`, `gpu_paint`, or presented-frame counters.
-Slow-frame schema 8 adds actual `composition_backend`; CPU raster-path fields are
+Slow-frame schema 9 adds actual `composition_backend`; CPU raster-path fields are
 unprocessed/zero on GPU frames rather than credited as CPU fast paths.
+
+Direct delivery adds texture/RGBA counts, pool occupancy/current/peak bytes, Busy
+attempts, fallback, producer/consumer fence submission and viewer wait submission.
+`viewer_uploaded_bytes` counts only successful final RGBA uploads. Delivery schema
+3 records `gpu_texture_accepted`, `preview_to_gpu_texture_acceptance` and
+`gpu_texture_acceptance_to_draw` independently of upload. Normal direct frames
+have zero readback bytes, zero viewer upload bytes and no upload delivery stage.
+See [GPU_TEXTURE_DELIVERY.md](../GPU_TEXTURE_DELIVERY.md).

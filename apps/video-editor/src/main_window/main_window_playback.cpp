@@ -131,7 +131,19 @@ timeline::FrameRate slowFrameRate(
 void appendPerformanceContext(
     logging::Context& context,
     const PreviewPerformanceSnapshot& snapshot) {
-    context.emplace_back("metrics_schema_version", "8");
+    context.emplace_back("metrics_schema_version", "9");
+    context.emplace_back("texture_delivery_frames", std::to_string(snapshot.texture_delivery_frames));
+    context.emplace_back("rgba_delivery_frames", std::to_string(snapshot.rgba_delivery_frames));
+    context.emplace_back("texture_pool_busy_drops", std::to_string(snapshot.texture_pool_busy_drops));
+    context.emplace_back("texture_pool_busy_retries", std::to_string(snapshot.texture_pool_busy_retries));
+    context.emplace_back("texture_delivery_fallbacks", std::to_string(snapshot.texture_delivery_fallbacks));
+    context.emplace_back("texture_pool_bytes", std::to_string(snapshot.texture_pool_bytes));
+    context.emplace_back("texture_pool_peak_bytes", std::to_string(snapshot.texture_pool_peak_bytes));
+    context.emplace_back("texture_pool_occupancy", std::to_string(snapshot.texture_pool_occupancy));
+    context.emplace_back("viewer_uploaded_bytes", std::to_string(snapshot.viewer_uploaded_bytes));
+    appendTimingContext(context, "gpu_producer_fence_submission", snapshot.gpu_producer_fence_submission);
+    appendTimingContext(context, "gpu_fence_wait_submission", snapshot.gpu_fence_wait_submission);
+    appendTimingContext(context, "gpu_consumer_fence_submission", snapshot.gpu_consumer_fence_submission);
     context.emplace_back("composition_backend", snapshot.gpu_composition_frames > 0
         ? (snapshot.cpu_composition_frames > 0 ? "mixed" : "opengl")
         : (snapshot.cpu_composition_frames > 0 ? "cpu" : "none"));
@@ -455,6 +467,7 @@ const char* deliveryStageName(
     case Stage::GpuDrawn: return "gpu_drawn";
     case Stage::QtFrameSwapped: return "qt_frame_swapped";
     case Stage::CpuPainted: return "cpu_painted";
+    case Stage::GpuTextureAccepted: return "gpu_texture_accepted";
     case Stage::Count: break;
     }
     return "unknown";
@@ -482,7 +495,7 @@ void appendFrameDeliveryContext(
     logging::Context& context,
     const rendering::PreviewFrameDeliverySnapshot& snapshot,
     timeline::FrameRate frame_rate) {
-    context.emplace_back("diagnostic_schema_version", "2");
+    context.emplace_back("diagnostic_schema_version", "3");
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back("sample_origin_thread_role", "playback_worker");
     context.emplace_back("trace_capacity", "512");
@@ -496,7 +509,7 @@ void appendFrameDeliveryContext(
     constexpr std::array stage_names{
         "worker_emitted", "mailbox_published", "controller_delivered",
         "window_received", "preview_submitted", "gpu_uploaded", "gpu_drawn",
-        "qt_frame_swapped", "cpu_painted"};
+        "qt_frame_swapped", "cpu_painted", "gpu_texture_accepted"};
     for (std::size_t index = 0; index < stage_names.size(); ++index) {
         context.emplace_back(
             std::string(stage_names[index]) + "_count",
@@ -517,7 +530,7 @@ void appendFrameDeliveryContext(
         "worker_to_mailbox", "mailbox_wait", "controller_to_window",
         "window_to_preview", "preview_to_gpu_upload", "gpu_upload_to_draw",
         "draw_to_qt_swap", "preview_to_cpu_paint", "worker_to_qt_swap",
-        "worker_to_cpu_paint"};
+        "worker_to_cpu_paint", "preview_to_gpu_texture_acceptance", "gpu_texture_acceptance_to_draw"};
     for (std::size_t index = 0; index < timing_names.size(); ++index) {
         appendTimingContext(context, timing_names[index], snapshot.timings[index]);
     }
@@ -576,7 +589,9 @@ void appendSlowFrameContext(
     const rendering::PreviewPerformanceSnapshot& snapshot) {
     if (!snapshot.worst_slow_frame.has_value()) return;
     const auto& frame = *snapshot.worst_slow_frame;
-    context.emplace_back("diagnostic_schema_version", "8");
+    context.emplace_back("diagnostic_schema_version", "9");
+    context.emplace_back("delivery_backend", frame.texture_delivery ? "texture" : "rgba");
+    context.emplace_back("texture_pool_bytes", std::to_string(frame.texture_pool_bytes));
     context.emplace_back("composition_backend", frame.gpu_composition ? "opengl" : "cpu");
     context.emplace_back("thread_role", "ui_logger");
     context.emplace_back("sample_origin_thread_role", "playback_worker");
@@ -1000,10 +1015,15 @@ void MainWindow::flushPreviewPerformanceMetrics() {
 void MainWindow::initializePlayback() {
     playback_controller_ = std::make_unique<playback::PlaybackController>(
         editor_session_);
-    playback_controller_->setPreviewQuality(playback_preview_quality_);
     playback_controller_->setEventHandler(
         [this](const playback::PlaybackControllerEvent& event) {
             handlePlaybackEvent(event);
+        });
+    playback_controller_->setPreviewQuality(playback_preview_quality_);
+    playback_controller_->setGpuTextureDeliveryAvailable(preview_widget_->textureDeliveryAvailable());
+    connect(preview_widget_, &PreviewWidget::gpuTextureDeliveryAvailabilityChanged, this,
+        [this](bool available) {
+            if (playback_controller_) playback_controller_->setGpuTextureDeliveryAvailable(available);
         });
     playback_controller_->setGpuCompositionEnabled(settings::gpuCompositionEnabled());
     if (editUi().monitor_volume != nullptr) {
@@ -1013,6 +1033,7 @@ void MainWindow::initializePlayback() {
 
 void MainWindow::shutdownPlayback() {
     if (playback_controller_ == nullptr) return;
+    if (preview_widget_) preview_widget_->releaseGpuFrames();
     playback_controller_->shutdown();
     playback_controller_.reset();
 }
@@ -1206,6 +1227,8 @@ void MainWindow::handlePlaybackEvent(
             handlePlaybackFinished(value.during_playback, value.gap);
         } else if constexpr (std::is_same_v<Event, playback::PlaybackErrorEvent>) {
             handlePlaybackError(value);
+        } else if constexpr (std::is_same_v<Event, playback::PlaybackDeliveryEpochEvent>) {
+            preview_widget_->setDeliveryEpoch(value.epoch, value.retry_texture_delivery);
         } else if constexpr (std::is_same_v<Event, playback::PlaybackCompositionWarningEvent>) {
             statusBar()->showMessage(value.message, 5000);
         } else if constexpr (std::is_same_v<Event, playback::PlaybackAudioWarningEvent>) {
@@ -1259,7 +1282,7 @@ void MainWindow::handlePlaybackActivation(
 
 void MainWindow::handlePlaybackFrame(
     const playback::PlaybackFrameEvent& event) {
-    if (event.frame == nullptr) return;
+    if (!event.frame.valid()) return;
 
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
     rendering::PreviewPerformanceScope timing(

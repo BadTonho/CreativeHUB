@@ -31,6 +31,9 @@ enum class PreviewTiming {
     GpuCompositionUpload,
     GpuCompositionDrawSubmission,
     GpuCompositionReadback,
+    GpuProducerFenceSubmission,
+    GpuFenceWaitSubmission,
+    GpuConsumerFenceSubmission,
     PacingLag,
     MediaOpen,
     AudioSetup,
@@ -115,6 +118,8 @@ struct SlowFrameLayerSample {
 
 struct SlowFrameSample {
     bool gpu_composition = false;
+    bool texture_delivery = false;
+    std::uint64_t texture_pool_bytes = 0;
     std::uint64_t playback_generation = 0;
     std::int64_t timeline_frame = -1;
     std::uint64_t frame_rate_milli = 0;
@@ -148,6 +153,7 @@ enum class PreviewFrameDeliveryStage : std::uint8_t {
     GpuDrawn,
     QtFrameSwapped,
     CpuPainted,
+    GpuTextureAccepted,
     Count,
 };
 
@@ -175,6 +181,8 @@ enum class PreviewFrameDeliveryTiming : std::uint8_t {
     PreviewToCpuPaint,
     WorkerToQtSwap,
     WorkerToCpuPaint,
+    PreviewToGpuTextureAcceptance,
+    GpuTextureAcceptanceToDraw,
     Count,
 };
 
@@ -209,6 +217,18 @@ void addSlowFrameLayer(
     const SlowFrameLayerSample& layer) noexcept;
 
 struct PreviewPerformanceSnapshot {
+    std::uint64_t texture_delivery_frames = 0;
+    std::uint64_t rgba_delivery_frames = 0;
+    std::uint64_t texture_pool_busy_drops = 0;
+    std::uint64_t texture_pool_busy_retries = 0;
+    std::uint64_t texture_delivery_fallbacks = 0;
+    std::uint64_t texture_pool_bytes = 0;
+    std::uint64_t texture_pool_peak_bytes = 0;
+    std::uint64_t texture_pool_occupancy = 0;
+    std::uint64_t viewer_uploaded_bytes = 0;
+    PreviewTimingSnapshot gpu_producer_fence_submission;
+    PreviewTimingSnapshot gpu_fence_wait_submission;
+    PreviewTimingSnapshot gpu_consumer_fence_submission;
     std::uint64_t cpu_composition_frames = 0;
     std::uint64_t gpu_composition_frames = 0;
     std::uint64_t gpu_composition_fallbacks = 0;
@@ -319,6 +339,11 @@ public:
         const creative_suite::composition::OpenGlCompositionTimings& timings = {},
         bool fallback = false) noexcept;
     void recordGpuCompositionFailure() noexcept;
+    void recordPreviewDelivery(bool texture) noexcept;
+    void recordTexturePoolBusy(bool playback_drop = true) noexcept;
+    void recordTextureDeliveryFallback() noexcept;
+    void setTexturePoolState(std::uint64_t bytes, std::uint64_t occupancy) noexcept;
+    void recordViewerUploadBytes(std::uint64_t bytes) noexcept;
     void recordGpuCompositionWork(
         const creative_suite::composition::OpenGlCompositionTimings& timings) noexcept;
     [[nodiscard]] std::uint64_t createFrameDeliveryTrace(
@@ -411,6 +436,12 @@ private:
     [[nodiscard]] PreviewFrameDeliverySnapshot takeFrameDeliverySnapshotAndReset() noexcept;
 
     std::atomic_bool enabled_{false};
+    std::atomic<std::uint64_t> texture_delivery_frames_{0}, rgba_delivery_frames_{0};
+    std::atomic<std::uint64_t> texture_pool_busy_drops_{0}, texture_delivery_fallbacks_{0};
+    std::atomic<std::uint64_t> texture_pool_busy_retries_{0};
+    std::atomic<std::uint64_t> texture_pool_bytes_{0}, texture_pool_peak_bytes_{0}, texture_pool_occupancy_{0};
+    std::atomic<std::uint64_t> viewer_uploaded_bytes_{0};
+    TimingStorage gpu_producer_fence_submission_, gpu_fence_wait_submission_, gpu_consumer_fence_submission_;
     std::atomic<std::uint64_t> cpu_composition_frames_{0};
     std::atomic<std::uint64_t> gpu_composition_frames_{0};
     std::atomic<std::uint64_t> gpu_composition_fallbacks_{0};

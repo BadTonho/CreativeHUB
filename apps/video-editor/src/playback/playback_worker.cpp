@@ -107,7 +107,12 @@ PlaybackWorker::PlaybackWorker(QObject* parent, GpuCompose gpu_compose)
     : QObject(parent), gpu_compose_(std::move(gpu_compose)) {}
 
 PlaybackWorker::~PlaybackWorker() {
+    clearCompositionCache();
+    last_composition_texture_.reset();
+    if (gpu_busy_timer_) gpu_busy_timer_->stop();
+    if (gpu_maintenance_timer_) gpu_maintenance_timer_->stop();
     gpu_compositor_.reset();
+    retiring_gpu_compositors_.clear();
     if (timer_ != nullptr) timer_->stop();
     cancelTransitionPreroll();
     if (transition_preroll_thread_.joinable()) {
@@ -143,7 +148,8 @@ void PlaybackWorker::initializeDiagnostics() {
 void PlaybackWorker::clearCompositionCache() noexcept {
     cached_composition_generation_ = 0;
     cached_composition_global_frame_ = -1;
-    cached_composition_frame_.reset();
+    cached_composition_frame_ = {};
+    pending_gpu_frame_.reset();
 }
 
 void PlaybackWorker::requestSeek(qint64 frame_index, quint64 generation) {
@@ -470,12 +476,146 @@ void PlaybackWorker::setMonitorVolume(double gain) {
 
 void PlaybackWorker::setGpuCompositionEnabled(bool enabled, QOffscreenSurface* surface) {
     if (enabled == gpu_composition_enabled_ && surface == gpu_surface_) return;
-    gpu_compositor_.reset();
+    clearCompositionCache();
+    retireGpuCompositor();
     gpu_surface_ = surface;
     gpu_composition_enabled_ = enabled;
     gpu_composition_failed_ = false;
     gpu_warning_reported_ = false;
+    gpu_texture_delivery_failed_ = false;
+    gpu_texture_warning_reported_ = false;
+}
+
+void PlaybackWorker::setGpuTextureDelivery(bool enabled, quint64 epoch,
+    QOpenGLContext* share_context) {
+    if (epoch < delivery_epoch_) return;
     clearCompositionCache();
+    if (share_context != gpu_share_context_) retireGpuCompositor();
+    gpu_share_context_ = share_context;
+    gpu_texture_delivery_enabled_ = enabled;
+    delivery_epoch_ = epoch;
+}
+
+void PlaybackWorker::publishPreviewFrame(rendering::PreviewFramePayload frame,
+    qint64 index, quint64 generation, quint64 trace) {
+    frame.delivery_epoch = delivery_epoch_;
+    frame.composition_revision = composition_revision_;
+    frame.playback_generation = generation;
+    frame.timeline_frame = current_timeline_frame_;
+    if (frame.rgba) emit frameReady(frame.rgba, index, generation, trace);
+    emit previewFrameReady(std::move(frame), index, generation, trace);
+}
+
+void PlaybackWorker::retireGpuCompositor() {
+    last_composition_texture_.reset();
+    if (!gpu_compositor_) return;
+    gpu_compositor_->retireTextureFrames();
+    // Return completed slots immediately; a remaining displayed lease keeps
+    // only its own target reserved while the next activation starts.
+    static_cast<void>(gpu_compositor_->collectReleasedTextureFrames());
+    retiring_gpu_compositors_.push_back(std::move(gpu_compositor_));
+    ensureGpuMaintenance();
+}
+
+void PlaybackWorker::ensureGpuMaintenance() {
+    if (!gpu_maintenance_timer_) {
+        gpu_maintenance_timer_ = new QTimer(this);
+        gpu_maintenance_timer_->setTimerType(Qt::PreciseTimer);
+        gpu_maintenance_timer_->setInterval(5);
+        connect(gpu_maintenance_timer_, &QTimer::timeout, this,
+            &PlaybackWorker::collectGpuResources);
+    }
+    if (!gpu_maintenance_timer_->isActive()) gpu_maintenance_timer_->start();
+}
+
+void PlaybackWorker::collectGpuResources() {
+    using creative_suite::composition::OpenGlCompositionStatus;
+    bool recompose_paused = false;
+    auto collect = [this](auto& backend) {
+        if (failed_gpu_collectors_.contains(backend.get())) return false;
+        const auto result = backend->collectReleasedTextureFrames();
+        if (result.status == OpenGlCompositionStatus::Failed) {
+            failed_gpu_collectors_.insert(backend.get());
+            logging::Logger::instance().log(logging::Level::Error,
+                "gpu-delivery", result.operation, result.cause,
+                {{"error_code", std::to_string(result.error_code)},
+                 {"pool_occupancy", std::to_string(backend->texturePoolOccupancy())}});
+        }
+        return result.status != OpenGlCompositionStatus::Failed;
+    };
+    if (gpu_compositor_ && !collect(gpu_compositor_)) {
+        gpu_texture_delivery_failed_ = true;
+        clearCompositionCache();
+        retireGpuCompositor();
+        emit compositionWarning("Direct GPU preview is unavailable. Using RGBA delivery.", -1, generation_);
+        recompose_paused = !playing_ && composition_enabled_;
+    }
+    for (auto it = retiring_gpu_compositors_.begin(); it != retiring_gpu_compositors_.end();) {
+        const bool healthy = collect(*it);
+        if (!(*it)->hasPendingTextureFrames() ||
+            (!healthy && (*it)->texturePoolOccupancy() == 0))
+            { failed_gpu_collectors_.erase(it->get()); it = retiring_gpu_compositors_.erase(it); }
+        else ++it;
+    }
+    std::uint64_t occupancy = gpu_compositor_ ? gpu_compositor_->texturePoolOccupancy() : 0;
+    for (const auto& backend : retiring_gpu_compositors_) occupancy += backend->texturePoolOccupancy();
+    rendering::PreviewPerformanceMetrics::instance().setTexturePoolState(gpu_texture_budget_->bytes(), occupancy);
+    if (!gpu_compositor_ && retiring_gpu_compositors_.empty()) gpu_maintenance_timer_->stop();
+    if (recompose_paused) renderCompositionFrame(current_timeline_frame_, current_frame_index_, generation_);
+}
+
+void PlaybackWorker::recoverPreviewFrame(rendering::PreviewFramePayload frame,
+    qint64 local_frame, quint64 generation, quint64 epoch) {
+    if (generation != generation_ || epoch != delivery_epoch_) return;
+    gpu_texture_delivery_failed_ = true;
+    clearCompositionCache();
+    auto should_cancel = [this, sequence = pending_seek_sequence_.load()] {
+        return !isSeekCurrent(sequence);
+    };
+    const int divisor = preview_quality_ == PreviewQuality::Full ? 1 :
+        preview_quality_ == PreviewQuality::Half ? 2 : 4;
+    try {
+    if (frame.gpu && frame.playback_generation == generation_ &&
+        frame.composition_revision == composition_revision_ && frame.timeline_frame == current_timeline_frame_ &&
+        frame.width() == 1920 / divisor && frame.height() == 1080 / divisor) {
+        auto read = [&](auto& backend) {
+            if (!backend) return false;
+            creative_suite::composition::OpenGlCompositionTimings timings;
+            auto result = backend->readback(frame.gpu, should_cancel, &timings);
+            rendering::PreviewPerformanceMetrics::instance().recordGpuCompositionWork(timings);
+            if (result.frame) {
+                rendering::PreviewFramePayload recovered;
+                recovered.rgba = std::make_shared<const media::VideoFrame>(std::move(*result.frame));
+                recovered.delivery_epoch = delivery_epoch_;
+                recovered.composition_revision = composition_revision_;
+                recovered.playback_generation = generation_;
+                recovered.timeline_frame = current_timeline_frame_;
+                cached_composition_frame_ = recovered;
+                cached_composition_generation_ = generation_;
+                cached_composition_global_frame_ = current_timeline_frame_;
+                publishPreviewFrame(std::move(recovered), local_frame, generation_, 0);
+                return true;
+            }
+            if (result.status == creative_suite::composition::OpenGlCompositionStatus::Failed) {
+                logging::Logger::instance().log(logging::Level::Error, "gpu-delivery", result.operation, result.cause,
+                    {{"error_code", std::to_string(result.error_code)}, {"fallback", "cpu"}});
+            }
+            return result.status == creative_suite::composition::OpenGlCompositionStatus::Cancelled;
+        };
+        if (read(gpu_compositor_)) return;
+        for (auto& backend : retiring_gpu_compositors_) if (read(backend)) return;
+    }
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(logging::Level::Error, "gpu-delivery", "recover-preview", error.what(),
+            {{"generation", std::to_string(generation_)}, {"delivery_epoch", std::to_string(delivery_epoch_)},
+             {"fallback", "cpu"}});
+    }
+    // Presentation recovery must be independent of both GPU paths.
+    const bool saved = gpu_composition_failed_;
+    gpu_composition_failed_ = true;
+    clearCompositionCache();
+    renderCompositionFrame(current_timeline_frame_, current_frame_index_, generation_);
+    gpu_composition_failed_ = saved;
 }
 
 void PlaybackWorker::setPreviewQuality(PreviewQuality quality) {
@@ -809,7 +949,9 @@ void PlaybackWorker::renderCompositionFrame(
                 segment_frame_count_ - 1);
         }
         auto& metrics = rendering::PreviewPerformanceMetrics::instance();
-        if (cached_composition_frame_ != nullptr &&
+        if (cached_composition_frame_.valid() &&
+            cached_composition_frame_.delivery_epoch == delivery_epoch_ &&
+            cached_composition_frame_.composition_revision == composition_revision_ &&
             cached_composition_generation_ == generation &&
             cached_composition_global_frame_ == global_frame) {
             const auto trace_id = playing_
@@ -818,7 +960,7 @@ void PlaybackWorker::renderCompositionFrame(
             metrics.recordCompositionCacheHit();
             metrics.recordComposedFrame();
             metrics.recordEmittedFrame();
-            emit frameReady(
+            publishPreviewFrame(
                 cached_composition_frame_, frame_index, generation_, trace_id);
             return;
         }
@@ -866,20 +1008,45 @@ void PlaybackWorker::renderCompositionFrame(
                 Clock::now() - composition_started)
             : std::chrono::nanoseconds::zero();
         if (should_cancel() || last_composition_cancelled_) return;
-        if (!composed.has_value()) {
+        if (last_composition_busy_) {
+            if (!playing_) {
+                pending_gpu_frame_ = PendingGpuFrame{global_frame, frame_index,
+                    generation, delivery_epoch_, composition_revision_, seek_sequence};
+                if (!gpu_busy_timer_) {
+                    gpu_busy_timer_ = new QTimer(this);
+                    gpu_busy_timer_->setSingleShot(true);
+                    gpu_busy_timer_->setTimerType(Qt::PreciseTimer);
+                    connect(gpu_busy_timer_, &QTimer::timeout, this, [this] {
+                        auto request = std::exchange(pending_gpu_frame_, std::nullopt);
+                        if (request && !playing_ && request->generation == generation_ &&
+                            request->epoch == delivery_epoch_ && request->revision == composition_revision_ &&
+                            isSeekCurrent(request->seek_sequence))
+                            renderCompositionFrame(request->global_frame, request->local_frame, request->generation);
+                    });
+                }
+                gpu_busy_timer_->start(5);
+            }
+            return;
+        }
+        pending_gpu_frame_.reset();
+        if (!composed.has_value() && !last_composition_texture_) {
             throw media::MediaError("The timeline composition could not produce a frame.");
         }
         if (collect_slow_frame && !last_composition_gpu_) {
             metrics.recordBlendLookupComposition(composition_timings);
         }
 
-        std::shared_ptr<const media::VideoFrame> payload;
+        rendering::PreviewFramePayload payload;
         const auto payload_started = collect_slow_frame ? Clock::now() : Clock::time_point{};
         {
             rendering::PreviewPerformanceScope timing(
                 metrics,
                 rendering::PreviewTiming::Payload);
-            payload = std::make_shared<const media::VideoFrame>(std::move(*composed));
+            if (last_composition_texture_) payload.gpu = std::move(last_composition_texture_);
+            else payload.rgba = std::make_shared<const media::VideoFrame>(std::move(*composed));
+            payload.delivery_epoch = delivery_epoch_;
+            payload.composition_revision = composition_revision_;
+            payload.timeline_frame = global_frame;
         }
         const auto payload_elapsed = collect_slow_frame
             ? std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -889,6 +1056,8 @@ void PlaybackWorker::renderCompositionFrame(
         if (collect_slow_frame) {
             rendering::SlowFrameSample sample;
             sample.gpu_composition = last_composition_gpu_;
+            sample.texture_delivery = bool(payload.gpu);
+            sample.texture_pool_bytes = gpu_texture_budget_->bytes();
             sample.playback_generation = generation_;
             sample.timeline_frame = global_frame;
             const auto clock_frame_rate = playbackFrameRate();
@@ -1029,7 +1198,7 @@ void PlaybackWorker::renderCompositionFrame(
         const auto trace_id = playing_
             ? metrics.createFrameDeliveryTrace(generation_, global_frame)
             : 0U;
-        emit frameReady(std::move(payload), frame_index, generation_, trace_id);
+        publishPreviewFrame(std::move(payload), frame_index, generation_, trace_id);
     } catch (const media::MediaError& error) {
         reportFailure(error, "compose", frame_index);
     } catch (const std::exception& error) {
@@ -2259,8 +2428,9 @@ void PlaybackWorker::emitFrame(std::optional<media::VideoFramePtr> frame) {
         ? metrics.createFrameDeliveryTrace(
             generation_, timeline_frame.value_or(-1))
         : 0U;
-    emit frameReady(
-        std::move(*frame), current_frame_index_, generation_, trace_id);
+    rendering::PreviewFramePayload payload;
+    payload.rgba = std::move(*frame);
+    publishPreviewFrame(std::move(payload), current_frame_index_, generation_, trace_id);
 }
 
 void PlaybackWorker::emitComposedFrame() {
@@ -2465,6 +2635,8 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     using namespace creative_suite::composition;
     last_composition_gpu_ = false;
     last_composition_cancelled_ = false;
+    last_composition_busy_ = false;
+    last_composition_texture_.reset();
     if (timings) *timings = {};
     auto adapter_started = timings != nullptr ? Clock::now() : Clock::time_point{};
     int width = 1920;
@@ -2500,7 +2672,51 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
                 gpu_result = gpu_compose_(width, height, layers, should_cancel, &gpu_timings);
             } else {
                 if (!gpu_compositor_)
-                    gpu_compositor_ = std::make_unique<OpenGlFrameCompositor>(gpu_surface_);
+                    gpu_compositor_ = std::make_unique<OpenGlFrameCompositor>(gpu_surface_,
+                        OpenGlPrecisionPolicy::Automatic, gpu_share_context_, gpu_texture_budget_);
+                if (gpu_texture_delivery_enabled_ && !gpu_texture_delivery_failed_) {
+                    auto direct = gpu_compositor_->composeTexture(width, height, layers, should_cancel, &gpu_timings);
+                    metrics.setTexturePoolState(gpu_texture_budget_->bytes(), gpu_compositor_->texturePoolOccupancy());
+                    if (direct.status == OpenGlCompositionStatus::Complete && direct.frame) {
+                        last_composition_texture_ = std::move(direct.frame);
+                        last_composition_gpu_ = true;
+                        metrics.recordCompositionBackend(true, gpu_timings);
+                        ensureGpuMaintenance();
+                        if (timings) { timings->canvas_width = width; timings->canvas_height = height; }
+                        return {};
+                    }
+                    metrics.recordGpuCompositionWork(gpu_timings);
+                    if (direct.status == OpenGlCompositionStatus::Busy) {
+                        metrics.recordTexturePoolBusy(playing_);
+                        last_composition_busy_ = true;
+                        ensureGpuMaintenance();
+                        return {};
+                    }
+                    if (direct.status == OpenGlCompositionStatus::Cancelled || should_cancel()) {
+                        last_composition_cancelled_ = true;
+                        return {};
+                    }
+                    metrics.recordTextureDeliveryFallback();
+                    if (direct.status == OpenGlCompositionStatus::Failed || direct.operation == "check-sharing") {
+                        gpu_texture_delivery_failed_ = true;
+                        if (!gpu_texture_warning_reported_) {
+                            gpu_texture_warning_reported_ = true;
+                            logging::Logger::instance().log(logging::Level::Warning,
+                                "gpu-delivery", direct.operation, direct.cause,
+                                {{"error_code", std::to_string(direct.error_code)},
+                                 {"generation", std::to_string(generation_)},
+                                 {"delivery_epoch", std::to_string(delivery_epoch_)}, {"fallback", "rgba"}});
+                            emit compositionWarning("Direct GPU preview is unavailable. Using RGBA delivery.",
+                                direct.error_code, generation_);
+                        }
+                        if (direct.status == OpenGlCompositionStatus::Failed) {
+                            retireGpuCompositor();
+                            gpu_compositor_ = std::make_unique<OpenGlFrameCompositor>(gpu_surface_,
+                                OpenGlPrecisionPolicy::Automatic, gpu_share_context_, gpu_texture_budget_);
+                        }
+                    }
+                }
+                gpu_timings = {};
                 gpu_result = gpu_compositor_->compose(width, height, layers, should_cancel, &gpu_timings);
             }
         } catch (const std::exception& error) {
@@ -2529,7 +2745,7 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
         if (failed) {
             gpu_composition_failed_ = true;
             metrics.recordGpuCompositionFailure();
-            gpu_compositor_.reset();
+            retireGpuCompositor();
         }
         if (!gpu_warning_reported_ || failed) {
             gpu_warning_reported_ = true;

@@ -178,3 +178,12 @@ Record build, OS, GPU, driver, setting, actions, and outcome for each item.
 This is a future implementation checklist. Automated boundary coverage and
 native driver results must accompany the backend; this checklist does not
 establish acceptance by itself.
+
+## Shared Video Editor stage 2 delivery
+
+Video Editor remains the first consumer. Its experimental backend now supports
+[direct texture delivery](../video-editor/GPU_TEXTURE_DELIVERY.md), public Qt
+global sharing, a three-target/64 MiB reservation budget including retired targets,
+producer/consumer fences and asynchronous RGBA recovery. This application remains
+on its current CPU renderer; adoption requires its own rendering, alpha, lifecycle,
+export and regression contracts. See [native evidence and remaining platform gates](../video-editor/GPU_COMPOSITION_RESULTS.md).

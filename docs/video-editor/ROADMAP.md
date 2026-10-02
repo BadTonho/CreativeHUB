@@ -28,7 +28,8 @@ Update it when implementation, scope, or a decision changes.
   [cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
 - CPU composition remains the default. An experimental shared OpenGL 3.2 Core
   backend is available for timeline preview through Settings > General, with
-  CPU fallback and worker readback. Qt OpenGL presents the final frame. See the
+  CPU fallback and automatic shared-texture delivery, retaining worker readback
+  when required. Qt OpenGL presents the final frame. See the
   [rendering boundary](architecture/RENDERING.md).
 - The Image Editor's standalone acceptance gate comes before acceptance of
   its linked-image workflow. Motion Studio development may proceed in
@@ -40,12 +41,13 @@ Update it when implementation, scope, or a decision changes.
 ## GPU acceleration planning
 
 The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records the implemented
-optional timeline composition stage and future texture delivery, offline export,
+optional timeline composition and direct-delivery stages, followed by offline export,
 effects and platform acceptance. Video Editor is the first consumer of the
 shared backend; Motion Studio and Image Editor adoption remain planned.
 
-**Status: Stage 1 implemented, experimental, disabled by default.** Existing
-presentation remains in use, including CPU fallback; export remains CPU.
+**Status: Stages 1 and 2 implemented, experimental, disabled by default.** Direct
+texture presentation has RGBA and CPU fallbacks; export remains CPU. See the
+[delivery contract](GPU_TEXTURE_DELIVERY.md).
 Native parity/benchmark and build/test evidence is recorded in
 [GPU_COMPOSITION_RESULTS.md](GPU_COMPOSITION_RESULTS.md). Further OS/driver and
 human audio/visual acceptance remain pending; formats and versions are unchanged.
@@ -268,6 +270,8 @@ performance measurements, and Video Editor stability as the decision criteria.
 - [ ] Establish startup, memory, and playback/preview baselines on the
   maintainer's reference PC and additional systems; set numeric minimum
   hardware requirements from those measurements.
+- [x] Deliver shared composed textures directly, with bounded leases/fences,
+  asynchronous recovery and transfer diagnostics; platform acceptance pending.
 - [x] Add experimental per-layer GPU composition with CPU fallback and transfer
   measurements. Keep default and platform acceptance tied to recorded evidence.
 - [ ] Revisit plugin architecture, additional export presets, and templates

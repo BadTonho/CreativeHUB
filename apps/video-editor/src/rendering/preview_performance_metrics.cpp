@@ -249,6 +249,9 @@ void PreviewPerformanceMetrics::recordTiming(
     case PreviewTiming::GpuCompositionUpload: storage = &gpu_composition_upload_; break;
     case PreviewTiming::GpuCompositionDrawSubmission: storage = &gpu_composition_draw_submission_; break;
     case PreviewTiming::GpuCompositionReadback: storage = &gpu_composition_readback_; break;
+    case PreviewTiming::GpuProducerFenceSubmission: storage = &gpu_producer_fence_submission_; break;
+    case PreviewTiming::GpuFenceWaitSubmission: storage = &gpu_fence_wait_submission_; break;
+    case PreviewTiming::GpuConsumerFenceSubmission: storage = &gpu_consumer_fence_submission_; break;
     case PreviewTiming::PacingLag: storage = &pacing_lag_; break;
     case PreviewTiming::MediaOpen: storage = &media_open_; break;
     case PreviewTiming::AudioSetup: storage = &audio_setup_; break;
@@ -309,7 +312,28 @@ void PreviewPerformanceMetrics::recordGpuCompositionWork(
     gpu_composition_uploaded_layers_.fetch_add(timings.uploaded_layers, std::memory_order_relaxed);
     recordTiming(PreviewTiming::GpuCompositionUpload, std::chrono::nanoseconds(timings.upload_nanoseconds));
     recordTiming(PreviewTiming::GpuCompositionDrawSubmission, std::chrono::nanoseconds(timings.draw_submission_nanoseconds));
-    recordTiming(PreviewTiming::GpuCompositionReadback, std::chrono::nanoseconds(timings.readback_nanoseconds));
+    if (timings.readback_bytes) recordTiming(PreviewTiming::GpuCompositionReadback, std::chrono::nanoseconds(timings.readback_nanoseconds));
+    if (timings.producer_fence_submission_nanoseconds) recordTiming(PreviewTiming::GpuProducerFenceSubmission,
+        std::chrono::nanoseconds(timings.producer_fence_submission_nanoseconds));
+}
+
+void PreviewPerformanceMetrics::recordPreviewDelivery(bool texture) noexcept {
+    if (isEnabled()) (texture ? texture_delivery_frames_ : rgba_delivery_frames_).fetch_add(1);
+}
+void PreviewPerformanceMetrics::recordTexturePoolBusy(bool playback_drop) noexcept {
+    if (isEnabled()) (playback_drop ? texture_pool_busy_drops_ : texture_pool_busy_retries_).fetch_add(1);
+}
+void PreviewPerformanceMetrics::recordViewerUploadBytes(std::uint64_t bytes) noexcept {
+    if (isEnabled()) viewer_uploaded_bytes_.fetch_add(bytes);
+}
+void PreviewPerformanceMetrics::recordTextureDeliveryFallback() noexcept {
+    if (isEnabled()) texture_delivery_fallbacks_.fetch_add(1);
+}
+void PreviewPerformanceMetrics::setTexturePoolState(std::uint64_t bytes, std::uint64_t occupancy) noexcept {
+    texture_pool_bytes_.store(bytes);
+    texture_pool_occupancy_.store(occupancy);
+    auto peak = texture_pool_peak_bytes_.load();
+    while (peak < bytes && !texture_pool_peak_bytes_.compare_exchange_weak(peak, bytes)) {}
 }
 
 void PreviewPerformanceMetrics::recordGpuCompositionFailure() noexcept {
@@ -443,8 +467,12 @@ void PreviewPerformanceMetrics::recordFrameDeliveryStage(
                    PreviewFrameDeliveryTiming::PreviewToGpuUpload);
         break;
     case PreviewFrameDeliveryStage::GpuDrawn:
-        record_hop(PreviewFrameDeliveryStage::GpuUploaded,
-                   PreviewFrameDeliveryTiming::GpuUploadToDraw);
+        if (record.stage_nanoseconds[static_cast<std::size_t>(PreviewFrameDeliveryStage::GpuTextureAccepted)])
+            record_hop(PreviewFrameDeliveryStage::GpuTextureAccepted, PreviewFrameDeliveryTiming::GpuTextureAcceptanceToDraw);
+        else record_hop(PreviewFrameDeliveryStage::GpuUploaded, PreviewFrameDeliveryTiming::GpuUploadToDraw);
+        break;
+    case PreviewFrameDeliveryStage::GpuTextureAccepted:
+        record_hop(PreviewFrameDeliveryStage::PreviewSubmitted, PreviewFrameDeliveryTiming::PreviewToGpuTextureAcceptance);
         break;
     case PreviewFrameDeliveryStage::QtFrameSwapped:
         record_hop(PreviewFrameDeliveryStage::GpuDrawn,
@@ -853,6 +881,18 @@ PreviewPerformanceSnapshot PreviewPerformanceMetrics::takeSnapshotAndReset() noe
     PreviewPerformanceSnapshot snapshot;
     snapshot.cpu_composition_frames = cpu_composition_frames_.exchange(0);
     snapshot.gpu_composition_frames = gpu_composition_frames_.exchange(0);
+    snapshot.texture_delivery_frames = texture_delivery_frames_.exchange(0);
+    snapshot.rgba_delivery_frames = rgba_delivery_frames_.exchange(0);
+    snapshot.texture_pool_busy_drops = texture_pool_busy_drops_.exchange(0);
+    snapshot.texture_pool_busy_retries = texture_pool_busy_retries_.exchange(0);
+    snapshot.texture_delivery_fallbacks = texture_delivery_fallbacks_.exchange(0);
+    snapshot.texture_pool_bytes = texture_pool_bytes_.load();
+    snapshot.texture_pool_peak_bytes = texture_pool_peak_bytes_.exchange(snapshot.texture_pool_bytes);
+    snapshot.texture_pool_occupancy = texture_pool_occupancy_.load();
+    snapshot.viewer_uploaded_bytes = viewer_uploaded_bytes_.exchange(0);
+    snapshot.gpu_producer_fence_submission = takeTimingSnapshot(gpu_producer_fence_submission_);
+    snapshot.gpu_fence_wait_submission = takeTimingSnapshot(gpu_fence_wait_submission_);
+    snapshot.gpu_consumer_fence_submission = takeTimingSnapshot(gpu_consumer_fence_submission_);
     snapshot.gpu_composition_fallbacks = gpu_composition_fallbacks_.exchange(0);
     snapshot.gpu_composition_failures = gpu_composition_failures_.exchange(0);
     snapshot.gpu_composition_uploaded_bytes = gpu_composition_uploaded_bytes_.exchange(0);

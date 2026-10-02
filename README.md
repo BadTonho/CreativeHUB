@@ -32,7 +32,8 @@ coverage in both the producer and consumer applications.
 - **Video Editor:** the desktop shell, multitrack timeline, FFmpeg playback,
   audio mixing, transforms, keyframes, transitions, text overlays, and `.csp`
   project persistence are implemented. Experimental GPU timeline composition is
-  available in Settings > General, disabled by default with CPU fallback;
+  available in Settings > General, disabled by default with automatic direct
+  texture delivery when supported and RGBA/CPU fallbacks;
   export remains CPU. See the [Video Editor roadmap](docs/video-editor/ROADMAP.md).
 - **Image Editor:** Windows users have confirmed the current Release workflow,
   including layers and groups, editable shapes, object selection, save/reopen,
@@ -199,7 +200,8 @@ Before contributing, please read the project guidelines outlined in [`AGENTS.md`
 | [Video Editor architecture](docs/video-editor/ARCHITECTURE.md) | Video Editor structure and modules. |
 | [Video Editor subsystem docs](docs/video-editor/architecture/) | Technical boundaries and subsystem behavior. |
 | [Video Editor roadmap](docs/video-editor/ROADMAP.md) | Current work and release gates. |
-| [Video Editor GPU plan](docs/video-editor/GPU_ACCELERATION_PLAN.md) | First consumer of the shared compositor: optional timeline GPU composition implemented; texture delivery, GPU export, and platform acceptance pending. |
+| [Video Editor GPU plan](docs/video-editor/GPU_ACCELERATION_PLAN.md) | First consumer of the shared compositor: optional timeline GPU composition and direct texture delivery implemented; GPU export and platform acceptance pending. |
+| [Direct GPU preview delivery](docs/video-editor/GPU_TEXTURE_DELIVERY.md) | Shared contexts, texture leases, bounded buffers, fences, asynchronous recovery and diagnostics. |
 | [Regression prevention policy](docs/REGRESSION_POLICY.md) | Required test coverage and gates for all current and future applications. |
 | [Video Editor regression tests](docs/video-editor/REGRESSION_TESTING.md) | Detailed automated coverage and local validation checklist. |
 | [Image Editor scope](docs/image-editor/SCOPE.md) | Approved first editing-release workflow, current boundary, and validation profile. |

@@ -5,6 +5,7 @@
 #include <QOpenGLContext>
 #include <QOpenGLFunctions>
 #include <QThread>
+#include <QSurfaceFormat>
 
 #include <chrono>
 #include <algorithm>
@@ -14,6 +15,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 using namespace creative_suite;
 using namespace creative_suite::composition;
@@ -59,6 +61,15 @@ void compare(OpenGlFrameCompositor& gpu, int width, int height,
     }
     require(timings.readback_bytes == static_cast<std::uint64_t>(width) * height * 4,
         name + ": readback bytes missing");
+    OpenGlCompositionTimings direct_timings;
+    auto direct = gpu.composeTexture(width, height, layers, {}, &direct_timings);
+    require(direct.status == OpenGlCompositionStatus::Complete && direct.frame,
+        name + ": direct texture composition failed: " + direct.cause);
+    require(direct_timings.readback_bytes == 0 && direct_timings.readback_nanoseconds == 0 &&
+        direct.frame->bottomLeftOrigin() && direct.frame->valid(), name + ": invalid direct contract");
+    const auto recovered = gpu.readback(direct.frame);
+    require(recovered.frame && recovered.frame->rgba_pixels == frame.rgba_pixels,
+        name + ": on-demand texture readback differs from RGBA composition");
 }
 void parity(OpenGlFrameCompositor& gpu) {
     auto opaque = fixture(16, 12, false);
@@ -162,9 +173,125 @@ void benchmark(OpenGlFrameCompositor& gpu) {
         }
     }
 }
+
+void textureLeases(QOffscreenSurface* surface) {
+    auto budget = std::make_shared<OpenGlTexturePoolBudget>();
+    auto backend = std::make_unique<OpenGlFrameCompositor>(surface,
+        OpenGlPrecisionPolicy::Automatic, QOpenGLContext::globalShareContext(), budget);
+    std::vector<OpenGlTextureFramePtr> leased;
+    for (int i = 0; i < 3; ++i) {
+        auto result = backend->composeTexture(16 + i, 12, {});
+        require(result.frame && result.status == OpenGlCompositionStatus::Complete, "Pool allocation failed.");
+        require(backend->readback(result.frame).frame.has_value(), "Lease readback failed.");
+        leased.push_back(std::move(result.frame));
+    }
+    require(backend->texturePoolOccupancy() == 3 && budget->targets() == 3 &&
+        budget->bytes() == (16 + 17 + 18) * 12 * 4, "Pool accounting is incorrect.");
+    require(backend->composeTexture(19, 12, {}).status == OpenGlCompositionStatus::Busy,
+        "Leased output was overwritten instead of returning Busy.");
+    const auto original_texture = leased[0]->texture();
+    QOpenGLContext consumer;
+    consumer.setFormat(surface->format());
+    consumer.setShareContext(QOpenGLContext::globalShareContext());
+    require(consumer.create() && consumer.makeCurrent(surface), "Shared consumer unavailable.");
+    std::string cause; std::int64_t code = 0;
+    require(!leased[0]->beginUse(nullptr, cause, code), "A texture accepted a missing consumer context.");
+    require(leased[0]->beginUse(&consumer, cause, code) && leased[0]->endUse(&consumer, cause, code),
+        "Cross-context fences failed: " + cause);
+    consumer.doneCurrent();
+    // Final reference return may happen on a thread with no OpenGL context.
+    std::thread release([frame = std::move(leased[0])]() mutable { frame.reset(); });
+    release.join();
+    OpenGlTextureCompositionResult replacement;
+    for (int attempt = 0; attempt < 100 && !replacement.frame; ++attempt) {
+        replacement = backend->composeTexture(16, 12, {});
+        if (!replacement.frame) QThread::msleep(1);
+    }
+    require(replacement.frame && replacement.frame->texture() == original_texture,
+        "Returned and consumed buffer was not reused.");
+    require(backend->readback(replacement.frame, [] { return true; }).status == OpenGlCompositionStatus::Cancelled,
+        "Cancelled recovery published pixels.");
+    OpenGlFrameCompositor retired(surface, OpenGlPrecisionPolicy::Automatic,
+        QOpenGLContext::globalShareContext(), budget);
+    require(retired.composeTexture(16, 12, {}).status == OpenGlCompositionStatus::Busy,
+        "Retired and active pools exceeded the shared target budget.");
+    backend.reset();
+    require(!replacement.frame->valid() && !leased[1]->valid() && budget->bytes() == 0 && budget->targets() == 0,
+        "Worker shutdown did not revoke leases and release reservations.");
+    replacement.frame.reset(); leased.clear();
+    auto large = retired.composeTexture(4096, 2048, {});
+    require(large.frame && budget->bytes() == 32ULL * 1024 * 1024, "Large pool target accounting failed.");
+    auto second = retired.composeTexture(4096, 2048, {});
+    require(second.frame && budget->bytes() == OpenGlTexturePoolBudget::maximum_bytes,
+        "64 MiB pool budget was not accounted.");
+    require(retired.composeTexture(16, 12, {}).status == OpenGlCompositionStatus::Busy,
+        "Shared pool exceeded 64 MiB.");
+    require(retired.composeTexture(4096, 4097, {}).status == OpenGlCompositionStatus::Unsupported,
+        "A target larger than the pool budget was accepted.");
+    OpenGlFrameCompositor isolated(surface);
+    require(isolated.composeTexture(16, 12, {}).status == OpenGlCompositionStatus::Unsupported,
+        "An unshared worker published a texture.");
+    require(isolated.readback(large.frame).status == OpenGlCompositionStatus::Unsupported,
+        "A foreign session read a leased texture.");
+    for (int checkpoint = 1; checkpoint <= 5; ++checkpoint) {
+        int calls = 0;
+        auto cancelled = isolated.composeTexture(16, 12, {}, [&] { return ++calls >= checkpoint; });
+        require(!cancelled.frame, "An unavailable/cancelled texture was published.");
+    }
+}
+
+void directCancellation(OpenGlFrameCompositor& gpu) {
+    auto source = fixture(16, 12, true, 3);
+    std::vector<CompositionLayer> layers{{&source}, {&source}};
+    int checkpoints = 0;
+    auto probe = gpu.composeTexture(32, 24, layers, [&] { ++checkpoints; return false; });
+    require(probe.frame && gpu.readback(probe.frame).frame, "Direct cancellation fixture unavailable.");
+    for (int checkpoint = 1; checkpoint <= 4; ++checkpoint) {
+        int calls = 0;
+        auto read = gpu.readback(probe.frame, [&] { return ++calls >= checkpoint; });
+        require(read.status == OpenGlCompositionStatus::Cancelled && !read.frame,
+            "Cancelled texture recovery published pixels.");
+    }
+    probe.frame.reset();
+    for (int checkpoint = 1; checkpoint <= checkpoints; ++checkpoint) {
+        int calls = 0;
+        auto output = gpu.composeTexture(32, 24, layers, [&] { return ++calls >= checkpoint; });
+        require(output.status == OpenGlCompositionStatus::Cancelled && !output.frame,
+            "Cancelled direct composition published a lease.");
+        require(gpu.compose(32, 24, layers).frame.has_value(), "Cancelled direct output damaged RGBA fallback.");
+    }
+}
+
+void retirementCapacity(QOffscreenSurface* surface) {
+    auto budget = std::make_shared<OpenGlTexturePoolBudget>();
+    OpenGlFrameCompositor old(surface, OpenGlPrecisionPolicy::Automatic,
+        QOpenGLContext::globalShareContext(), budget);
+    std::vector<OpenGlTextureFramePtr> frames;
+    for (int i = 0; i < 3; ++i) {
+        auto result = old.composeTexture(16, 12, {});
+        require(result.frame && old.readback(result.frame).frame, "Retirement fixture failed.");
+        frames.push_back(std::move(result.frame));
+    }
+    frames[1].reset(); frames[2].reset();
+    old.retireTextureFrames();
+    require(old.composeTexture(16, 12, {}).status == OpenGlCompositionStatus::Unsupported,
+        "A retired session continued publishing textures.");
+    require(old.collectReleasedTextureFrames().status == OpenGlCompositionStatus::Complete &&
+        budget->targets() == 1 && frames[0]->valid(), "Unused retired targets retained the pool capacity.");
+    require(old.readback(frames[0]).frame.has_value(), "Retirement prevented recovery of a displayed lease.");
+    OpenGlFrameCompositor fresh(surface, OpenGlPrecisionPolicy::Automatic,
+        QOpenGLContext::globalShareContext(), budget);
+    auto next = fresh.composeTexture(16, 12, {});
+    require(next.frame && budget->targets() == 2 && frames[0]->valid(),
+        "A held previous preview starved direct delivery after reactivation.");
+}
 } // namespace
 
 int main(int argc, char** argv) {
+    QSurfaceFormat format; format.setRenderableType(QSurfaceFormat::OpenGL);
+    format.setVersion(3, 2); format.setProfile(QSurfaceFormat::CoreProfile);
+    QSurfaceFormat::setDefaultFormat(format);
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QGuiApplication app(argc, argv);
     try {
         OpenGlFrameCompositor unavailable(nullptr);
@@ -194,7 +321,8 @@ int main(int argc, char** argv) {
         for (int activation = 0; activation < 2; ++activation) {
             std::unique_ptr<QThread> worker(QThread::create([&] {
                 try {
-                    OpenGlFrameCompositor gpu(surface.get());
+                    OpenGlFrameCompositor gpu(surface.get(), OpenGlPrecisionPolicy::Automatic,
+                        QOpenGLContext::globalShareContext());
                     const auto initial = gpu.compose(16, 12, {});
                     if (initial.status == OpenGlCompositionStatus::Failed &&
                         (initial.operation == "create-context" || initial.operation == "check-context")) {
@@ -204,8 +332,11 @@ int main(int argc, char** argv) {
                         "native initialization failed: " + initial.operation + ": " + initial.cause);
                     parity(gpu);
                     cancellationAndLimits(gpu);
+                    directCancellation(gpu);
+                    textureLeases(surface.get());
+                    retirementCapacity(surface.get());
                     {
-                        OpenGlFrameCompositor baseline(surface.get(), OpenGlPrecisionPolicy::CoreOnly);
+        OpenGlFrameCompositor baseline(surface.get(), OpenGlPrecisionPolicy::CoreOnly, QOpenGLContext::globalShareContext());
                         auto f = fixture(13, 7, true, 3);
                         compare(baseline, 53, 39, {{&f}}, "OpenGL 3.2 without precision extensions");
                         animation::Transform2D rotated; rotated.rotation_degrees = 90;

@@ -281,6 +281,11 @@ void MainWindow::createWorkspace() {
         this,
         [this](const QString& reason, qint64 error_code) {
             logging::Context context{{"cause", reason.toUtf8().toStdString()}};
+            const auto payload = preview_widget_->currentPayload();
+            context.emplace_back("delivery_epoch", std::to_string(payload.delivery_epoch));
+            context.emplace_back("generation", std::to_string(payload.playback_generation));
+            context.emplace_back("timeline_frame", std::to_string(payload.timeline_frame));
+            context.emplace_back("gpu_session", payload.gpu ? std::to_string(payload.gpu->session()) : "none");
             if (error_code != 0) {
                 context.emplace_back("error_code", std::to_string(error_code));
             }
@@ -290,7 +295,11 @@ void MainWindow::createWorkspace() {
                 "gpu_preview",
                 reason.toUtf8().toStdString(),
                 context);
-            statusBar()->showMessage("GPU preview unavailable; using CPU preview.");
+            if (playback_controller_ && preview_widget_->currentPayload().gpu)
+                playback_controller_->recoverPreviewFrame(preview_widget_->currentPayload());
+            statusBar()->showMessage(preview_widget_->usesGpuPreview()
+                ? "Direct GPU preview unavailable; using RGBA delivery."
+                : "GPU preview unavailable; using CPU preview.", 5000);
         });
 
     bins_dock_ = createDock(

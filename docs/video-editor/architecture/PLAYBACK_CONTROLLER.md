@@ -13,7 +13,7 @@ The controller accepts typed commands for clip activation, play, pause, frame st
 
 ## Event and thread flow
 
-Worker state and completion signals are queued to the controller's UI-thread affinity. Frame signals use a direct connection only to publish a shared frame pointer into `PlaybackFrameMailbox`; a queued controller callback drains the latest packet. The controller checks the generation both before publishing and before emitting a frame event, so an old frame cannot replace a newer preview after an activation or edit.
+Worker state and completion signals are queued to the controller's UI-thread affinity. Frame signals use a direct connection only to publish a shared frame payload into `PlaybackFrameMailbox`; a queued controller callback drains the latest packet. The controller checks generation and delivery epoch both before publishing and before emitting a frame event, so an old frame cannot replace a newer preview after an activation, edit, quality change or backend toggle.
 
 The controller validates pending activation against the current `ClipId`, canonical media path, and online library item before committing it. It updates the session playhead and stable selection, then emits a typed event. `MainWindow` projects accepted events to the preview, timeline, media browser, playback controls, status bar, and technical error log. It keeps only a loading presentation flag derived from activation events; pending activation details remain in the controller.
 
@@ -21,7 +21,7 @@ Generation-tagged media, render, and seek requests are rejected when an activati
 
 When the clock enters another clip, the controller requests activation while keeping `Playing` active and updating the global playhead. The worker uses the matching prepared decoder from the current composition snapshot, or opens the source for direct playback when composition is unavailable, then seeks to the latest local frame before committing the first frame and resuming worker playback. In composed mode, seeks and clip activation update the global frame without changing the composition-wide playback bounds; the active layer's duration is not a playback endpoint. The controller remains responsible for Timeline gaps and the project end. Frames behind the clock are discarded; pending seeks are coalesced to the current position. Pause, Stop, timeline seek, and project invalidation stop the clock and cancel pending activations. Per-clip and per-track audio gain and mute values are reapplied on media activation.
 
-On shutdown, the controller stops the worker on its thread, quits and joins the thread, and clears the frame mailbox. Calls made after shutdown are ignored.
+On shutdown, MainWindow releases preview GPU references; the controller clears the frame mailbox, stops the worker on its thread, quits and joins the thread, and destroys its GUI-owned offscreen surface. Calls made after shutdown are ignored.
 
 ## Experimental composition preference
 
@@ -55,3 +55,14 @@ for platform, visual and physical audio checks.
 3. While playback is active, seek rapidly between clips and edit the selected clip. Confirm a late frame or completion from an earlier activation does not replace the current preview. Pause or Stop during a pending activation and confirm playback remains stopped; Play retries the selected clip from its current position.
 4. Play a video with a text overlay that starts around Timeline frame 294 and lasts about 150 frames. Confirm the underlying video continues changing through the full text clip and after it ends; the worker must not stop or jump to the text clip's final frame. Repeat with image clips and a gap in the Timeline. Confirm the preview follows the visible composition and the controller reports the gap.
 5. Close the editor during playback. Confirm shutdown completes without leaving audio, preview updates, or a worker thread active.
+
+## Shared texture delivery
+
+The generic frame signal/mailbox/event carries `PreviewFramePayload` with RGBA
+or a GPU lease. Controller publication and drain validate generation and delivery
+epoch. Refresh, quality, preference and viewer-capability changes advance that
+epoch. `PlaybackDeliveryEpochEvent` updates the viewer before accepted deliveries.
+`recoverPreviewFrame` queues retained-frame readback or latest-position CPU
+recomposition, preserving playback/audio. MainWindow releases preview leases and
+the controller clears its mailbox before worker join and offscreen-surface
+destruction. See [GPU_TEXTURE_DELIVERY.md](../GPU_TEXTURE_DELIVERY.md).

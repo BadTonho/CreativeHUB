@@ -278,8 +278,9 @@ available and is expected to stay at zero for this path.
 forward catch-up without creating an RGBA `VideoFrame`.
 
 Playback frames cross the worker/UI boundary as immutable shared payloads. The
-GPU Preview retains that payload until its upload instead of copying the RGBA
-vector, while the CPU fallback creates its `QImage` lazily. This keeps frame
+GPU Preview retains RGBA until upload or a shared texture lease through its draws,
+without copying pixels; the CPU fallback creates its `QImage` lazily. Delivery
+epochs also reject frames superseded by composition/quality/preference changes. This keeps frame
 handoff and Preview submission separate from Timeline editing and does not
 change frame selection, playback timing, or project state.
 
@@ -335,7 +336,7 @@ the new start. Invalid boundaries remain intentional no-op outcomes.
 
 At a global frame, all visible video clips are composed from the bottom track
 up to the top track. The compositor runs outside the UI worker boundary and
-produces one RGBA frame for the preview. The provisional canvas is 1920x1080;
+produces one RGBA frame or leased shared texture for the preview. The provisional canvas is 1920x1080;
 empty areas use the dark preview background. Audio is mixed from every active
 video clip with an embedded stream, independently of which clip supplies the
 visible image.

@@ -46,7 +46,7 @@ struct PlaybackActivationEvent {
 };
 
 struct PlaybackFrameEvent {
-    VideoFramePtr frame;
+    rendering::PreviewFramePayload frame;
     std::int64_t frame_index = 0;
     timeline::ClipId clip_id = 0;
     std::uint64_t delivery_trace_id = 0;
@@ -88,6 +88,8 @@ struct PlaybackCompositionWarningEvent {
     qint64 error_code = -1;
 };
 
+struct PlaybackDeliveryEpochEvent { quint64 epoch = 0; bool retry_texture_delivery = false; };
+
 using PlaybackControllerEvent = std::variant<
     PlaybackActivationEvent,
     PlaybackFrameEvent,
@@ -96,7 +98,8 @@ using PlaybackControllerEvent = std::variant<
     PlaybackFinishedEvent,
     PlaybackErrorEvent,
     PlaybackAudioWarningEvent,
-    PlaybackCompositionWarningEvent>;
+    PlaybackCompositionWarningEvent,
+    PlaybackDeliveryEpochEvent>;
 
 class PlaybackController final : public QObject {
 public:
@@ -121,6 +124,8 @@ public:
     void refreshComposition();
     void setPreviewQuality(PreviewQuality quality);
     void setGpuCompositionEnabled(bool enabled);
+    void setGpuTextureDeliveryAvailable(bool available);
+    void recoverPreviewFrame(rendering::PreviewFramePayload frame);
     [[nodiscard]] bool gpuCompositionEnabled() const noexcept { return gpu_composition_enabled_; }
     void setMonitorVolume(double gain);
     void setAudioParametersForActiveClip();
@@ -170,7 +175,7 @@ private:
         qint64 error_code,
         quint64 generation);
     void queueFrame(
-        VideoFramePtr frame,
+        rendering::PreviewFramePayload frame,
         qint64 frame_index,
         quint64 generation,
         quint64 delivery_trace_id);
@@ -184,6 +189,7 @@ private:
     [[nodiscard]] double timelineFrameRate() const noexcept;
     [[nodiscard]] std::int64_t timelineClockFrame() const noexcept;
     void emitEvent(PlaybackControllerEvent event);
+    void advanceDeliveryEpoch(bool retry_texture_delivery = false);
     void setGeneration(quint64 generation) noexcept;
     void discardPendingActivation(bool clear_selection);
     void cancelPendingActivation();
@@ -210,6 +216,8 @@ private:
     bool composition_ready_ = false;
     PreviewQuality preview_quality_ = PreviewQuality::Full;
     bool gpu_composition_enabled_ = false;
+    bool gpu_texture_delivery_available_ = false;
+    std::atomic<quint64> delivery_epoch_{0};
     std::unique_ptr<QOffscreenSurface> gpu_surface_;
     std::optional<timeline::ClipId> ready_clip_id_;
     std::atomic<quint64> composition_revision_{0};

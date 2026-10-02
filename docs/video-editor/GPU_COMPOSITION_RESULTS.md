@@ -3,7 +3,12 @@
 Date: 2026-10-02. Video Editor is the first consumer. The opt-in remains disabled
 by default. No project/application version or keyboard shortcut changes.
 
-## Native Windows evidence
+## Stage 1 historical evidence: GPU composition with RGBA readback
+
+The following stage 1 measurements were recorded before direct delivery was
+implemented. Stage 2 execution and presentation measurements are recorded below.
+
+### Native Windows evidence
 
 Host: Windows 11 build 26200, NVIDIA GeForce GTX 1660 SUPER, NVIDIA OpenGL driver
 616.92, Qt 6.7.2, MSVC 2022, x64 Release. The context resolves OpenGL 3.2 Core.
@@ -27,7 +32,7 @@ correctly returned `Unsupported/check-precision` for rotation. On a driver
 without these extensions, the native test reports limited rotation coverage;
 that is CPU fallback coverage, not approval of GPU rotation.
 
-## Build and automated gates
+### Build and automated gates
 
 - Full Debug and Release builds completed with MSVC, including all three apps.
   Changed sources produced no compiler warning; the full Debug build retained
@@ -47,7 +52,7 @@ Local logs are under ignored `build/`: `gpu-final-release-build.log`,
 `gpu-benchmark-final-1.log` through `gpu-benchmark-final-3.log`. These are local
 execution artifacts; this document records the portable results.
 
-## Measurement method
+### Measurement method
 
 Run `creative-suite-composition-opengl-tests --benchmark` in Release. Three
 sequential process runs were measured after builds/tests completed. Each run
@@ -84,10 +89,128 @@ Uploaded bytes include the small geometry lookup. This measures synthetic
 composition workloads, not presented FPS or a 15-minute audiovisual project.
 The GPU improved the layered fixture; the optimized CPU path was faster for the
 single opaque fixture at every quality. That tradeoff supports keeping the
-preference off by default while direct texture delivery remains a later stage.
+preference off by default. Direct texture delivery was still planned at the time
+of these stage 1 measurements; it is now implemented as described in
+[the delivery contract](GPU_TEXTURE_DELIVERY.md).
 Existing local diagnostics before implementation showed CPU composition around
 2.5–3.7 ms and much larger decode times in a few intervals; these uncontrolled
 samples do not identify a universal bottleneck. No broad speedup is promised.
+
+## Stage 2: direct texture delivery evidence
+
+Date: 2026-10-02. Current measured host: Windows 11 Pro build **26300**,
+AMD Ryzen 5 3600, 32 GiB RAM, NVIDIA GeForce GTX 1660 SUPER, NVIDIA OpenGL
+driver **616.92** (Windows driver version 32.0.16.1692), Qt 6.7.2, MSVC 2022,
+x64. The previous build 26200 record above belongs to stage 1.
+
+### Builds and automated gates
+
+- Complete Debug and Release builds passed, including the three applications.
+  Changed sources produced no compiler warnings; the Release build retained
+  existing C4244 warnings in FFmpeg headers used by the decoder test.
+- Focused/shared checks: **22/22 passed in Debug**, 76.88 seconds, and
+  **22/22 passed in Release**, 38.31 seconds. The Debug checks ran alongside
+  the Release build; these elapsed totals are execution evidence, not benchmarks.
+- Complete Release suite: **66/66 passed**, 60.45 seconds, including Image
+  Editor producer, Video Editor consumer/export and Motion Studio coverage.
+- The three native graphics tests (shared compositor, timeline and viewer)
+  executed without skips in both configurations. Valid native contexts require
+  actual texture results and shared-texture presentation, rather than accepting
+  an unnoticed RGBA fallback.
+
+Coverage includes exact alpha/geometry and RGB tolerance 2 against CPU,
+texture-owner readback parity, padded strides, transforms, transparency, text,
+keyframes, transitions and all qualities. It also exercises three-target/64 MiB
+limits, Busy/latest-request retry, cross-thread reference returns, foreign
+sessions, missing sharing, cancellation, cache identity, stale delivery epochs,
+consumer-fence failure, RGBA recovery, off/on direct retry, retired slot release,
+resize/grayscale/orientation, teardown with retained references and linked masked
+PNG production/refresh. Normal direct viewer tests assert no final upload or
+composition readback. Physical audio and real driver-loss checks remain separate
+manual acceptance items.
+
+Local execution logs are ignored artifacts under `build/`:
+`gpu-texture-debug-final-build.log`, `gpu-texture-release-final-build.log`,
+`gpu-texture-debug-final-focused.log`, `gpu-texture-release-final-focused.log`,
+`gpu-texture-release-final-full-suite.log`, and
+`gpu-texture-benchmark-1.log` through `gpu-texture-benchmark-3.log`.
+
+### Measurement through presentation
+
+Run `creative-suite-main-editor-opengl-preview-tests --benchmark` in Release
+with native Qt presentation. Three sequential process runs completed after all
+builds and tests. Each route/workload/quality receives two warmup frames and ten
+measured frames per process. The fixtures use a 1920x1080 opaque source and, for
+the layered workload, two uses of a transparent 1280x720 source (scaled and
+rotated 23 degrees). The viewer remains 960x540; source dimensions stay fixed.
+
+The timer starts before a real worker invocation and ends only when the exact
+frame's trace reaches Qt `frameSwapped`. It includes composition, transfer,
+worker dispatch, event processing, fence submission and presentation scheduling.
+No screenshots or recovery reads occur inside the measured loop. All routes
+use the same OpenGL viewer; CPU/RGBA and GPU/RGBA upload the final frame, while
+GPU/texture borrows it. These are sequential synthetic latency measurements,
+not concurrent audiovisual playback FPS, physical scanout, or GPU execution
+queries. The event pump polls at 5 ms and display scheduling affects short
+frames; small differences near that floor should not be interpreted as gains.
+
+Times are means of three process averages; parentheses show their range.
+
+| Workload | Preview | CPU/RGBA to Qt swap ms | GPU/RGBA to Qt swap ms | GPU/texture to Qt swap ms |
+| --- | --- | ---: | ---: | ---: |
+| Three layers | Full 1920x1080 | 88.01 (85.03–90.25) | 20.03 (19.84–20.24) | 12.41 (12.25–12.58) |
+| Three layers | Half 960x540 | 28.05 (27.98–28.16) | 11.84 (11.64–12.08) | 13.36 (13.34–13.41) |
+| Three layers | Quarter 480x270 | 13.97 (13.83–14.23) | 12.99 (12.60–13.28) | 13.32 (13.25–13.44) |
+| One opaque layer | Full 1920x1080 | 13.32 (13.27–13.35) | 13.32 (13.26–13.36) | 13.31 (13.28–13.38) |
+| One opaque layer | Half 960x540 | 13.40 (13.36–13.46) | 13.39 (13.36–13.42) | 13.27 (13.14–13.39) |
+| One opaque layer | Quarter 480x270 | 13.32 (13.26–13.40) | 13.40 (13.29–13.49) | 13.27 (13.23–13.29) |
+
+### Transfers, synchronization and memory
+
+The following are bytes per frame. GPU source upload includes the existing
+geometry lookup; CPU composition has no composition upload/readback. Both RGBA
+routes uploaded exactly ten final frames per ten measured frames. Every direct
+route reported **zero readback bytes, zero viewer uploads and zero viewer-upload
+bytes**. Decoded source pixels are still uploaded for composition.
+
+| Workload | Preview | GPU source upload bytes | GPU/RGBA readback bytes | Either RGBA viewer upload bytes | Direct readback/viewer upload bytes |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Three layers | Full | 15,691,200 | 8,294,400 | 8,294,400 | 0 / 0 |
+| Three layers | Half | 15,679,200 | 2,073,600 | 2,073,600 | 0 / 0 |
+| Three layers | Quarter | 15,673,216 | 518,400 | 518,400 | 0 / 0 |
+| One opaque layer | Full | 8,306,400 | 8,294,400 | 8,294,400 | 0 / 0 |
+| One opaque layer | Half | 8,300,400 | 2,073,600 | 2,073,600 | 0 / 0 |
+| One opaque layer | Quarter | 8,297,408 | 518,400 | 518,400 | 0 / 0 |
+
+Fence times below are mean CPU submission times, not blocking fence waits or
+GPU execution durations. Pool values are measured reservations at the end and
+peak of each direct interval; two output targets were sufficient. The production
+limit remains three targets and 64 MiB across active/retiring sessions, with
+separate automated saturation/budget checks.
+
+| Direct workload | Preview | Producer submission ms | Viewer wait submission ms | Consumer submission ms | Pool current/peak bytes |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Three layers | Full | 0.0080 | 0.0263 | 0.0622 | 16,588,800 / 16,588,800 |
+| Three layers | Half | 0.0077 | 0.0240 | 0.0663 | 4,147,200 / 4,147,200 |
+| Three layers | Quarter | 0.0076 | 0.0235 | 0.0710 | 1,036,800 / 1,036,800 |
+| One opaque layer | Full | 0.0078 | 0.0232 | 0.0677 | 16,588,800 / 16,588,800 |
+| One opaque layer | Half | 0.0077 | 0.0297 | 0.0704 | 4,147,200 / 4,147,200 |
+| One opaque layer | Quarter | 0.0074 | 0.0246 | 0.0617 | 1,036,800 / 1,036,800 |
+
+One compositor is retained across benchmark routes/qualities, so RGBA intervals
+can still reserve unused targets from the preceding direct interval. These
+gauges describe output-pool reservations, not total driver memory. Source texture,
+legacy readback framebuffer, viewer-owned RGBA texture and decoded CPU caches
+are outside the pool. Direct output allocates no final CPU pixel buffer or
+copied `QImage`; the corresponding tightly packed RGBA payload alone occupies
+8,294,400 / 2,073,600 / 518,400 bytes at Full/Half/Quarter. Total process/driver
+memory and long-running real-project measurements remain pending.
+
+The Full layered fixture reduced presentation-boundary latency from GPU/RGBA
+20.03 ms to direct 12.41 ms on this driver. Half was slower with direct delivery,
+and Quarter/opaque routes were close to presentation scheduling costs. The
+transfer elimination is verified; these results do not establish a universal
+speedup. The preference remains experimental and disabled by default.
 
 ## Remaining acceptance
 
@@ -112,8 +235,16 @@ samples do not identify a universal bottleneck. No broad speedup is promised.
    linked PNG in Video Editor. Compare CPU/GPU preview and the CPU export.
 5. Force unsupported context/limits where the driver permits; verify logged
    context, brief status warning, continued CPU playback and preserved setting.
-   Off/on retries technical failures. Close during rendering and reopen repeatedly.
+   Off/on retries technical failures. A texture synchronization failure should
+   recover through RGBA without unnecessarily disabling a working GPU viewer.
+   A full viewer-context failure should recover through CPU presentation.
+   Close during rendering and reopen repeatedly, including with texture leases
+   still retained and during paused Busy retries.
 6. Repeat with presentation disabled through the existing environment variable;
-   composition preference still applies. Export/cancel keeps previous outputs.
+   composition preference still applies through RGBA. Export/cancel keeps previous
+   outputs. Inspect schemas 9/3: direct delivery has zero final readback/viewer
+   uploads, while source uploads, fence submission, pool bytes and Busy drops or
+   retries are reported separately. Resize and toggle grayscale without another
+   composition or final-frame upload.
 
 These human/platform checks are pending unless a dated result is recorded here.

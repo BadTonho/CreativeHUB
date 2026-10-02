@@ -6,6 +6,7 @@
 
 #include <QMetaObject>
 #include <QOffscreenSurface>
+#include <QOpenGLContext>
 
 #include <algorithm>
 #include <cmath>
@@ -38,6 +39,7 @@ PlaybackController::PlaybackController(
       worker_factory_(std::move(worker_factory)),
       timeline_clock_timer_(this) {
     qRegisterMetaType<VideoFramePtr>();
+    qRegisterMetaType<rendering::PreviewFramePayload>();
     qRegisterMetaType<CompositionLayerSpec>();
     qRegisterMetaType<QVector<CompositionLayerSpec>>();
     qRegisterMetaType<CompositionTransitionSpec>();
@@ -67,9 +69,9 @@ PlaybackController::PlaybackController(
         &QObject::deleteLater);
     QObject::connect(
         worker_,
-        &PlaybackWorker::frameReady,
+        &PlaybackWorker::previewFrameReady,
         this,
-        [this](VideoFramePtr frame, qint64 index, quint64 generation,
+        [this](rendering::PreviewFramePayload frame, qint64 index, quint64 generation,
                quint64 delivery_trace_id) {
             queueFrame(std::move(frame), index, generation, delivery_trace_id);
         },
@@ -199,6 +201,7 @@ void PlaybackController::requestSeekForGeneration(
 
 void PlaybackController::refreshComposition() {
     if (!available()) return;
+    advanceDeliveryEpoch();
     composition_ready_ = true;
     auto revision = composition_revision_.fetch_add(1, std::memory_order_acq_rel) + 1;
     if (revision == 0) {
@@ -326,6 +329,7 @@ void PlaybackController::setGpuCompositionEnabled(bool enabled) {
     queueWorker([enabled, surface = gpu_surface_.get()](PlaybackWorker& worker) {
         worker.setGpuCompositionEnabled(enabled, surface);
     });
+    advanceDeliveryEpoch(true);
     if (playing_ || pending_activation_.has_value()) return;
     const auto global_frame = timelineFrame();
     const auto destination = session_.timeline().topClipAt(global_frame);
@@ -333,6 +337,39 @@ void PlaybackController::setGpuCompositionEnabled(bool enabled) {
     const auto& clip = session_.timeline().tracks()[destination->track_index]
         .clips[destination->clip_index];
     renderCompositionFrame(global_frame, global_frame - clip.timeline_start_frame);
+}
+
+void PlaybackController::advanceDeliveryEpoch(bool retry_texture_delivery) {
+    const auto epoch = delivery_epoch_.fetch_add(1, std::memory_order_acq_rel) + 1;
+    emitEvent(PlaybackDeliveryEpochEvent{epoch, retry_texture_delivery});
+    queueWorker([enabled = gpu_composition_enabled_ && gpu_texture_delivery_available_, epoch,
+        share = QOpenGLContext::globalShareContext()](PlaybackWorker& worker) {
+        worker.setGpuTextureDelivery(enabled, epoch, share);
+    });
+}
+
+void PlaybackController::setGpuTextureDeliveryAvailable(bool available) {
+    if (!this->available() || available == gpu_texture_delivery_available_) return;
+    gpu_texture_delivery_available_ = available;
+    advanceDeliveryEpoch();
+    if (!playing_ && !pending_activation_) {
+        const auto frame = timelineFrame();
+        if (auto location = session_.timeline().topClipAt(frame)) {
+            const auto& clip = session_.timeline().tracks()[location->track_index].clips[location->clip_index];
+            renderCompositionFrame(frame, frame - clip.timeline_start_frame);
+        }
+    }
+}
+
+void PlaybackController::recoverPreviewFrame(rendering::PreviewFramePayload frame) {
+    if (!available()) return;
+    // Recovery is queued, so neither graphics failure nor readback blocks the UI/audio.
+    const auto generation = generation_;
+    const auto epoch = delivery_epoch_.load();
+    const auto local = session_.playheadFrame();
+    queueWorker([frame = std::move(frame), generation, epoch, local](PlaybackWorker& worker) mutable {
+        worker.recoverPreviewFrame(std::move(frame), local, generation, epoch);
+    }, generation);
 }
 
 void PlaybackController::setPreviewQuality(PreviewQuality quality) {
@@ -344,6 +381,7 @@ void PlaybackController::setPreviewQuality(PreviewQuality quality) {
     if (preview_quality_ == quality) return;
 
     preview_quality_ = quality;
+    advanceDeliveryEpoch();
     queueWorker([quality](PlaybackWorker& worker) {
         worker.setPreviewQuality(quality);
     });
@@ -877,12 +915,12 @@ void PlaybackController::handleWorkerAudioWarning(
 }
 
 void PlaybackController::queueFrame(
-    VideoFramePtr frame,
+    rendering::PreviewFramePayload frame,
     qint64 frame_index,
     quint64 generation,
     quint64 delivery_trace_id) {
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
-    if (frame == nullptr) {
+    if (!frame.valid()) {
         metrics.recordFrameDeliveryDrop(
             delivery_trace_id,
             rendering::PreviewFrameDeliveryDropReason::InvalidFrame);
@@ -894,7 +932,8 @@ void PlaybackController::queueFrame(
             rendering::PreviewFrameDeliveryDropReason::Shutdown);
         return;
     }
-    if (generation != published_generation_.load(std::memory_order_acquire)) {
+    if (generation != published_generation_.load(std::memory_order_acquire) ||
+        frame.delivery_epoch != delivery_epoch_.load(std::memory_order_acquire)) {
         metrics.recordStaleFrameDiscarded();
         metrics.recordFrameDeliveryDrop(
             delivery_trace_id,
@@ -922,12 +961,13 @@ void PlaybackController::queueFrame(
 void PlaybackController::drainFrameMailbox() {
     const auto packet = frame_mailbox_.take();
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
-    if (packet.has_value() && packet->generation != generation_) {
+    if (packet.has_value() && (packet->generation != generation_ ||
+        packet->frame.delivery_epoch != delivery_epoch_.load(std::memory_order_acquire))) {
         metrics.recordFrameDeliveryDrop(
             packet->delivery_trace_id,
             rendering::PreviewFrameDeliveryDropReason::StaleGeneration);
         metrics.recordStaleFrameDiscarded();
-    } else if (packet.has_value() && packet->frame == nullptr) {
+    } else if (packet.has_value() && !packet->frame.valid()) {
         metrics.recordFrameDeliveryDrop(
             packet->delivery_trace_id,
             rendering::PreviewFrameDeliveryDropReason::InvalidFrame);

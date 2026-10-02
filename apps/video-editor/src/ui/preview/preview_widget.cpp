@@ -67,6 +67,10 @@ PreviewWidget::PreviewWidget(QWidget* parent)
             &rendering::OpenGLPreviewSurface::gpuFailure,
             this,
             &PreviewWidget::handleGpuFailure);
+        connect(gpu_surface_, &rendering::OpenGLPreviewSurface::textureDeliveryAvailabilityChanged,
+            this, &PreviewWidget::gpuTextureDeliveryAvailabilityChanged);
+        connect(gpu_surface_, &rendering::OpenGLPreviewSurface::gpuTextureFailure,
+            this, &PreviewWidget::gpuFallbackRequested);
     }
 
     clearFrame("Preview area\n\nImport media to display its first frame.");
@@ -76,11 +80,27 @@ void PreviewWidget::setFrame(const media::VideoFrame& frame) {
     setFrame(std::make_shared<const media::VideoFrame>(frame));
 }
 
+PreviewWidget::~PreviewWidget() {
+    if (gpu_surface_) disconnect(gpu_surface_, nullptr, this, nullptr);
+    releaseGpuFrames();
+}
+
 void PreviewWidget::setFrame(
     media::VideoFramePtr frame,
     quint64 delivery_trace_id) {
-    if (frame == nullptr || frame->width <= 0 || frame->height <= 0 ||
-        frame->stride < frame->width * 4) {
+    rendering::PreviewFramePayload payload{std::move(frame)};
+    payload.delivery_epoch = delivery_epoch_;
+    setFrame(std::move(payload), delivery_trace_id);
+}
+
+void PreviewWidget::setFrame(rendering::PreviewFramePayload frame, quint64 delivery_trace_id) {
+    if (frame.delivery_epoch != delivery_epoch_) {
+        rendering::PreviewPerformanceMetrics::instance().recordFrameDeliveryDrop(
+            delivery_trace_id, rendering::PreviewFrameDeliveryDropReason::StaleGeneration);
+        return;
+    }
+    if (!frame.valid() || frame.width() <= 0 || frame.height() <= 0 ||
+        (frame.rgba && frame.rgba->stride < frame.width() * 4)) {
         rendering::PreviewPerformanceMetrics::instance().recordFrameDeliveryDrop(
             delivery_trace_id,
             rendering::PreviewFrameDeliveryDropReason::InvalidFrame);
@@ -88,9 +108,8 @@ void PreviewWidget::setFrame(
         return;
     }
 
-    const auto expected_size = static_cast<std::size_t>(frame->stride) *
-        static_cast<std::size_t>(frame->height);
-    if (frame->rgba_pixels.size() < expected_size) {
+    if (frame.rgba && frame.rgba->rgba_pixels.size() <
+        static_cast<std::size_t>(frame.rgba->stride) * static_cast<std::size_t>(frame.height())) {
         rendering::PreviewPerformanceMetrics::instance().recordFrameDeliveryDrop(
             delivery_trace_id,
             rendering::PreviewFrameDeliveryDropReason::InvalidFrame);
@@ -102,19 +121,28 @@ void PreviewWidget::setFrame(
     rendering::PreviewPerformanceScope timing(
         metrics,
         rendering::PreviewTiming::PreviewSubmit);
-    metrics.recordSubmittedFrame(frame->width, frame->height);
+    metrics.recordSubmittedFrame(frame.width(), frame.height());
+    metrics.recordPreviewDelivery(bool(frame.gpu));
     metrics.recordFrameDeliveryStage(
         delivery_trace_id,
         rendering::PreviewFrameDeliveryStage::PreviewSubmitted);
-    current_frame_ = std::move(frame);
+    current_payload_ = std::move(frame);
+    current_frame_ = current_payload_.rgba;
 
     if (gpu_surface_ != nullptr && gpu_enabled_) {
         cpu_surface_->setDeliveryTraceId(0);
         frame_image_ = {};
-        gpu_surface_->setFrame(current_frame_, delivery_trace_id);
+        gpu_surface_->setFrame(current_payload_, delivery_trace_id);
         return;
     }
 
+    if (current_payload_.gpu) {
+        emit gpuFallbackRequested("The shared texture cannot be presented by the current viewer.", -1);
+        return;
+    }
+
+    stack_->setCurrentWidget(cpu_surface_);
+    if (gpu_surface_) gpu_surface_->clearFrame();
     cpu_surface_->setDeliveryTraceId(delivery_trace_id);
     frame_image_ = {};
     ensureCpuImage();
@@ -123,6 +151,7 @@ void PreviewWidget::setFrame(
 }
 
 void PreviewWidget::clearFrame(const QString& message) {
+    current_payload_ = {};
     current_frame_.reset();
     frame_image_ = {};
     empty_message_ = message;
@@ -132,6 +161,20 @@ void PreviewWidget::clearFrame(const QString& message) {
         cpu_surface_->setText(empty_message_);
     }
     if (gpu_surface_ != nullptr) gpu_surface_->clearFrame();
+}
+
+void PreviewWidget::releaseGpuFrames() {
+    current_payload_.gpu.reset();
+    if (gpu_surface_) gpu_surface_->clearFrame();
+}
+
+void PreviewWidget::setDeliveryEpoch(quint64 epoch, bool retry_texture_delivery) noexcept {
+    delivery_epoch_ = epoch;
+    if (retry_texture_delivery && gpu_surface_) gpu_surface_->retryTextureDelivery();
+}
+
+bool PreviewWidget::textureDeliveryAvailable() const noexcept {
+    return usesGpuPreview() && gpu_surface_->textureDeliveryAvailable();
 }
 
 void PreviewWidget::setGrayscaleEnabled(bool enabled) {
@@ -158,12 +201,13 @@ void PreviewWidget::resizeEvent(QResizeEvent* event) {
 
 void PreviewWidget::handleGpuFailure(const QString& reason, qint64 error_code) {
     gpu_enabled_ = false;
-    if (stack_ != nullptr && cpu_surface_ != nullptr) {
+    // Keep the previous GPU presentation until asynchronous recovery supplies RGBA.
+    if (!current_payload_.gpu && stack_ != nullptr && cpu_surface_ != nullptr) {
         stack_->setCurrentWidget(cpu_surface_);
     }
     frame_image_ = {};
     ensureCpuImage();
-    updateCpuPixmap();
+    if (!current_payload_.gpu) updateCpuPixmap();
     emit gpuFallbackRequested(reason, error_code);
 }
 

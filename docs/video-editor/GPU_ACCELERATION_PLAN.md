@@ -1,6 +1,6 @@
 # Video Editor GPU Acceleration Plan
 
-Status: **Stage 1 implemented as an opt-in experiment on 2026-10-02;
+Status: **Stages 1 and 2 implemented as an opt-in experiment on 2026-10-02;
 cross-platform acceptance and later stages pending**.
 Video Editor is the first consumer of the shared compositor. Motion Studio and
 Image Editor adoption follow their separate plans.
@@ -11,8 +11,8 @@ Timeline playback collects ordered decoded layers and evaluated transforms on
 the worker, then uses the shared CPU compositor by default. Settings > General
 offers **Use GPU for timeline preview (Experimental)**, disabled by default,
 stored globally as `performance/gpu_composition_enabled`. The separate public
-Qt/OpenGL 3.2 Core adapter composes those layers on the worker and reads back the
-RGBA frame for the existing viewer. CPU fallback and CPU export remain available.
+Qt/OpenGL 3.2 Core adapter composes those layers on the worker and automatically
+delivers shared textures when supported, retaining RGBA readback as fallback. CPU fallback and CPU export remain available.
 See [the rendering boundary](architecture/RENDERING.md).
 
 The [Motion Studio plan](../motion-editor/GPU_ACCELERATION_PLAN.md) will adopt
@@ -49,10 +49,10 @@ source texture, output framebuffer and the bounded geometry lookup. Toggle
 invalidates the final-frame cache only and recomposes a paused position. Request
 limits fall back individually; technical failures latch CPU until off/on. Errors
 are logged before a nonmodal status warning. Preference/project data are preserved.
-Cancellation returns no frame. Aggregate metrics schema 8 distinguishes actual
+Cancellation returns no frame. Aggregate metrics schema 9 distinguishes actual
 CPU/GPU composition, uploads, draw submission, readback, bytes and fallback from
-the existing presentation metrics. Export, GPU effects/decode/encode and direct
-texture delivery are deferred.
+the existing presentation metrics. Export and GPU effects/decode/encode remain
+deferred. Stage 2 now adds automatic direct delivery.
 
 Exact rotated nearest sampling additionally requires the optional
 `ARB_gpu_shader_fp64` and `ARB_gpu_shader5` extensions. Without them, rotated
@@ -64,7 +64,14 @@ See [precision and limits](architecture/RENDERING.md#timeline-composition).
 semantics; initialization/limits/context-loss cases have a defined fallback.
 No playback speedup is accepted from successful context creation alone.
 
-## Stage 2 — Playback, transitions, and delivery
+## Stage 2 — Direct preview delivery (implemented; acceptance pending)
+
+The [implemented contract](GPU_TEXTURE_DELIVERY.md) defines the shared global
+context, GPU lease payload, three-target/64 MiB pool (including retiring targets),
+producer/consumer fences, Busy coalescing and 5 ms retries, on-demand recovery,
+delivery epochs and shutdown ordering. Normal delivery performs no output
+readback or viewer upload. Aggregate/slow schemas are 9; delivery schema is 3.
+The existing preference controls this automatically; no new setting was added.
 
 - Preserve global rational Timeline timing, mixed source rates, trims/in-points,
   keyframes, frame stepping, seeking, loop/end behavior, and isolated media
@@ -198,3 +205,8 @@ evidence, unresolved issues, and the next stage here.
   native parity and timeline/PNG checks passed on NVIDIA GTX 1660 SUPER, OpenGL
   3.2, driver 616.92. See [measurement and delivery evidence](GPU_COMPOSITION_RESULTS.md)
   for repeat measurements, builds, tests and remaining platform/manual gates.
+
+- 2026-10-02: Stage 2 adds automatic direct texture delivery with public Qt sharing,
+  bounded leases/fences, asynchronous RGBA recovery and separate diagnostics.
+  Video Editor remains the first consumer; Motion/Image adoption and GPU export
+  remain later work. Native and build/test results are recorded with Stage 1 evidence.

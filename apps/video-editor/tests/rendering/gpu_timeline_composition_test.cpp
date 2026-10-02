@@ -13,6 +13,8 @@
 #include <QFileInfo>
 #include <QEventLoop>
 #include <QTimer>
+#include <QOpenGLContext>
+#include <QSurfaceFormat>
 
 #include <cmath>
 #include <exception>
@@ -38,9 +40,111 @@ void compare(const playback::VideoFramePtr& cpu, const playback::VideoFramePtr& 
         if (std::abs(int(cpu->rgba_pixels[i]) - int(gpu->rgba_pixels[i])) > (i % 4 == 3 ? 0 : 2)) require(false,
             "Timeline CPU/GPU pixel mismatch at " + std::to_string(i));
 }
+
+void directWorker(QOffscreenSurface* surface, playback::CompositionLayerSpec image,
+    playback::CompositionLayerSpec incoming, playback::CompositionLayerSpec text,
+    media::VideoFramePtr published, media::VideoFramePtr refreshed) {
+    playback::PlaybackWorker cpu, direct;
+    media::VideoFramePtr expected;
+    rendering::PreviewFramePayload delivered;
+    int errors = 0;
+    QObject::connect(&cpu, &playback::PlaybackWorker::frameReady,
+        [&](media::VideoFramePtr frame, qint64, quint64, quint64) { expected = std::move(frame); });
+    QObject::connect(&direct, &playback::PlaybackWorker::previewFrameReady,
+        [&](rendering::PreviewFramePayload frame, qint64, quint64, quint64) { delivered = std::move(frame); });
+    QObject::connect(&direct, &playback::PlaybackWorker::playbackError, [&](QString, qint64, quint64) { ++errors; });
+    auto& metrics = rendering::PreviewPerformanceMetrics::instance();
+    quint64 epoch = 1;
+    auto enable = [&] {
+        direct.setGpuCompositionEnabled(true, surface);
+        direct.setGpuTextureDelivery(true, epoch, QOpenGLContext::globalShareContext());
+    };
+    enable();
+    for (const auto quality : {playback::PreviewQuality::Full, playback::PreviewQuality::Half, playback::PreviewQuality::Quarter}) {
+        cpu.setPreviewQuality(quality); direct.setPreviewQuality(quality);
+        for (const auto kind : {timeline::TransitionKind::CrossDissolve, timeline::TransitionKind::FadeToBlack}) {
+            QVector<playback::CompositionTransitionSpec> transitions{{0, 0, 1, 60, 10, kind}};
+            cpu.setComposition({image, incoming, text}, transitions, 30);
+            direct.setComposition({image, incoming, text}, transitions, 30);
+            for (qint64 frame : {0, 49, 50, 55, 59, 60, 65, 75}) {
+                metrics.reset();
+                cpu.renderCompositionFrame(frame, frame, 30);
+                direct.renderCompositionFrame(frame, frame, 30);
+                require(delivered.gpu && !delivered.rgba && delivered.delivery_epoch == epoch,
+                    "Native timeline did not use direct delivery.");
+                auto cached = delivered.gpu;
+                direct.renderCompositionFrame(frame, frame, 30);
+                require(delivered.gpu == cached, "Direct final frame cache lost its lease.");
+                auto normal = metrics.takeSnapshotAndReset();
+                require(normal.gpu_composition_readback_bytes == 0 && normal.gpu_composition_frames == 1 &&
+                    normal.composition_cache_hits == 1, "Normal direct composition read pixels or missed the cache.");
+                direct.recoverPreviewFrame(delivered, frame, 30, epoch);
+                compare(expected, delivered.rgba);
+                cached.reset(); delivered = {};
+                direct.setGpuCompositionEnabled(false, surface);
+                // Allow nonblocking retirement and producer fence collection.
+                QThread::msleep(6); QCoreApplication::processEvents();
+                ++epoch; enable();
+            }
+        }
+    }
+    image.still_frame = published;
+    direct.setComposition({image}, {}, 31); direct.renderCompositionFrame(0, 0, 31);
+    require(bool(delivered.gpu), "Published PNG did not use direct delivery.");
+    direct.recoverPreviewFrame(delivered, 0, 31, epoch);
+    const auto old = delivered.rgba;
+    delivered = {}; direct.setGpuCompositionEnabled(false, surface);
+    QThread::msleep(6); QCoreApplication::processEvents(); ++epoch; enable();
+    image.still_frame = refreshed;
+    direct.setComposition({image}, {}, 32); direct.renderCompositionFrame(0, 0, 32);
+    require(bool(delivered.gpu), "Refreshed PNG did not use direct delivery.");
+    direct.recoverPreviewFrame(delivered, 0, 32, epoch);
+    require(old && delivered.rgba && old->rgba_pixels != delivered.rgba->rgba_pixels,
+        "Direct delivery cached the previous published PNG.");
+    delivered = {}; direct.setGpuCompositionEnabled(false, surface);
+    QThread::msleep(6); QCoreApplication::processEvents(); ++epoch; enable();
+    direct.setPreviewQuality(playback::PreviewQuality::Quarter);
+    direct.setComposition({image}, {}, 33);
+    std::vector<rendering::PreviewFramePayload> held;
+    for (qint64 frame : {0, 1, 2}) {
+        direct.renderCompositionFrame(frame, frame, 33);
+        require(bool(delivered.gpu), "Direct pool warmup failed."); held.push_back(delivered);
+    }
+    auto before = delivered.gpu;
+    direct.renderCompositionFrame(3, 3, 33);
+    direct.renderCompositionFrame(4, 4, 33);
+    require(delivered.gpu == before, "Busy request overwrote a leased frame.");
+    held[0] = {};
+    QEventLoop retry;
+    QTimer poll;
+    QObject::connect(&poll, &QTimer::timeout, &retry, [&] { if (delivered.timeline_frame == 4) retry.quit(); });
+    poll.start(5); QTimer::singleShot(2000, &retry, &QEventLoop::quit); retry.exec();
+    require(delivered.timeline_frame == 4 && delivered.gpu && errors == 0,
+        "Paused Busy retry did not coalesce to the latest request.");
+    direct.setGpuTextureDelivery(false, ++epoch, QOpenGLContext::globalShareContext());
+    direct.renderCompositionFrame(4, 4, 33);
+    require(delivered.rgba && !delivered.gpu, "Disabling direct presentation did not retain GPU RGBA fallback.");
+    held.clear(); delivered = {}; before.reset();
+    direct.setGpuCompositionEnabled(false, surface);
+    QThread::msleep(6); QCoreApplication::processEvents(); ++epoch; enable();
+    direct.renderCompositionFrame(5, 5, 33);
+    require(bool(delivered.gpu), "Direct delivery did not retry after off/on.");
+    std::string cause; std::int64_t code = 0;
+    require(!delivered.gpu->endUse(nullptr, cause, code), "Lost consumer context was not rejected.");
+    QThread::msleep(6); QCoreApplication::processEvents();
+    direct.renderCompositionFrame(6, 6, 33);
+    require(delivered.rgba && !delivered.gpu && errors == 0,
+        "A consumer/fence failure did not disable direct delivery and preserve RGBA fallback.");
+    direct.renderCompositionFrame(7, 7, 33);
+    require(delivered.rgba && !delivered.gpu, "Direct failure unexpectedly retried within the same activation.");
+    delivered = {};
+}
 } // namespace
 
 int main(int argc, char** argv) {
+    QSurfaceFormat format; format.setVersion(3, 2); format.setProfile(QSurfaceFormat::CoreProfile);
+    QSurfaceFormat::setDefaultFormat(format);
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QGuiApplication app(argc, argv);
     try {
         QTemporaryDir temp;
@@ -150,6 +254,7 @@ int main(int argc, char** argv) {
                 gpu.play(); loop.exec(); gpu.pause();
                 require(toggled_off && toggled_on && failures == 0 && warnings == 0,
                     "Native toggle interrupted playback.");
+                directWorker(surface.get(), image, incoming, text, published, refreshed);
                 metrics.setEnabled(false);
             } catch (...) { failure = std::current_exception(); }
         }));

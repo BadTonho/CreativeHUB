@@ -1534,7 +1534,7 @@ void validatePlaybackFrameMailbox() {
         "The mailbox did not replace an older pending packet.");
 
     const auto packet = mailbox.take();
-    require(packet.has_value() && packet->frame == second &&
+    require(packet.has_value() && packet->frame.rgba == second &&
                 packet->frame_index == 2 && packet->generation == 11 &&
                 packet->delivery_trace_id == 102,
             "The mailbox did not retain the newest shared frame packet.");

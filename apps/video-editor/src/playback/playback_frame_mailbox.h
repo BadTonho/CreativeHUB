@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../media/video_frame.h"
+#include "../rendering/preview_frame_payload.h"
 
 #include <QtGlobal>
 
@@ -10,7 +10,7 @@
 namespace playback {
 
 struct PlaybackFramePacket {
-    media::VideoFramePtr frame;
+    rendering::PreviewFramePayload frame;
     qint64 frame_index = 0;
     quint64 generation = 0;
     quint64 delivery_trace_id = 0;

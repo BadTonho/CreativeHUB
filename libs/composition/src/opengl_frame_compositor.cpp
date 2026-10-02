@@ -3,6 +3,7 @@
 #include <QGuiApplication>
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
+#include <QOpenGLContextGroup>
 #include <QOpenGLFramebufferObject>
 #include <QOpenGLFunctions_3_2_Core>
 #include <QOpenGLShaderProgram>
@@ -10,10 +11,12 @@
 #include <QThread>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <limits>
 #include <numbers>
+#include <mutex>
 #include <stdexcept>
 
 namespace creative_suite::composition {
@@ -79,6 +82,84 @@ void main() {
 )GLSL";
 } // namespace
 
+struct OpenGlTexturePoolBudget::Impl {
+    mutable std::mutex mutex;
+    std::uint64_t bytes = 0;
+    unsigned targets = 0;
+};
+OpenGlTexturePoolBudget::OpenGlTexturePoolBudget() : impl_(std::make_unique<Impl>()) {}
+OpenGlTexturePoolBudget::~OpenGlTexturePoolBudget() = default;
+std::uint64_t OpenGlTexturePoolBudget::bytes() const noexcept {
+    std::lock_guard lock(impl_->mutex); return impl_->bytes;
+}
+unsigned OpenGlTexturePoolBudget::targets() const noexcept {
+    std::lock_guard lock(impl_->mutex); return impl_->targets;
+}
+
+struct OpenGlTextureFrame::State {
+    int width = 0, height = 0;
+    GLuint texture = 0;
+    std::uint64_t session = 0;
+    QOpenGLContextGroup* group = nullptr;
+    mutable std::mutex mutex;
+    std::atomic_bool valid{true};
+    GLsync producer = nullptr;
+    std::vector<GLsync> consumers;
+    bool unsafe = false;
+};
+OpenGlTextureFrame::OpenGlTextureFrame(std::shared_ptr<State> state) : state_(std::move(state)) {}
+OpenGlTextureFrame::~OpenGlTextureFrame() = default;
+int OpenGlTextureFrame::width() const noexcept { return state_->width; }
+int OpenGlTextureFrame::height() const noexcept { return state_->height; }
+unsigned OpenGlTextureFrame::texture() const noexcept { return state_->texture; }
+std::uint64_t OpenGlTextureFrame::session() const noexcept { return state_->session; }
+bool OpenGlTextureFrame::valid() const noexcept { return state_->valid.load(); }
+bool OpenGlTextureFrame::beginUse(QOpenGLContext* context, std::string& cause, std::int64_t& code) const {
+    code = 0;
+    std::lock_guard lock(state_->mutex);
+    if (!valid() || !context || QOpenGLContext::currentContext() != context ||
+        context->shareGroup() != state_->group || state_->unsafe || state_->consumers.size() >= 128) {
+        cause = "The texture lease or consumer sharing context is unavailable."; return false;
+    }
+    auto* gl = QOpenGLVersionFunctionsFactory::get<QOpenGLFunctions_3_2_Core>(context);
+    if (!gl || !gl->initializeOpenGLFunctions()) {
+        cause = "Consumer OpenGL functions are unavailable."; return false;
+    }
+    gl->glWaitSync(state_->producer, 0, GL_TIMEOUT_IGNORED);
+    code = gl->glGetError();
+    if (code) cause = "OpenGL failed to submit the producer fence wait.";
+    return code == 0;
+}
+bool OpenGlTextureFrame::endUse(QOpenGLContext* context, std::string& cause, std::int64_t& code) const {
+    code = 0;
+    std::lock_guard lock(state_->mutex);
+    if (!valid() || !context || QOpenGLContext::currentContext() != context ||
+        context->shareGroup() != state_->group) {
+        cause = "The texture consumer context was lost."; state_->unsafe = true; return false;
+    }
+    auto* gl = QOpenGLVersionFunctionsFactory::get<QOpenGLFunctions_3_2_Core>(context);
+    if (!gl || !gl->initializeOpenGLFunctions()) {
+        cause = "Consumer OpenGL functions are unavailable."; state_->unsafe = true; return false;
+    }
+    if (state_->consumers.size() >= 128) {
+        gl->glFinish();
+        cause = "The bounded consumer fence registry is full.";
+        state_->unsafe = true;
+        return false;
+    }
+    const auto fence = gl->glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    if (fence) state_->consumers.push_back(fence);
+    gl->glFlush();
+    code = gl->glGetError();
+    if (!fence || code) {
+        // Exceptional recovery only: without a consumption fence, complete
+        // this consumer's commands before its lease can be returned.
+        gl->glFinish();
+        cause = "OpenGL failed to publish the consumer fence."; state_->unsafe = true; return false;
+    }
+    return true;
+}
+
 struct OpenGlFrameCompositor::Impl {
     QOffscreenSurface* surface;
     std::unique_ptr<QOpenGLContext> context;
@@ -96,16 +177,54 @@ struct OpenGlFrameCompositor::Impl {
     using Uniform2dv = void (QOPENGLF_APIENTRYP)(GLint, GLsizei, const GLdouble*);
     Uniform2dv uniform2dv = nullptr;
     OpenGlPrecisionPolicy precision;
+    QOpenGLContext* share_context = nullptr;
+    std::shared_ptr<OpenGlTexturePoolBudget> budget;
+    struct Target {
+        std::unique_ptr<QOpenGLFramebufferObject> output;
+        std::shared_ptr<OpenGlTextureFrame::State> state;
+        std::uint64_t bytes = 0;
+    };
+    std::vector<Target> targets;
+    QOpenGLFramebufferObject* selected_output = nullptr;
+    std::uint64_t session = 0;
+    bool retiring = false;
 
-    explicit Impl(QOffscreenSurface* s, OpenGlPrecisionPolicy policy) : surface(s), precision(policy) {}
+    explicit Impl(QOffscreenSurface* s, OpenGlPrecisionPolicy policy, QOpenGLContext* sharing,
+        std::shared_ptr<OpenGlTexturePoolBudget> pool_budget)
+        : surface(s), precision(policy), share_context(sharing),
+          budget(pool_budget ? std::move(pool_budget) : std::make_shared<OpenGlTexturePoolBudget>()) {
+        static std::atomic<std::uint64_t> next_session{0}; session = ++next_session;
+    }
     ~Impl() {
         if (context && context->makeCurrent(surface)) {
+            for (auto& target : targets) {
+                if (target.state) {
+                    std::lock_guard lock(target.state->mutex);
+                    target.state->valid.store(false);
+                    if (target.state->unsafe) gl->glFinish(); // Exceptional teardown only.
+                    if (target.state->producer) {
+                        gl->glWaitSync(target.state->producer, 0, GL_TIMEOUT_IGNORED);
+                        gl->glDeleteSync(target.state->producer);
+                        target.state->producer = nullptr;
+                    }
+                    for (auto fence : target.state->consumers) {
+                        gl->glWaitSync(fence, 0, GL_TIMEOUT_IGNORED); gl->glDeleteSync(fence);
+                    }
+                    target.state->consumers.clear();
+                }
+                target.output.reset();
+            }
             output.reset();
             program.reset();
             if (texture) gl->glDeleteTextures(1, &texture);
             if (vao) gl->glDeleteVertexArrays(1, &vao);
             if (lookup_buffer) gl->glDeleteBuffers(1, &lookup_buffer);
             context->doneCurrent();
+        }
+        for (auto& target : targets) {
+            if (target.state) target.state->valid.store(false);
+            std::lock_guard lock(budget->impl_->mutex);
+            budget->impl_->bytes -= target.bytes; --budget->impl_->targets;
         }
     }
     OpenGlCompositionResult initialize() {
@@ -118,6 +237,7 @@ struct OpenGlFrameCompositor::Impl {
         requested.setVersion(3, 2);
         requested.setProfile(QSurfaceFormat::CoreProfile);
         context->setFormat(requested);
+        if (share_context) context->setShareContext(share_context);
         if (!context->create() || !context->makeCurrent(surface))
             return result(OpenGlCompositionStatus::Failed, "create-context",
                 "Cannot create or activate the worker OpenGL context.");
@@ -161,6 +281,49 @@ struct OpenGlFrameCompositor::Impl {
         gl->glUniformBlockBinding(program->programId(), block, 0);
         return result(OpenGlCompositionStatus::Complete);
     }
+    OpenGlCompositionResult activate() {
+        if (!program || !program->isLinked()) {
+            if (context) return result(OpenGlCompositionStatus::Failed, "initialize",
+                "The previous context initialization failed.");
+            return initialize();
+        }
+        if (QOpenGLContext::currentContext() != context.get() && !context->makeCurrent(surface))
+            return result(OpenGlCompositionStatus::Failed, "make-current",
+                "Cannot reactivate the worker OpenGL context.");
+        return result(OpenGlCompositionStatus::Complete);
+    }
+    OpenGlCompositionResult collect() {
+        for (auto& target : targets) {
+            if (!target.state) continue;
+            auto& state = *target.state;
+            std::lock_guard lock(state.mutex);
+            if (state.unsafe) return result(OpenGlCompositionStatus::Failed, "consumer-fence",
+                "A consumer could not protect its texture draw.");
+            for (auto it = state.consumers.begin(); it != state.consumers.end();) {
+                const auto status = gl->glClientWaitSync(*it, 0, 0);
+                if (status == GL_WAIT_FAILED) return result(OpenGlCompositionStatus::Failed,
+                    "collect-fence", "Cannot query the texture consumer fence.", gl->glGetError());
+                if (status == GL_ALREADY_SIGNALED || status == GL_CONDITION_SATISFIED) {
+                    gl->glDeleteSync(*it); it = state.consumers.erase(it);
+                } else ++it;
+            }
+            if (target.state.use_count() == 1 && state.producer && state.consumers.empty()) {
+                const auto status = gl->glClientWaitSync(state.producer, 0, 0);
+                if (status == GL_WAIT_FAILED) return result(OpenGlCompositionStatus::Failed,
+                    "collect-fence", "Cannot query the texture producer fence.", gl->glGetError());
+                if (status == GL_ALREADY_SIGNALED || status == GL_CONDITION_SATISFIED) {
+                    gl->glDeleteSync(state.producer); state.producer = nullptr;
+                }
+            }
+        }
+        return result(OpenGlCompositionStatus::Complete);
+    }
+    bool available(const Target& target) const {
+        if (!target.state) return true;
+        std::lock_guard lock(target.state->mutex);
+        return target.state.use_count() == 1 && !target.state->producer &&
+            target.state->consumers.empty() && !target.state->unsafe;
+    }
 };
 
 std::unique_ptr<QOffscreenSurface> OpenGlFrameCompositor::createSurface() {
@@ -181,13 +344,179 @@ std::unique_ptr<QOffscreenSurface> OpenGlFrameCompositor::createSurface() {
     return surface->isValid() ? std::move(surface) : nullptr;
 }
 
-OpenGlFrameCompositor::OpenGlFrameCompositor(QOffscreenSurface* surface, OpenGlPrecisionPolicy precision)
-    : impl_(std::make_unique<Impl>(surface, precision)) {}
+OpenGlFrameCompositor::OpenGlFrameCompositor(QOffscreenSurface* surface, OpenGlPrecisionPolicy precision,
+    QOpenGLContext* share_context, std::shared_ptr<OpenGlTexturePoolBudget> budget)
+    : impl_(std::make_unique<Impl>(surface, precision, share_context, std::move(budget))) {}
 OpenGlFrameCompositor::~OpenGlFrameCompositor() = default;
 
 OpenGlCompositionResult OpenGlFrameCompositor::compose(int width, int height,
     const std::vector<CompositionLayer>& layers, const CancellationPredicate& cancel,
     OpenGlCompositionTimings* timings) {
+    return render(width, height, layers, cancel, timings, true);
+}
+
+OpenGlTextureCompositionResult OpenGlFrameCompositor::composeTexture(int width, int height,
+    const std::vector<CompositionLayer>& layers, const CancellationPredicate& cancel,
+    OpenGlCompositionTimings* timings) {
+    if (timings) *timings = {};
+    auto& p = *impl_;
+    struct Guard { Impl& p; ~Guard() { if (p.context) p.context->doneCurrent(); } } guard{p};
+    const auto converted = [](OpenGlCompositionResult r) {
+        return OpenGlTextureCompositionResult{r.status, {}, std::move(r.operation), std::move(r.cause), r.error_code};
+    };
+    try {
+        if (cancel && cancel()) return {OpenGlCompositionStatus::Cancelled};
+        if (p.retiring) return {OpenGlCompositionStatus::Unsupported, {}, "retired-session",
+            "This compositor session no longer publishes textures."};
+        auto active = p.activate();
+        if (active.status != OpenGlCompositionStatus::Complete) return converted(std::move(active));
+        if (!p.share_context || !QOpenGLContext::areSharing(p.context.get(), p.share_context))
+            return {OpenGlCompositionStatus::Unsupported, {}, "check-sharing",
+                "The producer has no verified shared context."};
+        if (!bounded(width, height, p.texture_limit) ||
+            static_cast<std::uint64_t>(width) * height * 4 > OpenGlTexturePoolBudget::maximum_bytes)
+            return {OpenGlCompositionStatus::Unsupported, {}, "check-pool-limits",
+                "Canvas exceeds the shared texture pool budget or device limits."};
+        auto collected = p.collect();
+        if (collected.status != OpenGlCompositionStatus::Complete) return converted(std::move(collected));
+        std::size_t index = p.targets.size();
+        for (std::size_t i = 0; i < p.targets.size(); ++i) {
+            if (p.available(p.targets[i])) {
+                index = i;
+                if (p.targets[i].output && p.targets[i].output->width() == width &&
+                    p.targets[i].output->height() == height) break;
+            }
+        }
+        const auto bytes = static_cast<std::uint64_t>(width) * height * 4;
+        const bool adding = index == p.targets.size();
+        const auto old_bytes = adding ? 0 : p.targets[index].bytes;
+        p.targets.reserve(OpenGlTexturePoolBudget::maximum_targets);
+        {
+            std::lock_guard lock(p.budget->impl_->mutex);
+            if ((adding && p.budget->impl_->targets == OpenGlTexturePoolBudget::maximum_targets) ||
+                p.budget->impl_->bytes - old_bytes + bytes > OpenGlTexturePoolBudget::maximum_bytes)
+                return {OpenGlCompositionStatus::Busy};
+            if (adding) { p.targets.emplace_back(); ++p.budget->impl_->targets; }
+            p.budget->impl_->bytes = p.budget->impl_->bytes - old_bytes + bytes;
+        }
+        auto& target = p.targets[index];
+        target.bytes = bytes;
+        if (!target.output || target.output->width() != width || target.output->height() != height) {
+            target.output.reset();
+            QOpenGLFramebufferObjectFormat format; format.setInternalTextureFormat(GL_RGBA8);
+            target.output = std::make_unique<QOpenGLFramebufferObject>(width, height, format);
+            if (!target.output->isValid()) return {OpenGlCompositionStatus::Failed, {},
+                "allocate-texture-target", "Cannot allocate a shared RGBA8 target."};
+        }
+        target.state = std::make_shared<OpenGlTextureFrame::State>();
+        // Allocate the bounded consumer registry on the worker, never while drawing.
+        target.state->consumers.reserve(128);
+        target.state->width = width; target.state->height = height;
+        target.state->texture = target.output->texture(); target.state->session = p.session;
+        target.state->group = p.context->shareGroup();
+        p.selected_output = target.output.get();
+        auto rendered = render(width, height, layers, cancel, timings, false);
+        p.selected_output = nullptr;
+        if (rendered.status != OpenGlCompositionStatus::Complete) return converted(std::move(rendered));
+        p.gl->glBindTexture(GL_TEXTURE_2D, target.state->texture);
+        p.gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        p.gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        p.gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        p.gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        const auto fence_started = Clock::now();
+        target.state->producer = p.gl->glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        p.gl->glFlush();
+        if (timings) timings->producer_fence_submission_nanoseconds = elapsed(fence_started);
+        const auto code = p.gl->glGetError();
+        if (!target.state->producer || code) return {OpenGlCompositionStatus::Failed, {},
+            "publish-texture-fence", "Cannot publish the texture producer fence.", code};
+        if (cancel && cancel()) return {OpenGlCompositionStatus::Cancelled};
+        return {OpenGlCompositionStatus::Complete,
+            OpenGlTextureFramePtr(new OpenGlTextureFrame(target.state))};
+    } catch (const std::exception& error) {
+        p.selected_output = nullptr;
+        return {OpenGlCompositionStatus::Failed, {}, "compose-texture", error.what()};
+    }
+}
+
+OpenGlCompositionResult OpenGlFrameCompositor::readback(const OpenGlTextureFramePtr& frame,
+    const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
+    if (timings) *timings = {};
+    auto& p = *impl_;
+    struct Guard { Impl& p; ~Guard() { if (p.context) p.context->doneCurrent(); } } guard{p};
+    try {
+        if (cancel && cancel()) return result(OpenGlCompositionStatus::Cancelled);
+        if (!frame || !frame->valid() || frame->session() != p.session)
+            return result(OpenGlCompositionStatus::Unsupported, "read-texture", "Texture lease is no longer available.");
+        auto active = p.activate();
+        if (active.status != OpenGlCompositionStatus::Complete) return active;
+        auto target = std::find_if(p.targets.begin(), p.targets.end(), [&](const auto& t) {
+            return t.state == frame->state_;
+        });
+        if (target == p.targets.end() || !target->output->bind())
+            return result(OpenGlCompositionStatus::Failed, "read-texture", "Cannot bind the leased framebuffer.");
+        const auto started = Clock::now();
+        p.gl->glWaitSync(frame->state_->producer, 0, GL_TIMEOUT_IGNORED);
+        media::RgbaFrame rgba{frame->width(), frame->height(), frame->width() * 4, {}};
+        rgba.rgba_pixels.resize(static_cast<std::size_t>(rgba.stride) * rgba.height);
+        p.gl->glPixelStorei(GL_PACK_ALIGNMENT, 1); p.gl->glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+        if (cancel && cancel()) return result(OpenGlCompositionStatus::Cancelled);
+        p.gl->glReadPixels(0, 0, rgba.width, rgba.height, GL_RGBA, GL_UNSIGNED_BYTE, rgba.rgba_pixels.data());
+        if (timings) {
+            timings->readback_bytes = rgba.rgba_pixels.size(); timings->readback_nanoseconds = elapsed(started);
+        }
+        if (auto code = p.gl->glGetError(); code != GL_NO_ERROR)
+            return result(OpenGlCompositionStatus::Failed, "read-texture", "Texture readback failed.", code);
+        if (cancel && cancel()) return result(OpenGlCompositionStatus::Cancelled);
+        for (int y = 0; y < rgba.height / 2; ++y) {
+            auto first = rgba.rgba_pixels.begin() + static_cast<std::size_t>(y) * rgba.stride;
+            auto last = rgba.rgba_pixels.begin() + static_cast<std::size_t>(rgba.height - 1 - y) * rgba.stride;
+            std::swap_ranges(first, first + rgba.stride, last);
+        }
+        if (timings) timings->readback_nanoseconds = elapsed(started);
+        if (cancel && cancel()) return result(OpenGlCompositionStatus::Cancelled);
+        return {OpenGlCompositionStatus::Complete, std::move(rgba)};
+    } catch (const std::exception& error) { return result(OpenGlCompositionStatus::Failed, "read-texture", error.what()); }
+}
+
+void OpenGlFrameCompositor::retireTextureFrames() noexcept { impl_->retiring = true; }
+
+OpenGlCompositionResult OpenGlFrameCompositor::collectReleasedTextureFrames() {
+    auto& p = *impl_;
+    if (p.targets.empty()) return result(OpenGlCompositionStatus::Complete);
+    auto active = p.activate();
+    if (active.status != OpenGlCompositionStatus::Complete) return active;
+    auto collected = p.collect();
+    if (p.retiring) {
+        // A displayed lease must not retain unused slots and starve the next
+        // activation. Only completed, unleased targets can be deleted here.
+        for (auto it = p.targets.begin(); it != p.targets.end();) {
+            if (!p.available(*it)) { ++it; continue; }
+            it->output.reset();
+            {
+                std::lock_guard lock(p.budget->impl_->mutex);
+                p.budget->impl_->bytes -= it->bytes;
+                --p.budget->impl_->targets;
+            }
+            it = p.targets.erase(it);
+        }
+    }
+    p.context->doneCurrent(); return collected;
+}
+bool OpenGlFrameCompositor::hasPendingTextureFrames() const {
+    return std::any_of(impl_->targets.begin(), impl_->targets.end(), [&](const auto& t) {
+        return !impl_->available(t);
+    });
+}
+std::uint64_t OpenGlFrameCompositor::texturePoolBytes() const noexcept { return impl_->budget->bytes(); }
+unsigned OpenGlFrameCompositor::texturePoolOccupancy() const {
+    return static_cast<unsigned>(std::count_if(impl_->targets.begin(), impl_->targets.end(),
+        [](const auto& t) { return t.state && t.state.use_count() > 1; }));
+}
+
+OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
+    const std::vector<CompositionLayer>& layers, const CancellationPredicate& cancel,
+    OpenGlCompositionTimings* timings, bool read_output) {
     OpenGlCompositionTimings measured;
     struct TimingsGuard {
         OpenGlCompositionTimings* output;
@@ -200,19 +529,12 @@ OpenGlCompositionResult OpenGlFrameCompositor::compose(int width, int height,
     auto& p = *impl_;
     struct CurrentGuard {
         Impl& p;
-        ~CurrentGuard() { if (p.context) p.context->doneCurrent(); }
-    } guard{p};
+        bool release;
+        ~CurrentGuard() { if (release && p.context) p.context->doneCurrent(); }
+    } guard{p, read_output};
     try {
-        if (!p.program || !p.program->isLinked()) {
-            // A failed instance is discarded by its caller, never reused.
-            if (p.context) return result(OpenGlCompositionStatus::Failed,
-                "initialize", "The previous context initialization failed.");
-            auto initialized = p.initialize();
-            if (initialized.status != OpenGlCompositionStatus::Complete) return initialized;
-        } else if (!p.context->makeCurrent(p.surface)) {
-            return result(OpenGlCompositionStatus::Failed, "make-current",
-                "Cannot reactivate the worker OpenGL context.");
-        }
+        auto activated = p.activate();
+        if (activated.status != OpenGlCompositionStatus::Complete) return activated;
         auto* gl = p.gl;
         if (!bounded(width, height, p.texture_limit))
             return result(OpenGlCompositionStatus::Unsupported, "check-limits",
@@ -247,15 +569,16 @@ OpenGlCompositionResult OpenGlFrameCompositor::compose(int width, int height,
             }
         }
         if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
-        if (!p.output || p.output->width() != width || p.output->height() != height) {
+        if (read_output && (!p.output || p.output->width() != width || p.output->height() != height)) {
             QOpenGLFramebufferObjectFormat format;
             format.setInternalTextureFormat(GL_RGBA8);
             p.output = std::make_unique<QOpenGLFramebufferObject>(width, height, format);
             if (!p.output->isValid()) return result(OpenGlCompositionStatus::Failed,
                 "allocate-framebuffer", "Cannot allocate the output RGBA8 framebuffer.");
         }
+        auto* output = read_output ? p.output.get() : p.selected_output;
         const auto setup_started = Clock::now();
-        if (!p.output->bind() || !p.program->bind())
+        if (!output || !output->bind() || !p.program->bind())
             return result(OpenGlCompositionStatus::Failed, "bind-output",
                 "Cannot bind the output framebuffer or shader program.");
         gl->glViewport(0, 0, width, height);
@@ -361,6 +684,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::compose(int width, int height,
                     "OpenGL reported an upload or drawing error.", code);
         }
         if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
+        if (!read_output) return result(OpenGlCompositionStatus::Complete);
         const auto read_started = Clock::now();
         media::RgbaFrame frame{width, height, width * 4, {}};
         frame.rgba_pixels.resize(static_cast<std::size_t>(frame.stride) * height);

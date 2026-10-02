@@ -40,7 +40,8 @@ timeline models, editors, and panels remain application-owned.
 
 `creative-suite::composition` stays Qt independent. Its separate optional
 `creative-suite::composition-opengl` target owns worker GPU resources and frame
-readback. Video Editor is the first consumer; Motion Studio adoption is planned.
+readback, shared GPU frame leases, fences and bounded output reservations.
+Video Editor is the first consumer; Motion Studio adoption is planned.
 
 ## Video Editor organization
 

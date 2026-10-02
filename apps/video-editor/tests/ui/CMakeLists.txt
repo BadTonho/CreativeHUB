@@ -144,6 +144,7 @@ target_include_directories(creative-suite-main-editor-preview-tests PRIVATE
 )
 
 target_link_libraries(creative-suite-main-editor-preview-tests PRIVATE
+    creative-suite::composition-opengl
     Qt6::Widgets
     Qt6::OpenGL
     Qt6::OpenGLWidgets
@@ -218,6 +219,7 @@ target_include_directories(creative-suite-main-editor-opengl-preview-tests PRIVA
     ${VIDEO_EDITOR_SOURCE_DIR}
 )
 target_link_libraries(creative-suite-main-editor-opengl-preview-tests PRIVATE
+    creative-suite::composition-opengl
     Qt6::Widgets
     Qt6::OpenGL
     Qt6::OpenGLWidgets

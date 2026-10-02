@@ -35,6 +35,26 @@ int main() {
                 gpu_snapshot.blend_lookup_composition_frames == 0,
                 "GPU composition metrics mixed presentation or CPU paths.");
         require(metrics.takeSnapshotAndReset().gpu_composition_uploaded_bytes == 0, "GPU metrics did not reset.");
+        metrics.recordPreviewDelivery(true);
+        metrics.recordPreviewDelivery(false);
+        metrics.recordTexturePoolBusy();
+        metrics.recordTexturePoolBusy(false);
+        metrics.recordTextureDeliveryFallback();
+        metrics.setTexturePoolState(4096, 2);
+        metrics.setTexturePoolState(2048, 1);
+        const auto direct_trace = metrics.createFrameDeliveryTrace(2, 20);
+        for (auto stage : {rendering::PreviewFrameDeliveryStage::PreviewSubmitted,
+            rendering::PreviewFrameDeliveryStage::GpuTextureAccepted, rendering::PreviewFrameDeliveryStage::GpuDrawn,
+            rendering::PreviewFrameDeliveryStage::QtFrameSwapped}) metrics.recordFrameDeliveryStage(direct_trace, stage);
+        const auto direct_snapshot = metrics.takeSnapshotAndReset();
+        require(direct_snapshot.texture_delivery_frames == 1 && direct_snapshot.rgba_delivery_frames == 1 &&
+            direct_snapshot.texture_pool_busy_drops == 1 && direct_snapshot.texture_pool_busy_retries == 1 &&
+            direct_snapshot.texture_delivery_fallbacks == 1 &&
+            direct_snapshot.texture_pool_peak_bytes == 4096 && direct_snapshot.texture_pool_bytes == 2048 &&
+            direct_snapshot.texture_pool_occupancy == 1 && direct_snapshot.gpu_upload.count == 0 &&
+            direct_snapshot.frame_delivery.stage_counts[static_cast<std::size_t>(rendering::PreviewFrameDeliveryStage::GpuUploaded)] == 0 &&
+            direct_snapshot.frame_delivery.timings[static_cast<std::size_t>(rendering::PreviewFrameDeliveryTiming::GpuTextureAcceptanceToDraw)].count == 1,
+            "Direct metrics mixed acceptance with upload or lost pool state.");
         metrics.recordGpuCompositionWork(gpu_timings);
         const auto cancelled_work = metrics.takeSnapshotAndReset();
         require(cancelled_work.gpu_composition_frames == 0 && cancelled_work.gpu_composition_uploaded_bytes == 400,

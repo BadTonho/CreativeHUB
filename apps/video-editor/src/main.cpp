@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QIcon>
+#include <QSurfaceFormat>
 
 #include <cstdlib>
 #include <exception>
@@ -56,6 +57,12 @@ int main(int argc, char* argv[]) {
         {{"version", "Beta 0.1.3"}, {"log_path", pathToUtf8(logger.log_path())}});
 
     try {
+        QSurfaceFormat format;
+        format.setRenderableType(QSurfaceFormat::OpenGL);
+        format.setVersion(3, 2);
+        format.setProfile(QSurfaceFormat::CoreProfile);
+        QSurfaceFormat::setDefaultFormat(format);
+        QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
         QApplication application(argc, argv);
         application.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
         QApplication::setApplicationName("Video Editor");

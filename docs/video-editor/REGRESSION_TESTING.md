@@ -140,8 +140,8 @@ and its subdirectories; shared-library tests are registered in
 | Timeline model, commands, geometry, gestures, and widgets | `tests/timeline/timeline_model_test.cpp`, `timeline_command_service_test.cpp`, `timeline_geometry_test.cpp`, `timeline_interaction_controller_test.cpp`, `timeline_trim_gesture_test.cpp`, `timeline_widget_test.cpp`, `timeline_end_buttons_test.cpp` | Manual UI validation is documented; rendering, pointer feel, scaling, and accessibility checks remain pending. |
 | Playback, seeking, frame stepping, transitions, and audio | `tests/playback/video_playback_test.cpp`, `playback_worker_test.cpp`, `playback_controller_test.cpp`, `playback_deadline_scheduler_test.cpp`, `frame_step_navigation_test.cpp`, `timeline_audio_mix_test.cpp`, `audio_playback_test.cpp` | The focused controller and main-window activation tests passed 10 repeated Debug runs; the controller also passed 10 Release runs on 2026-10-01. Driver/audio-device behavior and the approved reference workload still require manual validation. 4K-source and higher-rate performance are measured separately. |
 | Rendering, transforms, text, and preview metrics | `tests/rendering/transform_compositor_test.cpp`, `text_compositor_test.cpp`, `preview_performance_metrics_test.cpp`; `tests/ui/preview_widget_test.cpp`, `opengl_preview_test.cpp` (`creative-suite-main-editor-opengl-preview`) | The native OpenGL integration test checks framebuffer output and CPU fallback on a valid context; it skips only if the platform cannot create a valid context. Real-driver visual and platform checks remain manual. |
-| Experimental GPU timeline composition | `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`); `tests/rendering/gpu_timeline_composition_test.cpp` (`creative-suite-main-editor-gpu-timeline`); worker/controller/settings/metrics/main-window tests | Automated coverage present: native CPU/GPU parity with exact alpha/geometry and RGB tolerance 2, worker lifecycle, limits/cancel/failure/fallback/retry, settings persistence/live toggle/cache, transitions/keyframes/text/quality/playback and masked PNG producer/refresh. Windows native results and remaining human/platform checks: [GPU_COMPOSITION_RESULTS.md](GPU_COMPOSITION_RESULTS.md). Unavailable contexts skip; skips do not approve drivers. |
-| Direct texture delivery, GPU effects/decoding/encoding and offline export | No implementation in this stage; export remains CPU | Planned, not implemented. [GPU_ACCELERATION_PLAN.md](GPU_ACCELERATION_PLAN.md) records follow-up gates. |
+| Experimental GPU timeline composition | `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`); `tests/rendering/gpu_timeline_composition_test.cpp` (`creative-suite-main-editor-gpu-timeline`); worker/controller/settings/metrics/main-window tests | Automated coverage present: native CPU/GPU parity with exact alpha/geometry and RGB tolerance 2, worker lifecycle, limits/cancel/failure/fallback/retry, settings persistence/live toggle/cache, transitions/keyframes/text/quality/playback and masked PNG producer/refresh. Stage 2 adds direct/RGBA parity, cross-thread lease returns, pool/retiring budget, Busy retries, direct cache/recovery, texture orientation/grayscale/resize and zero final-frame transfers. Windows native results and remaining human/platform checks: [GPU_COMPOSITION_RESULTS.md](GPU_COMPOSITION_RESULTS.md). Unavailable contexts skip; skips do not approve drivers. |
+| GPU effects/decoding/encoding and offline export | No implementation in this stage; export remains CPU | Planned, not implemented. [GPU_ACCELERATION_PLAN.md](GPU_ACCELERATION_PLAN.md) records follow-up gates. |
 | Effects, workspace, settings, shortcuts, and main-window flows | `tests/effects/effects_panel_test.cpp`; `tests/settings/settings_dialog_test.cpp`, `shortcut_manager_test.cpp`; `tests/ui/workspace_page_switch_test.cpp`, `edit_workspace_controller_test.cpp`; `tests/application/main_window_integration_test.cpp` | The [manual UI checklist](#manual-ui-validation) documents visual layout and interaction checks; cross-platform release checks remain open in the [roadmap](ROADMAP.md). |
 | Render queue and export | `tests/ui/render_queue_model_test.cpp`, `render_export_test.cpp`; `libs/media/tests/video_encoder_test.cpp` | Manual validation documents encoder, profile, cancellation, and rendered-appearance checks; release results remain pending in the [roadmap](ROADMAP.md). |
 | Image Editor linked media | `tests/project/project_file_test.cpp`, `tests/application/application_media_services_test.cpp`, `tests/application/main_window_integration_test.cpp`, `tests/timeline/timeline_widget_test.cpp`; producer-side checks in `apps/image-editor/tests/image_editor_ui_test.cpp`, `image_editor_mask_ui_test.cpp`, and `image_editor_raster_ui_test.cpp`; the main-window consumer generates a real PNG from a linked raster image and layer mask in `.cimg` v11 via the Image Editor core when both apps are enabled and asserts retained alpha after refresh. The `.csp` contract is unchanged. | Full two-app validation is listed in [`docs/image-editor/MANUAL_VALIDATION.md`](../image-editor/MANUAL_VALIDATION.md); acceptance of remaining linked-image scenarios is pending. |
@@ -475,7 +475,7 @@ in the running Video Editor after UI or integration changes:
   Settings) and compare a simple 1080p playback run
   with the metrics disabled: confirm the one-second summaries include decode,
   composition, decoded-frame cache hits, text-raster cache hits, and final
-  composition-cache hits, `metrics_schema_version="8"`, absolute Timeline
+  composition-cache hits, `metrics_schema_version="9"`, absolute Timeline
   frame/seconds/timecode when a project position is available, Timeline FPS
   rational fields, p95/p99 timings,
   delivery FPS, window-local `first_frame_ms`, lifecycle timings for media
@@ -531,7 +531,7 @@ in the running Video Editor after UI or integration changes:
   unrotated video layer for 15 seconds at Full quality, then repeat the same
   section once to warm decoder and text caches;
   confirm one `playback/slow_frame` event at most per metrics interval, only
-  when frames exceed the target-FPS budget. Check that schema `8` reports the interval
+  when frames exceed the target-FPS budget. Check that schema `9` reports the interval
   slow-frame count, the worst timeline frame, total processing/decode/
   composition/payload times, compositor list/output initialization and layer
   setup/raster/blend/copy buckets, and no more than four costly layers with
@@ -749,3 +749,26 @@ for opt-in persistence, paused/live toggle, rapid navigation, quality, physical
 audio synchronization, linked masked PNG refresh, CPU fallback/retry, shutdown,
 and independence from presentation disabling. Native Windows automation is
 recorded separately from pending human checks and macOS/Linux acceptance.
+
+### Direct texture stage 2 checks
+
+- Shared `creative-suite-composition-opengl`: CPU/RGBA/direct parity, exact alpha
+  and geometry with RGB tolerance 2, producer/consumer fences, cross-thread returns,
+  leases surviving worker teardown, three targets, 64 MiB including retired
+  compositors, release of unused retiring slots while one lease remains displayed,
+  Busy, foreign sessions, missing sharing, cancellation and resize.
+- `creative-suite-main-editor-gpu-timeline`: direct cache identity, text/keyframes,
+  transitions, all qualities, retained readback, paused latest-request retry,
+  presentation-disable RGBA fallback, consumer-fence failure latching and masked
+  PNG producer/consumer refresh.
+- `creative-suite-main-editor-opengl-preview`: real sharing required on a valid
+  native context; bottom-left orientation, padding, linear viewing, grayscale,
+  resize/letterboxing, stale epochs, retained-frame recovery, context cleanup
+  direct fence failure followed by RGBA recovery and preference-cycle retry,
+  and zero output readback/viewer uploads for normal direct frames.
+- Controller/worker/metrics boundaries preserve RGBA entry points, one-slot
+  coalescing, generation/epoch rejection, settings/live toggles and project state.
+- Run focused/shared tests in Debug and Release and the complete Release suite.
+  Native context skips are not driver acceptance. For physical audio, rapid seeks,
+  resizing, toggles, linked PNG refresh and close with pending resources on each
+  platform, follow [the manual checklist](GPU_COMPOSITION_RESULTS.md#reproducible-manual-checklist).
