@@ -149,7 +149,9 @@ Windows UI. macOS and Linux packaging checks remain deferred.
 
 ### Editable text
 
-These manual checks are pending. The automated producer test also covers
+The owner confirmed that normal typing with the default settings works again
+in the Windows application. The remaining detailed checks below are pending.
+The automated producer test also covers
 publishing an image containing text, but does not complete the manual
 Video Editor linked-image acceptance milestone.
 
@@ -159,7 +161,12 @@ correcting native width and height measurements, the UI, native text, and
 export UI tests passed 3/3 in Debug and Release; the final complete Release
 suite passed 62/62 with no failures or skips. Native mouse selection,
 highlight rendering, replacement, caret placement, wrapping, and newlines
-are covered by automation. This does not complete the owner checks below.
+are covered by automation. The full-window regression also checks displayed
+pixels during growth before forcing a native redraw. These automated results
+do not complete the remaining owner checks below.
+
+The follow-up run with the full-window scenario passed all three focused
+Debug tests and the complete Release suite (62/62, no failures or skips).
 
 1. Open a disposable image or canvas and activate **Text**. Confirm the initial
    style is 48 px Sans Serif, opaque black, and left-aligned. Click an empty
@@ -307,9 +314,10 @@ are covered by automation. This does not complete the owner checks below.
   both configurations, and the full Release suite passed 61/61.
 - [x] The owner reopened the WebP image that showed the unsupported-format
   dialog in the rebuilt Windows application UI; it opened successfully.
-- [ ] Editable text has automated regression coverage, but its manual visual
-  checks above have not yet been recorded. The linked-image acceptance gate
-  remains pending separately.
+- [x] The owner confirmed that normal text typing with the default settings
+  works again in the Windows application after the reported live-preview issue.
+- [ ] The remaining detailed editable-text visual checks above have not yet
+  been recorded. The linked-image acceptance gate remains pending separately.
 - [ ] Cross-platform packaging and interaction checks below still need
   platform-specific records.
 

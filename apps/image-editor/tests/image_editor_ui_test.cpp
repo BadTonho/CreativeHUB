@@ -468,10 +468,17 @@ bool testTextEditorGrowthLayout() {
 
 bool testWindowTextGrowth() {
     image_editor::ImageEditorWindow window;
-    window.showMaximized();
+    const bool native = QApplication::platformName() == QStringLiteral("windows");
+    if (native) {
+        window.showMaximized();
+    } else {
+        // The offscreen virtual screen is too small for this unwrapped heading.
+        // Keep the fixture at the same usable canvas size as a desktop window.
+        window.resize(1920, 1080);
+        window.show();
+    }
     window.raise();
     window.activateWindow();
-    const bool native = QApplication::platformName() == QStringLiteral("windows");
     if (native && !QTest::qWaitForWindowActive(&window)) return false;
     QCoreApplication::processEvents();
     auto* new_canvas = window.findChild<QAction*>(QStringLiteral("newCanvasAction"));
@@ -521,7 +528,9 @@ bool testWindowTextGrowth() {
         return window.screen()->grabWindow(window.winId(), position.x(), position.y(),
             editor->width(), editor->height()).toImage();
     };
-    const QString heading = QStringLiteral("sasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasd");
+    // Grow beyond the initial frame while leaving room for the offscreen
+    // backend's wider fallback glyphs. Canvas-edge wrapping has a separate case.
+    const QString heading = QStringLiteral("sasdasdasdasdasdasdasdasdasdasdasd");
     int first_ink = 0;
     for (qsizetype index = 0; index < heading.size(); ++index) {
 #if defined(Q_OS_WIN)
@@ -599,7 +608,7 @@ bool testWindowTextGrowth() {
     }
     QTest::qWait(50);
     const QImage burst = displayedImage();
-    if (editor->toPlainText() != heading || darkPixelCount(burst) < first_ink * 20 ||
+    if (editor->toPlainText() != heading || darkPixelCount(burst) < first_ink * heading.size() * 0.5 ||
         editor->document()->firstBlock().layout()->lineCount() != 1) {
         burst.save(QStringLiteral("text-editor-window-burst-failure.png"));
         std::cerr << "Typing a burst left the editor layout or live pixels stale.\n";
