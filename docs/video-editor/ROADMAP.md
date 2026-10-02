@@ -1,5 +1,7 @@
 # Video Editor Roadmap
 
+Current application version: **Beta 0.1.3**.
+
 This roadmap tracks the Video Editor through its foundation exit gate. It
 separates implemented capabilities, approved foundation scope, release gates,
 open technical validation, and later expansion. A completed product-decision
