@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
     application.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
     QCoreApplication::setApplicationName(QStringLiteral("Motion Studio"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("Beta 0.1.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("Beta 0.1.1"));
     motion::ui::MainWindow window;
     window.show();
     return application.exec();

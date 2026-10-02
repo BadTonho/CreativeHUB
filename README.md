@@ -16,7 +16,7 @@ macOS, and Linux.
 | --- | --- | --- | --- |
 | <img src="docs/assets/app-icons/video-editor.png" alt="Temporary Video Editor icon" width="56"> | [Video Editor](docs/video-editor/ROADMAP.md) | Active development | Multitrack video and audio editing, compositing, and export. |
 | <img src="docs/assets/app-icons/image-editor.png" alt="Temporary Image Editor icon" width="56"> | [Image Editor](docs/image-editor/ROADMAP.md) | Beta 0.1.3 | Layered raster editing, masks, and linked image layers with `.cimg` documents and PNG/JPEG export. |
-| <img src="docs/assets/app-icons/motion-studio.png" alt="Temporary Motion Studio icon" width="56"> | [Motion Studio](docs/motion-editor/ROADMAP.md) | MVP implementation; validation in progress | Motion design, animation, and advanced compositing. |
+| <img src="docs/assets/app-icons/motion-studio.png" alt="Temporary Motion Studio icon" width="56"> | [Motion Studio](docs/motion-editor/ROADMAP.md) | Beta 0.1.1; validation in progress | Motion design, animation, and advanced compositing. |
 
 The icons above are temporary product assets. Each application loads its PNG
 icon from bundled resources for the runtime window. Windows executable icons
