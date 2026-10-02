@@ -44,3 +44,8 @@ Qt and FFmpeg are currently used under their open-source licensing terms.
 Before distributing binaries, the project must record the exact modules,
 codecs, licenses, deployment files, and source/relinking obligations required
 by the chosen configuration.
+
+When `BUILD_IMAGE_EDITOR` is enabled, the Video Editor main-window test links
+the Image Editor core to generate a real masked PNG producer fixture. The
+Video Editor application itself gains no Image Editor dependency. The fixture
+is omitted from Video Editor-only builds while existing linked PNG checks stay.

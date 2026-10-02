@@ -43,6 +43,8 @@ public:
                              QStringList selected_object_ids);
     void setEraserPreviewEnabled(bool enabled);
     void setTransientImage(QImage image);
+    void setMaskEditing(bool enabled);
+    [[nodiscard]] bool maskEditing() const noexcept { return mask_editing_; }
     void setBrush(QColor color, int diameter);
     void fitToWindow();
     [[nodiscard]] bool cropMode() const noexcept { return crop_mode_; }
@@ -55,6 +57,8 @@ signals:
     void paintStrokeSelected(const QVector<QPointF>& image_points,
                              const QColor& color,
                              int diameter);
+    void maskPaintPreviewRequested(const QVector<QPointF>& image_points,
+                                   const QColor& color, int diameter);
     void erasePreviewRequested(const QVector<QPointF>& image_points, int diameter);
     void erasePreviewCleared();
     void eraseStrokeSelected(const QVector<QPointF>& image_points, int diameter);
@@ -123,6 +127,7 @@ private:
     bool fit_to_window_ = true;
     bool crop_mode_ = false;
     bool paint_mode_ = false;
+    bool mask_editing_ = false;
     bool eraser_mode_ = false;
     bool shape_creation_mode_ = false;
     bool text_creation_mode_ = false;

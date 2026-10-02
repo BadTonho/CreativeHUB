@@ -7,6 +7,12 @@ target_link_libraries(creative-suite-main-editor-main-window-tests PRIVATE
 )
 
 target_compile_features(creative-suite-main-editor-main-window-tests PRIVATE cxx_std_20)
+if(BUILD_IMAGE_EDITOR)
+    target_link_libraries(creative-suite-main-editor-main-window-tests PRIVATE
+        creative-suite-image-editor-core)
+    target_compile_definitions(creative-suite-main-editor-main-window-tests PRIVATE
+        CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS=1)
+endif()
 
 if(MSVC)
     target_compile_options(creative-suite-main-editor-main-window-tests PRIVATE /W4 /permissive-)

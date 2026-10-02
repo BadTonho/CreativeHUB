@@ -199,7 +199,13 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     connect(canvas_, &ImageCanvas::erasePreviewRequested, this,
             [this](const QVector<QPointF>& points, int diameter) {
                 canvas_->setTransientImage(
-                    session_.renderedImageWithEraseStroke(points, diameter));
+                    editingMask()
+                        ? session_.renderedImageWithMaskStroke(points, Qt::black, diameter)
+                        : session_.renderedImageWithEraseStroke(points, diameter));
+            });
+    connect(canvas_, &ImageCanvas::maskPaintPreviewRequested, this,
+            [this](const QVector<QPointF>& points, const QColor& color, int diameter) {
+                canvas_->setTransientImage(session_.renderedImageWithMaskStroke(points, color, diameter));
             });
     connect(canvas_, &ImageCanvas::erasePreviewCleared, canvas_, [this]() {
         canvas_->setTransientImage({});
@@ -226,9 +232,8 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
                 selected_object_ids_ = object_ids;
                 const bool layer_changed = !layer_id.isEmpty() && session_.selectLayer(layer_id);
                 if (layer_changed) {
-                    layer_panel_->setDocument(session_.data(), session_.selectedLayerId(),
-                        session_.selectedGroupId(), session_.renderedLayerThumbnails(QSize(
-                            LayerPanel::kThumbnailWidth, LayerPanel::kThumbnailHeight)));
+                    selected_mask_layer_id_.clear();
+                    updateLayerPanel();
                     updateSelectionContext();
                 }
                 for (const auto& placement : session_.visibleObjects()) {
@@ -267,7 +272,10 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     connect(tool_sidebar_, &ToolSidebar::brushColorChanged,
             this, [this](const QColor&) { updateCanvasBrush(); });
     connect(layer_panel_, &LayerPanel::layerSelected, this, [this](const QString& id) {
-        if (!session_.selectLayer(id)) return;
+        const bool changed = session_.selectLayer(id);
+        const bool mask_changed = !selected_mask_layer_id_.isEmpty();
+        selected_mask_layer_id_.clear();
+        if (!changed && !mask_changed) return;
         if (!session_.selectedLayerIsEditable() &&
             tool_sidebar_->activeTool() != ToolSidebar::Tool::Select &&
             tool_sidebar_->activeTool() != ToolSidebar::Tool::Shapes) {
@@ -276,8 +284,31 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
         updateSelectionContext();
     });
     connect(layer_panel_, &LayerPanel::groupSelected, this, [this](const QString& id) {
-        if (session_.selectGroup(id)) updateSelectionContext();
+        const bool mask_changed = !selected_mask_layer_id_.isEmpty();
+        selected_mask_layer_id_.clear();
+        if (session_.selectGroup(id) || mask_changed) updateSelectionContext();
     });
+    connect(layer_panel_, &LayerPanel::layerMaskSelected, this, [this](const QString& id) {
+        static_cast<void>(session_.selectLayer(id));
+        selected_mask_layer_id_ = id;
+        selected_object_ids_.clear();
+        updateObjectPlacements();
+        updateSelectionContext();
+    });
+    connect(layer_panel_, &LayerPanel::addLayerMaskRequested, this, [this](const QString& id) {
+        if (!session_.addLayerMask(id)) return;
+        static_cast<void>(session_.selectLayer(id));
+        selected_mask_layer_id_ = id;
+        selected_object_ids_.clear();
+        updateView(true);
+    });
+    connect(layer_panel_, &LayerPanel::removeLayerMaskRequested, this, [this](const QString& id) {
+        if (session_.removeLayerMask(id)) updateView(true);
+    });
+    connect(layer_panel_, &LayerPanel::layerMaskEnabledChanged, this,
+            [this](const QString& id, bool enabled) {
+                if (session_.setLayerMaskEnabled(id, enabled)) updateView(true);
+            });
     connect(layer_panel_, &LayerPanel::layerVisibilityChanged, this,
             [this](const QString& id, bool visible) {
                 if (session_.setLayerVisible(id, visible)) updateView(true);
@@ -707,14 +738,14 @@ void ImageEditorWindow::updateToolOptions() {
     paint_options_action_->setVisible(tool_active && (paint_active || eraser_active));
     paint_size_options_->setVisible(tool_active && (paint_active || eraser_active));
     paint_size_options_->setEnabled(tool_active);
-    tool_size_label_->setText(eraser_active ? QStringLiteral("Eraser Size")
-                                            : QStringLiteral("Brush Size"));
+    tool_size_label_->setText(editingMask() ? QStringLiteral("Mask Brush Size")
+        : (eraser_active ? QStringLiteral("Eraser Size") : QStringLiteral("Brush Size")));
     brush_size_slider_->setAccessibleName(
         eraser_active ? QStringLiteral("Eraser size") : QStringLiteral("Brush size"));
     brush_size_spin_->setAccessibleName(
         eraser_active ? QStringLiteral("Eraser size in pixels")
                       : QStringLiteral("Brush size in pixels"));
-    eraser_preview_check_->setVisible(eraser_active);
+    eraser_preview_check_->setVisible(eraser_active && !editingMask());
     const auto tool = tool_sidebar_->activeTool();
     const auto placements = session_.visibleObjects();
     const bool has_selected_shape = std::any_of(
@@ -1417,16 +1448,31 @@ void ImageEditorWindow::openShortcutSettings() {
     }
 }
 
+bool ImageEditorWindow::editingMask() const {
+    if (selected_mask_layer_id_.isEmpty() ||
+        selected_mask_layer_id_ != session_.selectedLayerId()) return false;
+    for (const auto& layer : session_.data().layers) {
+        if (layer.id == selected_mask_layer_id_) return layer.mask.has_value();
+    }
+    return false;
+}
+
+void ImageEditorWindow::updateLayerPanel() {
+    const QSize size(LayerPanel::kThumbnailWidth, LayerPanel::kThumbnailHeight);
+    layer_panel_->setDocument(session_.data(), session_.selectedLayerId(),
+        session_.selectedGroupId(), session_.renderedLayerThumbnails(size),
+        session_.renderedLayerMaskThumbnails(size), selected_mask_layer_id_);
+}
+
 void ImageEditorWindow::updateView(bool preserveCanvasView) {
+    if (!editingMask()) selected_mask_layer_id_.clear();
+    canvas_->setMaskEditing(editingMask());
     const QImage rendered = session_.renderedImage();
     canvas_->setImage(rendered, !preserveCanvasView);
     tool_sidebar_->setDocumentAvailable(session_.hasSource());
     tool_sidebar_->setPaintingAllowed(session_.hasSource() &&
                                       session_.selectedLayerIsEditable());
-    layer_panel_->setDocument(session_.data(), session_.selectedLayerId(),
-                            session_.selectedGroupId(), session_.renderedLayerThumbnails(QSize(
-                                LayerPanel::kThumbnailWidth,
-                                LayerPanel::kThumbnailHeight)));
+    updateLayerPanel();
     updateObjectPlacements();
     updateToolOptions();
     updateCanvasBrush();
@@ -1461,9 +1507,19 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     status_label_->setText(QStringLiteral("%1 × %2 px  |  %3%")
         .arg(size.width()).arg(size.height())
         .arg(static_cast<int>(canvas_->zoomFactor() * 100.0)));
+    if (editingMask()) status_label_->setText(status_label_->text() +
+        QStringLiteral("  |  Editing layer mask — black hides, white reveals"));
 }
 
 void ImageEditorWindow::updateSelectionContext() {
+    canvas_->setMaskEditing(editingMask());
+    canvas_->setEraserPreviewEnabled(eraser_preview_check_->isChecked());
+    layer_panel_->setSelectedMask(selected_mask_layer_id_);
+    const QString mask_hint = QStringLiteral("  |  Editing layer mask — black hides, white reveals");
+    QString status = status_label_->text();
+    if (status.endsWith(mask_hint)) status.chop(mask_hint.size());
+    if (editingMask()) status += mask_hint;
+    status_label_->setText(status);
     if (tool_sidebar_ == nullptr || !session_.hasSource()) {
         if (tool_sidebar_ != nullptr) tool_sidebar_->setPaintingAllowed(false);
         if (crop_action_ != nullptr) crop_action_->setEnabled(false);
@@ -1860,7 +1916,8 @@ void ImageEditorWindow::handlePaintStroke(const QVector<QPointF>& points,
                                           const QColor& color,
                                           int diameter) {
     QString error;
-    if (session_.applyPaintStroke(points, color, diameter, &error)) {
+    if (editingMask() ? session_.applyLayerMaskStroke(points, color, diameter, &error)
+                      : session_.applyPaintStroke(points, color, diameter, &error)) {
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Paint stroke applied"), 1800);
     } else if (!error.isEmpty()) {
@@ -1870,7 +1927,8 @@ void ImageEditorWindow::handlePaintStroke(const QVector<QPointF>& points,
 
 void ImageEditorWindow::handleEraseStroke(const QVector<QPointF>& points, int diameter) {
     QString error;
-    if (session_.applyEraseStroke(points, diameter, &error)) {
+    if (editingMask() ? session_.applyLayerMaskEraseStroke(points, diameter, &error)
+                      : session_.applyEraseStroke(points, diameter, &error)) {
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Erase stroke applied"), 1800);
     } else if (!error.isEmpty()) {

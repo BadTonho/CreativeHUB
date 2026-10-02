@@ -247,3 +247,14 @@ application or between producer and consumer applications.
 OpenFX may be evaluated later for third-party effect-plugin interoperability.
 A plugin host API is distinct from the internal APIs and linked-document
 contract used by the project's own applications.
+
+## Image Editor Layer Mask Publication
+
+The Image Editor writes `.cimg` v10 with optional raster layer masks and reads
+v1–v9. Linked saves still publish an ordinary flattened PNG with straight alpha;
+the Video Editor `.csp` format and handoff arguments are unchanged. Producer UI
+coverage edits and saves a mask through linked mode. When `BUILD_IMAGE_EDITOR`
+is enabled, the Video Editor main-window regression links the Image Editor core
+for a test fixture, publishes a masked PNG, and checks refresh, retained alpha,
+and clip-variant isolation. This test dependency does not affect application
+runtime dependencies or a Video Editor-only build.

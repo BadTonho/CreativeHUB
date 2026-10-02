@@ -30,7 +30,8 @@ constexpr int kShapeDocumentVersion = 6;
 constexpr int kObjectIdentityDocumentVersion = 7;
 constexpr int kLayerGroupsDocumentVersion = 8;
 constexpr int kEditableTextDocumentVersion = 9;
-constexpr int kDocumentVersion = 9;
+constexpr int kLayerMaskDocumentVersion = 10;
+constexpr int kDocumentVersion = 10;
 constexpr int kRecoveryVersion = 1;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr auto kRecoveryFormat = "creative-suite-image-recovery";
@@ -84,7 +85,10 @@ void ensureObjectIds(ImageDocumentData* document) {
         }
     };
     ensure(&document->operations);
-    for (auto& layer : document->layers) ensure(&layer.operations);
+    for (auto& layer : document->layers) {
+        ensure(&layer.operations);
+        if (layer.mask.has_value()) ensure(&layer.mask->operations);
+    }
 }
 
 bool isArgbHexColor(const QString& value) {
@@ -441,7 +445,7 @@ bool validateLayers(const ImageDocumentData& document,
         if (layer.background) {
             ++background_count;
             if (index != 0 || layer.name != QStringLiteral("Background") ||
-                layer.opacity != 100 || !layer.operations.isEmpty()) {
+                layer.opacity != 100 || !layer.operations.isEmpty() || layer.mask.has_value()) {
                 assignError(error, QStringLiteral("The Background layer is invalid."));
                 return false;
             }
@@ -467,6 +471,29 @@ bool validateLayers(const ImageDocumentData& document,
                 return false;
             }
             object_ids.insert(id);
+        }
+        if (layer.mask.has_value()) {
+            QSize mask_size = canvas_size;
+            QVector<ImageOperation> mask_operations;
+            if (!decodeOperations(encodeOperations(layer.mask->operations), kDocumentVersion,
+                                  &mask_size, true, &mask_operations, error)) return false;
+            for (const auto& operation : mask_operations) {
+                if (operation.kind == OperationKind::Shape || operation.kind == OperationKind::Text ||
+                    (operation.kind == OperationKind::PaintStroke &&
+                     (operation.paint_stroke.color.red() != operation.paint_stroke.color.green() ||
+                      operation.paint_stroke.color.red() != operation.paint_stroke.color.blue()))) {
+                    assignError(error, QStringLiteral("A layer mask contains an unsupported operation or non-grayscale color."));
+                    return false;
+                }
+                const QString id = objectId(operation).toLower();
+                if (!id.isEmpty()) {
+                    if (object_ids.contains(id)) {
+                        assignError(error, QStringLiteral("The document contains a duplicate mask stroke ID."));
+                        return false;
+                    }
+                    object_ids.insert(id);
+                }
+            }
         }
     }
     for (const auto& group : document.groups) {
@@ -641,6 +668,12 @@ QJsonObject encodeDocument(const ImageDocumentData& document,
         encoded.insert("visible", layer.visible);
         encoded.insert("opacity", layer.opacity);
         encoded.insert("operations", encodeOperations(layer.operations));
+        if (layer.mask.has_value()) {
+            QJsonObject mask;
+            mask.insert("enabled", layer.mask->enabled);
+            mask.insert("operations", encodeOperations(layer.mask->operations));
+            encoded.insert("mask", mask);
+        }
         return encoded;
     };
     QJsonArray layers;
@@ -781,6 +814,24 @@ bool decodeDocument(const QJsonObject& root,
                                   &layer_size, true, &layer->operations, error)) {
                 return false;
             }
+            if (encoded.contains("mask")) {
+                if (version < kLayerMaskDocumentVersion || layer->background ||
+                    !encoded.value("mask").isObject()) {
+                    assignError(error, QStringLiteral("This layer mask is not supported."));
+                    return false;
+                }
+                const auto mask = encoded.value("mask").toObject();
+                if (!mask.value("enabled").isBool()) {
+                    assignError(error, QStringLiteral("A layer mask has invalid properties."));
+                    return false;
+                }
+                ImageLayerMaskData decoded_mask;
+                decoded_mask.enabled = mask.value("enabled").toBool();
+                QSize mask_size = layer_canvas_size;
+                if (!decodeOperations(mask.value("operations"), version, &mask_size, true,
+                                      &decoded_mask.operations, error)) return false;
+                layer->mask = std::move(decoded_mask);
+            }
             return true;
         };
         for (const auto& encoded_value : layer_array) {
@@ -792,6 +843,10 @@ bool decodeDocument(const QJsonObject& root,
             const auto encoded = encoded_value.toObject();
             const QString kind = encoded.value("kind").toString();
             if (version >= kLayerGroupsDocumentVersion && kind == QStringLiteral("group")) {
+                if (encoded.contains("mask")) {
+                    assignError(error, QStringLiteral("Group masks are not supported."));
+                    return false;
+                }
                 int opacity = -1;
                 if (!isInteger(encoded.value("opacity"), &opacity) ||
                     !encoded.value("visible").isBool() ||

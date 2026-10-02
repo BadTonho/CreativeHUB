@@ -38,7 +38,8 @@ persistence, and recovery.
   and recovery snapshots. Version 4 stores layer UUIDs and properties; version
   5 adds layer-local eraser strokes; version 6 adds editable shape operations;
   version 7 adds stable UUIDs to paint and eraser strokes; version 8 adds
-  one-level groups. The reader continues to accept versions 1–7 and generates
+  one-level groups. Version 9 adds text and version 10 adds raster layer masks. The reader
+  continues to accept versions 1–9 and generates
   in-memory IDs for older strokes. Its data format is specified in
   [`FORMAT.md`](FORMAT.md).
 - `ImageExportSnapshot` captures the current source image, document data, and
@@ -175,20 +176,44 @@ persistence, and recovery.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 8; host links live in the Video Editor's
+  The `.cimg` schema is version 10; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message
   is shown; expected dialog cancellation is not an error.
 
+## Layer mask ownership and rendering
+
+`ImageLayerData` owns optional `ImageLayerMaskData` with an enabled flag and a
+separate operation vector. Undo snapshots share operation buffers rather than
+copying a canvas-sized bitmap per stroke. `ImageDocumentSession` exposes mask
+creation/removal, enablement, painting, erasing, transient previews, and small
+mask thumbnails. Masks begin white and replay grayscale strokes and fixed
+canvas transforms. Mask luminance multiplies premultiplied layer pixels before
+opacity and group composition. Empty white masks avoid a full-size allocation.
+Exports and linked publication use the same raster-layer renderer.
+
+Layer transforms are appended to both content and existing mask operations.
+Painting in a transformed parent group uses inverse group geometry. Object
+selection transforms affect content objects while the layer mask remains in
+the layer canvas. Masks are not independently selectable canvas objects.
+
+The Layers dock displays the grayscale mask beside the content thumbnail;
+the active target has a highlighted border and a disabled mask has a slash.
+Clicking either thumbnail changes the Paint/Eraser target without a document
+edit. Mask painting previews the composed result and Escape cancels the gesture.
+Context actions add, enable/disable, or remove one mask per editable raster
+layer. Background and groups reject masks. Technical mask edit and document
+errors use the window's existing structured logging path.
+
 ## Image I/O and current limits
 
 The application reads PNG, JPEG, BMP, WebP, and TIFF through Qt's image I/O
 system. WebP and TIFF require the optional Qt Image Formats plugins, which are
-not currently provided by this repository's vcpkg manifest. For the Windows
-regression coverage run, matching Qt Image Formats 6.7.2/MSVC2019 plugins were
-deployed only into the Git-ignored local test output. This does not complete
-normal application packaging. The official
+tracked by the repository's vcpkg manifest. Windows CMake deployment requires
+configuration-matched WebP/TIFF plugins and copies them to application build
+and install layouts. The deployed-format regression checks the application
+plugin path. macOS/Linux packaging remains pending. The official
 [Qt Image Formats module documentation](https://doc.qt.io/qt-6/qtimageformats-index.html)
 describes the plugin model and its bundled codec notices. The module is
 available under LGPLv3 or GPLv2; its bundled TIFF codec uses the libtiff

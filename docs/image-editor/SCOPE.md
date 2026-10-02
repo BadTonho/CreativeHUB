@@ -12,16 +12,16 @@ The current application supports one raster document at a time, either linked
 to an original image or created as a self-contained canvas. It provides a
 locked Background, editable raster layers, one-level groups, visibility,
 opacity, ordering, crop, quarter-turn rotation, flips, painting, erasing,
-editable line/rectangle/ellipse shapes, editable text, object selection and
+editable line/rectangle/ellipse shapes, editable text, raster layer masks, object selection and
 transforms, Undo/Redo, local autosave and recovery, and bounded technical error
 logging. Text supports multiline content, family, pixel size, color, horizontal
 alignment, movement, and width resizing. While editing, its box grows
 horizontally to fit the longest line up to the canvas edge, then wraps and grows
 vertically. Text is kept editable in its own `Text N` layer.
 
-Documents use the provisional `.cimg` version 9 format. The application reads
-versions 1 through 8 and writes version 9, migrating older documents on save;
-version 1 recovery envelopes accept a version 9 document payload. Source images
+Documents use the provisional `.cimg` version 10 format. The application reads
+versions 1 through 9 and writes version 10, migrating older documents on save;
+version 1 recovery envelopes accept a version 10 document payload. Source images
 remain unchanged.
 Canvas documents can use standard presets or custom dimensions. Self-contained
 canvas documents currently allow up to 32768 pixels per side and 64 million
@@ -73,9 +73,9 @@ performance guarantee is approved yet.
 
 ## Compatibility and Release Order
 
-The text implementation preserves the ability to open existing `.cimg`
-versions 1 through 8 and writes the current version 9 format on save. Automated
-regression tests cover the migration, invalid text rejection, and version 9
+The current implementation preserves the ability to open existing `.cimg`
+versions 1 through 9 and writes the current version 10 format on save. Automated
+regression tests cover the migration, invalid text rejection, and version 10
 recovery payload. This implementation does not mark manual text checks or
 Video Editor linked-image acceptance complete.
 
@@ -85,9 +85,21 @@ linked-image acceptance milestone as ordered in the [roadmap](ROADMAP.md).
 Cross-application work must validate the producer and consumer contracts and
 their regression coverage.
 
+## Approved Layer Mask Extension
+
+On 2026-10-02 the maintainer approved raster layer masks as the next code
+feature. Each editable raster layer, including group children, can have one
+mask. A white mask initially reveals everything. Selecting its thumbnail
+directs the existing Paint/Eraser tools to it; grayscale paint controls coverage
+and color alpha controls strength. Eraser writes black. The panel offers
+Add Layer Mask, Enable Layer Mask, and Remove Layer Mask. Layer transforms,
+Undo/Redo, persistence, recovery, exports, and linked PNG output include masks.
+Background and group masks are outside this extension. This code work does not
+complete the existing first-release or cross-application acceptance gates.
+
 ## Outside This Release
 
-Keep masks, retouching, color adjustment, broad effect systems, advanced
+Keep retouching, color adjustment, broad effect systems, advanced
 typography, text outlines, and text effects in the backlog for later evaluation.
 Do not expand the release boundary without validated user workflows and
 performance measurements. The Image Editor remains a separate development

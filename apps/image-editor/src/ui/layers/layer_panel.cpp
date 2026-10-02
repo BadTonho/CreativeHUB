@@ -21,6 +21,7 @@
 #include <QStyledItemDelegate>
 #include <QToolButton>
 #include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -35,7 +36,14 @@ constexpr int kBackgroundRole = Qt::UserRole + 3;
 constexpr int kVisibleRole = Qt::UserRole + 4;
 constexpr int kThumbnailRole = Qt::UserRole + 5;
 constexpr int kParentGroupRole = Qt::UserRole + 6;
+constexpr int kMaskThumbnailRole = Qt::UserRole + 7;
+constexpr int kMaskSelectedRole = Qt::UserRole + 8;
+constexpr int kMaskEnabledRole = Qt::UserRole + 9;
 constexpr int kLayerRowHeight = 46;
+
+QRect maskThumbnailRect(const QRect& row) {
+    return QRect(row.left() + 60, row.center().y() - 18, 36, 36);
+}
 
 QRect eyeButtonRect(const QRect& row) {
     return QRect(row.right() - 32, row.center().y() - 13, 26, 26);
@@ -104,8 +112,27 @@ public:
         painter->setBrush(Qt::NoBrush);
         painter->drawRect(thumbnail_rect.adjusted(0, 0, -1, -1));
 
-        const QRect text_rect(thumbnail_rect.right() + 9, row.top(),
-                              eyeHitRect(row).left() - thumbnail_rect.right() - 15,
+        const QImage mask_thumbnail = index.data(kMaskThumbnailRole).value<QImage>();
+        int content_right = thumbnail_rect.right();
+        if (!mask_thumbnail.isNull()) {
+            const QRect mask_rect = maskThumbnailRect(row);
+            painter->fillRect(mask_rect, Qt::black);
+            const QSize fitted = mask_thumbnail.size().scaled(mask_rect.size(), Qt::KeepAspectRatio);
+            painter->drawImage(QRect(QPoint(mask_rect.center().x() - fitted.width() / 2,
+                                           mask_rect.center().y() - fitted.height() / 2), fitted),
+                               mask_thumbnail);
+            painter->setPen(QPen(index.data(kMaskSelectedRole).toBool()
+                ? option.palette.color(QPalette::Highlight) : option.palette.color(QPalette::Mid),
+                index.data(kMaskSelectedRole).toBool() ? 3 : 1));
+            painter->drawRect(mask_rect.adjusted(0, 0, -1, -1));
+            if (!index.data(kMaskEnabledRole).toBool()) {
+                painter->setPen(QPen(QColor(230, 70, 70), 2));
+                painter->drawLine(mask_rect.topLeft(), mask_rect.bottomRight());
+            }
+            content_right = mask_rect.right();
+        }
+        const QRect text_rect(content_right + 9, row.top(),
+                              eyeHitRect(row).left() - content_right - 15,
                               row.height());
         const bool selected = option.state.testFlag(QStyle::State_Selected);
         painter->setPen(option.palette.color(selected ? QPalette::HighlightedText
@@ -242,6 +269,14 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     QAction* delete_group_context_action = layer_context_menu_->addAction(
         QStringLiteral("Delete Group"));
     delete_group_context_action->setObjectName(QStringLiteral("deleteLayerGroupContextAction"));
+    layer_context_menu_->addSeparator();
+    QAction* add_mask_action = layer_context_menu_->addAction(QStringLiteral("Add Layer Mask"));
+    add_mask_action->setObjectName(QStringLiteral("addLayerMaskAction"));
+    QAction* enable_mask_action = layer_context_menu_->addAction(QStringLiteral("Enable Layer Mask"));
+    enable_mask_action->setObjectName(QStringLiteral("enableLayerMaskAction"));
+    enable_mask_action->setCheckable(true);
+    QAction* remove_mask_action = layer_context_menu_->addAction(QStringLiteral("Remove Layer Mask"));
+    remove_mask_action->setObjectName(QStringLiteral("removeLayerMaskAction"));
 
     edit_hint_ = new QLabel(this);
     edit_hint_->setObjectName(QStringLiteral("layerEditingHint"));
@@ -326,7 +361,8 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
             [this]() { updateControls(); });
     connect(layer_tree_, &QTreeWidget::customContextMenuRequested, this,
             [this, group_context_action, ungroup_context_action,
-             delete_group_context_action](const QPoint& position) {
+             delete_group_context_action, add_mask_action, enable_mask_action,
+             remove_mask_action](const QPoint& position) {
                 QTreeWidgetItem* item = layer_tree_->itemAt(position);
                 if (item == nullptr) return;
 
@@ -338,6 +374,12 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
                 }
 
                 const bool is_group = item->data(0, kGroupRole).toBool();
+                const bool editable = !is_group && !item->data(0, kBackgroundRole).toBool();
+                const bool has_mask = !item->data(0, kMaskThumbnailRole).value<QImage>().isNull();
+                add_mask_action->setVisible(editable && !has_mask);
+                enable_mask_action->setVisible(editable && has_mask);
+                remove_mask_action->setVisible(editable && has_mask);
+                enable_mask_action->setChecked(item->data(0, kMaskEnabledRole).toBool());
                 group_context_action->setVisible(!is_group);
                 group_context_action->setEnabled(!is_group && canGroupSelectedLayers());
                 ungroup_context_action->setVisible(is_group);
@@ -377,6 +419,12 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
             [this]() { emit ungroupRequested(selectedItemId()); });
     connect(delete_group_context_action, &QAction::triggered, this,
             [this]() { emit deleteGroupRequested(selectedItemId()); });
+    connect(add_mask_action, &QAction::triggered, this,
+            [this]() { emit addLayerMaskRequested(selectedItemId()); });
+    connect(remove_mask_action, &QAction::triggered, this,
+            [this]() { emit removeLayerMaskRequested(selectedItemId()); });
+    connect(enable_mask_action, &QAction::triggered, this,
+            [this](bool enabled) { emit layerMaskEnabledChanged(selectedItemId(), enabled); });
     connect(rename_button_, &QToolButton::clicked, this, [this]() {
         auto* item = layer_tree_->currentItem();
         if (item != nullptr && !item->data(0, kBackgroundRole).toBool()) {
@@ -451,7 +499,9 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
 void LayerPanel::setDocument(const ImageDocumentData& document,
                              const QString& selected_layer_id,
                              const QString& selected_group_id,
-                             const QHash<QString, QImage>& thumbnails) {
+                             const QHash<QString, QImage>& thumbnails,
+                             const QHash<QString, QImage>& mask_thumbnails,
+                             const QString& selected_mask_id) {
     QSet<QString> expanded;
     for (int index = 0; index < layer_tree_->topLevelItemCount(); ++index) {
         auto* item = layer_tree_->topLevelItem(index);
@@ -463,6 +513,16 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
     refreshing_ = true;
     const QSignalBlocker blocker(layer_tree_);
     document_ = document;
+    const auto set_mask_data = [&](QTreeWidgetItem* item, const ImageLayerData& layer) {
+        item->setData(0, kMaskThumbnailRole, mask_thumbnails.value(layer.id));
+        item->setData(0, kMaskSelectedRole, layer.id == selected_mask_id);
+        item->setData(0, kMaskEnabledRole, layer.mask.has_value() && layer.mask->enabled);
+        if (layer.mask.has_value()) {
+            item->setData(0, Qt::ToolTipRole, QStringLiteral(
+                "Click the mask thumbnail to edit it. Black hides, white reveals. "
+                "Click the image thumbnail to edit layer content."));
+        }
+    };
     layer_tree_->clear();
     QTreeWidgetItem* selected = nullptr;
     for (auto root = document.root_stack.crbegin(); root != document.root_stack.crend(); ++root) {
@@ -471,6 +531,7 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
                 [&root](const ImageLayerData& value) { return value.id == root->id; });
             if (layer == document.layers.cend()) continue;
             auto* item = makeLayerItem(*layer, thumbnails);
+            set_mask_data(item, *layer);
             layer_tree_->addTopLevelItem(item);
             if (layer->id == selected_layer_id) selected = item;
             continue;
@@ -501,6 +562,7 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
                 [&child_id](const ImageLayerData& value) { return value.id == *child_id; });
             if (child == document.layers.cend()) continue;
             auto* child_item = makeLayerItem(*child, thumbnails, group_item);
+            set_mask_data(child_item, *child);
             if (child->id == selected_layer_id) selected = child_item;
         }
         group_item->setExpanded(expanded.isEmpty() || expanded.contains(group->id));
@@ -509,6 +571,15 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
     if (selected != nullptr) layer_tree_->setCurrentItem(selected);
     refreshing_ = false;
     updateControls();
+}
+
+void LayerPanel::setSelectedMask(const QString& layer_id) {
+    const QSignalBlocker blocker(layer_tree_);
+    for (QTreeWidgetItemIterator item(layer_tree_); *item != nullptr; ++item) {
+        (*item)->setData(0, kMaskSelectedRole,
+                        (*item)->data(0, kItemIdRole).toString() == layer_id);
+    }
+    layer_tree_->viewport()->update();
 }
 
 void LayerPanel::setQuickExportEnabled(bool enabled) {
@@ -529,6 +600,23 @@ bool LayerPanel::eventFilter(QObject* watched, QEvent* event) {
             event->type() == QEvent::MouseButtonDblClick) {
             auto* mouse = static_cast<QMouseEvent*>(event);
             QTreeWidgetItem* item = layer_tree_->itemAt(mouse->pos());
+            if (mouse->button() == Qt::LeftButton && item != nullptr &&
+                !item->data(0, kGroupRole).toBool() &&
+                !item->data(0, kMaskThumbnailRole).value<QImage>().isNull()) {
+                const QRect row = layer_tree_->visualItemRect(item);
+                const bool mask_hit = maskThumbnailRect(row).contains(mouse->pos());
+                const QRect content_rect(row.left() + 6, row.center().y() - 18, 48, 36);
+                if (mask_hit || content_rect.contains(mouse->pos())) {
+                    eye_press_consumed_ = true;
+                    if (event->type() == QEvent::MouseButtonPress) {
+                        const QString id = item->data(0, kItemIdRole).toString();
+                        layer_tree_->setCurrentItem(item);
+                        if (mask_hit) emit layerMaskSelected(id);
+                        else emit layerSelected(id);
+                    }
+                    return true;
+                }
+            }
             if (mouse->button() == Qt::LeftButton && item != nullptr &&
                 eyeHitRect(layer_tree_->visualItemRect(item)).contains(mouse->pos())) {
                 eye_press_consumed_ = true;

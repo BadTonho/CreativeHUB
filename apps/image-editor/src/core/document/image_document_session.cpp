@@ -299,6 +299,46 @@ bool exportWasCancelled(const std::atomic_bool* cancellation_requested) {
         cancellation_requested->load(std::memory_order_relaxed);
 }
 
+bool layerTransformHasCapacity(const ImageLayerData& layer) {
+    return layer.operations.size() < ImageDocumentStore::kMaximumOperations &&
+        (!layer.mask.has_value() ||
+         layer.mask->operations.size() < ImageDocumentStore::kMaximumOperations);
+}
+
+QVector<ImageOperation> maskRenderOperations(const ImageLayerMaskData& mask) {
+    QVector<ImageOperation> operations = mask.operations;
+    for (auto& operation : operations) {
+        if (operation.kind != OperationKind::EraseStroke) continue;
+        operation.kind = OperationKind::PaintStroke;
+        operation.paint_stroke.points = operation.erase_stroke.points;
+        operation.paint_stroke.diameter = operation.erase_stroke.diameter;
+        operation.paint_stroke.color = Qt::black;
+    }
+    return operations;
+}
+
+// Both images are premultiplied. Mask luminance already includes coverage at
+// antialiased edges and transparent areas introduced by fixed-canvas transforms.
+bool multiplyLayerMask(QImage* pixels, const QImage& mask,
+                       const std::atomic_bool* cancellation_requested = nullptr) {
+    if (pixels == nullptr || pixels->isNull() || mask.size() != pixels->size()) return false;
+    *pixels = pixels->convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    for (int y = 0; y < pixels->height(); ++y) {
+        if (exportWasCancelled(cancellation_requested)) return false;
+        auto* row = reinterpret_cast<QRgb*>(pixels->scanLine(y));
+        const auto* mask_row = reinterpret_cast<const QRgb*>(mask.constScanLine(y));
+        for (int x = 0; x < pixels->width(); ++x) {
+            const int value = qGray(mask_row[x]);
+            const QRgb pixel = row[x];
+            row[x] = qRgba((qRed(pixel) * value + 127) / 255,
+                           (qGreen(pixel) * value + 127) / 255,
+                           (qBlue(pixel) * value + 127) / 255,
+                           (qAlpha(pixel) * value + 127) / 255);
+        }
+    }
+    return true;
+}
+
 QImage renderGroup(const ImageDocumentData& document,
                    const ImageGroupData& group,
                    const QSize& size,
@@ -320,7 +360,16 @@ QImage renderRasterLayer(const ImageLayerData& layer,
                 return excluded_object_ids.contains(operationObjectId(operation));
             }), operations.end());
     }
-    return applyOperations(std::move(pixels), operations, true, cancellation_requested);
+    pixels = applyOperations(std::move(pixels), operations, true, cancellation_requested);
+    if (layer.mask.has_value() && layer.mask->enabled && !layer.mask->operations.isEmpty() && !pixels.isNull()) {
+        QImage mask(size, QImage::Format_ARGB32_Premultiplied);
+        if (mask.isNull()) return {};
+        mask.fill(Qt::white);
+        mask = applyOperations(std::move(mask), maskRenderOperations(*layer.mask),
+                               true, cancellation_requested);
+        if (!multiplyLayerMask(&pixels, mask, cancellation_requested)) return {};
+    }
+    return pixels;
 }
 
 QImage renderGroup(const ImageDocumentData& document,
@@ -1260,19 +1309,27 @@ QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
             cached->source_size == canvas_size &&
             cached->maximum_size == maximum_size &&
             cached->source_cache_key == source_cache_key &&
-            cached->background == layer.background;
+            cached->background == layer.background && cached->mask == layer.mask;
 
         if (!cache_matches) {
             QImage thumbnail = renderLayerThumbnail(
                 layer.background ? source_image_ : QImage{},
                 layer.background ? data_.source_size : canvas_size,
                 operations, !layer.background, maximum_size, !layer.background);
+            if (layer.mask.has_value() && layer.mask->enabled && !thumbnail.isNull()) {
+                QImage white(thumbnail.size(), QImage::Format_ARGB32_Premultiplied);
+                white.fill(Qt::white);
+                const QImage mask = renderLayerThumbnail(white, canvas_size,
+                    maskRenderOperations(*layer.mask), true, maximum_size, false);
+                if (!multiplyLayerMask(&thumbnail, mask)) thumbnail = {};
+            }
             LayerThumbnailCacheEntry entry;
             entry.operations = operations;
             entry.source_size = canvas_size;
             entry.maximum_size = maximum_size;
             entry.source_cache_key = source_cache_key;
             entry.background = layer.background;
+            entry.mask = layer.mask;
             entry.thumbnail = std::move(thumbnail);
             cached = layer_thumbnail_cache_.insert(layer.id, std::move(entry));
         }
@@ -1316,11 +1373,17 @@ bool ImageDocumentSession::applyCrop(const QRect& crop, QString* error) {
         return false;
     }
     if (valid == QRect(QPoint(0, 0), size)) return false;
+    if (!layerTransformHasCapacity(data_.layers.at(layerIndex(selected_layer_id_)))) {
+        assignError(error, QStringLiteral("The layer or its mask has reached the operation limit."));
+        return false;
+    }
     pushEdit();
     ImageOperation operation;
     operation.kind = OperationKind::Crop;
     operation.crop = valid;
-    data_.layers[layerIndex(selected_layer_id_)].operations.append(operation);
+    auto& layer = data_.layers[layerIndex(selected_layer_id_)];
+    layer.operations.append(operation);
+    if (layer.mask.has_value()) layer.mask->operations.append(operation);
     return true;
 }
 
@@ -1842,6 +1905,123 @@ bool ImageDocumentSession::setLayerOpacity(const QString& layer_id, int opacity)
     return true;
 }
 
+bool ImageDocumentSession::addLayerMask(const QString& layer_id) {
+    const qsizetype index = layerIndex(layer_id);
+    if (!hasSource() || index <= 0 || data_.layers.at(index).mask.has_value()) return false;
+    pushEdit();
+    data_.layers[index].mask = ImageLayerMaskData{};
+    return true;
+}
+
+bool ImageDocumentSession::removeLayerMask(const QString& layer_id) {
+    const qsizetype index = layerIndex(layer_id);
+    if (index <= 0 || !data_.layers.at(index).mask.has_value()) return false;
+    pushEdit();
+    data_.layers[index].mask.reset();
+    return true;
+}
+
+bool ImageDocumentSession::setLayerMaskEnabled(const QString& layer_id, bool enabled) {
+    const qsizetype index = layerIndex(layer_id);
+    if (index <= 0 || !data_.layers.at(index).mask.has_value() ||
+        data_.layers.at(index).mask->enabled == enabled) return false;
+    pushEdit();
+    data_.layers[index].mask->enabled = enabled;
+    return true;
+}
+
+bool ImageDocumentSession::applyLayerMaskStroke(const QVector<QPointF>& points,
+                                                const QColor& color, int diameter,
+                                                QString* error) {
+    if (error != nullptr) error->clear();
+    const qsizetype index = layerIndex(selected_layer_id_);
+    if (!hasSource() || !selectedLayerIsEditable() || index <= 0 ||
+        !data_.layers.at(index).mask.has_value()) {
+        assignError(error, QStringLiteral("Select a raster layer with a mask before painting its mask."));
+        return false;
+    }
+    const QSize size = renderedSize();
+    if (!color.isValid() || points.isEmpty() ||
+        points.size() > ImageDocumentStore::kMaximumPaintStrokePoints ||
+        diameter < 1 || diameter > ImageDocumentStore::kMaximumPaintBrushDiameter ||
+        data_.layers.at(index).mask->operations.size() >= ImageDocumentStore::kMaximumOperations) {
+        assignError(error, QStringLiteral("The mask stroke color, size, or operation count is invalid."));
+        return false;
+    }
+    QVector<QPointF> local_points;
+    local_points.reserve(points.size());
+    const auto* parent = findGroup(data_, data_.layers.at(index).parent_group_id);
+    for (const auto& point : points) {
+        if (!std::isfinite(point.x()) || !std::isfinite(point.y()) ||
+            point.x() < 0.0 || point.y() < 0.0 ||
+            point.x() >= size.width() || point.y() >= size.height()) {
+            assignError(error, QStringLiteral("The mask stroke contains a point outside the canvas."));
+            return false;
+        }
+        QPointF local = point;
+        if (parent != nullptr) {
+            for (auto operation = parent->operations.crbegin(); operation != parent->operations.crend(); ++operation) {
+                local = transformShapePoint(local, *operation, size, true);
+            }
+        }
+        if (local.x() >= 0.0 && local.y() >= 0.0 && local.x() < size.width() && local.y() < size.height()) {
+            local_points.append(local);
+        }
+    }
+    if (color.alpha() == 0 || local_points.isEmpty()) return false;
+    ImageOperation operation;
+    operation.kind = OperationKind::PaintStroke;
+    operation.paint_stroke.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    operation.paint_stroke.points = std::move(local_points);
+    const int gray = qGray(color.rgb());
+    operation.paint_stroke.color = QColor(gray, gray, gray, color.alpha());
+    operation.paint_stroke.diameter = diameter;
+    pushEdit();
+    data_.layers[index].mask->operations.append(std::move(operation));
+    return true;
+}
+
+bool ImageDocumentSession::applyLayerMaskEraseStroke(const QVector<QPointF>& points,
+                                                     int diameter, QString* error) {
+    // Reuse paint validation/history; erasing a mask writes opaque black.
+    if (!applyLayerMaskStroke(points, Qt::black, diameter, error)) return false;
+    auto& operation = data_.layers[layerIndex(selected_layer_id_)].mask->operations.last();
+    operation.kind = OperationKind::EraseStroke;
+    operation.erase_stroke.id = operation.paint_stroke.id;
+    operation.erase_stroke.points = operation.paint_stroke.points;
+    operation.erase_stroke.diameter = diameter;
+    operation.paint_stroke = {};
+    return true;
+}
+
+QImage ImageDocumentSession::renderedImageWithMaskStroke(
+    const QVector<QPointF>& points, const QColor& color, int diameter) const {
+    // A preview uses implicitly shared document/source buffers and never edits history.
+    ImageDocumentSession preview;
+    preview.data_ = data_;
+    preview.source_image_ = source_image_;
+    preview.selected_layer_id_ = selected_layer_id_;
+    if (!preview.applyLayerMaskStroke(points, color, diameter)) return renderedImage();
+    return preview.renderedImage();
+}
+
+QHash<QString, QImage> ImageDocumentSession::renderedLayerMaskThumbnails(
+    const QSize& maximum_size) const {
+    QHash<QString, QImage> thumbnails;
+    if (!hasSource() || maximum_size.isEmpty()) return thumbnails;
+    const QSize size = renderedSize();
+    const QSize small_size = size.scaled(maximum_size, Qt::KeepAspectRatio);
+    if (small_size.isEmpty()) return thumbnails;
+    QImage white(small_size, QImage::Format_ARGB32_Premultiplied);
+    white.fill(Qt::white);
+    for (const auto& layer : data_.layers) {
+        if (!layer.mask.has_value()) continue;
+        thumbnails.insert(layer.id, renderLayerThumbnail(white, size,
+            maskRenderOperations(*layer.mask), true, maximum_size, false));
+    }
+    return thumbnails;
+}
+
 QString ImageDocumentSession::addGroup(QString* error) {
     if (error != nullptr) error->clear();
     if (!hasDocument() || totalStackItemCount() >= ImageDocumentStore::kMaximumLayers) {
@@ -2321,8 +2501,12 @@ void ImageDocumentSession::rotateLeft() {
         return;
     }
     if (!selectedLayerIsEditable()) return;
+    if (!layerTransformHasCapacity(data_.layers.at(layerIndex(selected_layer_id_)))) return;
     pushEdit();
-    data_.layers[layerIndex(selected_layer_id_)].operations.append({OperationKind::Rotate, {}, -1});
+    auto& layer = data_.layers[layerIndex(selected_layer_id_)];
+    const ImageOperation operation{OperationKind::Rotate, {}, -1};
+    layer.operations.append(operation);
+    if (layer.mask.has_value()) layer.mask->operations.append(operation);
 }
 
 void ImageDocumentSession::rotateRight() {
@@ -2331,8 +2515,12 @@ void ImageDocumentSession::rotateRight() {
         return;
     }
     if (!selectedLayerIsEditable()) return;
+    if (!layerTransformHasCapacity(data_.layers.at(layerIndex(selected_layer_id_)))) return;
     pushEdit();
-    data_.layers[layerIndex(selected_layer_id_)].operations.append({OperationKind::Rotate, {}, 1});
+    auto& layer = data_.layers[layerIndex(selected_layer_id_)];
+    const ImageOperation operation{OperationKind::Rotate, {}, 1};
+    layer.operations.append(operation);
+    if (layer.mask.has_value()) layer.mask->operations.append(operation);
 }
 
 void ImageDocumentSession::flipHorizontal() {
@@ -2341,8 +2529,12 @@ void ImageDocumentSession::flipHorizontal() {
         return;
     }
     if (!selectedLayerIsEditable()) return;
+    if (!layerTransformHasCapacity(data_.layers.at(layerIndex(selected_layer_id_)))) return;
     pushEdit();
-    data_.layers[layerIndex(selected_layer_id_)].operations.append({OperationKind::FlipHorizontal, {}, 0});
+    auto& layer = data_.layers[layerIndex(selected_layer_id_)];
+    const ImageOperation operation{OperationKind::FlipHorizontal, {}, 0};
+    layer.operations.append(operation);
+    if (layer.mask.has_value()) layer.mask->operations.append(operation);
 }
 
 void ImageDocumentSession::flipVertical() {
@@ -2351,8 +2543,12 @@ void ImageDocumentSession::flipVertical() {
         return;
     }
     if (!selectedLayerIsEditable()) return;
+    if (!layerTransformHasCapacity(data_.layers.at(layerIndex(selected_layer_id_)))) return;
     pushEdit();
-    data_.layers[layerIndex(selected_layer_id_)].operations.append({OperationKind::FlipVertical, {}, 0});
+    auto& layer = data_.layers[layerIndex(selected_layer_id_)];
+    const ImageOperation operation{OperationKind::FlipVertical, {}, 0};
+    layer.operations.append(operation);
+    if (layer.mask.has_value()) layer.mask->operations.append(operation);
 }
 
 bool ImageDocumentSession::undo() {

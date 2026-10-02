@@ -15,6 +15,16 @@ set_tests_properties(creative-suite-image-editor-core PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
+add_executable(creative-suite-image-editor-mask-tests image_editor_mask_test.cpp)
+target_link_libraries(creative-suite-image-editor-mask-tests PRIVATE
+    creative-suite-image-editor-core Qt6::Test)
+target_compile_features(creative-suite-image-editor-mask-tests PRIVATE cxx_std_20)
+add_creative_suite_test(
+    NAME creative-suite-image-editor-masks
+    COMMAND creative-suite-image-editor-mask-tests)
+set_tests_properties(creative-suite-image-editor-masks PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 add_executable(creative-suite-image-editor-format-tests
     image_editor_format_test.cpp
 )
@@ -40,6 +50,7 @@ endif()
 
 add_executable(creative-suite-image-editor-ui-tests
     image_editor_ui_test.cpp
+    image_editor_mask_ui_test.cpp
     ../src/ui/windows/image_editor_window.cpp
     ../src/ui/windows/image_editor_window.h
     ../src/ui/windows/image_export_worker.cpp
@@ -73,9 +84,11 @@ target_link_libraries(creative-suite-image-editor-ui-tests PRIVATE
 target_compile_features(creative-suite-image-editor-ui-tests PRIVATE cxx_std_20)
 
 if(MSVC)
+    target_compile_options(creative-suite-image-editor-mask-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-image-editor-core-tests PRIVATE /W4 /permissive-)
     target_compile_options(creative-suite-image-editor-ui-tests PRIVATE /W4 /permissive-)
 else()
+    target_compile_options(creative-suite-image-editor-mask-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-image-editor-core-tests PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(creative-suite-image-editor-ui-tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -152,6 +165,7 @@ if(WIN32)
 
     foreach(TEST_TARGET IN ITEMS
             creative-suite-image-editor-core-tests
+            creative-suite-image-editor-mask-tests
             creative-suite-image-editor-format-tests
             creative-suite-image-editor-ui-tests
             creative-suite-image-editor-export-ui-tests)

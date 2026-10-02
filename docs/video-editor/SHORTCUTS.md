@@ -51,7 +51,7 @@ Mouse gestures remain outside the customizable shortcut list.
 | Ctrl + Y / Ctrl + Shift + Z; platform standard Redo sequence | Redo | Image Editor |
 | B | Activate or deactivate the Paint tool when an editable layer is selected | Image Editor |
 | E | Activate or deactivate the Eraser tool when an editable layer is selected | Image Editor |
-| Esc | Cancel crop selection, shape creation, or object selection gesture | Image Editor |
+| Esc | Cancel crop selection, shape creation, object selection, or a mask brush gesture | Image Editor |
 | Unassigned by default | Activate Shapes or Selection, or Delete Selected Objects | Image Editor |
 
 Layer group commands (Add Group, Group Selected, Ungroup, and Delete Group)

@@ -1,11 +1,11 @@
 # Image Editor Document Format
 
-Status: **provisional version 9**. The `.cimg` extension is temporary until a
+Status: **provisional version 10**. The `.cimg` extension is temporary until a
 later format review. Version 4 added editable raster layers; version 5 adds
 eraser strokes; version 6 adds editable line, rectangle, and ellipse shapes;
 version 7 adds stable IDs to paint and eraser strokes; version 8 adds
-one-level layer groups; version 9 adds editable text operations. Versions 1
-through 8 remain readable.
+one-level layer groups; version 9 adds editable text operations; version 10
+adds raster layer masks. Versions 1 through 9 remain readable.
 
 ## Document contents
 
@@ -14,7 +14,7 @@ A `.cimg` file is UTF-8 JSON with these top-level fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite-image-document`. |
-| `version` | integer | Current version is `9`. |
+| `version` | integer | Current version is `10`. |
 | `base` | object | A linked source image or a self-contained canvas. |
 | `operations` | array | Version 1–3 edits retained as Background content. |
 | `layers` | array | Version 4 and later layer stack ordered bottom-to-top. |
@@ -30,6 +30,42 @@ A canvas base contains `kind: "canvas"`, `width`, `height`, and a `background`
 color in `#AARRGGBB` notation. The canvas is reconstructed from these values
 without an external raster file. Canvas dimensions must be positive, at most
 32768 pixels per side, and at most 64 million pixels total.
+
+## Raster layer masks (version 10)
+
+An editable raster layer may have an optional `mask` object containing
+`enabled` (boolean) and `operations` (array). Omitting `mask` means the layer
+has no mask. Background and groups cannot contain this field. A present mask
+starts as opaque white over the fixed canvas; an empty operation array is valid.
+
+```json
+"mask": {
+  "enabled": true,
+  "operations": []
+}
+```
+
+Mask operations reuse `paint_stroke`, `erase_stroke`, `crop`, `rotate`,
+`flip_horizontal`, and `flip_vertical`. Shape and text operations are rejected.
+Paint colors must have equal red, green, and blue components; their alpha
+controls blending strength. The editing API converts the selected RGB color using Qt
+`qGray` before storing it. Eraser strokes paint opaque black. Stroke IDs are
+unique across document content and masks; existing brush, point, and operation
+limits also apply to masks.
+
+White reveals, black hides, and gray supplies partial coverage. The renderer
+multiplies the layer's premultiplied channels and alpha by mask luminance,
+including antialiased coverage and transparent transform borders. Layer
+opacity is applied afterward; group opacity is still applied once after child
+composition. Disabled masks retain edits but bypass this multiplication.
+
+Layer crop, quarter-turn rotation, and flips append the equivalent transform
+to an existing mask's operation sequence. Mask strokes in transformed groups
+are mapped back into the child's coordinates. Creating, removing, toggling,
+and painting a mask are undoable document edits. Mask editing target selection
+is temporary UI state and is not persisted. Versions 1–9 load without masks;
+saving upgrades the envelope to v10. A mask in an older envelope is rejected.
+Recovery, full export, Quick Export, and linked PNG publication include masks.
 
 ## Layer stack
 
@@ -54,7 +90,7 @@ combined pixels, and group opacity is applied once to that result.
 ```json
 {
   "format": "creative-suite-image-document",
-  "version": 9,
+  "version": 10,
   "base": {
     "kind": "canvas",
     "width": 1920,
@@ -108,7 +144,7 @@ group to preserve the one-level rule.
 
 The top-level `operations` array preserves the ordered, non-destructive edits
 from versions 1–3 and renders them as part of `Background`. This keeps old
-documents visually unchanged when they are opened and later saved as version 9.
+documents visually unchanged when they are opened and later saved as version 10.
 New edits are stored in the selected raster layer's `operations` array.
 
 Each layer operation is evaluated on the fixed document canvas. Crop keeps the
@@ -202,8 +238,8 @@ Version 1 uses the legacy `source` object. Version 2 adds canvas bases. Version
 layer-local eraser strokes. Version 6 adds editable shapes to layer operations.
 Version 7 adds IDs to paint and eraser operations. When reading versions 1–6,
 the loader generates in-memory IDs for operations that do not contain them;
-the next save writes those IDs in version 9. Versions 1 through 8 remain
-visually compatible. Saving any supported version writes version 9. New text
+the next save writes those IDs in version 10. Versions 1 through 9 remain
+visually compatible. Saving any supported version writes version 10. New text
 layers are named `Text N` and inserted using the same stack placement rule as
 shape layers; they can be grouped, hidden, assigned opacity, selected, moved,
 resized by changing their box width, and deleted as editable operations.
@@ -231,7 +267,7 @@ showing the options dialog.
 Recovery snapshots use a separate `creative-suite-image-recovery` JSON wrapper
 with the document payload, intended `.cimg` destination, and a session identity
 for unsaved canvases. Recovery wrapper version 1 accepts document payloads in
-versions 1 through 9. Autosave and recovery preserve root order, group
+versions 1 through 10. Autosave and recovery preserve root order, group
 children, properties, IDs, and operations.
 
 Unsupported versions, invalid layer stacks, and invalid operation data are

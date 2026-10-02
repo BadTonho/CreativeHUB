@@ -8,6 +8,7 @@
 #include <QStringList>
 #include <QSize>
 #include <QVector>
+#include <optional>
 
 namespace image_editor {
 
@@ -109,6 +110,15 @@ struct ImageObjectPlacement {
     bool operator==(const ImageObjectPlacement&) const = default;
 };
 
+// Mask edits use grayscale PaintStroke, EraseStroke, and fixed-canvas transforms.
+// An empty operation sequence represents a fully revealing white mask.
+struct ImageLayerMaskData {
+    bool enabled = true;
+    QVector<ImageOperation> operations;
+
+    bool operator==(const ImageLayerMaskData&) const = default;
+};
+
 struct ImageLayerData {
     QString id;
     QString name;
@@ -117,6 +127,7 @@ struct ImageLayerData {
     bool visible = true;
     int opacity = 100;
     QVector<ImageOperation> operations;
+    std::optional<ImageLayerMaskData> mask;
 
     bool operator==(const ImageLayerData&) const = default;
 };

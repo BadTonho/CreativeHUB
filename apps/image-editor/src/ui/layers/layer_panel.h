@@ -30,13 +30,20 @@ public:
     void setDocument(const ImageDocumentData& document,
                      const QString& selected_layer_id,
                      const QString& selected_group_id,
-                     const QHash<QString, QImage>& thumbnails);
+                     const QHash<QString, QImage>& thumbnails,
+                     const QHash<QString, QImage>& mask_thumbnails = {},
+                     const QString& selected_mask_id = {});
+    void setSelectedMask(const QString& layer_id);
     void setQuickExportEnabled(bool enabled);
 
 signals:
     void quickExportRequested();
     void layerSelected(const QString& layer_id);
     void groupSelected(const QString& group_id);
+    void layerMaskSelected(const QString& layer_id);
+    void addLayerMaskRequested(const QString& layer_id);
+    void removeLayerMaskRequested(const QString& layer_id);
+    void layerMaskEnabledChanged(const QString& layer_id, bool enabled);
     void layerVisibilityChanged(const QString& layer_id, bool visible);
     void groupVisibilityChanged(const QString& group_id, bool visible);
     void layerRenamed(const QString& layer_id, const QString& name);

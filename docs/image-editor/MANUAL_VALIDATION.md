@@ -201,9 +201,9 @@ Debug tests and the complete Release suite (62/62, no failures or skips).
 4. Save as `.cimg`, close, and reopen. Confirm the text remains editable and
    retains content, font family name, size, color, alignment, width, layer
    placement, and rendered appearance. Create a recovery snapshot and confirm
-   its wrapper stays version 1 and its document payload is version 9. Open
-   copies of supported v1-v8 documents and confirm they retain their previous
-   appearance; save each copy and confirm it is upgraded to v9.
+   its wrapper stays version 1 and its document payload is version 10. Open
+   copies of supported v1-v9 documents and confirm they retain their previous
+   appearance; save each copy and confirm it is upgraded to v10.
 5. Export the full composite and Quick Export the text layer and a group that
    contains text. Confirm the saved raster outputs contain the expected text,
    respect visibility and opacity, and keep the canvas dimensions. In linked
@@ -211,6 +211,27 @@ Debug tests and the complete Release suite (62/62, no failures or skips).
    manually confirm in the Video Editor that the linked image refreshes after
    save; keep Milestone 2 acceptance pending until its complete checklist is
    recorded.
+
+### Raster layer masks
+
+Status: checklist documented; no owner-recorded mask visual result yet.
+
+1. On an editable raster layer, right-click and choose **Add Layer Mask**.
+   Confirm the second thumbnail is white, selected, and the existing content
+   remains visible. Background and group context menus must not offer a mask.
+2. Select Paint. Black hides, white restores, gray partially hides; translucent
+   paint blends with previous coverage. Select Eraser and confirm it writes
+   black. Check the live preview, cancel a mask gesture with Escape, and confirm
+   each completed gesture is one Undo/Redo entry. Click the content thumbnail
+   and confirm normal painting resumes; click the mask thumbnail to return.
+3. Use **Enable Layer Mask** to compare and **Remove Layer Mask** to remove it;
+   undo both actions. Crop, rotate, and flip the layer and confirm its mask follows.
+   Repeat with a child in a transformed group, checking brush placement and group
+   opacity. Check thumbnails while hidden, disabled, or at zero layer opacity.
+4. Save/reopen `.cimg`, restore recovery, and export PNG/JPEG plus Quick Export
+   for the layer and its group. Confirm masked alpha and JPEG matte are correct.
+   In linked mode, confirm output changes only after Save and the Video Editor
+   refreshes while preserving transparent masked areas and clip isolation.
 
 ### Editable shapes and general object selection
 

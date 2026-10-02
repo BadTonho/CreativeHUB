@@ -20,7 +20,7 @@ duplicate combinations are rejected. Use **Reset All** to restore the defaults.
 | Eraser tool | `E` (toggle Eraser on or off when an editable layer is available) |
 | Insert a line break while editing text | `Enter` |
 | Confirm text editing | `Ctrl+Enter` |
-| Cancel text editing, crop selection, shape creation, or object selection gesture | `Esc` |
+| Cancel text editing, crop selection, shape creation, object selection, or a mask brush gesture | `Esc` |
 | Shapes tool | Unassigned by default |
 | Text tool | Unassigned by default |
 | Selection tool | Unassigned by default |

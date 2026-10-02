@@ -68,6 +68,19 @@ public:
     [[nodiscard]] bool moveLayer(const QString& layer_id, int direction);
     [[nodiscard]] bool setLayerVisible(const QString& layer_id, bool visible);
     [[nodiscard]] bool setLayerOpacity(const QString& layer_id, int opacity);
+    [[nodiscard]] bool addLayerMask(const QString& layer_id);
+    [[nodiscard]] bool removeLayerMask(const QString& layer_id);
+    [[nodiscard]] bool setLayerMaskEnabled(const QString& layer_id, bool enabled);
+    [[nodiscard]] bool applyLayerMaskStroke(const QVector<QPointF>& points,
+                                            const QColor& color, int diameter,
+                                            QString* error = nullptr);
+    [[nodiscard]] bool applyLayerMaskEraseStroke(const QVector<QPointF>& points,
+                                                 int diameter,
+                                                 QString* error = nullptr);
+    [[nodiscard]] QImage renderedImageWithMaskStroke(
+        const QVector<QPointF>& points, const QColor& color, int diameter) const;
+    [[nodiscard]] QHash<QString, QImage> renderedLayerMaskThumbnails(
+        const QSize& maximum_size) const;
     [[nodiscard]] QString addGroup(QString* error = nullptr);
     [[nodiscard]] QString groupLayers(const QStringList& layer_ids,
                                       QString* error = nullptr);
@@ -132,6 +145,7 @@ private:
         QSize maximum_size;
         qint64 source_cache_key = 0;
         bool background = false;
+        std::optional<ImageLayerMaskData> mask;
         QImage thumbnail;
     };
 

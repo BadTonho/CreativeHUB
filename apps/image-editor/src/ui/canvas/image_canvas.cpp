@@ -375,12 +375,25 @@ void ImageCanvas::setObjectPlacements(QVector<ImageObjectPlacement> placements,
 }
 
 void ImageCanvas::setEraserPreviewEnabled(bool enabled) {
+    if (mask_editing_) enabled = false;
     eraser_preview_enabled_ = enabled;
     if (erasing_ && !enabled) emit erasePreviewRequested(paint_points_, brush_diameter_);
     if (erasing_ && enabled) {
         transient_image_ = {};
         emit erasePreviewCleared();
     }
+    update();
+}
+
+void ImageCanvas::setMaskEditing(bool enabled) {
+    if (mask_editing_ == enabled) return;
+    mask_editing_ = enabled;
+    painting_ = false;
+    erasing_ = false;
+    paint_points_.clear();
+    transient_image_ = {};
+    emit erasePreviewCleared();
+    if (enabled) eraser_preview_enabled_ = false;
     update();
 }
 
@@ -1015,7 +1028,7 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     }
 
     if (paint_mode_ || eraser_mode_) {
-        if ((painting_ || (erasing_ && eraser_preview_enabled_)) && !paint_points_.isEmpty()) {
+        if (((!mask_editing_ && painting_) || (erasing_ && eraser_preview_enabled_)) && !paint_points_.isEmpty()) {
             QPainterPath path;
             const auto toWidget = [&target, this](const QPointF& point) {
                 return QPointF(target.left() + point.x() * zoom_,
@@ -1246,6 +1259,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         paint_points_.append(widgetToImageCoordinates(event->position()));
         brush_cursor_position_ = event->position();
         brush_cursor_visible_ = true;
+        if (mask_editing_) emit maskPaintPreviewRequested(paint_points_, brush_color_, brush_diameter_);
         update();
         event->accept();
         return;
@@ -1331,6 +1345,9 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         appendPaintPoint(point);
         brush_cursor_position_ = event->position();
         brush_cursor_visible_ = imageTargetRect().contains(event->position());
+        if (painting_ && mask_editing_) {
+            emit maskPaintPreviewRequested(paint_points_, brush_color_, brush_diameter_);
+        }
         if (erasing_ && !eraser_preview_enabled_) {
             emit erasePreviewRequested(paint_points_, brush_diameter_);
         }
@@ -1474,6 +1491,10 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         appendPaintPoint(point);
         const QVector<QPointF> points = std::move(paint_points_);
         painting_ = false;
+        if (mask_editing_) {
+            transient_image_ = {};
+            emit erasePreviewCleared();
+        }
         brush_cursor_position_ = event->position();
         brush_cursor_visible_ = imageTargetRect().contains(event->position());
         update();
@@ -1587,7 +1608,8 @@ void ImageCanvas::keyPressEvent(QKeyEvent* event) {
         event->accept();
         return;
     }
-    if (event->key() == Qt::Key_Escape && erasing_) {
+    if (event->key() == Qt::Key_Escape && (erasing_ || (painting_ && mask_editing_))) {
+        painting_ = false;
         erasing_ = false;
         paint_points_.clear();
         transient_image_ = {};

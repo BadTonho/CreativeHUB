@@ -61,6 +61,8 @@ private:
     void openShortcutSettings();
     void updateToolOptions();
     void updateSelectionContext();
+    void updateLayerPanel();
+    [[nodiscard]] bool editingMask() const;
     void updateView(bool preserveCanvasView = false);
     void deactivateCanvasTools();
     void createNewCanvas();
@@ -156,6 +158,7 @@ private:
     ImageShapeData shape_style_;
     ImageTextData text_style_;
     QStringList selected_object_ids_;
+    QString selected_mask_layer_id_;
     bool shape_colors_initialized_ = false;
     bool shape_palette_positioned_ = false;
     int paint_diameter_ = 12;

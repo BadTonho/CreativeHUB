@@ -1251,6 +1251,8 @@ bool testRenamedShortcutPersistence() {
     return true;
 }
 
+bool testLayerMasksUi(const QString& directory);
+
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
@@ -1267,6 +1269,10 @@ int main(int argc, char* argv[]) {
     if (!testWindowTextGrowth()) return 1;
     if (!testTextEditorGrowthLayout()) return 1;
     if (application.arguments().contains(QStringLiteral("--text-layout-only"))) return 0;
+    if (!testLayerMasksUi(temporary.path())) {
+        std::cerr << "Layer mask thumbnails, brush targeting, or linked publication failed.\n";
+        return 1;
+    }
 
     if (!testGeneralCanvasSelection()) return 1;
     if (!testLayerGroupsUi(temporary.path())) {
@@ -2683,7 +2689,7 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    if (shape_document_json.value("version").toInt() != 9 ||
+    if (shape_document_json.value("version").toInt() != 10 ||
         persisted_shape_layer.isEmpty() ||
         !persisted_shape_layer.value("name").toString().startsWith("Shape ") ||
         persisted_shape_layer.value("operations").toArray().size() != 1 ||
