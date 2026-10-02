@@ -87,6 +87,16 @@ set_tests_properties(creative-suite-image-editor-ui PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 
+if(WIN32)
+    target_link_libraries(creative-suite-image-editor-ui-tests PRIVATE user32)
+    add_creative_suite_test(
+        NAME creative-suite-image-editor-native-text
+        COMMAND creative-suite-image-editor-ui-tests --text-layout-only)
+    set_tests_properties(creative-suite-image-editor-native-text PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=windows"
+    )
+endif()
+
 add_executable(creative-suite-image-editor-export-ui-tests
     image_editor_export_ui_test.cpp
     ../src/ui/windows/image_editor_window.cpp

@@ -18,6 +18,7 @@
 #include <QFileInfo>
 #include <QFontComboBox>
 #include <QFontDatabase>
+#include <QFontMetricsF>
 #include <QImage>
 #include <QImageWriter>
 #include <QJsonArray>
@@ -40,6 +41,9 @@
 #include <QTreeWidget>
 #include <QSlider>
 #include <QSpinBox>
+#include <QTextBlock>
+#include <QTextCursor>
+#include <QTextLayout>
 #include <QToolBar>
 #include <QToolButton>
 #include <QStandardPaths>
@@ -48,12 +52,23 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <utility>
 #include <QTest>
 #include <QSignalSpy>
 #include <QUuid>
 
 #include <iostream>
+
+#if defined(Q_OS_WIN)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -344,6 +359,253 @@ bool testLayerGroupContextMenu(const QString& directory) {
         !deleted.delete_group_visible || layerRowCount(tree) != 2) {
         return fail("delete group from context menu");
     }
+    return true;
+}
+
+bool testTextEditorGrowthLayout() {
+    image_editor::ImageCanvas canvas;
+    canvas.resize(1584, 912);
+    QImage image(1920, 1080, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    canvas.setImage(image);
+    canvas.show();
+    QCoreApplication::processEvents();
+    auto* editor = canvas.findChild<QPlainTextEdit*>(
+        QStringLiteral("imageCanvasTextEditor"));
+    if (editor == nullptr) return false;
+    const QString heading = QStringLiteral("sasdasdasdasdasdasdasdasdasdasdasd");
+    for (const qreal initial_width : {24.0, 320.0}) {
+        image_editor::ImageTextData text;
+        text.position = QPointF(40, 100);
+        text.box_width = initial_width;
+        canvas.beginTextEditing(text, false);
+        QCoreApplication::processEvents();
+        const int initial_editor_width = editor->width();
+        for (qsizetype index = 0; index < heading.size(); ++index) {
+            QTest::keyClicks(editor, QString(heading.at(index)));
+            QCoreApplication::processEvents();
+            const QString typed = heading.left(index + 1);
+            const QTextLayout* layout = editor->document()->firstBlock().layout();
+            const QRect caret = editor->cursorRect();
+            QTextCursor start(editor->document());
+            start.setPosition(0);
+            const qreal caret_advance = caret.left() - editor->cursorRect(start).left();
+            const qreal expected_advance = QFontMetricsF(editor->font()).horizontalAdvance(typed);
+            if (editor->toPlainText() != typed ||
+                editor->textCursor().position() != typed.size() ||
+                layout->lineCount() != 1 || layout->lineAt(0).textLength() != typed.size() ||
+                std::abs(caret_advance - expected_advance) > 4.0 ||
+                !editor->viewport()->rect().contains(caret.center()) ||
+                editor->verticalScrollBar()->value() != 0 ||
+                editor->cursorForPosition(caret.center()).position() != typed.size()) {
+                std::cerr << "Live text layout became stale after " << typed.size()
+                          << " characters, initial width=" << initial_width
+                          << ", editor width=" << editor->width()
+                          << ", viewport width=" << editor->viewport()->width()
+                          << ", document width=" << editor->document()->textWidth()
+                          << ", lines=" << layout->lineCount()
+                          << ", caret advance=" << caret_advance
+                          << ", expected advance=" << expected_advance << ".\n";
+                return false;
+            }
+        }
+        if (editor->width() <= initial_editor_width) {
+            std::cerr << "The text box did not grow beyond its initial width.\n";
+            return false;
+        }
+        QTextCursor selection_start(editor->document());
+        selection_start.setPosition(0);
+        QTextCursor selection_end = selection_start;
+        selection_end.setPosition(3);
+        const QPoint drag_start = editor->cursorRect(selection_start).center();
+        const QPoint drag_end = editor->cursorRect(selection_end).center();
+        QTest::mousePress(editor->viewport(), Qt::LeftButton, Qt::NoModifier, drag_start);
+        QMouseEvent drag_move(QEvent::MouseMove, QPointF(drag_end),
+            QPointF(editor->viewport()->mapToGlobal(drag_end)), Qt::NoButton,
+            Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(editor->viewport(), &drag_move);
+        QTest::mouseRelease(editor->viewport(), Qt::LeftButton, Qt::NoModifier, drag_end);
+        QCoreApplication::processEvents();
+        if (editor->textCursor().selectedText() != heading.left(3)) {
+            std::cerr << "Mouse selection did not match the visible text after expansion.\n";
+            return false;
+        }
+        if (selectionHighlightPixelCount(canvas.grab().toImage().copy(
+                editor->geometry().adjusted(2, 2, -2, -2))) < 10) {
+            std::cerr << "The mouse-selected text did not show its selection highlight.\n";
+            return false;
+        }
+        QTest::keyClicks(editor, QStringLiteral("DE"));
+        QCoreApplication::processEvents();
+        if (editor->toPlainText() != QStringLiteral("DE") + heading.mid(3) ||
+            editor->textCursor().position() != 2) {
+            std::cerr << "Typing did not replace the mouse-selected text.\n";
+            return false;
+        }
+        QTest::keyClick(editor, Qt::Key_End, Qt::ControlModifier);
+        QTest::keyClicks(editor, heading.repeated(3));
+        QCoreApplication::processEvents();
+        if (editor->document()->firstBlock().layout()->lineCount() <= 1 ||
+            editor->verticalScrollBar()->maximum() != 0 ||
+            !editor->viewport()->rect().contains(editor->cursorRect().center())) {
+            std::cerr << "Canvas-edge wrapping hid text or scrolled the growing box.\n";
+            return false;
+        }
+        const int wrapped_height = editor->height();
+        QTest::keyClick(editor, Qt::Key_Return);
+        QTest::keyClicks(editor, QStringLiteral("second line"));
+        QCoreApplication::processEvents();
+        if (editor->height() <= wrapped_height ||
+            editor->verticalScrollBar()->maximum() != 0 ||
+            !editor->viewport()->rect().contains(editor->cursorRect().center())) {
+            std::cerr << "An explicit newline was hidden in the growing box.\n";
+            return false;
+        }
+        QTest::keyClick(editor, Qt::Key_Escape);
+    }
+    return true;
+}
+
+bool testWindowTextGrowth() {
+    image_editor::ImageEditorWindow window;
+    window.showMaximized();
+    window.raise();
+    window.activateWindow();
+    const bool native = QApplication::platformName() == QStringLiteral("windows");
+    if (native && !QTest::qWaitForWindowActive(&window)) return false;
+    QCoreApplication::processEvents();
+    auto* new_canvas = window.findChild<QAction*>(QStringLiteral("newCanvasAction"));
+    if (new_canvas == nullptr) return false;
+    bool configured = false;
+    QTimer::singleShot(0, &window, [&]() {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr) return;
+        auto* preset = dialog->findChild<QComboBox*>(QStringLiteral("newCanvasPresetCombo"));
+        auto* background = dialog->findChild<QComboBox*>(QStringLiteral("newCanvasBackgroundCombo"));
+        if (preset == nullptr || background == nullptr) { dialog->reject(); return; }
+        preset->setCurrentIndex(4);
+        background->setCurrentIndex(1);
+        configured = true;
+        dialog->accept();
+    });
+    new_canvas->trigger();
+    if (!configured) return false;
+    window.raise();
+    window.activateWindow();
+    if (native && !QTest::qWaitForWindowActive(&window)) return false;
+    QTest::qWait(100);
+    auto* canvas = window.findChild<image_editor::ImageCanvas*>();
+    auto* editor = window.findChild<QPlainTextEdit*>(QStringLiteral("imageCanvasTextEditor"));
+    auto* tool = window.findChild<QToolButton*>(QStringLiteral("textToolButton"));
+    if (canvas == nullptr || editor == nullptr || tool == nullptr) return false;
+    QTest::mouseClick(window.windowHandle(), Qt::LeftButton, Qt::NoModifier,
+                      tool->mapTo(&window, tool->rect().center()));
+    QCoreApplication::processEvents();
+    const qreal zoom = canvas->zoomFactor();
+    const QPoint start(qRound((canvas->width() - 1920.0 * zoom) / 2.0 + 40 * zoom),
+                       qRound((canvas->height() - 1080.0 * zoom) / 2.0 + 100 * zoom));
+    QTest::mouseClick(window.windowHandle(), Qt::LeftButton, Qt::NoModifier,
+                      canvas->mapTo(&window, start));
+    QTest::qWait(30);
+    if (!QTest::qWaitFor([editor]() { return editor->hasFocus() && editor->isVisible(); })) {
+        window.screen()->grabWindow(window.winId()).save(QStringLiteral("text-editor-window-click-failure.png"));
+        std::cerr << "Text click creation failed: tool=" << tool->isChecked()
+                  << ", focus=" << editor->hasFocus() << ", visible=" << editor->isVisible()
+                  << ", zoom=" << canvas->zoomFactor() << ", click=" << start.x()
+                  << "," << start.y() << ".\n";
+        return false;
+    }
+    const auto displayedImage = [&]() {
+        if (!native) return canvas->grab().toImage().copy(editor->geometry());
+        const QPoint position = editor->mapTo(&window, QPoint());
+        return window.screen()->grabWindow(window.winId(), position.x(), position.y(),
+            editor->width(), editor->height()).toImage();
+    };
+    const QString heading = QStringLiteral("sasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasdasd");
+    int first_ink = 0;
+    for (qsizetype index = 0; index < heading.size(); ++index) {
+#if defined(Q_OS_WIN)
+        if (native && QApplication::arguments().contains(QStringLiteral("--native-keyboard"))) {
+            if (GetForegroundWindow() != reinterpret_cast<HWND>(window.winId())) {
+                std::cerr << "The native text test lost foreground focus.\n";
+                return false;
+            }
+            INPUT input[2]{};
+            input[0].type = INPUT_KEYBOARD;
+            input[0].ki.wVk = heading.at(index).toUpper().unicode();
+            input[1] = input[0];
+            input[1].ki.dwFlags = KEYEVENTF_KEYUP;
+            if (SendInput(2, input, sizeof(INPUT)) != 2) {
+                std::cerr << "Native keyboard input failed: " << GetLastError() << ".\n";
+                return false;
+            }
+        } else
+#endif
+        {
+            QTest::keyClick(window.windowHandle(), heading.at(index).toLatin1());
+        }
+        QTest::qWait(20);
+        const QImage displayed = displayedImage();
+        const int ink = darkPixelCount(displayed);
+        if (index == 0) first_ink = ink;
+        const QTextLayout* layout = editor->document()->firstBlock().layout();
+        if (editor->toPlainText() != heading.left(index + 1) ||
+            editor->textCursor().position() != index + 1 ||
+            layout->lineCount() != 1 ||
+            !editor->viewport()->rect().contains(editor->cursorRect().center()) ||
+            (index >= 2 && ink < first_ink * (index + 1) * 0.5)) {
+            displayed.save(QStringLiteral("text-editor-window-failure.png"));
+            std::cerr << "Window text growth failed after " << index + 1
+                      << " characters; ink=" << ink << "/" << first_ink
+                      << ", lines=" << layout->lineCount()
+                      << ", cursor=" << editor->textCursor().position()
+                      << ", editor width=" << editor->width()
+                      << ", viewport width=" << editor->viewport()->width()
+                      << ", zoom=" << canvas->zoomFactor()
+                      << ", window active=" << window.isActiveWindow()
+                      << ", screenshot=" << QDir::currentPath().toStdString()
+                      << "/text-editor-window-failure.png.\n";
+            return false;
+        }
+    }
+    if (native) displayedImage().save(QStringLiteral("text-editor-window-live.png"));
+    QTextCursor first(editor->document());
+    first.setPosition(0);
+    QTextCursor third = first;
+    third.setPosition(3);
+    const QPoint first_point = editor->viewport()->mapTo(&window, editor->cursorRect(first).center());
+    const QPoint third_point = editor->viewport()->mapTo(&window, editor->cursorRect(third).center());
+    QTest::mousePress(window.windowHandle(), Qt::LeftButton, Qt::NoModifier, first_point);
+    QTest::mouseMove(window.windowHandle(), third_point);
+    QTest::mouseRelease(window.windowHandle(), Qt::LeftButton, Qt::NoModifier, third_point);
+    QTest::qWait(20);
+    if (editor->textCursor().selectedText() != heading.left(3) ||
+        selectionHighlightPixelCount(displayedImage()) < 10) {
+        std::cerr << "Selection in the full window did not match the displayed text.\n";
+        return false;
+    }
+    QTest::keyClick(window.windowHandle(), 'D');
+    QTest::keyClick(window.windowHandle(), 'E');
+    if (editor->toPlainText() != QStringLiteral("DE") + heading.mid(3)) {
+        std::cerr << "Full-window typing did not replace the selected text.\n";
+        return false;
+    }
+    QTest::keyClick(window.windowHandle(), Qt::Key_A, Qt::ControlModifier);
+    QTest::keyClick(window.windowHandle(), Qt::Key_Backspace);
+    for (const QChar character : heading) {
+        QKeyEvent press(QEvent::KeyPress, character.toUpper().unicode(),
+                        Qt::NoModifier, QString(character));
+        QApplication::sendEvent(editor, &press);
+    }
+    QTest::qWait(50);
+    const QImage burst = displayedImage();
+    if (editor->toPlainText() != heading || darkPixelCount(burst) < first_ink * 20 ||
+        editor->document()->firstBlock().layout()->lineCount() != 1) {
+        burst.save(QStringLiteral("text-editor-window-burst-failure.png"));
+        std::cerr << "Typing a burst left the editor layout or live pixels stale.\n";
+        return false;
+    }
+    QTest::keyClick(editor, Qt::Key_Escape);
     return true;
 }
 
@@ -992,6 +1254,10 @@ int main(int argc, char* argv[]) {
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, temporary.path());
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, temporary.path());
+
+    if (!testWindowTextGrowth()) return 1;
+    if (!testTextEditorGrowthLayout()) return 1;
+    if (application.arguments().contains(QStringLiteral("--text-layout-only"))) return 0;
 
     if (!testGeneralCanvasSelection()) return 1;
     if (!testLayerGroupsUi(temporary.path())) {

@@ -153,6 +153,14 @@ These manual checks are pending. The automated producer test also covers
 publishing an image containing text, but does not complete the manual
 Video Editor linked-image acceptance milestone.
 
+On 2026-10-01, the growing-box regression reproduced a hidden second line
+after two characters with the native Windows backend before the fix. After
+correcting native width and height measurements, the UI, native text, and
+export UI tests passed 3/3 in Debug and Release; the final complete Release
+suite passed 62/62 with no failures or skips. Native mouse selection,
+highlight rendering, replacement, caret placement, wrapping, and newlines
+are covered by automation. This does not complete the owner checks below.
+
 1. Open a disposable image or canvas and activate **Text**. Confirm the initial
    style is 48 px Sans Serif, opaque black, and left-aligned. Click an empty
    canvas location and type; confirm editing starts without a drag. Type `ABC`,
@@ -162,8 +170,11 @@ Video Editor linked-image acceptance milestone.
    text object. Type several words until the box grows, drag across one word,
    and confirm the selected characters and blue selection highlight stay aligned
    with the text and the selection can be replaced by typing. Continue with a
-   long line and confirm the box grows horizontally; at the
-   canvas edge, confirm text wraps and the box grows vertically. Include `b`
+   long line and confirm the box grows horizontally. Repeat at a zoom below
+   100% with the default 48 px font; confirm every typed character remains
+   visible and the caret follows the insertion point without jumping to a
+   clipped line. At the canvas edge, confirm text wraps and the box grows
+   vertically with all earlier lines still visible. Include `b`
    and `e` in the text and confirm they do not switch to
    Paint or Eraser. Enter must insert a line break, while Ctrl+Enter commits.
    Start another empty text frame and click outside to commit; start one more

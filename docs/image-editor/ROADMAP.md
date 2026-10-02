@@ -198,8 +198,12 @@ the text editor has keyboard focus, a temporary application-level filter keeps
 unmodified keys from triggering window shortcuts such as Paint (`B`) or Eraser
 (`E`), including shortcut events without text payloads. While typing, the box
 grows to fit its longest line up to the canvas edge, then wraps and expands
-vertically. The editor's geometry is updated after the key event completes so
-resizing does not interrupt text layout or cursor handling. The native editor
+vertically. Width includes the native editor's rounded font metrics at the
+current zoom, viewport frame, document margins, and caret space. Height is
+measured from its actual text blocks after applying the width. This prevents
+accidental wrapping into a clipped, scrolled line below 100% zoom. The editor's
+geometry is updated after the key event completes so resizing does not interrupt
+text layout or cursor handling. The native editor
 widget draws live text, caret, and selection together; the canvas renderer draws
 text after confirmation. This avoids a duplicate live text layer beneath the
 native selection highlight. Editing an existing text temporarily hides
@@ -210,10 +214,25 @@ test verifies live rendered pixels, cursor advancement, native text selection
 and highlight after expansion, replacement of selected text, editor visibility
 during expansion, cancellation restoration, insertion at the beginning when
 reopening existing text, and caret repositioning during click-to-create (`ABC`,
-click before `A`, then `DE` produces `DEABC`). The updated UI test, including
-selection rendering and replacement after expansion, passed 1/1 in Debug and
-Release. Manual mouse-drag selection and click-to-create visual reviews remain
-pending.
+click before `A`, then `DE` produces `DEABC`).
+
+The offscreen test missed the native Windows font/layout difference. A new
+`testTextEditorGrowthLayout` regression in `image_editor_ui_test.cpp` reproduced
+the failure on Windows after two typed characters before the fix. It checks
+each character's layout, visible caret, cursor hit testing, mouse selection and
+replacement after expansion, canvas-edge wrapping, and explicit newlines on a
+1080p canvas with 48 px text and both narrow and default initial widths.
+The [CMake registration](../../apps/image-editor/tests/CMakeLists.txt) also runs
+it as `creative-suite-image-editor-native-text` with `QT_QPA_PLATFORM=windows`
+on Windows; other platforms retain the offscreen UI test. Owner visual
+acceptance remains pending.
+
+On 2026-10-01, the UI, native text, and export UI CTest cases passed 3/3 in
+Debug and Release. The final complete Release suite passed 62/62, with no
+failures or skipped tests. Its initial run passed 61/62 because the Video
+Editor main-window test executable predated its current activation-wait source;
+that target was rebuilt without changing Video Editor code before the final
+run. The normal Release Image Editor executable was rebuilt with this fix.
 
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
@@ -224,7 +243,7 @@ pending.
 | Flattened export, Quick Export, and export dialogs | `image_editor_core_test.cpp`, `image_editor_export_ui_test.cpp` (`creative-suite-image-editor-export-ui`) | The owner reports current export workflows exercised on Windows 11; cross-platform package checks remain pending. |
 | Canvas, tools, layers, shortcuts, and UI interactions | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`) | The owner reports current UI workflows exercised on Windows 11; cross-platform visual checks remain pending. |
 | Video Editor linked-image producer/consumer workflow | Producer: `image_editor_ui_test.cpp`; consumers: `application_media_services_test.cpp` (`creative-suite-main-editor-application-media`), `main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`), and `project_file_test.cpp` (`creative-suite-main-editor-project`) | Automated producer/consumer regression tests pass in Debug and Release. The owner reports the basic linked edit/save workflow working on Windows, but the full scenario and cross-platform acceptance remain pending (**P1 validation**). |
-| First-release editable text | `image_editor_core_test.cpp` and `image_editor_ui_test.cpp`; CTest `creative-suite-image-editor-core` and `creative-suite-image-editor-ui` (one-key shortcut interception, focus retention, click-to-create, click-to-position caret and insert text at that position, keyboard text selection/highlight after expansion, selected-text replacement, horizontal growth, canvas-edge wrapping, and multiline height growth) | Manual visual editing checks, including mouse-drag text selection while the box grows, click-to-create, and click-outside confirmation, are listed in `MANUAL_VALIDATION.md` and remain pending (**P2 validation**). Linked PNG producer and Video Editor consumer regression tests are present; manual cross-application acceptance remains pending (**P1 validation**). |
+| First-release editable text | `image_editor_core_test.cpp` and `image_editor_ui_test.cpp`; CTest `creative-suite-image-editor-core`, `creative-suite-image-editor-ui`, and Windows `creative-suite-image-editor-native-text` (one-key shortcut interception, focus retention, click-to-create, caret placement and hit testing after each character, mouse and keyboard selection, selected-text replacement, horizontal growth with native margins and zoomed font metrics, canvas-edge wrapping, and visible multiline height growth) | Manual visual editing checks, including text selection while the box grows, click-to-create, and click-outside confirmation, are listed in `MANUAL_VALIDATION.md` and remain pending (**P2 validation**). Native Windows mouse-drag selection has automated coverage; owner visual acceptance and other-platform checks remain pending. Linked PNG producer and Video Editor consumer regression tests are present; manual cross-application acceptance remains pending (**P1 validation**). |
 
 ### Current coverage gaps and pending validation
 

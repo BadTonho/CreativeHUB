@@ -5,6 +5,7 @@
 
 #include <QEvent>
 #include <QApplication>
+#include <QAbstractTextDocumentLayout>
 #include <QCoreApplication>
 #include <QCursor>
 #include <QFrame>
@@ -17,6 +18,8 @@
 #include <QPainterPath>
 #include <QPainterPathStroker>
 #include <QPlainTextEdit>
+#include <QScrollBar>
+#include <QTextBlock>
 #include <QPen>
 #include <QTextLayout>
 #include <QTextCursor>
@@ -864,18 +867,38 @@ void ImageCanvas::updateTextEditorGeometry() {
     const qreal height = text_editing_.content.isEmpty()
         ? minimum_height : std::max(minimum_height, text_bounds.height());
     const int width = std::max(24, qRound(text_editing_.box_width * zoom_));
-    const int pixel_height = std::max(24, qRound(height * zoom_));
     const int left = qRound(target.left() + text_editing_.position.x() * zoom_);
     const int top = qRound(target.top() + text_editing_.position.y() * zoom_);
-    const QRect editor_geometry(left, top, width, pixel_height);
     QFont font(text_editing_.font_family);
     font.setPixelSize(std::max(1, qRound(text_editing_.font_pixel_size * zoom_)));
     const bool keep_focus = text_editor_->hasFocus();
     const QTextCursor cursor = text_editor_->textCursor();
+    if (text_editor_->font() != font) text_editor_->setFont(font);
+    // Lay out at the new width before measuring height. The native editor's
+    // rounded font size and fixed screen-pixel margins can wrap differently
+    // from the canvas renderer, especially below 100% zoom.
+    QRect editor_geometry(left, top, width, text_editor_->height());
     if (text_editor_->geometry() != editor_geometry) {
         text_editor_->setGeometry(editor_geometry);
     }
-    if (text_editor_->font() != font) text_editor_->setFont(font);
+    qreal native_height = 0.0;
+    auto* document_layout = text_editor_->document()->documentLayout();
+    for (QTextBlock block = text_editor_->document()->begin(); block.isValid();
+         block = block.next()) {
+        native_height += document_layout->blockBoundingRect(block).height();
+    }
+    const qreal vertical_inset = text_editor_->height() - text_editor_->viewport()->height()
+        + 2.0 * text_editor_->document()->documentMargin();
+    const int pixel_height = std::max({24, qRound(height * zoom_),
+        static_cast<int>(std::ceil(native_height + vertical_inset))});
+    editor_geometry.setHeight(pixel_height);
+    if (text_editor_->geometry() != editor_geometry) {
+        text_editor_->setGeometry(editor_geometry);
+    }
+    // The growing box contains every line, so retain the start of the text in
+    // view after a temporary wrap during the input event.
+    text_editor_->verticalScrollBar()->setValue(0);
+    text_editor_->horizontalScrollBar()->setValue(0);
     if (keep_focus) {
         if (!text_editor_->hasFocus()) text_editor_->setFocus(Qt::OtherFocusReason);
         // Relayout after a resize or font change must not discard the caret or
@@ -892,19 +915,27 @@ void ImageCanvas::updateTextEditorContentAndGeometry() {
     QFont font(text_editing_.font_family);
     font.setPixelSize(std::clamp(text_editing_.font_pixel_size, 1, 1024));
     const QFontMetricsF metrics(font);
+    const QFontMetricsF native_metrics(text_editor_->font(), text_editor_->viewport());
     qreal content_width = 0.0;
+    qreal native_content_width = 0.0;
     const QStringList lines = text_editing_.content.split(QLatin1Char('\n'),
                                                           Qt::KeepEmptyParts);
     for (const QString& line : lines) {
         content_width = std::max(content_width, metrics.horizontalAdvance(line));
+        native_content_width = std::max(native_content_width,
+            native_metrics.horizontalAdvance(line));
     }
 
     const qreal available_width = std::max<qreal>(1.0,
         image_.width() - text_editing_.position.x());
     const qreal minimum_width = std::min(text_editing_initial_box_width_, available_width);
     constexpr qreal kTextEditorHorizontalInset = 4.0;
-    const qreal desired_width = std::max(minimum_width,
-        content_width > 0.0 ? content_width + kTextEditorHorizontalInset : minimum_width);
+    const qreal native_inset = text_editor_->width() - text_editor_->viewport()->width()
+        + 2.0 * text_editor_->document()->documentMargin()
+        + text_editor_->cursorWidth() + 2.0;
+    const qreal desired_width = text_editing_.content.isEmpty() ? minimum_width
+        : std::max({minimum_width, content_width + kTextEditorHorizontalInset,
+            (native_content_width + native_inset) / zoom_});
     text_editing_.box_width = std::clamp(desired_width, minimum_width, available_width);
 
     // Resizing QPlainTextEdit synchronously from its textChanged signal can
