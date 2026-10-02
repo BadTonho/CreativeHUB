@@ -11,7 +11,7 @@ int main(int argc, char* argv[]) {
     application.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
     QCoreApplication::setApplicationName(QStringLiteral("Image Editor"));
-    QApplication::setApplicationVersion(QStringLiteral("Beta 0.1.2"));
+    QApplication::setApplicationVersion(QStringLiteral("Beta 0.1.3"));
 
     QCommandLineParser parser;
     parser.addHelpOption();

@@ -3,7 +3,7 @@
 Status: **standalone minimum implemented; basic editable text, raster layer masks, linked image layers, and regression
 coverage implemented; manual text validation, packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
-Current application version: **Beta 0.1.2**.
+Current application version: **Beta 0.1.3**.
 This roadmap covers the independent application under `apps/image-editor/`.
 The Video Editor handoff implementation already exists as a bounded prototype,
 but its acceptance is gated on passing the standalone manual and Windows
