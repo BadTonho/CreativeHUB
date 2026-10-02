@@ -19,6 +19,45 @@ persistence, and recovery.
   `src/ui/windows/` contain the canvas widget, creation dialogs, layer dock
   panel, tool sidebar, and main application window respectively.
 
+## Linked image resources and geometry
+
+`prepareRasterImport` decodes PNG, JPEG, BMP, WebP, and TIFF through the existing
+Qt reader with automatic orientation. The window runs it on a worker thread
+behind a cancellable modal progress dialog. Cancellation is checked between
+files and after each blocking decode; Qt's decode call itself cannot be
+interrupted. The document remains stable while the worker runs. Only a
+complete successful batch enters the session, as one Undo/Redo edit.
+
+`RasterImage` stores a UUID, path, oriented source size, and an invertible
+affine matrix. `ImageDocumentSession` caches implicitly shared QImages by path.
+Repeated imports share loaded pixels; operations contain no pixel buffers.
+Relink can retain a per-object shared image handle to refresh a selected
+reference without refreshing other references to the same path. History and
+export snapshots retain shared resource handles, allowing Undo to restore
+same-path relinks. Reopening recreates the cache from disk. No external file
+watcher is used.
+
+The session exposes batch insertion, raster lookup, geometry editing through
+`visibleObjects`/`updateObjectsRendered`, temporary core composition through
+`renderedImageWithObjects`, source diagnostics, and compatible relinking.
+Import commits above the active layer, inside its parent group if applicable;
+an active group inserts above that group at root. Placement starts centered,
+fits down without enlargement, and maps canvas placement back through an
+existing parent group transform.
+
+Selection manipulates only the raster matrix, including positions outside
+the canvas. Oriented corners resize in image-local axes, Alt permits independent
+scales, and the rotation handle rotates around the image center with optional
+15-degree Shift snapping. Esc discards the temporary composition. The core
+preview includes masks, operation order, opacity, crop, and group transforms.
+The existing layer transform commands retain their content-and-mask behavior.
+
+Source problems are reported in the layer panel and logged with path/object
+context. They do not prevent document save or other layer edits. Export
+snapshots check only references participating in their visible scope before
+rendering or opening an output file. Full export, Quick Export, and linked PNG
+publication retain their previous output on failure.
+
 ## Runtime boundaries
 
 - `ImageDocumentSession` owns either a decoded, linked source image or a
@@ -38,8 +77,9 @@ persistence, and recovery.
   and recovery snapshots. Version 4 stores layer UUIDs and properties; version
   5 adds layer-local eraser strokes; version 6 adds editable shape operations;
   version 7 adds stable UUIDs to paint and eraser strokes; version 8 adds
-  one-level groups. Version 9 adds text and version 10 adds raster layer masks. The reader
-  continues to accept versions 1–9 and generates
+  one-level groups. Version 9 adds text, version 10 adds raster layer masks, and version 11 adds linked
+  raster images. The reader
+  continues to accept versions 1–10 and generates
   in-memory IDs for older strokes. Its data format is specified in
   [`FORMAT.md`](FORMAT.md).
 - `ImageExportSnapshot` captures the current source image, document data, and
@@ -176,7 +216,7 @@ persistence, and recovery.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 10; host links live in the Video Editor's
+  The `.cimg` schema is version 11; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message

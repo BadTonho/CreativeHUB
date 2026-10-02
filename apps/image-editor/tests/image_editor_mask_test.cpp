@@ -125,7 +125,7 @@ void testMasks(const QString& root) {
 
     const QString document_path = root + "/masked.cimg";
     require(session.saveDocument(document_path, &error), error);
-    require(readJson(document_path).value("version").toInt() == 10, "Mask document is not v10.");
+    require(readJson(document_path).value("version").toInt() == 11, "Mask document is not v11.");
     ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error) && reopened.data() == session.data() &&
             reopened.renderedImage() == session.renderedImage(), "Mask round-trip lost edits.");
@@ -137,7 +137,7 @@ void testMasks(const QString& root) {
             restored.data() == session.data() && restored.isDirty(), "Recovery lost the mask.");
     const auto recovery_json = readJson(recovery.pathFor(session));
     require(recovery_json.value("version").toInt() == 1 &&
-            recovery_json.value("document").toObject().value("version").toInt() == 10,
+            recovery_json.value("document").toObject().value("version").toInt() == 11,
             "Recovery changed its envelope or omitted v10.");
 
     const QString png_path = root + "/masked.png";
@@ -240,7 +240,7 @@ void testMasks(const QString& root) {
     old_with_mask.insert("version", 9);
     expect_invalid(old_with_mask);
 
-    // A supported v9 file without masks retains pixels and upgrades to v10.
+    // A supported v9 file without masks retains pixels and upgrades to v11.
     auto legacy_layers = initial_layers;
     auto legacy_layer = legacy_layers.last().toObject();
     legacy_layer.remove("mask");
@@ -254,7 +254,7 @@ void testMasks(const QString& root) {
     require(!legacy_session.data().layers.back().mask.has_value(), "v9 invented a mask.");
     const auto legacy_pixels = legacy_session.renderedImage();
     require(legacy_session.saveDocument({}, &error), error);
-    require(readJson(root + "/legacy-v9.cimg").value("version").toInt() == 10 &&
+    require(readJson(root + "/legacy-v9.cimg").value("version").toInt() == 11 &&
             legacy_session.renderedImage() == legacy_pixels, "v9 migration changed pixels.");
 
     // Mirrored transforms must not make a valid mask exceed persisted limits.

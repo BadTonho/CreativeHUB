@@ -26,6 +26,10 @@
 #include <QTextOption>
 #include <QSignalBlocker>
 #include <QWheelEvent>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QFileInfo>
 
 #include <algorithm>
 #include <cmath>
@@ -41,6 +45,7 @@ QString objectId(const ImageOperation& operation) {
     case OperationKind::EraseStroke: return operation.erase_stroke.id;
     case OperationKind::Shape: return operation.shape.id;
     case OperationKind::Text: return operation.text.id;
+    case OperationKind::RasterImage: return operation.raster.id;
     default: return {};
     }
 }
@@ -65,6 +70,11 @@ QPainterPath strokePath(const QVector<QPointF>& points, qreal width) {
 }
 
 QPainterPath objectPath(const ImageOperation& operation, qreal extra = 0.0) {
+    if (operation.kind == OperationKind::RasterImage) {
+        QPainterPath path;
+        path.addRect(QRectF(QPointF(), QSizeF(operation.raster.source_size)));
+        return operation.raster.transform.map(path);
+    }
     if (operation.kind == OperationKind::PaintStroke) {
         return strokePath(operation.paint_stroke.points,
                           operation.paint_stroke.diameter + extra * 2.0);
@@ -130,6 +140,7 @@ QRectF visibleObjectBounds(const ImageOperation& operation) {
 } // namespace
 
 ImageCanvas::ImageCanvas(QWidget* parent) : QWidget(parent) {
+    setAcceptDrops(true);
     setFocusPolicy(Qt::StrongFocus);
     setMinimumSize(240, 180);
     setMouseTracking(true);
@@ -516,9 +527,58 @@ QRectF ImageCanvas::objectBounds(const QVector<ImageObjectPlacement>& objects) c
     return first ? QRectF{} : bounds;
 }
 
+
+bool ImageCanvas::rasterTransform() const {
+    return transform_initial_objects_.size() == 1 &&
+        transform_initial_objects_.front().operation.kind == OperationKind::RasterImage;
+}
+QPointF ImageCanvas::unboundedImagePoint(const QPointF& position) const {
+    return (position - imageTargetRect().topLeft()) / std::max(zoom_, 0.01);
+}
+QPointF ImageCanvas::rotationHandle(const ImageOperation& operation) const {
+    const auto& r = operation.raster;
+    const QPointF center = r.transform.map(QPointF(r.source_size.width() / 2.0, r.source_size.height() / 2.0));
+    const QPointF top = r.transform.map(QPointF(r.source_size.width() / 2.0, 0));
+    QPointF direction = top - center;
+    const qreal length = std::hypot(direction.x(), direction.y());
+    return top + direction / std::max(length, 0.001) * (28.0 / std::max(zoom_, 0.01));
+}
+namespace {
+QStringList dropPaths(const QMimeData* mime) {
+    QStringList paths;
+    const QStringList extensions{"png", "jpg", "jpeg", "bmp", "webp", "tif", "tiff"};
+    if (!mime->hasUrls()) return paths;
+    for (const auto& url : mime->urls()) {
+        if (!url.isLocalFile() || !extensions.contains(QFileInfo(url.toLocalFile()).suffix().toLower())) return {};
+        paths.append(url.toLocalFile());
+    }
+    return paths;
+}
+}
+void ImageCanvas::dragEnterEvent(QDragEnterEvent* event) {
+    if (!image_.isNull() && !dropPaths(event->mimeData()).isEmpty()) event->acceptProposedAction();
+}
+void ImageCanvas::dropEvent(QDropEvent* event) {
+    const auto paths = dropPaths(event->mimeData());
+    if (image_.isNull() || paths.isEmpty() || !imageTargetRect().contains(event->position())) return;
+    event->acceptProposedAction();
+    emit imagesDropped(paths, unboundedImagePoint(event->position()));
+}
+
 int ImageCanvas::resizeHandleAt(const QPointF& image_point) const {
     if (selected_object_ids_.isEmpty()) return -1;
     const auto selected = selectedObjects();
+    if (selected.size() == 1 && selected.front().operation.kind == OperationKind::RasterImage) {
+        const auto& op = selected.front().operation;
+        const qreal tolerance = 9.0 / std::max(zoom_, 0.01);
+        if (QLineF(image_point, rotationHandle(op)).length() <= tolerance) return 6;
+        const auto& r = op.raster;
+        const qreal w = r.source_size.width(), h = r.source_size.height();
+        const QPointF corners[] = {{0, 0}, {w, 0}, {0, h}, {w, h}};
+        for (int i = 0; i < 4; ++i)
+            if (QLineF(image_point, r.transform.map(corners[i])).length() <= tolerance) return i;
+        return -1;
+    }
     if (selected.size() == 1 && selected.front().operation.kind == OperationKind::Text) {
         const QRectF bounds = imageTextBounds(selected.front().operation.text);
         const qreal tolerance = 9.0 / std::max(zoom_, 0.01);
@@ -581,6 +641,10 @@ QVector<ImageObjectPlacement> ImageCanvas::transformObjects(
             operation.text.position = map_point(operation.text.position);
             operation.text.box_width = std::max<qreal>(1.0,
                 operation.text.box_width * std::abs(scale_x));
+        } else if (operation.kind == OperationKind::RasterImage) {
+            operation.raster.transform *= QTransform(scale_x, 0, 0, scale_y,
+                destination.x() - origin.x() * scale_x,
+                destination.y() - origin.y() * scale_y);
         }
         const int diameter = std::clamp(
             static_cast<int>(std::lround(operationDiameter(operation) * width_scale)),
@@ -598,6 +662,7 @@ void ImageCanvas::beginObjectTransform(bool resize, int handle,
     transform_initial_bounds_ = objectBounds(transform_initial_objects_);
     transform_start_ = image_point;
     resizing_objects_ = resize;
+    rotating_objects_ = handle == 6;
     resizing_handle_ = handle;
     transforming_objects_ = true;
     moved_interaction_ = false;
@@ -607,7 +672,7 @@ void ImageCanvas::beginObjectTransform(bool resize, int handle,
         const bool left_handle = handle == 4;
         transform_fixed_anchor_ = left_handle
             ? transform_initial_bounds_.topRight() : transform_initial_bounds_.topLeft();
-    } else if (resize) {
+    } else if (resize && !rotating_objects_) {
         const QPointF anchors[] = {transform_initial_bounds_.bottomRight(),
                                    transform_initial_bounds_.bottomLeft(),
                                    transform_initial_bounds_.topRight(),
@@ -620,6 +685,45 @@ void ImageCanvas::beginObjectTransform(bool resize, int handle,
 
 void ImageCanvas::updateObjectTransform(const QPointF& image_point, bool freeform) {
     if (!transforming_objects_ || transform_initial_objects_.isEmpty()) return;
+    if (rasterTransform()) {
+        const auto& original = transform_initial_objects_.front().operation.raster;
+        auto& raster = transform_current_objects_.front().operation.raster;
+        raster.transform = original.transform;
+        if (rotating_objects_) {
+            const QPointF pivot = original.transform.map(QPointF(original.source_size.width() / 2.0,
+                original.source_size.height() / 2.0));
+            const auto a = transform_start_ - pivot;
+            const auto b = image_point - pivot;
+            qreal degrees = (std::atan2(b.y(), b.x()) - std::atan2(a.y(), a.x())) * 180.0 / std::acos(-1.0);
+            if (shift_constrain_held_) {
+                const qreal base = std::atan2(original.transform.m12(), original.transform.m11()) * 180.0 / std::acos(-1.0);
+                degrees = std::round((degrees + base) / 15.0) * 15.0 - base;
+            }
+            QTransform rotation;
+            rotation.translate(pivot.x(), pivot.y());
+            rotation.rotate(degrees);
+            rotation.translate(-pivot.x(), -pivot.y());
+            raster.transform *= rotation;
+        } else if (resizing_objects_) {
+            const qreal width = original.source_size.width(), height = original.source_size.height();
+            const QPointF corners[] = {{0, 0}, {width, 0}, {0, height}, {width, height}};
+            const QPointF anchor = corners[3 - resizing_handle_];
+            const QPointF initial = corners[resizing_handle_] - anchor;
+            const QPointF dragged = original.transform.inverted().map(image_point) - anchor;
+            qreal sx = std::max(0.001, dragged.x() / initial.x());
+            qreal sy = std::max(0.001, dragged.y() / initial.y());
+            if (!freeform) sx = sy = std::max(sx, sy);
+            const QTransform local(sx, 0, 0, sy, anchor.x() * (1 - sx), anchor.y() * (1 - sy));
+            raster.transform = local * original.transform;
+        } else {
+            const QPointF delta = image_point - transform_start_;
+            raster.transform *= QTransform::fromTranslate(delta.x(), delta.y());
+        }
+        moved_interaction_ = true;
+        emit objectsPreviewRequested(transform_current_objects_);
+        update();
+        return;
+    }
     const QSize size = image_.size();
     if (!resizing_objects_) {
         QPointF delta = image_point - transform_start_;
@@ -633,6 +737,9 @@ void ImageCanvas::updateObjectTransform(const QPointF& image_point, bool freefor
             transform_initial_objects_, 1.0, 1.0,
             transform_initial_bounds_.topLeft(),
             transform_initial_bounds_.topLeft() + delta);
+        if (std::any_of(transform_current_objects_.cbegin(), transform_current_objects_.cend(),
+            [](const ImageObjectPlacement& p) { return p.operation.kind == OperationKind::RasterImage; }))
+            emit objectsPreviewRequested(transform_current_objects_);
         update();
         return;
     }
@@ -698,6 +805,9 @@ void ImageCanvas::updateObjectTransform(const QPointF& image_point, bool freefor
     transform_current_objects_ = transformObjects(
         transform_initial_objects_, scale_x, scale_y,
         transform_initial_bounds_.topLeft(), new_top_left);
+    if (std::any_of(transform_current_objects_.cbegin(), transform_current_objects_.cend(),
+        [](const ImageObjectPlacement& p) { return p.operation.kind == OperationKind::RasterImage; }))
+        emit objectsPreviewRequested(transform_current_objects_);
     update();
 }
 
@@ -706,6 +816,7 @@ void ImageCanvas::clearObjectInteraction() {
     selection_toggle_ = false;
     transforming_objects_ = false;
     resizing_objects_ = false;
+    rotating_objects_ = false;
     resizing_text_width_ = false;
     moved_interaction_ = false;
     resizing_handle_ = -1;
@@ -1087,7 +1198,9 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
         painter.restore();
     }
     if (transforming_objects_) {
-        for (const auto& object : transform_current_objects_) drawObjectOverlay(painter, object);
+        const bool raster = std::any_of(transform_current_objects_.cbegin(), transform_current_objects_.cend(),
+            [](const ImageObjectPlacement& p) { return p.operation.kind == OperationKind::RasterImage; });
+        if (!raster) for (const auto& object : transform_current_objects_) drawObjectOverlay(painter, object);
     }
     if (object_selection_mode_ && !selected_object_ids_.isEmpty()) {
         const QRectF bounds = objectBounds(selectedObjects());
@@ -1107,6 +1220,19 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
             if (selected.size() == 1 && selected.front().operation.kind == OperationKind::Text) {
                 handles = {QPointF(widget_bounds.left(), widget_bounds.center().y()),
                            QPointF(widget_bounds.right(), widget_bounds.center().y())};
+            } else if (selected.size() == 1 && selected.front().operation.kind == OperationKind::RasterImage) {
+                painter.setClipping(false);
+                const auto& op = selected.front().operation;
+                const auto& r = op.raster;
+                const qreal w = r.source_size.width(), h = r.source_size.height();
+                const QPointF corners[] = {{0, 0}, {w, 0}, {0, h}, {w, h}};
+                for (const auto& corner : corners) handles.append(target.topLeft() + r.transform.map(corner) * zoom_);
+                QPolygonF outline{handles[0], handles[1], handles[3], handles[2]};
+                painter.drawPolygon(outline);
+                const QPointF handle = target.topLeft() + rotationHandle(op) * zoom_;
+                painter.drawLine((handles[0] + handles[1]) / 2, handle);
+                painter.setBrush(QColor(244, 247, 251));
+                painter.drawEllipse(handle, 5, 5);
             } else {
                 handles = {widget_bounds.topLeft(), widget_bounds.topRight(),
                            widget_bounds.bottomLeft(), widget_bounds.bottomRight()};
@@ -1205,9 +1331,9 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (object_selection_mode_ && event->button() == Qt::LeftButton &&
-        imageTargetRect().contains(event->position())) {
-        const QPointF point = widgetToImageCoordinates(event->position());
+    if (object_selection_mode_ && event->button() == Qt::LeftButton && !image_.isNull() &&
+        (imageTargetRect().contains(event->position()) || resizeHandleAt(unboundedImagePoint(event->position())) >= 0)) {
+        const QPointF point = unboundedImagePoint(event->position());
         const int handle = resizeHandleAt(point);
         if (handle >= 0) {
             beginObjectTransform(true, handle, point);
@@ -1335,7 +1461,9 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         return;
     }
     if (transforming_objects_) {
-        const QPointF point = widgetToImageCoordinates(event->position());
+        const QPointF point = rasterTransform() ? unboundedImagePoint(event->position())
+                                               : widgetToImageCoordinates(event->position());
+        if (rotating_objects_) shift_constrain_held_ = event->modifiers().testFlag(Qt::ShiftModifier);
         updateObjectTransform(point, event->modifiers().testFlag(Qt::AltModifier));
         event->accept();
         return;

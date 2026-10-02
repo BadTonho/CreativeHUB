@@ -39,6 +39,8 @@ constexpr int kParentGroupRole = Qt::UserRole + 6;
 constexpr int kMaskThumbnailRole = Qt::UserRole + 7;
 constexpr int kMaskSelectedRole = Qt::UserRole + 8;
 constexpr int kMaskEnabledRole = Qt::UserRole + 9;
+constexpr int kSourceProblemRole = Qt::UserRole + 10;
+constexpr int kRasterObjectRole = Qt::UserRole + 11;
 constexpr int kLayerRowHeight = 46;
 
 QRect maskThumbnailRect(const QRect& row) {
@@ -135,10 +137,11 @@ public:
                               eyeHitRect(row).left() - content_right - 15,
                               row.height());
         const bool selected = option.state.testFlag(QStyle::State_Selected);
-        painter->setPen(option.palette.color(selected ? QPalette::HighlightedText
+        const bool source_problem = index.data(kSourceProblemRole).toBool();
+        painter->setPen(source_problem ? QColor(230, 170, 80) : option.palette.color(selected ? QPalette::HighlightedText
                                                        : QPalette::Text));
         const QString text = QFontMetrics(option.font).elidedText(
-            index.data(Qt::DisplayRole).toString(), Qt::ElideRight,
+            index.data(Qt::DisplayRole).toString() + (source_problem ? QStringLiteral(" [Image unavailable]") : QString{}), Qt::ElideRight,
             std::max(0, text_rect.width()));
         painter->drawText(text_rect, Qt::AlignVCenter | Qt::AlignLeft, text);
 
@@ -501,7 +504,8 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
                              const QString& selected_group_id,
                              const QHash<QString, QImage>& thumbnails,
                              const QHash<QString, QImage>& mask_thumbnails,
-                             const QString& selected_mask_id) {
+                             const QString& selected_mask_id,
+                             const QHash<QString, QString>& source_problems) {
     QSet<QString> expanded;
     for (int index = 0; index < layer_tree_->topLevelItemCount(); ++index) {
         auto* item = layer_tree_->topLevelItem(index);
@@ -521,6 +525,15 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
             item->setData(0, Qt::ToolTipRole, QStringLiteral(
                 "Click the mask thumbnail to edit it. Black hides, white reveals. "
                 "Click the image thumbnail to edit layer content."));
+        }
+        for (const auto& op : layer.operations) {
+            if (op.kind == OperationKind::RasterImage) item->setData(0, kRasterObjectRole, op.raster.id);
+            if (op.kind != OperationKind::RasterImage || !source_problems.contains(op.raster.id)) continue;
+            item->setData(0, kSourceProblemRole, true);
+            item->setData(0, Qt::ToolTipRole, source_problems.value(op.raster.id) +
+                QStringLiteral(" Select this image and choose File > Relink Image."));
+            item->setData(0, Qt::AccessibleDescriptionRole, source_problems.value(op.raster.id));
+            item->setForeground(0, QColor(230, 170, 80));
         }
     };
     layer_tree_->clear();
@@ -602,9 +615,11 @@ bool LayerPanel::eventFilter(QObject* watched, QEvent* event) {
             QTreeWidgetItem* item = layer_tree_->itemAt(mouse->pos());
             if (mouse->button() == Qt::LeftButton && item != nullptr &&
                 !item->data(0, kGroupRole).toBool() &&
-                !item->data(0, kMaskThumbnailRole).value<QImage>().isNull()) {
+                (!item->data(0, kMaskThumbnailRole).value<QImage>().isNull() ||
+                 !item->data(0, kRasterObjectRole).toString().isEmpty())) {
                 const QRect row = layer_tree_->visualItemRect(item);
-                const bool mask_hit = maskThumbnailRect(row).contains(mouse->pos());
+                const bool mask_hit = !item->data(0, kMaskThumbnailRole).value<QImage>().isNull() &&
+                    maskThumbnailRect(row).contains(mouse->pos());
                 const QRect content_rect(row.left() + 6, row.center().y() - 18, 48, 36);
                 if (mask_hit || content_rect.contains(mouse->pos())) {
                     eye_press_consumed_ = true;

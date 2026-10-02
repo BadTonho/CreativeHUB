@@ -2,6 +2,7 @@
 
 #include "image_exporter.h"
 #include "image_document_store.h"
+#include "image_raster_import.h"
 
 #include <QHash>
 #include <QImage>
@@ -13,6 +14,16 @@ namespace image_editor {
 
 class ImageDocumentSession final {
 public:
+    [[nodiscard]] bool importRasterImages(const QVector<PreparedRasterImage>& images,
+        std::optional<QPointF> center = {}, QString* error = nullptr);
+    [[nodiscard]] bool findRaster(const QString& id, ImageRasterData* raster,
+        QString* layer_id = nullptr) const;
+    [[nodiscard]] bool relinkRaster(const QString& id, const PreparedRasterImage& image,
+        QString* error = nullptr);
+    // Problems are keyed by object UUID; cached pixels remain stable for this session.
+    [[nodiscard]] QHash<QString, QString> rasterSourceProblems() const;
+    [[nodiscard]] QImage renderedImageWithObjects(
+        const QVector<ImageObjectPlacement>& objects) const;
     [[nodiscard]] bool createCanvas(const QSize& size,
                                     const QColor& background,
                                     QString* error = nullptr);
@@ -137,6 +148,7 @@ private:
         ImageDocumentData document;
         QString selected_layer_id;
         QString selected_group_id;
+        QHash<QString, QImage> raster_images;
     };
 
     struct LayerThumbnailCacheEntry {
@@ -162,9 +174,12 @@ private:
     [[nodiscard]] bool effectiveLayerVisible(const ImageLayerData& layer) const;
     [[nodiscard]] bool loadSource(const QString& path, QImage* image, QString* error) const;
     [[nodiscard]] QSize renderedSize() const;
+    void loadRasterSources();
 
     ImageDocumentData data_;
     QImage source_image_;
+    QHash<QString, QImage> raster_images_;
+    QHash<QString, QString> raster_errors_;
     QString document_path_;
     QString recovery_session_id_;
     QString selected_layer_id_;

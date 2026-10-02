@@ -135,7 +135,7 @@ void ImageExportProgressDialog::setCancellationPending() {
         QStringLiteral("Encoding"), Qt::CaseInsensitive)
         ? QStringLiteral(
               "Finishing the current encoding so the temporary output can be discarded…")
-        : QStringLiteral("Cancelling export…");
+        : (cancellation_text_.isEmpty() ? QStringLiteral("Cancelling export…") : cancellation_text_);
     label_->setText(message);
 }
 

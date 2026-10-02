@@ -1,7 +1,7 @@
 # Image Editor Scope
 
-Status: **basic editable text is implemented; manual text validation and
-release acceptance remain pending**. The Image Editor is a standalone raster
+Status: **editable text, raster masks, and linked image layers are implemented;
+manual visual validation and release acceptance remain pending**. The Image Editor is a standalone raster
 editor in `apps/image-editor/`. Its current behavior and the approved next
 release direction are recorded separately below. See the
 [roadmap](ROADMAP.md) for milestone order and acceptance gates.
@@ -12,16 +12,16 @@ The current application supports one raster document at a time, either linked
 to an original image or created as a self-contained canvas. It provides a
 locked Background, editable raster layers, one-level groups, visibility,
 opacity, ordering, crop, quarter-turn rotation, flips, painting, erasing,
-editable line/rectangle/ellipse shapes, editable text, raster layer masks, object selection and
+editable line/rectangle/ellipse shapes, editable text, raster layer masks, imported image layers, object selection and
 transforms, Undo/Redo, local autosave and recovery, and bounded technical error
 logging. Text supports multiline content, family, pixel size, color, horizontal
 alignment, movement, and width resizing. While editing, its box grows
 horizontally to fit the longest line up to the canvas edge, then wraps and grows
 vertically. Text is kept editable in its own `Text N` layer.
 
-Documents use the provisional `.cimg` version 10 format. The application reads
-versions 1 through 9 and writes version 10, migrating older documents on save;
-version 1 recovery envelopes accept a version 10 document payload. Source images
+Documents use the provisional `.cimg` version 11 format. The application reads
+versions 1 through 10 and writes version 11, migrating older documents on save;
+version 1 recovery envelopes accept a version 11 document payload. Source images
 remain unchanged.
 Canvas documents can use standard presets or custom dimensions. Self-contained
 canvas documents currently allow up to 32768 pixels per side and 64 million
@@ -74,8 +74,8 @@ performance guarantee is approved yet.
 ## Compatibility and Release Order
 
 The current implementation preserves the ability to open existing `.cimg`
-versions 1 through 9 and writes the current version 10 format on save. Automated
-regression tests cover the migration, invalid text rejection, and version 10
+versions 1 through 10 and writes the current version 11 format on save. Automated
+regression tests cover the migration, invalid text rejection, and version 11
 recovery payload. This implementation does not mark manual text checks or
 Video Editor linked-image acceptance complete.
 
@@ -96,6 +96,29 @@ Add Layer Mask, Enable Layer Mask, and Remove Layer Mask. Layer transforms,
 Undo/Redo, persistence, recovery, exports, and linked PNG output include masks.
 Background and group masks are outside this extension. This code work does not
 complete the existing first-release or cross-application acceptance gates.
+
+## Linked image layer extension (approved 2026-10-02)
+
+**File > Import Image as Layer** accepts multiple PNG, JPEG, BMP, WebP, or TIFF
+files in an open document. Local files can also be dropped on the canvas.
+Decoding runs in the background with cancellation; the complete batch commits
+as one Undo edit or inserts nothing. Each layer uses the file name and retains
+a link to the original file. Default placement centers and only shrinks images
+larger than the canvas; a drop centers at its pointer.
+
+The last imported image is selected with Selection active. Drag to move, use
+corners to resize proportionally, hold Alt for independent dimensions, and use
+the rotation handle for free rotation. Shift snaps rotation to 15 degrees.
+Esc cancels the gesture. Image gestures leave masks and unselected strokes
+fixed; layer transform commands continue to transform content and masks.
+
+Loaded pixels remain stable until reopening or relinking. Missing/unreadable
+or incompatible sources are marked in Layers. File > Relink Image replaces a
+selected image reference only and requires the original oriented dimensions.
+Saving and editing other layers remain available, but dependent exports and
+linked PNG publication fail while preserving the previous output. No embedded
+images, automatic file copies, live external updates, perspective, or color
+adjustments are included. Background remains locked and .csp is unchanged.
 
 ## Outside This Release
 

@@ -201,7 +201,7 @@ Debug tests and the complete Release suite (62/62, no failures or skips).
 4. Save as `.cimg`, close, and reopen. Confirm the text remains editable and
    retains content, font family name, size, color, alignment, width, layer
    placement, and rendered appearance. Create a recovery snapshot and confirm
-   its wrapper stays version 1 and its document payload is version 10. Open
+   its wrapper stays version 1 and its document payload is version 11. Open
    copies of supported v1-v9 documents and confirm they retain their previous
    appearance; save each copy and confirm it is upgraded to v10.
 5. Export the full composite and Quick Export the text layer and a group that
@@ -407,3 +407,40 @@ automated document, operation, export, recovery, and UI-boundary tests.
 - [ ] The remaining linked-image scenarios above still need manual validation.
   The platform and test-image details for the confirmed smoke test were not
   recorded.
+
+
+## Imported image layers
+
+Use Debug and Release on each supported platform. Record build, OS, Qt plugins,
+and outcome; these visual checks have no recorded manual result yet.
+
+1. Open a 1920x1080 document. Import several PNG/JPEG/BMP/WebP/TIFF files,
+   including an oriented JPEG and transparent PNG. Confirm file-name layers,
+   correct orientation, fit without enlargement, centered placement, order,
+   and selection of the last image. Repeat by dropping files at a canvas point.
+2. Cancel during a large batch; no layer appears and Undo history is unchanged.
+   Include a corrupt file in a batch; the whole batch fails and the log names it.
+3. Import above a root layer, a group child, and a selected group. Confirm
+   root/group placement, including groups already rotated or flipped.
+4. Move an image partly outside the canvas, resize each corner, use Alt for
+   independent dimensions, rotate freely, and hold Shift to snap at 15 degrees.
+   Confirm oriented handles, core preview, Esc cancellation, and one Undo step
+   per confirmed gesture.
+5. Paint a black mask and separate content stroke. Manipulate only the image;
+   the mask/stroke remain fixed. Repeat in a group. Use existing layer crop,
+   quarter-turn, and flip commands and confirm content and mask move together.
+6. Save/reopen, Save As in a different directory, and restore recovery.
+   Confirm .cimg v11, recovery wrapper v1, paths, and editable geometry.
+7. Remove/corrupt a referenced file or replace it with a different size, then
+   reopen. Confirm Layers reports the problem, other layers remain editable,
+   and document save works. Relink one duplicate reference to a compatible file;
+   the other reference retains its own source. Reject mismatched dimensions.
+8. Full export, Quick Export, and linked PNG publication use the same masked
+   composition. With a missing visible reference, each dependent output fails
+   and its previous file remains intact; unrelated selected-layer export works.
+9. In Video Editor, edit a linked image, import and transform a masked image,
+   save, and confirm Media Pool and timeline preview refresh. Save/reopen the
+   .csp project; its format and media identity remain unchanged.
+10. Modify an original externally during a session. Loaded pixels remain stable;
+    reopening or relinking picks up the change. Original files are never modified
+    by gestures, document save, export, or recovery.

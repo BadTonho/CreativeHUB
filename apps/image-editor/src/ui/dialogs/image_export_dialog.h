@@ -40,6 +40,7 @@ public:
     explicit ImageExportProgressDialog(QWidget* parent = nullptr);
 
     void setPhaseText(const QString& text);
+    void setCancellationText(const QString& text) { cancellation_text_ = text; }
     void setCancellationPending();
     void finish();
 
@@ -57,6 +58,7 @@ private:
     QProgressBar* progress_bar_ = nullptr;
     QPushButton* cancel_button_ = nullptr;
     QString phase_text_;
+    QString cancellation_text_;
     bool cancellation_pending_ = false;
     bool finished_ = false;
 };

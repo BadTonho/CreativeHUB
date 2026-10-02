@@ -1,6 +1,6 @@
 # Image Editor Roadmap
 
-Status: **standalone minimum implemented; basic editable text, raster layer masks, and regression
+Status: **standalone minimum implemented; basic editable text, raster layer masks, linked image layers, and regression
 coverage implemented; manual text validation, packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.2**.
@@ -177,6 +177,34 @@ validated contracts and producer/consumer regression coverage.
 This implementation extension does not complete the earlier manual or platform
 acceptance gates. Its documented UI checklist has no owner-recorded result yet.
 
+### Linked image layer extension (approved 2026-10-02)
+
+**Automated run (2026-10-02, Windows):** the Image Editor compiled in Debug
+and Release. The final Debug focused run passed 11/11 tests: the eight Image
+Editor tests plus Video Editor main-window, application-media, and workspace
+switch tests. The complete Release CTest suite passed 64/64 tests. New coverage
+includes all five formats, EXIF orientation, shared duplicate sources, atomic
+batch history, fit/drop placement, transformed groups, object deletion,
+fixed masks, geometry previews, file-dialog/drop gestures, Alt scaling, Shift
+rotation, Esc, cancellation, v11 persistence, v10 migration, Save As, recovery,
+source diagnostics, compatible and same-path relink history, protected outputs,
+and producer/consumer PNG refresh. Existing fixtures cover v1–v9 migration.
+`git diff --check` passed. No new manual or macOS/Linux acceptance is recorded.
+
+- [x] Import a cancellable atomic batch from a dialog or canvas drop, with
+  auto-oriented Qt decoding and file-name layers.
+- [x] Add raster selection, movement, proportional/Alt scaling, free rotation,
+  Shift snapping, core preview, gesture cancellation, and one history entry.
+- [x] Keep masks and unselected operations fixed for image gestures; retain
+  existing content-and-mask layer transforms.
+- [x] Share decoded source pixels across previews, thumbnails, history, and
+  export snapshots without embedding/copying original files.
+- [x] Persist .cimg v11, migrate v1–v10 on save, and keep recovery wrapper v1.
+- [x] Preserve unavailable references and support compatible selected-image
+  relink; block dependent outputs without replacing previous output files.
+- [x] Add core/UI and Video Editor PNG refresh regressions.
+- [ ] Record platform/manual visual acceptance of these gestures.
+
 ### 4. Future expansion
 
 - [ ] Revisit retouching, color adjustments, and larger effect sets only
@@ -294,6 +322,7 @@ mask acceptance or macOS/Linux results.
 | Flattened export, Quick Export, and export dialogs | `image_editor_core_test.cpp`, `image_editor_export_ui_test.cpp` (`creative-suite-image-editor-export-ui`) | The owner reports current export workflows exercised on Windows 11; cross-platform package checks remain pending. |
 | Canvas, tools, layers, shortcuts, and UI interactions | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`) | The owner reports current UI workflows exercised on Windows 11; cross-platform visual checks remain pending. |
 | Video Editor linked-image producer/consumer workflow | Producer: `image_editor_ui_test.cpp`; consumers: `application_media_services_test.cpp` (`creative-suite-main-editor-application-media`), `main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`), and `project_file_test.cpp` (`creative-suite-main-editor-project`) | Automated producer/consumer regression tests pass in Debug and Release. The owner reports the basic linked edit/save workflow working on Windows, but the full scenario and cross-platform acceptance remain pending (**P1 validation**). |
+| Linked image import, geometry, sources, v11 persistence, export and publication | `image_editor_raster_test.cpp` (`creative-suite-image-editor-raster`), `image_editor_raster_ui_test.cpp` (within `creative-suite-image-editor-ui`), Video Editor `main_window_integration_test.cpp` | Automated coverage present. Visual/native drag checks are documented in `MANUAL_VALIDATION.md`; macOS/Linux and manual acceptance remain pending. |
 | Raster layer masks | `image_editor_mask_test.cpp` (`creative-suite-image-editor-masks`), `image_editor_mask_ui_test.cpp` (within `creative-suite-image-editor-ui`); Video Editor `main_window_integration_test.cpp` when both apps are enabled | Automated coverage for editing, transforms, persistence, recovery, export, thumbnail targeting, and linked PNG producer/consumer behavior. Mask UI checks are documented in `MANUAL_VALIDATION.md`; no manual result recorded. |
 | First-release editable text | `image_editor_core_test.cpp` and `image_editor_ui_test.cpp`; CTest `creative-suite-image-editor-core`, `creative-suite-image-editor-ui`, and Windows `creative-suite-image-editor-native-text` (one-key shortcut interception, focus retention, click-to-create through the full window, displayed pixels without a forced native redraw, caret placement and hit testing after each character, mouse and keyboard selection, selected-text replacement, horizontal growth with native margins and zoomed font metrics, canvas-edge wrapping, and visible multiline height growth) | The owner confirmed that normal typing with the default settings works again in the Windows application. The remaining detailed visual editing checks in `MANUAL_VALIDATION.md` and other-platform acceptance remain pending (**P2 validation**). Native Windows mouse-drag selection has automated coverage. Linked PNG producer and Video Editor consumer regression tests are present; manual cross-application acceptance remains pending (**P1 validation**). |
 

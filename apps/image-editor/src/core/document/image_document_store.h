@@ -8,6 +8,7 @@
 #include <QStringList>
 #include <QSize>
 #include <QVector>
+#include <QTransform>
 #include <optional>
 
 namespace image_editor {
@@ -26,6 +27,7 @@ enum class OperationKind {
     EraseStroke,
     Shape,
     Text,
+    RasterImage,
 };
 
 enum class ImageShapeKind {
@@ -84,6 +86,16 @@ struct ImageTextData {
     bool operator==(const ImageTextData&) const = default;
 };
 
+// Source pixels are shared resources; operations contain metadata only.
+struct ImageRasterData {
+    QString id;
+    QString source_path;
+    QSize source_size;
+    QTransform transform;
+
+    bool operator==(const ImageRasterData&) const = default;
+};
+
 struct ImageShapePlacement {
     ImageShapeData shape;
     QString layer_id;
@@ -98,6 +110,7 @@ struct ImageOperation {
     ImageEraseStroke erase_stroke;
     ImageShapeData shape;
     ImageTextData text;
+    ImageRasterData raster;
 
     bool operator==(const ImageOperation&) const = default;
 };
@@ -188,6 +201,8 @@ public:
     static constexpr qsizetype kMaximumOperations = 100'000;
 
     [[nodiscard]] static bool isValidCanvasSize(const QSize& size) noexcept;
+    [[nodiscard]] static bool isValidRaster(const ImageRasterData& raster,
+                                           QString* error = nullptr);
     [[nodiscard]] static bool isValidShape(const ImageShapeData& shape,
                                            const QSize& canvas_size,
                                            QString* error = nullptr);

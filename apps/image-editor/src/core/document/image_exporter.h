@@ -4,6 +4,7 @@
 
 #include <QColor>
 #include <QImage>
+#include <QHash>
 #include <QString>
 
 #include <atomic>
@@ -28,6 +29,7 @@ struct ImageExportSnapshot {
     ImageDocumentData document;
     QString selected_layer_id;
     QString selected_group_id;
+    QHash<QString, QImage> raster_images;
 };
 
 enum class ImageExportPhase {

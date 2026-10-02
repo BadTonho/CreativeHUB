@@ -18,6 +18,8 @@ class QMouseEvent;
 class QPainter;
 class QPlainTextEdit;
 class QWheelEvent;
+class QDragEnterEvent;
+class QDropEvent;
 
 namespace image_editor {
 
@@ -53,6 +55,8 @@ public:
     [[nodiscard]] double zoomFactor() const noexcept { return zoom_; }
 
 signals:
+    void imagesDropped(const QStringList& paths, const QPointF& center);
+    void objectsPreviewRequested(const QVector<image_editor::ImageObjectPlacement>& objects);
     void cropSelected(const QRect& image_rect);
     void paintStrokeSelected(const QVector<QPointF>& image_points,
                              const QColor& color,
@@ -73,6 +77,8 @@ signals:
         const QVector<image_editor::ImageObjectPlacement>& objects);
 
 protected:
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
@@ -114,6 +120,9 @@ private:
                            const ImageObjectPlacement& object) const;
     void beginObjectTransform(bool resize, int handle, const QPointF& image_point);
     void updateObjectTransform(const QPointF& image_point, bool freeform);
+    [[nodiscard]] QPointF rotationHandle(const ImageOperation& operation) const;
+    [[nodiscard]] bool rasterTransform() const;
+    [[nodiscard]] QPointF unboundedImagePoint(const QPointF& position) const;
     void clearObjectInteraction();
     void updateTextEditorContentAndGeometry();
     void updateTextEditorGeometry();
@@ -145,6 +154,7 @@ private:
     bool transforming_objects_ = false;
     bool resizing_objects_ = false;
     bool resizing_text_width_ = false;
+    bool rotating_objects_ = false;
     bool moved_interaction_ = false;
     int resizing_handle_ = -1;
     QPointF crop_start_;

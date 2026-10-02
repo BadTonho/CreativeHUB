@@ -39,6 +39,8 @@ class ToolSidebar;
 class ImageEditorWindow final : public QMainWindow {
 public:
     explicit ImageEditorWindow(QWidget* parent = nullptr);
+    [[nodiscard]] bool importImagePaths(const QStringList& paths,
+        std::optional<QPointF> center = {}, const QString& relink_id = {});
 
     // Accepts paths from application launchers or future handoff adapters.
     [[nodiscard]] bool openImagePath(const QString& path);
@@ -133,6 +135,10 @@ private:
     QLabel* status_label_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
     QAction* relink_action_ = nullptr;
+    QAction* import_layer_action_ = nullptr;
+    QAction* relink_raster_action_ = nullptr;
+    bool importing_ = false;
+    QHash<QString, QString> logged_raster_problems_;
     QAction* new_canvas_action_ = nullptr;
     QAction* save_action_ = nullptr;
     QAction* save_as_action_ = nullptr;

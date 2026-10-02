@@ -160,6 +160,7 @@ QString operationObjectId(const ImageOperation& operation) {
     case OperationKind::EraseStroke: return operation.erase_stroke.id;
     case OperationKind::Shape: return operation.shape.id;
     case OperationKind::Text: return operation.text.id;
+    case OperationKind::RasterImage: return operation.raster.id;
     default: return {};
     }
 }
@@ -200,6 +201,17 @@ void transformObjectGeometry(ImageOperation* operation,
         }
     };
     switch (operation->kind) {
+    case OperationKind::RasterImage: {
+        const auto origin = transformShapePoint({}, transform, canvas_size, inverse);
+        const auto x = transformShapePoint({1, 0}, transform, canvas_size, inverse) - origin;
+        const auto y = transformShapePoint({0, 1}, transform, canvas_size, inverse) - origin;
+        // Raster geometry describes pixel edges; flips use the canvas edge.
+        QPointF offset = origin;
+        if (transform.kind == OperationKind::FlipHorizontal) offset.rx() += 1;
+        if (transform.kind == OperationKind::FlipVertical) offset.ry() += 1;
+        operation->raster.transform *= QTransform(x.x(), x.y(), y.x(), y.y(), offset.x(), offset.y());
+        break;
+    }
     case OperationKind::PaintStroke:
         transform_points(&operation->paint_stroke.points);
         break;
@@ -232,7 +244,8 @@ void transformObjectGeometry(ImageOperation* operation,
 QImage applyOperations(QImage image,
                        const QVector<ImageOperation>& operations,
                        bool fixed_canvas,
-                       const std::atomic_bool* cancellation_requested = nullptr) {
+                       const std::atomic_bool* cancellation_requested = nullptr,
+                       const QHash<QString, QImage>& resources = {}) {
     const QSize canvas_size = image.size();
     for (const auto& operation : operations) {
         if (cancellation_requested != nullptr &&
@@ -240,6 +253,16 @@ QImage applyOperations(QImage image,
             return {};
         }
         switch (operation.kind) {
+        case OperationKind::RasterImage: {
+            const QImage source = resources.value(operation.raster.id, resources.value(operation.raster.source_path));
+            if (!source.isNull() && source.size() == operation.raster.source_size) {
+                QPainter painter(&image);
+                painter.setRenderHint(QPainter::SmoothPixmapTransform);
+                painter.setTransform(operation.raster.transform);
+                painter.drawImage(0, 0, source);
+            }
+            break;
+        }
         case OperationKind::Crop:
             if (!fixed_canvas) {
                 image = image.copy(operation.crop);
@@ -339,13 +362,15 @@ bool multiplyLayerMask(QImage* pixels, const QImage& mask,
     return true;
 }
 
-QImage renderGroup(const ImageDocumentData& document,
+QImage renderGroup(const QHash<QString, QImage>& resources,
+                   const ImageDocumentData& document,
                    const ImageGroupData& group,
                    const QSize& size,
                    const std::atomic_bool* cancellation_requested,
                    const QStringList& excluded_object_ids);
 
-QImage renderRasterLayer(const ImageLayerData& layer,
+QImage renderRasterLayer(const QHash<QString, QImage>& resources,
+                         const ImageLayerData& layer,
                          const QSize& size,
                          const std::atomic_bool* cancellation_requested,
                          const QStringList& excluded_object_ids) {
@@ -360,7 +385,7 @@ QImage renderRasterLayer(const ImageLayerData& layer,
                 return excluded_object_ids.contains(operationObjectId(operation));
             }), operations.end());
     }
-    pixels = applyOperations(std::move(pixels), operations, true, cancellation_requested);
+    pixels = applyOperations(std::move(pixels), operations, true, cancellation_requested, resources);
     if (layer.mask.has_value() && layer.mask->enabled && !layer.mask->operations.isEmpty() && !pixels.isNull()) {
         QImage mask(size, QImage::Format_ARGB32_Premultiplied);
         if (mask.isNull()) return {};
@@ -372,7 +397,8 @@ QImage renderRasterLayer(const ImageLayerData& layer,
     return pixels;
 }
 
-QImage renderGroup(const ImageDocumentData& document,
+QImage renderGroup(const QHash<QString, QImage>& resources,
+                   const ImageDocumentData& document,
                    const ImageGroupData& group,
                    const QSize& size,
                    const std::atomic_bool* cancellation_requested,
@@ -392,7 +418,7 @@ QImage renderGroup(const ImageDocumentData& document,
         }
         const auto* layer = findLayer(document, layer_id);
         if (layer == nullptr || !layer->visible || layer->opacity == 0) continue;
-        QImage pixels = renderRasterLayer(
+        QImage pixels = renderRasterLayer(resources,
             *layer, size, cancellation_requested, excluded_object_ids);
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
             painter.end();
@@ -403,7 +429,7 @@ QImage renderGroup(const ImageDocumentData& document,
     }
     painter.end();
     QImage transformed = applyOperations(
-        std::move(composite), group.operations, true, cancellation_requested);
+        std::move(composite), group.operations, true, cancellation_requested, resources);
     if (transformed.isNull() || exportWasCancelled(cancellation_requested)) return {};
     if (group.opacity == 100) return transformed;
     QImage result(size, QImage::Format_ARGB32_Premultiplied);
@@ -416,7 +442,8 @@ QImage renderGroup(const ImageDocumentData& document,
     return result;
 }
 
-QImage renderComposite(const QImage& source_image,
+QImage renderComposite(const QHash<QString, QImage>& resources,
+                           const QImage& source_image,
                        const ImageDocumentData& document,
                        const std::atomic_bool* cancellation_requested = nullptr,
                        const QStringList& excluded_object_ids = {}) {
@@ -450,13 +477,13 @@ QImage renderComposite(const QImage& source_image,
         if (item.group) {
             const auto* group = findGroup(document, item.id);
             if (group == nullptr || !group->visible || group->opacity == 0) continue;
-            pixels = renderGroup(document, *group, size,
+            pixels = renderGroup(resources, document, *group, size,
                                  cancellation_requested, excluded_object_ids);
         } else {
             const auto* layer = findLayer(document, item.id);
             if (layer == nullptr || !layer->visible || layer->opacity == 0) continue;
             opacity = layer->opacity / 100.0;
-            pixels = renderRasterLayer(
+            pixels = renderRasterLayer(resources,
                 *layer, size, cancellation_requested, excluded_object_ids);
         }
         if (pixels.isNull() || exportWasCancelled(cancellation_requested)) {
@@ -470,7 +497,8 @@ QImage renderComposite(const QImage& source_image,
     return exportWasCancelled(cancellation_requested) ? QImage{} : composite;
 }
 
-QImage renderSelectedLayer(const QImage& source_image,
+QImage renderSelectedLayer(const QHash<QString, QImage>& resources,
+                           const QImage& source_image,
                            const ImageDocumentData& document,
                            const QString& selected_layer_id,
                            const std::atomic_bool* cancellation_requested = nullptr) {
@@ -511,7 +539,7 @@ QImage renderSelectedLayer(const QImage& source_image,
         pixels = QImage(size, QImage::Format_ARGB32_Premultiplied);
         if (pixels.isNull()) return {};
         pixels.fill(Qt::transparent);
-        pixels = renderRasterLayer(selected_layer, size,
+        pixels = renderRasterLayer(resources, selected_layer, size,
                                    cancellation_requested, {});
         if (parent_group != nullptr) {
             pixels = applyOperations(std::move(pixels), parent_group->operations,
@@ -529,7 +557,8 @@ QImage renderSelectedLayer(const QImage& source_image,
     return exportWasCancelled(cancellation_requested) ? QImage{} : rendered;
 }
 
-QImage renderSelectedGroup(const QImage& source_image,
+QImage renderSelectedGroup(const QHash<QString, QImage>& resources,
+                           const QImage& source_image,
                            const ImageDocumentData& document,
                            const QString& selected_group_id,
                            const std::atomic_bool* cancellation_requested = nullptr) {
@@ -544,10 +573,11 @@ QImage renderSelectedGroup(const QImage& source_image,
         else if (operation.kind == OperationKind::Rotate) size.transpose();
     }
     if (!size.isValid() || size.isEmpty()) return {};
-    return renderGroup(document, *group, size, cancellation_requested, {});
+    return renderGroup(resources, document, *group, size, cancellation_requested, {});
 }
 
-QImage renderLayerThumbnail(QImage image,
+QImage renderLayerThumbnail(const QHash<QString, QImage>& resources,
+                            QImage image,
                             QSize virtual_size,
                             const QVector<ImageOperation>& operations,
                             bool fixed_canvas,
@@ -616,6 +646,9 @@ QImage renderLayerThumbnail(QImage image,
             scaled_operation.shape.stroke_width = std::max(
                 1, qRound(operation.shape.stroke_width * std::min(scale_x, scale_y)));
             break;
+        case OperationKind::RasterImage:
+            scaled_operation.raster.transform *= QTransform::fromScale(scale_x, scale_y);
+            break;
         case OperationKind::Text:
             scaled_operation.text.position.setX(operation.text.position.x() * scale_x);
             scaled_operation.text.position.setY(operation.text.position.y() * scale_y);
@@ -628,13 +661,141 @@ QImage renderLayerThumbnail(QImage image,
         case OperationKind::FlipVertical:
             break;
         }
-        image = applyOperations(std::move(image), {scaled_operation}, fixed_canvas);
+        image = applyOperations(std::move(image), {scaled_operation}, fixed_canvas, nullptr, resources);
     }
 
     return image.scaled(maximum_size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 }
 
 } // namespace
+
+void ImageDocumentSession::loadRasterSources() {
+    raster_images_.clear();
+    raster_errors_.clear();
+    layer_thumbnail_cache_.clear();
+    for (const auto& layer : data_.layers) for (const auto& op : layer.operations) {
+        if (op.kind != OperationKind::RasterImage) continue;
+        const QString path = op.raster.source_path;
+        if (raster_images_.contains(path) || raster_errors_.contains(path)) continue;
+        const auto result = prepareRasterImport({path});
+        if (result.status == RasterImportStatus::Ready)
+            raster_images_.insert(path, result.images.front().image);
+        else raster_errors_.insert(path, result.cause);
+    }
+}
+
+QHash<QString, QString> ImageDocumentSession::rasterSourceProblems() const {
+    QHash<QString, QString> problems;
+    for (const auto& layer : data_.layers) for (const auto& op : layer.operations) {
+        if (op.kind != OperationKind::RasterImage) continue;
+        const auto image = raster_images_.value(op.raster.id, raster_images_.value(op.raster.source_path));
+        if (image.isNull())
+            problems.insert(op.raster.id, QStringLiteral("%1: %2").arg(op.raster.source_path,
+                raster_errors_.value(op.raster.source_path, QStringLiteral("Source image unavailable."))));
+        else if (image.size() != op.raster.source_size)
+            problems.insert(op.raster.id, QStringLiteral("%1: Source dimensions no longer match.").arg(op.raster.source_path));
+    }
+    return problems;
+}
+
+bool ImageDocumentSession::importRasterImages(const QVector<PreparedRasterImage>& images,
+    std::optional<QPointF> center, QString* error) {
+    if (!hasSource() || images.isEmpty() ||
+        images.size() > ImageDocumentStore::kMaximumLayers - totalStackItemCount() ||
+        (center && (!std::isfinite(center->x()) || !std::isfinite(center->y())))) {
+        assignError(error, QStringLiteral("Open a document and choose a batch within the layer limit."));
+        return false;
+    }
+    for (const auto& image : images) {
+        if (image.path.isEmpty() || image.path.contains(QChar::Null) ||
+            QFileInfo(image.path).fileName().isEmpty() || !QDir::isAbsolutePath(image.path) ||
+            image.image.isNull() || !ImageDocumentStore::isValidCanvasSize(image.image.size())) {
+            assignError(error, QStringLiteral("The imported image batch is invalid."));
+            return false;
+        }
+    }
+    const QSize canvas = renderedSize();
+    const QPointF anchor = center.value_or(QPointF(canvas.width() / 2.0, canvas.height() / 2.0));
+    const QString parent_id = selected_group_id_.isEmpty()
+        ? parentGroupForLayer(selected_layer_id_) : QString{};
+    qsizetype insertion = 0;
+    if (auto* parent = findGroup(data_, parent_id)) {
+        insertion = parent->layer_ids.indexOf(selected_layer_id_) + 1;
+    } else {
+        const QString selected = selected_group_id_.isEmpty() ? selected_layer_id_ : selected_group_id_;
+        insertion = data_.root_stack.size();
+        for (qsizetype i = 0; i < data_.root_stack.size(); ++i)
+            if (data_.root_stack[i].id == selected) { insertion = i + 1; break; }
+    }
+    pushEdit();
+    for (const auto& prepared : images) {
+        const QString path = QDir::cleanPath(prepared.path);
+        if (!raster_images_.contains(path)) raster_images_.insert(path, prepared.image);
+        const QSize size = raster_images_.value(path).size();
+        const qreal scale = std::min({1.0, qreal(canvas.width()) / size.width(),
+                                          qreal(canvas.height()) / size.height()});
+        ImageOperation op;
+        op.kind = OperationKind::RasterImage;
+        op.raster = {QUuid::createUuid().toString(QUuid::WithoutBraces), path, size,
+            QTransform(scale, 0, 0, scale,
+                anchor.x() - size.width() * scale / 2, anchor.y() - size.height() * scale / 2)};
+        if (const auto* parent = findGroup(data_, parent_id))
+            for (qsizetype index = parent->operations.size(); index > 0; --index)
+                transformObjectGeometry(&op, parent->operations[index - 1], canvas, true);
+        ImageLayerData layer;
+        layer.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        layer.name = QFileInfo(path).fileName().left(ImageDocumentStore::kMaximumLayerNameLength);
+        layer.parent_group_id = parent_id;
+        layer.operations.append(op);
+        if (auto* parent = findGroup(data_, parent_id))
+            parent->layer_ids.insert(insertion++, layer.id);
+        else data_.root_stack.insert(insertion++, {layer.id, false});
+        data_.layers.append(layer);
+        selected_layer_id_ = layer.id;
+    }
+    selected_group_id_.clear();
+    rebuildLayerOrder();
+    layer_thumbnail_cache_.clear();
+    return true;
+}
+
+bool ImageDocumentSession::findRaster(const QString& id, ImageRasterData* raster, QString* layer_id) const {
+    for (const auto& layer : data_.layers) for (const auto& op : layer.operations)
+        if (op.kind == OperationKind::RasterImage && op.raster.id == id) {
+            if (raster) *raster = op.raster;
+            if (layer_id) *layer_id = layer.id;
+            return true;
+        }
+    return false;
+}
+
+bool ImageDocumentSession::relinkRaster(const QString& id, const PreparedRasterImage& image, QString* error) {
+    ImageRasterData raster;
+    QString layer_id;
+    if (!findRaster(id, &raster, &layer_id) || image.image.isNull() ||
+        image.image.size() != raster.source_size || !QDir::isAbsolutePath(image.path)) {
+        assignError(error, QStringLiteral("Choose an image with the original dimensions for this reference."));
+        return false;
+    }
+    const QString path = QDir::cleanPath(image.path);
+    // Retain a per-object handle so other references keep their loaded pixels.
+    pushEdit();
+    for (auto& layer : data_.layers) for (auto& op : layer.operations)
+        if (op.kind == OperationKind::RasterImage && op.raster.id == id) op.raster.source_path = path;
+    raster_images_.insert(id, image.image);
+    raster_errors_.remove(path);
+    layer_thumbnail_cache_.clear();
+    return true;
+}
+
+QImage ImageDocumentSession::renderedImageWithObjects(const QVector<ImageObjectPlacement>& objects) const {
+    ImageDocumentSession preview;
+    preview.data_ = data_;
+    preview.source_image_ = source_image_;
+    preview.raster_images_ = raster_images_;
+    if (!preview.updateObjectsRendered(objects)) return renderedImage();
+    return preview.renderedImage();
+}
 
 bool ImageDocumentSession::createCanvas(const QSize& size,
                                         const QColor& background,
@@ -651,6 +812,9 @@ bool ImageDocumentSession::createCanvas(const QSize& size,
     }
     canvas.fill(background);
 
+    raster_images_.clear();
+    raster_errors_.clear();
+    layer_thumbnail_cache_.clear();
     data_ = {};
     data_.base_kind = ImageBaseKind::Canvas;
     data_.source_size = size;
@@ -699,6 +863,9 @@ bool ImageDocumentSession::openImage(const QString& source_path, QString* error)
     QImage decoded;
     if (!loadSource(source_path, &decoded, error)) return false;
 
+    raster_images_.clear();
+    raster_errors_.clear();
+    layer_thumbnail_cache_.clear();
     data_ = {};
     data_.base_kind = ImageBaseKind::SourceImage;
     data_.source_path = absoluteCleanPath(source_path);
@@ -746,6 +913,7 @@ bool ImageDocumentSession::openDocument(const QString& document_path, QString* e
     }
 
     data_ = std::move(candidate);
+    loadRasterSources();
     source_image_ = std::move(decoded);
     selected_layer_id_.clear();
     selected_group_id_.clear();
@@ -799,6 +967,7 @@ bool ImageDocumentSession::restoreRecovery(const QString& recovery_path, QString
     }
 
     data_ = std::move(recovery.document);
+    loadRasterSources();
     source_image_ = std::move(decoded);
     selected_layer_id_.clear();
     selected_group_id_.clear();
@@ -886,6 +1055,16 @@ ImageExportResult exportImageSnapshot(
         return failed(QStringLiteral("Open or relink an image before exporting."));
     }
     const QString suffix = QFileInfo(output_path).suffix().toLower();
+    const QString output_absolute = absoluteCleanPath(output_path);
+    for (const auto& layer : snapshot.document.layers) for (const auto& op : layer.operations)
+        if (op.kind == OperationKind::RasterImage &&
+            absoluteCleanPath(op.raster.source_path).compare(output_absolute,
+#ifdef Q_OS_WIN
+                Qt::CaseInsensitive
+#else
+                Qt::CaseSensitive
+#endif
+            ) == 0) return failed(QStringLiteral("Choose an output path that preserves the imported source image."));
     QByteArray format;
     if (suffix == "png") format = "png";
     else if (suffix == "jpg" || suffix == "jpeg") format = "jpeg";
@@ -916,6 +1095,20 @@ ImageExportResult exportImageSnapshot(
         findGroup(snapshot.document, snapshot.selected_group_id) == nullptr) {
         return failed(QStringLiteral("The selected group is unavailable for export."));
     }
+    for (const auto& layer : snapshot.document.layers) {
+        const auto* group = findGroup(snapshot.document, layer.parent_group_id);
+        if (!layer.visible || layer.opacity == 0 ||
+            (group && (!group->visible || group->opacity == 0)) ||
+            (options.scope == ImageExportScope::SelectedLayer && layer.id != snapshot.selected_layer_id) ||
+            (options.scope == ImageExportScope::SelectedGroup && layer.parent_group_id != snapshot.selected_group_id)) continue;
+        for (const auto& op : layer.operations) {
+            if (op.kind != OperationKind::RasterImage) continue;
+            const auto source = snapshot.raster_images.value(op.raster.id,
+                snapshot.raster_images.value(op.raster.source_path));
+            if (source.isNull() || source.size() != op.raster.source_size)
+                return failed(QStringLiteral("Relink the unavailable image before exporting: %1").arg(op.raster.source_path));
+        }
+    }
     if (exportWasCancelled(cancellation_requested)) {
         return {ImageExportStatus::Cancelled, {}};
     }
@@ -923,13 +1116,13 @@ ImageExportResult exportImageSnapshot(
 
     QImage rendered;
     if (options.scope == ImageExportScope::SelectedLayer) {
-        rendered = renderSelectedLayer(snapshot.source_image, snapshot.document,
+        rendered = renderSelectedLayer(snapshot.raster_images, snapshot.source_image, snapshot.document,
                                        snapshot.selected_layer_id, cancellation_requested);
     } else if (options.scope == ImageExportScope::SelectedGroup) {
-        rendered = renderSelectedGroup(snapshot.source_image, snapshot.document,
+        rendered = renderSelectedGroup(snapshot.raster_images, snapshot.source_image, snapshot.document,
                                        snapshot.selected_group_id, cancellation_requested);
     } else {
-        rendered = renderComposite(snapshot.source_image, snapshot.document,
+        rendered = renderComposite(snapshot.raster_images, snapshot.source_image, snapshot.document,
                                    cancellation_requested);
     }
     if (exportWasCancelled(cancellation_requested)) {
@@ -982,7 +1175,7 @@ ImageExportResult exportImageSnapshot(
 }
 
 ImageExportSnapshot ImageDocumentSession::exportSnapshot() const {
-    return {source_image_, data_, selected_layer_id_, selected_group_id_};
+    return {source_image_, data_, selected_layer_id_, selected_group_id_, raster_images_};
 }
 
 bool ImageDocumentSession::exportImage(const QString& output_path, QString* error) const {
@@ -1008,16 +1201,16 @@ QSize ImageDocumentSession::renderedSize() const {
 }
 
 QImage ImageDocumentSession::renderedImage() const {
-    return renderComposite(source_image_, data_);
+    return renderComposite(raster_images_, source_image_, data_);
 }
 
 QImage ImageDocumentSession::renderedImageWithoutShape(const QString& shape_id) const {
-    return renderComposite(source_image_, data_, nullptr, QStringList{shape_id});
+    return renderComposite(raster_images_, source_image_, data_, nullptr, QStringList{shape_id});
 }
 
 QImage ImageDocumentSession::renderedImageWithoutObjects(
     const QStringList& object_ids) const {
-    return renderComposite(source_image_, data_, nullptr, object_ids);
+    return renderComposite(raster_images_, source_image_, data_, nullptr, object_ids);
 }
 
 QVector<ImageShapePlacement> ImageDocumentSession::visibleShapes() const {
@@ -1046,7 +1239,8 @@ QVector<ImageObjectPlacement> ImageDocumentSession::visibleObjects() const {
             if (operation.kind != OperationKind::PaintStroke &&
                 operation.kind != OperationKind::EraseStroke &&
                 operation.kind != OperationKind::Shape &&
-                operation.kind != OperationKind::Text) continue;
+                operation.kind != OperationKind::Text &&
+                operation.kind != OperationKind::RasterImage) continue;
             ImageObjectPlacement placement;
             placement.operation = operation;
             placement.layer_id = layer.id;
@@ -1149,6 +1343,12 @@ bool ImageDocumentSession::updateObjectsRendered(
             }
         } else if (stored.kind == OperationKind::Shape) {
             valid = ImageDocumentStore::isValidShape(stored.shape, size, error);
+        } else if (stored.kind == OperationKind::RasterImage) {
+            const auto& original = layer.operations.at(operation_index).raster;
+            valid = stored.raster.id == original.id &&
+                stored.raster.source_path == original.source_path &&
+                stored.raster.source_size == original.source_size &&
+                ImageDocumentStore::isValidRaster(stored.raster, error);
         } else if (stored.kind == OperationKind::Text) {
             valid = ImageDocumentStore::isValidText(stored.text, size, error);
         }
@@ -1283,7 +1483,7 @@ QImage ImageDocumentSession::renderedImageWithEraseStroke(
         preview.erase_stroke.diameter = diameter;
         selected->operations.append(std::move(preview));
     }
-    return renderComposite(source_image_, preview_document);
+    return renderComposite(raster_images_, source_image_, preview_document);
 }
 
 QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
@@ -1312,14 +1512,14 @@ QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
             cached->background == layer.background && cached->mask == layer.mask;
 
         if (!cache_matches) {
-            QImage thumbnail = renderLayerThumbnail(
+            QImage thumbnail = renderLayerThumbnail(raster_images_,
                 layer.background ? source_image_ : QImage{},
                 layer.background ? data_.source_size : canvas_size,
                 operations, !layer.background, maximum_size, !layer.background);
             if (layer.mask.has_value() && layer.mask->enabled && !thumbnail.isNull()) {
                 QImage white(thumbnail.size(), QImage::Format_ARGB32_Premultiplied);
                 white.fill(Qt::white);
-                const QImage mask = renderLayerThumbnail(white, canvas_size,
+                const QImage mask = renderLayerThumbnail(raster_images_, white, canvas_size,
                     maskRenderOperations(*layer.mask), true, maximum_size, false);
                 if (!multiplyLayerMask(&thumbnail, mask)) thumbnail = {};
             }
@@ -1342,7 +1542,7 @@ QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
         else ++cached;
     }
     for (const auto& group : data_.groups) {
-        const QImage rendered_group = renderGroup(
+        const QImage rendered_group = renderGroup(raster_images_,
             data_, group, canvas_size, nullptr, {});
         thumbnails.insert(group.id, rendered_group.isNull()
             ? QImage{} : rendered_group.scaled(
@@ -2000,6 +2200,7 @@ QImage ImageDocumentSession::renderedImageWithMaskStroke(
     ImageDocumentSession preview;
     preview.data_ = data_;
     preview.source_image_ = source_image_;
+    preview.raster_images_ = raster_images_;
     preview.selected_layer_id_ = selected_layer_id_;
     if (!preview.applyLayerMaskStroke(points, color, diameter)) return renderedImage();
     return preview.renderedImage();
@@ -2016,7 +2217,7 @@ QHash<QString, QImage> ImageDocumentSession::renderedLayerMaskThumbnails(
     white.fill(Qt::white);
     for (const auto& layer : data_.layers) {
         if (!layer.mask.has_value()) continue;
-        thumbnails.insert(layer.id, renderLayerThumbnail(white, size,
+        thumbnails.insert(layer.id, renderLayerThumbnail(raster_images_, white, size,
             maskRenderOperations(*layer.mask), true, maximum_size, false));
     }
     return thumbnails;
@@ -2459,7 +2660,7 @@ void ImageDocumentSession::recordEditSnapshot(ImageDocumentData before,
                                               QString selected_layer_id,
                                               QString selected_group_id) {
     undo_stack_.append({std::move(before), std::move(selected_layer_id),
-                        std::move(selected_group_id)});
+                        std::move(selected_group_id), raster_images_});
     if (undo_stack_.size() > kMaximumHistoryEntries) undo_stack_.removeFirst();
     redo_stack_.clear();
 }
@@ -2554,9 +2755,14 @@ void ImageDocumentSession::flipVertical() {
 bool ImageDocumentSession::undo() {
     endLayerOpacityEdit();
     if (undo_stack_.isEmpty()) return false;
-    redo_stack_.append({data_, selected_layer_id_, selected_group_id_});
+    redo_stack_.append({data_, selected_layer_id_, selected_group_id_, raster_images_});
     const auto previous = undo_stack_.takeLast();
     data_ = previous.document;
+    const auto retained = raster_images_;
+    raster_images_ = previous.raster_images;
+    for (auto it = retained.cbegin(); it != retained.cend(); ++it)
+        if (QDir::isAbsolutePath(it.key()) && !raster_images_.contains(it.key())) raster_images_.insert(it.key(), it.value());
+    layer_thumbnail_cache_.clear();
     selected_group_id_ = groupIndex(previous.selected_group_id) >= 0
         ? previous.selected_group_id : QString{};
     selected_layer_id_ = selected_group_id_.isEmpty() && layerIndex(previous.selected_layer_id) >= 0
@@ -2569,9 +2775,14 @@ bool ImageDocumentSession::undo() {
 bool ImageDocumentSession::redo() {
     endLayerOpacityEdit();
     if (redo_stack_.isEmpty()) return false;
-    undo_stack_.append({data_, selected_layer_id_, selected_group_id_});
+    undo_stack_.append({data_, selected_layer_id_, selected_group_id_, raster_images_});
     const auto next = redo_stack_.takeLast();
     data_ = next.document;
+    const auto retained = raster_images_;
+    raster_images_ = next.raster_images;
+    for (auto it = retained.cbegin(); it != retained.cend(); ++it)
+        if (QDir::isAbsolutePath(it.key()) && !raster_images_.contains(it.key())) raster_images_.insert(it.key(), it.value());
+    layer_thumbnail_cache_.clear();
     selected_group_id_ = groupIndex(next.selected_group_id) >= 0
         ? next.selected_group_id : QString{};
     selected_layer_id_ = selected_group_id_.isEmpty() && layerIndex(next.selected_layer_id) >= 0

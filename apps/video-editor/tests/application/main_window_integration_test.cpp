@@ -816,13 +816,17 @@ public:
 #if defined(CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS)
             image_editor::ImageDocumentSession masked_image;
             QString mask_error;
+            QImage imported_source(16, 16, QImage::Format_ARGB32);
+            imported_source.fill(QColor(25, 40, 235));
+            const QString imported_path = QString::fromStdString((directory / "imported-layer.png").string());
+            require(imported_source.save(imported_path), "Could not create imported image fixture.");
             require(masked_image.createCanvas(QSize(16, 16), Qt::transparent, &mask_error) &&
-                        masked_image.applyPaintStroke({QPointF(8, 8)}, QColor(25, 40, 235), 100, &mask_error) &&
+                        masked_image.importRasterImages(image_editor::prepareRasterImport({imported_path}).images, {}, &mask_error) &&
                         masked_image.addLayerMask(masked_image.selectedLayerId()) &&
                         masked_image.applyLayerMaskEraseStroke({QPointF(12, 12)}, 3, &mask_error) &&
                         masked_image.saveDocument(QString::fromStdString(linked_document.string()), &mask_error) &&
                         masked_image.exportImage(QString::fromStdString(linked_output.string()), &mask_error),
-                    "The Image Editor could not publish its masked v10 image: " + mask_error.toStdString());
+                    "The Image Editor could not publish its imported and masked v11 image: " + mask_error.toStdString());
 #else
             QImage next_output(16, 16, QImage::Format_ARGB32);
             next_output.fill(QColor(25, 40, 235, 255));

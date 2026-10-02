@@ -16,6 +16,11 @@ set_tests_properties(creative-suite-image-editor-core PROPERTIES
 )
 
 add_executable(creative-suite-image-editor-mask-tests image_editor_mask_test.cpp)
+add_executable(creative-suite-image-editor-raster-tests image_editor_raster_test.cpp)
+target_link_libraries(creative-suite-image-editor-raster-tests PRIVATE creative-suite-image-editor-core Qt6::Test)
+target_compile_features(creative-suite-image-editor-raster-tests PRIVATE cxx_std_20)
+add_creative_suite_test(NAME creative-suite-image-editor-raster COMMAND creative-suite-image-editor-raster-tests)
+set_tests_properties(creative-suite-image-editor-raster PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 target_link_libraries(creative-suite-image-editor-mask-tests PRIVATE
     creative-suite-image-editor-core Qt6::Test)
 target_compile_features(creative-suite-image-editor-mask-tests PRIVATE cxx_std_20)
@@ -51,6 +56,7 @@ endif()
 add_executable(creative-suite-image-editor-ui-tests
     image_editor_ui_test.cpp
     image_editor_mask_ui_test.cpp
+    image_editor_raster_ui_test.cpp
     ../src/ui/windows/image_editor_window.cpp
     ../src/ui/windows/image_editor_window.h
     ../src/ui/windows/image_export_worker.cpp
@@ -166,6 +172,7 @@ if(WIN32)
     foreach(TEST_TARGET IN ITEMS
             creative-suite-image-editor-core-tests
             creative-suite-image-editor-mask-tests
+            creative-suite-image-editor-raster-tests
             creative-suite-image-editor-format-tests
             creative-suite-image-editor-ui-tests
             creative-suite-image-editor-export-ui-tests)

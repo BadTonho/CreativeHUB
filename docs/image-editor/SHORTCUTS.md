@@ -25,6 +25,8 @@ duplicate combinations are rejected. Use **Reset All** to restore the defaults.
 | Text tool | Unassigned by default |
 | Selection tool | Unassigned by default |
 | Delete selected objects | Unassigned by default |
+| Import Image as Layer | Unassigned by default |
+| Relink selected imported image | Unassigned by default |
 | Open editable document | Unassigned by default |
 | Relink source image | Unassigned by default |
 | Export image | Unassigned by default |
@@ -37,7 +39,7 @@ duplicate combinations are rejected. Use **Reset All** to restore the defaults.
 
 Use the mouse wheel to zoom, the middle mouse button to pan, and the Crop
 Selection toolbar or Edit menu action to start a crop gesture. Selection can
-pick paint strokes, eraser strokes, shapes, and text on visible editable
+pick imported images, paint strokes, eraser strokes, shapes, and text on visible editable
 layers. Click an object to select it; Shift-click toggles it in the selection.
 Drag on empty canvas to select every object whose visible geometry intersects
 the marquee. Drag a selected object to move the selection, or drag a corner
@@ -62,3 +64,13 @@ system pointer returns to the press point; the outline resumes following it
 after the next mouse movement. Vertical movement does not affect the size. The
 range is 1–1024 px. This fixed mouse gesture is not configurable in Keyboard
 Shortcuts.
+
+
+For a selected imported image, oriented corner handles preserve proportions;
+Alt allows independent width and height. The handle above its top edge rotates
+freely around its center; Shift snaps to 15-degree steps. Esc cancels without a
+history entry. Each confirmed gesture creates one Undo/Redo edit. The mask and
+other unselected operations remain fixed in canvas coordinates. Existing
+Rotate/Flip/Crop layer commands continue to affect both layer content and mask.
+Imported images may extend beyond the canvas. Drop one or more local supported
+image files onto the canvas to import a batch centered at the drop point.

@@ -15,7 +15,7 @@ macOS, and Linux.
 | Icon | Application | Status | Purpose |
 | --- | --- | --- | --- |
 | <img src="docs/assets/app-icons/video-editor.png" alt="Temporary Video Editor icon" width="56"> | [Video Editor](docs/video-editor/ROADMAP.md) | Active development | Multitrack video and audio editing, compositing, and export. |
-| <img src="docs/assets/app-icons/image-editor.png" alt="Temporary Image Editor icon" width="56"> | [Image Editor](docs/image-editor/ROADMAP.md) | Beta 0.1.2 | Layered raster editing and masks with `.cimg` documents and PNG/JPEG export. |
+| <img src="docs/assets/app-icons/image-editor.png" alt="Temporary Image Editor icon" width="56"> | [Image Editor](docs/image-editor/ROADMAP.md) | Beta 0.1.2 | Layered raster editing, masks, and linked image layers with `.cimg` documents and PNG/JPEG export. |
 | <img src="docs/assets/app-icons/motion-studio.png" alt="Temporary Motion Studio icon" width="56"> | [Motion Studio](docs/motion-editor/ROADMAP.md) | MVP implementation; validation in progress | Motion design, animation, and advanced compositing. |
 
 The icons above are temporary product assets. Each application loads its PNG
@@ -34,8 +34,8 @@ coverage in both the producer and consumer applications.
   project persistence are implemented. See the [Video Editor roadmap](docs/video-editor/ROADMAP.md).
 - **Image Editor:** Windows users have confirmed the current Release workflow,
   including layers and groups, editable shapes, object selection, save/reopen,
-  and export. Editable raster layer masks now use `.cimg` v10, preserving
-  v1–v9 reads. Windows packaging and linked-image acceptance remain in progress;
+  and export. Imported images support movement, scaling, free rotation, and fixed
+  masks with `.cimg` v11, preserving v1–v10 reads. Windows packaging and linked-image acceptance remain in progress;
   macOS and Linux validation is deferred. See the [Image Editor roadmap](docs/image-editor/ROADMAP.md).
 - **Motion Studio:** its standalone Qt workspace has a Media Pool, image/video
   timeline layers, native text/rectangle/ellipse layers, CPU preview, playback,

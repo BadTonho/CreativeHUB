@@ -84,3 +84,9 @@ documents. The default modifier is Ctrl on Windows/Linux and Cmd on macOS.
 
 The Time / Frames selector and Media Pool commands are not part of the initial
 configurable shortcut list.
+
+
+Image Editor imported-image gestures: Selection drags move the image; corner
+handles preserve proportions, Alt allows independent dimensions, the top handle
+rotates freely, Shift snaps rotation to 15 degrees, and Esc cancels the gesture.
+Import Image as Layer and Relink Image have no default keyboard shortcut.

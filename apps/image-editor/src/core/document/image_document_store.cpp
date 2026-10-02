@@ -31,7 +31,7 @@ constexpr int kObjectIdentityDocumentVersion = 7;
 constexpr int kLayerGroupsDocumentVersion = 8;
 constexpr int kEditableTextDocumentVersion = 9;
 constexpr int kLayerMaskDocumentVersion = 10;
-constexpr int kDocumentVersion = 10;
+constexpr int kDocumentVersion = 11;
 constexpr int kRecoveryVersion = 1;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr auto kRecoveryFormat = "creative-suite-image-recovery";
@@ -64,6 +64,7 @@ QString objectId(const ImageOperation& operation) {
     case OperationKind::EraseStroke: return operation.erase_stroke.id;
     case OperationKind::Shape: return operation.shape.id;
     case OperationKind::Text: return operation.text.id;
+    case OperationKind::RasterImage: return operation.raster.id;
     default: return {};
     }
 }
@@ -103,7 +104,17 @@ bool isArgbHexColor(const QString& value) {
     return true;
 }
 
-QJsonObject encodeOperation(const ImageOperation& operation) {
+QString storedPath(const QString& path, const QString& document_path) {
+    if (document_path.isEmpty()) return path;
+    const QString absolute = QFileInfo(path).absoluteFilePath();
+    const QString relative = QDir::cleanPath(QDir(QFileInfo(document_path).absolutePath())
+        .relativeFilePath(absolute));
+    return !QDir::isAbsolutePath(relative) && relative != ".." &&
+        !relative.startsWith("../") && !relative.startsWith("..\\")
+        ? QDir::fromNativeSeparators(relative) : absolute;
+}
+
+QJsonObject encodeOperation(const ImageOperation& operation, const QString& document_path = {}) {
     QJsonObject encoded;
     switch (operation.kind) {
     case OperationKind::Crop:
@@ -169,6 +180,17 @@ QJsonObject encodeOperation(const ImageOperation& operation) {
         encoded.insert("fill_color", shape.fill_color.name(QColor::HexArgb));
         break;
     }
+    case OperationKind::RasterImage: {
+        const auto& raster = operation.raster;
+        encoded.insert("kind", "raster_image");
+        encoded.insert("id", raster.id);
+        encoded.insert("path", storedPath(raster.source_path, document_path));
+        encoded.insert("width", raster.source_size.width());
+        encoded.insert("height", raster.source_size.height());
+        const auto& t = raster.transform;
+        encoded.insert("transform", QJsonArray{t.m11(), t.m12(), t.m21(), t.m22(), t.dx(), t.dy()});
+        break;
+    }
     case OperationKind::Text: {
         const auto& text = operation.text;
         encoded.insert("kind", "text");
@@ -188,9 +210,9 @@ QJsonObject encodeOperation(const ImageOperation& operation) {
     return encoded;
 }
 
-QJsonArray encodeOperations(const QVector<ImageOperation>& operations) {
+QJsonArray encodeOperations(const QVector<ImageOperation>& operations, const QString& document_path = {}) {
     QJsonArray encoded;
-    for (const auto& operation : operations) encoded.append(encodeOperation(operation));
+    for (const auto& operation : operations) encoded.append(encodeOperation(operation, document_path));
     return encoded;
 }
 
@@ -199,7 +221,7 @@ bool decodeOperations(const QJsonValue& value,
                       QSize* current_size,
                       bool fixed_canvas,
                       QVector<ImageOperation>* decoded,
-                      QString* error) {
+                      QString* error, const QString& document_path = {}) {
     if (!value.isArray() || current_size == nullptr || decoded == nullptr) {
         assignError(error, QStringLiteral("The document edit list is invalid."));
         return false;
@@ -399,6 +421,28 @@ bool decodeOperations(const QJsonValue& value,
             if (!ImageDocumentStore::isValidText(operation.text, *current_size, error)) {
                 return false;
             }
+        } else if (kind == "raster_image" && version >= 11 && fixed_canvas) {
+            int width = 0, height = 0;
+            const auto matrix = object.value("transform").toArray();
+            if (!isInteger(object.value("width"), &width) ||
+                !isInteger(object.value("height"), &height) || matrix.size() != 6 ||
+                std::any_of(matrix.begin(), matrix.end(), [](const QJsonValue& v) {
+                    return !v.isDouble() || !std::isfinite(v.toDouble());
+                })) {
+                assignError(error, QStringLiteral("The imported image geometry is invalid."));
+                return false;
+            }
+            operation.kind = OperationKind::RasterImage;
+            auto& raster = operation.raster;
+            raster.id = object.value("id").toString();
+            raster.source_path = object.value("path").toString();
+            if (!raster.source_path.isEmpty() && !document_path.isEmpty())
+                raster.source_path = QDir::cleanPath(QDir::isAbsolutePath(raster.source_path)
+                    ? raster.source_path : QDir(QFileInfo(document_path).absolutePath()).filePath(raster.source_path));
+            raster.source_size = QSize(width, height);
+            raster.transform = QTransform(matrix[0].toDouble(), matrix[1].toDouble(),
+                matrix[2].toDouble(), matrix[3].toDouble(), matrix[4].toDouble(), matrix[5].toDouble());
+            if (!ImageDocumentStore::isValidRaster(raster, error)) return false;
         } else {
             assignError(error, QStringLiteral("The document contains an unsupported edit."));
             return false;
@@ -478,7 +522,7 @@ bool validateLayers(const ImageDocumentData& document,
             if (!decodeOperations(encodeOperations(layer.mask->operations), kDocumentVersion,
                                   &mask_size, true, &mask_operations, error)) return false;
             for (const auto& operation : mask_operations) {
-                if (operation.kind == OperationKind::Shape || operation.kind == OperationKind::Text ||
+                if (operation.kind == OperationKind::RasterImage || operation.kind == OperationKind::Shape || operation.kind == OperationKind::Text ||
                     (operation.kind == OperationKind::PaintStroke &&
                      (operation.paint_stroke.color.red() != operation.paint_stroke.color.green() ||
                       operation.paint_stroke.color.red() != operation.paint_stroke.color.blue()))) {
@@ -660,14 +704,14 @@ QJsonObject encodeDocument(const ImageDocumentData& document,
     root.insert("version", kDocumentVersion);
     root.insert("base", base);
     root.insert("operations", encodeOperations(document.operations));
-    const auto encode_layer = [](const ImageLayerData& layer) {
+    const auto encode_layer = [&document_path](const ImageLayerData& layer) {
         QJsonObject encoded;
         encoded.insert("id", layer.id);
         encoded.insert("name", layer.name);
         encoded.insert("kind", layer.background ? "background" : "raster");
         encoded.insert("visible", layer.visible);
         encoded.insert("opacity", layer.opacity);
-        encoded.insert("operations", encodeOperations(layer.operations));
+        encoded.insert("operations", encodeOperations(layer.operations, document_path));
         if (layer.mask.has_value()) {
             QJsonObject mask;
             mask.insert("enabled", layer.mask->enabled);
@@ -783,7 +827,7 @@ bool decodeDocument(const QJsonObject& root,
         const auto layer_array = encoded_layers.toArray();
         decoded.layers.reserve(layer_array.size());
         qsizetype stack_item_count = 0;
-        const auto decode_raster_layer = [&layer_canvas_size, version, error](
+        const auto decode_raster_layer = [&layer_canvas_size, version, error, &document_path](
             const QJsonValue& encoded_value,
             const QString& parent_group_id,
             ImageLayerData* layer) {
@@ -811,7 +855,7 @@ bool decodeDocument(const QJsonObject& root,
             }
             QSize layer_size = layer_canvas_size;
             if (!decodeOperations(encoded.value("operations"), version,
-                                  &layer_size, true, &layer->operations, error)) {
+                                  &layer_size, true, &layer->operations, error, document_path)) {
                 return false;
             }
             if (encoded.contains("mask")) {
@@ -1017,6 +1061,20 @@ bool ImageDocumentStore::loadRecovery(const QString& recovery_path,
         ? QString{}
         : QFileInfo(target).absoluteFilePath();
     return true;
+}
+
+bool ImageDocumentStore::isValidRaster(const ImageRasterData& raster, QString* error) {
+    const auto& t = raster.transform;
+    const double values[] = {t.m11(), t.m12(), t.m21(), t.m22(), t.dx(), t.dy()};
+    bool valid = isCanonicalUuid(raster.id) && !raster.source_path.trimmed().isEmpty() &&
+        !raster.source_path.contains(QChar::Null) && isValidCanvasSize(raster.source_size) &&
+        t.isAffine() && t.isInvertible();
+    for (double value : values) valid = valid && std::isfinite(value);
+    const auto corners = t.map(QPolygonF(QRectF(QPointF(), QSizeF(raster.source_size))));
+    for (const auto& corner : corners)
+        valid = valid && std::isfinite(corner.x()) && std::isfinite(corner.y());
+    if (!valid) assignError(error, QStringLiteral("The imported image reference or affine geometry is invalid."));
+    return valid;
 }
 
 bool ImageDocumentStore::isValidCanvasSize(const QSize& size) noexcept {

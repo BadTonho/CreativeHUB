@@ -1252,6 +1252,7 @@ bool testRenamedShortcutPersistence() {
 }
 
 bool testLayerMasksUi(const QString& directory);
+bool testRasterImagesUi(const QString& directory);
 
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
@@ -1269,6 +1270,8 @@ int main(int argc, char* argv[]) {
     if (!testWindowTextGrowth()) return 1;
     if (!testTextEditorGrowthLayout()) return 1;
     if (application.arguments().contains(QStringLiteral("--text-layout-only"))) return 0;
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+    if (!testRasterImagesUi(temporary.path())) return 1;
     if (!testLayerMasksUi(temporary.path())) {
         std::cerr << "Layer mask thumbnails, brush targeting, or linked publication failed.\n";
         return 1;
@@ -2689,13 +2692,13 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    if (shape_document_json.value("version").toInt() != 10 ||
+    if (shape_document_json.value("version").toInt() != 11 ||
         persisted_shape_layer.isEmpty() ||
         !persisted_shape_layer.value("name").toString().startsWith("Shape ") ||
         persisted_shape_layer.value("operations").toArray().size() != 1 ||
         persisted_shape.value("kind").toString() != "shape" ||
         persisted_shape.value("fill_enabled").toBool()) {
-        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in v9: version="
+        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in v11: version="
                   << shape_document_json.value("version").toInt()
                   << " operations=" << persisted_shape_layer.value("operations").toArray().size()
                   << " layer=" << persisted_shape_layer.value("name").toString().toStdString()

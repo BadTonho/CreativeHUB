@@ -63,6 +63,7 @@ QString imageObjectId(const ImageOperation& operation) {
     case OperationKind::EraseStroke: return operation.erase_stroke.id;
     case OperationKind::Shape: return operation.shape.id;
     case OperationKind::Text: return operation.text.id;
+    case OperationKind::RasterImage: return operation.raster.id;
     default: return {};
     }
 }
@@ -230,6 +231,9 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     connect(canvas_, &ImageCanvas::objectsSelected, this,
             [this](const QStringList& object_ids, const QString& layer_id) {
                 selected_object_ids_ = object_ids;
+                const bool mask_changed = !selected_mask_layer_id_.isEmpty();
+                selected_mask_layer_id_.clear();
+                canvas_->setMaskEditing(false);
                 const bool layer_changed = !layer_id.isEmpty() && session_.selectLayer(layer_id);
                 if (layer_changed) {
                     selected_mask_layer_id_.clear();
@@ -248,7 +252,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
                         break;
                     }
                 }
-                if (layer_changed) updateView(true);
+                if (layer_changed || mask_changed) updateView(true);
                 else {
                     updateObjectPlacements();
                     updateShapeOptions();
@@ -257,8 +261,20 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             });
     connect(canvas_, &ImageCanvas::objectTransformStarted, this,
             [this](const QStringList& object_ids) {
+                for (const auto& object : session_.visibleObjects())
+                    if (object_ids.contains(imageObjectId(object.operation)) && object.operation.kind == OperationKind::RasterImage) {
+                        canvas_->setTransientImage(session_.renderedImage());
+                        return;
+                    }
                 canvas_->setTransientImage(session_.renderedImageWithoutObjects(object_ids));
             });
+    connect(canvas_, &ImageCanvas::objectsPreviewRequested, this,
+        [this](const QVector<ImageObjectPlacement>& objects) {
+            canvas_->setTransientImage(session_.renderedImageWithObjects(objects));
+        });
+    connect(canvas_, &ImageCanvas::imagesDropped, this, [this](const QStringList& paths, const QPointF& center) {
+        (void)importImagePaths(paths, center);
+    });
     connect(canvas_, &ImageCanvas::objectsGeometryChanged, this,
             [this](const QVector<ImageObjectPlacement>& objects) {
                 handleObjectsGeometryChanged(objects);
@@ -272,10 +288,15 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     connect(tool_sidebar_, &ToolSidebar::brushColorChanged,
             this, [this](const QColor&) { updateCanvasBrush(); });
     connect(layer_panel_, &LayerPanel::layerSelected, this, [this](const QString& id) {
-        const bool changed = session_.selectLayer(id);
-        const bool mask_changed = !selected_mask_layer_id_.isEmpty();
+        static_cast<void>(session_.selectLayer(id));
         selected_mask_layer_id_.clear();
-        if (!changed && !mask_changed) return;
+        selected_object_ids_.clear();
+        for (const auto& object : session_.visibleObjects())
+            if (object.layer_id == id && object.operation.kind == OperationKind::RasterImage) {
+                selected_object_ids_ = {object.operation.raster.id};
+                break;
+            }
+        updateObjectPlacements();
         if (!session_.selectedLayerIsEditable() &&
             tool_sidebar_->activeTool() != ToolSidebar::Tool::Select &&
             tool_sidebar_->activeTool() != ToolSidebar::Tool::Shapes) {
@@ -286,6 +307,8 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     connect(layer_panel_, &LayerPanel::groupSelected, this, [this](const QString& id) {
         const bool mask_changed = !selected_mask_layer_id_.isEmpty();
         selected_mask_layer_id_.clear();
+        selected_object_ids_.clear();
+        updateObjectPlacements();
         if (session_.selectGroup(id) || mask_changed) updateSelectionContext();
     });
     connect(layer_panel_, &LayerPanel::layerMaskSelected, this, [this](const QString& id) {
@@ -895,6 +918,8 @@ void ImageEditorWindow::setShapeKind(ImageShapeKind kind) {
 }
 
 void ImageEditorWindow::updateObjectPlacements() {
+    if (relink_raster_action_) relink_raster_action_->setEnabled(session_.hasSource() && !importing_ &&
+        selected_object_ids_.size() == 1 && session_.findRaster(selected_object_ids_.front(), nullptr));
     const auto placements = session_.visibleObjects();
     for (qsizetype index = selected_object_ids_.size(); index > 0; --index) {
         const QString& id = selected_object_ids_.at(index - 1);
@@ -1144,6 +1169,64 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool) {
     updateToolOptions();
 }
 
+
+bool ImageEditorWindow::importImagePaths(const QStringList& paths,
+    std::optional<QPointF> center, const QString& relink_id) {
+    if (importing_ || paths.isEmpty() || !session_.hasSource()) return false;
+    if (relink_id.isEmpty() && paths.size() >
+        ImageDocumentStore::kMaximumLayers - session_.data().layers.size() - session_.data().groups.size()) {
+        reportError(QStringLiteral("import_images"), QStringLiteral("The batch exceeds the layer limit."));
+        return false;
+    }
+    canvas_->commitTextEditing();
+    importing_ = true;
+    auto cancellation = std::make_shared<std::atomic_bool>(false);
+    RasterImportResult result;
+    ImageExportProgressDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("imageImportProgressDialog"));
+    dialog.setWindowTitle(relink_id.isEmpty() ? QStringLiteral("Importing Images") : QStringLiteral("Relinking Image"));
+    dialog.setPhaseText(QStringLiteral("Decoding images…"));
+    dialog.setCancellationText(QStringLiteral("Cancelling image import…"));
+    connect(&dialog, &ImageExportProgressDialog::cancelRequested, this, [cancellation]() {
+        cancellation->store(true, std::memory_order_relaxed);
+    });
+    std::unique_ptr<QThread> thread(QThread::create([&result, paths, cancellation]() {
+        result = prepareRasterImport(paths, cancellation.get());
+    }));
+    connect(thread.get(), &QThread::finished, &dialog, &ImageExportProgressDialog::finish);
+    thread->start();
+    dialog.exec();
+    thread->wait();
+    importing_ = false;
+    if (cancellation->load(std::memory_order_relaxed) || result.status == RasterImportStatus::Cancelled) {
+        statusBar()->showMessage(QStringLiteral("Image import cancelled"), 3000);
+        return false;
+    }
+    if (result.status != RasterImportStatus::Ready) {
+        reportError(QStringLiteral("decode_imported_images"), result.cause, result.failed_path);
+        return false;
+    }
+    QString error;
+    const bool changed = relink_id.isEmpty()
+        ? session_.importRasterImages(result.images, center, &error)
+        : (result.images.size() == 1 && session_.relinkRaster(relink_id, result.images.front(), &error));
+    if (!changed) {
+        reportError(QStringLiteral("import_or_relink_images"), error, paths.front());
+        return false;
+    }
+    selected_mask_layer_id_.clear();
+    if (relink_id.isEmpty()) {
+        selected_object_ids_.clear();
+        for (const auto& object : session_.visibleObjects())
+            if (object.layer_id == session_.selectedLayerId() && object.operation.kind == OperationKind::RasterImage)
+                selected_object_ids_ = {object.operation.raster.id};
+    }
+    tool_sidebar_->setActiveTool(ToolSidebar::Tool::Select);
+    updateView(true);
+    statusBar()->showMessage(relink_id.isEmpty() ? QStringLiteral("Images imported") : QStringLiteral("Image relinked"), 3000);
+    return true;
+}
+
 void ImageEditorWindow::createActions() {
     auto makeAction = [this](const QString& text, const QKeySequence& shortcut,
                              auto callback) {
@@ -1163,6 +1246,21 @@ void ImageEditorWindow::createActions() {
     open_document_action_ = makeAction(
         QStringLiteral("Open Editable Document..."), {}, [this]() { openDocument(); });
     open_document_action_->setObjectName(QStringLiteral("openEditableDocumentAction"));
+    import_layer_action_ = makeAction(QStringLiteral("Import Image as Layer..."), {}, [this]() {
+        const auto paths = QFileDialog::getOpenFileNames(this, QStringLiteral("Import Image as Layer"), {},
+            QStringLiteral("Images (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"));
+        if (!paths.isEmpty()) (void)importImagePaths(paths);
+    });
+    import_layer_action_->setObjectName(QStringLiteral("importImageAsLayerAction"));
+    registerShortcutAction(import_layer_action_, {});
+    relink_raster_action_ = makeAction(QStringLiteral("Relink Image..."), {}, [this]() {
+        if (selected_object_ids_.size() != 1) return;
+        const auto path = QFileDialog::getOpenFileName(this, QStringLiteral("Relink Image"), {},
+            QStringLiteral("Images (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"));
+        if (!path.isEmpty()) (void)importImagePaths({path}, {}, selected_object_ids_.front());
+    });
+    relink_raster_action_->setObjectName(QStringLiteral("relinkRasterImageAction"));
+    registerShortcutAction(relink_raster_action_, {});
     relink_action_ = makeAction(
         QStringLiteral("Relink Source Image..."), {}, [this]() { relinkSource(); });
     save_action_ = makeAction(
@@ -1340,6 +1438,8 @@ void ImageEditorWindow::createActions() {
     file_menu->addSeparator();
     file_menu->addAction(open_image_action_);
     file_menu->addAction(open_document_action_);
+    file_menu->addAction(import_layer_action_);
+    file_menu->addAction(relink_raster_action_);
     file_menu->addAction(relink_action_);
     file_menu->addSeparator();
     file_menu->addAction(save_action_);
@@ -1458,10 +1558,18 @@ bool ImageEditorWindow::editingMask() const {
 }
 
 void ImageEditorWindow::updateLayerPanel() {
+    const auto problems = session_.rasterSourceProblems();
+    for (auto it = problems.cbegin(); it != problems.cend(); ++it)
+        if (logged_raster_problems_.value(it.key()) != it.value()) {
+            ImageRasterData raster;
+            (void)session_.findRaster(it.key(), &raster);
+            logger_.logError(QStringLiteral("load_imported_image"), it.value(), raster.source_path);
+        }
+    logged_raster_problems_ = problems;
     const QSize size(LayerPanel::kThumbnailWidth, LayerPanel::kThumbnailHeight);
     layer_panel_->setDocument(session_.data(), session_.selectedLayerId(),
         session_.selectedGroupId(), session_.renderedLayerThumbnails(size),
-        session_.renderedLayerMaskThumbnails(size), selected_mask_layer_id_);
+        session_.renderedLayerMaskThumbnails(size), selected_mask_layer_id_, problems);
 }
 
 void ImageEditorWindow::updateView(bool preserveCanvasView) {
@@ -1484,6 +1592,9 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     quick_export_action_->setEnabled(session_.hasSource());
     layer_panel_->setQuickExportEnabled(session_.hasSource());
     relink_action_->setEnabled(session_.sourceIsMissing());
+    import_layer_action_->setEnabled(session_.hasSource() && !importing_);
+    relink_raster_action_->setEnabled(session_.hasSource() && !importing_ &&
+        selected_object_ids_.size() == 1 && session_.findRaster(selected_object_ids_.front(), nullptr));
     updateSelectionContext();
 
     QString title = QStringLiteral("Image Editor");
@@ -1595,6 +1706,7 @@ void ImageEditorWindow::openImage() {
 }
 
 bool ImageEditorWindow::openImagePath(const QString& path) {
+    if (importing_) return false;
     if (path.isEmpty()) return false;
     if (!confirmDiscardOrSave()) return false;
     QString error;
@@ -1617,6 +1729,7 @@ void ImageEditorWindow::openDocument() {
 }
 
 bool ImageEditorWindow::openDocumentPath(const QString& path) {
+    if (importing_) return false;
     if (path.isEmpty()) return false;
     if (!confirmDiscardOrSave()) return false;
     QString error;
@@ -1989,6 +2102,7 @@ void ImageEditorWindow::reportError(const QString& operation,
 }
 
 void ImageEditorWindow::closeEvent(QCloseEvent* event) {
+    if (importing_) { event->ignore(); return; }
     if (confirmDiscardOrSave()) event->accept();
     else event->ignore();
 }
