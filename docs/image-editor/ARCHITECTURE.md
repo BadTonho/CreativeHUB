@@ -244,6 +244,10 @@ publication retain their previous output on failure.
 
 ## Layer mask ownership and rendering
 
+The future [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) preserves this
+operation/alpha contract while proposing a shared backend adapter. It is
+documentation only; the CPU renderer described here remains the implementation.
+
 `ImageLayerData` owns optional `ImageLayerMaskData` with an enabled flag and a
 separate operation vector. Undo snapshots share operation buffers rather than
 copying a canvas-sized bitmap per stroke. `ImageDocumentSession` exposes mask

@@ -37,6 +37,18 @@ Update it when implementation, scope, or a decision changes.
   [Image Editor roadmap](../image-editor/ROADMAP.md) and
   [Motion Studio roadmap](../motion-editor/ROADMAP.md).
 
+## GPU acceleration planning
+
+The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records future stages
+for optional timeline composition, playback/texture delivery, offline export,
+covered effect reuse/linked assets, and measured platform acceptance. It reuses
+the proposed shared Motion Studio backend and preserves Video Editor's timing,
+audio, transitions, queue, and project responsibilities.
+
+**Status: documentation only; implementation deferred.** Existing OpenGL
+presentation remains implemented; per-layer composition and offline export
+remain on the CPU. The plan introduces no renderer or project-format change.
+
 ## Status legend
 
 - `[ ]` Not started

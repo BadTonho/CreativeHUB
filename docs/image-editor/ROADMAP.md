@@ -44,6 +44,18 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 - Consider Windows, macOS, and Linux paths, packaging, and image dimensions
   from the beginning.
 
+## GPU acceleration planning
+
+The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) separates future work
+into the rendering contract/adapter, layer-mask-group composition, interactive
+editing/presentation, export/linked PNG publication, and measured acceptance.
+It coordinates reuse with the Motion Studio and Video Editor plans while
+preserving Image Editor's transparent output and editable operations.
+
+**Status: documentation only; implementation deferred.** Current image
+rendering remains on the CPU. No GPU editing, export gain, or driver acceptance
+is claimed; each future delivery includes its own coverage and acceptance gate.
+
 ## Milestones
 
 ### 0. Readiness
@@ -334,6 +346,7 @@ results.
 | Video Editor linked-image producer/consumer workflow | Producer: `image_editor_ui_test.cpp`; consumers: `application_media_services_test.cpp` (`creative-suite-main-editor-application-media`), `main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`), and `project_file_test.cpp` (`creative-suite-main-editor-project`) | Automated producer/consumer regression tests pass in Debug and Release. The owner reports the basic linked edit/save workflow working on Windows, but the full scenario and cross-platform acceptance remain pending (**P1 validation**). |
 | Linked image import, geometry, sources, v11 persistence, export and publication | `image_editor_raster_test.cpp` (`creative-suite-image-editor-raster`), `image_editor_raster_ui_test.cpp` (within `creative-suite-image-editor-ui`), Video Editor `main_window_integration_test.cpp` | Automated coverage present. Visual/native drag checks are documented in `MANUAL_VALIDATION.md`; macOS/Linux and manual acceptance remain pending. |
 | Raster layer masks | `image_editor_mask_test.cpp` (`creative-suite-image-editor-masks`), `image_editor_mask_ui_test.cpp` (within `creative-suite-image-editor-ui`); Video Editor `main_window_integration_test.cpp` when both apps are enabled | Automated coverage for editing, transforms, persistence, recovery, export, thumbnail targeting, and linked PNG producer/consumer behavior. Mask UI checks are documented in `MANUAL_VALIDATION.md`; no manual result recorded. |
+| GPU composition, editing presentation, and export | No GPU implementation or direct GPU boundary tests in this delivery | Planned, not implemented. Required CPU/GPU comparisons, native checks, and PNG producer/consumer gates are recorded in [GPU_ACCELERATION_PLAN.md](GPU_ACCELERATION_PLAN.md). |
 | First-release editable text | `image_editor_core_test.cpp` and `image_editor_ui_test.cpp`; CTest `creative-suite-image-editor-core`, `creative-suite-image-editor-ui`, and Windows `creative-suite-image-editor-native-text` (one-key shortcut interception, focus retention, click-to-create through the full window, displayed pixels without a forced native redraw, caret placement and hit testing after each character, mouse and keyboard selection, selected-text replacement, horizontal growth with native margins and zoomed font metrics, canvas-edge wrapping, and visible multiline height growth) | The owner confirmed that normal typing with the default settings works again in the Windows application. The remaining detailed visual editing checks in `MANUAL_VALIDATION.md` and other-platform acceptance remain pending (**P2 validation**). Native Windows mouse-drag selection has automated coverage. Linked PNG producer and Video Editor consumer regression tests are present; manual cross-application acceptance remains pending (**P1 validation**). |
 
 ### Current coverage gaps and pending validation

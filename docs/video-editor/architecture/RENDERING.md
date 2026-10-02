@@ -402,6 +402,10 @@ be introduced only after a concrete need and measurements justify it.
 
 ## Timeline composition
 
+Future backend adoption is split into deliveries in the
+[GPU acceleration plan](../GPU_ACCELERATION_PLAN.md). That plan is documentation
+only; the composition/presentation boundary below remains the current code.
+
 The Video Editor and Motion Studio use the shared, Qt-independent CPU
 compositor in `libs/composition/` for layer transforms and RGBA frame blending.
 Scheduling remains application-owned: the Video Editor's playback worker

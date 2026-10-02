@@ -100,9 +100,12 @@ unnecessary transfers have been removed where measurements justify it.
 ## Stage 4 — Other applications and backend choice (planned)
 
 - Integrate the shared compositor into Video Editor after its own regression
-  and performance checks. Keep Video Editor stability as a priority.
+  and performance checks, following its
+  [dedicated stages](../video-editor/GPU_ACCELERATION_PLAN.md). Keep Video Editor
+  stability as a priority.
 - Audit Image Editor composition, masks, transforms, and editable operations
-  before adapting this backend to that application's different output contract.
+  before adapting this backend to that application's different output contract;
+  follow its [dedicated stages](../image-editor/GPU_ACCELERATION_PLAN.md).
 - Compare OpenGL with Qt RHI/native Vulkan, Metal, or Direct3D alternatives if
   portability or measurements justify the additional dependency/maintenance
   cost. Do not select a final suite renderer from this experiment alone.
