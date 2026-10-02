@@ -52,10 +52,13 @@ Mouse gestures remain outside the customizable shortcut list.
 | B | Activate or deactivate the Paint tool when an editable layer is selected | Image Editor |
 | E | Activate or deactivate the Eraser tool when an editable layer is selected | Image Editor |
 | Esc | Cancel crop selection, shape creation, object selection, or a mask brush gesture | Image Editor |
-| Unassigned by default | Activate Shapes or Selection, or Delete Selected Objects | Image Editor |
+| Delete | Delete selected objects in the canvas, or selected layers/groups in Layers; text/rename/numeric fields keep normal editing | Image Editor |
+| Unassigned by default | Activate Shapes or Selection | Image Editor |
 
-Layer group commands (Add Group, Group Selected, Ungroup, and Delete Group)
-are panel actions and have no keyboard shortcuts.
+Add Group, Group Selected, and Ungroup are panel actions without default
+shortcuts. Delete Group and Delete Layer are explicit panel actions; the single
+customizable Delete Selection command follows focus. Each deletion is one Undo
+edit, protects Background, and preserves original image files.
 
 ## Motion Studio
 

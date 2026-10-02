@@ -10,6 +10,8 @@
 #include "layer_panel.h"
 
 #include <QAction>
+#include <QApplication>
+#include <QAbstractSpinBox>
 #include <QButtonGroup>
 #include <QCryptographicHash>
 #include <QCheckBox>
@@ -27,6 +29,7 @@
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QKeySequence>
 #include <QLockFile>
 #include <QMenu>
@@ -35,6 +38,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
+#include <QPlainTextEdit>
 #include <QScreen>
 #include <QSignalBlocker>
 #include <QSettings>
@@ -43,6 +47,7 @@
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QThread>
+#include <QTextEdit>
 #include <QToolBar>
 #include <QToolButton>
 #include <QTimer>
@@ -56,6 +61,15 @@
 
 namespace image_editor {
 namespace {
+
+bool editingFieldHasFocus() {
+    for (QWidget* widget = QApplication::focusWidget(); widget != nullptr;
+         widget = widget->parentWidget()) {
+        if (qobject_cast<QLineEdit*>(widget) || qobject_cast<QPlainTextEdit*>(widget) ||
+            qobject_cast<QTextEdit*>(widget) || qobject_cast<QAbstractSpinBox*>(widget)) return true;
+    }
+    return false;
+}
 
 QString imageObjectId(const ImageOperation& operation) {
     switch (operation.kind) {
@@ -189,6 +203,10 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     createToolOptionsBar();
     createLayerPanel();
     createActions();
+    connect(qApp, &QApplication::focusChanged, this,
+            [this](QWidget*, QWidget*) { updateDeleteActions(); });
+    connect(layer_panel_, &LayerPanel::deletionSelectionChanged, this,
+            [this]() { updateDeleteActions(); });
     connect(layer_panel_, &LayerPanel::quickExportRequested, this,
             [this]() { quick_export_action_->trigger(); });
     connect(canvas_, &ImageCanvas::cropSelected, this,
@@ -388,21 +406,19 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
                 updateView(true);
                 statusBar()->showMessage(QStringLiteral("Layers grouped"), 1800);
             });
-    connect(layer_panel_, &LayerPanel::deleteLayerRequested, this,
-            [this](const QString& id) {
-                if (!session_.deleteLayer(id)) return;
+    connect(layer_panel_, &LayerPanel::deleteStackItemsRequested, this,
+            [this](const QVector<ImageStackItemData>& items) {
+                canvas_->commitTextEditing();
+                if (!session_.deleteStackItems(items)) return;
+                selected_object_ids_.clear();
+                selected_mask_layer_id_.clear();
                 if (!session_.selectedLayerIsEditable() &&
                     tool_sidebar_->activeTool() != ToolSidebar::Tool::Select &&
                     tool_sidebar_->activeTool() != ToolSidebar::Tool::Shapes) {
                     deactivateCanvasTools();
                 }
                 updateView(true);
-            });
-    connect(layer_panel_, &LayerPanel::deleteGroupRequested, this,
-            [this](const QString& id) {
-                if (!session_.deleteGroup(id)) return;
-                selected_object_ids_.clear();
-                updateView(true);
+                statusBar()->showMessage(QStringLiteral("Selected layers / groups deleted"), 1800);
             });
     connect(layer_panel_, &LayerPanel::ungroupRequested, this,
             [this](const QString& id) {
@@ -541,10 +557,6 @@ void ImageEditorWindow::createToolOptionsBar() {
     shape_stroke_width_spin_->setSuffix(QStringLiteral(" px"));
     shape_stroke_width_spin_->setFixedWidth(82);
     shape_layout->addWidget(shape_stroke_width_spin_);
-    delete_selected_shape_button_ = new QPushButton(
-        QStringLiteral("Delete Selected Objects"), shape_options_widget_);
-    delete_selected_shape_button_->setObjectName(QStringLiteral("deleteSelectedShapeButton"));
-    shape_layout->addWidget(delete_selected_shape_button_);
     shape_options_action_ = new QWidgetAction(tool_options_toolbar_);
     shape_options_action_->setObjectName(QStringLiteral("shapeOptionsAction"));
     shape_options_action_->setDefaultWidget(shape_options_widget_);
@@ -590,6 +602,21 @@ void ImageEditorWindow::createToolOptionsBar() {
     text_options_action_->setDefaultWidget(text_options_widget_);
     tool_options_toolbar_->addAction(text_options_action_);
     text_options_action_->setVisible(false);
+
+    auto* selection_options = new QWidget(tool_options_toolbar_);
+    selection_options->setObjectName(QStringLiteral("selectionOptionsWidget"));
+    auto* selection_layout = new QHBoxLayout(selection_options);
+    selection_layout->setContentsMargins(8, 3, 8, 3);
+    delete_selected_shape_button_ = new QPushButton(
+        QStringLiteral("Delete Selected Objects"), selection_options);
+    delete_selected_shape_button_->setObjectName(QStringLiteral("deleteSelectedShapeButton"));
+    delete_selected_shape_button_->setAccessibleName(QStringLiteral("Delete selected objects"));
+    selection_layout->addWidget(delete_selected_shape_button_);
+    selection_options_action_ = new QWidgetAction(tool_options_toolbar_);
+    selection_options_action_->setObjectName(QStringLiteral("selectionOptionsAction"));
+    selection_options_action_->setDefaultWidget(selection_options);
+    tool_options_toolbar_->addAction(selection_options_action_);
+    selection_options_action_->setVisible(false);
 
     const auto refreshColorButton = [](QPushButton* button, const QColor& color) {
         button->setStyleSheet(QStringLiteral("background-color: %1;").arg(
@@ -791,6 +818,7 @@ void ImageEditorWindow::updateToolOptions() {
         (tool == ToolSidebar::Tool::Select && has_selected_text);
     text_options_action_->setVisible(tool_active && text_options_active);
     text_options_widget_->setVisible(tool_active && text_options_active);
+    selection_options_action_->setVisible(tool_active && tool == ToolSidebar::Tool::Select);
     updateTextOptions();
     updateShapeOptions();
 }
@@ -844,12 +872,7 @@ void ImageEditorWindow::updateShapeOptions() {
     const bool can_edit_fill_and_stroke = shape_creation_active
         ? shape_style_.kind != ImageShapeKind::Line
         : has_selected_fillable_shape;
-    delete_selected_shape_button_->setEnabled(!selected_object_ids_.isEmpty() &&
-        tool_sidebar_->activeTool() == ToolSidebar::Tool::Select);
-    if (delete_objects_action_ != nullptr) {
-        delete_objects_action_->setEnabled(!selected_object_ids_.isEmpty() &&
-            tool_sidebar_->activeTool() == ToolSidebar::Tool::Select);
-    }
+    updateDeleteActions();
     shape_stroke_check_->setEnabled(can_edit_fill_and_stroke);
     shape_fill_check_->setEnabled(can_edit_fill_and_stroke);
     shape_stroke_color_button_->setEnabled(can_edit_selected_shape || shape_creation_active);
@@ -1068,6 +1091,30 @@ void ImageEditorWindow::deleteSelectedObjects() {
     selected_object_ids_.clear();
     updateView(true);
     statusBar()->showMessage(QStringLiteral("Selected objects deleted"), 1800);
+}
+
+void ImageEditorWindow::deleteSelection() {
+    if (editingFieldHasFocus()) return;
+    QWidget* focus = QApplication::focusWidget();
+    if (focus != nullptr && layer_panel_->isAncestorOf(focus)) {
+        layer_panel_->requestDeleteSelection();
+    } else if (focus == canvas_ || focus == this) {
+        deleteSelectedObjects();
+    }
+}
+
+void ImageEditorWindow::updateDeleteActions() {
+    const bool can_delete_objects = session_.hasSource() && !selected_object_ids_.isEmpty() &&
+        tool_sidebar_->activeTool() == ToolSidebar::Tool::Select && !canvas_->textEditing();
+    if (delete_selected_shape_button_ != nullptr) delete_selected_shape_button_->setEnabled(can_delete_objects);
+    if (delete_objects_action_ != nullptr) delete_objects_action_->setEnabled(can_delete_objects);
+    if (delete_selection_action_ == nullptr) return;
+    QWidget* focus = QApplication::focusWidget();
+    const bool layers = focus != nullptr && layer_panel_->isAncestorOf(focus);
+    const bool canvas = focus == canvas_ || focus == this;
+    delete_selection_action_->setEnabled(!editingFieldHasFocus() &&
+        ((layers && session_.hasDocument() && !layer_panel_->selectedStackItems().isEmpty()) ||
+         (canvas && can_delete_objects)));
 }
 
 void ImageEditorWindow::updateCanvasBrush() {
@@ -1426,12 +1473,17 @@ void ImageEditorWindow::createActions() {
     });
 
     delete_objects_action_ = new QAction(QStringLiteral("Delete Selected Objects"), this);
-    // Keep the preference key for any user-assigned Delete Selected Shape shortcut.
-    delete_objects_action_->setObjectName(QStringLiteral("deleteSelectedShapeAction"));
-    registerShortcutAction(delete_objects_action_, {});
-    addAction(delete_objects_action_);
+    delete_objects_action_->setObjectName(QStringLiteral("deleteSelectedObjectsAction"));
     connect(delete_objects_action_, &QAction::triggered, this,
             [this]() { deleteSelectedObjects(); });
+
+    delete_selection_action_ = new QAction(QStringLiteral("Delete Selection"), this);
+    // Keep the preference key for any user-assigned Delete Selected Shape shortcut.
+    delete_selection_action_->setObjectName(QStringLiteral("deleteSelectedShapeAction"));
+    registerShortcutAction(delete_selection_action_, QKeySequence(Qt::Key_Delete));
+    addAction(delete_selection_action_);
+    connect(delete_selection_action_, &QAction::triggered, this,
+            [this]() { deleteSelection(); });
 
     auto* file_menu = menuBar()->addMenu(QStringLiteral("File"));
     file_menu->addAction(new_canvas_action_);
@@ -1453,6 +1505,7 @@ void ImageEditorWindow::createActions() {
     edit_menu->addAction(undo_action_);
     edit_menu->addAction(redo_action_);
     edit_menu->addSeparator();
+    edit_menu->addAction(delete_selection_action_);
     edit_menu->addAction(delete_objects_action_);
     edit_menu->addSeparator();
     edit_menu->addAction(crop_action_);
@@ -1505,8 +1558,34 @@ void ImageEditorWindow::registerShortcutAction(
 }
 
 void ImageEditorWindow::loadShortcutPreferences() {
+    // A newly introduced default must not displace an older saved assignment.
+    QSettings settings;
+    settings.beginGroup(QStringLiteral("ImageEditor/KeyboardShortcuts"));
+    const QString deletion_key = delete_selection_action_->objectName();
+    if (!settings.contains(deletion_key)) {
+        for (const auto& entry : shortcut_manager_.entries()) {
+            if (entry.id == deletion_key || !settings.contains(entry.id)) continue;
+            if (QKeySequence::fromString(settings.value(entry.id).toString(), QKeySequence::PortableText)
+                == delete_selection_action_->shortcut()) {
+                settings.setValue(deletion_key, QString{});
+                break;
+            }
+        }
+    }
+    if (settings.contains(deletion_key)) {
+        const QString saved = settings.value(deletion_key).toString();
+        delete_selection_action_->setShortcut(saved == QStringLiteral("<disabled>")
+            ? QKeySequence{} : QKeySequence(saved, QKeySequence::PortableText));
+    }
+    settings.endGroup();
+    settings.sync();
     QString error;
-    if (!shortcut_manager_.load(&error)) {
+    const bool preferences_loaded = shortcut_manager_.load(&error);
+    if (!preferences_loaded || settings.status() != QSettings::NoError) {
+        if (error.isEmpty() && settings.status() != QSettings::NoError) {
+            error = QStringLiteral("Keyboard shortcut preference migration could not be saved to %1.")
+                .arg(settings.fileName());
+        }
         logger_.logError(QStringLiteral("load_keyboard_shortcuts"),
                          error.isEmpty()
                              ? QStringLiteral("The keyboard shortcut preferences could not be read.")
@@ -1645,6 +1724,7 @@ void ImageEditorWindow::updateSelectionContext() {
         if (text_tool_action_ != nullptr) text_tool_action_->setEnabled(false);
         if (select_tool_action_ != nullptr) select_tool_action_->setEnabled(false);
         if (delete_objects_action_ != nullptr) delete_objects_action_->setEnabled(false);
+        updateDeleteActions();
         return;
     }
     const bool selected_layer_editable = session_.selectedLayerIsEditable();
@@ -1663,8 +1743,7 @@ void ImageEditorWindow::updateSelectionContext() {
     shapes_tool_action_->setEnabled(true);
     text_tool_action_->setEnabled(true);
     select_tool_action_->setEnabled(true);
-    delete_objects_action_->setEnabled(!selected_object_ids_.isEmpty() &&
-        tool_sidebar_->activeTool() == ToolSidebar::Tool::Select);
+    updateDeleteActions();
     updateToolOptions();
 }
 

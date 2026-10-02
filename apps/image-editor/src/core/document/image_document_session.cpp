@@ -2039,24 +2039,44 @@ QString ImageDocumentSession::addLayer() {
 }
 
 bool ImageDocumentSession::deleteLayer(const QString& layer_id) {
-    const qsizetype index = layerIndex(layer_id);
-    if (index <= 0) return false;
-    const QString parent_group_id = data_.layers.at(index).parent_group_id;
-    pushEdit();
-    const bool selected = selected_layer_id_ == layer_id;
-    if (parent_group_id.isEmpty()) {
-        for (qsizetype item = 0; item < data_.root_stack.size(); ++item) {
-            if (!data_.root_stack.at(item).group && data_.root_stack.at(item).id == layer_id) {
-                data_.root_stack.removeAt(item);
-                break;
+    return deleteStackItems({{layer_id, false}});
+}
+
+bool ImageDocumentSession::deleteStackItems(const QVector<ImageStackItemData>& items) {
+    QSet<QString> layer_ids;
+    QSet<QString> group_ids;
+    for (const auto& item : items) {
+        if (item.group) {
+            const qsizetype index = groupIndex(item.id);
+            if (index < 0) continue;
+            group_ids.insert(item.id);
+            for (const auto& child : data_.groups.at(index).layer_ids) {
+                if (layerIndex(child) > 0) layer_ids.insert(child);
             }
+        } else if (layerIndex(item.id) > 0) {
+            layer_ids.insert(item.id);
         }
-    } else if (auto* parent = findGroup(data_, parent_group_id)) {
-        parent->layer_ids.removeAll(layer_id);
     }
-    data_.layers.removeAt(index);
-    if (selected) {
-        const qsizetype replacement = std::min(index, data_.layers.size() - 1);
+    if (layer_ids.isEmpty() && group_ids.isEmpty()) return false;
+
+    const qsizetype selected_index = layerIndex(selected_layer_id_);
+    const bool removed_layer = layer_ids.contains(selected_layer_id_);
+    const bool removed_group = group_ids.contains(selected_group_id_);
+    pushEdit();
+    data_.root_stack.erase(std::remove_if(data_.root_stack.begin(), data_.root_stack.end(),
+        [&](const ImageStackItemData& item) {
+            return item.group ? group_ids.contains(item.id) : layer_ids.contains(item.id);
+        }), data_.root_stack.end());
+    for (auto& group : data_.groups) {
+        group.layer_ids.erase(std::remove_if(group.layer_ids.begin(), group.layer_ids.end(),
+            [&](const QString& id) { return layer_ids.contains(id); }), group.layer_ids.end());
+    }
+    data_.layers.erase(std::remove_if(data_.layers.begin(), data_.layers.end(),
+        [&](const ImageLayerData& layer) { return layer_ids.contains(layer.id); }), data_.layers.end());
+    data_.groups.erase(std::remove_if(data_.groups.begin(), data_.groups.end(),
+        [&](const ImageGroupData& group) { return group_ids.contains(group.id); }), data_.groups.end());
+    if (removed_layer || removed_group) {
+        const qsizetype replacement = std::clamp(selected_index, qsizetype{0}, data_.layers.size() - 1);
         selected_layer_id_ = data_.layers.at(replacement).id;
         selected_group_id_.clear();
     }
@@ -2374,29 +2394,7 @@ bool ImageDocumentSession::ungroup(const QString& group_id) {
 }
 
 bool ImageDocumentSession::deleteGroup(const QString& group_id) {
-    const qsizetype index = groupIndex(group_id);
-    if (index < 0) return false;
-    const auto root_item = std::find_if(data_.root_stack.cbegin(), data_.root_stack.cend(),
-        [&group_id](const ImageStackItemData& item) { return item.group && item.id == group_id; });
-    if (root_item == data_.root_stack.cend()) return false;
-    const qsizetype root_index = std::distance(data_.root_stack.cbegin(), root_item);
-    const QStringList children = data_.groups.at(index).layer_ids;
-    const QString previous_selection = selected_layer_id_;
-    pushEdit();
-    data_.root_stack.removeAt(root_index);
-    for (const QString& child_id : children) {
-        const qsizetype child_index = layerIndex(child_id);
-        if (child_index > 0) data_.layers.removeAt(child_index);
-    }
-    data_.groups.removeAt(index);
-    if (selected_group_id_ == group_id || children.contains(previous_selection)) {
-        selected_group_id_.clear();
-        selected_layer_id_ = data_.layers.isEmpty()
-            ? QString{} : data_.layers.back().id;
-    }
-    rebuildLayerOrder();
-    layer_thumbnail_cache_.clear();
-    return true;
+    return deleteStackItems({{group_id, true}});
 }
 
 bool ImageDocumentSession::renameGroup(const QString& group_id,

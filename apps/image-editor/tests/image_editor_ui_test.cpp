@@ -1242,7 +1242,7 @@ bool testRenamedShortcutPersistence() {
     auto* delete_action = reopened.findChild<QAction*>(QStringLiteral("deleteSelectedShapeAction"));
     if (select_action == nullptr || delete_action == nullptr ||
         select_action->text() != QStringLiteral("Selection") ||
-        delete_action->text() != QStringLiteral("Delete Selected Objects") ||
+        delete_action->text() != QStringLiteral("Delete Selection") ||
         select_action->shortcut() != select_shortcut ||
         delete_action->shortcut() != delete_shortcut) {
         std::cerr << "The renamed Selection and Delete actions did not retain saved shortcuts.\n";
@@ -1253,6 +1253,7 @@ bool testRenamedShortcutPersistence() {
 
 bool testLayerMasksUi(const QString& directory);
 bool testRasterImagesUi(const QString& directory);
+bool testDeletionUi(const QString& directory);
 
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
@@ -1271,6 +1272,7 @@ int main(int argc, char* argv[]) {
     if (!testTextEditorGrowthLayout()) return 1;
     if (application.arguments().contains(QStringLiteral("--text-layout-only"))) return 0;
     QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+    if (!testDeletionUi(temporary.path())) return 1;
     if (!testRasterImagesUi(temporary.path())) return 1;
     if (!testLayerMasksUi(temporary.path())) {
         std::cerr << "Layer mask thumbnails, brush targeting, or linked publication failed.\n";
@@ -1335,12 +1337,12 @@ int main(int argc, char* argv[]) {
         paint_tool_action->shortcut() != QKeySequence(Qt::Key_B) ||
         eraser_tool_action->shortcut() != QKeySequence(Qt::Key_E) ||
         select_shapes_tool_action->text() != QStringLiteral("Selection") ||
-        delete_shape_action->text() != QStringLiteral("Delete Selected Objects") ||
+        delete_shape_action->text() != QStringLiteral("Delete Selection") ||
         paint_tool_action->isChecked() || paint_tool_action->isEnabled() ||
         eraser_tool_action->isChecked() || eraser_tool_action->isEnabled() ||
         !shapes_tool_action->shortcut().isEmpty() ||
         !select_shapes_tool_action->shortcut().isEmpty() ||
-        !delete_shape_action->shortcut().isEmpty() ||
+        delete_shape_action->shortcut() != QKeySequence(Qt::Key_Delete) ||
         shapes_tool_action->isEnabled() || select_shapes_tool_action->isEnabled() ||
         delete_shape_action->isEnabled()) {
         std::cerr << "Settings or the default, inactive tool shortcuts were not created.\n";
@@ -2711,7 +2713,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     auto* linked_delete_shape_action = linked_window.findChild<QAction*>(
-        QStringLiteral("deleteSelectedShapeAction"));
+        QStringLiteral("deleteSelectedObjectsAction"));
     if (linked_delete_shape_action == nullptr || linked_undo_action == nullptr ||
         !linked_delete_shape_action->isEnabled()) {
         std::cerr << "The selected object was not available to Delete Selected Objects.\n";

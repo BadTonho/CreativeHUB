@@ -189,6 +189,17 @@ publication retain their previous output on failure.
   Shapes and Selection remain available; shapes created with Background
   selected are inserted immediately above it. Opacity slider drags are grouped
   into one undo entry.
+- `ImageDocumentSession::deleteStackItems` normalizes a batch of
+  `ImageStackItemData` references, ignores Background/unknown/duplicate entries,
+  and removes selected groups and their children in one history edit. Surviving
+  groups keep their other children; selection moves to a surviving layer when
+  its target is removed. `deleteLayer` and `deleteGroup` delegate to this method.
+  The panel emits one batch for its Delete button and context commands, and
+  excludes Background from the selection. Object deletion still uses
+  `deleteObjects`, leaving masks and unselected layer operations intact.
+  Refreshing the canvas cancels pending gestures/previews so a later mouse
+  release cannot commit a deleted object's transform. Source resources remain
+  shared with history; deleting a reference never deletes its original file.
 - `ImageEditorWindow` routes menu and sidebar actions, prompts before discarding
   edits, and projects session state into the window. A completed paint gesture
   is one undoable document operation; changing tools does not modify the image.
@@ -198,10 +209,19 @@ publication retain their previous output on failure.
   stable action names and `ImageEditor/KeyboardShortcuts` QSettings group,
   separately from editable documents. Defaults use Qt standard
   sequences plus `B` for Paint, `E` for Eraser, and `Esc` to cancel crop or an
-  in-progress shape. Shapes, Selection, and Delete Selected Objects have no
-  default shortcut. The Selection and delete actions keep their existing
-  settings keys so user-assigned shortcuts survive the rename. Duplicate
-  assignments are rejected before acceptance. The dialog stages edits until OK;
+  in-progress shape. Shapes and Selection have no default shortcut. **Delete
+  Selection** defaults to Delete and targets objects with canvas focus or the
+  stack selection with Layers focus. Focus changes disable it in text, rename,
+  and numeric fields. The explicit Delete Selected Objects menu command and
+  Selection options button remain available for every selected object kind,
+  including imported raster images. Only the contextual command is registered
+  as a deletion shortcut, preventing duplicate Delete bindings. The Selection
+  and contextual delete actions keep their existing
+  settings keys so user-assigned shortcuts survive the rename. Default conflicts
+  are avoided when migrating an older saved Delete assignment:
+  if no deletion preference exists, the new contextual binding starts cleared
+  and the older command keeps Delete. Reset All restores canonical defaults.
+  Duplicate assignments are rejected before acceptance. The dialog stages edits until OK;
   Cancel discards them, and accepted bindings are persisted as one validated
   batch. Paint and Eraser require an editable layer; Shapes
   creates a new layer above the selected layer, and Selection remains

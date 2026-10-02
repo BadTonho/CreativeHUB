@@ -36,6 +36,8 @@ public:
                      const QHash<QString, QString>& source_problems = {});
     void setSelectedMask(const QString& layer_id);
     void setQuickExportEnabled(bool enabled);
+    [[nodiscard]] QVector<ImageStackItemData> selectedStackItems() const;
+    void requestDeleteSelection();
 
 signals:
     void quickExportRequested();
@@ -52,8 +54,8 @@ signals:
     void addLayerRequested();
     void addGroupRequested();
     void groupSelectedLayersRequested(const QStringList& layer_ids);
-    void deleteLayerRequested(const QString& layer_id);
-    void deleteGroupRequested(const QString& group_id);
+    void deleteStackItemsRequested(const QVector<image_editor::ImageStackItemData>& items);
+    void deletionSelectionChanged();
     void ungroupRequested(const QString& group_id);
     void moveStackItemRequested(const QString& item_id,
                                 bool is_group,

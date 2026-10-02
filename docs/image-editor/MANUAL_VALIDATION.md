@@ -18,6 +18,34 @@ passed in Debug and Release (5/5 each), and the full Release suite passed
 (61/61). The owner then reopened the affected WebP successfully in the rebuilt
 Windows UI. macOS and Linux packaging checks remain deferred.
 
+## Contextual deletion
+
+Automated coverage: `image_editor_deletion_ui_test.cpp` in
+`creative-suite-image-editor-ui`, plus `image_editor_raster_test.cpp` and the
+existing layer/group/object core tests. Native appearance and platform keyboard
+checks remain manual; record the build, OS, and result.
+
+1. Import an image, activate Selection, and select it in the canvas. Confirm
+   **Delete Selected Objects** is visible and Delete removes only that object.
+   Its layer, mask, and other strokes remain. Undo restores it; Redo removes it.
+2. Begin moving the image, press Delete before releasing, and release the mouse.
+   Confirm the object stays removed and no stale preview or transform commits.
+3. Focus Layers and select a layer. Use Delete, the visible Delete button, and
+   the Delete Layer context action in separate attempts, undoing between them.
+   Confirm each removes the entire layer and its mask in one history edit.
+4. Select a group, a child, another layer, and Background together. Delete the
+   selection; confirm all editable targets disappear once and Background stays.
+   One Undo restores all content, masks, and group membership. Select only
+   Background or clear the selection; deletion controls must be disabled.
+5. Press Delete while renaming, typing canvas text, or editing a numeric field.
+   Confirm normal character deletion and no object/layer removal. Customize
+   Delete Selection, restart, and confirm the binding persists in both contexts.
+6. Save and reopen after deletion; verify the removed targets stay absent and
+   thumbnails/exports match the canvas. Confirm original image files are intact.
+   Remove a test source while the editor is closed, reopen, delete its layer,
+   and save/export again. Linked PNG publication must succeed when all remaining
+   dependencies are available.
+
 ## Standalone editing and recovery
 
 1. Configure and build `creative-suite-image-editor` in Release mode, then
@@ -104,7 +132,7 @@ Windows UI. macOS and Linux packaging checks remain deferred.
    is selected. With Crop Selection active, confirm `Esc` cancels it. Activate
    Selection, begin a marquee, and press `Esc`; confirm the selection gesture
    ends.
-   Assign shortcuts to Selection and Delete Selected Objects, close and restart
+   Assign shortcuts to Selection and Delete Selection, close and restart
    the editor, and confirm both assignments persist.
 9. Save an editable `.cimg`, close it, reopen it, and confirm the rendered
    result is unchanged. Compare the original source file before and after to

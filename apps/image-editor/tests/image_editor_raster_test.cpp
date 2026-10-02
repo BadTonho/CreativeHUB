@@ -156,6 +156,91 @@ void geometryTests(const QString& root) {
     require(limits.importRasterImages(batch), "Allowed layer count rejected.");
     require(!limits.importRasterImages({decoded.images.front()}), "Layer limit exceeded.");
 }
+void deletionTests(const QString& root) {
+    const QString source = imageFile(root, "delete-source.png");
+    const QByteArray original = bytes(source);
+    const auto decoded = prepareRasterImport({source, source});
+    ImageDocumentSession session;
+    require(session.createCanvas({32, 32}, Qt::transparent) &&
+        session.importRasterImages(decoded.images), "Deletion fixture failed.");
+    const QString background = session.data().layers.front().id;
+    const QString empty_layer = session.data().layers[1].id;
+    const QString first = session.data().layers[2].id;
+    const QString second = session.data().layers[3].id;
+    const QString raster = session.data().layers[3].operations.front().raster.id;
+    require(session.addLayerMask(second) &&
+        session.applyPaintStroke({QPointF(2, 2)}, Qt::blue, 2), "Mask/paint fixture failed.");
+    const auto layer_before = layerById(session, second);
+    const auto thumbnails = session.renderedLayerThumbnails({24, 24});
+    require(session.deleteObjects({raster, raster, "unknown"}) &&
+        layerById(session, second).mask == layer_before.mask &&
+        layerById(session, second).operations.size() == 1 &&
+        layerById(session, second).operations.front() == layer_before.operations.back(),
+        "Deleting an image changed its layer, mask, or other operations.");
+    require(session.renderedLayerThumbnails({24, 24}).value(second) != thumbnails.value(second) &&
+        session.undo() && layerById(session, second) == layer_before,
+        "Object deletion thumbnails or undo failed.");
+    const QString group = session.groupLayers({first, second});
+    require(!group.isEmpty() && session.selectLayer(second), "Group fixture failed.");
+    const QString doc = root + "/delete.cimg";
+    require(session.saveDocument(doc), "Deletion save failed.");
+    require(session.openDocument(doc), "Deletion document reopen failed.");
+    (void)session.selectLayer(second);
+    require(session.selectedLayerId() == second && !session.canUndo(), "Deletion history baseline failed.");
+    const auto before = session.data();
+    const auto rendered = session.renderedImage();
+    require(!session.deleteStackItems({}) &&
+        !session.deleteStackItems({{background, false}, {"unknown", false}, {"unknown", true}, {group, false}}) &&
+        session.data() == before && !session.isDirty() && !session.canUndo(),
+        "Invalid deletion changed the document or history.");
+    require(session.deleteStackItems({{group, true}, {second, false}, {group, true},
+        {background, false}, {empty_layer, false}}), "Batch deletion failed.");
+    require(session.data().layers.size() == 1 && session.data().groups.isEmpty() &&
+        session.data().root_stack.size() == 1 && session.selectedLayerId() == background &&
+        session.renderedImage().pixelColor(16, 16).alpha() == 0 &&
+        session.renderedLayerMaskThumbnails({24, 24}).isEmpty(),
+        "Batch deletion left children, masks, or invalid selection.");
+    const auto deleted = session.data();
+    require(session.undo() && session.data() == before && session.selectedLayerId() == second &&
+        session.renderedImage() == rendered && session.redo() && session.data() == deleted,
+        "Batch deletion was not one complete history edit.");
+    require(session.saveDocument() && json(doc)["version"].toInt() == 11,
+        "Deletion changed the document format.");
+    ImageDocumentSession reopened;
+    require(reopened.openDocument(doc) && reopened.data() == deleted,
+        "Deleted items returned after reopening.");
+    require(session.exportImage(root + "/delete-export.png") &&
+        QImage(root + "/delete-export.png") == session.renderedImage(), "Deletion export failed.");
+    require(session.undo() && session.deleteStackItems({{first, false}}) &&
+        session.data().groups.size() == 1 && session.data().groups.front().layer_ids == QStringList{second} &&
+        session.selectedLayerId() == second && session.undo() && session.data() == before,
+        "Child deletion changed its sibling, group, or selection.");
+    require(bytes(source) == original, "Deletion changed the original image file.");
+
+    ImageDocumentSession unavailable;
+    require(unavailable.createCanvas({32, 32}, Qt::transparent) &&
+        unavailable.importRasterImages(decoded.images) && unavailable.saveDocument(root + "/delete-missing.cimg"),
+        "Unavailable deletion fixture failed.");
+    require(QFile::remove(source) && unavailable.openDocument(root + "/delete-missing.cimg") &&
+        unavailable.rasterSourceProblems().size() == 2, "Unavailable sources not detected.");
+    const QString missing_layer = unavailable.data().layers.back().id;
+    const QString missing_object = unavailable.data().layers[2].operations.front().raster.id;
+    require(unavailable.deleteObjects({missing_object}) &&
+        unavailable.deleteStackItems({{missing_layer, false}}) && unavailable.rasterSourceProblems().isEmpty() &&
+        unavailable.saveDocument() && unavailable.exportImage(root + "/delete-missing.png"),
+        "Unavailable references could not be deleted, saved, or exported.");
+    require(unavailable.undo() && unavailable.rasterSourceProblems().size() == 1 &&
+        unavailable.redo() && unavailable.rasterSourceProblems().isEmpty(), "Missing deletion history failed.");
+    ImageDocumentSession empty;
+    require(empty.createCanvas({4, 4}, Qt::transparent), "Empty group fixture failed.");
+    const QString empty_group = empty.addGroup();
+    const auto with_empty_group = empty.data();
+    require(!empty_group.isEmpty() && empty.selectedGroupIsActive() &&
+        empty.deleteStackItems({{empty_group, true}}) && !empty.selectedGroupIsActive() &&
+        empty.data().groups.isEmpty() && empty.undo() && empty.data() == with_empty_group &&
+        empty.selectedGroupIsActive(), "Empty group deletion/history failed.");
+}
+
 void persistenceTests(const QString& root) {
     QString error;
     const QString source=imageFile(root,"linked.png",{16,16},QColor(90,30,200,180));
@@ -261,6 +346,7 @@ int main(int argc,char** argv) {
     try { require(temp.isValid(),"Temporary directory failed.");
         phase = "decode"; decodeTests(temp.path());
         phase = "geometry"; geometryTests(temp.path());
+        phase = "deletion"; deletionTests(temp.path());
         phase = "persistence"; persistenceTests(temp.path());
     } catch (const std::exception& e) { std::cerr<<phase<<": "<<e.what()<<'\n'; return 1; }
     return 0;

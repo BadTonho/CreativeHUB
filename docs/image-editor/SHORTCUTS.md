@@ -24,7 +24,7 @@ duplicate combinations are rejected. Use **Reset All** to restore the defaults.
 | Shapes tool | Unassigned by default |
 | Text tool | Unassigned by default |
 | Selection tool | Unassigned by default |
-| Delete selected objects | Unassigned by default |
+| Delete selection | `Delete`: selected objects in the canvas; selected layers/groups in Layers |
 | Import Image as Layer | Unassigned by default |
 | Relink selected imported image | Unassigned by default |
 | Open editable document | Unassigned by default |
@@ -38,8 +38,25 @@ duplicate combinations are rejected. Use **Reset All** to restore the defaults.
 | Toggle Layers panel | Unassigned by default |
 
 Use the mouse wheel to zoom, the middle mouse button to pan, and the Crop
-Selection toolbar or Edit menu action to start a crop gesture. Selection can
-pick imported images, paint strokes, eraser strokes, shapes, and text on visible editable
+Selection toolbar or Edit menu action to start a crop gesture.
+
+**Delete Selection** follows keyboard focus. In the canvas with Selection active,
+it removes the selected objects while preserving their layers, masks, and other
+operations. In Layers it removes all selected editable layers/groups; groups
+include their children and Background is always protected. Rename, text, and
+numeric editors keep their normal character-deletion behavior. Empty selections
+disable deletion. Each deletion is one Undo/Redo edit and never changes the
+original imported files. The contextual shortcut retains the former
+`deleteSelectedShapeAction` preference key, including explicit custom or cleared
+bindings. **Edit > Delete Selected Objects** and the Selection options button
+always target objects. If Delete was previously assigned to another command
+and there is no saved deletion binding, that assignment is preserved and the
+new contextual shortcut starts cleared; Reset All restores the new defaults.
+The panel **Delete** button and **Delete Layer / Delete Group** context actions
+always target the stack selection.
+
+Selection can pick imported images, paint strokes, eraser strokes, shapes, and
+text on visible editable
 layers. Click an object to select it; Shift-click toggles it in the selection.
 Drag on empty canvas to select every object whose visible geometry intersects
 the marquee. Drag a selected object to move the selection, or drag a corner

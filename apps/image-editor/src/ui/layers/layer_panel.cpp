@@ -272,6 +272,9 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     QAction* delete_group_context_action = layer_context_menu_->addAction(
         QStringLiteral("Delete Group"));
     delete_group_context_action->setObjectName(QStringLiteral("deleteLayerGroupContextAction"));
+    QAction* delete_layer_context_action = layer_context_menu_->addAction(
+        QStringLiteral("Delete Layer"));
+    delete_layer_context_action->setObjectName(QStringLiteral("deleteLayerContextAction"));
     layer_context_menu_->addSeparator();
     QAction* add_mask_action = layer_context_menu_->addAction(QStringLiteral("Add Layer Mask"));
     add_mask_action->setObjectName(QStringLiteral("addLayerMaskAction"));
@@ -312,8 +315,9 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
 
     delete_button_ = new QToolButton(this);
     delete_button_->setObjectName(QStringLiteral("deleteImageLayerButton"));
-    delete_button_->setText(QStringLiteral("−"));
-    delete_button_->setToolTip(QStringLiteral("Delete layer or group"));
+    delete_button_->setText(QStringLiteral("Delete"));
+    delete_button_->setToolTip(QStringLiteral("Delete selected layers or groups"));
+    delete_button_->setAccessibleName(QStringLiteral("Delete selected layers or groups"));
     actions->addWidget(delete_button_);
 
     ungroup_button_ = new QToolButton(this);
@@ -364,7 +368,8 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
             [this]() { updateControls(); });
     connect(layer_tree_, &QTreeWidget::customContextMenuRequested, this,
             [this, group_context_action, ungroup_context_action,
-             delete_group_context_action, add_mask_action, enable_mask_action,
+             delete_group_context_action, delete_layer_context_action,
+             add_mask_action, enable_mask_action,
              remove_mask_action](const QPoint& position) {
                 QTreeWidgetItem* item = layer_tree_->itemAt(position);
                 if (item == nullptr) return;
@@ -387,6 +392,13 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
                 group_context_action->setEnabled(!is_group && canGroupSelectedLayers());
                 ungroup_context_action->setVisible(is_group);
                 delete_group_context_action->setVisible(is_group);
+                delete_layer_context_action->setVisible(!is_group);
+                delete_layer_context_action->setEnabled(!selectedStackItems().isEmpty());
+                const bool multiple = selectedStackItems().size() > 1;
+                delete_layer_context_action->setText(multiple
+                    ? QStringLiteral("Delete Selected Layers / Groups") : QStringLiteral("Delete Layer"));
+                delete_group_context_action->setText(multiple
+                    ? QStringLiteral("Delete Selected Layers / Groups") : QStringLiteral("Delete Group"));
                 ungroup_context_action->setEnabled(is_group);
                 delete_group_context_action->setEnabled(is_group);
                 layer_context_menu_->exec(layer_tree_->viewport()->mapToGlobal(position));
@@ -412,16 +424,15 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
         QStringList ids;
         if (canGroupSelectedLayers(&ids)) emit groupSelectedLayersRequested(ids);
     });
-    connect(delete_button_, &QToolButton::clicked, this, [this]() {
-        if (selectedItemIsGroup()) emit deleteGroupRequested(selectedItemId());
-        else emit deleteLayerRequested(selectedItemId());
-    });
+    connect(delete_button_, &QToolButton::clicked, this, &LayerPanel::requestDeleteSelection);
     connect(ungroup_button_, &QToolButton::clicked, this,
             [this]() { emit ungroupRequested(selectedItemId()); });
     connect(ungroup_context_action, &QAction::triggered, this,
             [this]() { emit ungroupRequested(selectedItemId()); });
     connect(delete_group_context_action, &QAction::triggered, this,
-            [this]() { emit deleteGroupRequested(selectedItemId()); });
+            &LayerPanel::requestDeleteSelection);
+    connect(delete_layer_context_action, &QAction::triggered, this,
+            &LayerPanel::requestDeleteSelection);
     connect(add_mask_action, &QAction::triggered, this,
             [this]() { emit addLayerMaskRequested(selectedItemId()); });
     connect(remove_mask_action, &QAction::triggered, this,
@@ -599,6 +610,20 @@ void LayerPanel::setQuickExportEnabled(bool enabled) {
     quick_export_button_->setEnabled(enabled);
 }
 
+QVector<ImageStackItemData> LayerPanel::selectedStackItems() const {
+    QVector<ImageStackItemData> items;
+    for (auto* item : layer_tree_->selectedItems()) {
+        if (item->data(0, kBackgroundRole).toBool()) continue;
+        items.append({item->data(0, kItemIdRole).toString(), item->data(0, kGroupRole).toBool()});
+    }
+    return items;
+}
+
+void LayerPanel::requestDeleteSelection() {
+    const auto items = selectedStackItems();
+    if (!items.isEmpty()) emit deleteStackItemsRequested(items);
+}
+
 bool LayerPanel::eventFilter(QObject* watched, QEvent* event) {
     if (watched == layer_tree_->viewport()) {
         if (event->type() == QEvent::MouseMove) {
@@ -739,7 +764,8 @@ void LayerPanel::updateControls() {
     edit_hint_->setVisible(has_layer && layer->background);
     add_button_->setEnabled(!document_.root_stack.isEmpty());
     group_selected_button_->setEnabled(canGroupSelectedLayers());
-    delete_button_->setEnabled(editable);
+    delete_button_->setEnabled(!selectedStackItems().isEmpty());
+    emit deletionSelectionChanged();
     ungroup_button_->setVisible(has_group);
     ungroup_button_->setEnabled(has_group);
     rename_button_->setEnabled(editable);

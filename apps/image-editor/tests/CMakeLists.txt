@@ -57,6 +57,7 @@ add_executable(creative-suite-image-editor-ui-tests
     image_editor_ui_test.cpp
     image_editor_mask_ui_test.cpp
     image_editor_raster_ui_test.cpp
+    image_editor_deletion_ui_test.cpp
     ../src/ui/windows/image_editor_window.cpp
     ../src/ui/windows/image_editor_window.h
     ../src/ui/windows/image_export_worker.cpp

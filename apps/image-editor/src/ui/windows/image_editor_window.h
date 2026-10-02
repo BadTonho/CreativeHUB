@@ -97,6 +97,8 @@ private:
     void handleTextEditingStarted(const ImageTextData& text, bool existing);
     void handleObjectsGeometryChanged(const QVector<ImageObjectPlacement>& objects);
     void deleteSelectedObjects();
+    void deleteSelection();
+    void updateDeleteActions();
     void reportError(const QString& operation,
                      const QString& cause,
                      const QString& path = {});
@@ -112,6 +114,7 @@ private:
     QWidgetAction* paint_options_action_ = nullptr;
     QWidgetAction* shape_options_action_ = nullptr;
     QWidgetAction* text_options_action_ = nullptr;
+    QWidgetAction* selection_options_action_ = nullptr;
     QWidget* paint_size_options_ = nullptr;
     QWidget* shape_options_widget_ = nullptr;
     QWidget* text_options_widget_ = nullptr;
@@ -161,6 +164,7 @@ private:
     QAction* text_tool_action_ = nullptr;
     QAction* select_tool_action_ = nullptr;
     QAction* delete_objects_action_ = nullptr;
+    QAction* delete_selection_action_ = nullptr;
     ImageShapeData shape_style_;
     ImageTextData text_style_;
     QStringList selected_object_ids_;

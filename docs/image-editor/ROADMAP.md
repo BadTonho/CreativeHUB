@@ -313,8 +313,18 @@ three Video Editor consumer tests (main window, application media, and project
 persistence) passed, for 10/10 focused tests. These runs do not record manual
 mask acceptance or macOS/Linux results.
 
+Contextual deletion was built in Debug and Release on Windows on 2026-10-02.
+All eight focused Image Editor tests passed in Debug; the complete Release
+CTest suite passed 64/64 with no failures. The deletion regressions cover
+contextual keyboard routing, explicit buttons/menus, batch history, Background
+and editor protection, preview cancellation, source preservation, missing
+references, thumbnails, persistence, exports, and linked PNG publication.
+These automated runs do not record native visual acceptance or macOS/Linux
+results.
+
 | Behavior group | Automated evidence | Manual evidence and status |
 | --- | --- | --- |
+| Contextual object/layer/group deletion | `image_editor_raster_test.cpp` (`creative-suite-image-editor-raster`), `image_editor_deletion_ui_test.cpp` (within `creative-suite-image-editor-ui`), existing layer/group core tests | Automated coverage present for button/menu/Delete focus routing, multiple selection, masks, Background, text/rename/numeric fields, gesture cancellation, Undo/Redo, thumbnails, save/reopen, missing sources, exports, and linked PNG output. Native/platform checks are documented in `MANUAL_VALIDATION.md`; no manual result recorded. |
 | Document editing, canvas, layers, groups, shapes, object selection, transforms, undo/redo | `image_editor_core_test.cpp` (`creative-suite-image-editor-core`) | The owner reports all current Image Editor workflows were exercised on Windows 11; scenario-level gestures and edge results are not itemized. Cross-platform visual checks remain pending. |
 | `.cimg` persistence, validation, and backward compatibility | `image_editor_core_test.cpp`, `image_editor_mask_test.cpp`; read-and-save migration fixtures for v1–v9, v9 text validation, v10 masks and recovery | The owner reports repeatedly migrating the same long-lived project across persisted-format versions, with migrations working. Cross-platform validation remains pending. |
 | Recovery, relinking, and error logging | `image_editor_core_test.cpp` | The owner reports current recovery workflows working on Windows; the per-scenario record is not maintained. Cross-platform validation remains pending. |

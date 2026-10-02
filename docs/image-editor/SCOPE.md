@@ -120,6 +120,17 @@ linked PNG publication fail while preserving the previous output. No embedded
 images, automatic file copies, live external updates, perspective, or color
 adjustments are included. Background remains locked and .csp is unchanged.
 
+## Contextual deletion
+
+Delete removes selected objects in the canvas with Selection active. The layer,
+mask, and unselected contents remain. In Layers, Delete, the visible Delete
+button, and Delete Layer/Delete Group context commands remove the selected
+editable stack items in one Undo/Redo edit; groups include their children.
+Background is protected, including mixed selections. Text, rename, and numeric
+fields keep normal character deletion. Deleting a missing image reference is
+allowed and can unblock exports. Original files are preserved. The document
+format remains v11 and the contextual shortcut is customizable.
+
 ## Outside This Release
 
 Keep retouching, color adjustment, broad effect systems, advanced

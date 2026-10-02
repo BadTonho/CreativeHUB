@@ -73,6 +73,9 @@ public:
     [[nodiscard]] bool deleteObjects(const QStringList& object_ids);
     [[nodiscard]] QString addLayer();
     [[nodiscard]] bool deleteLayer(const QString& layer_id);
+    // Removes valid editable items and group children in one history edit.
+    // Background, duplicate IDs, and unknown items are ignored.
+    [[nodiscard]] bool deleteStackItems(const QVector<ImageStackItemData>& items);
     [[nodiscard]] bool renameLayer(const QString& layer_id,
                                    const QString& name,
                                    QString* error = nullptr);
