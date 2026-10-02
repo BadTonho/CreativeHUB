@@ -44,6 +44,19 @@ technically clear.
 - Keep this roadmap provisional while technical choices and later release
   gates remain unvalidated.
 
+## GPU acceleration planning
+
+The [GPU acceleration plan](GPU_ACCELERATION_PLAN.md) records four future
+deliveries: layer composition, GPU effects, preview/export integration, and
+adoption by the other applications. The first proposed experiment is an
+optional shared OpenGL compositor for Motion Studio with CPU fallback.
+
+**Status: documentation only; implementation deferred.** Motion Studio still
+uses CPU composition and CPU effects. The plan records existing diagnostic
+observations, provisional backend alternatives, regression requirements, and
+the steps for resuming implementation. No GPU speedup or driver acceptance is
+claimed.
+
 ## Milestones
 
 ### 0. Scope and readiness

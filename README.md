@@ -205,6 +205,7 @@ Before contributing, please read the project guidelines outlined in [`AGENTS.md`
 | [Motion Studio reuse plan](docs/motion-editor/REUSE_PLAN.md) | Shared library boundaries and application ownership. |
 | [Motion Studio native format](docs/motion-editor/FORMAT.md) | Provisional `.motion` version 4 JSON layout, v1-v3 migration, curve and effect data, and save/open behavior. |
 | [Motion Studio roadmap](docs/motion-editor/ROADMAP.md) | Provisional scope and technical milestones. |
+| [GPU acceleration plan](docs/motion-editor/GPU_ACCELERATION_PLAN.md) | Planned stages for shared GPU composition, effects, and preview/export integration; implementation deferred. |
 | [Cross-application compatibility](docs/CROSS_APPLICATION_COMPATIBILITY.md) | Shared interfaces and handoff contracts. |
 | [Product and distribution architecture (Portuguese planning document)](docs/PRODUCT_DISTRIBUTION.md) | Provisional boundaries for the future Hub, its integrated recovery feature and standalone recovery tool, and GitHub releases. |
 | [Technical prototype comparison](docs/video-editor/TECHNICAL_PROTOTYPE_COMPARISON.md) | Language and technology evaluation. |
