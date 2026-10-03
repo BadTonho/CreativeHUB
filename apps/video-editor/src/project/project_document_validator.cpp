@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "../media/media_library.h"
@@ -239,10 +240,22 @@ void validateDocument(const ProjectDocument& document,
                     : clip.kind == timeline::ClipKind::Image
                         ? media::MediaKind::Image
                         : media::MediaKind::Video;
-                if (media_kind.has_value() && *media_kind != expected) {
+                const bool video_audio_companion =
+                    clip.kind == timeline::ClipKind::Audio &&
+                    clip.linked_clip_id.has_value() &&
+                    media_kind == media::MediaKind::Video;
+                if (media_kind.has_value() && *media_kind != expected &&
+                    !video_audio_companion) {
                     throwJson(ProjectErrorCode::InvalidTimeline, project_path,
                               "Project JSON contains a clip whose source media type does not match its clip type.");
                 }
+            }
+            if ((clip.kind != timeline::ClipKind::Video &&
+                 (clip.audio_extracted || clip.audio_companion_pending)) ||
+                (clip.audio_companion_pending && clip.linked_clip_id.has_value()) ||
+                (clip.audio_companion_pending && !clip.audio_extracted)) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains invalid extracted audio state.");
             }
             validate_clip(clip);
         }
@@ -307,6 +320,39 @@ void validateDocument(const ProjectDocument& document,
                     throwJson(ProjectErrorCode::InvalidTimeline, project_path,
                               "Project JSON contains overlapping clips that are not allowed on one track.");
                 }
+            }
+        }
+    }
+
+    std::unordered_map<timeline::ClipId,
+        std::pair<const ProjectClip*, timeline::TrackKind>> clips_by_id;
+    for (const auto& track : document.timeline_tracks) {
+        for (const auto& clip : track.clips) {
+            clips_by_id.emplace(clip.clip_id, std::make_pair(&clip, track.kind));
+        }
+    }
+    for (const auto& track : document.timeline_tracks) {
+        for (const auto& clip : track.clips) {
+            if (!clip.linked_clip_id.has_value()) continue;
+            const auto peer = clips_by_id.find(*clip.linked_clip_id);
+            if (peer == clips_by_id.end() || peer->second.first == &clip) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains a missing or self-referencing linked audio clip.");
+            }
+            const auto& other = *peer->second.first;
+            const auto video = clip.kind == timeline::ClipKind::Video
+                ? &clip : other.kind == timeline::ClipKind::Video ? &other : nullptr;
+            const auto audio = clip.kind == timeline::ClipKind::Audio
+                ? &clip : other.kind == timeline::ClipKind::Audio ? &other : nullptr;
+            if (video == nullptr || audio == nullptr ||
+                clip.kind == other.kind || other.linked_clip_id != clip.clip_id ||
+                track.kind == peer->second.second ||
+                video->audio_extracted == false ||
+                video->timeline_start_frame != audio->timeline_start_frame ||
+                media::MediaLibrary::canonicalPath(video->source_path) !=
+                    media::MediaLibrary::canonicalPath(audio->source_path)) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains an inconsistent video and audio clip pair.");
             }
         }
     }

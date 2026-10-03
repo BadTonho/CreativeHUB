@@ -159,6 +159,32 @@ void testNonVideoAndMissingAudioAreExcluded() {
             "Text or video-only media created an audio source.");
 }
 
+void testExternalizedVideoAudioIsMixedOnlyFromItsCompanion() {
+    auto video = media::TimelineAudioMixClip{
+        0, 0, 0, timeline::ClipKind::Video, true,
+        0, 60, 0, 30.0, 1.0, 1.0, false, false};
+    video.audio_extracted = true;
+    const media::TimelineAudioMixClip companion{
+        1, 1, 0, timeline::ClipKind::Audio, true,
+        0, 60, 0, 0.0, 0.5, 0.75, false, false,
+        125000, 1000000};
+    const std::vector<media::TimelineAudioMixClip> clips{video, companion};
+    const auto spans = media::planTimelineAudioMix(
+        clips, {}, 30.0, 48000, 6000, 4800);
+    require(spans.size() == 1 && spans.front().source_index == 1 &&
+                spans.front().source_start_sample == 12000 &&
+                spans.front().gain == 0.375,
+            "Externalized video audio was duplicated or the Audio companion was not scheduled.");
+
+    auto muted_companion = companion;
+    muted_companion.clip_muted = true;
+    const std::vector<media::TimelineAudioMixClip> muted_clips{
+        video, muted_companion};
+    require(media::planTimelineAudioMix(
+                muted_clips, {}, 30.0, 48000, 6000, 4800).empty(),
+            "Muting an externalized companion fell back to the embedded video stream.");
+}
+
 } // namespace
 
 int main() {
@@ -169,6 +195,7 @@ int main() {
         testCrossDissolveAudioStartsAtTheOriginalCut();
         testAudioOnlyClipUsesMicrosecondSourceTiming();
         testNonVideoAndMissingAudioAreExcluded();
+        testExternalizedVideoAudioIsMixedOnlyFromItsCompanion();
         std::cout << "timeline audio mix tests passed\n";
         return 0;
     } catch (const std::exception& error) {

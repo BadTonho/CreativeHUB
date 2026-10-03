@@ -85,6 +85,7 @@ struct CompositionLayerSpec {
     bool clip_audio_muted = false;
     qint64 source_start_time_us = 0;
     qint64 source_duration_time_us = 0;
+    bool audio_extracted = false;
 };
 
 struct CompositionTransitionSpec {

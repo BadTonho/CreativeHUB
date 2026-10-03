@@ -31,10 +31,13 @@ preserves transition junctions by shifting following clips when necessary,
 updates playback, and records the timing change in Undo/Redo and project dirty
 state.
 
-Media clips can be videos, static raster images, or audio-only sources. Audio
-clips retain Timeline placement and duration in project frames, while their
-source in-point and duration use microseconds and do not depend on a source FPS.
-Audio clips use cached audio metadata and do not require a decoded visual frame.
+Media clips can be videos, static raster images, or audio-only sources. Videos
+with an audio stream also have a linked Audio companion on a dedicated Audio
+track. Audio clips retain Timeline placement and duration in project frames,
+while their source in-point and duration use microseconds and do not depend on
+a source FPS. Audio clips use cached audio metadata and do not require a decoded
+visual frame. A companion uses the video's media source and FFmpeg-selected
+audio stream.
 Image clips use the cached
 first frame for every timeline frame, default to 150 frames at 30 FPS (five
 seconds), participate in the same movement, trim, overlap, snapping, history,
@@ -52,7 +55,9 @@ overlap one adjacent media clip while leaving it fixed. In that region, the
 media clip with the later timeline start is composed above the earlier clip.
 Audio clips cannot overlap within the same Audio track. Audio clips on
 different tracks may overlap and mix together; visual clips cannot be placed
-on Audio tracks, and audio-only clips cannot be placed on video tracks.
+on Audio tracks, and audio-only clips cannot be placed on video tracks. A video
+with audio dropped onto the Timeline reuses a compatible Audio track or creates
+an `Audio N` track if all existing Audio tracks overlap at that time.
 Text-over-text overlap remains rejected; clips on different tracks may overlap.
 TimelineModel can locate the clip visible at a frame and the top-priority clip
 when tracks overlap.
@@ -121,8 +126,12 @@ The internal add-to-timeline operation appends media to the active track. A
 drop from the imported Media Browser provides a target track and absolute
 timeline frame. Dropping audio-only media over an Audio track reuses that track;
 dropping it over a video track creates a new `Audio N` track at the end of the
-list and places the clip at the indicated frame. The same source may appear
-repeatedly as independent occurrences. Clip hit testing is local to
+list and places the clip at the indicated frame. Dropping a video with audio
+creates a linked, synchronized Audio companion and chooses a non-overlapping
+Audio track or creates one. Linked clips move, trim, split, and delete together.
+The clip context menu can unlink a pair; afterward the audio remains
+externalized, and the two clips are edited independently. The same source may
+appear repeatedly as independent occurrences. Clip hit testing is local to
 the track row under the pointer, so a clip on another row cannot be selected
 or moved through an empty row. Direct selection in the Timeline changes the
 active clip and Media Browser selection. Clicking a content gap clears both
@@ -230,15 +239,17 @@ occurrences independently.
 ## Playback
 
 The worker owns the video sessions needed by the composition and lazily opens
-audio sessions for every independent Audio clip and every video clip with
-embedded audio that intersects the upcoming output buffer. It mixes those
+audio sessions for every Audio clip and every video clip with embedded audio
+that has not been externalized, when it intersects the upcoming output buffer.
+Linked Audio companions suppress the corresponding embedded stream, so it is
+mixed only once. It mixes those
 sources into one PCM stream regardless of visual track priority; track and
 clip mute and gain are applied per source. The
 composed audio clock drives the global Timeline even through silent gaps. The
 Video Editor still chooses the highest-priority visible clip for the image and
-changes the visual active clip when crossing a boundary. Audio-only clips
-never create visual layers, and the composition range extends through the end
-of the longest clip, including audio-only clips. When the active
+changes the visual active clip when crossing a boundary. Audio-only clips and
+Audio companions never create visual layers, and the composition range extends
+through the end of the longest clip, including audio clips. When the active
 Timeline clip is text, composition playback uses the worker's global
 composition frame range and does not depend on a Media Browser or Timeline
 item selection. The Play command resolves the clip at the current playhead
@@ -318,10 +329,12 @@ positions, active track and clip, selected media, and playhead. Decoded frames,
 FFmpeg sessions, and GPU resources are never stored.
 
 The versioned `.csp` project format stores typed tracks and clips, audio source
-timing, optional audio parameters, and per-project timeline zoom and uniform
-track-row height. Version 1 sequential clips migrate to Video 1 when opened.
-Video, still-image, text, and audio-only media, plus offline video/audio export,
-are implemented. Waveforms, recording, advanced mixing, advanced ripple
+timing, optional audio parameters, linked video-audio companion IDs and
+externalized/pending state, and per-project timeline zoom and uniform track-row
+height. Versions 1 through 13 migrate online videos with audio to companions;
+offline videos receive them when restored. Version 1 sequential clips migrate
+to Video 1 when opened. Video, still-image, text, and audio media, plus offline
+video/audio export, are implemented. Waveforms, recording, advanced mixing, advanced ripple
 editing, automatic gap management, and history for every project subsystem are
 outside the current Timeline scope. See [Current Scope and Non-goals](SCOPE.md).
 
@@ -352,8 +365,8 @@ At a global frame, all visible video clips are composed from the bottom track
 up to the top track. The compositor runs outside the UI worker boundary and
 produces one RGBA frame or leased shared texture for the preview. The provisional canvas is 1920x1080;
 empty areas use the dark preview background. Audio is mixed from every active
-video clip with an embedded stream, independently of which clip supplies the
-visible image.
+Audio clip and from active video clips whose embedded audio has not been
+externalized, independently of which clip supplies the visible image.
 
 ## Text clips
 
@@ -411,6 +424,6 @@ pixels) and commits the transition on release. Updating or removing a Cross
 Dissolve ripples the incoming clip and later clips on that track atomically.
 Moving, splitting, trimming, or deleting an endpoint preserves valid
 transitions or removes them and repairs the affected overlap. Transitions are
-included in bounded Undo/Redo snapshots and persisted in `.csp` version 13.
+included in bounded Undo/Redo snapshots and persisted in `.csp` version 14.
 Projects through version 11 migrate existing Cross Dissolves to the overlap
 semantics on load; Fade to Black is unchanged.

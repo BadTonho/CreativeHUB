@@ -160,6 +160,12 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                 item.insert("source_duration_time_us",
                             static_cast<qint64>(clip.source_duration_time_us));
             }
+            if (clip.linked_clip_id.has_value()) {
+                item.insert("linked_clip_id",
+                            static_cast<qint64>(*clip.linked_clip_id));
+            }
+            item.insert("audio_extracted", clip.audio_extracted);
+            item.insert("audio_companion_pending", clip.audio_companion_pending);
             item.insert("audio_gain", clip.audio_gain);
             item.insert("audio_muted", clip.audio_muted);
             QJsonObject transform;

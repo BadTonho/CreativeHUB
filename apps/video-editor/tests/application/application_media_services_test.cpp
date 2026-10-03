@@ -130,6 +130,131 @@ std::filesystem::path create24FpsVideo(const std::filesystem::path& path) {
     return path;
 }
 
+void writeLittleEndian(std::ofstream& output, std::uint32_t value, int byte_count) {
+    for (int index = 0; index < byte_count; ++index) {
+        output.put(static_cast<char>((value >> (index * 8)) & 0xffU));
+    }
+}
+
+std::filesystem::path createSilentWave(const std::filesystem::path& path) {
+    constexpr std::uint32_t sample_rate = 48000;
+    constexpr std::uint32_t channels = 2;
+    constexpr std::uint32_t sample_count = sample_rate * 2;
+    constexpr std::uint32_t data_size = sample_count * channels * 2;
+    std::ofstream output(path, std::ios::binary);
+    output.write("RIFF", 4);
+    writeLittleEndian(output, 36 + data_size, 4);
+    output.write("WAVEfmt ", 8);
+    writeLittleEndian(output, 16, 4);
+    writeLittleEndian(output, 1, 2);
+    writeLittleEndian(output, channels, 2);
+    writeLittleEndian(output, sample_rate, 4);
+    writeLittleEndian(output, sample_rate * channels * 2, 4);
+    writeLittleEndian(output, channels * 2, 2);
+    writeLittleEndian(output, 16, 2);
+    output.write("data", 4);
+    writeLittleEndian(output, data_size, 4);
+    std::vector<char> samples(data_size, 0);
+    output.write(samples.data(), static_cast<std::streamsize>(samples.size()));
+    require(output.good(), "Could not write the WAV audio migration fixture.");
+    return path;
+}
+
+std::filesystem::path muxVideoAndWave(
+    const std::filesystem::path& video_path,
+    const std::filesystem::path& wave_path,
+    const std::filesystem::path& output_path) {
+    AVFormatContext* video = nullptr;
+    AVFormatContext* audio = nullptr;
+    const auto open_input = [](const std::filesystem::path& path,
+                               AVFormatContext** context) {
+        const auto u8 = path.u8string();
+        const std::string utf8(reinterpret_cast<const char*>(u8.data()), u8.size());
+        requireFfmpeg(avformat_open_input(context, utf8.c_str(), nullptr, nullptr),
+                      "Opening a migration fixture for muxing");
+        requireFfmpeg(avformat_find_stream_info(*context, nullptr),
+                      "Reading migration fixture stream metadata");
+    };
+    open_input(video_path, &video);
+    open_input(wave_path, &audio);
+    AVFormatContext* output = nullptr;
+    const auto output_u8 = output_path.u8string();
+    const std::string output_utf8(
+        reinterpret_cast<const char*>(output_u8.data()), output_u8.size());
+    requireFfmpeg(avformat_alloc_output_context2(
+                      &output, nullptr, "matroska", output_utf8.c_str()),
+                  "Creating a video/audio migration fixture");
+    require(output != nullptr, "Could not allocate the video/audio migration fixture.");
+    const auto copy_streams = [output](AVFormatContext* input) {
+        std::vector<int> stream_map(input->nb_streams, -1);
+        for (unsigned int index = 0; index < input->nb_streams; ++index) {
+            const auto* input_stream = input->streams[index];
+            auto* output_stream = avformat_new_stream(output, nullptr);
+            require(output_stream != nullptr,
+                    "Could not create a muxed migration fixture stream.");
+            requireFfmpeg(avcodec_parameters_copy(
+                              output_stream->codecpar, input_stream->codecpar),
+                          "Copying migration fixture stream parameters");
+            output_stream->codecpar->codec_tag = 0;
+            output_stream->time_base = input_stream->time_base;
+            stream_map[index] = output_stream->index;
+        }
+        return stream_map;
+    };
+    const auto video_map = copy_streams(video);
+    const auto audio_map = copy_streams(audio);
+    if ((output->oformat->flags & AVFMT_NOFILE) == 0) {
+        requireFfmpeg(avio_open(&output->pb, output_utf8.c_str(), AVIO_FLAG_WRITE),
+                      "Opening the video/audio migration fixture");
+    }
+    requireFfmpeg(avformat_write_header(output, nullptr),
+                  "Writing the video/audio migration fixture header");
+    const auto copy_packets = [output](AVFormatContext* input,
+                                       const std::vector<int>& stream_map) {
+        AVPacket* packet = av_packet_alloc();
+        require(packet != nullptr, "Could not allocate a muxed media packet.");
+        while (true) {
+            const int read = av_read_frame(input, packet);
+            if (read == AVERROR_EOF) break;
+            requireFfmpeg(read, "Reading packets for the video/audio fixture");
+            const auto input_stream_index = packet->stream_index;
+            if (input_stream_index < 0 ||
+                static_cast<std::size_t>(input_stream_index) >= stream_map.size() ||
+                stream_map[static_cast<std::size_t>(input_stream_index)] < 0) {
+                av_packet_unref(packet);
+                continue;
+            }
+            const auto* input_stream = input->streams[input_stream_index];
+            auto* output_stream = output->streams[
+                stream_map[static_cast<std::size_t>(input_stream_index)]];
+            av_packet_rescale_ts(packet, input_stream->time_base,
+                                 output_stream->time_base);
+            packet->stream_index = output_stream->index;
+            packet->pos = -1;
+            requireFfmpeg(av_interleaved_write_frame(output, packet),
+                          "Writing packets for the video/audio fixture");
+            av_packet_unref(packet);
+        }
+        av_packet_free(&packet);
+    };
+    copy_packets(video, video_map);
+    copy_packets(audio, audio_map);
+    requireFfmpeg(av_write_trailer(output),
+                  "Finishing the video/audio migration fixture");
+    if ((output->oformat->flags & AVFMT_NOFILE) == 0) avio_closep(&output->pb);
+    avformat_free_context(output);
+    avformat_close_input(&video);
+    avformat_close_input(&audio);
+    return output_path;
+}
+
+std::filesystem::path create24FpsVideoWithAudio(
+    const std::filesystem::path& directory) {
+    const auto video = create24FpsVideo(directory / "video-only.mkv");
+    const auto wave = createSilentWave(directory / "audio.wav");
+    return muxVideoAndWave(video, wave, directory / "video-with-audio.mkv");
+}
+
 media::MediaItem itemAt(const std::filesystem::path& path) {
     media::VideoMetadata metadata;
     metadata.source_path = path;
@@ -444,6 +569,135 @@ void testAudioTrackProjectOpenPreservesAudioTiming() {
     std::filesystem::remove_all(root, cleanup_error);
 }
 
+void testVideoAudioCompanionMigrationAndOfflineRestore() {
+    const auto root = std::filesystem::temp_directory_path() /
+        ("creative-suite-video-audio-migration-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(root);
+    const auto video_with_audio = create24FpsVideoWithAudio(root);
+    const auto video_without_audio = create24FpsVideo(root / "silent-video.mkv");
+    const auto downgrade_to_v13 = [](const std::filesystem::path& path) {
+        std::ifstream input(path, std::ios::binary);
+        const std::string bytes{
+            std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+        input.close();
+        auto root_object = QJsonDocument::fromJson(
+            QByteArray::fromStdString(bytes)).object();
+        root_object.insert("version", 13);
+        auto timeline_object = root_object.value("timeline").toObject();
+        auto tracks = timeline_object.value("tracks").toArray();
+        for (qsizetype track_index = 0; track_index < tracks.size(); ++track_index) {
+            auto track = tracks.at(track_index).toObject();
+            auto clips = track.value("clips").toArray();
+            for (qsizetype clip_index = 0; clip_index < clips.size(); ++clip_index) {
+                auto clip = clips.at(clip_index).toObject();
+                clip.remove("linked_clip_id");
+                clip.remove("audio_extracted");
+                clip.remove("audio_companion_pending");
+                clips.replace(clip_index, clip);
+            }
+            track.insert("clips", clips);
+            tracks.replace(track_index, track);
+        }
+        timeline_object.insert("tracks", tracks);
+        root_object.insert("timeline", timeline_object);
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        const auto json = QJsonDocument(root_object).toJson();
+        output.write(json.constData(), json.size());
+        require(output.good(), "Could not write the version 13 migration fixture.");
+    };
+    const auto legacy_project_for = [&](const std::filesystem::path& project_path,
+                                        const std::filesystem::path& media_path) {
+        project::ProjectDocument document;
+        document.timeline_frame_rate = {24, 1};
+        document.media.push_back({
+            media_path, media_path.filename().string(), "Footage", false,
+            media::MediaKind::Video});
+        project::ProjectTrack track;
+        track.track_id = 3;
+        track.name = "Video 1";
+        project::ProjectClip clip;
+        clip.clip_id = 7;
+        clip.source_path = media_path;
+        clip.timeline_start_frame = 12;
+        clip.source_start_frame = 12;
+        clip.duration_frames = 24;
+        clip.source_duration_frames = 24;
+        track.clips.push_back(clip);
+        document.timeline_tracks.push_back(track);
+        project::save(project_path, document);
+        downgrade_to_v13(project_path);
+    };
+
+    std::atomic_bool cancel{false};
+    application::ProjectOpenService service;
+    const auto online_project = root / "online-v13.csp";
+    legacy_project_for(online_project, video_with_audio);
+    const auto migrated = service.prepare(
+        online_project, online_project, std::nullopt, cancel);
+    require(migrated.status == application::ProjectOpenStatus::Prepared &&
+                migrated.prepared.has_value(),
+            "An online version 13 video with audio could not be migrated.");
+    const auto& migrated_document = migrated.prepared->document;
+    require(migrated_document.timeline_tracks.size() == 2 &&
+                migrated_document.timeline_tracks[0].clips.front().linked_clip_id.has_value() &&
+                migrated_document.timeline_tracks[0].clips.front().audio_extracted &&
+                migrated_document.timeline_tracks[1].kind == timeline::TrackKind::Audio &&
+                migrated_document.timeline_tracks[1].clips.front().linked_clip_id == 7 &&
+                migrated_document.timeline_tracks[1].clips.front().source_start_time_us == 500000 &&
+                migrated_document.timeline_tracks[1].clips.front().source_duration_time_us == 1000000,
+            "Opening a legacy video project did not generate one synchronized audio companion.");
+    project::save(online_project, migrated_document);
+    const auto reopened = service.prepare(
+        online_project, online_project, std::nullopt, cancel);
+    require(reopened.status == application::ProjectOpenStatus::Prepared &&
+                reopened.prepared.has_value() &&
+                reopened.prepared->document.timeline_tracks.size() == 2 &&
+                reopened.prepared->document.timeline_tracks[1].clips.size() == 1 &&
+                reopened.prepared->document.timeline_tracks[1].clips.front().clip_id ==
+                    migrated_document.timeline_tracks[1].clips.front().clip_id,
+            "Reopening a version 14 project duplicated its audio companion.");
+
+    const auto silent_project = root / "silent-v13.csp";
+    legacy_project_for(silent_project, video_without_audio);
+    const auto silent = service.prepare(
+        silent_project, silent_project, std::nullopt, cancel);
+    require(silent.status == application::ProjectOpenStatus::Prepared &&
+                silent.prepared.has_value() &&
+                silent.prepared->document.timeline_tracks.size() == 1 &&
+                !silent.prepared->document.timeline_tracks.front().clips.front()
+                     .linked_clip_id.has_value(),
+            "Opening a legacy video without audio created an empty Audio track.");
+
+    const auto offline_media = root / "restored-video.mkv";
+    const auto offline_project = root / "offline-v13.csp";
+    legacy_project_for(offline_project, offline_media);
+    const auto offline = service.prepare(
+        offline_project, offline_project, std::nullopt, cancel);
+    require(offline.status == application::ProjectOpenStatus::Prepared &&
+                offline.prepared.has_value() &&
+                offline.prepared->document.timeline_tracks.size() == 1 &&
+                offline.prepared->document.timeline_tracks.front().clips.front()
+                    .audio_companion_pending &&
+                offline.prepared->document.timeline_tracks.front().clips.front()
+                    .audio_extracted,
+            "An offline legacy video did not defer audio companion creation.");
+    project::save(offline_project, offline.prepared->document);
+    std::filesystem::copy_file(video_with_audio, offline_media);
+    const auto restored = service.prepare(
+        offline_project, offline_project, std::nullopt, cancel);
+    require(restored.status == application::ProjectOpenStatus::Prepared &&
+                restored.prepared.has_value() &&
+                restored.prepared->document.timeline_tracks.size() == 2 &&
+                restored.prepared->document.timeline_tracks.front().clips.front()
+                    .linked_clip_id.has_value() &&
+                !restored.prepared->document.timeline_tracks.front().clips.front()
+                    .audio_companion_pending,
+            "Restoring an offline video did not create its pending audio companion.");
+    std::error_code cleanup_error;
+    std::filesystem::remove_all(root, cleanup_error);
+}
+
 QColor framePixel(const media::VideoFrame& frame, int x, int y) {
     const auto offset = static_cast<std::size_t>(y) * frame.stride +
         static_cast<std::size_t>(x) * 4;
@@ -738,6 +992,7 @@ int main() {
         testProjectControllerDirtyAutosaveSaveAndReset();
         testProjectOpenPreparationIsTransactionalAndPreservesOfflineMedia();
         testAudioTrackProjectOpenPreservesAudioTiming();
+        testVideoAudioCompanionMigrationAndOfflineRestore();
         testLegacyTimelineRateMigrationAndOfflineReconnect();
         testLinkedImageProjectOpenUsesSharedOutputAndClipVariant();
     } catch (const std::exception& error) {

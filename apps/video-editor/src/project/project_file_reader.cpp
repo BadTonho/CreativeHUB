@@ -370,6 +370,8 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
     ProjectDocument document;
     document.timing_migration_required =
         version < timeline_frame_rate_format_version;
+    document.audio_companion_migration_required =
+        version < audio_companion_format_version;
     if (version >= canvas_format_version) {
         const auto canvas_value = root.value("canvas");
         if (!canvas_value.isObject()) {
@@ -638,6 +640,26 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip mute flag.");
                     }
                     clip.audio_muted = clip_object.value("audio_muted").toBool();
+                }
+                if (version >= audio_companion_format_version) {
+                    if (clip_object.contains("linked_clip_id")) {
+                        const auto linked_id = clip_object.value("linked_clip_id");
+                        if (!linked_id.isDouble() ||
+                            linked_id.toInteger() <= 0) {
+                            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                      "Project JSON contains an invalid linked audio clip identifier.");
+                        }
+                        clip.linked_clip_id = static_cast<timeline::ClipId>(
+                            linked_id.toInteger());
+                    }
+                    const auto extracted = clip_object.value("audio_extracted");
+                    const auto pending = clip_object.value("audio_companion_pending");
+                    if (!extracted.isBool() || !pending.isBool()) {
+                        throwJson(ProjectErrorCode::MissingField, project_path,
+                                  "A version 14 clip is missing its audio companion state.");
+                    }
+                    clip.audio_extracted = extracted.toBool();
+                    clip.audio_companion_pending = pending.toBool();
                 }
                 if (version >= canvas_format_version && clip_object.contains("transform")) {
                     const auto transform = clip_object.value("transform");

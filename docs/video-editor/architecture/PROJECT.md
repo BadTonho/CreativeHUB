@@ -5,7 +5,7 @@ Status: provisional.
 ## Version 11 Timeline timebase
 
 Version 11 introduced the Timeline timebase; the current root uses
-`version: 13`. The Timeline object stores a reduced
+`version: 14`. The Timeline object stores a reduced
 rational `frame_rate` as a positive `numerator` and `denominator`. New projects
 default to 30/1 FPS. Media clips store `source_duration_frames` separately from
 their Timeline `duration_frames`; `source_duration_migration_pending` marks an
@@ -26,7 +26,7 @@ restored from the Media Pool in an active session. It is recorded in Timeline
 history, marks the project dirty through the normal edit flow, and is applied
 only once to each pending clip. Migration while opening an old project does
 not by itself mark the project dirty; the next ordinary save writes the
-normalized version 13 document.
+normalized version 14 document.
 
 ## Version 12 Cross Dissolve overlap
 
@@ -39,7 +39,7 @@ left by D frames. `fade_to_black` remains at the original contiguous cut.
 When opening versions 1 through 11, each legacy Cross Dissolve is migrated by
 shifting its incoming clip and the later clips on that track left by its
 duration. Fade to Black is unchanged. The migration does not mark the project
-dirty by itself; the next ordinary save writes version 13. Saving and
+dirty by itself; the next ordinary save writes version 14. Saving and
 reopening a migrated project preserves the new overlap geometry.
 
 ## Version 13 independent audio tracks
@@ -54,10 +54,29 @@ video tracks; audio-only clips cannot be stored on video tracks, and visual
 clips cannot be stored on audio tracks.
 
 Versions 1 through 12 load existing tracks as video tracks. Their next save
-writes version 13 with explicit track kinds. Version 13 validates media, clip,
+writes version 14 with explicit track kinds. Version 13 validates media, clip,
 and track kinds and rejects incompatible clip/track combinations and
 overlapping audio clips within one audio track. Clips on separate audio tracks
 may overlap.
+
+## Version 14 linked video audio companions
+
+Version 14 persists optional `linked_clip_id` references between a video clip
+and its Audio companion, plus `audio_extracted` and
+`audio_companion_pending` state on video clips. Audio companions use the video
+source path and store their source in-point and duration in microseconds; their
+Timeline placement and duration remain project frames. A linked pair must use
+the same source and Timeline start, reside on compatible Video and Audio
+tracks, and reference each other. The validator rejects broken or incompatible
+links. Unlinking clears the relation while keeping the video's embedded audio
+externalized, so removing the detached Audio clip does not restore it.
+
+Opening versions 1 through 13 creates Audio companions for online video clips
+whose media has an audio stream. Offline video clips are marked pending and
+receive a companion when their media is restored. Version 14 opens preserve
+existing linked or unlinked state and do not generate duplicate companions.
+Migration on open alone does not dirty the project; the next ordinary save
+writes the normalized version 14 document.
 
 ## Version 10 linked-image references
 
@@ -68,8 +87,9 @@ stable string `id`, a path to the editable `.cimg` document, and a path to the
 published raster output. Paths follow the same relative-within-project and
 absolute-outside-project rule as source media. Video and text records cannot
 carry these references. Version 1 through 9 projects remain readable and load
-without linked-image references; their next save writes the current version 13
-format, including Timeline timebase, Cross Dissolve, and audio-track migrations.
+without linked-image references; their next save writes the current version 14
+format, including Timeline timebase, Cross Dissolve, audio-track, and linked
+video-audio migrations.
 
 A Media Pool link is shared by every timeline occurrence of its image source.
 A timeline variant belongs to one stable clip ID and is initialized from an
@@ -157,7 +177,7 @@ keyframes. Version 2 files receive the identity transform, an empty keyframe
 set, and the 1920x1080 canvas when opened. Version 1 files containing
 `timeline.clips` remain supported; they are converted to a single Video 1
 track with sequential timeline starts computed from clip durations. The next
-successful save writes version 13 and includes the timeline zoom, row height,
+successful save writes version 14 and includes the timeline zoom, row height,
 explicit media/clip kinds, optional linked-image references, and the rational
 Timeline rate with separate source durations. Existing version 1 through 10 projects continue
 to load; their media entries default to video unless a version 8 image kind is

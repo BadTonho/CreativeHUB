@@ -497,6 +497,24 @@ void EditWorkspaceController::setTimelineWidget(
             this, &EditWorkspaceController::handleTimelineEffectDrop);
     connect(timeline_widget_, &timeline::TimelineWidget::editImageClipRequested,
             this, &EditWorkspaceController::timelineImageClipEditRequested);
+    connect(timeline_widget_, &timeline::TimelineWidget::audioUnlinkRequested,
+            this, [this](timeline::ClipId clip_id) {
+                try {
+                    const auto result = execute(
+                        application::UnlinkAudioCommand{clip_id});
+                    if (result.changed()) {
+                        publishCommittedEdit(
+                            result, true, true,
+                            QStringLiteral("Video and audio clips unlinked."));
+                    }
+                } catch (const std::exception& error) {
+                    logging::Logger::instance().log(
+                        logging::Level::Error, "timeline", "unlink_audio",
+                        error.what(), {{"clip_id", std::to_string(clip_id)}});
+                    emit statusMessageRequested(
+                        QStringLiteral("Could not unlink the audio clip."));
+                }
+            });
     connect(timeline_widget_, &timeline::TimelineWidget::zoomRequested,
             this, &EditWorkspaceController::applyTimelineZoom);
     connect(timeline_widget_, &timeline::TimelineWidget::zoomChanged, this,

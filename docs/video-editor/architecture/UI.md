@@ -403,6 +403,11 @@ preview frame. Dragging from a gap performs no edit and does not create a
 ghost. Existing movement between tracks remains available when the gesture
 starts on an actual clip.
 
+Videos with audio show a linked Audio clip on a dedicated Audio track. The pair
+moves, trims, splits, and deletes together by default. The clip context menu's
+`Unlink Audio` action keeps the sound externalized and allows independent
+editing; deleting the detached Audio clip removes it from the Timeline.
+
 The upper time ruler is also a playhead scrub area. Clicking or dragging it
 updates the visible playhead without selecting a clip, then requests the seek
 when the pointer is released. Scrubbing remains bounded by the real project
@@ -474,7 +479,9 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 13 format. Image media context menus can open a
+the current `.csp` version 14 format. Linked video-audio clips can be
+unlinked from the Timeline clip context menu; after unlinking, audio remains
+externalized on its Audio track. Image media context menus can open a
 shared Image Editor document, and image clip context menus can open a
 clip-specific variant. The Main Window records those references in the project
 and polls published PNG revisions asynchronously; UI presentation updates only

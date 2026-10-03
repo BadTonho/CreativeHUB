@@ -31,6 +31,9 @@ struct TimelineAudioMixClip {
     // microseconds and are converted directly to samples at the mix rate.
     std::int64_t source_start_time_us = 0;
     std::int64_t source_duration_time_us = 0;
+    // The video's embedded stream is suppressed when its audio is represented
+    // by a linked Audio clip elsewhere on the timeline.
+    bool audio_extracted = false;
 };
 
 struct TimelineAudioMixTransition {

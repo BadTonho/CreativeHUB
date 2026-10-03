@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 13") != std::string::npos &&
+        require(saved_json.find("\"version\": 14") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
@@ -187,7 +187,7 @@ int main(int argc, char** argv) {
                     saved_json.find("cross_dissolve") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
                     saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline frame timing and linked image references were not written to the version 13 project.");
+                "Timeline frame timing and linked image references were not written to the version 14 project.");
         require(saved_json.find("\"kind\": \"image\"") != std::string::npos &&
                     loaded.media.back().kind == media::MediaKind::Image &&
                     loaded.timeline_tracks.front().clips.back().kind == timeline::ClipKind::Image,
@@ -225,7 +225,7 @@ int main(int argc, char** argv) {
                     audio_json.find("\"source_duration_time_us\"") != std::string::npos &&
                     audio_json.find("\"source_start_frame\"") == std::string::npos &&
                     audio_json.find("\"source_duration_frames\"") == std::string::npos,
-                "Version 13 serialized fake source-frame timing for an Audio clip.");
+                "Version 14 serialized fake source-frame timing for an Audio clip.");
         const auto reopened_audio = project::load(audio_project_path);
         require(reopened_audio == audio_document &&
                     reopened_audio.timeline_tracks.front().kind ==
@@ -234,7 +234,30 @@ int main(int argc, char** argv) {
                             .source_start_time_us == 275000 &&
                     reopened_audio.timeline_tracks.front().clips.front()
                             .source_duration_time_us == 1500000,
-                "Version 13 did not preserve Audio track types and source offsets.");
+                "Version 14 did not preserve Audio track types and source offsets.");
+        auto version_13_audio_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(audio_json)).object();
+        version_13_audio_json.insert("version", 13);
+        auto version_13_timeline = version_13_audio_json.value("timeline").toObject();
+        auto version_13_tracks = version_13_timeline.value("tracks").toArray();
+        auto version_13_track = version_13_tracks.at(0).toObject();
+        auto version_13_clips = version_13_track.value("clips").toArray();
+        auto version_13_clip = version_13_clips.at(0).toObject();
+        version_13_clip.remove("audio_extracted");
+        version_13_clip.remove("audio_companion_pending");
+        version_13_clip.remove("linked_clip_id");
+        version_13_clips.replace(0, version_13_clip);
+        version_13_track.insert("clips", version_13_clips);
+        version_13_tracks.replace(0, version_13_track);
+        version_13_timeline.insert("tracks", version_13_tracks);
+        version_13_audio_json.insert("timeline", version_13_timeline);
+        writeText(audio_project_path,
+                  QJsonDocument(version_13_audio_json).toJson().toStdString());
+        const auto reopened_version_13 = project::load(audio_project_path);
+        require(reopened_version_13.audio_companion_migration_required &&
+                    !reopened_version_13.timeline_tracks.front().clips.front()
+                         .linked_clip_id.has_value(),
+                "A version 13 project did not request one-time audio companion migration.");
         auto mismatched_audio = audio_document;
         mismatched_audio.timeline_tracks.front().kind = timeline::TrackKind::Video;
         bool rejected_mismatched_audio = false;
@@ -245,7 +268,55 @@ int main(int argc, char** argv) {
                 error.code() == project::ProjectErrorCode::InvalidTimeline;
         }
         require(rejected_mismatched_audio,
-                "Version 13 accepted an Audio clip on a Video track.");
+                "Version 14 accepted an Audio clip on a Video track.");
+
+        const auto linked_audio_path = directory / "linked-video-audio.csp";
+        project::ProjectDocument linked_audio_document;
+        linked_audio_document.media.push_back({
+            first_source, "Video with audio", "Footage", false,
+            media::MediaKind::Video});
+        project::ProjectTrack linked_video_track;
+        linked_video_track.track_id = 20;
+        linked_video_track.name = "Video 1";
+        project::ProjectClip linked_video_clip;
+        linked_video_clip.clip_id = 21;
+        linked_video_clip.source_path = first_source;
+        linked_video_clip.timeline_start_frame = 17;
+        linked_video_clip.duration_frames = 60;
+        linked_video_clip.source_duration_frames = 60;
+        linked_video_clip.linked_clip_id = 22;
+        linked_video_clip.audio_extracted = true;
+        linked_video_track.clips.push_back(linked_video_clip);
+        project::ProjectTrack linked_audio_track;
+        linked_audio_track.track_id = 23;
+        linked_audio_track.name = "Audio 1";
+        linked_audio_track.kind = timeline::TrackKind::Audio;
+        project::ProjectClip linked_audio_clip;
+        linked_audio_clip.clip_id = 22;
+        linked_audio_clip.source_path = first_source;
+        linked_audio_clip.kind = timeline::ClipKind::Audio;
+        linked_audio_clip.timeline_start_frame = 17;
+        linked_audio_clip.duration_frames = 60;
+        linked_audio_clip.source_start_time_us = 500000;
+        linked_audio_clip.source_duration_time_us = 2000000;
+        linked_audio_clip.linked_clip_id = 21;
+        linked_audio_track.clips.push_back(linked_audio_clip);
+        linked_audio_document.timeline_tracks = {
+            linked_video_track, linked_audio_track};
+        project::save(linked_audio_path, linked_audio_document);
+        require(project::load(linked_audio_path) == linked_audio_document,
+                "Version 14 did not round-trip linked video and audio clips.");
+        auto invalid_audio_link = linked_audio_document;
+        invalid_audio_link.timeline_tracks.back().clips.front().linked_clip_id = 999;
+        bool rejected_invalid_audio_link = false;
+        try {
+            project::save(directory / "invalid-audio-link.csp", invalid_audio_link);
+        } catch (const project::ProjectError& error) {
+            rejected_invalid_audio_link =
+                error.code() == project::ProjectErrorCode::InvalidTimeline;
+        }
+        require(rejected_invalid_audio_link,
+                "A project with a missing linked clip ID was accepted.");
 
         auto version_12_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
@@ -254,6 +325,7 @@ int main(int argc, char** argv) {
                   QJsonDocument(version_12_json).toJson().toStdString());
         const auto reopened_version_12 = project::load(project_path);
         require(!reopened_version_12.timeline_tracks.empty() &&
+                    reopened_version_12.audio_companion_migration_required &&
                     std::all_of(
                         reopened_version_12.timeline_tracks.begin(),
                         reopened_version_12.timeline_tracks.end(),
@@ -396,7 +468,9 @@ int main(int argc, char** argv) {
                 "A version 11 project did not migrate Cross Dissolve ripple on only its affected track while preserving Fade to Black.");
         project::save(project_path, migrated_version_11);
         const auto reopened_migrated_version_11 = project::load(project_path);
-        require(reopened_migrated_version_11 == migrated_version_11,
+        auto expected_reopened_version_11 = migrated_version_11;
+        expected_reopened_version_11.audio_companion_migration_required = false;
+        require(reopened_migrated_version_11 == expected_reopened_version_11,
                 "Saving and reopening a migrated version 11 project changed its overlap geometry.");
         project::save(project_path, original);
 

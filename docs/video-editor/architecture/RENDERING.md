@@ -42,9 +42,11 @@ The OpenGL surface retains RGBA until upload or a GPU lease through every draw;
 only the CPU fallback creates a copied image. Non-contiguous rows use a reusable
 staging buffer instead of allocating a new buffer for every upload.
 
-Composed Preview playback mixes embedded audio from every active video clip
-and independent audio from every active Audio clip, including clips whose
-video is covered by a higher-priority track. It lazily opens per-occurrence
+Composed Preview playback mixes embedded audio from active video clips only
+when their audio has not been externalized, and independent audio from every
+active Audio clip, including clips whose video is covered by a higher-priority
+track. Linked video-audio companions keep the source synchronized and prevent
+the embedded stream from being mixed twice. It lazily opens per-occurrence
 audio sessions for sources needed by the upcoming output buffer, applies clip
 and track mute/gain, sums the sources before clipping the final PCM samples,
 and emits silence through gaps so the audio clock remains on the global
@@ -553,10 +555,10 @@ still-image, and text layers plus Cross Dissolve and Fade to Black transitions.
 Preview-only viewing effects such as Grayscale are not applied to exports.
 
 When audio export is enabled, the renderer decodes embedded audio from video
-clips, mixes it at 48 kHz stereo, and applies the current clip and track gain
-and mute settings. Timeline gaps are silent. The result is resampled and
-encoded using the selected audio encoder. Image and text clips do not add audio
-sources.
+clips that have not been externalized and mixes it with Audio track clips at
+48 kHz stereo. It applies the current clip and track gain and mute settings.
+Timeline gaps are silent. The result is resampled and encoded using the
+selected audio encoder. Image and text clips do not add audio sources.
 
 Containers and compatible encoders come from the active FFmpeg build. The
 selected video and audio encoders remain FFmpeg's responsibility, including

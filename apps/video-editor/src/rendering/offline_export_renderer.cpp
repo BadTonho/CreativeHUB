@@ -464,7 +464,8 @@ std::vector<media::TimelineAudioMixClip> audioMixClips(
             render_clip.track->audio_muted,
             clip.audio_muted,
             clip.source_start_time_us,
-            clip.source_duration_time_us});
+            clip.source_duration_time_us,
+            clip.audio_extracted});
     }
     return result;
 }

@@ -79,6 +79,7 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
             clip.kind == timeline::ClipKind::Video ||
             clip.kind == timeline::ClipKind::Audio;
         if (!supported_audio_kind || !clip.has_audio ||
+            (clip.kind == timeline::ClipKind::Video && clip.audio_extracted) ||
             clip.track_muted || clip.clip_muted || clip.duration_frames <= 0 ||
             clip.timeline_start_frame < 0 || clip.source_start_frame < 0 ||
             clip.timeline_start_frame >

@@ -151,10 +151,11 @@ tasks.
 - [x] Video and static raster-image clips, manual text clips, transforms,
   linear keyframes, essential Cross Dissolve and Fade to Black transitions.
 - [x] Embedded video audio playback with per-clip and per-track gain and mute.
-- [x] Audio-only import and dedicated Audio tracks with automatic track
-  creation on Timeline drops, frame-based Timeline timing, microsecond source
-  timing, editing/history, mixed preview and export, and black video frames
-  through an audio tail.
+- [x] Audio-only import and dedicated Audio tracks, plus synchronized linked
+  Audio companions for videos with sound; automatic compatible-track reuse or
+  creation, microsecond source timing, paired editing/unlinking, v14 persistence
+  and legacy migration, mixed preview/export, and black frames through audio
+  tails.
 - [x] Qt OpenGL preview presentation with CPU fallback and grayscale preview.
 - [x] Versioned `.csp` persistence, transactional New/Open/Save/Save As,
   autosave, and recovery snapshots.
@@ -201,7 +202,7 @@ and required manual validation pass.
   must keep subsequent clips in place and leave the gap.
 - [ ] Add project creation choices for the approved 16:9 and 9:16 canvases and
   24/25/30/48/50/60 fps rates, defaulting to 16:9 at 30 fps. Preserve the
-  existing behavior of `.csp` versions 1 through 12 as 16:9 when opening them;
+  existing behavior of `.csp` versions 1 through 13 as 16:9 when opening them;
   define and test the versioned persistence change before implementation.
 - [ ] Implement direct operating-system file drops as decided in section 1.
   Dropping on the Media Browser imports; dropping on the Timeline uses the

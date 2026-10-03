@@ -115,6 +115,7 @@ signals:
         timeline::TrackId track_id,
         timeline::ClipId from_clip_id,
         timeline::ClipId to_clip_id);
+    void audioUnlinkRequested(timeline::ClipId clip_id);
     void trimStarted();
     void seekStarted();
     void seekRequested(qint64 frame_index);
@@ -174,6 +175,7 @@ private:
     transitionClipIndexesAt(double x, double y) const noexcept;
     void showTransitionMenu(const QPoint& position, const QPoint& global_position);
     void showImageClipMenu(const ClipLocation& location, const QPoint& global_position);
+    void showAudioLinkMenu(const ClipLocation& location, const QPoint& global_position);
     void emitSelected(const ClipLocation& location);
     [[nodiscard]] bool isSupportedDrop(
         const QMimeData* mime_data) const noexcept;

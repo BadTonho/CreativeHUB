@@ -88,6 +88,9 @@ struct TimelineClip {
     bool source_duration_migration_pending = false;
     std::int64_t source_start_time_us = 0;
     std::int64_t source_duration_time_us = 0;
+    std::optional<ClipId> linked_clip_id;
+    bool audio_extracted = false;
+    bool audio_companion_pending = false;
 
     friend bool operator==(const TimelineClip&, const TimelineClip&) = default;
 };
@@ -224,6 +227,12 @@ public:
         std::size_t track_index,
         const media::VideoMetadata& metadata,
         std::int64_t timeline_start_frame);
+    AddClipResult addAudioCompanion(
+        ClipId video_clip_id,
+        const media::VideoMetadata& metadata,
+        ClipId* audio_clip_id = nullptr);
+    [[nodiscard]] bool linkAudio(ClipId video_clip_id, ClipId audio_clip_id);
+    [[nodiscard]] bool unlinkAudio(ClipId clip_id);
     [[nodiscard]] PendingMediaTimingMigrationResult migratePendingMediaTiming(
         const std::filesystem::path& source_path,
         const media::VideoMetadata& metadata);

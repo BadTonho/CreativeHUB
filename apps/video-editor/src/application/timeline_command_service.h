@@ -78,6 +78,10 @@ struct DeleteClipCommand {
     timeline::ClipId clip_id = 0;
 };
 
+struct UnlinkAudioCommand {
+    timeline::ClipId clip_id = 0;
+};
+
 struct AddMediaClipCommand {
     std::filesystem::path source_path;
     timeline::TrackId track_id = 0;
@@ -163,6 +167,7 @@ public:
     [[nodiscard]] TimelineEditResult execute(const TrimClipEdgeCommand& command);
     [[nodiscard]] TimelineEditResult execute(const TrimClipRangeCommand& command);
     [[nodiscard]] TimelineEditResult execute(const DeleteClipCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const UnlinkAudioCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddMediaClipCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddTextClipCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddTransitionCommand& command);

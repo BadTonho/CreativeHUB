@@ -209,8 +209,16 @@ TimelineEditResult TimelineCommandService::execute(const MoveClipCommand& comman
     if (!source || !target_track) return result(EditStatus::Rejected, EditReason::InvalidTarget);
 
     auto before = session_.captureEditState();
-    const auto previous_track_id =
-        before.timeline.tracks[source->track_index].track_id;
+    const auto original_clip = session_.timeline_.tracks()[source->track_index]
+        .clips[source->clip_index];
+    const auto previous_track_id = session_.timeline_.tracks()[source->track_index].track_id;
+    const auto peer_id = original_clip.linked_clip_id;
+    const auto peer_location_before = peer_id.has_value()
+        ? session_.timeline_.locateClip(*peer_id)
+        : std::optional<timeline::ClipLocation>{};
+    const auto peer_track_id = peer_location_before.has_value()
+        ? session_.timeline_.tracks()[peer_location_before->track_index].track_id
+        : timeline::TrackId{};
     const auto moved = session_.timeline_.moveClip(
         *source,
         timeline::ClipLocation{*target_track, 0},
@@ -222,14 +230,39 @@ TimelineEditResult TimelineCommandService::execute(const MoveClipCommand& comman
         return result(EditStatus::Rejected, reasonForMove(moved));
     }
 
+    if (peer_id.has_value()) {
+        const auto peer_location = session_.timeline_.locateClip(*peer_id);
+        const auto peer_track = session_.timeline_.locateTrack(peer_track_id);
+        if (!peer_location || !peer_track) {
+            session_.restoreEditState(std::move(before));
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+        const auto peer_moved = session_.timeline_.moveClip(
+            *peer_location, timeline::ClipLocation{*peer_track, 0},
+            command.timeline_start_frame);
+        if (peer_moved != timeline::MoveClipResult::Moved &&
+            peer_moved != timeline::MoveClipResult::NoChange) {
+            session_.restoreEditState(std::move(before));
+            return result(EditStatus::Rejected, reasonForMove(peer_moved));
+        }
+    }
+
     recordSuccessfulEdit(std::move(before));
     selectClip(command.clip_id);
     auto output = result(EditStatus::Applied);
-    output.affected_track_ids = {command.target_track_id};
-    if (previous_track_id != command.target_track_id) {
-        output.affected_track_ids.push_back(previous_track_id);
+    output.affected_track_ids = {previous_track_id, command.target_track_id};
+    if (peer_id.has_value()) {
+        const auto peer_location = session_.timeline_.locateClip(*peer_id);
+        if (peer_location.has_value()) {
+            output.affected_track_ids.push_back(
+                session_.timeline_.tracks()[peer_location->track_index].track_id);
+        }
     }
+    std::sort(output.affected_track_ids.begin(), output.affected_track_ids.end());
+    output.affected_track_ids.erase(std::unique(output.affected_track_ids.begin(),
+        output.affected_track_ids.end()), output.affected_track_ids.end());
     output.affected_clip_ids = {command.clip_id};
+    if (peer_id.has_value()) output.affected_clip_ids.push_back(*peer_id);
     output.invalidate_playback = true;
     return output;
 }
@@ -258,30 +291,92 @@ TimelineEditResult TimelineCommandService::execute(const ReorderClipCommand& com
 TimelineEditResult TimelineCommandService::execute(const SplitClipCommand& command) {
     const auto location = session_.timeline_.locateClip(command.clip_id);
     if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto original_clip = session_.timeline_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    const auto peer_id = original_clip.linked_clip_id;
+    const auto split_boundary = original_clip.timeline_start_frame + command.local_frame;
     auto before = session_.captureEditState();
+    const auto primary_right_id = session_.timeline_.snapshot().next_clip_id;
     const auto split = session_.timeline_.splitClip(
         location->track_index, location->clip_index, command.local_frame);
     if (split != timeline::SplitClipResult::Split) {
         return result(EditStatus::Rejected, EditReason::InvalidBoundary);
     }
-    const auto left = session_.timeline_.locateClip(command.clip_id);
-    if (!left) {
+
+    std::optional<timeline::ClipId> peer_right_id;
+    if (peer_id.has_value()) {
+        const auto peer_location = session_.timeline_.locateClip(*peer_id);
+        if (!peer_location) {
+            session_.restoreEditState(std::move(before));
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+        const auto& peer_clip = session_.timeline_.tracks()[peer_location->track_index]
+            .clips[peer_location->clip_index];
+        const auto peer_local_frame = split_boundary - peer_clip.timeline_start_frame;
+        const bool peer_can_split = peer_local_frame > 0 &&
+            peer_local_frame < peer_clip.timeline_duration_frames;
+        if (peer_can_split) {
+            const auto new_peer_right_id = session_.timeline_.snapshot().next_clip_id;
+            const auto peer_split = session_.timeline_.splitClip(
+                peer_location->track_index, peer_location->clip_index,
+                peer_local_frame);
+            if (peer_split != timeline::SplitClipResult::Split) {
+                session_.restoreEditState(std::move(before));
+                return result(EditStatus::Rejected, EditReason::InvalidBoundary);
+            }
+            peer_right_id = new_peer_right_id;
+        }
+    }
+
+    const auto primary_right = session_.timeline_.locateClip(primary_right_id);
+    if (!primary_right) {
         session_.restoreEditState(std::move(before));
         return result(EditStatus::Rejected, EditReason::InvalidTarget);
     }
-    const auto& clips = session_.timeline_.tracks()[left->track_index].clips;
-    if (left->clip_index + 1 >= clips.size()) {
-        session_.restoreEditState(std::move(before));
-        return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    if (peer_id.has_value() && peer_right_id.has_value()) {
+        const bool linked = original_clip.kind == timeline::ClipKind::Video
+            ? session_.timeline_.linkAudio(command.clip_id, *peer_id) &&
+                session_.timeline_.linkAudio(primary_right_id, *peer_right_id)
+            : session_.timeline_.linkAudio(*peer_id, command.clip_id) &&
+                session_.timeline_.linkAudio(*peer_right_id, primary_right_id);
+        if (!linked) {
+            session_.restoreEditState(std::move(before));
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+    } else if (peer_id.has_value() &&
+               original_clip.kind == timeline::ClipKind::Video) {
+        // A companion may end before its video. Splitting in the silent tail
+        // keeps the existing audio with the left video segment only.
+        if (!session_.timeline_.unlinkAudio(primary_right_id)) {
+            session_.restoreEditState(std::move(before));
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
     }
-    const auto new_clip_id = clips[left->clip_index + 1].clip_id;
+
     recordSuccessfulEdit(std::move(before));
-    selectClip(new_clip_id);
+    selectClip(primary_right_id);
     session_.playhead_frame_ = 0;
     session_.preserved_playhead_frame_.reset();
     auto output = result(EditStatus::Applied);
-    output.affected_track_ids = {clips[left->clip_index].track_id};
-    output.affected_clip_ids = {command.clip_id, new_clip_id};
+    output.affected_track_ids = {
+        session_.timeline_.tracks()[primary_right->track_index].track_id};
+    output.affected_clip_ids = {command.clip_id, primary_right_id};
+    if (peer_id.has_value()) {
+        output.affected_clip_ids.push_back(*peer_id);
+        const auto peer_location = session_.timeline_.locateClip(*peer_id);
+        if (peer_location.has_value()) {
+            output.affected_track_ids.push_back(
+                session_.timeline_.tracks()[peer_location->track_index].track_id);
+        }
+        if (peer_right_id.has_value()) {
+            output.affected_clip_ids.push_back(*peer_right_id);
+            const auto peer_right = session_.timeline_.locateClip(*peer_right_id);
+            if (peer_right.has_value()) {
+                output.affected_track_ids.push_back(
+                    session_.timeline_.tracks()[peer_right->track_index].track_id);
+            }
+        }
+    }
     output.invalidate_playback = true;
     return output;
 }
@@ -289,6 +384,9 @@ TimelineEditResult TimelineCommandService::execute(const SplitClipCommand& comma
 TimelineEditResult TimelineCommandService::execute(const TrimClipEdgeCommand& command) {
     const auto location = session_.timeline_.locateClip(command.clip_id);
     if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto original_clip = session_.timeline_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    const auto peer_id = original_clip.linked_clip_id;
     auto before = session_.captureEditState();
     const auto outcome = timeline::applyClipEdgeTrim(
         session_.timeline_, *location, command.edge, command.boundary_frame,
@@ -304,13 +402,71 @@ TimelineEditResult TimelineCommandService::execute(const TrimClipEdgeCommand& co
                 : EditReason::InvalidBoundary;
         return result(EditStatus::Rejected, reason);
     }
+
+    bool peer_removed = false;
+    if (peer_id.has_value()) {
+        const auto peer_location = session_.timeline_.locateClip(*peer_id);
+        if (!peer_location) {
+            session_.restoreEditState(std::move(before));
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+        const auto peer_clip = session_.timeline_.tracks()[peer_location->track_index]
+            .clips[peer_location->clip_index];
+        const auto peer_end = peer_clip.timeline_start_frame +
+            peer_clip.timeline_duration_frames;
+        if (original_clip.kind == timeline::ClipKind::Video &&
+            command.edge == timeline::ClipEdge::Right &&
+            command.boundary_frame >= peer_end) {
+            // The audio source already ends before this video tail.
+        } else if (original_clip.kind == timeline::ClipKind::Video &&
+                   command.edge == timeline::ClipEdge::Left &&
+                   command.boundary_frame >= peer_end) {
+            if (!session_.timeline_.unlinkAudio(command.clip_id)) {
+                session_.restoreEditState(std::move(before));
+                return result(EditStatus::Rejected, EditReason::InvalidTarget);
+            }
+            const auto refreshed_peer = session_.timeline_.locateClip(*peer_id);
+            if (!refreshed_peer || session_.timeline_.removeClip(
+                    refreshed_peer->track_index, refreshed_peer->clip_index) !=
+                    timeline::RemoveClipResult::Removed) {
+                session_.restoreEditState(std::move(before));
+                return result(EditStatus::Rejected, EditReason::InvalidTarget);
+            }
+            peer_removed = true;
+        } else {
+            const auto refreshed_peer = session_.timeline_.locateClip(*peer_id);
+            if (!refreshed_peer) {
+                session_.restoreEditState(std::move(before));
+                return result(EditStatus::Rejected, EditReason::InvalidTarget);
+            }
+            const auto peer_result = session_.timeline_.trimClipEdge(
+                refreshed_peer->track_index, refreshed_peer->clip_index,
+                command.edge, command.boundary_frame, command.mode);
+            if (peer_result != timeline::TrimClipResult::Trimmed &&
+                peer_result != timeline::TrimClipResult::NoChange) {
+                session_.restoreEditState(std::move(before));
+                return result(EditStatus::Rejected, EditReason::InvalidRange);
+            }
+        }
+    }
     recordSuccessfulEdit(std::move(before));
     selectClip(outcome.selection->location);
     session_.playhead_frame_ = outcome.selection->playback_frame;
     session_.preserved_playhead_frame_ = outcome.selection->preserved_playhead_frame;
     auto output = result(EditStatus::Applied);
-    output.affected_track_ids = {session_.timeline_.tracks()[outcome.selection->location.track_index].track_id};
+    output.affected_track_ids = {
+        session_.timeline_.tracks()[outcome.selection->location.track_index].track_id};
     output.affected_clip_ids = {command.clip_id};
+    if (peer_id.has_value()) {
+        output.affected_clip_ids.push_back(*peer_id);
+        if (!peer_removed) {
+            const auto peer_location = session_.timeline_.locateClip(*peer_id);
+            if (peer_location.has_value()) {
+                output.affected_track_ids.push_back(
+                    session_.timeline_.tracks()[peer_location->track_index].track_id);
+            }
+        }
+    }
     output.invalidate_playback = true;
     return output;
 }
@@ -319,6 +475,7 @@ TimelineEditResult TimelineCommandService::execute(const TrimClipRangeCommand& c
     const auto location = session_.timeline_.locateClip(command.clip_id);
     if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
     const auto old_clip = session_.timeline_.tracks()[location->track_index].clips[location->clip_index];
+    const auto peer_id = old_clip.linked_clip_id;
     const bool was_active = session_.selection_.active_clip_id == old_clip.clip_id;
     const auto old_playhead_frame = session_.playhead_frame_;
     if (command.source_start_frame < 0 || command.duration_frames <= 0 ||
@@ -337,6 +494,60 @@ TimelineEditResult TimelineCommandService::execute(const TrimClipRangeCommand& c
     if (trimmed != timeline::TrimClipResult::Trimmed) {
         return result(EditStatus::Rejected, EditReason::InvalidRange);
     }
+    bool peer_removed = false;
+    if (peer_id.has_value()) {
+        if (old_clip.kind != timeline::ClipKind::Video) {
+            session_.restoreEditState(std::move(before));
+            return result(EditStatus::Rejected, EditReason::InvalidRange);
+        }
+        const auto peer_location = session_.timeline_.locateClip(*peer_id);
+        if (!peer_location) {
+            session_.restoreEditState(std::move(before));
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+        const auto& peer_clip = session_.timeline_.tracks()[peer_location->track_index]
+            .clips[peer_location->clip_index];
+        const auto source_rate = old_clip.frame_rate.value_or(
+            session_.timeline_.frameRate().asDouble());
+        const auto audio_source_start_us = static_cast<long double>(
+            command.source_start_frame) * 1000000.0L / source_rate;
+        if (!std::isfinite(audio_source_start_us) ||
+            audio_source_start_us >= std::ldexp(1.0L, 63)) {
+            session_.restoreEditState(std::move(before));
+            return result(EditStatus::Rejected, EditReason::InvalidRange);
+        }
+        const auto rounded_audio_start_us = static_cast<std::int64_t>(
+            std::llround(audio_source_start_us));
+        const auto audio_source_end_us = peer_clip.source_start_time_us +
+            peer_clip.source_duration_time_us;
+        if (rounded_audio_start_us >= audio_source_end_us) {
+            if (!session_.timeline_.unlinkAudio(command.clip_id)) {
+                session_.restoreEditState(std::move(before));
+                return result(EditStatus::Rejected, EditReason::InvalidTarget);
+            }
+            const auto refreshed_peer = session_.timeline_.locateClip(*peer_id);
+            if (!refreshed_peer || session_.timeline_.removeClip(
+                    refreshed_peer->track_index, refreshed_peer->clip_index) !=
+                    timeline::RemoveClipResult::Removed) {
+                session_.restoreEditState(std::move(before));
+                return result(EditStatus::Rejected, EditReason::InvalidTarget);
+            }
+            peer_removed = true;
+        } else {
+            const auto refreshed_peer = session_.timeline_.locateClip(*peer_id);
+            if (!refreshed_peer) {
+                session_.restoreEditState(std::move(before));
+                return result(EditStatus::Rejected, EditReason::InvalidTarget);
+            }
+            const auto audio_trimmed = session_.timeline_.trimClip(
+                refreshed_peer->track_index, refreshed_peer->clip_index,
+                0, command.duration_frames, rounded_audio_start_us);
+            if (audio_trimmed != timeline::TrimClipResult::Trimmed) {
+                session_.restoreEditState(std::move(before));
+                return result(EditStatus::Rejected, EditReason::InvalidRange);
+            }
+        }
+    }
     recordSuccessfulEdit(std::move(before));
     selectClip(command.clip_id);
     const auto source_delta = command.source_start_frame - old_clip.source_start_frame;
@@ -351,6 +562,16 @@ TimelineEditResult TimelineCommandService::execute(const TrimClipRangeCommand& c
     auto output = result(EditStatus::Applied);
     output.affected_track_ids = {session_.timeline_.tracks()[location->track_index].track_id};
     output.affected_clip_ids = {command.clip_id};
+    if (peer_id.has_value()) {
+        output.affected_clip_ids.push_back(*peer_id);
+        if (!peer_removed) {
+            const auto peer_location = session_.timeline_.locateClip(*peer_id);
+            if (peer_location.has_value()) {
+                output.affected_track_ids.push_back(
+                    session_.timeline_.tracks()[peer_location->track_index].track_id);
+            }
+        }
+    }
     output.invalidate_playback = true;
     return output;
 }
@@ -359,10 +580,28 @@ TimelineEditResult TimelineCommandService::execute(const DeleteClipCommand& comm
     const auto location = session_.timeline_.locateClip(command.clip_id);
     if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
     const auto track_id = session_.timeline_.tracks()[location->track_index].track_id;
+    const auto clip = session_.timeline_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    const auto peer_id = clip.linked_clip_id;
+    const auto peer_location_before = peer_id.has_value()
+        ? session_.timeline_.locateClip(*peer_id)
+        : std::optional<timeline::ClipLocation>{};
+    const auto peer_track_id = peer_location_before.has_value()
+        ? session_.timeline_.tracks()[peer_location_before->track_index].track_id
+        : timeline::TrackId{};
     auto before = session_.captureEditState();
     if (session_.timeline_.removeClip(location->track_index, location->clip_index) !=
         timeline::RemoveClipResult::Removed) {
         return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    }
+    if (peer_id.has_value()) {
+        const auto peer_location = session_.timeline_.locateClip(*peer_id);
+        if (!peer_location || session_.timeline_.removeClip(
+                peer_location->track_index, peer_location->clip_index) !=
+                timeline::RemoveClipResult::Removed) {
+            session_.restoreEditState(std::move(before));
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
     }
     recordSuccessfulEdit(std::move(before));
     session_.selection_.active_transition.reset();
@@ -389,7 +628,32 @@ TimelineEditResult TimelineCommandService::execute(const DeleteClipCommand& comm
     }
     auto output = result(EditStatus::Applied);
     output.affected_track_ids = {track_id};
+    if (peer_id.has_value()) output.affected_track_ids.push_back(peer_track_id);
     output.affected_clip_ids = {command.clip_id};
+    if (peer_id.has_value()) output.affected_clip_ids.push_back(*peer_id);
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(const UnlinkAudioCommand& command) {
+    const auto location = session_.timeline_.locateClip(command.clip_id);
+    if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto& clip = session_.timeline_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    const auto peer_id = clip.linked_clip_id;
+    if (!peer_id.has_value()) return result(EditStatus::NoChange);
+    const auto peer_location = session_.timeline_.locateClip(*peer_id);
+    if (!peer_location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto track_id = session_.timeline_.tracks()[location->track_index].track_id;
+    const auto peer_track_id = session_.timeline_.tracks()[peer_location->track_index].track_id;
+    auto before = session_.captureEditState();
+    if (!session_.timeline_.unlinkAudio(command.clip_id)) {
+        return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    }
+    recordSuccessfulEdit(std::move(before));
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {track_id, peer_track_id};
+    output.affected_clip_ids = {command.clip_id, *peer_id};
     output.invalidate_playback = true;
     return output;
 }
@@ -444,6 +708,17 @@ TimelineEditResult TimelineCommandService::execute(const AddMediaClipCommand& co
     if (added != timeline::AddClipResult::Added) {
         return result(EditStatus::Rejected, reasonForAdd(added));
     }
+    std::optional<timeline::ClipId> audio_companion_id;
+    if (media_item.metadata.kind == media::MediaKind::Video &&
+        media_item.metadata.audio.has_value()) {
+        timeline::ClipId companion_id = 0;
+        const auto companion_result = staged_timeline.addAudioCompanion(
+            next_clip_id, media_item.metadata, &companion_id);
+        if (companion_result != timeline::AddClipResult::Added) {
+            return result(EditStatus::Rejected, reasonForAdd(companion_result));
+        }
+        audio_companion_id = companion_id;
+    }
     auto before = session_.captureEditState();
     session_.timeline_ = std::move(staged_timeline);
     recordSuccessfulEdit(std::move(before));
@@ -455,7 +730,17 @@ TimelineEditResult TimelineCommandService::execute(const AddMediaClipCommand& co
     session_.preserved_playhead_frame_.reset();
     auto output = result(EditStatus::Applied);
     output.affected_track_ids = {destination_track_id};
+    if (audio_companion_id.has_value()) {
+        const auto audio_location = session_.timeline_.locateClip(*audio_companion_id);
+        if (audio_location.has_value()) {
+            output.affected_track_ids.push_back(
+                session_.timeline_.tracks()[audio_location->track_index].track_id);
+        }
+    }
     output.affected_clip_ids = {next_clip_id};
+    if (audio_companion_id.has_value()) {
+        output.affected_clip_ids.push_back(*audio_companion_id);
+    }
     output.invalidate_playback = true;
     return output;
 }
@@ -653,6 +938,8 @@ TimelineEditResult TimelineCommandService::execute(const ClearTimelineCommand&) 
 TimelineEditResult TimelineCommandService::execute(const SetClipAudioCommand& command) {
     const auto location = session_.timeline_.locateClip(command.clip_id);
     if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto peer_id = session_.timeline_.tracks()[location->track_index]
+        .clips[location->clip_index].linked_clip_id;
     const auto before = session_.captureEditState();
     const auto mutation = session_.timeline_.setClipAudio(
         location->track_index, location->clip_index, command.gain, command.muted);
@@ -660,10 +947,33 @@ TimelineEditResult TimelineCommandService::execute(const SetClipAudioCommand& co
     if (mutation != timeline::AudioParameterResult::Changed) {
         return result(EditStatus::Rejected, reasonForAudio(mutation));
     }
+    if (peer_id.has_value()) {
+        const auto peer_location = session_.timeline_.locateClip(*peer_id);
+        if (!peer_location) {
+            session_.restoreEditState(before);
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+        const auto peer_mutation = session_.timeline_.setClipAudio(
+            peer_location->track_index, peer_location->clip_index,
+            command.gain, command.muted);
+        if (peer_mutation != timeline::AudioParameterResult::Changed &&
+            peer_mutation != timeline::AudioParameterResult::NoChange) {
+            session_.restoreEditState(before);
+            return result(EditStatus::Rejected, reasonForAudio(peer_mutation));
+        }
+    }
     recordSuccessfulEdit(before);
     auto output = result(EditStatus::Applied);
     output.affected_track_ids = {session_.timeline_.tracks()[location->track_index].track_id};
     output.affected_clip_ids = {command.clip_id};
+    if (peer_id.has_value()) {
+        output.affected_clip_ids.push_back(*peer_id);
+        const auto peer_location = session_.timeline_.locateClip(*peer_id);
+        if (peer_location.has_value()) {
+            output.affected_track_ids.push_back(
+                session_.timeline_.tracks()[peer_location->track_index].track_id);
+        }
+    }
     return output;
 }
 

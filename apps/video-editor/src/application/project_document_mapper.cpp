@@ -58,6 +58,9 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
                 clip.source_duration_migration_pending;
             project_clip.source_start_time_us = clip.source_start_time_us;
             project_clip.source_duration_time_us = clip.source_duration_time_us;
+            project_clip.linked_clip_id = clip.linked_clip_id;
+            project_clip.audio_extracted = clip.audio_extracted;
+            project_clip.audio_companion_pending = clip.audio_companion_pending;
             project_track.clips.push_back(std::move(project_clip));
         }
         for (const auto& transition : track.transitions) {

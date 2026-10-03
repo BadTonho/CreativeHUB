@@ -1,4 +1,5 @@
 #include "timeline/timeline_widget.h"
+#include "timeline/timeline_geometry.h"
 #include "timeline/timeline_track_header_overlay.h"
 #include "timeline/timeline_time.h"
 #include "ui/media_browser/media_drag_mime.h"
@@ -2159,6 +2160,80 @@ int main(int argc, char* argv[]) {
                 "(selected=" + std::to_string(image_clip_selected) +
                 ", edit requested=" + std::to_string(image_edit_requested) + ").");
         image_context_widget.close();
+
+        timeline::TimelineWidget linked_audio_context_widget;
+        linked_audio_context_widget.resize(900, 240);
+        linked_audio_context_widget.setTimelineViewportWidth(900);
+        auto linked_video_clip = makeClip(
+            "linked-video.mkv", 0, 100, "Video with audio");
+        linked_video_clip.clip_id = 921;
+        linked_video_clip.kind = timeline::ClipKind::Video;
+        linked_video_clip.linked_clip_id = 922;
+        linked_video_clip.audio_extracted = true;
+        auto linked_audio_clip = makeClip(
+            "linked-video.mkv", 0, 100, "Audio companion");
+        linked_audio_clip.clip_id = 922;
+        linked_audio_clip.kind = timeline::ClipKind::Audio;
+        linked_audio_clip.linked_clip_id = 921;
+        linked_audio_clip.frame_rate.reset();
+        linked_audio_clip.frame_count.reset();
+        const std::vector<timeline::TimelineTrack> linked_audio_tracks{
+            timeline::TimelineTrack{719, "Video 1", 1.0, false, {linked_video_clip}},
+            timeline::TimelineTrack{720, "Audio 1", 1.0, false, {linked_audio_clip},
+                                    {}, timeline::TrackKind::Audio}};
+        linked_audio_context_widget.setTracks(linked_audio_tracks);
+        linked_audio_context_widget.show();
+        application.processEvents();
+        timeline::ClipId unlinked_clip_id = 0;
+        bool linked_video_selected = false;
+        bool linked_audio_menu_found = false;
+        bool linked_audio_action_found = false;
+        QObject::connect(
+            &linked_audio_context_widget,
+            &timeline::TimelineWidget::audioUnlinkRequested,
+            [&unlinked_clip_id](timeline::ClipId clip_id) {
+                unlinked_clip_id = clip_id;
+            });
+        QObject::connect(
+            &linked_audio_context_widget,
+            &timeline::TimelineWidget::clipSelected,
+            [&linked_video_selected](timeline::TrackId track_id, timeline::ClipId clip_id) {
+                linked_video_selected = track_id == 719 && clip_id == 921;
+            });
+        const timeline::TimelineGeometry linked_audio_geometry(
+            linked_audio_tracks, QSizeF(linked_audio_context_widget.size()),
+            linked_audio_context_widget.trackRowHeight(),
+            linked_audio_context_widget.zoomFactor(), std::nullopt, 30.0);
+        const QPoint linked_video_context_position(
+            linked_audio_geometry.clipRect(linked_video_clip, 0).center().toPoint());
+        QTimer::singleShot(0, [&linked_audio_context_widget, &linked_audio_menu_found,
+                               &linked_audio_action_found]() {
+            auto* menu = linked_audio_context_widget.findChild<QMenu*>();
+            if (menu == nullptr) return;
+            linked_audio_menu_found = true;
+            for (auto* action : menu->actions()) {
+                if (action->text() == QStringLiteral("Unlink Audio")) {
+                    linked_audio_action_found = true;
+                    action->trigger();
+                    break;
+                }
+            }
+            menu->close();
+        });
+        QContextMenuEvent linked_audio_context_event(
+            QContextMenuEvent::Mouse,
+            linked_video_context_position,
+            linked_audio_context_widget.mapToGlobal(linked_video_context_position),
+            Qt::NoModifier);
+        QApplication::sendEvent(
+            &linked_audio_context_widget, &linked_audio_context_event);
+        require(unlinked_clip_id == 921,
+                "The linked video context menu did not request audio unlink for its stable clip ID (received " +
+                    std::to_string(unlinked_clip_id) + ", selected=" +
+                    std::to_string(linked_video_selected) + ", menu=" +
+                    std::to_string(linked_audio_menu_found) + ", action=" +
+                    std::to_string(linked_audio_action_found) + ").");
+        linked_audio_context_widget.close();
 
         timeline::TimelineWidget read_only_widget;
         read_only_widget.resize(900, 180);

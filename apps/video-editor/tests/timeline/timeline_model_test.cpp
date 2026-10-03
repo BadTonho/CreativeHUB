@@ -111,6 +111,72 @@ void testIndependentAudioTrackEditing(const std::filesystem::path& directory) {
             "A trimmed Audio clip could not extend its right edge within the source bounds.");
 }
 
+void testVideoAudioCompanionTracks(const std::filesystem::path& directory) {
+    media::VideoMetadata video;
+    video.kind = media::MediaKind::Video;
+    video.source_path = directory / "camera-with-audio.mkv";
+    video.display_name = "camera-with-audio.mkv";
+    video.duration_seconds = 4.0;
+    video.frame_rate = 30.0;
+    video.frame_count = 120;
+    video.audio = media::AudioMetadata{"aac", 48000, 2, 2.0};
+
+    timeline::TimelineModel model;
+    require(model.addClip(0, video, 0) == timeline::AddClipResult::Added,
+            "Could not add the first video used by the audio-companion test.");
+    const auto first_video_id = model.tracks()[0].clips.front().clip_id;
+    require(model.addTrack("Video 2") == timeline::AddTrackResult::Added &&
+                model.addClip(0, video, 30) == timeline::AddClipResult::Added,
+            "Could not add the overlapping video on a second Video track.");
+    const auto second_video_id = model.tracks()[0].clips.front().clip_id;
+    require(model.addAudioCompanion(first_video_id, video) ==
+                timeline::AddClipResult::Added,
+            "A video with audio did not create its companion clip.");
+    require(model.trackCount() == 3 &&
+                model.tracks()[2].kind == timeline::TrackKind::Audio &&
+                model.tracks()[2].name == "Audio 1",
+            "A video audio companion did not append an Audio 1 track.");
+    const auto first_video_location = model.locateClip(first_video_id);
+    require(first_video_location.has_value(),
+            "The first video clip was not locatable after adding its companion.");
+    const auto first_audio_id = *model.tracks()[first_video_location->track_index]
+        .clips[first_video_location->clip_index].linked_clip_id;
+    const auto first_audio_location = model.locateClip(first_audio_id);
+    require(first_audio_location.has_value(),
+            "The first video audio companion was not locatable.");
+    const auto& first_audio = model.tracks()[first_audio_location->track_index]
+        .clips[first_audio_location->clip_index];
+    require(first_audio.timeline_start_frame == 0 &&
+                first_audio.timeline_duration_frames == 60 &&
+                first_audio.source_start_time_us == 0 &&
+                first_audio.source_duration_time_us == 2000000 &&
+                !first_audio.frame_rate.has_value(),
+            "A companion did not clamp its visible duration and source range to the audio stream.");
+
+    require(model.addAudioCompanion(second_video_id, video) ==
+                timeline::AddClipResult::Added &&
+                model.trackCount() == 4 &&
+                model.tracks()[3].kind == timeline::TrackKind::Audio &&
+                model.tracks()[3].name == "Audio 2",
+            "An overlapping companion was not placed on a separate Audio track.");
+
+    require(model.unlinkAudio(first_video_id),
+            "A video audio companion could not be unlinked.");
+    const auto independent_audio_location = model.locateClip(first_audio_id);
+    const auto unlinked_video_location = model.locateClip(first_video_id);
+    require(independent_audio_location.has_value() &&
+                unlinked_video_location.has_value() &&
+                !model.tracks()[unlinked_video_location->track_index]
+                     .clips[unlinked_video_location->clip_index]
+                     .linked_clip_id.has_value() &&
+                model.tracks()[unlinked_video_location->track_index]
+                    .clips[unlinked_video_location->clip_index].audio_extracted &&
+                !model.tracks()[independent_audio_location->track_index]
+                     .clips[independent_audio_location->clip_index]
+                     .linked_clip_id.has_value(),
+            "Unlinking a video companion did not preserve its independent audio clip.");
+}
+
 void validatePendingMediaTimingReconnect(const std::filesystem::path& directory) {
     const auto offline_path = directory / "reconnected.mkv";
     timeline::TimelineModel model;
@@ -131,6 +197,8 @@ void validatePendingMediaTimingReconnect(const std::filesystem::path& directory)
     pending.kind = timeline::ClipKind::Video;
     pending.source_duration_frames = 24;
     pending.source_duration_migration_pending = true;
+    pending.audio_companion_pending = true;
+    pending.audio_extracted = true;
     auto following = pending;
     following.timeline_start_frame = 24;
     following.timeline_duration_frames = 30;
@@ -140,6 +208,8 @@ void validatePendingMediaTimingReconnect(const std::filesystem::path& directory)
     following.clip_id = 2;
     following.source_duration_frames = 30;
     following.source_duration_migration_pending = false;
+    following.audio_companion_pending = false;
+    following.audio_extracted = false;
     auto last = following;
     last.timeline_start_frame = 54;
     last.timeline_duration_frames = 15;
@@ -159,10 +229,12 @@ void validatePendingMediaTimingReconnect(const std::filesystem::path& directory)
     metadata.duration_seconds = 1.0;
     metadata.frame_rate = 60.0;
     metadata.frame_count = 60;
+    metadata.audio = media::AudioMetadata{"aac", 48000, 2, 1.0};
     require(model.migratePendingMediaTiming(offline_path, metadata) ==
                 timeline::PendingMediaTimingMigrationResult::Migrated,
             "Reconnecting media did not migrate its pending Timeline duration.");
     const auto& migrated_track = model.tracks().front();
+    const auto migrated_video_id = migrated_track.clips[0].clip_id;
     require(migrated_track.clips[0].timeline_duration_frames == 12 &&
                 !migrated_track.clips[0].source_duration_migration_pending &&
                 migrated_track.clips[0].source_duration_frames == 24 &&
@@ -170,7 +242,13 @@ void validatePendingMediaTimingReconnect(const std::filesystem::path& directory)
                 migrated_track.clips[1].timeline_start_frame == 0 &&
                 migrated_track.clips[2].timeline_start_frame == 30 &&
                 migrated_track.transitions.size() == 1 &&
-                migrated_track.transitions.front().duration_frames == 12,
+                migrated_track.transitions.front().duration_frames == 12 &&
+                migrated_track.clips[0].linked_clip_id.has_value() &&
+                migrated_track.clips[0].audio_extracted &&
+                model.trackCount() == 2 &&
+                model.tracks()[1].kind == timeline::TrackKind::Audio &&
+                model.tracks()[1].clips.front().linked_clip_id ==
+                    migrated_video_id,
             "Reconnect migration did not preserve the Cross Dissolve overlap and following clips.");
     const auto migrated_snapshot = model.snapshot();
     require(model.migratePendingMediaTiming(offline_path, metadata) ==
@@ -387,6 +465,7 @@ int main() {
     try {
         std::filesystem::create_directories(directory / "media");
         testIndependentAudioTrackEditing(directory);
+        testVideoAudioCompanionTracks(directory);
         const auto first_source = directory / "media" / "first.mkv";
         const auto second_source = directory / "media" / "second.mkv";
         std::ofstream(first_source, std::ios::binary).close();

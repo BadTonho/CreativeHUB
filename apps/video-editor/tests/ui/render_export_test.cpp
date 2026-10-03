@@ -769,6 +769,40 @@ void validateEmbeddedAudioMixing(
     require(audible_rms > 0.025 && audible_rms < 0.05,
             "Embedded video audio was not mixed with the configured track and clip gains.");
 
+    auto linked_job = makeImageJob(
+        output, source, root / ("linked-video-audio." + extension), 407, 24);
+    linked_job.project_snapshot.timeline_frame_rate = {24, 1};
+    auto& linked_video_track = linked_job.project_snapshot.timeline_tracks.front();
+    linked_video_track.audio_gain = 0.5;
+    auto& linked_video_clip = linked_video_track.clips.front();
+    linked_video_clip.kind = timeline::ClipKind::Video;
+    linked_video_clip.source_start_frame = 30;
+    linked_video_clip.source_duration_frames = 30;
+    linked_video_clip.audio_gain = 0.5;
+    linked_video_clip.linked_clip_id = 2;
+    linked_video_clip.audio_extracted = true;
+    project::ProjectTrack linked_audio_track;
+    linked_audio_track.track_id = 2;
+    linked_audio_track.name = "Audio 1";
+    linked_audio_track.kind = timeline::TrackKind::Audio;
+    linked_audio_track.audio_gain = 0.5;
+    project::ProjectClip linked_audio_clip;
+    linked_audio_clip.clip_id = 2;
+    linked_audio_clip.source_path = source;
+    linked_audio_clip.kind = timeline::ClipKind::Audio;
+    linked_audio_clip.duration_frames = 24;
+    linked_audio_clip.source_start_time_us = 1000000;
+    linked_audio_clip.source_duration_time_us = 1000000;
+    linked_audio_clip.audio_gain = 0.5;
+    linked_audio_clip.linked_clip_id = linked_video_clip.clip_id;
+    linked_audio_track.clips.push_back(linked_audio_clip);
+    linked_job.project_snapshot.timeline_tracks.push_back(linked_audio_track);
+    renderJob(linked_job, canceled);
+    const auto linked_rms = decodedAudioRms(
+        pathFromQString(linked_job.settings.output_path));
+    require(std::abs(linked_rms - audible_rms) < 0.001,
+            "A linked video Audio companion was omitted or mixed a second copy of the embedded stream.");
+
     auto dissolve_job = makeImageJob(
         output, source, root / ("audio-dissolve." + extension), 403, 24);
     dissolve_job.project_snapshot.timeline_frame_rate = {24, 1};

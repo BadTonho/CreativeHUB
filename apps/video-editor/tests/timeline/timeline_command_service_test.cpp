@@ -99,6 +99,17 @@ void addAudioMedia(application::EditorSession& session,
     require(result.changed(), "Could not add test audio media to the editor session.");
 }
 
+void addVideoWithAudioMedia(
+    application::EditorSession& session,
+    const std::filesystem::path& path) {
+    application::MediaController controller(session);
+    auto metadata = makeMetadata(path);
+    metadata.audio = media::AudioMetadata{"aac", 48000, 2, 4.0};
+    const auto result = controller.commitImported({
+        metadata, {}, metadata.display_name, "Unsorted", false});
+    require(result.changed(), "Could not add test video-with-audio media.");
+}
+
 void run() {
     application::EditorSession session;
     application::TimelineCommandService service(session);
@@ -592,6 +603,108 @@ void runAutomaticAudioTrackCommand() {
             "Undo and Redo did not treat automatic Audio track creation as one edit.");
 }
 
+void runLinkedVideoAudioCommands() {
+    application::EditorSession session;
+    application::TimelineCommandService service(session);
+    const auto video_track_id = session.timeline().tracks().front().track_id;
+    const auto source_path = std::filesystem::temp_directory_path() /
+        "service-linked-video-audio.mkv";
+    addVideoWithAudioMedia(session, source_path);
+
+    const auto added = service.execute(application::AddMediaClipCommand{
+        source_path, video_track_id, 0});
+    require(added.changed() && added.affected_clip_ids.size() == 2 &&
+                session.timeline().trackCount() == 2 &&
+                session.timeline().tracks()[1].kind == timeline::TrackKind::Audio,
+            "Adding a video with audio did not create its Audio companion track.");
+    const auto video_id = added.affected_clip_ids[0];
+    const auto audio_id = added.affected_clip_ids[1];
+    auto video_location = session.timeline().locateClip(video_id);
+    auto audio_location = session.timeline().locateClip(audio_id);
+    require(video_location.has_value() && audio_location.has_value(),
+            "The generated video/audio pair could not be located.");
+    const auto& video = session.timeline().tracks()[video_location->track_index]
+        .clips[video_location->clip_index];
+    const auto& audio = session.timeline().tracks()[audio_location->track_index]
+        .clips[audio_location->clip_index];
+    require(video.linked_clip_id == audio_id && audio.linked_clip_id == video_id &&
+                video.audio_extracted && audio.kind == timeline::ClipKind::Audio &&
+                audio.timeline_start_frame == video.timeline_start_frame &&
+                audio.source_start_time_us == 0 &&
+                audio.source_duration_time_us == 4000000 &&
+                !audio.frame_rate.has_value(),
+            "The generated audio companion did not preserve its link and source timing.");
+
+    require(service.execute(application::MoveClipCommand{
+                video_id, video_track_id, 30}).changed(),
+            "A linked video clip could not be moved.");
+    video_location = session.timeline().locateClip(video_id);
+    audio_location = session.timeline().locateClip(audio_id);
+    require(session.timeline().tracks()[video_location->track_index]
+                    .clips[video_location->clip_index].timeline_start_frame == 30 &&
+                session.timeline().tracks()[audio_location->track_index]
+                    .clips[audio_location->clip_index].timeline_start_frame == 30,
+            "Moving a linked video did not move its audio companion.");
+
+    const auto split = service.execute(application::SplitClipCommand{video_id, 30});
+    require(split.changed() && split.affected_clip_ids.size() == 4,
+            "Splitting a linked video did not split both synchronized clips.");
+    video_location = session.timeline().locateClip(video_id);
+    audio_location = session.timeline().locateClip(audio_id);
+    const auto right_video_id = split.selection.active_clip_id.value();
+    const auto& left_video = session.timeline().tracks()[video_location->track_index]
+        .clips[video_location->clip_index];
+    const auto& left_audio = session.timeline().tracks()[audio_location->track_index]
+        .clips[audio_location->clip_index];
+    const auto right_video_location = session.timeline().locateClip(right_video_id);
+    require(right_video_location.has_value(), "The right video segment was not created.");
+    const auto right_audio_id = *session.timeline().tracks()[right_video_location->track_index]
+        .clips[right_video_location->clip_index].linked_clip_id;
+    const auto right_audio_location = session.timeline().locateClip(right_audio_id);
+    require(right_audio_location.has_value() &&
+                left_video.linked_clip_id == audio_id &&
+                left_audio.linked_clip_id == video_id &&
+                session.timeline().tracks()[right_audio_location->track_index]
+                    .clips[right_audio_location->clip_index].linked_clip_id == right_video_id,
+            "The two split pairs do not retain reciprocal links.");
+    require(service.undo().changed() && session.timeline().clipCount() == 2 &&
+                service.redo().changed() && session.timeline().clipCount() == 4,
+            "Undo/Redo did not restore both halves of a linked split.");
+
+    const auto audio_edit = service.execute(application::SetClipAudioCommand{
+        right_video_id, 0.4, true});
+    const auto refreshed_audio = session.timeline().locateClip(right_audio_id);
+    require(audio_edit.changed() && refreshed_audio.has_value() &&
+                session.timeline().tracks()[refreshed_audio->track_index]
+                    .clips[refreshed_audio->clip_index].audio_gain == 0.4 &&
+                session.timeline().tracks()[refreshed_audio->track_index]
+                    .clips[refreshed_audio->clip_index].audio_muted,
+            "Clip audio gain and mute were not shared across a linked pair.");
+
+    require(service.execute(application::UnlinkAudioCommand{right_video_id}).changed(),
+            "The linked pair could not be unlinked.");
+    const auto unlinked_video_location = session.timeline().locateClip(right_video_id);
+    const auto unlinked_audio_location = session.timeline().locateClip(right_audio_id);
+    require(!session.timeline().tracks()[unlinked_video_location->track_index]
+                 .clips[unlinked_video_location->clip_index].linked_clip_id.has_value() &&
+                !session.timeline().tracks()[unlinked_audio_location->track_index]
+                     .clips[unlinked_audio_location->clip_index].linked_clip_id.has_value(),
+            "Unlinking did not clear both sides of the relationship.");
+    require(service.execute(application::MoveClipCommand{
+                right_audio_id,
+                session.timeline().tracks()[unlinked_audio_location->track_index].track_id,
+                300}).changed() &&
+                session.timeline().tracks()[session.timeline().locateClip(right_video_id)->track_index]
+                    .clips[session.timeline().locateClip(right_video_id)->clip_index]
+                    .timeline_start_frame == 60,
+            "An unlinked Audio clip could not move independently.");
+
+    require(service.execute(application::DeleteClipCommand{video_id}).changed() &&
+                !session.timeline().locateClip(video_id).has_value() &&
+                !session.timeline().locateClip(audio_id).has_value(),
+            "Deleting one linked clip did not remove the paired clips together.");
+}
+
 } // namespace
 
 int main() {
@@ -600,6 +713,7 @@ int main() {
         runInspectorAndTrackCommands();
         runReconnectTimingCommand();
         runAutomaticAudioTrackCommand();
+        runLinkedVideoAudioCommands();
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

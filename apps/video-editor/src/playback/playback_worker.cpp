@@ -771,7 +771,8 @@ void PlaybackWorker::setComposition(
                 prepared.track_audio_muted,
                 prepared.clip_audio_muted,
                 prepared.source_start_time_us,
-                prepared.source_duration_time_us});
+                prepared.source_duration_time_us,
+                prepared.audio_extracted});
         }
 
         composition_audio_mix_transitions_.reserve(
@@ -1751,7 +1752,8 @@ void PlaybackWorker::configureCompositionAudio() {
         composition_audio_mix_clips_.end(),
         [](const media::TimelineAudioMixClip& clip) {
             return (clip.kind == timeline::ClipKind::Video ||
-                    clip.kind == timeline::ClipKind::Audio) && clip.has_audio;
+                    clip.kind == timeline::ClipKind::Audio) && clip.has_audio &&
+                !(clip.kind == timeline::ClipKind::Video && clip.audio_extracted);
         });
     if (!has_timeline_audio) return;
 

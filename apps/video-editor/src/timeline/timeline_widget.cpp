@@ -1562,6 +1562,23 @@ void TimelineWidget::showImageClipMenu(
     menu.exec(global_position);
 }
 
+void TimelineWidget::showAudioLinkMenu(
+    const ClipLocation& location,
+    const QPoint& global_position) {
+    if (location.track_index >= tracks_.size() ||
+        location.clip_index >= tracks_[location.track_index].clips.size()) return;
+    const auto& clip = tracks_[location.track_index].clips[location.clip_index];
+    if (!clip.linked_clip_id.has_value()) return;
+    const auto clip_id = clip.clip_id;
+    emitSelected(location);
+    QMenu menu(this);
+    auto* unlink = menu.addAction(QStringLiteral("Unlink Audio"));
+    connect(unlink, &QAction::triggered, this, [this, clip_id]() {
+        emit audioUnlinkRequested(clip_id);
+    });
+    menu.exec(global_position);
+}
+
 void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
     if (read_only_) {
         event->ignore();
@@ -1579,6 +1596,11 @@ void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
         const auto location = clipAt(event->pos().x(), event->pos().y());
         if (location.has_value()) {
             const auto& clip = tracks_[location->track_index].clips[location->clip_index];
+            if (clip.linked_clip_id.has_value()) {
+                showAudioLinkMenu(*location, event->globalPos());
+                event->accept();
+                return;
+            }
             if (clip.kind == ClipKind::Image) {
                 showImageClipMenu(*location, event->globalPos());
                 event->accept();
@@ -1614,11 +1636,16 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
             const auto location = clipAt(
                 event->position().x(), event->position().y());
             if (location.has_value() &&
-                tracks_[location->track_index].clips[location->clip_index].kind ==
-                    ClipKind::Image) {
+                tracks_[location->track_index].clips[location->clip_index]
+                    .linked_clip_id.has_value()) {
                 suppress_next_context_menu_ = true;
-                showImageClipMenu(
-                    *location, event->globalPosition().toPoint());
+                showAudioLinkMenu(*location, event->globalPosition().toPoint());
+                event->accept();
+            } else if (location.has_value() &&
+                       tracks_[location->track_index].clips[location->clip_index].kind ==
+                           ClipKind::Image) {
+                suppress_next_context_menu_ = true;
+                showImageClipMenu(*location, event->globalPosition().toPoint());
                 event->accept();
             } else {
                 event->ignore();
