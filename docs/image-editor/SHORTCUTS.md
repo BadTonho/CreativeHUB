@@ -13,6 +13,9 @@ duplicate combinations are rejected. Use **Reset All** to restore the defaults.
 | Open image | `Ctrl+O` on Windows/Linux; `Cmd+O` on macOS |
 | Save editable document | `Ctrl+S` on Windows/Linux; `Cmd+S` on macOS |
 | Save editable document as | `Ctrl+Shift+S` on Windows/Linux; `Cmd+Shift+S` on macOS |
+| Close document tab | Qt standard Close sequence |
+| Next document tab | Qt standard Next Child sequence |
+| Previous document tab | Qt standard Previous Child sequence |
 | Quit | Qt standard Quit sequence |
 | Undo | `Ctrl+Z` on Windows/Linux; `Cmd+Z` on macOS |
 | Redo | Qt standard Redo sequence (`Ctrl+Y` on Windows/Linux; `Cmd+Shift+Z` on macOS) |

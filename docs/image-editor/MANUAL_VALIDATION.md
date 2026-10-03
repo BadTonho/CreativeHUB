@@ -48,6 +48,38 @@ checks remain manual; record the build, OS, and result.
 
 ## Standalone editing and recovery
 
+### Multiple document tabs
+
+Repeat these interaction checks on Windows, macOS, and Linux, recording the OS,
+Qt version, build, and result. The current automated UI test covers these
+workflows offscreen on Windows; native visual and other-platform validation is
+still pending.
+
+1. Launch into the empty workspace. Use **+** to create a canvas in a new tab,
+   then use **File > New Canvas** and confirm it replaces only the active tab.
+   Use **+ > Open Image in New Tab** and **File > Open Image** to open two
+   different images. Confirm normal Open replaces the selected tab and the
+   other document remains available.
+2. Edit both documents independently. Switch tabs and verify each canvas
+   content, active layer, multi-selection in Layers, canvas object selection,
+   undo/redo history, zoom, pan, and unsaved-change marker returns with that
+   document. Import an image as a layer and confirm it affects only the active
+   tab. Open the same `.cimg` twice from **+** and confirm the existing tab is
+   selected rather than duplicated.
+3. Modify a tab and try replacing it and closing it. Exercise **Save**,
+   **Discard**, and **Cancel**; confirm cancellation preserves the active
+   document and discard affects only that tab. Cause a save failure, such as by
+   temporarily moving its parent directory after opening a `.cimg`, and confirm
+   the dirty tab remains open. Close the final tab and confirm the window stays
+   open with the **+** control available.
+4. Make edits in two tabs and wait for autosave. Restart the application and
+   restore each snapshot in a separate tab. Confirm each recovered document
+   retains its own content and remains marked unsaved. Discard one snapshot and
+   restore the other to check the choices are independent.
+5. Launch the Image Editor from a linked Video Editor image. Confirm **+** and
+   tab closing are unavailable, save an edit, and verify the published PNG is
+   refreshed in the Video Editor while the source remains unchanged.
+
 1. Configure and build `creative-suite-image-editor` in Release mode, then
    launch it from the build output. Open **Help > System** and confirm the
    version reads **Beta 0.1.3** and the executable path is shown. Confirm the

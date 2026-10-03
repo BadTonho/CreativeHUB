@@ -32,8 +32,10 @@ bool testRasterImagesUi(const QString& root) {
     ImageEditorWindow window; window.resize(1100,800); window.show();
     auto* import=window.findChild<QAction*>("importImageAsLayerAction");
     auto* canvas=window.findChild<ImageCanvas*>();
-    if (!check(import && !import->isEnabled(),"Import enabled without document.")) return false;
+    if (!check(import && !import->isEnabled() && canvas==nullptr,"Empty workspace exposed document controls.")) return false;
     if (!window.openLinkedImage(background,doc,output)) return false;
+    canvas=window.findChild<ImageCanvas*>();
+    if (!canvas) return false;
     QCoreApplication::processEvents();
     if (!check(import->isEnabled(),"Import disabled with document.")) return false;
     // Exercise the actual file dialog command.

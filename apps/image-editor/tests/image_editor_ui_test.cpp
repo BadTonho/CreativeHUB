@@ -15,6 +15,7 @@
 #include <QDockWidget>
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QFontComboBox>
 #include <QFontDatabase>
@@ -37,6 +38,8 @@
 #include <QScrollBar>
 #include <QScreen>
 #include <QSettings>
+#include <QStackedWidget>
+#include <QTabBar>
 #include <QTableWidget>
 #include <QTreeWidget>
 #include <QSlider>
@@ -1255,6 +1258,521 @@ bool testLayerMasksUi(const QString& directory);
 bool testRasterImagesUi(const QString& directory);
 bool testDeletionUi(const QString& directory);
 
+bool testDocumentTabs(const QString& directory) {
+    const QString first_path = directory + QStringLiteral("/tabs-first.png");
+    const QString second_path = directory + QStringLiteral("/tabs-second.png");
+    const QString replacement_path = directory + QStringLiteral("/tabs-replacement.png");
+    QImage first_image(72, 54, QImage::Format_ARGB32);
+    first_image.fill(QColor(210, 40, 35));
+    QImage second_image(180, 120, QImage::Format_ARGB32);
+    second_image.fill(QColor(30, 150, 220));
+    QImage replacement_image(96, 80, QImage::Format_ARGB32);
+    replacement_image.fill(QColor(40, 190, 90));
+    if (!first_image.save(first_path) || !second_image.save(second_path) ||
+        !replacement_image.save(replacement_path)) return false;
+
+    image_editor::ImageEditorWindow window;
+    window.resize(1100, 760);
+    window.show();
+    if (!window.openImagePath(first_path)) return false;
+    QCoreApplication::processEvents();
+
+    auto* tabs = window.findChild<QTabBar*>(QStringLiteral("imageDocumentTabBar"));
+    auto* stack = window.findChild<QStackedWidget*>(QStringLiteral("imageDocumentStack"));
+    auto* new_tab_button = window.findChild<QToolButton*>(QStringLiteral("newDocumentTabButton"));
+    auto* add_layer = window.findChild<QToolButton*>(QStringLiteral("addImageLayerButton"));
+    auto* layer_tree = window.findChild<QTreeWidget*>(QStringLiteral("imageLayerTree"));
+    auto* undo = window.findChild<QAction*>(QStringLiteral("undoAction"));
+    auto* redo = window.findChild<QAction*>(QStringLiteral("redoAction"));
+    auto* close_tab = window.findChild<QAction*>(QStringLiteral("closeDocumentTabAction"));
+    auto* next_tab = window.findChild<QAction*>(QStringLiteral("nextDocumentTabAction"));
+    auto* previous_tab = window.findChild<QAction*>(QStringLiteral("previousDocumentTabAction"));
+    auto* select_tool = window.findChild<QAction*>(QStringLiteral("selectShapesToolAction"));
+    auto* delete_objects = window.findChild<QAction*>(
+        QStringLiteral("deleteSelectedObjectsAction"));
+    auto* new_tab_open_image = window.findChild<QAction*>(
+        QStringLiteral("newTabOpenImageAction"));
+    auto* new_tab_open_document = window.findChild<QAction*>(
+        QStringLiteral("newTabOpenEditableDocumentAction"));
+    if (tabs == nullptr || stack == nullptr || new_tab_button == nullptr ||
+        add_layer == nullptr || layer_tree == nullptr || undo == nullptr || redo == nullptr ||
+        close_tab == nullptr || next_tab == nullptr || previous_tab == nullptr ||
+        select_tool == nullptr || delete_objects == nullptr ||
+        new_tab_open_image == nullptr || new_tab_open_document == nullptr ||
+        close_tab->property("defaultShortcut").toString() !=
+            QKeySequence(QKeySequence::Close).toString(QKeySequence::PortableText) ||
+        next_tab->property("defaultShortcut").toString() !=
+            QKeySequence(QKeySequence::NextChild).toString(QKeySequence::PortableText) ||
+        previous_tab->property("defaultShortcut").toString() !=
+            QKeySequence(QKeySequence::PreviousChild).toString(QKeySequence::PortableText) ||
+        tabs->count() != 1 || !new_tab_button->isEnabled()) return false;
+
+    const auto chooseFileAndTrigger = [&window](QAction* action, const QString& path) {
+        bool selected = false;
+        QTimer chooser;
+        chooser.setInterval(10);
+        QObject::connect(&chooser, &QTimer::timeout, &window, [&selected, &path, &chooser]() {
+            for (QWidget* widget : QApplication::topLevelWidgets()) {
+                auto* dialog = qobject_cast<QFileDialog*>(widget);
+                if (dialog == nullptr || !dialog->isVisible()) continue;
+                selected = true;
+                chooser.stop();
+                dialog->selectFile(path);
+                QMetaObject::invokeMethod(dialog, "accept", Qt::QueuedConnection);
+                return;
+            }
+        });
+        chooser.start();
+        action->trigger();
+        chooser.stop();
+        return selected;
+    };
+
+    auto* first_canvas = stack->currentWidget()->findChild<image_editor::ImageCanvas*>();
+    if (first_canvas == nullptr) return false;
+    first_canvas->fitToWindow();
+    const double first_zoom = first_canvas->zoomFactor();
+    add_layer->click();
+    if (layerRowCount(layer_tree) != 3 || !undo->isEnabled() ||
+        !tabs->tabText(0).startsWith('*')) {
+        std::cerr << "Editing the first tab did not update its layers, history, and dirty marker.\n";
+        return false;
+    }
+    const auto first_layer_items = layer_tree->findItems(
+        QStringLiteral("Layer 1"), Qt::MatchExactly, 0);
+    if (first_layer_items.size() != 1) return false;
+    first_layer_items.front()->setSelected(true);
+    if (layer_tree->selectedItems().size() != 2) {
+        std::cerr << "The first tab could not hold its multi-layer selection.\n";
+        return false;
+    }
+
+    if (!chooseFileAndTrigger(new_tab_open_image, second_path) ||
+        tabs->count() != 2 || tabs->currentIndex() != 1) {
+        std::cerr << "Opening an image in a new tab did not preserve the existing tab.\n";
+        return false;
+    }
+    auto* second_canvas = stack->currentWidget()->findChild<image_editor::ImageCanvas*>();
+    if (second_canvas == nullptr || second_canvas == first_canvas ||
+        layerRowCount(layer_tree) != 2 || undo->isEnabled() ||
+        layer_tree->selectedItems().size() != 1 ||
+        layer_tree->currentItem() == nullptr ||
+        layer_tree->currentItem()->text(0) != QStringLiteral("Layer 1")) {
+        std::cerr << "The second tab did not receive an independent canvas and history.\n";
+        return false;
+    }
+    const double second_zoom = second_canvas->zoomFactor();
+    next_tab->trigger();
+    QCoreApplication::processEvents();
+    if (stack->currentWidget()->findChild<image_editor::ImageCanvas*>() != first_canvas ||
+        layerRowCount(layer_tree) != 3 || first_canvas->zoomFactor() != first_zoom ||
+        layer_tree->selectedItems().size() != 2 ||
+        layer_tree->currentItem() == nullptr ||
+        layer_tree->currentItem()->text(0) != QStringLiteral("Layer 2")) {
+        std::cerr << "Switching back did not restore the first tab's view and layer state.\n";
+        return false;
+    }
+    undo->trigger();
+    if (layerRowCount(layer_tree) != 2 || !redo->isEnabled()) return false;
+    previous_tab->trigger();
+    QCoreApplication::processEvents();
+    if (tabs->currentIndex() != 1) {
+        std::cerr << "The previous-tab shortcut action did not activate the adjacent tab.\n";
+        return false;
+    }
+    tabs->setCurrentIndex(1);
+    QCoreApplication::processEvents();
+    if (layerRowCount(layer_tree) != 2 || undo->isEnabled() ||
+        layer_tree->selectedItems().size() != 1 ||
+        second_canvas->zoomFactor() != second_zoom) {
+        std::cerr << "Undo history or zoom leaked between document tabs.\n";
+        return false;
+    }
+
+    if (!window.openImagePath(replacement_path) || tabs->count() != 2 ||
+        tabs->currentIndex() != 1 || layerRowCount(layer_tree) != 2 ||
+        !tabs->tabText(1).contains(QStringLiteral("tabs-replacement.png"))) {
+        std::cerr << "The normal Open command did not replace only the current tab.\n";
+        return false;
+    }
+    if (!window.importImagePaths({first_path}) || tabs->count() != 2 ||
+        layerRowCount(layer_tree) != 3 || layer_tree->currentItem() == nullptr ||
+        layer_tree->currentItem()->text(0) != QStringLiteral("tabs-first.png")) {
+        std::cerr << "Import as Layer did not stay in the active document tab.\n";
+        return false;
+    }
+    tabs->setCurrentIndex(0);
+    QCoreApplication::processEvents();
+    if (layer_tree->currentItem() == nullptr ||
+        layer_tree->currentItem()->text(0) != QStringLiteral("Layer 1")) {
+        std::cerr << "The active layer leaked into another document tab.\n";
+        return false;
+    }
+    tabs->setCurrentIndex(1);
+    QCoreApplication::processEvents();
+    if (layer_tree->currentItem() == nullptr ||
+        layer_tree->currentItem()->text(0) != QStringLiteral("tabs-first.png")) {
+        std::cerr << "Switching tabs did not restore the active layer selection.\n";
+        return false;
+    }
+    QTimer::singleShot(0, []() {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        if (prompt == nullptr) return;
+        for (auto* button : prompt->buttons())
+            if (button->text().contains(QStringLiteral("Cancel"), Qt::CaseInsensitive)) {
+                button->click();
+                return;
+            }
+    });
+    if (window.openImagePath(second_path) || tabs->count() != 2 ||
+        tabs->currentIndex() != 1 || layerRowCount(layer_tree) != 3 ||
+        !tabs->tabText(1).startsWith(QLatin1Char('*'))) {
+        std::cerr << "Cancelling replacement of a dirty tab changed its document.\n";
+        return false;
+    }
+    QTimer::singleShot(0, []() {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        if (prompt == nullptr) return;
+        for (auto* button : prompt->buttons())
+            if (button->text().contains(QStringLiteral("Discard"), Qt::CaseInsensitive)) {
+                button->click();
+                return;
+            }
+    });
+    const bool replaced_with_second_image = window.openImagePath(second_path);
+    auto* replacement_canvas = stack->currentWidget()->findChild<image_editor::ImageCanvas*>();
+    if (!replaced_with_second_image || tabs->count() != 2 ||
+        tabs->currentIndex() != 1 || layerRowCount(layer_tree) != 2 ||
+        !tabs->tabText(1).contains(QStringLiteral("tabs-second.png")) ||
+        replacement_canvas == nullptr) {
+        std::cerr << "Discarding a dirty tab did not allow the requested replacement.\n";
+        return false;
+    }
+    select_tool->trigger();
+    const bool replacement_kept_a_stale_object_selection = delete_objects->isEnabled();
+    select_tool->trigger();
+    if (replacement_kept_a_stale_object_selection) {
+        std::cerr << "Replacing a document retained its previous object selection.\n";
+        return false;
+    }
+
+    const QString editable_path = directory + QStringLiteral("/tabs-editable.cimg");
+    image_editor::ImageDocumentSession document;
+    QString error;
+    if (!document.openImage(replacement_path, &error) ||
+        !document.saveDocument(editable_path, &error)) return false;
+    if (!window.openDocumentPath(editable_path) || tabs->count() != 2 ||
+        tabs->currentIndex() != 1 || layerRowCount(layer_tree) != 2 ||
+        !tabs->tabText(1).contains(QStringLiteral("tabs-editable.cimg"))) {
+        std::cerr << "The normal Open command did not replace the active tab with a .cimg.\n";
+        return false;
+    }
+    const QString second_editable_path = directory + QStringLiteral("/tabs-first-editable.cimg");
+    image_editor::ImageDocumentSession second_document;
+    if (!second_document.openImage(first_path, &error) ||
+        !second_document.saveDocument(second_editable_path, &error)) return false;
+    if (!chooseFileAndTrigger(new_tab_open_document, second_editable_path) ||
+        tabs->count() != 3 ||
+        tabs->currentIndex() != 2 ||
+        !chooseFileAndTrigger(new_tab_open_document, second_editable_path) ||
+        tabs->count() != 3 || tabs->currentIndex() != 2) {
+        std::cerr << "Reopening an already open .cimg created a duplicate tab.\n";
+        return false;
+    }
+
+    tabs->setCurrentIndex(2);
+    QCoreApplication::processEvents();
+    add_layer->click();
+    const auto request_close = [tabs]() {
+        return QMetaObject::invokeMethod(
+            tabs, "tabCloseRequested", Qt::DirectConnection, Q_ARG(int, tabs->currentIndex()));
+    };
+    QTimer::singleShot(0, []() {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        if (prompt == nullptr) return;
+        for (auto* button : prompt->buttons())
+            if (button->text().contains(QStringLiteral("Cancel"), Qt::CaseInsensitive)) {
+                button->click();
+                return;
+            }
+    });
+    if (!request_close() || tabs->count() != 3 || tabs->currentIndex() != 2) {
+        std::cerr << "Cancelling a dirty tab close did not keep the tab open.\n";
+        return false;
+    }
+    add_layer->click();
+    bool save_prompt_clicked = false;
+    QString save_prompt_text;
+    QTimer::singleShot(0, [&save_prompt_clicked, &save_prompt_text]() {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        if (prompt == nullptr) return;
+        save_prompt_text = prompt->text();
+        for (auto* button : prompt->buttons())
+            if (button->text().contains(QStringLiteral("Save"), Qt::CaseInsensitive)) {
+                save_prompt_clicked = true;
+                button->click();
+                return;
+            }
+    });
+    const bool save_close_invoked = request_close();
+    if (!save_close_invoked || tabs->count() != 2 || tabs->currentIndex() != 1) {
+        std::cerr << "Saving a dirty tab before closing did not close only that tab.\n";
+        std::cerr << "tabs=" << tabs->count() << " current=" << tabs->currentIndex()
+                  << " signal=" << save_close_invoked
+                  << " label=" << (tabs->count() > 2 ? tabs->tabText(2).toStdString() : "none")
+                  << " modal=" << (QApplication::activeModalWidget()
+                                          ? QApplication::activeModalWidget()->metaObject()->className()
+                                          : "none") << '\n';
+        std::cerr << "save-prompt-clicked=" << save_prompt_clicked
+                  << " prompt='" << save_prompt_text.toStdString() << "'\n";
+        return false;
+    }
+    image_editor::ImageDocumentSession persisted;
+    if (!persisted.openDocument(second_editable_path, &error) ||
+        persisted.data().layers.size() != 4) {
+        std::cerr << "The Save choice did not persist the tab before closing it.\n";
+        return false;
+    }
+
+    const QString failing_directory = directory + QStringLiteral("/save-failure");
+    if (!QDir().mkpath(failing_directory)) return false;
+    const QString failing_document_path =
+        failing_directory + QStringLiteral("/save-failure.cimg");
+    image_editor::ImageDocumentSession failing_document;
+    if (!failing_document.openImage(replacement_path, &error) ||
+        !failing_document.saveDocument(failing_document_path, &error) ||
+        !chooseFileAndTrigger(new_tab_open_document, failing_document_path) ||
+        tabs->count() != 3 || tabs->currentIndex() != 2) return false;
+    add_layer->click();
+    if (!QDir(directory).rename(QStringLiteral("save-failure"),
+                                QStringLiteral("save-failure-offline"))) return false;
+    QTimer failed_save_dialog_handler;
+    failed_save_dialog_handler.setInterval(10);
+    QObject::connect(&failed_save_dialog_handler, &QTimer::timeout, []() {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        if (prompt == nullptr) return;
+        if (prompt->text().contains(QStringLiteral("Save the changes"))) {
+            for (auto* button : prompt->buttons())
+                if (button->text().contains(QStringLiteral("Save"), Qt::CaseInsensitive)) {
+                    button->click();
+                    return;
+                }
+        } else {
+            prompt->accept();
+            return;
+        }
+    });
+    failed_save_dialog_handler.start();
+    const bool failed_save_close_invoked = request_close();
+    failed_save_dialog_handler.stop();
+    const bool failed_save_kept_tab = failed_save_close_invoked && tabs->count() == 3 &&
+        tabs->currentIndex() == 2 &&
+        tabs->tabText(2).startsWith(QLatin1Char('*'));
+    const bool restored_directory = QDir(directory).rename(
+        QStringLiteral("save-failure-offline"), QStringLiteral("save-failure"));
+    if (!failed_save_kept_tab || !restored_directory) {
+        std::cerr << "A failed save did not leave the dirty document tab open.\n";
+        return false;
+    }
+    QTimer::singleShot(0, []() {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        if (prompt == nullptr) return;
+        for (auto* button : prompt->buttons())
+            if (button->text().contains(QStringLiteral("Discard"), Qt::CaseInsensitive)) {
+                button->click();
+                return;
+            }
+    });
+    if (!request_close() || tabs->count() != 2 || tabs->currentIndex() != 1) {
+        std::cerr << "The failed-save tab could not be discarded after restoring its path.\n";
+        return false;
+    }
+
+    add_layer->click();
+    QTimer::singleShot(0, []() {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        if (prompt == nullptr) return;
+        for (auto* button : prompt->buttons())
+            if (button->text().contains(QStringLiteral("Discard"), Qt::CaseInsensitive)) {
+                button->click();
+                return;
+            }
+    });
+    if (!request_close() || tabs->count() != 1 || tabs->currentIndex() != 0) {
+        std::cerr << "Discarding a dirty tab did not preserve the other tabs.\n";
+        return false;
+    }
+
+    add_layer->click();
+    QTimer::singleShot(0, []() {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        if (prompt == nullptr) return;
+        for (auto* button : prompt->buttons())
+            if (button->text().contains(QStringLiteral("Discard"), Qt::CaseInsensitive)) {
+                button->click();
+                return;
+            }
+    });
+    if (!request_close() || tabs->count() != 0) {
+        std::cerr << "Discarding the final dirty tab did not leave the empty workspace.\n";
+        return false;
+    }
+
+    QCoreApplication::processEvents();
+    bool plus_menu_has_all_options = false;
+    QTimer::singleShot(0, [&plus_menu_has_all_options]() {
+        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        if (menu == nullptr) return;
+        bool canvas = false;
+        bool image = false;
+        bool document = false;
+        for (auto* action : menu->actions()) {
+            canvas = canvas || action->objectName() == QStringLiteral("newTabCanvasAction");
+            image = image || action->objectName() == QStringLiteral("newTabOpenImageAction");
+            document = document || action->objectName() ==
+                QStringLiteral("newTabOpenEditableDocumentAction");
+        }
+        plus_menu_has_all_options = canvas && image && document;
+        menu->close();
+    });
+    new_tab_button->click();
+    if (!plus_menu_has_all_options || !new_tab_button->isEnabled()) {
+        std::cerr << "The explicit new-tab control was not available in the empty workspace.\n";
+        return false;
+    }
+    auto* new_tab_canvas = window.findChild<QAction*>(QStringLiteral("newTabCanvasAction"));
+    auto* new_canvas = window.findChild<QAction*>(QStringLiteral("newCanvasAction"));
+    if (new_tab_canvas == nullptr || new_canvas == nullptr) return false;
+    QTimer new_tab_canvas_acceptor;
+    new_tab_canvas_acceptor.setInterval(10);
+    QObject::connect(&new_tab_canvas_acceptor, &QTimer::timeout, [&window]() {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            auto* dialog = qobject_cast<QDialog*>(widget);
+            if (dialog == nullptr || widget == &window || !dialog->isVisible()) continue;
+            auto* preset = dialog->findChild<QComboBox*>(QStringLiteral("newCanvasPresetCombo"));
+            auto* background = dialog->findChild<QComboBox*>(
+                QStringLiteral("newCanvasBackgroundCombo"));
+            if (preset == nullptr || background == nullptr) continue;
+            preset->setCurrentIndex(4);
+            background->setCurrentIndex(1);
+            dialog->accept();
+            return;
+        }
+    });
+    new_tab_canvas_acceptor.start();
+    new_tab_canvas->trigger();
+    new_tab_canvas_acceptor.stop();
+    if (tabs->count() != 1 || tabs->currentIndex() != 0 ||
+        stack->currentWidget()->findChild<image_editor::ImageCanvas*>() == nullptr) {
+        std::cerr << "New Canvas from the plus menu did not create the first document tab.\n";
+        return false;
+    }
+    QTimer replacement_dialog_clicker;
+    replacement_dialog_clicker.setInterval(10);
+    QObject::connect(&replacement_dialog_clicker, &QTimer::timeout, []() {
+        if (auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            for (auto* button : prompt->buttons())
+                if (button->text().contains(QStringLiteral("Discard"), Qt::CaseInsensitive)) {
+                    button->click();
+                    return;
+                }
+        }
+        if (auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+            if (auto* preset = dialog->findChild<QComboBox*>(
+                    QStringLiteral("newCanvasPresetCombo"))) preset->setCurrentIndex(4);
+            if (auto* background = dialog->findChild<QComboBox*>(
+                    QStringLiteral("newCanvasBackgroundCombo"))) background->setCurrentIndex(1);
+            dialog->accept();
+        }
+    });
+    replacement_dialog_clicker.start();
+    new_canvas->trigger();
+    replacement_dialog_clicker.stop();
+    if (tabs->count() != 1 || tabs->currentIndex() != 0 ||
+        stack->currentWidget()->findChild<image_editor::ImageCanvas*>() == nullptr) {
+        std::cerr << "The normal New Canvas command did not replace the active tab.\n";
+        return false;
+    }
+    return true;
+}
+
+bool testMultiDocumentRecovery(const QString& directory) {
+    QCoreApplication::setApplicationName(
+        QStringLiteral("Image Editor Multi Tab Recovery Test %1")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+    const QString first_source = directory + QStringLiteral("/recover-first.png");
+    const QString second_source = directory + QStringLiteral("/recover-second.png");
+    QImage first_image(80, 55, QImage::Format_ARGB32);
+    first_image.fill(Qt::red);
+    QImage second_image(130, 90, QImage::Format_ARGB32);
+    second_image.fill(Qt::blue);
+    if (!first_image.save(first_source) || !second_image.save(second_source)) return false;
+
+    const QString recovery_data_directory =
+        directory + QStringLiteral("/multi-tab-recovery-data");
+    image_editor::RecoveryStore recovery(recovery_data_directory);
+    image_editor::ImageDocumentSession first;
+    image_editor::ImageDocumentSession second;
+    QString error;
+    const bool first_opened = first.openImage(first_source, &error);
+    const bool first_layer_added = !first.addLayer().isEmpty();
+    const bool second_opened = second.openImage(second_source, &error);
+    const bool second_layer_added = !second.addLayer().isEmpty();
+    const bool first_saved = recovery.save(first, &error);
+    const bool second_saved = recovery.save(second, &error);
+    const auto saved_snapshots = recovery.snapshots();
+    if (!first_opened || !first_layer_added || !second_opened || !second_layer_added ||
+        !first_saved || !second_saved || saved_snapshots.size() != 2) {
+        std::cerr << "The multiple-tab recovery fixtures could not be prepared.\n";
+        std::cerr << "open=" << first_opened << ',' << second_opened
+                  << " add=" << first_layer_added << ',' << second_layer_added
+                  << " save=" << first_saved << ',' << second_saved
+                  << " snapshots=" << saved_snapshots.size()
+                  << " error='" << error.toStdString() << "'\n";
+        for (const auto& snapshot : saved_snapshots)
+            std::cerr << snapshot.toStdString() << '\n';
+        return false;
+    }
+
+    QTimer recovery_clicker;
+    recovery_clicker.setInterval(10);
+    QObject::connect(&recovery_clicker, &QTimer::timeout, []() {
+        auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        if (prompt == nullptr ||
+            !prompt->text().contains(QStringLiteral("Restore this recovery snapshot"))) return;
+        for (auto* button : prompt->buttons())
+            if (button->text().contains(QStringLiteral("Restore in New Tab"))) {
+                button->click();
+                return;
+            }
+    });
+    recovery_clicker.start();
+    image_editor::ImageEditorWindow window(nullptr, recovery_data_directory);
+    window.show();
+    QTest::qWait(100);
+    recovery_clicker.stop();
+    auto* tabs = window.findChild<QTabBar*>(QStringLiteral("imageDocumentTabBar"));
+    auto* stack = window.findChild<QStackedWidget*>(QStringLiteral("imageDocumentStack"));
+    auto* layer_tree = window.findChild<QTreeWidget*>(QStringLiteral("imageLayerTree"));
+    auto* autosave = window.findChild<QTimer*>(QStringLiteral("imageEditorRecoveryTimer"));
+    if (tabs == nullptr || stack == nullptr || layer_tree == nullptr || autosave == nullptr ||
+        tabs->count() != 2 || layerRowCount(layer_tree) != 3) {
+        std::cerr << "Recovery did not restore each snapshot as an independent tab.\n";
+        return false;
+    }
+
+    for (const QString& snapshot : recovery.snapshots())
+        static_cast<void>(recovery.remove(snapshot));
+    if (!QMetaObject::invokeMethod(autosave, "timeout", Qt::DirectConnection) ||
+        recovery.snapshots().size() != 2) {
+        std::cerr << "Autosave did not write recovery snapshots for every dirty tab.\n";
+        return false;
+    }
+    for (const QString& snapshot : recovery.snapshots())
+        static_cast<void>(recovery.remove(snapshot));
+    return true;
+}
+
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
@@ -1311,11 +1829,15 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    auto* canvas = window.findChild<image_editor::ImageCanvas*>();
-    if (canvas == nullptr || !window.isVisible()) {
-        std::cerr << "The Image Editor window or canvas was not created.\n";
+    auto* empty_workspace_add = window.findChild<QToolButton*>(
+        QStringLiteral("newDocumentTabButton"));
+    if (window.findChild<image_editor::ImageCanvas*>() != nullptr ||
+        empty_workspace_add == nullptr || !empty_workspace_add->isEnabled() ||
+        !window.isVisible()) {
+        std::cerr << "The empty Image Editor workspace did not expose the new-tab control.\n";
         return 1;
     }
+    image_editor::ImageCanvas* canvas = nullptr;
 
     auto* settings_menu = window.findChild<QMenu*>(QStringLiteral("settingsMenu"));
     auto* keyboard_shortcuts_action = window.findChild<QAction*>(
@@ -1557,6 +2079,11 @@ int main(int argc, char* argv[]) {
     QImageWriter writer(source_path, "png");
     if (!writer.write(source) || !window.openImagePath(source_path)) {
         std::cerr << "The window could not load the integration test image.\n";
+        return 1;
+    }
+    canvas = window.findChild<image_editor::ImageCanvas*>();
+    if (canvas == nullptr) {
+        std::cerr << "Opening an image did not create its document canvas.\n";
         return 1;
     }
     if (canvas->zoomFactor() <= 0.0) {
@@ -2845,5 +3372,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     if (!testRenamedShortcutPersistence()) return 1;
+    if (!testDocumentTabs(temporary.path())) {
+        std::cerr << "Document tab workflows failed.\n";
+        return 1;
+    }
+    if (!testMultiDocumentRecovery(temporary.path())) {
+        std::cerr << "Multi-document recovery workflows failed.\n";
+        return 1;
+    }
     return 0;
 }

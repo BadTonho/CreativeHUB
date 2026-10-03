@@ -33,7 +33,8 @@ public:
                      const QHash<QString, QImage>& thumbnails,
                      const QHash<QString, QImage>& mask_thumbnails = {},
                      const QString& selected_mask_id = {},
-                     const QHash<QString, QString>& source_problems = {});
+                     const QHash<QString, QString>& source_problems = {},
+                     const QVector<ImageStackItemData>& selected_stack_items = {});
     void setSelectedMask(const QString& layer_id);
     void setQuickExportEnabled(bool enabled);
     [[nodiscard]] QVector<ImageStackItemData> selectedStackItems() const;

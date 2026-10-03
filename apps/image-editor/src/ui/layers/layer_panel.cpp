@@ -516,7 +516,8 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
                              const QHash<QString, QImage>& thumbnails,
                              const QHash<QString, QImage>& mask_thumbnails,
                              const QString& selected_mask_id,
-                             const QHash<QString, QString>& source_problems) {
+                             const QHash<QString, QString>& source_problems,
+                             const QVector<ImageStackItemData>& selected_stack_items) {
     QSet<QString> expanded;
     for (int index = 0; index < layer_tree_->topLevelItemCount(); ++index) {
         auto* item = layer_tree_->topLevelItem(index);
@@ -593,6 +594,18 @@ void LayerPanel::setDocument(const ImageDocumentData& document,
         if (group->id == selected_group_id) selected = group_item;
     }
     if (selected != nullptr) layer_tree_->setCurrentItem(selected);
+    if (!selected_stack_items.isEmpty()) {
+        layer_tree_->clearSelection();
+        for (const auto& selected_item : selected_stack_items) {
+            for (QTreeWidgetItemIterator item(layer_tree_); *item != nullptr; ++item) {
+                if ((*item)->data(0, kItemIdRole).toString() == selected_item.id &&
+                    (*item)->data(0, kGroupRole).toBool() == selected_item.group) {
+                    (*item)->setSelected(true);
+                    break;
+                }
+            }
+        }
+    }
     refreshing_ = false;
     updateControls();
 }

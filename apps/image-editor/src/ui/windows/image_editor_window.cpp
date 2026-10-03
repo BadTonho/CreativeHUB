@@ -46,6 +46,8 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QStackedWidget>
+#include <QTabBar>
 #include <QThread>
 #include <QTextEdit>
 #include <QToolBar>
@@ -58,8 +60,23 @@
 #include <memory>
 #include <atomic>
 #include <algorithm>
+#include <utility>
 
 namespace image_editor {
+
+struct ImageEditorDocumentTab {
+    ImageDocumentSession session;
+    QWidget* page = nullptr;
+    ImageCanvas* canvas = nullptr;
+    QStringList selected_object_ids;
+    QVector<ImageStackItemData> selected_stack_items;
+    QString selected_mask_layer_id;
+    QHash<QString, QString> logged_raster_problems;
+    QString linked_document_path;
+    QString linked_output_path;
+    QByteArray linked_document_fingerprint;
+};
+
 namespace {
 
 bool editingFieldHasFocus() {
@@ -182,7 +199,9 @@ bool saveJpegExportPreferences(const ImageExportOptions& options,
 
 } // namespace
 
-ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
+ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_directory)
+    : QMainWindow(parent),
+      recovery_store_(std::move(recovery_data_directory)) {
     setWindowTitle(QStringLiteral("Image Editor"));
     resize(1180, 760);
 
@@ -192,8 +211,32 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     layout->setSpacing(0);
     tool_sidebar_ = new ToolSidebar(central);
     layout->addWidget(tool_sidebar_);
-    canvas_ = new ImageCanvas(central);
-    layout->addWidget(canvas_, 1);
+
+    auto* document_workspace = new QWidget(central);
+    auto* document_layout = new QVBoxLayout(document_workspace);
+    document_layout->setContentsMargins(0, 0, 0, 0);
+    document_layout->setSpacing(0);
+    auto* tab_row = new QWidget(document_workspace);
+    auto* tab_row_layout = new QHBoxLayout(tab_row);
+    tab_row_layout->setContentsMargins(0, 0, 4, 0);
+    tab_row_layout->setSpacing(2);
+    document_tab_bar_ = new QTabBar(tab_row);
+    document_tab_bar_->setObjectName(QStringLiteral("imageDocumentTabBar"));
+    document_tab_bar_->setMovable(false);
+    document_tab_bar_->setTabsClosable(true);
+    document_tab_bar_->setExpanding(false);
+    tab_row_layout->addWidget(document_tab_bar_, 1);
+    new_document_tab_button_ = new QToolButton(tab_row);
+    new_document_tab_button_->setObjectName(QStringLiteral("newDocumentTabButton"));
+    new_document_tab_button_->setText(QStringLiteral("+"));
+    new_document_tab_button_->setAccessibleName(QStringLiteral("Open a new document tab"));
+    new_document_tab_button_->setToolTip(QStringLiteral("Open a new document tab"));
+    tab_row_layout->addWidget(new_document_tab_button_);
+    document_layout->addWidget(tab_row);
+    document_stack_ = new QStackedWidget(document_workspace);
+    document_stack_->setObjectName(QStringLiteral("imageDocumentStack"));
+    document_layout->addWidget(document_stack_, 1);
+    layout->addWidget(document_workspace, 1);
     setCentralWidget(central);
 
     status_label_ = new QLabel(QStringLiteral("No image open"), this);
@@ -203,102 +246,36 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     createToolOptionsBar();
     createLayerPanel();
     createActions();
+    connect(document_tab_bar_, &QTabBar::currentChanged, this,
+            [this](int index) { activateDocumentTab(index); });
+    connect(document_tab_bar_, &QTabBar::tabCloseRequested, this,
+            [this](int index) { closeDocumentTab(index); });
+    connect(document_tab_bar_, &QTabBar::tabMoved, this,
+            [this](int from, int to) {
+                if (from < 0 || to < 0 || from >= document_tabs_.size() ||
+                    to >= document_tabs_.size()) return;
+                document_tabs_.move(from, to);
+                if (active_document_tab_ == from) active_document_tab_ = to;
+                else if (from < active_document_tab_ && to >= active_document_tab_) --active_document_tab_;
+                else if (from > active_document_tab_ && to <= active_document_tab_) ++active_document_tab_;
+                updateDocumentTabLabel();
+            });
+    connect(new_document_tab_button_, &QToolButton::clicked,
+            this, [this]() { openNewTabMenu(); });
     connect(qApp, &QApplication::focusChanged, this,
             [this](QWidget*, QWidget*) { updateDeleteActions(); });
     connect(layer_panel_, &LayerPanel::deletionSelectionChanged, this,
-            [this]() { updateDeleteActions(); });
+            [this]() {
+                const auto selected_items = layer_panel_->selectedStackItems();
+                selected_stack_items_ = selected_items.size() > 1
+                    ? selected_items : QVector<ImageStackItemData>{};
+                if (hasActiveDocumentTab())
+                    document_tabs_.at(active_document_tab_)->selected_stack_items =
+                        selected_stack_items_;
+                updateDeleteActions();
+            });
     connect(layer_panel_, &LayerPanel::quickExportRequested, this,
             [this]() { quick_export_action_->trigger(); });
-    connect(canvas_, &ImageCanvas::cropSelected, this,
-            [this](const QRect& crop) { handleCrop(crop); });
-    connect(canvas_, &ImageCanvas::paintStrokeSelected, this,
-            [this](const QVector<QPointF>& points, const QColor& color, int diameter) {
-                handlePaintStroke(points, color, diameter);
-            });
-    connect(canvas_, &ImageCanvas::erasePreviewRequested, this,
-            [this](const QVector<QPointF>& points, int diameter) {
-                canvas_->setTransientImage(
-                    editingMask()
-                        ? session_.renderedImageWithMaskStroke(points, Qt::black, diameter)
-                        : session_.renderedImageWithEraseStroke(points, diameter));
-            });
-    connect(canvas_, &ImageCanvas::maskPaintPreviewRequested, this,
-            [this](const QVector<QPointF>& points, const QColor& color, int diameter) {
-                canvas_->setTransientImage(session_.renderedImageWithMaskStroke(points, color, diameter));
-            });
-    connect(canvas_, &ImageCanvas::erasePreviewCleared, canvas_, [this]() {
-        canvas_->setTransientImage({});
-    });
-    connect(canvas_, &ImageCanvas::eraseStrokeSelected, this,
-            [this](const QVector<QPointF>& points, int diameter) {
-                handleEraseStroke(points, diameter);
-            });
-    connect(canvas_, &ImageCanvas::shapeCreated, this,
-            [this](const ImageShapeData& shape) { handleShapeCreated(shape); });
-    connect(canvas_, &ImageCanvas::textCommitted, this,
-            [this](const ImageTextData& text, bool existing) {
-                handleTextCommitted(text, existing);
-            });
-    connect(canvas_, &ImageCanvas::textEditingStarted, this,
-            [this](const ImageTextData& text, bool existing) {
-                handleTextEditingStarted(text, existing);
-            });
-    connect(canvas_, &ImageCanvas::textEditingCancelled, this, [this]() {
-        canvas_->setTransientImage({});
-    });
-    connect(canvas_, &ImageCanvas::objectsSelected, this,
-            [this](const QStringList& object_ids, const QString& layer_id) {
-                selected_object_ids_ = object_ids;
-                const bool mask_changed = !selected_mask_layer_id_.isEmpty();
-                selected_mask_layer_id_.clear();
-                canvas_->setMaskEditing(false);
-                const bool layer_changed = !layer_id.isEmpty() && session_.selectLayer(layer_id);
-                if (layer_changed) {
-                    selected_mask_layer_id_.clear();
-                    updateLayerPanel();
-                    updateSelectionContext();
-                }
-                for (const auto& placement : session_.visibleObjects()) {
-                    if (!selected_object_ids_.contains(imageObjectId(placement.operation))) continue;
-                    if (placement.operation.kind == OperationKind::Shape) {
-                        shape_style_ = placement.operation.shape;
-                        canvas_->setShapeStyle(shape_style_);
-                        break;
-                    } else if (placement.operation.kind == OperationKind::Text) {
-                        text_style_ = placement.operation.text;
-                        canvas_->setTextStyle(text_style_);
-                        break;
-                    }
-                }
-                if (layer_changed || mask_changed) updateView(true);
-                else {
-                    updateObjectPlacements();
-                    updateShapeOptions();
-                    updateToolOptions();
-                }
-            });
-    connect(canvas_, &ImageCanvas::objectTransformStarted, this,
-            [this](const QStringList& object_ids) {
-                for (const auto& object : session_.visibleObjects())
-                    if (object_ids.contains(imageObjectId(object.operation)) && object.operation.kind == OperationKind::RasterImage) {
-                        canvas_->setTransientImage(session_.renderedImage());
-                        return;
-                    }
-                canvas_->setTransientImage(session_.renderedImageWithoutObjects(object_ids));
-            });
-    connect(canvas_, &ImageCanvas::objectsPreviewRequested, this,
-        [this](const QVector<ImageObjectPlacement>& objects) {
-            canvas_->setTransientImage(session_.renderedImageWithObjects(objects));
-        });
-    connect(canvas_, &ImageCanvas::imagesDropped, this, [this](const QStringList& paths, const QPointF& center) {
-        (void)importImagePaths(paths, center);
-    });
-    connect(canvas_, &ImageCanvas::objectsGeometryChanged, this,
-            [this](const QVector<ImageObjectPlacement>& objects) {
-                handleObjectsGeometryChanged(objects);
-            });
-    connect(canvas_, &ImageCanvas::brushDiameterChanged,
-            brush_size_spin_, &QSpinBox::setValue);
     connect(tool_sidebar_, &ToolSidebar::activeToolChanged,
             this, [this](ToolSidebar::Tool tool) { updateCanvasToolState(tool); });
     connect(tool_sidebar_, &ToolSidebar::shapesPaletteRequested,
@@ -382,6 +359,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             statusBar()->showMessage(QStringLiteral("A layer could not be added"), 3000);
             return;
         }
+        selected_stack_items_.clear();
         static_cast<void>(session_.selectLayer(id));
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Layer added"), 1800);
@@ -393,6 +371,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
             return;
         }
+        selected_stack_items_.clear();
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Group added"), 1800);
     });
@@ -403,6 +382,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
                     if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
                     return;
                 }
+                selected_stack_items_.clear();
                 updateView(true);
                 statusBar()->showMessage(QStringLiteral("Layers grouped"), 1800);
             });
@@ -410,6 +390,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             [this](const QVector<ImageStackItemData>& items) {
                 canvas_->commitTextEditing();
                 if (!session_.deleteStackItems(items)) return;
+                selected_stack_items_.clear();
                 selected_object_ids_.clear();
                 selected_mask_layer_id_.clear();
                 if (!session_.selectedLayerIsEditable() &&
@@ -422,7 +403,9 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
             });
     connect(layer_panel_, &LayerPanel::ungroupRequested, this,
             [this](const QString& id) {
-                if (session_.ungroup(id)) updateView(true);
+                if (!session_.ungroup(id)) return;
+                selected_stack_items_.clear();
+                updateView(true);
             });
     connect(layer_panel_, &LayerPanel::moveStackItemRequested, this,
             [this](const QString& id, bool is_group, const QString& target_group_id,
@@ -445,22 +428,319 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent) : QMainWindow(parent) {
     });
 
     autosave_timer_ = new QTimer(this);
+    autosave_timer_->setObjectName(QStringLiteral("imageEditorRecoveryTimer"));
     autosave_timer_->setInterval(60'000);
     connect(autosave_timer_, &QTimer::timeout, this, [this]() {
-        if (!session_.isDirty() || !session_.hasSource()) return;
-        QString error;
-        if (!recovery_store_.save(session_, &error)) {
-            QString context = session_.sourcePath();
-            if (context.isEmpty()) context = session_.documentPath();
-            if (context.isEmpty()) context = session_.recoverySessionId();
-            logger_.logError(QStringLiteral("autosave"), error, context);
-            statusBar()->showMessage(QStringLiteral("Recovery snapshot could not be saved"), 5000);
+        for (int index = 0; index < document_tabs_.size(); ++index) {
+            const ImageDocumentSession& document = index == active_document_tab_
+                ? session_ : document_tabs_.at(index)->session;
+            if (!document.isDirty() || !document.hasSource()) continue;
+            QString error;
+            if (!recovery_store_.save(document, &error)) {
+                QString context = document.sourcePath();
+                if (context.isEmpty()) context = document.documentPath();
+                if (context.isEmpty()) context = document.recoverySessionId();
+                logger_.logError(QStringLiteral("autosave"), error, context);
+                statusBar()->showMessage(
+                    QStringLiteral("Recovery snapshot could not be saved for %1")
+                        .arg(context), 5000);
+            }
         }
     });
     autosave_timer_->start();
 
     QTimer::singleShot(0, this, [this]() { maybeOfferRecovery(); });
-    updateView();
+    updateView(true);
+}
+
+ImageEditorWindow::~ImageEditorWindow() {
+    for (auto* tab : document_tabs_) delete tab;
+}
+
+void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
+    if (canvas == nullptr) return;
+    connect(canvas, &ImageCanvas::cropSelected, this,
+            [this](const QRect& crop) { handleCrop(crop); });
+    connect(canvas, &ImageCanvas::paintStrokeSelected, this,
+            [this](const QVector<QPointF>& points, const QColor& color, int diameter) {
+                handlePaintStroke(points, color, diameter);
+            });
+    connect(canvas, &ImageCanvas::erasePreviewRequested, this,
+            [this](const QVector<QPointF>& points, int diameter) {
+                if (canvas_ == nullptr) return;
+                canvas_->setTransientImage(
+                    editingMask()
+                        ? session_.renderedImageWithMaskStroke(points, Qt::black, diameter)
+                        : session_.renderedImageWithEraseStroke(points, diameter));
+            });
+    connect(canvas, &ImageCanvas::maskPaintPreviewRequested, this,
+            [this](const QVector<QPointF>& points, const QColor& color, int diameter) {
+                if (canvas_ != nullptr)
+                    canvas_->setTransientImage(
+                        session_.renderedImageWithMaskStroke(points, color, diameter));
+            });
+    connect(canvas, &ImageCanvas::erasePreviewCleared, canvas, [canvas]() {
+        canvas->setTransientImage({});
+    });
+    connect(canvas, &ImageCanvas::eraseStrokeSelected, this,
+            [this](const QVector<QPointF>& points, int diameter) {
+                handleEraseStroke(points, diameter);
+            });
+    connect(canvas, &ImageCanvas::shapeCreated, this,
+            [this](const ImageShapeData& shape) { handleShapeCreated(shape); });
+    connect(canvas, &ImageCanvas::textCommitted, this,
+            [this](const ImageTextData& text, bool existing) {
+                handleTextCommitted(text, existing);
+            });
+    connect(canvas, &ImageCanvas::textEditingStarted, this,
+            [this](const ImageTextData& text, bool existing) {
+                handleTextEditingStarted(text, existing);
+            });
+    connect(canvas, &ImageCanvas::textEditingCancelled, canvas, [canvas]() {
+        canvas->setTransientImage({});
+    });
+    connect(canvas, &ImageCanvas::objectsSelected, this,
+            [this](const QStringList& object_ids, const QString& layer_id) {
+                if (canvas_ == nullptr) return;
+                selected_object_ids_ = object_ids;
+                const bool mask_changed = !selected_mask_layer_id_.isEmpty();
+                selected_mask_layer_id_.clear();
+                canvas_->setMaskEditing(false);
+                const bool layer_changed = !layer_id.isEmpty() && session_.selectLayer(layer_id);
+                if (layer_changed) {
+                    selected_mask_layer_id_.clear();
+                    updateLayerPanel();
+                    updateSelectionContext();
+                }
+                for (const auto& placement : session_.visibleObjects()) {
+                    if (!selected_object_ids_.contains(imageObjectId(placement.operation))) continue;
+                    if (placement.operation.kind == OperationKind::Shape) {
+                        shape_style_ = placement.operation.shape;
+                        canvas_->setShapeStyle(shape_style_);
+                        break;
+                    }
+                    if (placement.operation.kind == OperationKind::Text) {
+                        text_style_ = placement.operation.text;
+                        canvas_->setTextStyle(text_style_);
+                        break;
+                    }
+                }
+                if (layer_changed || mask_changed) updateView(true);
+                else {
+                    updateObjectPlacements();
+                    updateShapeOptions();
+                    updateToolOptions();
+                }
+            });
+    connect(canvas, &ImageCanvas::objectTransformStarted, this,
+            [this](const QStringList& object_ids) {
+                if (canvas_ == nullptr) return;
+                for (const auto& object : session_.visibleObjects())
+                    if (object_ids.contains(imageObjectId(object.operation)) &&
+                        object.operation.kind == OperationKind::RasterImage) {
+                        canvas_->setTransientImage(session_.renderedImage());
+                        return;
+                    }
+                canvas_->setTransientImage(session_.renderedImageWithoutObjects(object_ids));
+            });
+    connect(canvas, &ImageCanvas::objectsPreviewRequested, this,
+            [this](const QVector<ImageObjectPlacement>& objects) {
+                if (canvas_ != nullptr)
+                    canvas_->setTransientImage(session_.renderedImageWithObjects(objects));
+            });
+    connect(canvas, &ImageCanvas::imagesDropped, this,
+            [this](const QStringList& paths, const QPointF& center) {
+                (void)importImagePaths(paths, center);
+            });
+    connect(canvas, &ImageCanvas::objectsGeometryChanged, this,
+            [this](const QVector<ImageObjectPlacement>& objects) {
+                handleObjectsGeometryChanged(objects);
+            });
+    connect(canvas, &ImageCanvas::brushDiameterChanged,
+            brush_size_spin_, &QSpinBox::setValue);
+}
+
+int ImageEditorWindow::addDocumentTab(bool activate) {
+    auto* tab = new ImageEditorDocumentTab;
+    tab->page = new QWidget(document_stack_);
+    auto* layout = new QHBoxLayout(tab->page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    tab->canvas = new ImageCanvas(tab->page);
+    layout->addWidget(tab->canvas);
+    connectCanvas(tab->canvas);
+
+    const int index = document_tabs_.size();
+    document_tabs_.append(tab);
+    document_stack_->addWidget(tab->page);
+    {
+        const QSignalBlocker blocker(document_tab_bar_);
+        document_tab_bar_->addTab(QStringLiteral("Untitled Canvas"));
+        if (activate) document_tab_bar_->setCurrentIndex(index);
+    }
+    if (activate) activateDocumentTab(index);
+    return index;
+}
+
+void ImageEditorWindow::activateDocumentTab(int index) {
+    if (index < 0 || index >= document_tabs_.size()) {
+        if (active_document_tab_ >= 0 && canvas_ != nullptr) canvas_->commitTextEditing();
+        if (active_document_tab_ >= 0) {
+            selected_stack_items_ = layer_panel_->selectedStackItems();
+            auto* previous = document_tabs_.at(active_document_tab_);
+            std::swap(session_, previous->session);
+            std::swap(selected_object_ids_, previous->selected_object_ids);
+            std::swap(selected_stack_items_, previous->selected_stack_items);
+            std::swap(selected_mask_layer_id_, previous->selected_mask_layer_id);
+            std::swap(logged_raster_problems_, previous->logged_raster_problems);
+            std::swap(linked_document_path_, previous->linked_document_path);
+            std::swap(linked_output_path_, previous->linked_output_path);
+            std::swap(linked_document_fingerprint_, previous->linked_document_fingerprint);
+        }
+        active_document_tab_ = -1;
+        canvas_ = nullptr;
+        resetActiveDocumentState();
+        updateView();
+        return;
+    }
+    if (index == active_document_tab_) {
+        canvas_ = document_tabs_.at(index)->canvas;
+        document_stack_->setCurrentWidget(document_tabs_.at(index)->page);
+        updateView(true);
+        return;
+    }
+
+    if (active_document_tab_ >= 0 && canvas_ != nullptr) canvas_->commitTextEditing();
+    if (active_document_tab_ >= 0) {
+        selected_stack_items_ = layer_panel_->selectedStackItems();
+        auto* previous = document_tabs_.at(active_document_tab_);
+        std::swap(session_, previous->session);
+        std::swap(selected_object_ids_, previous->selected_object_ids);
+        std::swap(selected_stack_items_, previous->selected_stack_items);
+        std::swap(selected_mask_layer_id_, previous->selected_mask_layer_id);
+        std::swap(logged_raster_problems_, previous->logged_raster_problems);
+        std::swap(linked_document_path_, previous->linked_document_path);
+        std::swap(linked_output_path_, previous->linked_output_path);
+        std::swap(linked_document_fingerprint_, previous->linked_document_fingerprint);
+    }
+
+    active_document_tab_ = index;
+    auto* tab = document_tabs_.at(index);
+    std::swap(session_, tab->session);
+    std::swap(selected_object_ids_, tab->selected_object_ids);
+    std::swap(selected_stack_items_, tab->selected_stack_items);
+    std::swap(selected_mask_layer_id_, tab->selected_mask_layer_id);
+    std::swap(logged_raster_problems_, tab->logged_raster_problems);
+    std::swap(linked_document_path_, tab->linked_document_path);
+    std::swap(linked_output_path_, tab->linked_output_path);
+    std::swap(linked_document_fingerprint_, tab->linked_document_fingerprint);
+    canvas_ = tab->canvas;
+    document_stack_->setCurrentWidget(tab->page);
+    canvas_->setShapeStyle(shape_style_);
+    canvas_->setTextStyle(text_style_);
+    updateCanvasToolState(tool_sidebar_->activeTool(), true);
+    updateView(true);
+}
+
+void ImageEditorWindow::closeDocumentTab(int index) {
+    if (importing_ || index < 0 || index >= document_tabs_.size()) return;
+    auto* closing = document_tabs_.at(index);
+    if (!closing->linked_document_path.isEmpty() ||
+        (index == active_document_tab_ && !linked_document_path_.isEmpty())) return;
+
+    const int previous_active = active_document_tab_;
+    if (index != active_document_tab_) {
+        const QSignalBlocker blocker(document_tab_bar_);
+        document_tab_bar_->setCurrentIndex(index);
+        activateDocumentTab(index);
+    }
+    if (!confirmDiscardOrSave()) {
+        if (previous_active >= 0 && previous_active < document_tabs_.size()) {
+            const QSignalBlocker blocker(document_tab_bar_);
+            document_tab_bar_->setCurrentIndex(previous_active);
+            activateDocumentTab(previous_active);
+        }
+        return;
+    }
+
+    const QString recovery_path = recovery_store_.pathFor(session_);
+    if (!recovery_path.isEmpty()) static_cast<void>(recovery_store_.remove(recovery_path));
+    const int next_active = previous_active >= 0 && previous_active != index
+        ? previous_active - (previous_active > index ? 1 : 0)
+        : (document_tabs_.size() > 1
+               ? static_cast<int>(std::min<qsizetype>(
+                     index, document_tabs_.size() - 2))
+               : -1);
+    document_stack_->removeWidget(closing->page);
+    {
+        const QSignalBlocker blocker(document_tab_bar_);
+        document_tab_bar_->removeTab(index);
+    }
+    document_tabs_.removeAt(index);
+    delete closing->page;
+    delete closing;
+    active_document_tab_ = -1;
+    canvas_ = nullptr;
+    resetActiveDocumentState();
+
+    if (next_active >= 0 && next_active < document_tabs_.size()) {
+        const QSignalBlocker blocker(document_tab_bar_);
+        document_tab_bar_->setCurrentIndex(next_active);
+        activateDocumentTab(next_active);
+    } else {
+        updateView();
+    }
+}
+
+void ImageEditorWindow::openNewTabMenu() {
+    if (!linked_document_path_.isEmpty() || importing_) return;
+    QMenu menu(this);
+    new_tab_canvas_action_->setEnabled(true);
+    new_tab_open_image_action_->setEnabled(true);
+    new_tab_open_document_action_->setEnabled(true);
+    menu.addAction(new_tab_canvas_action_);
+    menu.addAction(new_tab_open_image_action_);
+    menu.addAction(new_tab_open_document_action_);
+    menu.exec(new_document_tab_button_->mapToGlobal(
+        QPoint(0, new_document_tab_button_->height())));
+}
+
+void ImageEditorWindow::updateDocumentTabLabel() {
+    if (!hasActiveDocumentTab()) return;
+    QString label;
+    if (!session_.documentPath().isEmpty()) {
+        label = QFileInfo(session_.documentPath()).fileName();
+    } else if (!session_.sourcePath().isEmpty()) {
+        label = QFileInfo(session_.sourcePath()).fileName();
+    } else if (session_.hasDocument()) {
+        label = QStringLiteral("Untitled Canvas");
+    } else {
+        label = QStringLiteral("New Document");
+    }
+    if (session_.isDirty()) label.prepend('*');
+    document_tab_bar_->setTabText(active_document_tab_, label);
+    QString tooltip = label;
+    if (!session_.documentPath().isEmpty()) tooltip += QStringLiteral("\n") + session_.documentPath();
+    else if (!session_.sourcePath().isEmpty()) tooltip += QStringLiteral("\n") + session_.sourcePath();
+    document_tab_bar_->setTabToolTip(active_document_tab_, tooltip);
+}
+
+void ImageEditorWindow::resetActiveDocumentState() {
+    session_ = ImageDocumentSession{};
+    resetActiveDocumentSelection();
+    linked_document_path_.clear();
+    linked_output_path_.clear();
+    linked_document_fingerprint_.clear();
+}
+
+void ImageEditorWindow::resetActiveDocumentSelection() {
+    selected_object_ids_.clear();
+    selected_stack_items_.clear();
+    selected_mask_layer_id_.clear();
+    logged_raster_problems_.clear();
+}
+
+bool ImageEditorWindow::hasActiveDocumentTab() const noexcept {
+    return active_document_tab_ >= 0 && active_document_tab_ < document_tabs_.size();
 }
 
 void ImageEditorWindow::createLayerPanel() {
@@ -643,8 +923,9 @@ void ImageEditorWindow::createToolOptionsBar() {
         }
         updateCanvasBrush();
     });
-    connect(eraser_preview_check_, &QCheckBox::toggled,
-            canvas_, &ImageCanvas::setEraserPreviewEnabled);
+    connect(eraser_preview_check_, &QCheckBox::toggled, this, [this](bool enabled) {
+        if (canvas_ != nullptr) canvas_->setEraserPreviewEnabled(enabled);
+    });
     connect(shape_stroke_check_, &QCheckBox::toggled, this, [this](bool enabled) {
         if (shape_style_.kind == ImageShapeKind::Line && !enabled) enabled = true;
         if (!enabled && !shape_style_.fill_enabled) {
@@ -1104,7 +1385,8 @@ void ImageEditorWindow::deleteSelection() {
 }
 
 void ImageEditorWindow::updateDeleteActions() {
-    const bool can_delete_objects = session_.hasSource() && !selected_object_ids_.isEmpty() &&
+    const bool can_delete_objects = canvas_ != nullptr && tool_sidebar_ != nullptr &&
+        session_.hasSource() && !selected_object_ids_.isEmpty() &&
         tool_sidebar_->activeTool() == ToolSidebar::Tool::Select && !canvas_->textEditing();
     if (delete_selected_shape_button_ != nullptr) delete_selected_shape_button_->setEnabled(can_delete_objects);
     if (delete_objects_action_ != nullptr) delete_objects_action_->setEnabled(can_delete_objects);
@@ -1124,8 +1406,10 @@ void ImageEditorWindow::updateCanvasBrush() {
     canvas_->setBrush(tool_sidebar_->brushColor(), diameter);
 }
 
-void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool) {
-    if (tool == ToolSidebar::Tool::Shapes && !selected_object_ids_.isEmpty()) {
+void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool preserveSelection) {
+    if (canvas_ == nullptr) return;
+    if (!preserveSelection && tool == ToolSidebar::Tool::Shapes &&
+        !selected_object_ids_.isEmpty()) {
         selected_object_ids_.clear();
         updateObjectPlacements();
     }
@@ -1293,6 +1577,24 @@ void ImageEditorWindow::createActions() {
     open_document_action_ = makeAction(
         QStringLiteral("Open Editable Document..."), {}, [this]() { openDocument(); });
     open_document_action_->setObjectName(QStringLiteral("openEditableDocumentAction"));
+    new_tab_canvas_action_ = makeAction(
+        QStringLiteral("New Canvas in New Tab..."), {}, [this]() { createNewCanvas(true); });
+    new_tab_canvas_action_->setObjectName(QStringLiteral("newTabCanvasAction"));
+    new_tab_open_image_action_ = makeAction(
+        QStringLiteral("Open Image in New Tab..."), {}, [this]() {
+            const QString path = QFileDialog::getOpenFileName(
+                this, QStringLiteral("Open Image in New Tab"), {}, imageFilter());
+            if (!path.isEmpty()) static_cast<void>(openImagePathInTarget(path, OpenTarget::NewTab));
+        });
+    new_tab_open_image_action_->setObjectName(QStringLiteral("newTabOpenImageAction"));
+    new_tab_open_document_action_ = makeAction(
+        QStringLiteral("Open Editable Document in New Tab..."), {}, [this]() {
+            const QString path = QFileDialog::getOpenFileName(
+                this, QStringLiteral("Open Editable Image Document in New Tab"), {},
+                QStringLiteral("Image Editor documents (*.cimg)"));
+            if (!path.isEmpty()) static_cast<void>(openDocumentPathInTarget(path, OpenTarget::NewTab));
+        });
+    new_tab_open_document_action_->setObjectName(QStringLiteral("newTabOpenEditableDocumentAction"));
     import_layer_action_ = makeAction(QStringLiteral("Import Image as Layer..."), {}, [this]() {
         const auto paths = QFileDialog::getOpenFileNames(this, QStringLiteral("Import Image as Layer"), {},
             QStringLiteral("Images (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"));
@@ -1320,6 +1622,27 @@ void ImageEditorWindow::createActions() {
         QStringLiteral("Quick Export..."), {}, [this]() { exportImage(true); });
     auto* quit_action = makeAction(
         QStringLiteral("Quit"), QKeySequence::Quit, [this]() { close(); });
+    close_document_tab_action_ = makeAction(
+        QStringLiteral("Close Document Tab"), QKeySequence::Close, [this]() {
+            closeDocumentTab(active_document_tab_);
+        });
+    close_document_tab_action_->setObjectName(QStringLiteral("closeDocumentTabAction"));
+    next_document_tab_action_ = makeAction(
+        QStringLiteral("Next Document Tab"), QKeySequence::NextChild, [this]() {
+            if (document_tabs_.size() > 1)
+                document_tab_bar_->setCurrentIndex((active_document_tab_ + 1) % document_tabs_.size());
+        });
+    next_document_tab_action_->setObjectName(QStringLiteral("nextDocumentTabAction"));
+    previous_document_tab_action_ = makeAction(
+        QStringLiteral("Previous Document Tab"), QKeySequence::PreviousChild, [this]() {
+            if (document_tabs_.size() > 1)
+                document_tab_bar_->setCurrentIndex(
+                    (active_document_tab_ + document_tabs_.size() - 1) % document_tabs_.size());
+        });
+    previous_document_tab_action_->setObjectName(QStringLiteral("previousDocumentTabAction"));
+    addAction(close_document_tab_action_);
+    addAction(next_document_tab_action_);
+    addAction(previous_document_tab_action_);
 
     undo_action_ = makeAction(
         QStringLiteral("Undo"), QKeySequence::Undo, [this]() {
@@ -1400,6 +1723,9 @@ void ImageEditorWindow::createActions() {
     registerShortcutAction(new_canvas_action_, QKeySequence::New);
     registerShortcutAction(open_image_action_, QKeySequence::Open);
     registerShortcutAction(open_document_action_, {});
+    registerShortcutAction(close_document_tab_action_, QKeySequence::Close);
+    registerShortcutAction(next_document_tab_action_, QKeySequence::NextChild);
+    registerShortcutAction(previous_document_tab_action_, QKeySequence::PreviousChild);
     registerShortcutAction(relink_action_, {});
     registerShortcutAction(save_action_, QKeySequence::Save);
     registerShortcutAction(save_as_action_, QKeySequence::SaveAs);
@@ -1487,6 +1813,7 @@ void ImageEditorWindow::createActions() {
 
     auto* file_menu = menuBar()->addMenu(QStringLiteral("File"));
     file_menu->addAction(new_canvas_action_);
+    file_menu->addAction(close_document_tab_action_);
     file_menu->addSeparator();
     file_menu->addAction(open_image_action_);
     file_menu->addAction(open_document_action_);
@@ -1516,6 +1843,8 @@ void ImageEditorWindow::createActions() {
 
     auto* view_menu = menuBar()->addMenu(QStringLiteral("View"));
     view_menu->addAction(fit_action_);
+    view_menu->addAction(next_document_tab_action_);
+    view_menu->addAction(previous_document_tab_action_);
     auto* layers_view_action = layer_dock_->toggleViewAction();
     layers_view_action->setObjectName(QStringLiteral("toggleLayersPanelAction"));
     registerShortcutAction(layers_view_action, {});
@@ -1648,10 +1977,50 @@ void ImageEditorWindow::updateLayerPanel() {
     const QSize size(LayerPanel::kThumbnailWidth, LayerPanel::kThumbnailHeight);
     layer_panel_->setDocument(session_.data(), session_.selectedLayerId(),
         session_.selectedGroupId(), session_.renderedLayerThumbnails(size),
-        session_.renderedLayerMaskThumbnails(size), selected_mask_layer_id_, problems);
+        session_.renderedLayerMaskThumbnails(size), selected_mask_layer_id_, problems,
+        selected_stack_items_);
 }
 
 void ImageEditorWindow::updateView(bool preserveCanvasView) {
+    updateDocumentTabLabel();
+    const bool has_tab = hasActiveDocumentTab();
+    const bool linked = !linked_document_path_.isEmpty();
+    new_document_tab_button_->setEnabled(!linked && !importing_);
+    document_tab_bar_->setTabsClosable(!linked);
+    close_document_tab_action_->setEnabled(has_tab && !linked);
+    next_document_tab_action_->setEnabled(document_tabs_.size() > 1 && !linked);
+    previous_document_tab_action_->setEnabled(document_tabs_.size() > 1 && !linked);
+
+    if (canvas_ == nullptr) {
+        tool_sidebar_->setDocumentAvailable(false);
+        tool_sidebar_->setPaintingAllowed(false);
+        paint_options_action_->setVisible(false);
+        paint_size_options_->setVisible(false);
+        shape_options_action_->setVisible(false);
+        shape_options_widget_->setVisible(false);
+        text_options_action_->setVisible(false);
+        text_options_widget_->setVisible(false);
+        selection_options_action_->setVisible(false);
+        layer_panel_->setDocument(ImageDocumentData{}, {}, {}, {}, {}, {}, {});
+        layer_panel_->setQuickExportEnabled(false);
+        undo_action_->setEnabled(false);
+        redo_action_->setEnabled(false);
+        save_action_->setEnabled(false);
+        save_as_action_->setEnabled(false);
+        export_action_->setEnabled(false);
+        quick_export_action_->setEnabled(false);
+        relink_action_->setEnabled(false);
+        import_layer_action_->setEnabled(false);
+        relink_raster_action_->setEnabled(false);
+        new_canvas_action_->setEnabled(!linked);
+        open_image_action_->setEnabled(!linked);
+        open_document_action_->setEnabled(!linked);
+        fit_action_->setEnabled(false);
+        status_label_->setText(QStringLiteral("No image open"));
+        setWindowTitle(QStringLiteral("Image Editor"));
+        updateSelectionContext();
+        return;
+    }
     if (!editingMask()) selected_mask_layer_id_.clear();
     canvas_->setMaskEditing(editingMask());
     const QImage rendered = session_.renderedImage();
@@ -1674,6 +2043,10 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     import_layer_action_->setEnabled(session_.hasSource() && !importing_);
     relink_raster_action_->setEnabled(session_.hasSource() && !importing_ &&
         selected_object_ids_.size() == 1 && session_.findRaster(selected_object_ids_.front(), nullptr));
+    new_canvas_action_->setEnabled(!linked);
+    open_image_action_->setEnabled(!linked);
+    open_document_action_->setEnabled(!linked);
+    save_as_action_->setEnabled(session_.hasSource() && !linked);
     updateSelectionContext();
 
     QString title = QStringLiteral("Image Editor");
@@ -1685,6 +2058,7 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
         title = QStringLiteral("Untitled Canvas — Image Editor");
     }
     if (session_.isDirty()) title.prepend('*');
+    if (linked) title += QStringLiteral(" [Linked]");
     setWindowTitle(title);
 
     if (!session_.hasSource()) {
@@ -1702,21 +2076,24 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
 }
 
 void ImageEditorWindow::updateSelectionContext() {
-    canvas_->setMaskEditing(editingMask());
-    canvas_->setEraserPreviewEnabled(eraser_preview_check_->isChecked());
-    layer_panel_->setSelectedMask(selected_mask_layer_id_);
+    if (canvas_ != nullptr) {
+        canvas_->setMaskEditing(editingMask());
+        canvas_->setEraserPreviewEnabled(eraser_preview_check_->isChecked());
+    }
+    if (layer_panel_ != nullptr) layer_panel_->setSelectedMask(selected_mask_layer_id_);
     const QString mask_hint = QStringLiteral("  |  Editing layer mask — black hides, white reveals");
     QString status = status_label_->text();
     if (status.endsWith(mask_hint)) status.chop(mask_hint.size());
     if (editingMask()) status += mask_hint;
     status_label_->setText(status);
-    if (tool_sidebar_ == nullptr || !session_.hasSource()) {
+    if (canvas_ == nullptr || tool_sidebar_ == nullptr || !session_.hasSource()) {
         if (tool_sidebar_ != nullptr) tool_sidebar_->setPaintingAllowed(false);
         if (crop_action_ != nullptr) crop_action_->setEnabled(false);
         if (rotate_left_action_ != nullptr) rotate_left_action_->setEnabled(false);
         if (rotate_right_action_ != nullptr) rotate_right_action_->setEnabled(false);
         if (flip_horizontal_action_ != nullptr) flip_horizontal_action_->setEnabled(false);
         if (flip_vertical_action_ != nullptr) flip_vertical_action_->setEnabled(false);
+        if (fit_action_ != nullptr) fit_action_->setEnabled(false);
         if (cancel_crop_action_ != nullptr) cancel_crop_action_->setEnabled(false);
         if (paint_tool_action_ != nullptr) paint_tool_action_->setEnabled(false);
         if (eraser_tool_action_ != nullptr) eraser_tool_action_->setEnabled(false);
@@ -1747,21 +2124,28 @@ void ImageEditorWindow::updateSelectionContext() {
     updateToolOptions();
 }
 
-void ImageEditorWindow::createNewCanvas() {
+void ImageEditorWindow::createNewCanvas(bool new_tab) {
+    if (new_tab && !linked_document_path_.isEmpty()) return;
     NewCanvasDialog dialog(this);
-    if (dialog.exec() != QDialog::Accepted || !confirmDiscardOrSave()) return;
+    if (dialog.exec() != QDialog::Accepted) return;
+    if (!new_tab && hasActiveDocumentTab() && !confirmDiscardOrSave()) return;
+    if (!linked_document_path_.isEmpty()) return;
+    const bool created_tab = new_tab || !hasActiveDocumentTab();
+    if (created_tab) static_cast<void>(addDocumentTab(true));
 
     QString error;
     if (!session_.createCanvas(dialog.canvasSize(), dialog.backgroundColor(), &error)) {
         reportError(QStringLiteral("create_canvas"), error);
+        if (created_tab) closeDocumentTab(active_document_tab_);
         return;
     }
+    resetActiveDocumentSelection();
     deactivateCanvasTools();
     updateView();
     statusBar()->showMessage(QStringLiteral("New canvas created"), 3000);
 }
 
-bool ImageEditorWindow::confirmDiscardOrSave() {
+bool ImageEditorWindow::confirmDiscardOrSave(bool clearRecoveryOnDiscard) {
     if (canvas_ != nullptr) canvas_->commitTextEditing();
     if (!session_.isDirty()) return true;
     QMessageBox prompt(QMessageBox::Warning,
@@ -1773,7 +2157,13 @@ bool ImageEditorWindow::confirmDiscardOrSave() {
     auto* cancel = prompt.addButton(QMessageBox::Cancel);
     prompt.exec();
     if (prompt.clickedButton() == cancel) return false;
-    if (prompt.clickedButton() == discard) return true;
+    if (prompt.clickedButton() == discard) {
+        if (clearRecoveryOnDiscard) {
+            const QString recovery_path = recovery_store_.pathFor(session_);
+            if (!recovery_path.isEmpty()) static_cast<void>(recovery_store_.remove(recovery_path));
+        }
+        return true;
+    }
     return prompt.clickedButton() == save && saveToPath();
 }
 
@@ -1785,14 +2175,23 @@ void ImageEditorWindow::openImage() {
 }
 
 bool ImageEditorWindow::openImagePath(const QString& path) {
-    if (importing_) return false;
-    if (path.isEmpty()) return false;
-    if (!confirmDiscardOrSave()) return false;
+    return openImagePathInTarget(path, OpenTarget::CurrentTab);
+}
+
+bool ImageEditorWindow::openImagePathInTarget(const QString& path, OpenTarget target) {
+    if (importing_ || path.isEmpty()) return false;
+    if (!linked_document_path_.isEmpty()) return false;
+    if (target == OpenTarget::CurrentTab && hasActiveDocumentTab() &&
+        !confirmDiscardOrSave()) return false;
+    const bool created_tab = target == OpenTarget::NewTab || !hasActiveDocumentTab();
+    if (created_tab) static_cast<void>(addDocumentTab(true));
     QString error;
     if (!session_.openImage(path, &error)) {
         reportError(QStringLiteral("open_image"), error, path);
+        if (created_tab) closeDocumentTab(active_document_tab_);
         return false;
     }
+    resetActiveDocumentSelection();
     deactivateCanvasTools();
     updateView();
     statusBar()->showMessage(QStringLiteral("Image opened"), 3000);
@@ -1808,14 +2207,34 @@ void ImageEditorWindow::openDocument() {
 }
 
 bool ImageEditorWindow::openDocumentPath(const QString& path) {
-    if (importing_) return false;
-    if (path.isEmpty()) return false;
-    if (!confirmDiscardOrSave()) return false;
+    return openDocumentPathInTarget(path, OpenTarget::CurrentTab);
+}
+
+bool ImageEditorWindow::openDocumentPathInTarget(const QString& path, OpenTarget target) {
+    if (importing_ || path.isEmpty()) return false;
+    if (!linked_document_path_.isEmpty()) return false;
+    for (int index = 0; index < document_tabs_.size(); ++index) {
+        const QString open_path = index == active_document_tab_
+            ? session_.documentPath() : document_tabs_.at(index)->session.documentPath();
+        if (open_path.isEmpty() || !sameLinkedPath(open_path, path)) continue;
+        {
+            const QSignalBlocker blocker(document_tab_bar_);
+            document_tab_bar_->setCurrentIndex(index);
+        }
+        activateDocumentTab(index);
+        return true;
+    }
+    if (target == OpenTarget::CurrentTab && hasActiveDocumentTab() &&
+        !confirmDiscardOrSave()) return false;
+    const bool created_tab = target == OpenTarget::NewTab || !hasActiveDocumentTab();
+    if (created_tab) static_cast<void>(addDocumentTab(true));
     QString error;
     if (!session_.openDocument(path, &error)) {
         reportError(QStringLiteral("open_document"), error, path);
+        if (created_tab) closeDocumentTab(active_document_tab_);
         return false;
     }
+    resetActiveDocumentSelection();
     deactivateCanvasTools();
     updateView();
     if (session_.sourceIsMissing()) {
@@ -1841,6 +2260,12 @@ bool ImageEditorWindow::openLinkedImage(
                     QStringLiteral("The linked image paths are incomplete."), document_path);
         return false;
     }
+    if (document_tabs_.size() > 1) {
+        reportError(QStringLiteral("open_linked_image"),
+                    QStringLiteral("Linked editing requires a single open document tab."),
+                    document_path);
+        return false;
+    }
     if (QFileInfo(document_path).suffix().compare(
             QStringLiteral("cimg"), Qt::CaseInsensitive) != 0 ||
         QFileInfo(published_output_path).suffix().compare(
@@ -1850,53 +2275,83 @@ bool ImageEditorWindow::openLinkedImage(
                     document_path);
         return false;
     }
-    linked_document_path_ = QFileInfo(document_path).absoluteFilePath();
-    linked_output_path_ = QFileInfo(published_output_path).absoluteFilePath();
-    if (sameLinkedPath(linked_document_path_, linked_output_path_) ||
-        sameLinkedPath(linked_document_path_, source_path) ||
-        sameLinkedPath(linked_output_path_, source_path)) {
+    const QString normalized_document_path = QFileInfo(document_path).absoluteFilePath();
+    const QString normalized_output_path = QFileInfo(published_output_path).absoluteFilePath();
+    const bool reopening_linked_tab = !linked_document_path_.isEmpty();
+    if (reopening_linked_tab &&
+        !sameLinkedPath(linked_document_path_, normalized_document_path)) {
+        reportError(QStringLiteral("open_linked_image"),
+                    QStringLiteral("A different linked document is already open in this tab."),
+                    normalized_document_path);
+        return false;
+    }
+    if (sameLinkedPath(normalized_document_path, normalized_output_path) ||
+        sameLinkedPath(normalized_document_path, source_path) ||
+        sameLinkedPath(normalized_output_path, source_path)) {
         reportError(QStringLiteral("open_linked_image"),
                     QStringLiteral("The source, editable document, and published image must use different files."),
                     document_path);
-        linked_document_path_.clear();
-        linked_output_path_.clear();
         return false;
     }
-    if (!QDir().mkpath(QFileInfo(linked_document_path_).absolutePath()) ||
-        !QDir().mkpath(QFileInfo(linked_output_path_).absolutePath())) {
+    if (!QDir().mkpath(QFileInfo(normalized_document_path).absolutePath()) ||
+        !QDir().mkpath(QFileInfo(normalized_output_path).absolutePath())) {
         reportError(QStringLiteral("prepare_linked_image"),
                     QStringLiteral("The linked image directories could not be created."),
-                    linked_document_path_);
-        linked_document_path_.clear();
-        linked_output_path_.clear();
+                    normalized_document_path);
         return false;
     }
 
     bool opened = false;
-    if (QFileInfo::exists(linked_document_path_)) {
-        opened = openDocumentPath(linked_document_path_);
+    if (reopening_linked_tab) {
+        if (!confirmDiscardOrSave()) return false;
+        QString error;
+        if (!session_.openDocument(normalized_document_path, &error)) {
+            reportError(QStringLiteral("open_document"), error, normalized_document_path);
+            return false;
+        }
+        resetActiveDocumentSelection();
+        deactivateCanvasTools();
+        updateView();
+        if (session_.sourceIsMissing()) {
+            QMessageBox prompt(QMessageBox::Warning,
+                               QStringLiteral("Source image is missing"),
+                               QStringLiteral("The editable document is open, but its source image could not be found."),
+                               QMessageBox::NoButton, this);
+            auto* relink = prompt.addButton(QStringLiteral("Relink Source..."), QMessageBox::AcceptRole);
+            prompt.addButton(QMessageBox::Close);
+            prompt.exec();
+            if (prompt.clickedButton() == relink) relinkSource();
+        }
+        opened = true;
+    } else if (QFileInfo::exists(normalized_document_path)) {
+        opened = openDocumentPath(normalized_document_path);
     } else if (openImagePath(source_path)) {
+        linked_document_path_ = normalized_document_path;
+        linked_output_path_ = normalized_output_path;
         opened = saveToPath(linked_document_path_);
     }
     if (!opened) {
         linked_document_path_.clear();
         linked_output_path_.clear();
+        linked_document_fingerprint_.clear();
+        updateView();
         return false;
     }
+
+    linked_document_path_ = normalized_document_path;
+    linked_output_path_ = normalized_output_path;
 
     linked_document_fingerprint_ = documentFingerprint(linked_document_path_);
     if (linked_document_fingerprint_.isEmpty()) {
         reportError(QStringLiteral("open_linked_image"),
                     QStringLiteral("The linked document could not be fingerprinted."),
                     linked_document_path_);
+        linked_document_path_.clear();
+        linked_output_path_.clear();
+        updateView();
         return false;
     }
-    if (open_image_action_ != nullptr) open_image_action_->setEnabled(false);
-    if (open_document_action_ != nullptr) open_document_action_->setEnabled(false);
-    if (new_canvas_action_ != nullptr) new_canvas_action_->setEnabled(false);
-    if (save_as_action_ != nullptr) save_as_action_->setEnabled(false);
-    setWindowTitle(QStringLiteral("%1 — Image Editor [Linked]")
-                       .arg(QFileInfo(linked_document_path_).completeBaseName()));
+    updateView(true);
     return true;
 }
 
@@ -1947,7 +2402,8 @@ bool ImageEditorWindow::saveToPath(QString path) {
             return false;
         }
     }
-    if (path.isEmpty() && session_.documentPath().isEmpty()) {
+    if (path.isEmpty()) path = session_.documentPath();
+    if (path.isEmpty()) {
         path = QFileDialog::getSaveFileName(
             this, QStringLiteral("Save Editable Image Document"), {},
             QStringLiteral("Image Editor document (*.cimg)"));
@@ -2129,6 +2585,7 @@ void ImageEditorWindow::handleEraseStroke(const QVector<QPointF>& points, int di
 }
 
 void ImageEditorWindow::deactivateCanvasTools() {
+    if (canvas_ == nullptr || tool_sidebar_ == nullptr) return;
     tool_sidebar_->setActiveTool(ToolSidebar::Tool::None);
     updateToolOptions();
     if (crop_action_ != nullptr && crop_action_->isChecked()) {
@@ -2143,33 +2600,37 @@ void ImageEditorWindow::deactivateCanvasTools() {
 
 void ImageEditorWindow::maybeOfferRecovery() {
     const auto snapshots = recovery_store_.snapshots();
-    if (snapshots.isEmpty()) return;
-    const QString latest = snapshots.front();
-    QMessageBox prompt(QMessageBox::Question,
-                       QStringLiteral("Recover image edits?"),
-                       QStringLiteral("A recovery snapshot is available. Restore it?"),
-                       QMessageBox::NoButton, this);
-    auto* restore = prompt.addButton(QStringLiteral("Restore"), QMessageBox::AcceptRole);
-    auto* discard = prompt.addButton(QStringLiteral("Discard Snapshot"), QMessageBox::DestructiveRole);
-    prompt.addButton(QMessageBox::Cancel);
-    prompt.exec();
-    if (prompt.clickedButton() == discard) {
-        static_cast<void>(recovery_store_.remove(latest));
-        return;
-    }
-    if (prompt.clickedButton() != restore) return;
+    for (const QString& snapshot : snapshots) {
+        QMessageBox prompt(QMessageBox::Question,
+                           QStringLiteral("Recover image edits?"),
+                           QStringLiteral("Restore this recovery snapshot in a new tab?\n\n%1")
+                               .arg(QFileInfo(snapshot).completeBaseName()),
+                           QMessageBox::NoButton, this);
+        auto* restore = prompt.addButton(QStringLiteral("Restore in New Tab"), QMessageBox::AcceptRole);
+        auto* discard = prompt.addButton(QStringLiteral("Discard Snapshot"), QMessageBox::DestructiveRole);
+        auto* later = prompt.addButton(QStringLiteral("Later"), QMessageBox::RejectRole);
+        prompt.exec();
+        if (prompt.clickedButton() == discard) {
+            static_cast<void>(recovery_store_.remove(snapshot));
+            continue;
+        }
+        if (prompt.clickedButton() == later) break;
+        if (prompt.clickedButton() != restore) continue;
 
-    QString error;
-    if (!session_.restoreRecovery(latest, &error)) {
-        reportError(QStringLiteral("restore_recovery"), error, latest);
-        return;
-    }
-    deactivateCanvasTools();
-    updateView();
-    if (session_.sourceIsMissing()) {
-        QMessageBox::information(this, QStringLiteral("Source image is missing"),
-            QStringLiteral("The recovered document needs its source image to be relinked."));
-        relinkSource();
+        const int index = addDocumentTab(true);
+        QString error;
+        if (!session_.restoreRecovery(snapshot, &error)) {
+            reportError(QStringLiteral("restore_recovery"), error, snapshot);
+            closeDocumentTab(index);
+            continue;
+        }
+        deactivateCanvasTools();
+        updateView();
+        if (session_.sourceIsMissing()) {
+            QMessageBox::information(this, QStringLiteral("Source image is missing"),
+                QStringLiteral("The recovered document needs its source image to be relinked."));
+            relinkSource();
+        }
     }
 }
 
@@ -2182,8 +2643,29 @@ void ImageEditorWindow::reportError(const QString& operation,
 
 void ImageEditorWindow::closeEvent(QCloseEvent* event) {
     if (importing_) { event->ignore(); return; }
-    if (confirmDiscardOrSave()) event->accept();
-    else event->ignore();
+    const int previous_active = active_document_tab_;
+    QStringList recovery_paths;
+    for (int index = 0; index < document_tabs_.size(); ++index) {
+        if (index != active_document_tab_) {
+            const QSignalBlocker blocker(document_tab_bar_);
+            document_tab_bar_->setCurrentIndex(index);
+            activateDocumentTab(index);
+        }
+        if (!confirmDiscardOrSave(false)) {
+            if (previous_active >= 0 && previous_active < document_tabs_.size()) {
+                const QSignalBlocker blocker(document_tab_bar_);
+                document_tab_bar_->setCurrentIndex(previous_active);
+                activateDocumentTab(previous_active);
+            }
+            event->ignore();
+            return;
+        }
+        const QString recovery_path = recovery_store_.pathFor(session_);
+        if (!recovery_path.isEmpty()) recovery_paths.append(recovery_path);
+    }
+    for (const QString& recovery_path : recovery_paths)
+        static_cast<void>(recovery_store_.remove(recovery_path));
+    event->accept();
 }
 
 } // namespace image_editor

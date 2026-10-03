@@ -5,7 +5,7 @@ Status: **initial standalone boundary, provisional**.
 The Image Editor is an independent Qt Widgets application. Its application
 core lives under `apps/image-editor/src/` and links Qt Core and Qt Gui without
 depending on Qt Widgets. The UI owns dialogs, dock widgets, and window state;
-the core owns the active image document, layer stack, edit operations,
+the core owns each open image document, layer stack, edit operations,
 persistence, and recovery.
 
 ## Source layout
@@ -107,10 +107,24 @@ publication retain their previous output on failure.
 - The Layers dock places a **Quick Export** button above the tree. It invokes
   the same selected-item export action as **File > Quick Export** and stays
   disabled until an image is open.
-- `RecoveryStore` writes a local snapshot every 60 seconds while a dirty
-  document with a renderable base is open. Unsaved canvases use a persisted
-  session identity so they remain recoverable without a source path. On the
-  next launch, the UI offers the newest available snapshot for restoration.
+- `ImageEditorWindow` starts with an empty workspace and owns a tab context for
+  every open document. Each context retains its `ImageDocumentSession`, canvas,
+  active layer, multi-selection in the Layers dock, canvas object selection,
+  linked-image metadata, and source diagnostics; each canvas keeps its own zoom
+  and pan. Tool settings remain shared. The **+** menu creates a canvas, opens
+  an image, or opens a `.cimg` in a new tab. File-menu Open and New Canvas
+  replace the active tab after the save/discard/cancel prompt; opening an
+  already-open `.cimg` selects its tab.
+  Failed saves leave the affected tab open. Closing the last tab leaves the
+  window empty. Linked Video Editor mode stays in one tab and continues to
+  publish its PNG after a successful `.cimg` save. Tabs do not change the
+  `.cimg` schema or the Video Editor handoff contract.
+- `RecoveryStore` writes a local snapshot every 60 seconds for each dirty
+  document with a renderable base. Unsaved canvases use a persisted session
+  identity so they remain recoverable without a source path. On the next launch,
+  each available snapshot can be restored into its own tab. The default store
+  uses the application's local data directory; tests may inject an isolated
+  data directory when constructing `ImageEditorWindow`.
 - `NewCanvasDialog` offers fixed pixel presets or custom dimensions and
   requires a transparent, white, or custom-color background. Canvas documents
   store this base metadata without generating a companion raster file.

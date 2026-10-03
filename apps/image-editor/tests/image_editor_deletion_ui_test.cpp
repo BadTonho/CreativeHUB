@@ -71,8 +71,10 @@ bool testDeletionUi(const QString& root) {
     if (!check(contextual && !contextual->isEnabled() &&
         contextual->shortcut() == QKeySequence(Qt::Key_Delete) && objects && button &&
         layers_button && layers_button->text() == "Delete" && !layers_button->accessibleName().isEmpty() &&
-        tree && canvas && selection && save && undo && redo && menu, "Missing deletion controls/defaults.")) return false;
+        tree && canvas == nullptr && selection && save && undo && redo && menu, "Missing deletion controls/defaults.")) return false;
     if (!window.openLinkedImage(background, doc, output)) return false;
+    canvas = window.findChild<ImageCanvas*>();
+    if (!canvas) return false;
     selection->setChecked(true);
     QCoreApplication::processEvents();
     const auto row = [&](const QString& name) -> QTreeWidgetItem* {

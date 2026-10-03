@@ -1,6 +1,6 @@
 # Image Editor Roadmap
 
-Status: **standalone minimum implemented; basic editable text, raster layer masks, linked image layers, and regression
+Status: **standalone minimum and multi-document tabs implemented; basic editable text, raster layer masks, linked image layers, and regression
 coverage implemented; manual text validation, packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.3**.
@@ -22,10 +22,12 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
   Editor as a separate executable.
 - Preserve linked source images; store editable document operations in a
   versioned format.
-- Keep the current standalone scope to one raster document with a Background,
+- Keep each standalone document to one raster image with a Background,
   editable raster layers and masks, and one-level layer groups. Defer retouching,
   color adjustment, and effect systems until they are justified by validated
-  workflows.
+  workflows. The application window can hold multiple independent raster
+  documents in tabs; this does not change the `.cimg` format or linked-image
+  contract.
 - Basic editable text is implemented for the first editing release: multiline
   content, font family, pixel size, color, alignment, move/width resize,
   horizontal growth to the canvas edge while typing, wrapping, Undo/Redo,
@@ -101,6 +103,9 @@ is claimed; each future delivery includes its own coverage and acceptance gate.
   Export, undoable grouping/ungrouping/deletion, and `.cimg` v8 persistence
   while retaining v1-v7 compatibility.
 - [x] Add canvas fit, zoom, pan, and drag-to-crop controls.
+- [x] Add independent document tabs, new-tab creation/opening, active-tab
+  replacement and close prompts, per-tab recovery snapshots, and linked-mode
+  single-tab enforcement without changing `.cimg` or the host contract.
 - [x] Pass Release build and automated tests for documents, edits, relinking,
   export, recovery, logging, and the UI boundary.
 - [x] User-confirmed Windows validation of the Release build, Paint/Eraser
@@ -345,6 +350,7 @@ results.
 | Import formats and image decoding | `image_editor_core_test.cpp`, `image_editor_format_test.cpp` (`creative-suite-image-editor-image-formats`), `creative-suite-image-editor-deployed-image-formats` | Debug and Release tests encode and import PNG, JPEG, BMP, WebP, and TIFF through the application importer using the app's deployed plugin directory. This exposed and now guards against missing `qwebp`/`qtiff`; the owner confirmed the affected WebP opens in the rebuilt Windows UI. Other-platform packaging remains pending (**P1 validation**). |
 | Flattened export, Quick Export, and export dialogs | `image_editor_core_test.cpp`, `image_editor_export_ui_test.cpp` (`creative-suite-image-editor-export-ui`) | The owner reports current export workflows exercised on Windows 11; cross-platform package checks remain pending. |
 | Canvas, tools, layers, shortcuts, and UI interactions | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`) | The owner reports current UI workflows exercised on Windows 11; cross-platform visual checks remain pending. |
+| Multiple document tabs and per-tab recovery | `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`): current/new-tab creation and opening, duplicate `.cimg` selection, active-tab replacement, layer multi-selection/history/zoom isolation, import targeting, Save/Discard/Cancel, failed-save retention, last-tab empty state, multi-snapshot restore and autosave | The focused Windows Debug Image Editor UI test passed; the full Windows Release CTest suite passed 67/67. Repeat the interaction checklist in `MANUAL_VALIDATION.md`; native visual checks and macOS/Linux validation remain pending (**P2 validation**). |
 | Video Editor linked-image producer/consumer workflow | Producer: `image_editor_ui_test.cpp`; consumers: `application_media_services_test.cpp` (`creative-suite-main-editor-application-media`), `main_window_integration_test.cpp` (`creative-suite-main-editor-main-window`), and `project_file_test.cpp` (`creative-suite-main-editor-project`) | Automated producer/consumer regression tests pass in Debug and Release. The owner reports the basic linked edit/save workflow working on Windows, but the full scenario and cross-platform acceptance remain pending (**P1 validation**). |
 | Linked image import, geometry, sources, v11 persistence, export and publication | `image_editor_raster_test.cpp` (`creative-suite-image-editor-raster`), `image_editor_raster_ui_test.cpp` (within `creative-suite-image-editor-ui`), Video Editor `main_window_integration_test.cpp` | Automated coverage present. Visual/native drag checks are documented in `MANUAL_VALIDATION.md`; macOS/Linux and manual acceptance remain pending. |
 | Raster layer masks | `image_editor_mask_test.cpp` (`creative-suite-image-editor-masks`), `image_editor_mask_ui_test.cpp` (within `creative-suite-image-editor-ui`); Video Editor `main_window_integration_test.cpp` when both apps are enabled | Automated coverage for editing, transforms, persistence, recovery, export, thumbnail targeting, and linked PNG producer/consumer behavior. Mask UI checks are documented in `MANUAL_VALIDATION.md`; no manual result recorded. |

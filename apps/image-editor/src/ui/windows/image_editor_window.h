@@ -10,6 +10,7 @@
 #include <QByteArray>
 #include <QMainWindow>
 #include <QStringList>
+#include <QVector>
 
 class QAction;
 class QButtonGroup;
@@ -25,8 +26,10 @@ class QSlider;
 class QSpinBox;
 class QPushButton;
 class QToolBar;
+class QTabBar;
 class QToolButton;
 class QTimer;
+class QStackedWidget;
 class QWidget;
 class QWidgetAction;
 
@@ -35,10 +38,13 @@ namespace image_editor {
 class ImageCanvas;
 class LayerPanel;
 class ToolSidebar;
+struct ImageEditorDocumentTab;
 
 class ImageEditorWindow final : public QMainWindow {
 public:
-    explicit ImageEditorWindow(QWidget* parent = nullptr);
+    explicit ImageEditorWindow(QWidget* parent = nullptr,
+                                QString recovery_data_directory = {});
+    ~ImageEditorWindow() override;
     [[nodiscard]] bool importImagePaths(const QStringList& paths,
         std::optional<QPointF> center = {}, const QString& relink_id = {});
 
@@ -54,6 +60,19 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 private:
+    enum class OpenTarget { CurrentTab, NewTab };
+
+    void connectCanvas(ImageCanvas* canvas);
+    [[nodiscard]] int addDocumentTab(bool activate = true);
+    void activateDocumentTab(int index);
+    void closeDocumentTab(int index);
+    void openNewTabMenu();
+    void updateDocumentTabLabel();
+    void resetActiveDocumentState();
+    void resetActiveDocumentSelection();
+    [[nodiscard]] bool hasActiveDocumentTab() const noexcept;
+    [[nodiscard]] bool openImagePathInTarget(const QString& path, OpenTarget target);
+    [[nodiscard]] bool openDocumentPathInTarget(const QString& path, OpenTarget target);
     void createActions();
     void createToolOptionsBar();
     void createShapePalette();
@@ -67,7 +86,7 @@ private:
     [[nodiscard]] bool editingMask() const;
     void updateView(bool preserveCanvasView = false);
     void deactivateCanvasTools();
-    void createNewCanvas();
+    void createNewCanvas(bool new_tab = false);
     void openImage();
     void openDocument();
     void relinkSource();
@@ -75,14 +94,14 @@ private:
     void saveDocumentAs();
     void exportImage(bool quick_export = false);
     void maybeOfferRecovery();
-    [[nodiscard]] bool confirmDiscardOrSave();
+    [[nodiscard]] bool confirmDiscardOrSave(bool clearRecoveryOnDiscard = true);
     [[nodiscard]] bool saveToPath(QString path = {});
     void handleCrop(const QRect& crop);
     void handlePaintStroke(const QVector<QPointF>& points,
                            const QColor& color,
                            int diameter);
     void handleEraseStroke(const QVector<QPointF>& points, int diameter);
-    void updateCanvasToolState(ToolSidebar::Tool tool);
+    void updateCanvasToolState(ToolSidebar::Tool tool, bool preserveSelection = false);
     void updateCanvasBrush();
     void updateShapeOptions();
     void updateTextOptions();
@@ -108,6 +127,11 @@ private:
     RecoveryStore recovery_store_;
     ToolSidebar* tool_sidebar_ = nullptr;
     ImageCanvas* canvas_ = nullptr;
+    QTabBar* document_tab_bar_ = nullptr;
+    QStackedWidget* document_stack_ = nullptr;
+    QToolButton* new_document_tab_button_ = nullptr;
+    QVector<ImageEditorDocumentTab*> document_tabs_;
+    int active_document_tab_ = -1;
     QDockWidget* layer_dock_ = nullptr;
     LayerPanel* layer_panel_ = nullptr;
     QToolBar* tool_options_toolbar_ = nullptr;
@@ -149,6 +173,12 @@ private:
     QAction* quick_export_action_ = nullptr;
     QAction* open_image_action_ = nullptr;
     QAction* open_document_action_ = nullptr;
+    QAction* new_tab_canvas_action_ = nullptr;
+    QAction* new_tab_open_image_action_ = nullptr;
+    QAction* new_tab_open_document_action_ = nullptr;
+    QAction* close_document_tab_action_ = nullptr;
+    QAction* next_document_tab_action_ = nullptr;
+    QAction* previous_document_tab_action_ = nullptr;
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
     QAction* crop_action_ = nullptr;
@@ -168,6 +198,7 @@ private:
     ImageShapeData shape_style_;
     ImageTextData text_style_;
     QStringList selected_object_ids_;
+    QVector<ImageStackItemData> selected_stack_items_;
     QString selected_mask_layer_id_;
     bool shape_colors_initialized_ = false;
     bool shape_palette_positioned_ = false;
