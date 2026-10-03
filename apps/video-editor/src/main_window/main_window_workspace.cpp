@@ -791,7 +791,7 @@ void MainWindow::createMenus() {
             this,
             "System",
             QString("Video Editor\n\nVersion: %1\nExecutable: %2")
-                .arg(version.isEmpty() ? QStringLiteral("Beta 0.1.4") : version,
+                .arg(version.isEmpty() ? QStringLiteral("Beta 0.1.5") : version,
                      executable_path.isEmpty()
                          ? QStringLiteral("N/A")
                          : executable_path));
