@@ -42,6 +42,15 @@ std::filesystem::path normalizedPath(const std::filesystem::path& path) {
 }
 
 QString mediaListText(const media::VideoMetadata& metadata) {
+    if (metadata.kind == media::MediaKind::Audio) {
+        const auto audio = metadata.audio;
+        return QString("%1 — Audio — %2 Hz — %3 channels — %4 — %5")
+            .arg(fromUtf8(metadata.display_name))
+            .arg(audio.has_value() ? audio->sample_rate : 0)
+            .arg(audio.has_value() ? audio->channel_count : 0)
+            .arg(formatOptionalDouble(metadata.duration_seconds, " s"))
+            .arg(fromUtf8(metadata.container_format));
+    }
     return QString("%1 — %2×%3 — %4 — %5 — %6")
         .arg(fromUtf8(metadata.display_name))
         .arg(metadata.width)
@@ -52,6 +61,30 @@ QString mediaListText(const media::VideoMetadata& metadata) {
 }
 
 QString mediaDetailsText(const media::VideoMetadata& metadata) {
+    if (metadata.kind == media::MediaKind::Audio) {
+        const QString codec = metadata.audio.has_value()
+            ? fromUtf8(metadata.audio->codec)
+            : QStringLiteral("Unknown");
+        const int sample_rate = metadata.audio.has_value()
+            ? metadata.audio->sample_rate : 0;
+        const int channels = metadata.audio.has_value()
+            ? metadata.audio->channel_count : 0;
+        return QString("Name: %1\n"
+                       "Type: Audio\n"
+                       "Format: %2\n"
+                       "Codec: %3\n"
+                       "Sample rate: %4 Hz\n"
+                       "Channels: %5\n"
+                       "Duration: %6\n"
+                       "Path: %7")
+            .arg(fromUtf8(metadata.display_name))
+            .arg(fromUtf8(metadata.container_format))
+            .arg(codec)
+            .arg(sample_rate)
+            .arg(channels)
+            .arg(formatOptionalDouble(metadata.duration_seconds, " s"))
+            .arg(fromUtf8(pathToUtf8(metadata.source_path)));
+    }
     const QString frame_count = metadata.frame_count.has_value()
         ? QString::number(*metadata.frame_count)
         : "Unknown";

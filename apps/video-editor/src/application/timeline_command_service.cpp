@@ -31,6 +31,8 @@ EditReason reasonForAdd(timeline::AddClipResult result) noexcept {
         return EditReason::InvalidTimingMetadata;
     case timeline::AddClipResult::InvalidPosition:
         return EditReason::InvalidPosition;
+    case timeline::AddClipResult::IncompatibleTrack:
+        return EditReason::InvalidTarget;
     case timeline::AddClipResult::Overlap:
         return EditReason::Overlap;
     case timeline::AddClipResult::Added:
@@ -393,29 +395,57 @@ TimelineEditResult TimelineCommandService::execute(const DeleteClipCommand& comm
 }
 
 TimelineEditResult TimelineCommandService::execute(const AddMediaClipCommand& command) {
-    const auto track = session_.timeline_.locateTrack(command.track_id);
-    if (!track) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    auto staged_timeline = session_.timeline_;
+    const auto target_track = staged_timeline.locateTrack(command.track_id);
+    if (!target_track) return result(EditStatus::Rejected, EditReason::InvalidTarget);
     const auto media_index = session_.media_library_.indexForPath(command.source_path);
     if (media_index == session_.media_library_.size()) {
         return result(EditStatus::Rejected, EditReason::MediaNotFound);
     }
     const auto& media_item = session_.media_library_.items()[media_index];
     if (media_item.offline) return result(EditStatus::Rejected, EditReason::OfflineMedia);
+    std::size_t destination_track = *target_track;
+    timeline::TrackId destination_track_id = command.track_id;
+    if (media_item.metadata.kind == media::MediaKind::Audio &&
+        staged_timeline.tracks()[destination_track].kind !=
+            timeline::TrackKind::Audio) {
+        std::size_t audio_number = 1;
+        for (;;) {
+            const auto name = "Audio " + std::to_string(audio_number);
+            const bool used = std::any_of(
+                staged_timeline.tracks().begin(), staged_timeline.tracks().end(),
+                [&name](const timeline::TimelineTrack& track) {
+                    return track.kind == timeline::TrackKind::Audio && track.name == name;
+                });
+            if (!used) {
+                if (staged_timeline.addTrack(name, timeline::TrackKind::Audio) !=
+                    timeline::AddTrackResult::Added) {
+                    return result(EditStatus::Rejected, EditReason::InvalidTarget);
+                }
+                break;
+            }
+            ++audio_number;
+        }
+        destination_track = staged_timeline.tracks().size() - 1;
+        destination_track_id = staged_timeline.tracks()[destination_track].track_id;
+    }
     std::int64_t start = command.timeline_start_frame.value_or(0);
     if (!command.timeline_start_frame) {
-        for (const auto& clip : session_.timeline_.tracks()[*track].clips) {
+        for (const auto& clip : staged_timeline.tracks()[destination_track].clips) {
             if (clip.timeline_start_frame <= std::numeric_limits<std::int64_t>::max() -
                     clip.timeline_duration_frames) {
                 start = std::max(start, clip.timeline_start_frame + clip.timeline_duration_frames);
             }
         }
     }
-    const auto next_clip_id = session_.timeline_.snapshot().next_clip_id;
-    auto before = session_.captureEditState();
-    const auto added = session_.timeline_.addClip(*track, media_item.metadata, start);
+    const auto next_clip_id = staged_timeline.snapshot().next_clip_id;
+    const auto added = staged_timeline.addClip(
+        destination_track, media_item.metadata, start);
     if (added != timeline::AddClipResult::Added) {
         return result(EditStatus::Rejected, reasonForAdd(added));
     }
+    auto before = session_.captureEditState();
+    session_.timeline_ = std::move(staged_timeline);
     recordSuccessfulEdit(std::move(before));
     const auto location = session_.timeline_.locateClip(next_clip_id);
     if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
@@ -424,7 +454,7 @@ TimelineEditResult TimelineCommandService::execute(const AddMediaClipCommand& co
     session_.playhead_frame_ = 0;
     session_.preserved_playhead_frame_.reset();
     auto output = result(EditStatus::Applied);
-    output.affected_track_ids = {command.track_id};
+    output.affected_track_ids = {destination_track_id};
     output.affected_clip_ids = {next_clip_id};
     output.invalidate_playback = true;
     return output;

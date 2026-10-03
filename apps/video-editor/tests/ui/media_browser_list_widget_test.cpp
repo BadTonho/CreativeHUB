@@ -1,5 +1,6 @@
 #include "ui/media_browser/media_browser_list_widget.h"
 #include "ui/media_browser/media_drag_mime.h"
+#include "ui/media_browser/media_drag_mime.h"
 #include "main_window/main_window_support.h"
 
 #include <QApplication>
@@ -95,6 +96,9 @@ int main(int argc, char* argv[]) {
         item->setData(
             media_browser_ui::kMediaDurationSecondsRole,
             100.0);
+        item->setData(
+            media_browser_ui::kMediaKindRole,
+            QStringLiteral("video"));
         item->setFlags(item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
         QPixmap thumbnail(16, 16);
         thumbnail.fill(Qt::blue);
@@ -148,9 +152,32 @@ int main(int argc, char* argv[]) {
                 "100",
             "Media drag data did not preserve the duration metadata.");
         require(
+            QString::fromUtf8(media_mime->data(ui::kMediaKindMimeType)) ==
+                "video",
+            "Media drag data did not preserve the media kind.");
+        require(
             QString::fromUtf8(media_mime->data(ui::kMediaDisplayNameMimeType)) ==
                 "Sample clip with a longer original name",
             "Media drag data did not preserve the original display name.");
+        delete media_mime;
+        item->setData(media_browser_ui::kMediaFrameCountRole, QVariant{});
+        item->setData(media_browser_ui::kMediaFrameRateRole, QVariant{});
+        item->setData(
+            media_browser_ui::kMediaDurationSecondsRole,
+            12.5);
+        item->setData(
+            media_browser_ui::kMediaKindRole,
+            QStringLiteral("audio"));
+        media_mime = media_browser_ui::createMediaBrowserDragMimeData(
+            QList<QListWidgetItem*>{item});
+        require(
+            QString::fromUtf8(media_mime->data(ui::kMediaKindMimeType)) ==
+                "audio" &&
+                !media_mime->hasFormat(ui::kMediaFrameCountMimeType) &&
+                !media_mime->hasFormat(ui::kMediaFrameRateMimeType) &&
+                QString::fromUtf8(media_mime->data(
+                    ui::kMediaDurationSecondsMimeType)) == "12.5",
+            "Audio-only drag data included video frame timing or lost its duration.");
         delete media_mime;
         require(settings.value("media_browser/view_mode").toString() == "grid",
                 "Grid mode was not persisted.");

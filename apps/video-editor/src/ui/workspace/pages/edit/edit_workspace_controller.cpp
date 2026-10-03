@@ -825,8 +825,8 @@ void EditWorkspaceController::updateTimelineState() {
     if (location.has_value()) {
         const auto& clip = timeline_model_.tracks()[location->track_index]
             .clips[location->clip_index];
-        audio_enabled = clip.kind == timeline::ClipKind::Video &&
-            canPlaybackSelectedMedia();
+        audio_enabled = clip.kind == timeline::ClipKind::Audio ||
+            (clip.kind == timeline::ClipKind::Video && canPlaybackSelectedMedia());
     }
     if (ui_.clip_volume != nullptr && ui_.clip_mute != nullptr &&
         ui_.track_volume != nullptr && ui_.track_mute != nullptr) {

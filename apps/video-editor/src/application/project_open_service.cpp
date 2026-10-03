@@ -27,6 +27,11 @@ media::MediaItem importProjectMedia(
         const media::StillImageDecoder decoder;
         metadata = decoder.probe(path);
         first_frame = decoder.decode_first_frame(path);
+    } else if (kind == media::MediaKind::Audio) {
+        metadata = media::VideoProbe{}.probe(path);
+        if (metadata.kind != media::MediaKind::Audio || !metadata.audio.has_value()) {
+            throw media::MediaError("The source does not contain an audio-only stream.");
+        }
     } else {
         const media::VideoProbe probe;
         const media::VideoDecoder decoder;
@@ -57,6 +62,23 @@ std::optional<std::int64_t> availableFrameCount(const media::VideoMetadata& meta
         return std::nullopt;
     }
     return std::max<std::int64_t>(1, static_cast<std::int64_t>(std::ceil(estimate)));
+}
+
+std::optional<std::int64_t> availableAudioDurationTimeUs(
+    const media::VideoMetadata& metadata) {
+    if (!metadata.audio.has_value() ||
+        !metadata.audio->duration_seconds.has_value() ||
+        !std::isfinite(*metadata.audio->duration_seconds) ||
+        *metadata.audio->duration_seconds <= 0.0) {
+        return std::nullopt;
+    }
+    const auto value = static_cast<long double>(
+        *metadata.audio->duration_seconds) * 1000000.0L;
+    if (!std::isfinite(value) || value > static_cast<long double>(
+            std::numeric_limits<std::int64_t>::max())) {
+        return std::nullopt;
+    }
+    return static_cast<std::int64_t>(std::ceil(value));
 }
 
 timeline::FrameRate inferLegacyTimelineRate(
@@ -338,7 +360,7 @@ ProjectOpenResult ProjectOpenService::prepare(
         for (auto& track : document.timeline_tracks) {
             bool converted_timing = false;
             for (auto& clip : track.clips) {
-                if (!timeline::isMediaClipKind(clip.kind)) continue;
+                if (!timeline::isFrameTimedMediaClipKind(clip.kind)) continue;
                 const bool legacy_clip = document.timing_migration_required;
                 if (legacy_clip) clip.source_duration_frames = clip.duration_frames;
                 if (clip.source_duration_frames <= 0) {
@@ -420,14 +442,18 @@ ProjectOpenResult ProjectOpenService::prepare(
             const auto& project_track = document.timeline_tracks[track_index];
             const auto track_id = project_track.track_id;
             next_track_id = std::max(next_track_id, track_id + 1);
-            snapshot.tracks.push_back(timeline::TimelineTrack{
+            timeline::TimelineTrack prepared_track{
                 track_id,
                 project_track.name.empty()
-                    ? "Video " + std::to_string(track_index + 1)
+                    ? (project_track.kind == timeline::TrackKind::Audio
+                           ? "Audio " + std::to_string(track_index + 1)
+                           : "Video " + std::to_string(track_index + 1))
                     : project_track.name,
                 project_track.audio_gain,
                 project_track.audio_muted,
-                {}});
+                {}};
+            prepared_track.kind = project_track.kind;
+            snapshot.tracks.push_back(std::move(prepared_track));
 
             for (std::size_t clip_index = 0;
                  clip_index < project_track.clips.size(); ++clip_index) {
@@ -483,6 +509,58 @@ ProjectOpenResult ProjectOpenService::prepare(
 
                 const auto& loaded_item = loaded_library.items()[media_index];
                 const auto& metadata = loaded_item.metadata;
+                if (project_clip.kind == timeline::ClipKind::Audio) {
+                    const auto audio_duration = loaded_item.offline
+                        ? std::optional<std::int64_t>{}
+                        : availableAudioDurationTimeUs(metadata);
+                    if ((!loaded_item.offline && !audio_duration.has_value()) ||
+                        metadata.kind != media::MediaKind::Audio ||
+                        project_clip.timeline_start_frame < 0 ||
+                        project_clip.duration_frames <= 0 ||
+                        project_clip.source_start_time_us < 0 ||
+                        project_clip.source_duration_time_us <= 0 ||
+                        project_clip.source_start_time_us >
+                            std::numeric_limits<std::int64_t>::max() -
+                                project_clip.source_duration_time_us ||
+                        (audio_duration.has_value() &&
+                         project_clip.source_start_time_us +
+                                 project_clip.source_duration_time_us >
+                             *audio_duration)) {
+                        throw project::ProjectError(
+                            project::ProjectErrorCode::InvalidTimeline,
+                            "An audio timeline clip is outside the current media bounds.",
+                            std::nullopt,
+                            project_clip.source_path);
+                    }
+                    timeline::TimelineClip audio_clip;
+                    audio_clip.timeline_start_frame = project_clip.timeline_start_frame;
+                    audio_clip.source_start_frame = 0;
+                    audio_clip.timeline_duration_frames = project_clip.duration_frames;
+                    audio_clip.source_path = media::MediaLibrary::canonicalPath(
+                        project_clip.source_path);
+                    audio_clip.display_name = loaded_item.display_name;
+                    audio_clip.duration_seconds = metadata.audio.has_value() &&
+                            metadata.audio->duration_seconds.has_value()
+                        ? metadata.audio->duration_seconds
+                        : std::optional<double>(
+                              static_cast<double>(project_clip.source_start_time_us +
+                                  project_clip.source_duration_time_us) / 1000000.0);
+                    audio_clip.frame_rate.reset();
+                    audio_clip.frame_count.reset();
+                    audio_clip.audio_gain = project_clip.audio_gain;
+                    audio_clip.audio_muted = project_clip.audio_muted;
+                    audio_clip.clip_id = project_clip.clip_id;
+                    audio_clip.track_id = track_id;
+                    audio_clip.transform = project_clip.transform;
+                    audio_clip.keyframes = project_clip.keyframes;
+                    audio_clip.kind = timeline::ClipKind::Audio;
+                    audio_clip.source_start_time_us = project_clip.source_start_time_us;
+                    audio_clip.source_duration_time_us =
+                        project_clip.source_duration_time_us;
+                    snapshot.tracks.back().clips.push_back(std::move(audio_clip));
+                    next_clip_id = std::max(next_clip_id, project_clip.clip_id + 1);
+                    continue;
+                }
                 const auto frame_count = loaded_item.offline
                     ? std::optional<std::int64_t>{}
                     : availableFrameCount(metadata);

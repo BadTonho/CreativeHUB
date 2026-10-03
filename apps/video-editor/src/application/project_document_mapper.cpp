@@ -35,6 +35,7 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
         project_track.name = track.name;
         project_track.audio_gain = track.audio_gain;
         project_track.audio_muted = track.audio_muted;
+        project_track.kind = track.kind;
         project_track.clips.reserve(track.clips.size());
         for (const auto& clip : track.clips) {
             project::ProjectClip project_clip;
@@ -55,6 +56,8 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             project_clip.source_duration_frames = clip.source_duration_frames;
             project_clip.source_duration_migration_pending =
                 clip.source_duration_migration_pending;
+            project_clip.source_start_time_us = clip.source_start_time_us;
+            project_clip.source_duration_time_us = clip.source_duration_time_us;
             project_track.clips.push_back(std::move(project_clip));
         }
         for (const auto& transition : track.transitions) {

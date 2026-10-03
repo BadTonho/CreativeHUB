@@ -86,11 +86,18 @@ void TimelineInteractionPainter::paint(
             const auto& clip = tracks[location.track_index].clips[location.clip_index];
             if (state.move_target_track.has_value()) {
                 const auto target = *state.move_target_track;
-                const auto valid = !TimelineDropValidator::overlaps(
-                    tracks, target, state.move_target_frame,
-                    clip.timeline_duration_frames, location);
+                const bool compatible_track =
+                    target < tracks.size() &&
+                    ((tracks[target].kind == TrackKind::Audio) ==
+                     (clip.kind == ClipKind::Audio));
+                const auto valid = compatible_track &&
+                    !TimelineDropValidator::overlaps(
+                        tracks, target, state.move_target_frame,
+                        clip.timeline_duration_frames, location);
                 const auto label = (clip.kind == ClipKind::Text
-                    ? QStringLiteral("[Text] ") : QString{}) +
+                    ? QStringLiteral("[Text] ")
+                    : clip.kind == ClipKind::Audio
+                        ? QStringLiteral("[Audio] ") : QString{}) +
                     QString::fromUtf8(clip.display_name.data(),
                                       static_cast<int>(clip.display_name.size()));
                 draw_ghost(target, state.move_target_frame,

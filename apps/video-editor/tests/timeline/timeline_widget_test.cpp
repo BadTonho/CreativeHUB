@@ -346,6 +346,71 @@ int main(int argc, char* argv[]) {
             !header_media_drop.isAccepted(),
             "Timeline accepted a media drop on the track header.");
 
+        timeline::TimelineWidget typed_drop_widget;
+        typed_drop_widget.resize(1000, 700);
+        typed_drop_widget.setTrackRowHeight(timeline::kMaximumTrackRowHeight);
+        timeline::TimelineTrack audio_target{
+            3, "Audio 1", 1.0, false, {}};
+        audio_target.kind = timeline::TrackKind::Audio;
+        typed_drop_widget.setTracks({top_track, lower_track, audio_target});
+        typed_drop_widget.setTimelineViewportWidth(1000);
+        typed_drop_widget.show();
+        application.processEvents();
+        timeline::TrackId typed_drop_track = 0;
+        QObject::connect(
+            &typed_drop_widget,
+            &timeline::TimelineWidget::mediaDropRequested,
+            [&typed_drop_track](const QString&, timeline::TrackId track_id, qint64) {
+                typed_drop_track = track_id;
+            });
+        QMimeData audio_mime;
+        audio_mime.setData(ui::kMediaPathMimeType, QByteArrayLiteral("song.wav"));
+        audio_mime.setData(ui::kMediaKindMimeType, QByteArrayLiteral("audio"));
+        audio_mime.setData(
+            ui::kMediaDurationSecondsMimeType, QByteArrayLiteral("1.25"));
+        const auto sendTypedDrop = [&application, &typed_drop_widget](
+            QMimeData& mime, const QPointF& position) {
+            QDragEnterEvent enter(
+                position.toPoint(), Qt::CopyAction, &mime,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&typed_drop_widget, &enter);
+            QDragMoveEvent move(
+                position.toPoint(), Qt::CopyAction, &mime,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&typed_drop_widget, &move);
+            QDropEvent drop(
+                position, Qt::CopyAction, &mime,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(&typed_drop_widget, &drop);
+            return std::pair{move.isAccepted(), drop.isAccepted()};
+        };
+        const auto audio_on_video = sendTypedDrop(audio_mime, QPointF(400, 120));
+        require(audio_on_video.first && audio_on_video.second &&
+                    typed_drop_track == top_track.track_id,
+                "Audio-only media could not target a video row for automatic Audio-track creation.");
+        typed_drop_track = 0;
+        const auto audio_on_audio = sendTypedDrop(audio_mime, QPointF(400, 480));
+        require(audio_on_audio.first && audio_on_audio.second &&
+                    typed_drop_track == audio_target.track_id,
+                "Audio-only media could not target an existing Audio track.");
+        audio_target.clips.push_back(makeClip(
+            "existing-audio.wav", 0, test_clip_duration, "existing-audio.wav"));
+        audio_target.clips.front().kind = timeline::ClipKind::Audio;
+        typed_drop_widget.setTracks({top_track, lower_track, audio_target});
+        typed_drop_track = 0;
+        const auto overlapping_audio = sendTypedDrop(
+            audio_mime, QPointF(400, 480));
+        require(!overlapping_audio.first && !overlapping_audio.second &&
+                    typed_drop_track == 0,
+                "Audio-only media was accepted over a clip on the same Audio track.");
+        QMimeData visual_mime;
+        visual_mime.setData(ui::kMediaPathMimeType, QByteArrayLiteral("picture.png"));
+        visual_mime.setData(ui::kMediaKindMimeType, QByteArrayLiteral("image"));
+        const auto visual_on_audio = sendTypedDrop(visual_mime, QPointF(400, 480));
+        require(!visual_on_audio.first && !visual_on_audio.second,
+                "Visual media was accepted on an Audio track.");
+        typed_drop_widget.close();
+
         QScrollArea scroll_area;
         scroll_area.resize(360, 220);
         scroll_area.setWidgetResizable(true);

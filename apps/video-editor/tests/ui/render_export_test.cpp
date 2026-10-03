@@ -28,6 +28,7 @@ extern "C" {
 #include <atomic>
 #include <cstdio>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -302,6 +303,48 @@ std::filesystem::path createVideoWithAudioFixture(const std::filesystem::path& r
     avcodec_free_context(&video);
     avcodec_free_context(&audio);
     avformat_free_context(output);
+    return path;
+}
+
+std::filesystem::path createIndependentAudioFixture(
+    const std::filesystem::path& root) {
+    constexpr std::uint32_t sample_rate = 48000;
+    constexpr std::uint16_t channels = 2;
+    constexpr std::uint16_t bits_per_sample = 16;
+    constexpr std::uint32_t frame_count = sample_rate * 2;
+    constexpr std::uint32_t block_align = channels * bits_per_sample / 8;
+    constexpr std::uint32_t data_size = frame_count * block_align;
+    const auto path = root / "independent-audio.wav";
+    const auto write_u16 = [](std::ostream& stream, std::uint16_t value) {
+        stream.put(static_cast<char>(value & 0xff));
+        stream.put(static_cast<char>((value >> 8) & 0xff));
+    };
+    const auto write_u32 = [](std::ostream& stream, std::uint32_t value) {
+        for (int byte = 0; byte < 4; ++byte) {
+            stream.put(static_cast<char>((value >> (byte * 8)) & 0xff));
+        }
+    };
+    std::ofstream file(path, std::ios::binary);
+    file.write("RIFF", 4);
+    write_u32(file, 36 + data_size);
+    file.write("WAVEfmt ", 8);
+    write_u32(file, 16);
+    write_u16(file, 1);
+    write_u16(file, channels);
+    write_u32(file, sample_rate);
+    write_u32(file, sample_rate * block_align);
+    write_u16(file, static_cast<std::uint16_t>(block_align));
+    write_u16(file, bits_per_sample);
+    file.write("data", 4);
+    write_u32(file, data_size);
+    for (std::uint32_t index = 0; index < frame_count; ++index) {
+        const auto sample = static_cast<std::int16_t>(index < sample_rate / 4
+            ? 0
+            : 12000);
+        write_u16(file, static_cast<std::uint16_t>(sample));
+        write_u16(file, static_cast<std::uint16_t>(sample));
+    }
+    require(static_cast<bool>(file), "Could not write an independent WAV fixture.");
     return path;
 }
 
@@ -684,6 +727,19 @@ void validateEmbeddedAudioMixing(
         ? std::string("mkv")
         : output.container.extensions.substr(0, output.container.extensions.find(','));
     const auto source = createVideoWithAudioFixture(root);
+    const auto decodeFrames = [](const std::filesystem::path& path) {
+        auto decoder = media::VideoPlaybackSession::open(path);
+        std::vector<media::VideoFramePtr> frames;
+        while (const auto frame = decoder->decode_next_frame()) {
+            frames.push_back(*frame);
+        }
+        return frames;
+    };
+    const auto centerPixel = [](const media::VideoFrame& frame, int channel) {
+        const auto offset = static_cast<std::size_t>(
+            (frame.height / 2) * frame.stride + (frame.width / 2) * 4 + channel);
+        return frame.rgba_pixels[offset];
+    };
     auto job = makeImageJob(
         output, source, root / ("audio-mix." + extension), 401, 24);
     job.project_snapshot.timeline_frame_rate = {24, 1};
@@ -745,6 +801,63 @@ void validateEmbeddedAudioMixing(
     renderJob(job, canceled);
     require(decodedAudioRms(pathFromQString(job.settings.output_path)) < 0.001,
             "A muted audio track still contributed samples to the export.");
+
+    const auto independent_source = createIndependentAudioFixture(root);
+    auto independent_job = makeImageJob(
+        output, source, root / ("independent-audio-mix." + extension), 404, 24);
+    independent_job.project_snapshot.timeline_frame_rate = {24, 1};
+    auto& visual_track = independent_job.project_snapshot.timeline_tracks.front();
+    visual_track.clips.front().kind = timeline::ClipKind::Video;
+    visual_track.clips.front().duration_frames = 24;
+    visual_track.clips.front().source_start_frame = 0;
+    visual_track.clips.front().source_duration_frames = 24;
+    visual_track.clips.front().audio_gain = 0.5;
+    project::ProjectTrack independent_track;
+    independent_track.track_id = 2;
+    independent_track.name = "Audio 1";
+    independent_track.kind = timeline::TrackKind::Audio;
+    independent_track.audio_gain = 0.5;
+    project::ProjectClip independent_clip;
+    independent_clip.clip_id = 2;
+    independent_clip.source_path = independent_source;
+    independent_clip.kind = timeline::ClipKind::Audio;
+    independent_clip.duration_frames = 48;
+    independent_clip.source_start_time_us = 0;
+    independent_clip.source_duration_time_us = 2000000;
+    independent_clip.audio_gain = 0.5;
+    independent_track.clips.push_back(independent_clip);
+    independent_job.project_snapshot.timeline_tracks.push_back(independent_track);
+    renderJob(independent_job, canceled);
+    const auto independent_output = pathFromQString(
+        independent_job.settings.output_path);
+    const auto independent_frames = decodeFrames(independent_output);
+    require(independent_frames.size() == 120 &&
+                centerPixel(*independent_frames[90], 0) < 2 &&
+                centerPixel(*independent_frames[90], 1) < 2 &&
+                decodedAudioRmsRange(independent_output, 0, 24000) > 0.04 &&
+                decodedAudioRmsRange(independent_output, 72000, 24000) > 0.04,
+            "Independent and embedded audio were not mixed through the audio tail with black frames.");
+
+    independent_track.audio_muted = true;
+    independent_job.id = 405;
+    independent_job.project_snapshot.timeline_tracks.back() = independent_track;
+    independent_job.settings.output_path = pathToQString(
+        root / ("independent-audio-muted." + extension));
+    renderJob(independent_job, canceled);
+    require(decodedAudioRmsRange(
+                pathFromQString(independent_job.settings.output_path),
+                72000, 24000) < 0.001,
+            "Muting an independent Audio track did not silence its audio tail.");
+
+    independent_job.id = 406;
+    independent_job.settings.export_audio = false;
+    independent_job.settings.output_path = pathToQString(
+        root / ("independent-audio-disabled." + extension));
+    renderJob(independent_job, canceled);
+    auto no_audio_decoder = media::AudioPlaybackSession::open(
+        pathFromQString(independent_job.settings.output_path), {48000, 2});
+    require(!no_audio_decoder->has_audio(),
+            "Audio-disabled export still emitted an audio stream.");
 }
 
 void validateConfiguredFullResolutionExport(

@@ -20,15 +20,16 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 12, including migration from
-  versions 1 through 11, a rational Timeline rate and separate source/Timeline
-  clip durations, video/image/text media kinds, per-project timeline zoom,
+- versioned `.csp` persistence through version 13, including migration from
+  versions 1 through 12, a rational Timeline rate and separate source/Timeline
+  clip durations, video/image/text/audio media kinds, typed tracks,
+  per-project timeline zoom,
   track-row height, and optional shared/clip-specific Image Editor links. The
   current canvas is fixed at 1920x1080 and new projects default to 30 fps;
-- embedded audio playback synchronized with video, per-clip and per-track
-  gain/mute, and the video fallback path;
+- embedded video audio and independent audio-only tracks synchronized in
+  playback, per-clip and per-track gain/mute, and the video fallback path;
 - basic layers, normalized 2D transformations, linear keyframes, worker-side
-  composition, and current version 12 project persistence;
+  composition, and current version 13 project persistence;
 - manual text clips and basic captions, including worker-side QImage/QPainter
   rasterization, essential text styling, transforms/keyframes, and version 4
   project persistence with version 3 migration;
@@ -42,8 +43,9 @@ The Video Editor currently includes:
   timeline image variants, with saved PNG refresh and no unsaved live preview;
 - atomic project autosave and recovery snapshots with configurable global
   interval and retention;
-- offline FFmpeg video export with embedded audio, configurable output
-  settings, progress, and cancellation, but no YouTube-named preset;
+- offline FFmpeg video export with embedded and independent audio, black frames
+  through audio tails, configurable output settings, progress, and cancellation,
+  but no YouTube-named preset;
 - independent per-job experimental GPU export composition (Render > Video,
   default off), supporting 1080p, 1440p and 4K UHD with RGBA readback and CPU fallback;
 - local structured diagnostic logging;
@@ -60,8 +62,8 @@ The Video Editor currently includes:
 - Support 1920x1080 (16:9) and 1080x1920 (9:16) project canvases. Default new
   projects to 16:9 at 30 fps. Offer Timeline rates of 24, 25, 30, 48, 50, and
   60 fps. Other aspect ratios are not part of this foundation scope.
-- Preserve opening existing `.csp` versions 1 through 12 as 16:9 projects.
-  The current v12 format only permits a 1920x1080 canvas. Before implementing
+- Preserve opening existing `.csp` versions 1 through 13 as 16:9 projects.
+  The current v13 format only permits a 1920x1080 canvas. Before implementing
   portrait canvases, define and test the versioned persistence change without
   breaking older projects.
 - Accept 4K source media in 1080p projects, but do not promise real-time
@@ -90,8 +92,8 @@ The Video Editor currently includes:
 
 ## Deferred beyond the foundation
 
-- audio-only sources, independent audio tracks, advanced mixing, waveforms,
-  automation, recording, audio crossfades, and advanced audio effects;
+- advanced audio mixing, waveforms, automation, recording, audio crossfades,
+  audio-only file export, and advanced audio effects;
 - image sequences, SRT import, automatic captions, rich text, and animated text
   content;
 - advanced compositing, GPU effects/decoding/encoding, easing, masks, 3D layers, and

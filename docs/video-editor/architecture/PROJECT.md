@@ -5,7 +5,7 @@ Status: provisional.
 ## Version 11 Timeline timebase
 
 Version 11 introduced the Timeline timebase; the current root uses
-`version: 12`. The Timeline object stores a reduced
+`version: 13`. The Timeline object stores a reduced
 rational `frame_rate` as a positive `numerator` and `denominator`. New projects
 default to 30/1 FPS. Media clips store `source_duration_frames` separately from
 their Timeline `duration_frames`; `source_duration_migration_pending` marks an
@@ -26,7 +26,7 @@ restored from the Media Pool in an active session. It is recorded in Timeline
 history, marks the project dirty through the normal edit flow, and is applied
 only once to each pending clip. Migration while opening an old project does
 not by itself mark the project dirty; the next ordinary save writes the
-normalized version 12 document.
+normalized version 13 document.
 
 ## Version 12 Cross Dissolve overlap
 
@@ -39,8 +39,25 @@ left by D frames. `fade_to_black` remains at the original contiguous cut.
 When opening versions 1 through 11, each legacy Cross Dissolve is migrated by
 shifting its incoming clip and the later clips on that track left by its
 duration. Fade to Black is unchanged. The migration does not mark the project
-dirty by itself; the next ordinary save writes version 12. Saving and
+dirty by itself; the next ordinary save writes version 13. Saving and
 reopening a migrated project preserves the new overlap geometry.
+
+## Version 13 independent audio tracks
+
+Version 13 adds `kind: "audio"` to audio-only media and timeline clips, and
+`kind: "audio"` to dedicated Timeline tracks. Existing video tracks remain
+`kind: "video"`. Audio clips keep their Timeline start and duration in project
+frames, while `source_start_time_us` and `source_duration_time_us` store the
+source in-point and segment duration in microseconds. Audio clips do not store
+video source frames or a source frame rate. Audio tracks are serialized after
+video tracks; audio-only clips cannot be stored on video tracks, and visual
+clips cannot be stored on audio tracks.
+
+Versions 1 through 12 load existing tracks as video tracks. Their next save
+writes version 13 with explicit track kinds. Version 13 validates media, clip,
+and track kinds and rejects incompatible clip/track combinations and
+overlapping audio clips within one audio track. Clips on separate audio tracks
+may overlap.
 
 ## Version 10 linked-image references
 
@@ -51,8 +68,8 @@ stable string `id`, a path to the editable `.cimg` document, and a path to the
 published raster output. Paths follow the same relative-within-project and
 absolute-outside-project rule as source media. Video and text records cannot
 carry these references. Version 1 through 9 projects remain readable and load
-without linked-image references; their next save writes the current version 12
-format, including Timeline timebase and Cross Dissolve migrations.
+without linked-image references; their next save writes the current version 13
+format, including Timeline timebase, Cross Dissolve, and audio-track migrations.
 
 A Media Pool link is shared by every timeline occurrence of its image source.
 A timeline variant belongs to one stable clip ID and is initialized from an
@@ -71,7 +88,7 @@ The affected composition and preview are refreshed after a successful decode.
 The initial handoff updates after save; unsaved edits are not streamed.
 
 The Video Editor stores editable content in a versioned .csp file. The document
-model is Qt-independent and contains imported media, bins, ordered video tracks,
+model is Qt-independent and contains imported media, bins, ordered typed tracks,
 and timeline clips. It does not contain selection, playhead, dock geometry,
 Undo/Redo history, decoded frames, FFmpeg sessions, or Qt resources.
 
@@ -83,10 +100,11 @@ occurrence-local `transform` object and five optional keyframe arrays:
 `position_x`, `position_y`, `scale`, `rotation`, and `opacity`. Keyframe frames
 are local to the clip segment and values use linear interpolation at runtime.
 All existing media, bin, track, source-offset, timing, and audio fields remain
-compatible. Media entries persist `kind: "video"` or `kind: "image"`; missing
-media kind is treated as video for compatibility. Each clip has `kind:
-"video"`, `"image"`, or `"text"`; missing `kind` is treated as video for
-compatibility. Image clips keep their source path, timing, transforms, and
+compatible. Media entries persist `kind: "video"`, `"image"`, or `"audio"`;
+missing media kind is treated as video for compatibility. Each clip has
+`kind: "video"`, `"image"`, `"text"`, or (in version 13) `"audio"`; missing
+`kind` is treated as video for compatibility. Audio clips store source
+in-points and durations in microseconds. Image clips keep their source path, timing, transforms, and
 occurrence data but reconstruct their first RGBA frame from the source on open.
 Text clips persist a `text` object with
 UTF-8 `content`, `font_family`, `font_size_pixels`, RGBA `color`, and
@@ -139,7 +157,7 @@ keyframes. Version 2 files receive the identity transform, an empty keyframe
 set, and the 1920x1080 canvas when opened. Version 1 files containing
 `timeline.clips` remain supported; they are converted to a single Video 1
 track with sequential timeline starts computed from clip durations. The next
-successful save writes version 12 and includes the timeline zoom, row height,
+successful save writes version 13 and includes the timeline zoom, row height,
 explicit media/clip kinds, optional linked-image references, and the rational
 Timeline rate with separate source durations. Existing version 1 through 10 projects continue
 to load; their media entries default to video unless a version 8 image kind is

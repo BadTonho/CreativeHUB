@@ -116,6 +116,38 @@ void testCrossDissolveAudioStartsAtTheOriginalCut() {
             "Incoming Cross Dissolve audio did not start at source frame D at the original cut.");
 }
 
+void testAudioOnlyClipUsesMicrosecondSourceTiming() {
+    const media::TimelineAudioMixClip audio{
+        7, 3, 0, timeline::ClipKind::Audio, true,
+        30, 62, 0, 0.0, 0.5, 0.5, false, false,
+        500000, 1000000};
+    const media::TimelineAudioMixTransition invalid_audio_transition{
+        3, 0, 60, timeline::TransitionKind::CrossDissolve};
+    const auto spans = media::planTimelineAudioMix(
+        std::span<const media::TimelineAudioMixClip>(&audio, 1),
+        std::span<const media::TimelineAudioMixTransition>(
+            &invalid_audio_transition, 1),
+        30.0, 48000, 48000, 48000);
+    require(spans.size() == 1 && spans[0].source_index == 7 &&
+                spans[0].source_start_sample == 24000 &&
+                spans[0].destination_start_sample == 0 &&
+                spans[0].sample_count == 48000 && spans[0].gain == 0.25,
+            "An audio-only clip did not use its microsecond source range and clip gains.");
+
+    const auto after_source_end = media::planTimelineAudioMix(
+        std::span<const media::TimelineAudioMixClip>(&audio, 1), {},
+        30.0, 48000, 96000, 512);
+    require(after_source_end.empty(),
+            "Frame rounding scheduled audio samples beyond the exact source duration.");
+
+    auto muted = audio;
+    muted.track_muted = true;
+    require(media::planTimelineAudioMix(
+                std::span<const media::TimelineAudioMixClip>(&muted, 1), {},
+                30.0, 48000, 48000, 512).empty(),
+            "A muted audio-only track still contributed samples.");
+}
+
 void testNonVideoAndMissingAudioAreExcluded() {
     const std::vector<media::TimelineAudioMixClip> clips{
         {0, 0, 0, timeline::ClipKind::Text, true,
@@ -135,6 +167,7 @@ int main() {
         testMuteGainAndGaps();
         testTrimmedSourcePositionUsesTimelineElapsedTime();
         testCrossDissolveAudioStartsAtTheOriginalCut();
+        testAudioOnlyClipUsesMicrosecondSourceTiming();
         testNonVideoAndMissingAudioAreExcluded();
         std::cout << "timeline audio mix tests passed\n";
         return 0;

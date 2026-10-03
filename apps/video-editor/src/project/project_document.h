@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 12;
+inline constexpr int current_format_version = 13;
+inline constexpr int audio_tracks_format_version = 13;
 inline constexpr int cross_dissolve_overlap_format_version = 12;
 inline constexpr int timeline_frame_rate_format_version = 11;
 inline constexpr int separated_source_duration_format_version = 11;
@@ -44,6 +45,8 @@ struct ProjectClip {
     std::optional<media::LinkedImageReference> image_editor_variant;
     std::int64_t source_duration_frames = 0;
     bool source_duration_migration_pending = false;
+    std::int64_t source_start_time_us = 0;
+    std::int64_t source_duration_time_us = 0;
 
     friend bool operator==(const ProjectClip&, const ProjectClip&) = default;
 };
@@ -64,6 +67,7 @@ struct ProjectTrack {
     std::vector<ProjectClip> clips;
     std::vector<ProjectTransition> transitions;
     timeline::TrackId track_id = 0;
+    timeline::TrackKind kind = timeline::TrackKind::Video;
 
     friend bool operator==(const ProjectTrack&, const ProjectTrack&) = default;
 };

@@ -31,9 +31,11 @@ MediaItem importMedia(const std::filesystem::path& input_path)
         first_frame = decoder.decode_first_frame(path);
     } else {
         const VideoProbe probe;
-        const VideoDecoder decoder;
         metadata = probe.probe(path);
-        first_frame = decoder.decode_first_frame(path);
+        if (metadata.kind != MediaKind::Audio) {
+            const VideoDecoder decoder;
+            first_frame = decoder.decode_first_frame(path);
+        }
     }
     metadata.source_path = path;
     const auto name = metadata.display_name.empty()

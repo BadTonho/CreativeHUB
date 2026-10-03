@@ -71,6 +71,8 @@ media::MediaKind parseMediaKind(
     }
     if (value.toString() == QLatin1String("video")) return media::MediaKind::Video;
     if (value.toString() == QLatin1String("image")) return media::MediaKind::Image;
+    if (version >= audio_tracks_format_version &&
+        value.toString() == QLatin1String("audio")) return media::MediaKind::Audio;
     throwJson(ProjectErrorCode::InvalidValue, project_path,
               "Project JSON contains an unsupported media kind.");
 }
@@ -527,6 +529,21 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                 ? requiredStableId(track_object, "track_id", project_path)
                 : migrated_track_id++;
             track.name = requiredString(track_object, "name", project_path).toUtf8().toStdString();
+            if (version >= audio_tracks_format_version) {
+                const auto track_kind = track_object.value("kind");
+                if (!track_kind.isString()) {
+                    throwJson(ProjectErrorCode::MissingField, project_path,
+                              "A version 13 Timeline track is missing its kind.");
+                }
+                if (track_kind.toString() == QLatin1String("audio")) {
+                    track.kind = timeline::TrackKind::Audio;
+                } else if (track_kind.toString() == QLatin1String("video")) {
+                    track.kind = timeline::TrackKind::Video;
+                } else {
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "Project JSON contains an unsupported track kind.");
+                }
+            }
             if (track_object.contains("audio_gain")) {
                 if (!track_object.value("audio_gain").isDouble()) {
                     throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid track audio gain.");
@@ -563,6 +580,9 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                         clip.kind = timeline::ClipKind::Image;
                     } else if (kind.toString() == QLatin1String("text")) {
                         clip.kind = timeline::ClipKind::Text;
+                    } else if (version >= audio_tracks_format_version &&
+                               kind.toString() == QLatin1String("audio")) {
+                        clip.kind = timeline::ClipKind::Audio;
                     } else {
                         throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an unsupported clip kind.");
                     }
@@ -579,22 +599,33 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                         clip_object, "image_editor_variant", project_path);
                 }
                 clip.timeline_start_frame = requiredInteger(clip_object, "timeline_start_frame", project_path);
-                clip.source_start_frame = requiredInteger(clip_object, "source_start_frame", project_path);
                 clip.duration_frames = requiredInteger(clip_object, "duration_frames", project_path);
-                if (version >= separated_source_duration_format_version &&
-                    timeline::isMediaClipKind(clip.kind)) {
-                    clip.source_duration_frames = requiredInteger(
-                        clip_object, "source_duration_frames", project_path);
-                    const auto pending = clip_object.value(
-                        "source_duration_migration_pending");
-                    if (!pending.isBool()) {
-                        throwJson(ProjectErrorCode::MissingField, project_path,
-                                  "A media clip is missing its source duration migration state.");
+                if (clip.kind == timeline::ClipKind::Audio) {
+                    clip.source_start_frame = 0;
+                    clip.source_start_time_us = requiredInteger(
+                        clip_object, "source_start_time_us", project_path);
+                    clip.source_duration_time_us = requiredInteger(
+                        clip_object, "source_duration_time_us", project_path);
+                    clip.source_duration_frames = 0;
+                    clip.source_duration_migration_pending = false;
+                } else {
+                    clip.source_start_frame = requiredInteger(
+                        clip_object, "source_start_frame", project_path);
+                    if (version >= separated_source_duration_format_version &&
+                        timeline::isFrameTimedMediaClipKind(clip.kind)) {
+                        clip.source_duration_frames = requiredInteger(
+                            clip_object, "source_duration_frames", project_path);
+                        const auto pending = clip_object.value(
+                            "source_duration_migration_pending");
+                        if (!pending.isBool()) {
+                            throwJson(ProjectErrorCode::MissingField, project_path,
+                                      "A media clip is missing its source duration migration state.");
+                        }
+                        clip.source_duration_migration_pending = pending.toBool();
+                    } else if (timeline::isFrameTimedMediaClipKind(clip.kind)) {
+                        clip.source_duration_frames = clip.duration_frames;
+                        clip.source_duration_migration_pending = true;
                     }
-                    clip.source_duration_migration_pending = pending.toBool();
-                } else if (timeline::isMediaClipKind(clip.kind)) {
-                    clip.source_duration_frames = clip.duration_frames;
-                    clip.source_duration_migration_pending = true;
                 }
                 if (clip_object.contains("audio_gain")) {
                     if (!clip_object.value("audio_gain").isDouble()) {

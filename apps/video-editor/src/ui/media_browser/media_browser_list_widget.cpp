@@ -175,6 +175,7 @@ QMimeData* createMediaBrowserDragMimeData(
     setOptionalRole(kMediaFrameCountRole, ui::kMediaFrameCountMimeType);
     setOptionalRole(kMediaFrameRateRole, ui::kMediaFrameRateMimeType);
     setOptionalRole(kMediaDurationSecondsRole, ui::kMediaDurationSecondsMimeType);
+    setOptionalRole(kMediaKindRole, ui::kMediaKindMimeType);
     const auto display_name = item->data(kMediaFullDisplayNameRole).toString();
     if (!display_name.isEmpty()) {
         mime_data->setData(ui::kMediaDisplayNameMimeType, display_name.toUtf8());

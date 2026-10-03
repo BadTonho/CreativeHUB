@@ -2,11 +2,13 @@
 #include "media/video_metadata.h"
 #include "media/video_probe.h"
 #include "media/still_image_decoder.h"
+#include <creative_suite/media/media_importer.h>
 
 #include <QCoreApplication>
 #include <QImage>
 #include <QImageWriter>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -41,6 +43,43 @@ std::filesystem::path uniqueTestDirectory() {
         ("creative-suite-video-decoder-test-" + std::to_string(stamp));
 }
 
+void writePcmWav(const std::filesystem::path& path) {
+    constexpr std::uint32_t sample_rate = 48000;
+    constexpr std::uint16_t channels = 2;
+    constexpr std::uint16_t bits_per_sample = 16;
+    constexpr std::uint32_t frame_count = 4800;
+    constexpr std::uint32_t block_align = channels * bits_per_sample / 8;
+    constexpr std::uint32_t data_size = frame_count * block_align;
+    const auto write_u16 = [](std::ostream& stream, std::uint16_t value) {
+        stream.put(static_cast<char>(value & 0xff));
+        stream.put(static_cast<char>((value >> 8) & 0xff));
+    };
+    const auto write_u32 = [](std::ostream& stream, std::uint32_t value) {
+        for (int byte = 0; byte < 4; ++byte) {
+            stream.put(static_cast<char>((value >> (byte * 8)) & 0xff));
+        }
+    };
+    std::ofstream file(path, std::ios::binary);
+    file.write("RIFF", 4);
+    write_u32(file, 36 + data_size);
+    file.write("WAVEfmt ", 8);
+    write_u32(file, 16);
+    write_u16(file, 1);
+    write_u16(file, channels);
+    write_u32(file, sample_rate);
+    write_u32(file, sample_rate * block_align);
+    write_u16(file, static_cast<std::uint16_t>(block_align));
+    write_u16(file, bits_per_sample);
+    file.write("data", 4);
+    write_u32(file, data_size);
+    for (std::uint32_t frame = 0; frame < frame_count; ++frame) {
+        const auto sample = static_cast<std::int16_t>(frame % 80 < 40 ? 5000 : -5000);
+        write_u16(file, static_cast<std::uint16_t>(sample));
+        write_u16(file, static_cast<std::uint16_t>(sample));
+    }
+    if (!file) throw std::runtime_error("The test WAV could not be written.");
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -59,6 +98,39 @@ int main(int argc, char* argv[]) {
         const auto empty_file = directory / "empty.mkv";
         std::ofstream(empty_file, std::ios::binary).close();
         expectMediaError(decoder, empty_file, "Opening media for");
+
+        const auto wav_path = directory / "independent-audio.wav";
+        writePcmWav(wav_path);
+        const media::VideoProbe probe;
+        const auto audio_metadata = probe.probe(wav_path);
+        require(audio_metadata.kind == media::MediaKind::Audio &&
+                    audio_metadata.width == 0 && audio_metadata.height == 0 &&
+                    !audio_metadata.frame_rate.has_value() &&
+                    !audio_metadata.frame_count.has_value() &&
+                    audio_metadata.audio.has_value() &&
+                    audio_metadata.audio->sample_rate == 48000 &&
+                    audio_metadata.audio->channel_count == 2 &&
+                    audio_metadata.duration_seconds.has_value(),
+                "Audio-only media did not expose audio metadata without video timing.");
+        std::atomic_bool cancel_import{false};
+        const auto imported_audio = creative_suite::media::MediaImporter{}.process(
+            {wav_path}, cancel_import);
+        require(!imported_audio.cancelled && imported_audio.files.size() == 1 &&
+                    imported_audio.files.front().status ==
+                        creative_suite::media::MediaImportFileStatus::Imported &&
+                    imported_audio.files.front().item.has_value() &&
+                    imported_audio.files.front().item->metadata.kind ==
+                        media::MediaKind::Audio &&
+                    imported_audio.files.front().item->first_frame.width == 0 &&
+                    imported_audio.files.front().item->first_frame.rgba_pixels.empty(),
+                "Audio-only import attempted to create a visual frame.");
+        const auto invalid_audio = creative_suite::media::MediaImporter{}.process(
+            {empty_file}, cancel_import);
+        require(invalid_audio.files.size() == 1 &&
+                    invalid_audio.files.front().status ==
+                        creative_suite::media::MediaImportFileStatus::Failed &&
+                    !invalid_audio.files.front().cause.empty(),
+                "An invalid audio source did not return an actionable import failure.");
 
         const auto image_path = directory / "transparent.png";
         QImage source_image(3, 2, QImage::Format_RGBA8888);
@@ -132,8 +204,8 @@ int main(int argc, char* argv[]) {
                             static_cast<std::size_t>(frame.height),
                     "Decoded frame buffer size is incorrect.");
 
-            const media::VideoProbe probe;
-            const auto metadata = probe.probe(argv[1]);
+            const media::VideoProbe reference_probe;
+            const auto metadata = reference_probe.probe(argv[1]);
             require(!metadata.audio.has_value(),
                     "The video-only reference unexpectedly reported audio.");
         }

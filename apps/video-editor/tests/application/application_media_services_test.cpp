@@ -396,6 +396,54 @@ void testProjectOpenPreparationIsTransactionalAndPreservesOfflineMedia() {
     std::filesystem::remove_all(root);
 }
 
+void testAudioTrackProjectOpenPreservesAudioTiming() {
+    const auto root = std::filesystem::temp_directory_path() /
+        ("creative-suite-audio-open-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(root);
+    const auto missing_audio = root / "music.wav";
+    const auto project_path = root / "audio-only.csp";
+    project::ProjectDocument document;
+    document.timeline_frame_rate = {30000, 1001};
+    document.media.push_back({
+        missing_audio, "Music", "Audio", false, media::MediaKind::Audio});
+    project::ProjectTrack track;
+    track.track_id = 8;
+    track.name = "Audio 1";
+    track.kind = timeline::TrackKind::Audio;
+    project::ProjectClip clip;
+    clip.clip_id = 11;
+    clip.kind = timeline::ClipKind::Audio;
+    clip.source_path = missing_audio;
+    clip.timeline_start_frame = 14;
+    clip.duration_frames = 45;
+    clip.source_start_time_us = 275000;
+    clip.source_duration_time_us = 1500000;
+    track.clips.push_back(clip);
+    document.timeline_tracks.push_back(track);
+    project::save(project_path, document);
+
+    std::atomic_bool cancel{false};
+    const auto prepared = application::ProjectOpenService{}.prepare(
+        project_path, std::nullopt, std::nullopt, cancel);
+    require(prepared.status == application::ProjectOpenStatus::Prepared &&
+                prepared.prepared.has_value(),
+            "A version 13 project with an Audio track could not be reopened.");
+    const auto& restored_track = prepared.prepared->timeline.tracks.front();
+    const auto& restored_clip = restored_track.clips.front();
+    require(restored_track.kind == timeline::TrackKind::Audio &&
+                restored_clip.kind == timeline::ClipKind::Audio &&
+                restored_clip.timeline_start_frame == 14 &&
+                restored_clip.timeline_duration_frames == 45 &&
+                restored_clip.source_start_time_us == 275000 &&
+                restored_clip.source_duration_time_us == 1500000 &&
+                !restored_clip.frame_rate.has_value() &&
+                prepared.prepared->media_library.items().front().offline,
+            "Reopening an offline audio source changed its track, clip, or source-time data.");
+    std::error_code cleanup_error;
+    std::filesystem::remove_all(root, cleanup_error);
+}
+
 QColor framePixel(const media::VideoFrame& frame, int x, int y) {
     const auto offset = static_cast<std::size_t>(y) * frame.stride +
         static_cast<std::size_t>(x) * 4;
@@ -689,6 +737,7 @@ int main() {
         testCancellationDiscardsActiveAndSkipsFollowingFiles();
         testProjectControllerDirtyAutosaveSaveAndReset();
         testProjectOpenPreparationIsTransactionalAndPreservesOfflineMedia();
+        testAudioTrackProjectOpenPreservesAudioTiming();
         testLegacyTimelineRateMigrationAndOfflineReconnect();
         testLinkedImageProjectOpenUsesSharedOutputAndClipVariant();
     } catch (const std::exception& error) {

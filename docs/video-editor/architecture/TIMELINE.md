@@ -3,8 +3,9 @@
 Status: provisional.
 
 The application-local TimelineModel uses standard C++ types. It stores ordered
-video tracks and clips with stable identifiers, canonical source paths, media
-metadata, explicit timeline positions, source offsets, and segment durations.
+typed video and audio tracks and clips with stable identifiers, canonical
+source paths, media metadata, explicit timeline positions, source offsets, and
+segment durations.
 It does not own decoded frames, FFmpeg resources, or Qt objects.
 
 ## Timeline timebase
@@ -30,20 +31,28 @@ preserves transition junctions by shifting following clips when necessary,
 updates playback, and records the timing change in Undo/Redo and project dirty
 state.
 
-Media clips can be videos or static raster images. Image clips use the cached
+Media clips can be videos, static raster images, or audio-only sources. Audio
+clips retain Timeline placement and duration in project frames, while their
+source in-point and duration use microseconds and do not depend on a source FPS.
+Audio clips use cached audio metadata and do not require a decoded visual frame.
+Image clips use the cached
 first frame for every timeline frame, default to 150 frames at 30 FPS (five
 seconds), participate in the same movement, trim, overlap, snapping, history,
 and transform rules as videos, and never create an audio playback session.
 
 ## Multi-track behavior
 
-Video 1 is created by default. Each newly created track is inserted above the
-existing tracks, so it becomes the top visual priority. Tracks are drawn
+Video 1 is created by default. Newly created video tracks are inserted above
+the existing video tracks, so they become the top visual priority. Audio tracks
+are appended after the video tracks. Tracks are drawn
 vertically, with the top row composited above the rows below it. Tracks can be
 renamed, reordered, and removed when empty. Each track permits gaps. Add and
 move operations reject overlapping media clips; an individual edge trim may
 overlap one adjacent media clip while leaving it fixed. In that region, the
 media clip with the later timeline start is composed above the earlier clip.
+Audio clips cannot overlap within the same Audio track. Audio clips on
+different tracks may overlap and mix together; visual clips cannot be placed
+on Audio tracks, and audio-only clips cannot be placed on video tracks.
 Text-over-text overlap remains rejected; clips on different tracks may overlap.
 TimelineModel can locate the clip visible at a frame and the top-priority clip
 when tracks overlap.
@@ -110,8 +119,10 @@ decides whether the operation is accepted.
 
 The internal add-to-timeline operation appends media to the active track. A
 drop from the imported Media Browser provides a target track and absolute
-timeline frame. The same source
-may appear repeatedly as independent occurrences. Clip hit testing is local to
+timeline frame. Dropping audio-only media over an Audio track reuses that track;
+dropping it over a video track creates a new `Audio N` track at the end of the
+list and places the clip at the indicated frame. The same source may appear
+repeatedly as independent occurrences. Clip hit testing is local to
 the track row under the pointer, so a clip on another row cannot be selected
 or moved through an empty row. Direct selection in the Timeline changes the
 active clip and Media Browser selection. Clicking a content gap clears both
@@ -219,12 +230,15 @@ occurrences independently.
 ## Playback
 
 The worker owns the video sessions needed by the composition and lazily opens
-embedded audio sessions for every video clip that intersects the upcoming
-output buffer. It mixes those sources into one PCM stream regardless of visual
-track priority; track and clip mute and gain are applied per source. The
+audio sessions for every independent Audio clip and every video clip with
+embedded audio that intersects the upcoming output buffer. It mixes those
+sources into one PCM stream regardless of visual track priority; track and
+clip mute and gain are applied per source. The
 composed audio clock drives the global Timeline even through silent gaps. The
 Video Editor still chooses the highest-priority visible clip for the image and
-changes the visual active clip when crossing a boundary. When the active
+changes the visual active clip when crossing a boundary. Audio-only clips
+never create visual layers, and the composition range extends through the end
+of the longest clip, including audio-only clips. When the active
 Timeline clip is text, composition playback uses the worker's global
 composition frame range and does not depend on a Media Browser or Timeline
 item selection. The Play command resolves the clip at the current playhead
@@ -303,11 +317,11 @@ Undo/Redo snapshots. Snapshots restore tracks, order, names, clip identifiers,
 positions, active track and clip, selected media, and playhead. Decoded frames,
 FFmpeg sessions, and GPU resources are never stored.
 
-The versioned `.csp` project format stores tracks, clips, optional audio
-parameters, and per-project timeline zoom and uniform track-row height.
-Version 1 sequential clips migrate to Video 1 when opened. Video, still-image,
-and text media, plus offline video/audio export, are implemented. Audio-only
-sources and independent audio tracks remain future work; advanced ripple
+The versioned `.csp` project format stores typed tracks and clips, audio source
+timing, optional audio parameters, and per-project timeline zoom and uniform
+track-row height. Version 1 sequential clips migrate to Video 1 when opened.
+Video, still-image, text, and audio-only media, plus offline video/audio export,
+are implemented. Waveforms, recording, advanced mixing, advanced ripple
 editing, automatic gap management, and history for every project subsystem are
 outside the current Timeline scope. See [Current Scope and Non-goals](SCOPE.md).
 
@@ -397,6 +411,6 @@ pixels) and commits the transition on release. Updating or removing a Cross
 Dissolve ripples the incoming clip and later clips on that track atomically.
 Moving, splitting, trimming, or deleting an endpoint preserves valid
 transitions or removes them and repairs the affected overlap. Transitions are
-included in bounded Undo/Redo snapshots and persisted in `.csp` version 12.
+included in bounded Undo/Redo snapshots and persisted in `.csp` version 13.
 Projects through version 11 migrate existing Cross Dissolves to the overlap
 semantics on load; Fade to Black is unchanged.

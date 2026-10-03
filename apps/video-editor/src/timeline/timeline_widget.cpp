@@ -471,12 +471,19 @@ void TimelineWidget::paintTrackHeaderCell(
     header_path.closeSubpath();
     painter.drawPath(header_path);
 
+    std::size_t track_kind_number = 0;
+    for (std::size_t index = 0; index <= track_index; ++index) {
+        if (tracks_[index].kind == tracks_[track_index].kind) {
+            ++track_kind_number;
+        }
+    }
     painter.setPen(active_track ? QColor("#ffcf5c") : QColor("#b8c2d1"));
     painter.drawText(
         header.adjusted(10, 7, -8, -header.height() + 40),
         Qt::AlignLeft | Qt::AlignVCenter,
-        QString("V%1  %2")
-            .arg(track_index + 1)
+        QString("%1%2  %3")
+            .arg(tracks_[track_index].kind == TrackKind::Audio ? "A" : "V")
+            .arg(track_kind_number)
             .arg(text(tracks_[track_index].name)));
 
     painter.setPen(QColor("#7e8999"));
@@ -1065,7 +1072,9 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                 QColor("#6d5ca8"), QColor("#9b6943")};
             const auto clip_color = clip.kind == ClipKind::Text
                 ? QColor("#8c5fb3")
-                : track_colors[track_index % 4];
+                : clip.kind == ClipKind::Audio
+                    ? QColor("#2d8b91")
+                    : track_colors[track_index % 4];
             if (moving) {
                 painter.setPen(QColor(255, 255, 255, 90));
                 painter.setBrush(QColor(
@@ -1080,7 +1089,8 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             painter.setPen(moving ? QColor(244, 247, 251, 100) : QColor("#f4f7fb"));
             const auto label = QString("%1  %2%3")
                 .arg(clip_index + 1)
-                .arg(clip.kind == ClipKind::Text ? "[Text] " : "")
+                .arg(clip.kind == ClipKind::Text ? "[Text] "
+                    : clip.kind == ClipKind::Audio ? "[Audio] " : "")
                 .arg(text(clip.display_name))
                 + " - " + clipDuration(clip, frame_rate_.asDouble());
             painter.drawText(rect.adjusted(6, 0, -6, 0),
@@ -1366,6 +1376,7 @@ bool TimelineWidget::updateDropHover(
     const bool supported = isSupportedDrop(mime_data);
     bool accepted = supported &&
         track.has_value() && frame.has_value();
+    bool media_target_valid = true;
     TimelineDropPreview preview;
     preview.hovering = supported;
     preview.pointer_position = position;
@@ -1384,8 +1395,20 @@ bool TimelineWidget::updateDropHover(
                 preview.duration_frames);
             preview.target_frame = snapped.start_frame;
             preview.snap_guide_frame = snapped.guide_frame;
-            preview.valid = !placementOverlaps(
-                *track, *preview.target_frame, preview.duration_frames);
+            const auto media_kind = mime_data->hasFormat(ui::kMediaKindMimeType)
+                ? QString::fromUtf8(mime_data->data(ui::kMediaKindMimeType))
+                : QStringLiteral("video");
+            const bool audio_drop = media_kind == QStringLiteral("audio");
+            const bool target_is_audio = tracks_[*track].kind == TrackKind::Audio;
+            if (audio_drop) {
+                preview.valid = !target_is_audio || !placementOverlaps(
+                    *track, *preview.target_frame, preview.duration_frames);
+                media_target_valid = preview.valid;
+            } else {
+                preview.valid = !target_is_audio && !placementOverlaps(
+                    *track, *preview.target_frame, preview.duration_frames);
+                media_target_valid = !target_is_audio;
+            }
         }
     } else if (supported && mime_data->hasFormat(ui::kEffectIdMimeType)) {
         const auto effect_id = QString::fromUtf8(
@@ -1409,7 +1432,7 @@ bool TimelineWidget::updateDropHover(
     }
     interaction_controller_.setDropPreview(std::move(preview));
     update();
-    return accepted;
+    return accepted && media_target_valid;
 }
 
 bool TimelineWidget::processDrop(
@@ -1428,10 +1451,18 @@ bool TimelineWidget::processDrop(
 
     auto target_frame = *frame;
     if (is_media_drop) {
-        target_frame = snapPlacement(
-            *track,
-            *frame,
-            mediaDropDuration(mime_data)).start_frame;
+        const auto duration = mediaDropDuration(mime_data);
+        target_frame = snapPlacement(*track, *frame, duration).start_frame;
+        const auto media_kind = mime_data->hasFormat(ui::kMediaKindMimeType)
+            ? QString::fromUtf8(mime_data->data(ui::kMediaKindMimeType))
+            : QStringLiteral("video");
+        const bool audio_drop = media_kind == QStringLiteral("audio");
+        const bool target_is_audio = tracks_[*track].kind == TrackKind::Audio;
+        if ((target_is_audio && !audio_drop) ||
+            (target_is_audio && audio_drop &&
+             placementOverlaps(*track, target_frame, duration))) {
+            return false;
+        }
     }
     if (is_effect_drop) {
         const auto effect_id = QString::fromUtf8(

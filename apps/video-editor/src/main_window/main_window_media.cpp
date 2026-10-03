@@ -485,7 +485,13 @@ void MainWindow::populateMediaBrowser(
                 compactMediaItemListText(
                     item.metadata, item.display_name, item.offline),
                 media_list_);
-            if (!item.offline) list_item->setIcon(mediaThumbnailIcon(item.first_frame));
+            if (!item.offline) {
+                if (item.metadata.kind == media::MediaKind::Audio) {
+                    list_item->setIcon(style()->standardIcon(QStyle::SP_MediaVolume));
+                } else {
+                    list_item->setIcon(mediaThumbnailIcon(item.first_frame));
+                }
+            }
             list_item->setData(
                 media_browser_ui::kMediaFullDisplayNameRole,
                 fromUtf8(item.display_name.empty()
@@ -495,6 +501,12 @@ void MainWindow::populateMediaBrowser(
             list_item->setData(
                 media_browser_ui::kMediaItemTypeRole,
                 media_browser_ui::kMediaItemTypeMedia);
+            const auto kind_name = item.metadata.kind == media::MediaKind::Audio
+                ? QStringLiteral("audio")
+                : item.metadata.kind == media::MediaKind::Image
+                    ? QStringLiteral("image")
+                    : QStringLiteral("video");
+            list_item->setData(media_browser_ui::kMediaKindRole, kind_name);
             list_item->setFlags(
                 list_item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
             list_item->setData(
@@ -1509,6 +1521,9 @@ void MainWindow::updateMediaDetails(int row) {
     }
     if (item.offline) {
         preview_widget_->clearFrame("Preview area\n\nThe selected media is offline.");
+    } else if (item.metadata.kind == media::MediaKind::Audio) {
+        preview_widget_->clearFrame(
+            "Audio media\n\nDrag this item to the timeline to add an Audio track.");
     } else {
         preview_widget_->setFrame(item.first_frame);
     }

@@ -85,6 +85,20 @@ void addMedia(application::EditorSession& session, const std::filesystem::path& 
     require(result.changed(), "Could not add test media to the editor session.");
 }
 
+void addAudioMedia(application::EditorSession& session,
+                   const std::filesystem::path& path) {
+    application::MediaController controller(session);
+    media::VideoMetadata metadata;
+    metadata.kind = media::MediaKind::Audio;
+    metadata.source_path = path;
+    metadata.display_name = path.filename().string();
+    metadata.duration_seconds = 2.0;
+    metadata.audio = media::AudioMetadata{"pcm_s16le", 48000, 2, 2.0};
+    const auto result = controller.commitImported({
+        metadata, {}, metadata.display_name, "Unsorted", false});
+    require(result.changed(), "Could not add test audio media to the editor session.");
+}
+
 void run() {
     application::EditorSession session;
     application::TimelineCommandService service(session);
@@ -537,6 +551,47 @@ void runReconnectTimingCommand() {
             "Redo did not reapply the source timing conversion.");
 }
 
+void runAutomaticAudioTrackCommand() {
+    application::EditorSession session;
+    application::TimelineCommandService service(session);
+    const auto video_track_id = session.timeline().tracks().front().track_id;
+    const auto first_path = std::filesystem::temp_directory_path() /
+        "service-independent-audio-first.wav";
+    const auto second_path = std::filesystem::temp_directory_path() /
+        "service-independent-audio-second.wav";
+    addAudioMedia(session, first_path);
+    addAudioMedia(session, second_path);
+
+    const auto first = service.execute(application::AddMediaClipCommand{
+        first_path, video_track_id, 45});
+    require(first.changed() && first.affected_track_ids.size() == 1 &&
+                session.timeline().trackCount() == 2 &&
+                session.timeline().tracks().back().kind == timeline::TrackKind::Audio &&
+                session.timeline().tracks().back().name == "Audio 1" &&
+                session.timeline().tracks().back().clips.front().timeline_start_frame == 45,
+            "Dropping audio over a Video track did not create an Audio track at the requested time.");
+    const auto audio_track_id = first.affected_track_ids.front();
+
+    const auto second = service.execute(application::AddMediaClipCommand{
+        second_path, audio_track_id, 120});
+    require(second.changed() && second.affected_track_ids.front() == audio_track_id &&
+                session.timeline().trackCount() == 2 &&
+                session.timeline().tracks().back().clips.size() == 2,
+            "Dropping audio over an Audio track did not reuse that lane.");
+    require(service.undo().changed() &&
+                session.timeline().tracks().back().clips.size() == 1 &&
+                service.redo().changed() &&
+                session.timeline().tracks().back().clips.size() == 2,
+            "Undo and Redo did not restore an audio drop on its track.");
+    require(service.undo().changed() && service.undo().changed() &&
+                session.timeline().trackCount() == 1 &&
+                service.redo().changed() &&
+                session.timeline().trackCount() == 2 &&
+                session.timeline().tracks().back().kind == timeline::TrackKind::Audio &&
+                session.timeline().tracks().back().clips.size() == 1,
+            "Undo and Redo did not treat automatic Audio track creation as one edit.");
+}
+
 } // namespace
 
 int main() {
@@ -544,6 +599,7 @@ int main() {
         run();
         runInspectorAndTrackCommands();
         runReconnectTimingCommand();
+        runAutomaticAudioTrackCommand();
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

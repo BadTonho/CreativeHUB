@@ -231,6 +231,9 @@ void MainWindow::createWorkspace() {
             if (media->offline) {
                 preview_widget_->clearFrame(
                     "Preview area\n\nThe selected media is offline.");
+            } else if (clip.kind == timeline::ClipKind::Audio) {
+                preview_widget_->clearFrame(
+                    "Audio clip\n\nAudio is mixed during timeline playback.");
             } else {
                 preview_widget_->setFrame(media->first_frame);
             }

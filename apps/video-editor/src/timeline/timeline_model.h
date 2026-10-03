@@ -27,9 +27,20 @@ enum class ClipKind {
     Video,
     Image,
     Text,
+    Audio,
+};
+
+enum class TrackKind {
+    Video,
+    Audio,
 };
 
 [[nodiscard]] constexpr bool isMediaClipKind(ClipKind kind) noexcept {
+    return kind == ClipKind::Video || kind == ClipKind::Image ||
+        kind == ClipKind::Audio;
+}
+
+[[nodiscard]] constexpr bool isFrameTimedMediaClipKind(ClipKind kind) noexcept {
     return kind == ClipKind::Video || kind == ClipKind::Image;
 }
 
@@ -75,6 +86,8 @@ struct TimelineClip {
     std::shared_ptr<const media::VideoFrame> still_image_override;
     std::int64_t source_duration_frames = 0;
     bool source_duration_migration_pending = false;
+    std::int64_t source_start_time_us = 0;
+    std::int64_t source_duration_time_us = 0;
 
     friend bool operator==(const TimelineClip&, const TimelineClip&) = default;
 };
@@ -103,6 +116,7 @@ struct TimelineTrack {
     bool audio_muted = false;
     std::vector<TimelineClip> clips;
     std::vector<TimelineTransition> transitions;
+    TrackKind kind = TrackKind::Video;
 
     friend bool operator==(const TimelineTrack&, const TimelineTrack&) = default;
 };
@@ -150,6 +164,7 @@ enum class AddClipResult {
     InvalidTrack,
     InvalidTimingMetadata,
     InvalidPosition,
+    IncompatibleTrack,
     Overlap,
 };
 
@@ -200,7 +215,7 @@ public:
 
     TimelineModel();
 
-    AddTrackResult addTrack(std::string name);
+    AddTrackResult addTrack(std::string name, TrackKind kind = TrackKind::Video);
     TrackMutationResult renameTrack(std::size_t track_index, std::string name);
     TrackMutationResult moveTrack(std::size_t from_index, std::size_t to_index);
     TrackMutationResult removeTrack(std::size_t track_index);
@@ -225,7 +240,8 @@ public:
         std::size_t track_index,
         std::size_t clip_index,
         std::int64_t new_source_start_frame,
-        std::int64_t new_duration_frames);
+        std::int64_t new_duration_frames,
+        std::optional<std::int64_t> new_source_start_time_us = std::nullopt);
     TrimClipResult trimClipEdge(
         std::size_t track_index,
         std::size_t clip_index,

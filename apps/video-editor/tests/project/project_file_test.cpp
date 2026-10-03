@@ -6,10 +6,12 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -174,7 +176,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 12") != std::string::npos &&
+        require(saved_json.find("\"version\": 13") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
@@ -185,11 +187,80 @@ int main(int argc, char** argv) {
                     saved_json.find("cross_dissolve") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
                     saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline frame timing and linked image references were not written to the version 12 project.");
+                "Timeline frame timing and linked image references were not written to the version 13 project.");
         require(saved_json.find("\"kind\": \"image\"") != std::string::npos &&
                     loaded.media.back().kind == media::MediaKind::Image &&
                     loaded.timeline_tracks.front().clips.back().kind == timeline::ClipKind::Image,
                 "Image media and image clip kinds were not persisted.");
+
+        const auto audio_project_path = directory / "audio-project.csp";
+        const auto audio_source = directory / "media" / "music.wav";
+        project::ProjectDocument audio_document;
+        audio_document.timeline_frame_rate = {30000, 1001};
+        audio_document.media.push_back({
+            audio_source, "Music", "Audio", false, media::MediaKind::Audio});
+        project::ProjectTrack audio_track;
+        audio_track.track_id = 1;
+        audio_track.name = "Audio 1";
+        audio_track.kind = timeline::TrackKind::Audio;
+        project::ProjectClip audio_clip;
+        audio_clip.clip_id = 1;
+        audio_clip.source_path = audio_source;
+        audio_clip.timeline_start_frame = 14;
+        audio_clip.duration_frames = 45;
+        audio_clip.kind = timeline::ClipKind::Audio;
+        audio_clip.source_start_time_us = 275000;
+        audio_clip.source_duration_time_us = 1500000;
+        audio_clip.audio_gain = 0.75;
+        audio_clip.audio_muted = true;
+        audio_track.clips.push_back(audio_clip);
+        audio_document.timeline_tracks.push_back(audio_track);
+        project::save(audio_project_path, audio_document);
+        std::ifstream audio_file(audio_project_path, std::ios::binary);
+        const std::string audio_json(
+            (std::istreambuf_iterator<char>(audio_file)),
+            std::istreambuf_iterator<char>{});
+        audio_file.close();
+        require(audio_json.find("\"source_start_time_us\"") != std::string::npos &&
+                    audio_json.find("\"source_duration_time_us\"") != std::string::npos &&
+                    audio_json.find("\"source_start_frame\"") == std::string::npos &&
+                    audio_json.find("\"source_duration_frames\"") == std::string::npos,
+                "Version 13 serialized fake source-frame timing for an Audio clip.");
+        const auto reopened_audio = project::load(audio_project_path);
+        require(reopened_audio == audio_document &&
+                    reopened_audio.timeline_tracks.front().kind ==
+                        timeline::TrackKind::Audio &&
+                    reopened_audio.timeline_tracks.front().clips.front()
+                            .source_start_time_us == 275000 &&
+                    reopened_audio.timeline_tracks.front().clips.front()
+                            .source_duration_time_us == 1500000,
+                "Version 13 did not preserve Audio track types and source offsets.");
+        auto mismatched_audio = audio_document;
+        mismatched_audio.timeline_tracks.front().kind = timeline::TrackKind::Video;
+        bool rejected_mismatched_audio = false;
+        try {
+            project::save(directory / "incompatible-audio.csp", mismatched_audio);
+        } catch (const project::ProjectError& error) {
+            rejected_mismatched_audio =
+                error.code() == project::ProjectErrorCode::InvalidTimeline;
+        }
+        require(rejected_mismatched_audio,
+                "Version 13 accepted an Audio clip on a Video track.");
+
+        auto version_12_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        version_12_json.insert("version", 12);
+        writeText(project_path,
+                  QJsonDocument(version_12_json).toJson().toStdString());
+        const auto reopened_version_12 = project::load(project_path);
+        require(!reopened_version_12.timeline_tracks.empty() &&
+                    std::all_of(
+                        reopened_version_12.timeline_tracks.begin(),
+                        reopened_version_12.timeline_tracks.end(),
+                        [](const project::ProjectTrack& track) {
+                            return track.kind == timeline::TrackKind::Video;
+                        }),
+                "A version 12 project did not migrate its tracks as Video tracks.");
 
         auto version_9_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();

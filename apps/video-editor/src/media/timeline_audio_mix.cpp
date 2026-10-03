@@ -42,6 +42,19 @@ std::optional<std::int64_t> sampleAtSourceFrame(
     return static_cast<std::int64_t>(sample);
 }
 
+std::optional<std::int64_t> sampleAtSourceTimeUs(
+    std::int64_t time_us,
+    int sample_rate) noexcept {
+    if (time_us < 0 || sample_rate <= 0) return std::nullopt;
+    const auto sample = std::round(
+        static_cast<long double>(time_us) * sample_rate / 1000000.0L);
+    if (!std::isfinite(sample) ||
+        sample > static_cast<long double>(std::numeric_limits<std::int64_t>::max())) {
+        return std::nullopt;
+    }
+    return static_cast<std::int64_t>(sample);
+}
+
 } // namespace
 
 std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
@@ -62,12 +75,18 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
     const auto block_end_sample = block_start_sample + sample_count;
     spans.reserve(clips.size());
     for (const auto& clip : clips) {
-        if (clip.kind != timeline::ClipKind::Video || !clip.has_audio ||
+        const bool supported_audio_kind =
+            clip.kind == timeline::ClipKind::Video ||
+            clip.kind == timeline::ClipKind::Audio;
+        if (!supported_audio_kind || !clip.has_audio ||
             clip.track_muted || clip.clip_muted || clip.duration_frames <= 0 ||
             clip.timeline_start_frame < 0 || clip.source_start_frame < 0 ||
             clip.timeline_start_frame >
                 std::numeric_limits<std::int64_t>::max() - clip.duration_frames ||
-            !std::isfinite(clip.source_frame_rate) || clip.source_frame_rate <= 0.0) {
+            (clip.kind == timeline::ClipKind::Video &&
+             (!std::isfinite(clip.source_frame_rate) || clip.source_frame_rate <= 0.0)) ||
+            (clip.kind == timeline::ClipKind::Audio &&
+             (clip.source_start_time_us < 0 || clip.source_duration_time_us <= 0))) {
             continue;
         }
 
@@ -76,7 +95,8 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
 
         auto audio_start_frame = clip.timeline_start_frame;
         for (const auto& transition : transitions) {
-            if (transition.kind == timeline::TransitionKind::CrossDissolve &&
+            if (clip.kind == timeline::ClipKind::Video &&
+                transition.kind == timeline::TransitionKind::CrossDissolve &&
                 transition.track_index == clip.track_index &&
                 transition.to_clip_index == clip.clip_index) {
                 audio_start_frame = std::max(audio_start_frame, transition.boundary_frame);
@@ -91,10 +111,17 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
             clip.timeline_start_frame + clip.duration_frames,
             timeline_frame_rate,
             sample_rate);
-        const auto source_start_sample = sampleAtSourceFrame(
-            clip.source_start_frame, clip.source_frame_rate, sample_rate);
+        const auto source_start_sample = clip.kind == timeline::ClipKind::Audio
+            ? sampleAtSourceTimeUs(clip.source_start_time_us, sample_rate)
+            : sampleAtSourceFrame(
+                  clip.source_start_frame, clip.source_frame_rate, sample_rate);
+        const auto source_duration_sample = clip.kind == timeline::ClipKind::Audio
+            ? sampleAtSourceTimeUs(clip.source_duration_time_us, sample_rate)
+            : std::optional<std::int64_t>{};
         if (!audio_start_sample.has_value() || !timeline_origin_sample.has_value() ||
             !clip_end_sample.has_value() || !source_start_sample.has_value() ||
+            (clip.kind == timeline::ClipKind::Audio &&
+             !source_duration_sample.has_value()) ||
             *audio_start_sample < *timeline_origin_sample ||
             *source_start_sample > std::numeric_limits<std::int64_t>::max() -
                 (*audio_start_sample - *timeline_origin_sample)) {
@@ -102,7 +129,17 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
         }
 
         const auto overlap_start = std::max(block_start_sample, *audio_start_sample);
-        const auto overlap_end = std::min(block_end_sample, *clip_end_sample);
+        auto effective_clip_end = *clip_end_sample;
+        if (source_duration_sample.has_value()) {
+            if (*timeline_origin_sample > std::numeric_limits<std::int64_t>::max() -
+                    *source_duration_sample) {
+                continue;
+            }
+            effective_clip_end = std::min(
+                effective_clip_end,
+                *timeline_origin_sample + *source_duration_sample);
+        }
+        const auto overlap_end = std::min(block_end_sample, effective_clip_end);
         if (overlap_start >= overlap_end) continue;
         const auto preroll_samples = *audio_start_sample - *timeline_origin_sample;
         const auto local_sample = overlap_start - *audio_start_sample;

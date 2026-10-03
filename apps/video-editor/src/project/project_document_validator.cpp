@@ -137,13 +137,23 @@ void validateDocument(const ProjectDocument& document,
                 clip.timeline_start_frame) {
             throwJson(ProjectErrorCode::InvalidTimeline, project_path, "Project JSON contains an overflowing timeline range.");
         }
-        const auto source_duration = timeline::isMediaClipKind(clip.kind)
-            ? clip.source_duration_frames
-            : clip.duration_frames;
-        if (source_duration <= 0 || source_duration >
-            std::numeric_limits<std::int64_t>::max() - clip.source_start_frame) {
-            throwJson(ProjectErrorCode::InvalidTimeline, project_path,
-                      "Project JSON contains an invalid or overflowing media source range.");
+        if (clip.kind == timeline::ClipKind::Audio) {
+            if (clip.source_start_time_us < 0 || clip.source_duration_time_us <= 0 ||
+                clip.source_duration_time_us >
+                    std::numeric_limits<std::int64_t>::max() -
+                        clip.source_start_time_us) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains an invalid or overflowing audio source range.");
+            }
+        } else {
+            const auto source_duration = timeline::isFrameTimedMediaClipKind(clip.kind)
+                ? clip.source_duration_frames
+                : clip.duration_frames;
+            if (source_duration <= 0 || source_duration >
+                std::numeric_limits<std::int64_t>::max() - clip.source_start_frame) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains an invalid or overflowing media source range.");
+            }
         }
         if (!validAudioGain(clip.audio_gain)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip audio gain.");
@@ -178,6 +188,17 @@ void validateDocument(const ProjectDocument& document,
     };
     std::unordered_set<timeline::TrackId> track_ids;
     std::unordered_set<timeline::ClipId> clip_ids;
+    const auto media_kind_for_path = [&document](const std::filesystem::path& path)
+        -> std::optional<media::MediaKind> {
+        const auto canonical = media::MediaLibrary::canonicalPath(path);
+        const auto found = std::find_if(
+            document.media.begin(), document.media.end(),
+            [&canonical](const ProjectMedia& item) {
+                return media::MediaLibrary::canonicalPath(item.source_path) == canonical;
+            });
+        if (found == document.media.end()) return std::nullopt;
+        return found->kind;
+    };
     for (const auto& track : document.timeline_tracks) {
         if (track.track_id == 0 ||
             track.track_id > static_cast<timeline::TrackId>(
@@ -192,6 +213,10 @@ void validateDocument(const ProjectDocument& document,
         if (!validAudioGain(track.audio_gain)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid track audio gain.");
         }
+        if (track.kind == timeline::TrackKind::Audio && !track.transitions.empty()) {
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                      "Project JSON contains transitions on an audio track.");
+        }
         for (const auto& clip : track.clips) {
             if (clip.clip_id == 0 ||
                 clip.clip_id > static_cast<timeline::ClipId>(
@@ -200,11 +225,31 @@ void validateDocument(const ProjectDocument& document,
                 throwJson(ProjectErrorCode::InvalidTimeline, project_path,
                           "Project JSON contains a missing or duplicate clip identifier.");
             }
+            const bool compatible = track.kind == timeline::TrackKind::Audio
+                ? clip.kind == timeline::ClipKind::Audio
+                : clip.kind != timeline::ClipKind::Audio;
+            if (!compatible) {
+                throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                          "Project JSON contains a clip on an incompatible track type.");
+            }
+            if (timeline::isMediaClipKind(clip.kind)) {
+                const auto media_kind = media_kind_for_path(clip.source_path);
+                const auto expected = clip.kind == timeline::ClipKind::Audio
+                    ? media::MediaKind::Audio
+                    : clip.kind == timeline::ClipKind::Image
+                        ? media::MediaKind::Image
+                        : media::MediaKind::Video;
+                if (media_kind.has_value() && *media_kind != expected) {
+                    throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                              "Project JSON contains a clip whose source media type does not match its clip type.");
+                }
+            }
             validate_clip(clip);
         }
         std::vector<std::pair<std::size_t, std::size_t>> transition_pairs;
         for (const auto& transition : track.transitions) {
             if (!validTransitionKind(transition.kind) ||
+                track.kind == timeline::TrackKind::Audio ||
                 transition.from_clip_index >= track.clips.size() ||
                 transition.to_clip_index >= track.clips.size()) {
                 throwJson(ProjectErrorCode::InvalidTimeline, project_path,
@@ -254,10 +299,13 @@ void validateDocument(const ProjectDocument& document,
                 const auto second_end = second.timeline_start_frame + second.duration_frames;
                 const bool overlap = second.timeline_start_frame < first_end &&
                     first.timeline_start_frame < second_end;
-                if (overlap && first.kind == timeline::ClipKind::Text &&
-                    second.kind == timeline::ClipKind::Text) {
+                if (overlap &&
+                    ((first.kind == timeline::ClipKind::Text &&
+                      second.kind == timeline::ClipKind::Text) ||
+                     (first.kind == timeline::ClipKind::Audio &&
+                      second.kind == timeline::ClipKind::Audio))) {
                     throwJson(ProjectErrorCode::InvalidTimeline, project_path,
-                              "Project JSON contains overlapping text clips on one track.");
+                              "Project JSON contains overlapping clips that are not allowed on one track.");
                 }
             }
         }

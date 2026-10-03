@@ -1,6 +1,6 @@
 # Video Editor Timeline Audit
 
-**Status:** Active investigation notes; last reconciled on 2026-09-30. The
+**Status:** Active investigation notes; last reconciled on 2026-10-02. The
 performance observations below are code-level hypotheses or dated log samples,
 not a current benchmark. Recheck them against fresh code and measurements
 before starting an optimization.
@@ -19,7 +19,9 @@ See [Project Document and Persistence](PROJECT.md).
 Overlapping embedded audio is mixed in preview and export using the shared
 sample-range planner. This covers source and Timeline rates, trims, gain, mute,
 and the Cross Dissolve cut. Audio does not crossfade during a Cross Dissolve,
-and audio-only clips or tracks are not part of the current model.
+and independent audio clips use microsecond source offsets on dedicated Audio
+tracks. Audio-only import, editing, persistence, playback, and offline video
+export are implemented without waveforms or audio-only file export.
 
 ## Remaining correctness and scalability questions
 

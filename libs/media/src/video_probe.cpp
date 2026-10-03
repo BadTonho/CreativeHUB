@@ -105,7 +105,65 @@ VideoMetadata VideoProbe::probe(const std::filesystem::path& source_path) const 
         const int stream_index = av_find_best_stream(
             format.get(), AVMEDIA_TYPE_VIDEO, -1, -1, &codec, 0);
         if (stream_index < 0 || codec == nullptr) {
-            throw MediaError("No supported video stream was found.", stream_index);
+            const AVCodec* audio_codec = nullptr;
+            const int audio_stream_index = av_find_best_stream(
+                format.get(), AVMEDIA_TYPE_AUDIO, -1, -1, &audio_codec, 0);
+            if (audio_stream_index < 0 || audio_codec == nullptr) {
+                throw MediaError(
+                    "No supported video or audio stream was found.",
+                    audio_stream_index);
+            }
+
+            AVStream* audio_stream = format->streams[audio_stream_index];
+            if (audio_stream == nullptr || audio_stream->codecpar == nullptr) {
+                throw MediaError("The audio stream has no codec parameters.");
+            }
+            CodecContextPtr audio_decoder(avcodec_alloc_context3(audio_codec));
+            if (!audio_decoder) {
+                throw MediaError("Could not allocate the audio decoder context.");
+            }
+            const int audio_parameters_result = avcodec_parameters_to_context(
+                audio_decoder.get(), audio_stream->codecpar);
+            if (audio_parameters_result < 0) {
+                throwFfmpegError(audio_parameters_result,
+                                 "Reading audio codec parameters");
+            }
+            const int audio_decoder_result = avcodec_open2(
+                audio_decoder.get(), audio_codec, nullptr);
+            if (audio_decoder_result < 0) {
+                throwFfmpegError(audio_decoder_result, "Opening audio decoder");
+            }
+            if (audio_decoder->sample_rate <= 0 ||
+                audio_decoder->ch_layout.nb_channels <= 0) {
+                throw MediaError("The audio stream has invalid sample format metadata.");
+            }
+
+            VideoMetadata metadata;
+            metadata.kind = MediaKind::Audio;
+            metadata.source_path = source_path;
+            metadata.display_name = toUtf8(source_path.filename());
+            if (metadata.display_name.empty()) metadata.display_name = input_path;
+            metadata.container_format =
+                format->iformat != nullptr && format->iformat->long_name != nullptr
+                    ? format->iformat->long_name
+                    : (format->iformat != nullptr && format->iformat->name != nullptr
+                        ? format->iformat->name
+                        : "Unknown");
+            metadata.duration_seconds = secondsFromTimestamp(
+                audio_stream->duration, audio_stream->time_base);
+            if (!metadata.duration_seconds.has_value()) {
+                metadata.duration_seconds = secondsFromTimestamp(
+                    format->duration, AVRational{1, AV_TIME_BASE});
+            }
+            AudioMetadata audio;
+            audio.codec = audio_codec->long_name != nullptr
+                ? audio_codec->long_name
+                : (audio_codec->name != nullptr ? audio_codec->name : "Unknown");
+            audio.sample_rate = audio_decoder->sample_rate;
+            audio.channel_count = audio_decoder->ch_layout.nb_channels;
+            audio.duration_seconds = metadata.duration_seconds;
+            metadata.audio = std::move(audio);
+            return metadata;
         }
 
         AVStream* stream = format->streams[stream_index];

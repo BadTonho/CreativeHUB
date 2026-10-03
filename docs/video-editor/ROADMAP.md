@@ -78,8 +78,9 @@ requirements, and implementation details still require validation below.
   foundation scope does not promise parity with advanced post-production tools.
 - [x] Confirm the foundation scope and deferred workflows. Target a typical
   project up to 1080p and 15 minutes, with three video tracks, text, essential
-  transitions, and embedded video audio. Independent audio workflows, advanced
-  grading/compositing, proxies, and plugins remain later work.
+  transitions, embedded video audio, and basic independent Audio tracks.
+  Advanced audio workflows, advanced grading/compositing, proxies, and plugins
+  remain later work.
 - [x] Set the maintainer's current PC as the reference test machine for the
   representative workload above: AMD Ryzen 5 3600, 32 GB RAM, NVIDIA GeForce
   GTX 1660 SUPER with 6 GB VRAM, and Windows 11. Record test conditions and
@@ -120,9 +121,9 @@ requirements, and implementation details still require validation below.
 ### Approved foundation scope
 
 Build on the implemented local-media, multitrack-editing, preview/playback,
-transform, keyframe, text, essential-transition, embedded-audio, project
-save/open, Undo/Redo, autosave, and recovery workflows. Complete the release
-gates below and add the approved portrait canvas, project-rate choices,
+transform, keyframe, text, essential-transition, embedded and independent
+audio, project save/open, Undo/Redo, autosave, and recovery workflows. Complete
+the release gates below and add the approved portrait canvas, project-rate choices,
 operating-system file drops, and adjustable YouTube preset. Preserve a clear,
 discoverable interface with shortcuts for frequent actions.
 
@@ -131,8 +132,8 @@ implementation of portrait canvases and project-rate choices must preserve
 opening existing `.csp` projects as 16:9; define and validate any required
 format migration before changing persistence.
 
-Audio-only sources, independent audio tracks, waveforms, recording, advanced
-mixing, automatic captions, advanced color grading, masks, 3D layers, proxies,
+Waveforms, recording, advanced audio mixing, automatic captions, advanced color
+grading, masks, 3D layers, proxies,
 advanced compositing, plugins, and full Fusion processing remain outside the
 foundation. Continue evaluating these only as later milestones.
 
@@ -150,6 +151,10 @@ tasks.
 - [x] Video and static raster-image clips, manual text clips, transforms,
   linear keyframes, essential Cross Dissolve and Fade to Black transitions.
 - [x] Embedded video audio playback with per-clip and per-track gain and mute.
+- [x] Audio-only import and dedicated Audio tracks with automatic track
+  creation on Timeline drops, frame-based Timeline timing, microsecond source
+  timing, editing/history, mixed preview and export, and black video frames
+  through an audio tail.
 - [x] Qt OpenGL preview presentation with CPU fallback and grayscale preview.
 - [x] Versioned `.csp` persistence, transactional New/Open/Save/Save As,
   autosave, and recovery snapshots.
@@ -264,8 +269,8 @@ performance measurements, and Video Editor stability as the decision criteria.
 - [ ] Improve media organization, synchronization, relinking, and asset
   management.
 - [ ] Add color correction and grading workflows.
-- [ ] Expand audio editing to audio-only sources, independent tracks,
-  waveforms, automation, recording, and mixing as validated workflows require.
+- [ ] Expand audio editing with waveforms, automation, recording, audio-only
+  file export, crossfades, and advanced mixing as user workflows require.
 - [ ] Add masks and more advanced compositing.
 - [ ] Add proxies, incremental rendering, and broader cache workflows where
   measurements show a need.

@@ -225,6 +225,7 @@ std::optional<media::VideoFrame> composeFrame(
             checkCanceled(canceled);
             auto& render_clip = clips[request.clip_index];
             const auto& clip = *render_clip.clip;
+            if (clip.kind == timeline::ClipKind::Audio) continue;
             const auto local_frame = request.local_frame >= 0
                 ? request.local_frame
                 : timeline_frame - clip.timeline_start_frame;
@@ -387,6 +388,10 @@ std::vector<RenderClip> prepareClips(
             if (clip.kind == timeline::ClipKind::Image) {
                 entry.source_fps = media::kStillImageFrameRate;
                 entry.still = media::StillImageDecoder{}.decode_first_frame(path);
+            } else if (clip.kind == timeline::ClipKind::Audio) {
+                if (job.settings.export_audio) {
+                    entry.audio = media::AudioPlaybackSession::open(path, {48000, 2});
+                }
             } else {
                 const auto metadata = media::VideoProbe{}.probe(path);
                 entry.source_fps = validFrameRate(metadata.frame_rate, timeline_fps);
@@ -457,7 +462,9 @@ std::vector<media::TimelineAudioMixClip> audioMixClips(
             render_clip.track->audio_gain,
             clip.audio_gain,
             render_clip.track->audio_muted,
-            clip.audio_muted});
+            clip.audio_muted,
+            clip.source_start_time_us,
+            clip.source_duration_time_us});
     }
     return result;
 }

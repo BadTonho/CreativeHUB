@@ -262,7 +262,9 @@ void PlaybackController::refreshComposition() {
                 track.audio_gain,
                 track.audio_muted,
                 clip.audio_gain,
-                clip.audio_muted});
+                clip.audio_muted,
+                clip.source_start_time_us,
+                clip.source_duration_time_us});
         }
 
         for (const auto& transition : track.transitions) {
@@ -583,7 +585,9 @@ PlaybackCommandResult PlaybackController::activateClip(
     }
     playing_ = timeline_clock_active_ || resume_playback;
 
-    if (clip.kind == timeline::ClipKind::Text || clip.kind == timeline::ClipKind::Image) {
+    if (clip.kind == timeline::ClipKind::Text ||
+        clip.kind == timeline::ClipKind::Image ||
+        clip.kind == timeline::ClipKind::Audio) {
         if (composition_ready_) {
             const auto worker_track_index = static_cast<qint64>(location->track_index);
             const auto worker_clip_index = static_cast<qint64>(location->clip_index);

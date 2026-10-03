@@ -474,7 +474,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 12 format. Image media context menus can open a
+the current `.csp` version 13 format. Image media context menus can open a
 shared Image Editor document, and image clip context menus can open a
 clip-specific variant. The Main Window records those references in the project
 and polls published PNG revisions asynchronously; UI presentation updates only

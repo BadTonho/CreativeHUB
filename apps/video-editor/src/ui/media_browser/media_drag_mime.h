@@ -12,6 +12,8 @@ inline constexpr char kMediaDurationSecondsMimeType[] =
     "application/x-creative-suite-media-duration-seconds";
 inline constexpr char kMediaDisplayNameMimeType[] =
     "application/x-creative-suite-media-display-name";
+inline constexpr char kMediaKindMimeType[] =
+    "application/x-creative-suite-media-kind";
 inline constexpr char kMediaBinPathMimeType[] =
     "application/x-creative-suite-media-bin-path";
 inline constexpr char kEffectIdMimeType[] =

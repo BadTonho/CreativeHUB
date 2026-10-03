@@ -34,6 +34,102 @@ std::optional<std::int64_t> sourceFrameCountFromMetadata(
     return std::max<std::int64_t>(1, static_cast<std::int64_t>(std::ceil(estimated)));
 }
 
+std::optional<std::int64_t> timelineFramesForAudioDuration(
+    double duration_seconds,
+    FrameRate timeline_rate) noexcept {
+    if (!std::isfinite(duration_seconds) || duration_seconds <= 0.0 ||
+        !validFrameRate(timeline_rate)) return std::nullopt;
+    const long double frames = static_cast<long double>(duration_seconds) *
+        timeline_rate.numerator / timeline_rate.denominator;
+    const auto exclusive_max = std::ldexp(1.0L, 63);
+    if (!std::isfinite(frames) || frames >= exclusive_max) return std::nullopt;
+    return std::max<std::int64_t>(1, static_cast<std::int64_t>(std::ceil(frames)));
+}
+
+std::optional<std::int64_t> timelineFramesToMicroseconds(
+    std::int64_t frames,
+    FrameRate timeline_rate) noexcept {
+    if (frames < 0 || !validFrameRate(timeline_rate)) return std::nullopt;
+    const long double microseconds = static_cast<long double>(frames) *
+        timeline_rate.denominator * 1'000'000.0L / timeline_rate.numerator;
+    const auto exclusive_max = std::ldexp(1.0L, 63);
+    if (!std::isfinite(microseconds) || microseconds >= exclusive_max) {
+        return std::nullopt;
+    }
+    return static_cast<std::int64_t>(std::llround(microseconds));
+}
+
+std::optional<std::int64_t> secondsToMicroseconds(double seconds) noexcept {
+    if (!std::isfinite(seconds) || seconds <= 0.0) return std::nullopt;
+    const long double microseconds = static_cast<long double>(seconds) * 1'000'000.0L;
+    const auto exclusive_max = std::ldexp(1.0L, 63);
+    if (!std::isfinite(microseconds) || microseconds >= exclusive_max) {
+        return std::nullopt;
+    }
+    return static_cast<std::int64_t>(std::llround(microseconds));
+}
+
+std::optional<std::int64_t> timelineFramesForAudioDurationUs(
+    std::int64_t duration_us,
+    FrameRate timeline_rate) noexcept {
+    if (duration_us < 0 || !validFrameRate(timeline_rate)) return std::nullopt;
+    const long double frames = static_cast<long double>(duration_us) *
+        timeline_rate.numerator /
+        (static_cast<long double>(timeline_rate.denominator) * 1'000'000.0L);
+    const auto exclusive_max = std::ldexp(1.0L, 63);
+    if (!std::isfinite(frames) || frames >= exclusive_max) return std::nullopt;
+    return static_cast<std::int64_t>(std::ceil(frames));
+}
+
+std::optional<std::int64_t> audioSourceLimitUs(
+    const TimelineClip& clip) noexcept {
+    if (clip.kind != ClipKind::Audio || clip.source_start_time_us < 0 ||
+        clip.source_duration_time_us <= 0 ||
+        clip.source_duration_time_us > std::numeric_limits<std::int64_t>::max() -
+            clip.source_start_time_us) {
+        return std::nullopt;
+    }
+    const auto current_end = clip.source_start_time_us +
+        clip.source_duration_time_us;
+    if (clip.duration_seconds.has_value()) {
+        const auto media_end = secondsToMicroseconds(*clip.duration_seconds);
+        if (media_end.has_value()) return std::max(*media_end, current_end);
+    }
+    return current_end;
+}
+
+std::optional<std::int64_t> timelineFramesForMicroseconds(
+    std::int64_t microseconds,
+    FrameRate timeline_rate) noexcept {
+    if (microseconds < 0 || !validFrameRate(timeline_rate)) return std::nullopt;
+    const long double frames = static_cast<long double>(microseconds) *
+        timeline_rate.numerator /
+        (static_cast<long double>(timeline_rate.denominator) * 1'000'000.0L);
+    const auto exclusive_max = std::ldexp(1.0L, 63);
+    if (!std::isfinite(frames) || frames >= exclusive_max) return std::nullopt;
+    return static_cast<std::int64_t>(std::llround(frames));
+}
+
+std::optional<std::int64_t> shiftAudioSourceTime(
+    const TimelineClip& clip,
+    std::int64_t new_timeline_start_frame,
+    FrameRate timeline_rate) noexcept {
+    if (clip.kind != ClipKind::Audio || clip.source_start_time_us < 0) {
+        return std::nullopt;
+    }
+    const auto frame_delta = new_timeline_start_frame - clip.timeline_start_frame;
+    const auto absolute_delta = frame_delta < 0 ? -frame_delta : frame_delta;
+    const auto elapsed = timelineFramesToMicroseconds(absolute_delta, timeline_rate);
+    if (!elapsed.has_value()) return std::nullopt;
+    if (frame_delta >= 0) {
+        if (*elapsed > std::numeric_limits<std::int64_t>::max() -
+                clip.source_start_time_us) return std::nullopt;
+        return clip.source_start_time_us + *elapsed;
+    }
+    if (*elapsed > clip.source_start_time_us) return std::nullopt;
+    return clip.source_start_time_us - *elapsed;
+}
+
 std::optional<std::int64_t> sourceFrameLimit(const TimelineClip& clip) noexcept {
     if (clip.kind != ClipKind::Video) return std::nullopt;
     if (clip.frame_count.has_value() && *clip.frame_count > 0) {
@@ -288,7 +384,8 @@ TransformKeyframes reframeKeyframes(
 
 bool sameOverlapClass(const TimelineClip& left, const TimelineClip& right) noexcept {
     return left.kind == right.kind ||
-        (isMediaClipKind(left.kind) && isMediaClipKind(right.kind));
+        (isFrameTimedMediaClipKind(left.kind) &&
+         isFrameTimedMediaClipKind(right.kind));
 }
 
 bool hasCrossDissolveForClip(
@@ -374,8 +471,8 @@ bool TimelineModel::overlapsSameKind(
     ClipKind kind,
     std::int64_t start_frame,
     std::int64_t duration_frames) noexcept {
-    const bool same_visual_media_kind = isMediaClipKind(left.kind) &&
-        isMediaClipKind(kind);
+    const bool same_visual_media_kind = isFrameTimedMediaClipKind(left.kind) &&
+        isFrameTimedMediaClipKind(kind);
     return (left.kind == kind || same_visual_media_kind) &&
         overlaps(left, start_frame, duration_frames);
 }
@@ -403,6 +500,14 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
         original_source_duration <= 0 ||
         original.source_start_frame > std::numeric_limits<std::int64_t>::max() -
             original_source_duration) {
+        return std::nullopt;
+    }
+    if (original.kind == ClipKind::Audio &&
+        (original.source_start_time_us < 0 ||
+         original.source_duration_time_us <= 0 ||
+         original.source_duration_time_us >
+             std::numeric_limits<std::int64_t>::max() -
+                 original.source_start_time_us)) {
         return std::nullopt;
     }
 
@@ -488,7 +593,8 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
             if (!timeline_before.has_value()) return std::nullopt;
             minimum_boundary = std::max(
                 minimum_boundary,
-                original.timeline_start_frame - *timeline_before);
+                std::max<std::int64_t>(
+                    0, original.timeline_start_frame - *timeline_before));
         } else {
             const auto current_source_end = original.source_start_frame +
                 original_source_duration;
@@ -505,6 +611,29 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
                 ? std::numeric_limits<std::int64_t>::max()
                 : original.timeline_start_frame + *timeline_available;
             maximum_boundary = std::min(maximum_boundary, max_boundary);
+        }
+    } else if (original.kind == ClipKind::Audio) {
+        const auto source_limit = audioSourceLimitUs(original);
+        if (!source_limit.has_value()) return std::nullopt;
+        if (edge == ClipEdge::Left) {
+            const auto timeline_before = timelineFramesForAudioDurationUs(
+                original.source_start_time_us, timeline_frame_rate);
+            if (!timeline_before.has_value()) return std::nullopt;
+            minimum_boundary = std::max(
+                minimum_boundary,
+                original.timeline_start_frame - *timeline_before);
+        } else {
+            const auto available = *source_limit - original.source_start_time_us;
+            const auto timeline_available = timelineFramesForAudioDurationUs(
+                available, timeline_frame_rate);
+            if (!timeline_available.has_value() ||
+                *timeline_available > std::numeric_limits<std::int64_t>::max() -
+                    original.timeline_start_frame) {
+                return std::nullopt;
+            }
+            maximum_boundary = std::min(
+                maximum_boundary,
+                original.timeline_start_frame + *timeline_available);
         }
     }
 
@@ -528,11 +657,33 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
                 ? std::numeric_limits<std::int64_t>::max()
                 : neighbor.timeline_start_frame + *timeline_available;
             maximum_boundary = std::min(maximum_boundary, max_boundary);
+        } else if (edge == ClipEdge::Left && neighbor.kind == ClipKind::Audio) {
+            const auto source_limit = audioSourceLimitUs(neighbor);
+            if (!source_limit.has_value()) return std::nullopt;
+            const auto available = *source_limit - neighbor.source_start_time_us;
+            const auto timeline_available = timelineFramesForAudioDurationUs(
+                available, timeline_frame_rate);
+            if (!timeline_available.has_value() ||
+                *timeline_available > std::numeric_limits<std::int64_t>::max() -
+                    neighbor.timeline_start_frame) {
+                return std::nullopt;
+            }
+            maximum_boundary = std::min(
+                maximum_boundary,
+                neighbor.timeline_start_frame + *timeline_available);
         } else if (edge == ClipEdge::Right && neighbor.kind == ClipKind::Video) {
             const auto timeline_before = timelineFrameCapacityForSourceFrames(
                 neighbor.source_start_frame,
                 neighbor.frame_rate.value_or(timeline_frame_rate.asDouble()),
                 timeline_frame_rate);
+            if (!timeline_before.has_value()) return std::nullopt;
+            minimum_boundary = std::max(
+                minimum_boundary,
+                std::max<std::int64_t>(
+                    0, neighbor.timeline_start_frame - *timeline_before));
+        } else if (edge == ClipEdge::Right && neighbor.kind == ClipKind::Audio) {
+            const auto timeline_before = timelineFramesForAudioDurationUs(
+                neighbor.source_start_time_us, timeline_frame_rate);
             if (!timeline_before.has_value()) return std::nullopt;
             minimum_boundary = std::max(
                 minimum_boundary,
@@ -563,6 +714,19 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
                     original.source_duration_frames <= 0
                 ? original.source_duration_frames
                 : original_source_end - *source_start;
+        if (original.kind == ClipKind::Audio) {
+            const auto source_start_time = shiftAudioSourceTime(
+                original, boundary, timeline_frame_rate);
+            if (!source_start_time.has_value() ||
+                *source_start_time >= original.source_start_time_us +
+                    original.source_duration_time_us) {
+                return std::nullopt;
+            }
+            preview.clip.source_start_time_us = *source_start_time;
+            preview.clip.source_duration_time_us =
+                original.source_start_time_us + original.source_duration_time_us -
+                *source_start_time;
+        }
     } else {
         preview.clip.timeline_duration_frames = boundary - original.timeline_start_frame;
         if (original.kind == ClipKind::Video &&
@@ -573,6 +737,18 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
                 timeline_frame_rate);
             if (!source_duration.has_value()) return std::nullopt;
             preview.clip.source_duration_frames = *source_duration;
+        }
+        if (original.kind == ClipKind::Audio) {
+            const auto duration_time = timelineFramesToMicroseconds(
+                preview.clip.timeline_duration_frames, timeline_frame_rate);
+            const auto source_limit = audioSourceLimitUs(original);
+            if (!duration_time.has_value() || !source_limit.has_value() ||
+                original.source_start_time_us >= *source_limit) {
+                return std::nullopt;
+            }
+            preview.clip.source_duration_time_us = std::min(
+                *duration_time,
+                *source_limit - original.source_start_time_us);
         }
     }
     preview.clip.keyframes = reframeKeyframes(
@@ -596,21 +772,49 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
                     timeline_frame_rate);
                 if (!source_duration.has_value()) return std::nullopt;
                 neighbor.source_duration_frames = *source_duration;
+            } else if (neighbor.kind == ClipKind::Audio) {
+                const auto duration_time = timelineFramesToMicroseconds(
+                    neighbor.timeline_duration_frames, timeline_frame_rate);
+                const auto source_limit = audioSourceLimitUs(original_neighbor);
+                if (!duration_time.has_value() || !source_limit.has_value() ||
+                    original_neighbor.source_start_time_us >= *source_limit) {
+                    return std::nullopt;
+                }
+                neighbor.source_duration_time_us = std::min(
+                    *duration_time,
+                    *source_limit - original_neighbor.source_start_time_us);
+                if (neighbor.source_duration_time_us <= 0) return std::nullopt;
             }
         } else {
             neighbor.timeline_start_frame = boundary;
             neighbor.timeline_duration_frames = *neighbor_end - boundary;
-            const auto source_start = shiftedSourceStart(
-                original_neighbor, neighbor.timeline_start_frame,
-                timeline_frame_rate);
-            if (!source_start.has_value()) return std::nullopt;
-            neighbor.source_start_frame = *source_start;
-            const auto original_neighbor_source_duration = sourceDurationForClip(
-                original_neighbor, timeline_frame_rate);
-            const auto original_source_end = original_neighbor.source_start_frame +
-                original_neighbor_source_duration;
-            if (*source_start > original_source_end) return std::nullopt;
-            neighbor.source_duration_frames = original_source_end - *source_start;
+            if (original_neighbor.kind == ClipKind::Audio) {
+                const auto source_start_time = shiftAudioSourceTime(
+                    original_neighbor, boundary, timeline_frame_rate);
+                const auto source_limit = audioSourceLimitUs(original_neighbor);
+                if (!source_start_time.has_value() || !source_limit.has_value()) {
+                    return std::nullopt;
+                }
+                const auto neighbor_end_time =
+                    original_neighbor.source_start_time_us +
+                    original_neighbor.source_duration_time_us;
+                if (*source_start_time >= neighbor_end_time) return std::nullopt;
+                neighbor.source_start_time_us = *source_start_time;
+                neighbor.source_duration_time_us =
+                    neighbor_end_time - *source_start_time;
+            } else {
+                const auto source_start = shiftedSourceStart(
+                    original_neighbor, neighbor.timeline_start_frame,
+                    timeline_frame_rate);
+                if (!source_start.has_value()) return std::nullopt;
+                neighbor.source_start_frame = *source_start;
+                const auto original_neighbor_source_duration = sourceDurationForClip(
+                    original_neighbor, timeline_frame_rate);
+                const auto original_source_end = original_neighbor.source_start_frame +
+                    original_neighbor_source_duration;
+                if (*source_start > original_source_end) return std::nullopt;
+                neighbor.source_duration_frames = original_source_end - *source_start;
+            }
         }
         neighbor.keyframes = reframeKeyframes(
             original_neighbor,
@@ -644,11 +848,12 @@ const TimelineTrack* TimelineModel::trackAt(std::size_t track_index) const noexc
     return track_index < tracks_.size() ? &tracks_[track_index] : nullptr;
 }
 
-AddTrackResult TimelineModel::addTrack(std::string name) {
+AddTrackResult TimelineModel::addTrack(std::string name, TrackKind kind) {
     if (!validName(name)) return AddTrackResult::InvalidName;
-    tracks_.insert(
-        tracks_.begin(),
-        TimelineTrack{next_track_id_++, std::move(name), 1.0, false, {}});
+    TimelineTrack track{next_track_id_++, std::move(name), 1.0, false, {}};
+    track.kind = kind;
+    if (kind == TrackKind::Audio) tracks_.push_back(std::move(track));
+    else tracks_.insert(tracks_.begin(), std::move(track));
     assertIdentityInvariants();
     return AddTrackResult::Added;
 }
@@ -698,22 +903,34 @@ AddClipResult TimelineModel::addClip(
     std::int64_t timeline_start_frame) {
     auto* track = trackAt(track_index);
     if (track == nullptr) return AddClipResult::InvalidTrack;
-    const auto source_duration_frames = sourceDurationInFrames(metadata);
-    if (!source_duration_frames.has_value()) return AddClipResult::InvalidTimingMetadata;
+    const bool audio_source = metadata.kind == media::MediaKind::Audio;
+    if ((track->kind == TrackKind::Audio) != audio_source) {
+        return AddClipResult::IncompatibleTrack;
+    }
+    const auto source_duration_frames = audio_source
+        ? std::optional<std::int64_t>{}
+        : sourceDurationInFrames(metadata);
+    if (!audio_source && !source_duration_frames.has_value()) {
+        return AddClipResult::InvalidTimingMetadata;
+    }
     const auto source_rate = metadata.frame_rate.value_or(frame_rate_.asDouble());
-    const auto duration_frames = timelineFramesForSourceDuration(
-        *source_duration_frames, source_rate, frame_rate_);
+    const auto duration_frames = audio_source
+        ? (metadata.duration_seconds.has_value()
+            ? timelineFramesForAudioDuration(*metadata.duration_seconds, frame_rate_)
+            : std::nullopt)
+        : timelineFramesForSourceDuration(
+              *source_duration_frames, source_rate, frame_rate_);
     if (!duration_frames.has_value()) return AddClipResult::InvalidTimingMetadata;
     if (timeline_start_frame < 0 ||
         *duration_frames > std::numeric_limits<std::int64_t>::max() - timeline_start_frame) {
         return AddClipResult::InvalidPosition;
     }
+    const auto clip_kind = audio_source ? ClipKind::Audio
+        : metadata.kind == media::MediaKind::Image ? ClipKind::Image
+                                                   : ClipKind::Video;
     for (const auto& existing : track->clips) {
-        if (overlapsSameKind(
-                existing,
-                metadata.kind == media::MediaKind::Image
-                    ? ClipKind::Image : ClipKind::Video,
-                timeline_start_frame, *duration_frames)) {
+        if (overlapsSameKind(existing, clip_kind, timeline_start_frame,
+                             *duration_frames)) {
             return AddClipResult::Overlap;
         }
     }
@@ -723,13 +940,21 @@ AddClipResult TimelineModel::addClip(
     clip.source_path = canonicalPath(metadata.source_path);
     clip.display_name = metadata.display_name;
     clip.duration_seconds = metadata.duration_seconds;
-    clip.frame_rate = metadata.frame_rate;
-    clip.frame_count = metadata.frame_count;
-    clip.clip_id = next_clip_id_++;
+    clip.frame_rate = audio_source ? std::nullopt : metadata.frame_rate;
+    clip.frame_count = audio_source ? std::nullopt : metadata.frame_count;
     clip.track_id = track->track_id;
-    clip.kind = metadata.kind == media::MediaKind::Image
-        ? ClipKind::Image : ClipKind::Video;
-    clip.source_duration_frames = *source_duration_frames;
+    clip.kind = clip_kind;
+    clip.source_duration_frames = source_duration_frames.value_or(0);
+    clip.source_start_time_us = 0;
+    if (audio_source) {
+        const auto source_duration_us = secondsToMicroseconds(
+            *metadata.duration_seconds);
+        if (!source_duration_us.has_value()) {
+            return AddClipResult::InvalidTimingMetadata;
+        }
+        clip.source_duration_time_us = *source_duration_us;
+    }
+    clip.clip_id = next_clip_id_++;
     track->clips.push_back(std::move(clip));
     std::stable_sort(track->clips.begin(), track->clips.end(),
               [](const auto& left, const auto& right) {
@@ -746,7 +971,11 @@ PendingMediaTimingMigrationResult TimelineModel::migratePendingMediaTiming(
     const auto canonical_source = canonicalPath(source_path);
     const auto source_kind = metadata.kind == media::MediaKind::Image
         ? ClipKind::Image
-        : ClipKind::Video;
+        : metadata.kind == media::MediaKind::Audio ? ClipKind::Audio
+                                                   : ClipKind::Video;
+    if (source_kind == ClipKind::Audio) {
+        return PendingMediaTimingMigrationResult::NoPendingClips;
+    }
     const auto source_rate = source_kind == ClipKind::Image
         ? media::kStillImageFrameRate
         : metadata.frame_rate.value_or(frame_rate_.asDouble());
@@ -763,7 +992,7 @@ PendingMediaTimingMigrationResult TimelineModel::migratePendingMediaTiming(
         bool track_changed = false;
         for (auto& clip : track.clips) {
             if (!clip.source_duration_migration_pending ||
-                !isMediaClipKind(clip.kind) ||
+                !isFrameTimedMediaClipKind(clip.kind) ||
                 canonicalPath(clip.source_path) != canonical_source) {
                 continue;
             }
@@ -813,6 +1042,7 @@ AddClipResult TimelineModel::addTextClip(
     double frame_rate) {
     auto* track = trackAt(track_index);
     if (track == nullptr) return AddClipResult::InvalidTrack;
+    if (track->kind != TrackKind::Video) return AddClipResult::IncompatibleTrack;
     if (timeline_start_frame < 0 || duration_frames <= 0 ||
         duration_frames > std::numeric_limits<std::int64_t>::max() - timeline_start_frame ||
         !std::isfinite(frame_rate) || frame_rate <= 0.0) {
@@ -856,6 +1086,10 @@ MoveClipResult TimelineModel::moveClip(
     }
     if (target_track == nullptr) return MoveClipResult::InvalidTrack;
     const auto clip = source_track->clips[from.clip_index];
+    if ((target_track->kind == TrackKind::Audio) !=
+        (clip.kind == ClipKind::Audio)) {
+        return MoveClipResult::InvalidTrack;
+    }
     if (timeline_start_frame < 0 || clip.timeline_duration_frames <= 0 ||
         timeline_start_frame > std::numeric_limits<std::int64_t>::max() -
             clip.timeline_duration_frames) {
@@ -936,10 +1170,26 @@ SplitClipResult TimelineModel::splitClip(
         }
         source_offset = *mapped;
     }
+    std::int64_t audio_source_offset_us = 0;
+    if (clip.kind == ClipKind::Audio) {
+        const auto mapped = timelineFramesToMicroseconds(local_frame, frame_rate_);
+        if (!mapped.has_value() || *mapped <= 0 ||
+            *mapped >= clip.source_duration_time_us ||
+            *mapped > std::numeric_limits<std::int64_t>::max() -
+                clip.source_start_time_us) {
+            return SplitClipResult::InvalidBoundary;
+        }
+        audio_source_offset_us = *mapped;
+    }
     const auto original_transform = clip.transform;
     TimelineClip right = clip;
     right.clip_id = next_clip_id_++;
     right.source_start_frame += source_offset;
+    if (clip.kind == ClipKind::Audio) {
+        right.source_start_time_us += audio_source_offset_us;
+        right.source_duration_time_us -= audio_source_offset_us;
+        clip.source_duration_time_us = audio_source_offset_us;
+    }
     right.timeline_start_frame += local_frame;
     right.timeline_duration_frames -= local_frame;
     if (clip.kind == ClipKind::Video) {
@@ -995,7 +1245,8 @@ TrimClipResult TimelineModel::trimClip(
     std::size_t track_index,
     std::size_t clip_index,
     std::int64_t new_source_start_frame,
-    std::int64_t new_duration_frames) {
+    std::int64_t new_duration_frames,
+    std::optional<std::int64_t> new_source_start_time_us) {
     auto* track = trackAt(track_index);
     if (track == nullptr || clip_index >= track->clips.size()) {
         return TrimClipResult::InvalidIndex;
@@ -1007,11 +1258,59 @@ TrimClipResult TimelineModel::trimClip(
             return TrimClipResult::InvalidRange;
         }
         const auto result = staged.trimClip(
-            track_index, clip_index, new_source_start_frame, new_duration_frames);
+            track_index, clip_index, new_source_start_frame, new_duration_frames,
+            new_source_start_time_us);
         if (result == TrimClipResult::Trimmed) *this = std::move(staged);
         return result;
     }
     auto& clip = track->clips[clip_index];
+    if (clip.kind == ClipKind::Audio) {
+        if (!new_source_start_time_us.has_value() ||
+            *new_source_start_time_us < clip.source_start_time_us ||
+            clip.source_duration_time_us <= 0 || new_duration_frames <= 0) {
+            return TrimClipResult::InvalidRange;
+        }
+        const auto new_duration_us = timelineFramesToMicroseconds(
+            new_duration_frames, frame_rate_);
+        if (clip.source_start_time_us < 0 ||
+            clip.source_duration_time_us >
+                std::numeric_limits<std::int64_t>::max() -
+                    clip.source_start_time_us) {
+            return TrimClipResult::InvalidRange;
+        }
+        const auto old_end_us = clip.source_start_time_us +
+            clip.source_duration_time_us;
+        const auto source_limit = audioSourceLimitUs(clip);
+        if (!new_duration_us.has_value() || !source_limit.has_value() ||
+            *new_source_start_time_us >= old_end_us ||
+            *new_source_start_time_us >= *source_limit) {
+            return TrimClipResult::InvalidRange;
+        }
+        for (std::size_t index = 0; index < track->clips.size(); ++index) {
+            if (index != clip_index && overlapsSameKind(
+                    track->clips[index], clip.kind,
+                    clip.timeline_start_frame, new_duration_frames)) {
+                return TrimClipResult::InvalidRange;
+            }
+        }
+        const auto source_delta = *new_source_start_time_us -
+            clip.source_start_time_us;
+        const auto local_start = timelineFramesForMicroseconds(
+            source_delta, frame_rate_).value_or(0);
+        Transform2D trimmed_transform;
+        const auto trimmed_keyframes = trimKeyframes(
+            clip.transform, clip.keyframes, 0, local_start,
+            new_duration_frames, trimmed_transform);
+        clip.source_start_time_us = *new_source_start_time_us;
+        clip.source_duration_time_us = std::min(
+            *new_duration_us,
+            *source_limit - *new_source_start_time_us);
+        clip.timeline_duration_frames = new_duration_frames;
+        clip.transform = trimmed_transform;
+        clip.keyframes = trimmed_keyframes;
+        removeInvalidTransitions(*track);
+        return TrimClipResult::Trimmed;
+    }
     const auto old_source_duration = sourceDurationForClip(clip, frame_rate_);
     if (clip.source_start_frame < 0 || clip.timeline_duration_frames <= 0 ||
         old_source_duration < 0 ||
@@ -1678,6 +1977,9 @@ TransitionMutationResult TimelineModel::addTransition(
     if (track == nullptr || from_clip_index >= track->clips.size() ||
         to_clip_index >= track->clips.size()) {
         return TransitionMutationResult::InvalidIndex;
+    }
+    if (track->kind != TrackKind::Video) {
+        return TransitionMutationResult::InvalidBoundary;
     }
     if (!validTransitionKind(kind) || from_clip_index + 1 != to_clip_index) {
         return TransitionMutationResult::InvalidBoundary;

@@ -734,6 +734,9 @@ void PlaybackWorker::setComposition(
             } else if (spec.kind == timeline::ClipKind::Image) {
                 if (spec.still_frame == nullptr) continue;
                 composition_session.static_frame = spec.still_frame;
+            } else if (spec.kind == timeline::ClipKind::Audio &&
+                       spec.source_path.isEmpty()) {
+                continue;
             }
             if (spec.track_index == track_index_ && spec.clip_index == clip_index_) {
                 primary_timeline_start_frame_ = spec.timeline_start_frame;
@@ -766,7 +769,9 @@ void PlaybackWorker::setComposition(
                 prepared.track_audio_gain,
                 prepared.clip_audio_gain,
                 prepared.track_audio_muted,
-                prepared.clip_audio_muted});
+                prepared.clip_audio_muted,
+                prepared.source_start_time_us,
+                prepared.source_duration_time_us});
         }
 
         composition_audio_mix_transitions_.reserve(
@@ -909,7 +914,8 @@ void PlaybackWorker::setActiveCompositionClip(
     updateFrameRateMetrics();
 
     if (active->kind == timeline::ClipKind::Text ||
-        active->kind == timeline::ClipKind::Image) {
+        active->kind == timeline::ClipKind::Image ||
+        active->kind == timeline::ClipKind::Audio) {
         source_path_.clear();
         session_.reset();
     }
@@ -1128,6 +1134,8 @@ void PlaybackWorker::renderCompositionFrame(
                 case timeline::ClipKind::Text:
                     layer.kind = rendering::SlowFrameLayerKind::Text;
                     break;
+                case timeline::ClipKind::Audio:
+                    continue;
                 }
                 layer.decode_path = decoded.decode_path;
                 layer.decode_nanoseconds = decoded.decode_nanoseconds;
@@ -1742,7 +1750,8 @@ void PlaybackWorker::configureCompositionAudio() {
         composition_audio_mix_clips_.begin(),
         composition_audio_mix_clips_.end(),
         [](const media::TimelineAudioMixClip& clip) {
-            return clip.kind == timeline::ClipKind::Video && clip.has_audio;
+            return (clip.kind == timeline::ClipKind::Video ||
+                    clip.kind == timeline::ClipKind::Audio) && clip.has_audio;
         });
     if (!has_timeline_audio) return;
 
@@ -1840,7 +1849,8 @@ void PlaybackWorker::fillCompositionAudioOutput() {
         // seek can reopen the session on demand.
         for (const auto& clip : composition_audio_mix_clips_) {
             if (clip.source_index >= composition_sessions_.size() ||
-                clip.kind != timeline::ClipKind::Video || !clip.has_audio ||
+                (clip.kind != timeline::ClipKind::Video &&
+                 clip.kind != timeline::ClipKind::Audio) || !clip.has_audio ||
                 clip.duration_frames <= 0 || clip.timeline_start_frame < 0 ||
                 clip.timeline_start_frame >
                     std::numeric_limits<std::int64_t>::max() - clip.duration_frames) {
@@ -2475,6 +2485,7 @@ PlaybackWorker::decodeCompositionLayers(
     requests.reserve(ordered_sessions.size() + composition_transitions_.size());
     for (const auto& session : ordered_sessions) {
         const auto& spec = *session.spec;
+        if (spec.kind == timeline::ClipKind::Audio) continue;
         if (global_frame < spec.timeline_start_frame ||
             global_frame >= spec.timeline_start_frame + spec.segment_frame_count) {
             continue;

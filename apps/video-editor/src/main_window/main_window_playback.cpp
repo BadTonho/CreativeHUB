@@ -1105,8 +1105,12 @@ void MainWindow::commitTimelineClipActivation(
             const auto media_index = library.indexForPath(clip.source_path);
             const QSignalBlocker blocker(media_list_);
             media_list_->setCurrentRow(static_cast<int>(media_index));
-            if (show_cached_frame && media_index < library.size()) {
+            if (show_cached_frame && media_index < library.size() &&
+                clip.kind != timeline::ClipKind::Audio) {
                 preview_widget_->setFrame(library.items()[media_index].first_frame);
+            } else if (clip.kind == timeline::ClipKind::Audio) {
+                preview_widget_->clearFrame(
+                    "Audio clip\n\nAudio is mixed during timeline playback.");
             }
         }
     }

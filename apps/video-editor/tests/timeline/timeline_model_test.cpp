@@ -36,6 +36,81 @@ media::VideoMetadata makeMetadata(
     return metadata;
 }
 
+void testIndependentAudioTrackEditing(const std::filesystem::path& directory) {
+    media::VideoMetadata audio;
+    audio.kind = media::MediaKind::Audio;
+    audio.source_path = directory / "music.wav";
+    audio.display_name = "music.wav";
+    audio.duration_seconds = 1.25;
+    audio.audio = media::AudioMetadata{"pcm_s16le", 48000, 2, 1.25};
+
+    timeline::TimelineModel model;
+    require(model.addClip(audio) == timeline::AddClipResult::IncompatibleTrack,
+            "Audio-only media was accepted on a Video track.");
+    require(model.addTrack("Audio 1", timeline::TrackKind::Audio) ==
+                timeline::AddTrackResult::Added,
+            "An Audio track could not be created.");
+    require(model.addClip(0, audio, 15) == timeline::AddClipResult::IncompatibleTrack,
+            "Audio-only media was accepted on a Video track by index.");
+    require(model.addClip(1, audio, 15) == timeline::AddClipResult::Added,
+            "Audio-only media could not be added to an Audio track.");
+    const auto& first = model.tracks()[1].clips.front();
+    require(first.kind == timeline::ClipKind::Audio &&
+                first.timeline_duration_frames == 38 &&
+                first.source_start_time_us == 0 &&
+                first.source_duration_time_us == 1250000 &&
+                !first.frame_rate.has_value() && !first.frame_count.has_value(),
+            "Audio timing was not stored in project frames and source microseconds.");
+    const auto full_source_edge = timeline::previewClipEdgeEdit(
+        model.tracks(), {1, 0}, timeline::ClipEdge::Right, 53,
+        timeline::ClipEdgeEditMode::Individual, model.frameRate());
+    require(full_source_edge.has_value() &&
+                full_source_edge->clip.timeline_duration_frames == 38 &&
+                full_source_edge->clip.source_duration_time_us == 1250000,
+            "A sub-frame audio source tail changed when previewing its existing right edge.");
+    require(model.addClip(1, audio, 30) == timeline::AddClipResult::Overlap,
+            "Overlapping clips were accepted on one Audio track.");
+    require(model.addTrack("Audio 2", timeline::TrackKind::Audio) ==
+                timeline::AddTrackResult::Added &&
+                model.addClip(2, audio, 15) == timeline::AddClipResult::Added,
+            "Audio clips could not overlap across separate tracks.");
+
+    require(model.splitClip(2, 0, 10) == timeline::SplitClipResult::Split,
+            "An Audio clip could not be split.");
+    require(model.tracks()[2].clips[0].source_duration_time_us == 333333 &&
+                model.tracks()[2].clips[1].source_start_time_us == 333333 &&
+                model.tracks()[2].clips[1].source_duration_time_us == 916667,
+            "Splitting did not divide the Audio source range in microseconds.");
+    require(model.setClipAudio(2, 0, 0.5, true) ==
+                timeline::AudioParameterResult::Changed &&
+                model.setTrackAudio(2, 1.5, false) ==
+                timeline::AudioParameterResult::Changed,
+            "Audio clip and track gain/mute controls were not available.");
+
+    require(model.addTrack("Audio 3", timeline::TrackKind::Audio) ==
+                timeline::AddTrackResult::Added &&
+                model.moveClip({2, 1}, {3, 0}, 100) ==
+                    timeline::MoveClipResult::Moved,
+            "An Audio clip could not be moved between Audio tracks.");
+    require(model.tracks()[3].clips.front().source_start_time_us == 333333 &&
+                model.tracks()[3].clips.front().timeline_start_frame == 100,
+            "Moving an Audio clip changed its source position.");
+    require(model.moveClip({3, 0}, {0, 0}, 100) == timeline::MoveClipResult::InvalidTrack,
+            "An Audio clip was moved to a Video track.");
+    require(model.trimClip(3, 0, 0, 10, 500000) ==
+                timeline::TrimClipResult::Trimmed &&
+                model.tracks()[3].clips.front().source_start_time_us == 500000 &&
+                model.tracks()[3].clips.front().source_duration_time_us == 333333,
+            "An Audio clip could not be trimmed using a microsecond source offset.");
+    const auto extended_edge = timeline::previewClipEdgeEdit(
+        model.tracks(), {3, 0}, timeline::ClipEdge::Right, 115,
+        timeline::ClipEdgeEditMode::Individual, model.frameRate());
+    require(extended_edge.has_value() &&
+                extended_edge->clip.timeline_duration_frames == 15 &&
+                extended_edge->clip.source_duration_time_us == 500000,
+            "A trimmed Audio clip could not extend its right edge within the source bounds.");
+}
+
 void validatePendingMediaTimingReconnect(const std::filesystem::path& directory) {
     const auto offline_path = directory / "reconnected.mkv";
     timeline::TimelineModel model;
@@ -311,6 +386,7 @@ int main() {
 
     try {
         std::filesystem::create_directories(directory / "media");
+        testIndependentAudioTrackEditing(directory);
         const auto first_source = directory / "media" / "first.mkv";
         const auto second_source = directory / "media" / "second.mkv";
         std::ofstream(first_source, std::ios::binary).close();

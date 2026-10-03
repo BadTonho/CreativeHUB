@@ -12,6 +12,7 @@ namespace creative_suite::media {
 enum class MediaKind {
     Video,
     Image,
+    Audio,
 };
 
 struct AudioMetadata {

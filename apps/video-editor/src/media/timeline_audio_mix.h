@@ -27,6 +27,10 @@ struct TimelineAudioMixClip {
     double clip_gain = 1.0;
     bool track_muted = false;
     bool clip_muted = false;
+    // Audio-only media has no source frame rate. Its trim points stay in
+    // microseconds and are converted directly to samples at the mix rate.
+    std::int64_t source_start_time_us = 0;
+    std::int64_t source_duration_time_us = 0;
 };
 
 struct TimelineAudioMixTransition {

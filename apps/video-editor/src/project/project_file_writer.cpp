@@ -51,7 +51,13 @@ QString storedPath(const std::filesystem::path& project_path,
 }
 
 const char* mediaKindName(media::MediaKind kind) {
-    return kind == media::MediaKind::Image ? "image" : "video";
+    if (kind == media::MediaKind::Image) return "image";
+    if (kind == media::MediaKind::Audio) return "audio";
+    return "video";
+}
+
+const char* trackKindName(timeline::TrackKind kind) {
+    return kind == timeline::TrackKind::Audio ? "audio" : "video";
 }
 
 QJsonObject linkedImageJson(
@@ -101,13 +107,15 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
         track.insert("name", QString::fromStdString(track_source.name));
         track.insert("audio_gain", track_source.audio_gain);
         track.insert("audio_muted", track_source.audio_muted);
+        track.insert("kind", trackKindName(track_source.kind));
         QJsonArray clips;
         for (const auto& clip : track_source.clips) {
             QJsonObject item;
             item.insert("clip_id", static_cast<qint64>(clip.clip_id));
             const char* clip_kind = clip.kind == timeline::ClipKind::Text
                 ? "text"
-                : clip.kind == timeline::ClipKind::Image ? "image" : "video";
+                : clip.kind == timeline::ClipKind::Image ? "image"
+                : clip.kind == timeline::ClipKind::Audio ? "audio" : "video";
             item.insert("kind", clip_kind);
             if (clip.image_editor_variant.has_value()) {
                 item.insert("image_editor_variant",
@@ -135,13 +143,22 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                 item.insert("text", text);
             }
             item.insert("timeline_start_frame", static_cast<qint64>(clip.timeline_start_frame));
-            item.insert("source_start_frame", static_cast<qint64>(clip.source_start_frame));
+            if (clip.kind != timeline::ClipKind::Audio) {
+                item.insert("source_start_frame",
+                            static_cast<qint64>(clip.source_start_frame));
+            }
             item.insert("duration_frames", static_cast<qint64>(clip.duration_frames));
-            if (timeline::isMediaClipKind(clip.kind)) {
+            if (timeline::isFrameTimedMediaClipKind(clip.kind)) {
                 item.insert("source_duration_frames",
                             static_cast<qint64>(clip.source_duration_frames));
                 item.insert("source_duration_migration_pending",
                             clip.source_duration_migration_pending);
+            }
+            if (clip.kind == timeline::ClipKind::Audio) {
+                item.insert("source_start_time_us",
+                            static_cast<qint64>(clip.source_start_time_us));
+                item.insert("source_duration_time_us",
+                            static_cast<qint64>(clip.source_duration_time_us));
             }
             item.insert("audio_gain", clip.audio_gain);
             item.insert("audio_muted", clip.audio_muted);
