@@ -7,6 +7,8 @@
 #include <QDialog>
 #include <QEvent>
 #include <QKeySequence>
+#include <QLineEdit>
+#include <QListWidget>
 #include <QMainWindow>
 #include <QPointer>
 #include <QPushButton>
@@ -84,15 +86,33 @@ void verifyFunctionPalette(QSettings& settings) {
             "Functions window must be non-modal.");
     require(palette.dialog()->windowFlags().testFlag(Qt::Tool),
             "Functions window must use a floating tool-window flag.");
-    require(palette.dialog()->size() == QSize(420, 320),
+    require(palette.dialog()->size() == QSize(420, 360),
             "Functions window initial size is incorrect.");
     require(palette.dialog()->minimumSize() !=
                 palette.dialog()->maximumSize(),
             "Functions window must remain resizable.");
-    require(palette.dialog()->layout() == nullptr &&
-                palette.dialog()->findChildren<QWidget*>(
-                    QString(), Qt::FindDirectChildrenOnly).isEmpty(),
-            "Functions window body must remain empty.");
+    auto* functions_search = palette.dialog()->findChild<QLineEdit*>(
+        QStringLiteral("functionsEffectSearch"));
+    auto* functions_list = palette.dialog()->findChild<QListWidget*>(
+        QStringLiteral("functionsEffectList"));
+    auto* functions_add = palette.dialog()->findChild<QPushButton*>(
+        QStringLiteral("functionsAddButton"));
+    require(palette.dialog()->layout() != nullptr && functions_search != nullptr &&
+                functions_list != nullptr && functions_list->count() == 4 &&
+                functions_add != nullptr,
+            "Functions must provide effect search, list, and Add controls.");
+    require(!functions_add->isEnabled(),
+            "Add must be disabled without a compatible selected clip.");
+    functions_search->setText(QStringLiteral("contrast"));
+    require(functions_list->count() == 4 &&
+                functions_list->item(0)->isHidden() &&
+                functions_list->item(1)->isHidden() &&
+                !functions_list->item(2)->isHidden() &&
+                functions_list->item(3)->isHidden(),
+            "Functions search did not filter the visual filter list.");
+    require(!functions_add->isEnabled(),
+            "Filtering must remain available while Add is disabled.");
+    functions_search->clear();
     require(palette.toggleAction()->shortcut() ==
                 QKeySequence(QStringLiteral("Shift+Space")),
             "Functions window shortcut default is incorrect.");
@@ -110,6 +130,16 @@ void verifyFunctionPalette(QSettings& settings) {
     require(palette.toggleAction()->shortcut() ==
                 QKeySequence(QStringLiteral("Shift+Space")),
             "Resetting the Functions shortcut must restore Shift+Space.");
+
+    QString added_effect_id;
+    int added_effect_requests = 0;
+    QObject::connect(
+        &palette,
+        &ui::FunctionPalette::effectAddRequested,
+        [&added_effect_id, &added_effect_requests](const QString& effect_id) {
+            added_effect_id = effect_id;
+            ++added_effect_requests;
+        });
 
     main_window.show();
     main_window.raise();
@@ -205,6 +235,59 @@ void verifyFunctionPalette(QSettings& settings) {
     processDeferredDeletes();
     require(deactivated_dialog.isNull() && palette.dialog() == nullptr,
             "Losing window activation must close and destroy Functions.");
+
+    palette.setEffectTargetAvailable(true);
+    main_window.activateWindow();
+    editor->setFocus();
+    QApplication::processEvents();
+    sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
+    require(palette.dialog() != nullptr && palette.dialog()->isVisible(),
+            "Functions did not reopen with an available effect target.");
+    auto* active_search = palette.dialog()->findChild<QLineEdit*>(
+        QStringLiteral("functionsEffectSearch"));
+    auto* active_add = palette.dialog()->findChild<QPushButton*>(
+        QStringLiteral("functionsAddButton"));
+    auto* active_cancel = palette.dialog()->findChild<QPushButton*>(
+        QStringLiteral("functionsCancelButton"));
+    require(active_search != nullptr && active_add != nullptr && active_add->isEnabled(),
+            "Add must be enabled for a compatible selected clip.");
+    require(active_cancel != nullptr,
+            "Functions must provide a Cancel control.");
+    QTest::mouseClick(active_cancel, Qt::LeftButton);
+    processDeferredDeletes();
+    require(palette.dialog() == nullptr && added_effect_id.isEmpty(),
+            "Cancel must close Functions without applying a filter.");
+
+    sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
+    active_search = palette.dialog()->findChild<QLineEdit*>(
+        QStringLiteral("functionsEffectSearch"));
+    active_add = palette.dialog()->findChild<QPushButton*>(
+        QStringLiteral("functionsAddButton"));
+    require(active_search != nullptr && active_add != nullptr && active_add->isEnabled(),
+            "Functions did not restore its controls after Cancel.");
+    active_search->setText(QStringLiteral("Brightness"));
+    QTest::mouseClick(active_add, Qt::LeftButton);
+    processDeferredDeletes();
+    require(added_effect_id == QStringLiteral("video.brightness") &&
+                added_effect_requests == 1 &&
+                palette.dialog() == nullptr,
+            "Add must apply the selected filter and close Functions.");
+
+    added_effect_id.clear();
+    sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
+    active_search = palette.dialog()->findChild<QLineEdit*>(
+        QStringLiteral("functionsEffectSearch"));
+    require(active_search != nullptr,
+            "Functions did not restore search after Add.");
+    active_search->setText(QStringLiteral("Saturation"));
+    active_search->setFocus();
+    sendKey(active_search, Qt::Key_Return);
+    processDeferredDeletes();
+    require(added_effect_id == QStringLiteral("video.saturation") &&
+                added_effect_requests == 2 &&
+                palette.dialog() == nullptr,
+            "Enter must add the searched effect to the selected clip and close Functions.");
+    palette.setEffectTargetAvailable(false);
 
     main_window.activateWindow();
     editor->setFocus();

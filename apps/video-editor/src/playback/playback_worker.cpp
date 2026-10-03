@@ -1,4 +1,6 @@
 #include "playback_worker.h"
+
+#include <creative_suite/effects/effects.h>
 #include "playback_transition_plan.h"
 
 #include "../logging/logger.h"
@@ -2613,6 +2615,13 @@ PlaybackWorker::decodeCompositionLayers(
             }
         }
         if (frame == nullptr) continue;
+        if (!spec.effects.empty()) {
+            auto processed = std::make_shared<media::VideoFrame>(*frame);
+            if (!creative_suite::effects::applyStack(*processed, spec.effects)) {
+                throw media::MediaError("A clip effect stack could not be processed.");
+            }
+            frame = std::move(processed);
+        }
         auto transform = timeline::evaluateTransform(
             spec.transform,
             spec.keyframes,

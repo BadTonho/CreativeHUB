@@ -100,6 +100,20 @@ EditReason reasonForTransform(timeline::TransformParameterResult result) noexcep
     return EditReason::InvalidTarget;
 }
 
+EditReason reasonForEffects(timeline::EffectMutationResult result) noexcept {
+    switch (result) {
+    case timeline::EffectMutationResult::InvalidIndex:
+    case timeline::EffectMutationResult::IncompatibleClip:
+        return EditReason::InvalidTarget;
+    case timeline::EffectMutationResult::InvalidValue:
+        return EditReason::InvalidValue;
+    case timeline::EffectMutationResult::Changed:
+    case timeline::EffectMutationResult::NoChange:
+        return EditReason::None;
+    }
+    return EditReason::InvalidTarget;
+}
+
 void setTransformValue(
     timeline::Transform2D& transform,
     timeline::TransformProperty property,
@@ -1004,6 +1018,28 @@ TimelineEditResult TimelineCommandService::execute(
     }
     if (mutation != timeline::AudioParameterResult::Changed) {
         return result(EditStatus::Rejected, reasonForAudio(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {
+        session_.timeline_.tracks()[location->track_index].track_id};
+    output.affected_clip_ids = {command.clip_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(
+    const SetClipEffectsCommand& command) {
+    const auto location = session_.timeline_.locateClip(command.clip_id);
+    if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setClipEffects(
+        location->track_index, location->clip_index, command.effects);
+    if (mutation == timeline::EffectMutationResult::NoChange) {
+        return result(EditStatus::NoChange);
+    }
+    if (mutation != timeline::EffectMutationResult::Changed) {
+        return result(EditStatus::Rejected, reasonForEffects(mutation));
     }
     recordSuccessfulEdit(before);
     auto output = result(EditStatus::Applied);

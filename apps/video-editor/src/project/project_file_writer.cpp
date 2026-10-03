@@ -178,6 +178,26 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                 }
                 item.insert("audio_gain_keyframes", audio_gain_keyframes);
             }
+            if (!clip.effects.empty()) {
+                QJsonArray effect_stack;
+                for (const auto& effect : clip.effects) {
+                    QJsonObject effect_object;
+                    effect_object.insert("id", QString::fromUtf8(
+                        effect.id.data(), static_cast<qsizetype>(effect.id.size())));
+                    QJsonArray parameters;
+                    for (const auto& parameter : effect.parameters) {
+                        QJsonObject parameter_object;
+                        parameter_object.insert("id", QString::fromUtf8(
+                            parameter.id.data(),
+                            static_cast<qsizetype>(parameter.id.size())));
+                        parameter_object.insert("value", parameter.value);
+                        parameters.append(parameter_object);
+                    }
+                    effect_object.insert("parameters", parameters);
+                    effect_stack.append(effect_object);
+                }
+                item.insert("effects", effect_stack);
+            }
             QJsonObject transform;
             QJsonObject position;
             position.insert("x", clip.transform.position_x);

@@ -17,6 +17,7 @@ libs/
   animation/         # Shared keyframe and curve evaluation
   composition/       # Shared CPU composition and optional Qt/OpenGL adapter
   diagnostics/       # Structured logging
+  effects/           # Shared CPU visual-effect processing
   media/             # Media assets, playback, and video encoding
   shortcuts/         # Shared shortcut registration and persistence
   system-monitor/    # Process and system resource sampling
@@ -35,8 +36,11 @@ references and are not application dependencies.
 The Video Editor, Image Editor, and Motion Studio share focused capabilities
 without sharing their complete editing workflows. Current shared libraries
 include media assets/playback/encoding, animation, composition, diagnostics,
-shortcut management, and system monitoring. Project schemas, document stores,
-timeline models, editors, and panels remain application-owned.
+visual effects, shortcut management, and system monitoring. The Video Editor
+is the first consumer of `creative-suite::effects`; other applications can
+integrate it after their document and rendering contracts are defined. Project
+schemas, document stores, timeline models, editors, and panels remain
+application-owned.
 
 `creative-suite::composition` stays Qt independent. Its separate optional
 `creative-suite::composition-opengl` target owns worker GPU resources and frame

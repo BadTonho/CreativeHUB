@@ -7,6 +7,13 @@ add_creative_suite_test(
     NAME creative-suite-animation
     COMMAND creative-suite-animation-tests)
 
+add_executable(creative-suite-effects-tests effects_test.cpp)
+target_link_libraries(creative-suite-effects-tests PRIVATE creative-suite::effects)
+target_compile_features(creative-suite-effects-tests PRIVATE cxx_std_20)
+add_creative_suite_test(
+    NAME creative-suite-effects
+    COMMAND creative-suite-effects-tests)
+
 add_executable(creative-suite-composition-tests
     composition_test.cpp
 )
@@ -74,6 +81,7 @@ endif()
 
 foreach(shared_test IN ITEMS
         creative-suite-animation-tests
+        creative-suite-effects-tests
         creative-suite-composition-tests
         creative-suite-composition-opengl-tests
         creative-suite-shortcuts-tests)

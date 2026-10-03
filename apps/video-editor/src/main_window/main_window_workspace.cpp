@@ -404,6 +404,14 @@ void MainWindow::createWorkspace() {
             this);
 
     function_palette_ = new ui::FunctionPalette(this, *shortcut_manager_);
+    connect(function_palette_, &ui::FunctionPalette::effectAddRequested,
+            edit_workspace_->controller(),
+            &ui::EditWorkspaceController::addEffectToSelectedClip);
+    connect(edit_workspace_->controller(),
+            &ui::EditWorkspaceController::effectTargetAvailabilityChanged,
+            function_palette_, &ui::FunctionPalette::setEffectTargetAvailable);
+    function_palette_->setEffectTargetAvailable(
+        edit_workspace_->controller()->selectedClipSupportsEffects());
 
     restoreWorkspaceLayout();
     setWorkspacePage(ui::WorkspacePageId::Edit);

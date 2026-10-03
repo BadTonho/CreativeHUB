@@ -4,6 +4,8 @@
 #include "ui/workspace/pages/render/render_output_capabilities.h"
 #include "ui/workspace/pages/render/render_queue_controller.h"
 #include "logging/logger.h"
+
+#include <creative_suite/effects/effects.h>
 #ifdef CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS
 #include "image_document_session.h"
 #endif
@@ -501,6 +503,35 @@ void validateDirectExport(
         require(entry.path().filename().string().find(failed_temporary_prefix) != 0,
                 "A failed export must remove its temporary output file.");
     }
+}
+
+void validateVisualEffectExport(
+    const OutputChoice& output,
+    const std::filesystem::path& image_path,
+    const std::filesystem::path& root) {
+    const auto extension = output.container.extensions.empty()
+        ? std::string("mkv")
+        : output.container.extensions.substr(0, output.container.extensions.find(','));
+    const auto target = root / ("visual-effects." + extension);
+    auto job = makeImageJob(output, image_path, target, 111, 2);
+    job.project_snapshot.timeline_tracks.front().clips.front().effects = {
+        creative_suite::effects::makeDefaultInstance("video.grayscale")};
+    std::atomic_bool canceled{false};
+    renderJob(job, canceled);
+
+    auto decoder = media::VideoPlaybackSession::open(target);
+    const auto frame = decoder->decode_next_frame();
+    require(frame.has_value() && *frame != nullptr,
+            "The effect export did not contain a decodable video frame.");
+    const auto offset = static_cast<std::size_t>(
+        (12 * (*frame)->stride) + 16 * 4);
+    const auto red = (*frame)->rgba_pixels[offset];
+    const auto green = (*frame)->rgba_pixels[offset + 1];
+    const auto blue = (*frame)->rgba_pixels[offset + 2];
+    const auto maximum = std::max({red, green, blue});
+    const auto minimum = std::min({red, green, blue});
+    require(maximum - minimum <= 12 && red > 40 && red < 115,
+            "Offline export did not apply the grayscale effect to the image clip.");
 }
 
 void validateQueueContinuesAfterFailure(
@@ -1219,6 +1250,7 @@ int main(int argc, char* argv[]) {
 
         const auto output = chooseOutput();
         validateDirectExport(output, image_path, green_image_path, root);
+        validateVisualEffectExport(output, image_path, root);
         validateGapsTextAndKeyframes(output, image_path, green_image_path, root);
         validateQueueContinuesAfterFailure(output, image_path, green_image_path, root);
         validateQueueCancellationStopsLaterJobs(output, image_path, root);

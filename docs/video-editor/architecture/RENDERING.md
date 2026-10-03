@@ -553,7 +553,16 @@ configurable. It renders through the end of the last clip; uncovered frames
 are black. The current
 composition path evaluates clip transforms and keyframes and supports video,
 still-image, and text layers plus Cross Dissolve and Fade to Black transitions.
-Preview-only viewing effects such as Grayscale are not applied to exports.
+Persisted per-clip visual filters are included in both Preview and export.
+Each video or image clip may carry an ordered stack of Grayscale, Brightness,
+Contrast, and Saturation filters. The playback worker and
+`OfflineExportRenderer` evaluate the stack on a private RGBA frame copy before
+compositing, by calling the same CPU `creative-suite::effects` library. Filter
+order, parameter values, and alpha are preserved. The experimental GPU
+compositor receives the already-filtered layer pixels; effect processing
+remains CPU-based. The separate `View > Grayscale Preview` viewing mode remains
+a preview-only display option and does not modify the clip or its export. See
+[the shared effects contract](EFFECTS.md).
 
 When audio export is enabled, the renderer decodes embedded audio from video
 clips that have not been externalized and mixes it with Audio track clips at

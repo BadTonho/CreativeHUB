@@ -3,6 +3,7 @@
 #include "../media/video_metadata.h"
 #include "timeline_frame_rate.h"
 #include "timeline_transform.h"
+#include <creative_suite/effects/effects.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -114,6 +115,7 @@ struct TimelineClip {
     double audio_gain = 1.0;
     bool audio_muted = false;
     std::vector<AudioGainKeyframe> audio_gain_keyframes;
+    std::vector<creative_suite::effects::EffectInstance> effects;
     ClipId clip_id = 0;
     TrackId track_id = 0;
     Transform2D transform;
@@ -224,6 +226,7 @@ enum class TrimClipResult { Trimmed, NoChange, InvalidIndex, InvalidRange };
 enum class AudioParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class TransformParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class TextParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
+enum class EffectMutationResult { Changed, InvalidIndex, InvalidValue, IncompatibleClip, NoChange };
 enum class TransitionMutationResult {
     Added,
     Updated,
@@ -357,6 +360,10 @@ public:
         std::size_t track_index,
         std::size_t clip_index,
         const TextStyle& text);
+    EffectMutationResult setClipEffects(
+        std::size_t track_index,
+        std::size_t clip_index,
+        std::vector<creative_suite::effects::EffectInstance> effects);
     TransitionMutationResult addTransition(
         std::size_t track_index,
         std::size_t from_clip_index,

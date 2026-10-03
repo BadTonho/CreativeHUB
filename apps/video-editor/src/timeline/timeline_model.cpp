@@ -2284,6 +2284,26 @@ TextParameterResult TimelineModel::setClipText(
     return TextParameterResult::Changed;
 }
 
+EffectMutationResult TimelineModel::setClipEffects(
+    std::size_t track_index,
+    std::size_t clip_index,
+    std::vector<creative_suite::effects::EffectInstance> effects) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_index >= track->clips.size()) {
+        return EffectMutationResult::InvalidIndex;
+    }
+    auto& clip = track->clips[clip_index];
+    if (clip.kind != ClipKind::Video && clip.kind != ClipKind::Image) {
+        return EffectMutationResult::IncompatibleClip;
+    }
+    if (!creative_suite::effects::isValidStack(effects)) {
+        return EffectMutationResult::InvalidValue;
+    }
+    if (clip.effects == effects) return EffectMutationResult::NoChange;
+    clip.effects = std::move(effects);
+    return EffectMutationResult::Changed;
+}
+
 TransitionMutationResult TimelineModel::addTransition(
     std::size_t track_index,
     std::size_t from_clip_index,

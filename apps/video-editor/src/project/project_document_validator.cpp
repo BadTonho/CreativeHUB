@@ -171,6 +171,12 @@ void validateDocument(const ProjectDocument& document,
         if (clip.kind == timeline::ClipKind::Text && !validTextStyle(clip.text)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains invalid text clip styling.");
         }
+        if (!creative_suite::effects::isValidStack(clip.effects) ||
+            (!clip.effects.empty() && clip.kind != timeline::ClipKind::Video &&
+             clip.kind != timeline::ClipKind::Image)) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid effect stack for this clip.");
+        }
         if (clip.image_editor_variant.has_value() &&
             (clip.kind != timeline::ClipKind::Image ||
              !validLinkedImageReference(*clip.image_editor_variant, clip.source_path))) {

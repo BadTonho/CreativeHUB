@@ -1,5 +1,7 @@
 #include "ui/workspace/pages/edit/edit_workspace_controller.h"
 
+#include <creative_suite/effects/effects.h>
+
 #include "logging/logger.h"
 #include "timeline/timeline_clip_edge_command.h"
 #include "timeline/timeline_zoom.h"
@@ -13,6 +15,7 @@
 #include <QFont>
 #include <QFontComboBox>
 #include <QLabel>
+#include <QListWidget>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollArea>
@@ -343,12 +346,202 @@ void EditWorkspaceController::handleTimelineEffectDrop(
     const QString& effect_id,
     timeline::TrackId track_id,
     qint64 timeline_frame) {
+    const auto effect_bytes = effect_id.toUtf8();
+    const auto effect_id_view = std::string_view(
+        effect_bytes.constData(), static_cast<std::size_t>(effect_bytes.size()));
+    if (creative_suite::effects::findDefinition(effect_id_view) != nullptr) {
+        const auto track = timeline_model_.locateTrack(track_id);
+        if (!track.has_value()) return;
+        const auto location = timeline_model_.clipAt(*track, timeline_frame);
+        if (!location.has_value()) return;
+        const auto clip_id = timeline_model_.tracks()[location->track_index]
+            .clips[location->clip_index].clip_id;
+        static_cast<void>(addEffectToClip(clip_id, effect_id));
+        return;
+    }
     if (effect_id != QStringLiteral("text.text")) {
         emit statusMessageRequested(
             QStringLiteral("This effect cannot be added to the timeline."));
         return;
     }
     addTextClipAt(track_id, timeline_frame);
+}
+
+bool EditWorkspaceController::selectedClipSupportsEffects() const noexcept {
+    const auto location = selectedTimelineClipLocation();
+    if (!location.has_value() ||
+        location->track_index >= timeline_model_.trackCount() ||
+        location->clip_index >= timeline_model_.clipCount(location->track_index)) {
+        return false;
+    }
+    const auto kind = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index].kind;
+    return kind == timeline::ClipKind::Video || kind == timeline::ClipKind::Image;
+}
+
+void EditWorkspaceController::publishEffectTargetAvailability(bool available) {
+    if (last_effect_target_available_ == available) return;
+    last_effect_target_available_ = available;
+    emit effectTargetAvailabilityChanged(available);
+}
+
+bool EditWorkspaceController::addEffectToClip(
+    timeline::ClipId clip_id,
+    const QString& effect_id) {
+    const auto effect_bytes = effect_id.toUtf8();
+    const auto effect_id_view = std::string_view(
+        effect_bytes.constData(), static_cast<std::size_t>(effect_bytes.size()));
+    auto instance = creative_suite::effects::makeDefaultInstance(effect_id_view);
+    if (instance.id.empty()) return false;
+    auto location = timeline_model_.locateClip(clip_id);
+    if (!location.has_value()) return false;
+    const auto target_track_id = timeline_model_.tracks()[location->track_index].track_id;
+    if (active_timeline_clip_id_ != clip_id ||
+        active_timeline_track_id_ != target_track_id) {
+        handleTimelineClipSelectionChanged(target_track_id, clip_id);
+        location = timeline_model_.locateClip(clip_id);
+        if (!location.has_value()) return false;
+    }
+    const auto clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    if (clip.kind != timeline::ClipKind::Video && clip.kind != timeline::ClipKind::Image) {
+        return false;
+    }
+    auto effects = clip.effects;
+    effects.push_back(std::move(instance));
+    const auto previous_selection = selected_effect_index_;
+    selected_effect_index_ = static_cast<int>(effects.size() - 1);
+    try {
+        const auto result = execute(application::SetClipEffectsCommand{
+            clip_id, std::move(effects)});
+        if (!result.changed()) {
+            selected_effect_index_ = previous_selection;
+            return false;
+        }
+        publishCommittedEdit(result, false, true, QStringLiteral("Effect added."));
+        return true;
+    } catch (const std::exception& error) {
+        selected_effect_index_ = previous_selection;
+        logging::Logger::instance().log(
+            logging::Level::Error, "timeline", "add_clip_effect", error.what(),
+            {{"clip_id", std::to_string(clip_id)},
+             {"effect_id", std::string(effect_id_view)}});
+        emit statusMessageRequested(QStringLiteral("Could not add the effect."));
+        return false;
+    }
+}
+
+void EditWorkspaceController::addEffectToSelectedClip(const QString& effect_id) {
+    if (!selectedClipSupportsEffects()) {
+        emit statusMessageRequested(
+            QStringLiteral("Select a video or image clip to add an effect."));
+        return;
+    }
+    const auto location = selectedTimelineClipLocation();
+    if (!location.has_value()) return;
+    static_cast<void>(addEffectToClip(
+        timeline_model_.tracks()[location->track_index]
+            .clips[location->clip_index].clip_id,
+        effect_id));
+}
+
+void EditWorkspaceController::selectClipEffect(int index) {
+    selected_effect_index_ = index;
+    updateInspector();
+}
+
+void EditWorkspaceController::moveSelectedClipEffect(int direction) {
+    const auto location = selectedTimelineClipLocation();
+    if (!location.has_value() || (direction != -1 && direction != 1)) return;
+    const auto& clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    const auto target = selected_effect_index_ + direction;
+    if (selected_effect_index_ < 0 ||
+        static_cast<std::size_t>(selected_effect_index_) >= clip.effects.size() ||
+        target < 0 || static_cast<std::size_t>(target) >= clip.effects.size()) return;
+    auto effects = clip.effects;
+    std::swap(effects[static_cast<std::size_t>(selected_effect_index_)],
+              effects[static_cast<std::size_t>(target)]);
+    selected_effect_index_ = target;
+    try {
+        const auto result = execute(application::SetClipEffectsCommand{
+            clip.clip_id, std::move(effects)});
+        if (result.changed()) {
+            publishCommittedEdit(result, false, true, QStringLiteral("Effect order updated."));
+        }
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "timeline", "reorder_clip_effect", error.what(),
+            {{"clip_id", std::to_string(clip.clip_id)}});
+        emit statusMessageRequested(QStringLiteral("Could not reorder the effect."));
+    }
+}
+
+void EditWorkspaceController::removeSelectedClipEffect() {
+    const auto location = selectedTimelineClipLocation();
+    if (!location.has_value()) return;
+    const auto& clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    if (selected_effect_index_ < 0 ||
+        static_cast<std::size_t>(selected_effect_index_) >= clip.effects.size()) return;
+    auto effects = clip.effects;
+    effects.erase(effects.begin() + selected_effect_index_);
+    selected_effect_index_ = effects.empty()
+        ? -1
+        : std::min(selected_effect_index_, static_cast<int>(effects.size() - 1));
+    try {
+        const auto result = execute(application::SetClipEffectsCommand{
+            clip.clip_id, std::move(effects)});
+        if (result.changed()) {
+            publishCommittedEdit(result, false, true, QStringLiteral("Effect removed."));
+        }
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "timeline", "remove_clip_effect", error.what(),
+            {{"clip_id", std::to_string(clip.clip_id)}});
+        emit statusMessageRequested(QStringLiteral("Could not remove the effect."));
+    }
+}
+
+void EditWorkspaceController::beginEffectEdit() {
+    if (pending_effect_edit_batch_id_.has_value() ||
+        !selectedClipSupportsEffects()) return;
+    pending_effect_edit_batch_id_ = beginEditBatch();
+}
+
+void EditWorkspaceController::finishEffectEdit() {
+    if (!pending_effect_edit_batch_id_.has_value()) return;
+    const auto batch_id = *pending_effect_edit_batch_id_;
+    pending_effect_edit_batch_id_.reset();
+    static_cast<void>(finishEditBatch(batch_id));
+    updateHistoryActions();
+    emit projectDirtyStateUpdateRequested();
+}
+
+void EditWorkspaceController::applySelectedClipEffectParameter(double value) {
+    const auto location = selectedTimelineClipLocation();
+    if (!location.has_value() || !std::isfinite(value)) return;
+    const auto& clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    if (selected_effect_index_ < 0 ||
+        static_cast<std::size_t>(selected_effect_index_) >= clip.effects.size()) return;
+    auto effects = clip.effects;
+    if (!creative_suite::effects::setParameterValue(
+            effects[static_cast<std::size_t>(selected_effect_index_)], "amount", value)) {
+        return;
+    }
+    try {
+        const auto result = execute(application::SetClipEffectsCommand{
+            clip.clip_id, std::move(effects)});
+        if (result.changed()) {
+            publishCommittedEdit(result, false, true, QStringLiteral("Effect updated."));
+        }
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "timeline", "set_clip_effect_parameter", error.what(),
+            {{"clip_id", std::to_string(clip.clip_id)}});
+        emit statusMessageRequested(QStringLiteral("Could not update the effect."));
+    }
 }
 
 void EditWorkspaceController::promptAddVideoTrack(QWidget* dialog_parent) {
@@ -1031,6 +1224,118 @@ void EditWorkspaceController::updateInspector() {
     const bool enabled = location.has_value() &&
         location->track_index < timeline_model_.trackCount() &&
         location->clip_index < timeline_model_.clipCount(location->track_index);
+    const timeline::TimelineClip* selected_clip = enabled
+        ? &timeline_model_.tracks()[location->track_index].clips[location->clip_index]
+        : nullptr;
+    const bool effects_enabled = selected_clip != nullptr && !transition_enabled &&
+        (selected_clip->kind == timeline::ClipKind::Video ||
+         selected_clip->kind == timeline::ClipKind::Image);
+    publishEffectTargetAvailability(effects_enabled);
+    if (selected_clip != nullptr && selected_clip->clip_id != inspector_effect_clip_id_) {
+        inspector_effect_clip_id_ = selected_clip->clip_id;
+        selected_effect_index_ = selected_clip->effects.empty() ? -1 : 0;
+    }
+    if (selected_clip == nullptr) {
+        inspector_effect_clip_id_ = 0;
+        selected_effect_index_ = -1;
+    }
+    if (selected_clip != nullptr && selected_effect_index_ >=
+        static_cast<int>(selected_clip->effects.size())) {
+        selected_effect_index_ = selected_clip->effects.empty()
+            ? -1
+            : static_cast<int>(selected_clip->effects.size() - 1);
+    }
+    if (ui_.clip_effects_controls != nullptr) {
+        ui_.clip_effects_controls->setVisible(effects_enabled);
+    }
+    if (ui_.clip_effects_list != nullptr) {
+        auto* list = ui_.clip_effects_list;
+        const auto effect_count = effects_enabled ? selected_clip->effects.size() : 0U;
+        bool rebuild = static_cast<std::size_t>(list->count()) != effect_count;
+        if (!rebuild && effects_enabled) {
+            for (std::size_t index = 0; index < effect_count; ++index) {
+                const auto* definition = creative_suite::effects::findDefinition(
+                    selected_clip->effects[index].id);
+                const auto expected = definition != nullptr
+                    ? QString::fromUtf8(definition->name.data(),
+                                         static_cast<qsizetype>(definition->name.size()))
+                    : QString::fromStdString(selected_clip->effects[index].id);
+                if (list->item(static_cast<int>(index))->text() != expected) {
+                    rebuild = true;
+                    break;
+                }
+            }
+        }
+        const QSignalBlocker blocker(list);
+        if (rebuild) {
+            list->clear();
+            if (effects_enabled) {
+                for (const auto& effect : selected_clip->effects) {
+                    const auto* definition =
+                        creative_suite::effects::findDefinition(effect.id);
+                    list->addItem(definition != nullptr
+                        ? QString::fromUtf8(definition->name.data(),
+                                            static_cast<qsizetype>(definition->name.size()))
+                        : QString::fromStdString(effect.id));
+                }
+            }
+        }
+        list->setCurrentRow(effects_enabled ? selected_effect_index_ : -1);
+    }
+    const bool has_selected_effect = effects_enabled && selected_effect_index_ >= 0 &&
+        static_cast<std::size_t>(selected_effect_index_) < selected_clip->effects.size();
+    const creative_suite::effects::ParameterDefinition* selected_parameter = nullptr;
+    double selected_parameter_value = 0.0;
+    if (has_selected_effect) {
+        const auto& instance = selected_clip->effects[
+            static_cast<std::size_t>(selected_effect_index_)];
+        const auto* definition = creative_suite::effects::findDefinition(instance.id);
+        if (definition != nullptr && !definition->parameters.empty()) {
+            selected_parameter = &definition->parameters.front();
+            selected_parameter_value = creative_suite::effects::parameterValue(
+                instance, selected_parameter->id);
+        }
+    }
+    if (ui_.clip_effect_up != nullptr) {
+        ui_.clip_effect_up->setEnabled(has_selected_effect && selected_effect_index_ > 0);
+    }
+    if (ui_.clip_effect_down != nullptr) {
+        ui_.clip_effect_down->setEnabled(has_selected_effect &&
+            selected_clip != nullptr &&
+            static_cast<std::size_t>(selected_effect_index_ + 1) <
+                selected_clip->effects.size());
+    }
+    if (ui_.clip_effect_remove != nullptr) {
+        ui_.clip_effect_remove->setEnabled(has_selected_effect);
+    }
+    if (ui_.clip_effect_parameter_label != nullptr &&
+        ui_.clip_effect_parameter_slider != nullptr &&
+        ui_.clip_effect_parameter_value != nullptr) {
+        auto* slider = ui_.clip_effect_parameter_slider;
+        auto* spin = ui_.clip_effect_parameter_value;
+        if (selected_parameter != nullptr) {
+            const auto minimum = static_cast<int>(std::ceil(selected_parameter->minimum));
+            const auto maximum = static_cast<int>(std::floor(selected_parameter->maximum));
+            ui_.clip_effect_parameter_label->setText(QString::fromUtf8(
+                selected_parameter->name.data(),
+                static_cast<qsizetype>(selected_parameter->name.size())));
+            slider->setRange(minimum, maximum);
+            slider->setSingleStep(std::max(1, static_cast<int>(selected_parameter->step)));
+            spin->setRange(selected_parameter->minimum, selected_parameter->maximum);
+            spin->setSingleStep(selected_parameter->step);
+            spin->setDecimals(0);
+            const QSignalBlocker slider_blocker(slider);
+            const QSignalBlocker spin_blocker(spin);
+            slider->setValue(static_cast<int>(std::lround(selected_parameter_value)));
+            spin->setValue(selected_parameter_value);
+            slider->setEnabled(true);
+            spin->setEnabled(true);
+        } else {
+            ui_.clip_effect_parameter_label->setText(QStringLiteral("Parameter"));
+            slider->setEnabled(false);
+            spin->setEnabled(false);
+        }
+    }
     const std::array<QDoubleSpinBox*, 5> spins = ui_.transform_spins;
     const std::array<QSlider*, 5> sliders = ui_.transform_sliders;
     for (auto* spin : spins) {

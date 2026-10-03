@@ -271,7 +271,10 @@ performance measurements, and Video Editor stability as the decision criteria.
 
 - [ ] Improve media organization, synchronization, relinking, and asset
   management.
-- [ ] Add color correction and grading workflows.
+  - [x] Add shared CPU Grayscale, Brightness, Contrast, and Saturation filters
+    for video and image clips, available through Effects and Functions with
+    editable stacks and version 17 project persistence.
+  - [ ] Expand clip color correction into broader grading workflows.
 - [x] Display derived, cached waveforms on independent and linked Audio clips,
   with a global Mono/Stereo view preference and separate channel peaks.
 - [x] Add clip-local volume automation with editable points, fade support,

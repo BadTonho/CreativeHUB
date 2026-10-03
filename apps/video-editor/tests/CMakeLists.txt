@@ -6,6 +6,7 @@ find_package(Threads REQUIRED)
 link_libraries(
     creative-suite::animation
     creative-suite::composition
+    creative-suite::effects
     creative-suite::diagnostics
     creative-suite::media-frame
 )

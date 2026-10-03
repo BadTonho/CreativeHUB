@@ -29,6 +29,17 @@ target_include_directories(creative-suite-animation PUBLIC
 target_link_libraries(creative-suite-animation PUBLIC creative-suite::media-frame)
 target_compile_features(creative-suite-animation PUBLIC cxx_std_20)
 
+add_library(creative-suite-effects STATIC
+    effects/src/effects.cpp
+    effects/include/creative_suite/effects/effects.h
+)
+add_library(creative-suite::effects ALIAS creative-suite-effects)
+target_include_directories(creative-suite-effects PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/effects/include
+)
+target_link_libraries(creative-suite-effects PUBLIC creative-suite::media-frame)
+target_compile_features(creative-suite-effects PUBLIC cxx_std_20)
+
 add_library(creative-suite-composition STATIC
     composition/src/frame_compositor.cpp
     composition/include/creative_suite/composition/frame_compositor.h
@@ -89,6 +100,7 @@ endif()
 
 foreach(shared_target IN ITEMS
         creative-suite-animation
+        creative-suite-effects
         creative-suite-composition
         creative-suite-composition-opengl
         creative-suite-diagnostics

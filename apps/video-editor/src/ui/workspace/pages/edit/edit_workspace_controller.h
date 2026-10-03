@@ -89,6 +89,14 @@ public:
     void applyTimelineZoom(double factor);
     void updateHistoryActions();
     void updateInspector();
+    [[nodiscard]] bool selectedClipSupportsEffects() const noexcept;
+    void addEffectToSelectedClip(const QString& effect_id);
+    void selectClipEffect(int index);
+    void moveSelectedClipEffect(int direction);
+    void removeSelectedClipEffect();
+    void beginEffectEdit();
+    void finishEffectEdit();
+    void applySelectedClipEffectParameter(double value);
     void beginAudioEdit();
     void finishAudioEdit();
     void applyClipAudioControls();
@@ -185,9 +193,14 @@ signals:
     void clearMediaBrowserSelectionRequested();
     void refreshPlaybackUiRequested();
     void timelineSelectionPresentationChanged();
+    void effectTargetAvailabilityChanged(bool available);
 
 private:
     void synchronizeActiveTimelineSelection() noexcept;
+    [[nodiscard]] bool addEffectToClip(
+        timeline::ClipId clip_id,
+        const QString& effect_id);
+    void publishEffectTargetAvailability(bool available);
     void publishResult(const application::TimelineEditResult& result);
     void publishHistoryState();
     void publishCommittedEdit(
@@ -217,6 +230,11 @@ private:
         pending_transform_edit_batch_id_;
     std::optional<application::TimelineCommandService::EditBatchId>
         pending_audio_envelope_edit_batch_id_;
+    std::optional<application::TimelineCommandService::EditBatchId>
+        pending_effect_edit_batch_id_;
+    timeline::ClipId inspector_effect_clip_id_ = 0;
+    int selected_effect_index_ = -1;
+    std::optional<bool> last_effect_target_available_;
 };
 
 }  // namespace ui

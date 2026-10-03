@@ -6,6 +6,8 @@
 #include "rendering/frame_compositor.h"
 #include "rendering/preview_performance_metrics.h"
 
+#include <creative_suite/effects/effects.h>
+
 #include <QGuiApplication>
 #include <QEventLoop>
 #include <QThread>
@@ -1517,6 +1519,64 @@ void validateStaticImageComposition() {
             "Static image composition did not reuse the same image pixels.");
 }
 
+void validateVisualEffectPreview() {
+    playback::PlaybackWorker worker;
+    std::vector<playback::VideoFramePtr> frames;
+    QObject::connect(
+        &worker,
+        &playback::PlaybackWorker::frameReady,
+        [&frames](playback::VideoFramePtr frame, qint64, quint64, quint64) {
+            frames.push_back(std::move(frame));
+        });
+
+    auto still = std::make_shared<const media::VideoFrame>(media::VideoFrame{
+        2, 1, 8, std::vector<std::uint8_t>{200, 40, 20, 255, 30, 180, 60, 255}});
+    playback::CompositionLayerSpec image_layer;
+    image_layer.frame_rate = 30.0;
+    image_layer.timeline_start_frame = 0;
+    image_layer.segment_frame_count = 1;
+    image_layer.track_index = 0;
+    image_layer.clip_index = 0;
+    image_layer.kind = timeline::ClipKind::Image;
+    image_layer.still_frame = still;
+
+    worker.setPreviewQuality(playback::PreviewQuality::Quarter);
+    worker.setActiveCompositionClip(0, 0);
+    worker.setComposition({image_layer}, {}, 601);
+    worker.renderCompositionFrame(0, 0, 601);
+    require(frames.size() == 1 && frames.back() != nullptr,
+            "The unfiltered baseline Preview frame was not emitted.");
+    const auto baseline = frames.back();
+
+    image_layer.effects.push_back(
+        creative_suite::effects::makeDefaultInstance("video.grayscale"));
+    worker.setComposition({image_layer}, {}, 602);
+    worker.renderCompositionFrame(0, 0, 602);
+    require(frames.size() == 2 && frames.back() != nullptr,
+            "The filtered Preview frame was not emitted.");
+    const auto filtered = frames.back();
+    bool found_filtered_source_pixel = false;
+    for (int y = 0; y < filtered->height && !found_filtered_source_pixel; ++y) {
+        for (int x = 0; x < filtered->width; ++x) {
+            const auto offset = static_cast<std::size_t>(y) * filtered->stride +
+                static_cast<std::size_t>(x) * 4U;
+            const auto r = filtered->rgba_pixels[offset];
+            const auto g = filtered->rgba_pixels[offset + 1];
+            const auto b = filtered->rgba_pixels[offset + 2];
+            const auto base_r = baseline->rgba_pixels[offset];
+            const auto base_g = baseline->rgba_pixels[offset + 1];
+            const auto base_b = baseline->rgba_pixels[offset + 2];
+            if (r > 20 && r == g && g == b &&
+                (base_r != base_g || base_g != base_b)) {
+                found_filtered_source_pixel = true;
+                break;
+            }
+        }
+    }
+    require(found_filtered_source_pixel,
+            "Preview did not apply the clip's grayscale stack before composition.");
+}
+
 void validatePlaybackFrameMailbox() {
     playback::PlaybackFrameMailbox mailbox;
     auto first = std::make_shared<const media::VideoFrame>(media::VideoFrame{
@@ -1961,6 +2021,7 @@ int main(int argc, char* argv[]) {
         validateCompositionCaching();
         validateAnimatedTextGeometry();
         validateStaticImageComposition();
+        validateVisualEffectPreview();
         if (argc == 2) {
             validateReference(application, std::filesystem::path(argv[1]));
             validateSeekCoalescing(application, std::filesystem::path(argv[1]));

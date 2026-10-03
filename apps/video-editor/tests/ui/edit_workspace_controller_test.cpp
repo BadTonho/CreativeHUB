@@ -3,6 +3,8 @@
 #include "application/timeline_command_service.h"
 #include "ui/workspace/pages/edit/edit_workspace_controller.h"
 
+#include <creative_suite/effects/effects.h>
+
 #include <QCoreApplication>
 
 #include <chrono>
@@ -134,13 +136,62 @@ void run() {
                 media_drop_commands.undoCount() == 1 &&
                 committed_media_drops == 1,
             "Adding dropped media did not commit through the Edit controller.");
+
+    const auto visual_clip_id = added_media.affected_clip_ids.front();
+    bool effects_target_available = false;
+    QObject::connect(
+        &media_drop_controller,
+        &ui::EditWorkspaceController::effectTargetAvailabilityChanged,
+        [&effects_target_available](bool available) {
+            effects_target_available = available;
+        });
+    media_drop_controller.handleTimelineClipSelectionChanged(
+        media_drop_track, visual_clip_id);
+    require(media_drop_controller.selectedClipSupportsEffects() &&
+                effects_target_available,
+            "Selecting a video clip did not enable visual filters.");
+    media_drop_controller.handleTimelineEffectDrop(
+        QStringLiteral("video.grayscale"), media_drop_track, 12);
+    media_drop_controller.addEffectToSelectedClip(QStringLiteral("video.brightness"));
+    auto effect_stack = media_drop_session.timeline().tracks().front().clips.front().effects;
+    require(effect_stack.size() == 2 &&
+                effect_stack[0].id == "video.grayscale" &&
+                effect_stack[1].id == "video.brightness",
+            "Effects-panel drop and Functions application did not append filters to the selected clip.");
+
+    media_drop_controller.selectClipEffect(0);
+    const auto history_before_effect_parameter = media_drop_commands.undoCount();
+    media_drop_controller.beginEffectEdit();
+    media_drop_controller.applySelectedClipEffectParameter(55.0);
+    media_drop_controller.applySelectedClipEffectParameter(35.0);
+    media_drop_controller.finishEffectEdit();
+    effect_stack = media_drop_session.timeline().tracks().front().clips.front().effects;
+    require(effect_stack[0].parameters.front().value == 35.0 &&
+                media_drop_commands.undoCount() == history_before_effect_parameter + 1,
+            "Inspector parameter edits did not update the filter with one grouped history entry.");
+
+    media_drop_controller.moveSelectedClipEffect(1);
+    effect_stack = media_drop_session.timeline().tracks().front().clips.front().effects;
+    require(effect_stack[0].id == "video.brightness" &&
+                effect_stack[1].id == "video.grayscale",
+            "Inspector reordering did not preserve the requested effect order.");
+    media_drop_controller.removeSelectedClipEffect();
+    require(media_drop_session.timeline().tracks().front().clips.front().effects.size() == 1 &&
+                media_drop_commands.undo().changed() &&
+                media_drop_session.timeline().tracks().front().clips.front().effects.size() == 2 &&
+                media_drop_commands.redo().changed() &&
+                media_drop_session.timeline().tracks().front().clips.front().effects.size() == 1,
+            "Inspector effect removal did not participate in Undo/Redo.");
+
+    const auto history_before_occupied_drop = media_drop_commands.undoCount();
+    const auto committed_before_occupied_drop = committed_media_drops;
     const auto occupied_media = media_drop_controller.addMediaClip(
         online_path, media_drop_track, 30);
     require(!occupied_media.changed() &&
                 occupied_media.reason == application::EditReason::Overlap &&
                 media_drop_session.timeline().clipCount(0) == 1 &&
-                media_drop_commands.undoCount() == 1 &&
-                committed_media_drops == 1,
+                media_drop_commands.undoCount() == history_before_occupied_drop &&
+                committed_media_drops == committed_before_occupied_drop,
             "A rejected media drop changed the project or its history.");
 
     const auto undone = controller.undo();

@@ -48,6 +48,12 @@ composition tests deploy the same Qt runtime and report unavailable contexts as
 skipped; a headless skip is not driver acceptance. Video Editor is the first
 consumer; Motion Studio's renderer continues to use CPU composition.
 
+The internal `creative-suite::effects` library provides CPU RGBA visual
+filters to the Video Editor and depends only on the shared frame type and the
+C++ standard library. It adds no package, codec, Qt module, or license. The
+Video Editor is its first consumer; integration by other applications remains
+future work. See [the effects contract](EFFECTS.md).
+
 Before distributing binaries, the project must record the exact modules,
 codecs, licenses, deployment files, and source/relinking obligations required
 by the chosen configuration.

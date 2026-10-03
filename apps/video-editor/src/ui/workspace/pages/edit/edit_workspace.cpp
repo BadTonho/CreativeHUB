@@ -18,6 +18,7 @@
 #include <QInputDialog>
 #include <QIcon>
 #include <QLabel>
+#include <QListWidget>
 #include <QPainter>
 #include <QPlainTextEdit>
 #include <QPixmap>
@@ -254,6 +255,39 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     }
     layout->addLayout(form);
 
+    ui_.clip_effects_controls = new QGroupBox("Effects", inspector_page);
+    auto* effects_layout = new QVBoxLayout(ui_.clip_effects_controls);
+    effects_layout->setContentsMargins(8, 8, 8, 8);
+    effects_layout->setSpacing(5);
+    ui_.clip_effects_list = new QListWidget(ui_.clip_effects_controls);
+    ui_.clip_effects_list->setObjectName(QStringLiteral("clipEffectsList"));
+    ui_.clip_effects_list->setSelectionMode(QAbstractItemView::SingleSelection);
+    ui_.clip_effects_list->setMaximumHeight(100);
+    effects_layout->addWidget(ui_.clip_effects_list);
+    auto* effect_actions = new QHBoxLayout;
+    ui_.clip_effect_up = new QPushButton("Up", ui_.clip_effects_controls);
+    ui_.clip_effect_down = new QPushButton("Down", ui_.clip_effects_controls);
+    ui_.clip_effect_remove = new QPushButton("Remove", ui_.clip_effects_controls);
+    effect_actions->addWidget(ui_.clip_effect_up);
+    effect_actions->addWidget(ui_.clip_effect_down);
+    effect_actions->addWidget(ui_.clip_effect_remove);
+    effects_layout->addLayout(effect_actions);
+    auto* effect_parameter_row = new QWidget(ui_.clip_effects_controls);
+    auto* effect_parameter_layout = new QHBoxLayout(effect_parameter_row);
+    effect_parameter_layout->setContentsMargins(0, 0, 0, 0);
+    ui_.clip_effect_parameter_label = new QLabel("Parameter", effect_parameter_row);
+    ui_.clip_effect_parameter_slider = new QSlider(Qt::Horizontal, effect_parameter_row);
+    ui_.clip_effect_parameter_value = new QDoubleSpinBox(effect_parameter_row);
+    ui_.clip_effect_parameter_value->setFixedWidth(74);
+    ui_.clip_effect_parameter_slider->setEnabled(false);
+    ui_.clip_effect_parameter_value->setEnabled(false);
+    effect_parameter_layout->addWidget(ui_.clip_effect_parameter_label);
+    effect_parameter_layout->addWidget(ui_.clip_effect_parameter_slider, 1);
+    effect_parameter_layout->addWidget(ui_.clip_effect_parameter_value);
+    effects_layout->addWidget(effect_parameter_row);
+    ui_.clip_effects_controls->setVisible(false);
+    layout->addWidget(ui_.clip_effects_controls);
+
     ui_.text_controls = new QWidget(inspector_page);
     auto* text_layout = new QVBoxLayout(ui_.text_controls);
     text_layout->setContentsMargins(0, 8, 0, 0);
@@ -359,6 +393,31 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
             edit_controller, &ui::EditWorkspaceController::chooseTextColor);
     connect(ui_.apply_text, &QPushButton::clicked,
             edit_controller, &ui::EditWorkspaceController::applyTextStyle);
+    connect(ui_.clip_effects_list, &QListWidget::currentRowChanged,
+            edit_controller, &ui::EditWorkspaceController::selectClipEffect);
+    connect(ui_.clip_effect_up, &QPushButton::clicked,
+            edit_controller, [edit_controller]() {
+                edit_controller->moveSelectedClipEffect(-1);
+            });
+    connect(ui_.clip_effect_down, &QPushButton::clicked,
+            edit_controller, [edit_controller]() {
+                edit_controller->moveSelectedClipEffect(1);
+            });
+    connect(ui_.clip_effect_remove, &QPushButton::clicked,
+            edit_controller, &ui::EditWorkspaceController::removeSelectedClipEffect);
+    connect(ui_.clip_effect_parameter_slider, &QSlider::sliderPressed,
+            edit_controller, &ui::EditWorkspaceController::beginEffectEdit);
+    connect(ui_.clip_effect_parameter_slider, &QSlider::valueChanged,
+            edit_controller, [edit_controller](int value) {
+                edit_controller->applySelectedClipEffectParameter(value);
+            });
+    connect(ui_.clip_effect_parameter_slider, &QSlider::sliderReleased,
+            edit_controller, &ui::EditWorkspaceController::finishEffectEdit);
+    connect(ui_.clip_effect_parameter_value, &QDoubleSpinBox::editingFinished,
+            edit_controller, [edit_controller]() {
+                edit_controller->applySelectedClipEffectParameter(
+                    edit_controller->ui().clip_effect_parameter_value->value());
+            });
     connect(ui_.clip_volume, &QSlider::sliderPressed,
             edit_controller, &ui::EditWorkspaceController::beginAudioEdit);
     connect(ui_.clip_volume, &QSlider::valueChanged, this,

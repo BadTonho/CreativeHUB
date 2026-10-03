@@ -3,6 +3,8 @@
 
 #include "../ui/media_browser/media_drag_mime.h"
 
+#include <creative_suite/effects/effects.h>
+
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
 #include <QDragMoveEvent>
@@ -1631,6 +1633,10 @@ bool TimelineWidget::updateDropHover(
     } else if (supported && mime_data->hasFormat(ui::kEffectIdMimeType)) {
         const auto effect_id = QString::fromUtf8(
             mime_data->data(ui::kEffectIdMimeType));
+        const auto effect_utf8 = effect_id.toUtf8();
+        const bool is_clip_effect = creative_suite::effects::findDefinition(
+            std::string_view(effect_utf8.constData(),
+                             static_cast<std::size_t>(effect_utf8.size()))) != nullptr;
         const bool is_transition_effect =
             effect_id == QStringLiteral("transitions.cross_dissolve") ||
             effect_id == QStringLiteral("transitions.fade_to_black");
@@ -1646,6 +1652,16 @@ bool TimelineWidget::updateDropHover(
                 preview.target_track_index = track;
                 preview.target_frame = clips[indexes->second].timeline_start_frame;
             }
+        } else if (is_clip_effect && track.has_value() && frame.has_value()) {
+            const auto clip = tracks_[*track].kind == TrackKind::Video
+                ? clipAt(position.x(), position.y())
+                : std::optional<ClipLocation>{};
+            const bool compatible = clip.has_value() &&
+                (tracks_[*track].clips[clip->clip_index].kind == ClipKind::Video ||
+                 tracks_[*track].clips[clip->clip_index].kind == ClipKind::Image);
+            preview.valid = compatible;
+            media_target_valid = compatible;
+            if (!compatible) accepted = false;
         }
     }
     interaction_controller_.setDropPreview(std::move(preview));
@@ -1701,6 +1717,16 @@ bool TimelineWidget::processDrop(
                 track_value.clips[indexes->second].clip_id,
                 is_cross_dissolve ? 0 : 1);
             return true;
+        }
+        const auto effect_utf8 = effect_id.toUtf8();
+        if (creative_suite::effects::findDefinition(
+                std::string_view(effect_utf8.constData(),
+                                 static_cast<std::size_t>(effect_utf8.size()))) != nullptr) {
+            if (tracks_[*track].kind != TrackKind::Video) return false;
+            const auto clip = clipAt(position.x(), position.y());
+            if (!clip.has_value()) return false;
+            const auto kind = tracks_[*track].clips[clip->clip_index].kind;
+            if (kind != ClipKind::Video && kind != ClipKind::Image) return false;
         }
     }
     clearDropHover();

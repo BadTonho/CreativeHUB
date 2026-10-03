@@ -6,7 +6,7 @@ It must change in the same commit as any shortcut change.
 | Shortcut | Action | Context |
 | --- | --- | --- |
 | Space | Play or pause the selected timeline media | Video Editor |
-| Shift + Space | Open or close the empty Functions window | Video Editor |
+| Shift + Space | Open or close the Functions filter picker | Video Editor |
 | Left Arrow | Previous frame, crossing a clip boundary when applicable | Video Editor |
 | Right Arrow | Next frame, crossing a clip boundary when applicable | Video Editor |
 | Ctrl + Left | Nudge the active clip one frame left when valid | Video Editor |
@@ -31,6 +31,10 @@ requirement; in that mode, Alt + dragging moves clips and normal dragging
 seeks. Edge dragging trims, and the persistent Blade Tool changes a click into
 a split request. Playback shortcuts are disabled when no playable selected
 media is available.
+
+The Functions filter picker searches visual effects. Press Enter or choose Add
+to apply the selected filter to a selected video or image clip; with no
+compatible selection, browsing remains available and Add is disabled.
 
 Keyboard shortcuts can be customized in `Settings > Shortcuts`. Changes apply
 immediately and are stored as global user preferences. Clear a shortcut to

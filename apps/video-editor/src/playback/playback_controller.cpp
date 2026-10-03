@@ -266,7 +266,8 @@ void PlaybackController::refreshComposition() {
                 clip.source_start_time_us,
                 clip.source_duration_time_us,
                 clip.audio_extracted,
-                clip.audio_gain_keyframes});
+                clip.audio_gain_keyframes,
+                clip.effects});
         }
 
         for (const auto& transition : track.transitions) {

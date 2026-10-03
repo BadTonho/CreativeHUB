@@ -194,6 +194,7 @@ target_link_libraries(creative-suite-main-editor-core PUBLIC
     creative-suite::animation
     creative-suite::composition
     creative-suite::composition-opengl
+    creative-suite::effects
     creative-suite::diagnostics
     creative-suite::media-frame
     creative-suite::video-media

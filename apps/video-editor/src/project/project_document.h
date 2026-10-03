@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 16;
+inline constexpr int current_format_version = 17;
+inline constexpr int clip_effects_format_version = 17;
 inline constexpr int audio_crossfade_format_version = 16;
 inline constexpr int audio_gain_envelope_format_version = 15;
 inline constexpr int audio_companion_format_version = 14;
@@ -41,6 +42,7 @@ struct ProjectClip {
     double audio_gain = 1.0;
     bool audio_muted = false;
     std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
+    std::vector<creative_suite::effects::EffectInstance> effects;
     timeline::Transform2D transform;
     timeline::TransformKeyframes keyframes;
     timeline::ClipKind kind = timeline::ClipKind::Video;

@@ -2,6 +2,8 @@
 #include "application/media_controller.h"
 #include "application/timeline_command_service.h"
 
+#include <creative_suite/effects/effects.h>
+
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -510,6 +512,69 @@ void runInspectorAndTrackCommands() {
             "Undo did not restore the clips cleared by the typed command.");
 }
 
+void runVisualEffectCommands() {
+    application::EditorSession session;
+    application::TimelineCommandService service(session);
+    const auto track_id = session.timeline().tracks().front().track_id;
+    const auto source_path =
+        std::filesystem::temp_directory_path() / "service-effects-video.mkv";
+    addMedia(session, source_path);
+    const auto insertion = service.execute(application::AddMediaClipCommand{
+        source_path, track_id, 0});
+    require(insertion.changed() && insertion.selection.active_clip_id.has_value(),
+            "Could not create a visual clip for effect command coverage.");
+    const auto clip_id = *insertion.selection.active_clip_id;
+
+    auto grayscale = creative_suite::effects::makeDefaultInstance("video.grayscale");
+    const auto first_edit = service.execute(application::SetClipEffectsCommand{
+        clip_id, {grayscale}});
+    require(first_edit.changed() && first_edit.invalidate_playback &&
+                service.undoCount() == 2,
+            "Adding a visual filter did not create a playback-invalidating history edit.");
+    auto location = session.timeline().locateClip(clip_id);
+    require(location.has_value() &&
+                session.timeline().tracks()[location->track_index]
+                    .clips[location->clip_index].effects ==
+                    std::vector<creative_suite::effects::EffectInstance>{grayscale},
+            "The effect command did not update the visual clip stack.");
+
+    auto brightness = creative_suite::effects::makeDefaultInstance("video.brightness");
+    const auto reordered = service.execute(application::SetClipEffectsCommand{
+        clip_id, {brightness, grayscale}});
+    require(reordered.changed(), "An ordered filter stack could not be changed.");
+    require(service.undo().changed(), "Effect stack editing could not be undone.");
+    location = session.timeline().locateClip(clip_id);
+    require(location.has_value() &&
+                session.timeline().tracks()[location->track_index]
+                    .clips[location->clip_index].effects ==
+                    std::vector<creative_suite::effects::EffectInstance>{grayscale},
+            "Undo did not restore the previous filter stack order.");
+    require(service.redo().changed(), "Effect stack editing could not be redone.");
+    location = session.timeline().locateClip(clip_id);
+    require(location.has_value() &&
+                session.timeline().tracks()[location->track_index]
+                    .clips[location->clip_index].effects ==
+                    std::vector<creative_suite::effects::EffectInstance>{
+                        brightness, grayscale},
+            "Redo did not restore the ordered filter stack.");
+
+    const auto history_before_invalid_edit = service.undoCount();
+    auto invalid_brightness = brightness;
+    invalid_brightness.parameters.front().value = 201.0;
+    const auto invalid_edit = service.execute(application::SetClipEffectsCommand{
+        clip_id, {invalid_brightness}});
+    require(!invalid_edit.changed() && service.undoCount() == history_before_invalid_edit,
+            "An invalid effect value changed the clip or its history.");
+    require(service.execute(application::SetClipEffectsCommand{clip_id, {}}).changed(),
+            "Removing a filter stack did not produce a Timeline edit.");
+    require(service.undo().changed(), "Filter removal could not be undone.");
+    location = session.timeline().locateClip(clip_id);
+    require(location.has_value() &&
+                session.timeline().tracks()[location->track_index]
+                    .clips[location->clip_index].effects.size() == 2,
+            "Undo did not restore removed filters.");
+}
+
 void runReconnectTimingCommand() {
     application::EditorSession session;
     application::TimelineCommandService service(session);
@@ -760,6 +825,7 @@ void runLinkedVideoAudioCommands() {
 int main() {
     try {
         run();
+        runVisualEffectCommands();
         runInspectorAndTrackCommands();
         runReconnectTimingCommand();
         runAutomaticAudioTrackCommand();

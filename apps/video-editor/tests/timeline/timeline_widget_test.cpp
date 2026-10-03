@@ -514,6 +514,45 @@ int main(int argc, char* argv[]) {
                     effect_drop_frame > 0,
                 "Text effect drop did not preserve the target track and frame.");
 
+        bool visual_filter_drop_received = false;
+        QObject::connect(
+            &widget,
+            &timeline::TimelineWidget::effectDropRequested,
+            [&visual_filter_drop_received](const QString& effect_id,
+                                           timeline::TrackId,
+                                           qint64) {
+                if (effect_id == QStringLiteral("video.grayscale")) {
+                    visual_filter_drop_received = true;
+                }
+            });
+        QMimeData visual_filter_mime;
+        visual_filter_mime.setData(
+            ui::kEffectIdMimeType,
+            QByteArrayLiteral("video.grayscale"));
+        QDragEnterEvent visual_filter_enter(
+            effect_drop_position.toPoint(),
+            Qt::CopyAction,
+            &visual_filter_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&widget, &visual_filter_enter);
+        QDragMoveEvent visual_filter_move(
+            effect_drop_position.toPoint(),
+            Qt::CopyAction,
+            &visual_filter_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&widget, &visual_filter_move);
+        QDropEvent visual_filter_drop(
+            effect_drop_position,
+            Qt::CopyAction,
+            &visual_filter_mime,
+            Qt::LeftButton,
+            Qt::NoModifier);
+        QApplication::sendEvent(&widget, &visual_filter_drop);
+        require(visual_filter_drop_received,
+                "A visual filter could not be dropped onto a video clip.");
+
         qint64 transition_drop_count = 0;
         qint64 transition_drop_kind = -1;
         const auto sendTransitionDrop = [

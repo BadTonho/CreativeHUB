@@ -1,5 +1,7 @@
 #include "project/project_file.h"
 
+#include <creative_suite/effects/effects.h>
+
 #include <QCoreApplication>
 #include <QByteArray>
 #include <QJsonArray>
@@ -117,6 +119,13 @@ int main(int argc, char** argv) {
         original.timeline_tracks.front().clips.front().transform.position_x = 0.25;
         original.timeline_tracks.front().clips.front().transform.rotation_degrees = 12.0;
         original.timeline_tracks.front().clips.front().keyframes.position_x = {{0, 0.25}, {30, 0.75}};
+        original.timeline_tracks.front().clips.front().effects = {
+            creative_suite::effects::makeDefaultInstance("video.grayscale"),
+            creative_suite::effects::makeDefaultInstance("video.brightness")};
+        require(creative_suite::effects::setParameterValue(
+                    original.timeline_tracks.front().clips.front().effects.back(),
+                    "amount", 24.0),
+                "Could not set a non-default effect value for project coverage.");
         project::ProjectClip second_track_title;
         second_track_title.clip_id = 5;
         second_track_title.timeline_start_frame = 0;
@@ -151,6 +160,9 @@ int main(int argc, char** argv) {
                     loaded.timeline_tracks[0].clips[0].transform.rotation_degrees == 12.0 &&
                     loaded.timeline_tracks[0].clips[0].keyframes.position_x.size() == 2,
                 "Transform and keyframe data was not preserved.");
+        require(loaded.timeline_tracks[0].clips[0].effects ==
+                    original.timeline_tracks[0].clips[0].effects,
+                "The ordered effect stack and parameters were not preserved.");
         require(loaded.media.back().image_editor_link ==
                     original.media.back().image_editor_link &&
                     loaded.timeline_tracks.front().clips.back().image_editor_variant ==
@@ -177,7 +189,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 16") != std::string::npos &&
+        require(saved_json.find("\"version\": 17") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
@@ -186,9 +198,28 @@ int main(int argc, char** argv) {
                     saved_json.find("\"row_height\": 123.5") != std::string::npos &&
                     saved_json.find("\"transitions\"") != std::string::npos &&
                     saved_json.find("cross_dissolve") != std::string::npos &&
+                    saved_json.find("\"effects\"") != std::string::npos &&
+                    saved_json.find("video.grayscale") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
                     saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline frame timing and linked image references were not written to the version 16 project.");
+                "Timeline frame timing, effects, and linked image references were not written to the version 17 project.");
+        auto version_16_effects_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        version_16_effects_json.insert("version", 16);
+        const auto version_16_effects_path = directory / "version-16-effects.csp";
+        writeText(version_16_effects_path,
+                  QJsonDocument(version_16_effects_json).toJson().toStdString());
+        const auto reopened_version_16_effects = project::load(version_16_effects_path);
+        require(std::all_of(
+                    reopened_version_16_effects.timeline_tracks.begin(),
+                    reopened_version_16_effects.timeline_tracks.end(),
+                    [](const project::ProjectTrack& track) {
+                        return std::all_of(track.clips.begin(), track.clips.end(),
+                            [](const project::ProjectClip& clip) {
+                                return clip.effects.empty();
+                            });
+                    }),
+                "A version 16 project must load without visual effect stacks.");
         require(saved_json.find("\"kind\": \"image\"") != std::string::npos &&
                     loaded.media.back().kind == media::MediaKind::Image &&
                     loaded.timeline_tracks.front().clips.back().kind == timeline::ClipKind::Image,
@@ -335,6 +366,18 @@ int main(int argc, char** argv) {
         }
         require(rejected_visual_envelope,
                 "A visual clip with an audio envelope was not rejected.");
+        auto invalid_audio_effect = audio_document;
+        invalid_audio_effect.timeline_tracks.front().clips.front().effects = {
+            creative_suite::effects::makeDefaultInstance("video.grayscale")};
+        bool rejected_audio_effect = false;
+        try {
+            project::save(directory / "audio-visual-effect.csp", invalid_audio_effect);
+        } catch (const project::ProjectError& error) {
+            rejected_audio_effect =
+                error.code() == project::ProjectErrorCode::InvalidValue;
+        }
+        require(rejected_audio_effect,
+                "A visual filter stack on an Audio clip was not rejected.");
 
         const auto linked_audio_path = directory / "linked-video-audio.csp";
         project::ProjectDocument linked_audio_document;

@@ -12,6 +12,8 @@
 #include "timeline/timeline_transform.h"
 #include "ui/workspace/pages/render/render_output_capabilities.h"
 
+#include <creative_suite/effects/effects.h>
+
 #include <creative_suite/media/video_encoder.h>
 
 extern "C" {
@@ -216,10 +218,12 @@ std::optional<media::VideoFrame> composeFrame(
     const std::atomic_bool& canceled) {
     std::vector<rendering::CompositionLayer> layers;
     std::vector<media::VideoFramePtr> decoded_frames;
+    std::vector<media::VideoFrame> effected_frames;
     {
         detail::ExportTimedScope preparation(metrics.preparation_nanoseconds);
         const auto requests = activeClipRequests(clips, transitions, timeline_frame);
         decoded_frames.reserve(requests.size());
+        effected_frames.reserve(requests.size());
         layers.reserve(requests.size());
         for (const auto& request : requests) {
             checkCanceled(canceled);
@@ -247,7 +251,16 @@ std::optional<media::VideoFrame> composeFrame(
                 if (!render_clip.still.has_value()) {
                     throw std::runtime_error("An image clip has no decoded source frame.");
                 }
-                layers.push_back({&*render_clip.still, transform, {}});
+                if (clip.effects.empty()) {
+                    layers.push_back({&*render_clip.still, transform, {}});
+                } else {
+                    effected_frames.push_back(*render_clip.still);
+                    if (!creative_suite::effects::applyStack(
+                            effected_frames.back(), clip.effects)) {
+                        throw std::runtime_error("An image effect stack could not be processed.");
+                    }
+                    layers.push_back({&effected_frames.back(), transform, {}});
+                }
             } else {
                 const auto source_offset = timeline::sourceFrameOffsetForTimelineFrame(
                     local_frame, render_clip.source_fps, timeline_frame_rate,
@@ -267,11 +280,21 @@ std::optional<media::VideoFrame> composeFrame(
                         "A video frame could not be decoded from " + pathUtf8(clipPath(clip)));
                 }
                 decoded_frames.push_back(*decoded);
-                layers.push_back({decoded_frames.back().get(), transform, {}});
+                if (clip.effects.empty()) {
+                    layers.push_back({decoded_frames.back().get(), transform, {}});
+                } else {
+                    effected_frames.push_back(*decoded_frames.back());
+                    if (!creative_suite::effects::applyStack(
+                            effected_frames.back(), clip.effects)) {
+                        throw std::runtime_error("A video effect stack could not be processed.");
+                    }
+                    layers.push_back({&effected_frames.back(), transform, {}});
+                }
             }
         }
         std::uint64_t resident = 0;
         for (const auto& decoded : decoded_frames) resident += decoded->rgba_pixels.size();
+        for (const auto& effected : effected_frames) resident += effected.rgba_pixels.size();
         for (const auto& clip : clips) {
             if (clip.still) resident += clip.still->rgba_pixels.size();
             if (clip.text) resident += clip.text->rgba_pixels.size();

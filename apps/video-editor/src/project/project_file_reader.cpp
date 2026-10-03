@@ -665,6 +665,46 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                             value.toObject().value("gain").toDouble()});
                     }
                 }
+                if (version >= clip_effects_format_version &&
+                    clip_object.contains("effects")) {
+                    const auto stack = clip_object.value("effects");
+                    if (!stack.isArray()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "Project JSON contains an invalid clip effect stack.");
+                    }
+                    for (const auto& effect_value : stack.toArray()) {
+                        if (!effect_value.isObject()) {
+                            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                      "Project JSON contains an invalid clip effect.");
+                        }
+                        const auto effect_object = effect_value.toObject();
+                        if (!effect_object.value("id").isString() ||
+                            !effect_object.value("parameters").isArray()) {
+                            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                      "Project JSON contains an incomplete clip effect.");
+                        }
+                        creative_suite::effects::EffectInstance effect;
+                        const auto effect_id = effect_object.value("id").toString().toUtf8();
+                        effect.id.assign(effect_id.constData(),
+                                         static_cast<std::size_t>(effect_id.size()));
+                        for (const auto& parameter_value :
+                             effect_object.value("parameters").toArray()) {
+                            if (!parameter_value.isObject() ||
+                                !parameter_value.toObject().value("id").isString() ||
+                                !parameter_value.toObject().value("value").isDouble()) {
+                                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                          "Project JSON contains an invalid effect parameter.");
+                            }
+                            const auto parameter_object = parameter_value.toObject();
+                            const auto parameter_id = parameter_object.value("id").toString().toUtf8();
+                            effect.parameters.push_back({
+                                std::string(parameter_id.constData(),
+                                            static_cast<std::size_t>(parameter_id.size())),
+                                parameter_object.value("value").toDouble()});
+                        }
+                        clip.effects.push_back(std::move(effect));
+                    }
+                }
                 if (version >= audio_companion_format_version) {
                     if (clip_object.contains("linked_clip_id")) {
                         const auto linked_id = clip_object.value("linked_clip_id");

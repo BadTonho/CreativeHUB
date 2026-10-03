@@ -3,6 +3,8 @@
 #include "ui/effects/effects_catalog.h"
 #include "ui/media_browser/media_drag_mime.h"
 
+#include <creative_suite/effects/effects.h>
+
 #include <QAbstractItemView>
 #include <QMimeData>
 #include <QListWidgetItem>
@@ -12,7 +14,10 @@
 namespace {
 
 bool isDraggableEffect(const QString& effect_id) {
-    return effect_id == QStringLiteral("text.text") ||
+    const auto utf8 = effect_id.toUtf8();
+    return creative_suite::effects::findDefinition(
+               std::string_view(utf8.constData(), static_cast<std::size_t>(utf8.size()))) != nullptr ||
+        effect_id == QStringLiteral("text.text") ||
         effect_id == QStringLiteral("transitions.cross_dissolve") ||
         effect_id == QStringLiteral("transitions.fade_to_black");
 }

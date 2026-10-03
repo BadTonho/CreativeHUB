@@ -42,11 +42,11 @@ int main(int argc, char* argv[]) {
                 "Text category is missing.");
         require(toolbox.currentCategoryId() == "all",
                 "Effects Toolbox must initially select All.");
-        require(effects_list.count() == 5,
-                "Effects list must contain five implemented effects.");
+        require(effects_list.count() == 8,
+                "Effects list must contain all visual filters and existing tools.");
         require(effects_list.categoryId() == "all",
                 "Effects list must initially show All.");
-        require(effects_list.visibleEffectCount() == 5,
+        require(effects_list.visibleEffectCount() == 8,
                 "All category must show every effect.");
         require(effects_list.item(0)->data(Qt::UserRole).toString() ==
                     "video.grayscale",
@@ -62,13 +62,14 @@ int main(int argc, char* argv[]) {
             const auto effect_id = effects_list.item(index)
                 ->data(Qt::UserRole).toString();
             const bool expected_draggable =
+                effect_id.startsWith(QStringLiteral("video.")) ||
                 effect_id == QStringLiteral("text.text") ||
                 effect_id == QStringLiteral("transitions.cross_dissolve") ||
                 effect_id == QStringLiteral("transitions.fade_to_black");
             require(
                 effects_list.item(index)->flags().testFlag(Qt::ItemIsDragEnabled) ==
                     expected_draggable,
-                "Only Text and timeline transitions must be draggable.");
+                "Visual filters, Text, and transitions must be draggable.");
         }
         const auto verifyDragMime = [&effects_list](
             const QString& name,
@@ -84,6 +85,10 @@ int main(int argc, char* argv[]) {
             delete mime;
         };
         verifyDragMime("Text", QByteArrayLiteral("text.text"));
+        verifyDragMime("Grayscale", QByteArrayLiteral("video.grayscale"));
+        verifyDragMime("Brightness", QByteArrayLiteral("video.brightness"));
+        verifyDragMime("Contrast", QByteArrayLiteral("video.contrast"));
+        verifyDragMime("Saturation", QByteArrayLiteral("video.saturation"));
         verifyDragMime(
             "Cross Dissolve",
             QByteArrayLiteral("transitions.cross_dissolve"));
@@ -107,8 +112,8 @@ int main(int argc, char* argv[]) {
         effects_list.setCategory(toolbox.currentCategoryId());
         require(effects_list.categoryId() == "video",
                 "Effects list category did not change to Video.");
-        require(effects_list.visibleEffectCount() == 1,
-                "Video category must show one effect.");
+        require(effects_list.visibleEffectCount() == 4,
+                "Video category must show the four visual filters.");
 
         effects_list.setCategory("audio");
         require(effects_list.visibleEffectCount() == 1,
@@ -121,13 +126,13 @@ int main(int argc, char* argv[]) {
                 "Text category must show one effect.");
         effects_list.setCategory("unknown");
         require(effects_list.categoryId() == "all" &&
-                    effects_list.visibleEffectCount() == 5,
+                    effects_list.visibleEffectCount() == 8,
                 "Unknown categories must fall back to All.");
 
         require(effects::categories().size() == 5,
                 "Shared effect catalog contains unimplemented categories.");
-        require(effects::definitions().size() == 5,
-                "Shared effect catalog definitions are incomplete.");
+        require(effects::definitions().size() == 8,
+                "The Effects catalog must retain existing tools alongside visual filters.");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());

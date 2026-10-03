@@ -87,6 +87,7 @@ struct CompositionLayerSpec {
     qint64 source_duration_time_us = 0;
     bool audio_extracted = false;
     std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
+    std::vector<creative_suite::effects::EffectInstance> effects;
 };
 
 struct CompositionTransitionSpec {

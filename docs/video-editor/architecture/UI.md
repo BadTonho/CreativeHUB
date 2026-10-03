@@ -87,16 +87,18 @@ All three remain independently movable, resizable, floatable, closable, and
 tabifiable. `Favorites` is intentionally empty in this prototype and has no
 favoriting behavior yet. The Toolbox contains
 the categories `All`, `Video`, `Audio`, `Transitions`, and `Text`. Selecting a
-category filters the five currently implemented entries — `Grayscale`, `Gain`,
-`Cross Dissolve`, `Fade to Black`, and `Text` — in the Effects dock. The Text
-entry is the Timeline text-clip tool: it can be dragged to a track and frame
-in the Timeline to create a five-second text clip. `Cross Dissolve` and `Fade
-to Black` can be dragged onto a contiguous cut in the same track; the Timeline
-highlights the cut and adds the transition on release. Cross Dissolve then
-creates a moving overlap and ripples the incoming and later clips left by its
-duration. Fade to Black leaves clip positions unchanged. The
-`Grayscale` and `Gain` entries remain UI prototypes and cannot be applied from
-this dock to the Preview, Timeline, or project. The toolbar `Effects` action
+category filters the four CPU visual filters — `Grayscale`, `Brightness`,
+`Contrast`, and `Saturation` — plus the existing `Gain`, `Cross Dissolve`,
+`Fade to Black`, and `Text` entries. The four visual filters can be dragged
+onto a video or image clip in the Timeline. They are added in order and may be
+repeated. Selecting a visual clip exposes its effect stack, parameters, and
+reorder/remove controls in the Inspector. `Gain` remains an audio UI prototype.
+The Text entry is the Timeline text-clip tool: it can be dragged to a track and
+frame in the Timeline to create a five-second text clip. `Cross Dissolve` and
+`Fade to Black` can be dragged onto a contiguous cut in the same track; the
+Timeline highlights the cut and adds the transition on release. Cross Dissolve
+then creates a moving overlap and ripples the incoming and later clips left by
+its duration. Fade to Black leaves clip positions unchanged. The toolbar `Effects` action
 activates all three docks and hides the Media Pool pair, while `View > Effects` controls
 `Toolbox`, `Favorites`, and `Effects` individually. The workspace layout is
 stored globally in `workspace/dock_layout_state` with layout version 7 and
@@ -145,6 +147,10 @@ handled through that viewport and their coordinates are converted back to the
 Timeline content before the target track and frame are resolved. Only the
 content area of a track accepts a drop; the track header, ruler, and empty
 viewport space remain invalid targets.
+
+Visual-filter drops are accepted only over a video or image clip. The filter is
+appended to that clip's effect stack; it is not applied to audio, text, gaps,
+track headers, or empty Timeline space.
 
 During a media drop, the Timeline paints a semitransparent ghost at the
 calculated track, frame, and duration. A valid target uses the track color; an
@@ -208,14 +214,19 @@ separate settings groups and app-owned dialogs. Their dialogs apply shortcut
 batches only after acceptance; cancelling preserves the active bindings.
 
 `Shift + Space` opens and closes the non-modal floating `Functions` window.
-The window is an empty 420x320 shell centered over the Video Editor. A click
+The 420x360 filter picker is centered over the Video Editor. It offers search
+across the four visual filters and an `Add`/`Cancel` action row. With no
+selected video or image clip, search remains enabled and `Add` is disabled.
+`Add` or Enter applies the selected filter and closes the picker; Cancel closes
+it without editing the Timeline. Functions is an additional quick-access path
+and does not replace the Effects dock or its drag-and-drop workflow. A click
 outside it, loss of window activation, Escape, the title-bar close button, or
 Shift + Space closes and destroys it; the next shortcut press creates a fresh
 window. Outside clicks continue to the clicked control. The shortcut uses
 `WindowShortcut` context and remains available while the floating window is
 focused. It is registered in `ShortcutManager` and can be customized in
-`Settings > Shortcuts`. The window has no list, search, drag-and-drop, or
-function operations and does not change project or Timeline state.
+`Settings > Shortcuts`. Opening, searching, or canceling does not change
+project or Timeline state.
 
 The `Help > System` action opens a modal diagnostic dialog showing the Video
 Editor version (`Beta 0.1.5`) and the full path of the running executable.
@@ -492,7 +503,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 16 format. Linked video-audio clips can be
+the current `.csp` version 17 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Image media context menus can open a
 shared Image Editor document, and image clip context menus can open a
@@ -503,6 +514,17 @@ after a valid current-project decode completes.
 Text rasterization is performed with `QImage/QPainter` by the playback worker;
 the UI only edits the values and receives the composed RGBA frame. No new
 keyboard shortcut is introduced for text creation or editing.
+
+## Visual filter editing
+
+Video and image clips may carry an ordered stack of `Grayscale`, `Brightness`,
+`Contrast`, and `Saturation` filters. Both the Effects dock's drag gesture and
+Functions' `Add`/Enter action target compatible visual clips. Filters may be
+repeated, and their stack order is editable in the Inspector; parameter edits,
+removal, and reordering participate in Timeline Undo/Redo. The filter
+definitions and CPU RGBA processing live in the shared
+`creative-suite::effects` library without a Qt Widgets dependency. See
+[the effects contract](EFFECTS.md).
 
 ## Transition editing
 
