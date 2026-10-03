@@ -37,6 +37,7 @@ public:
 
 signals:
     void gpuCompositionEnabledChanged(bool enabled);
+    void audioWaveformStereoModeChanged(bool enabled);
     void previewPerformanceMetricsEnabledChanged(bool enabled);
     void projectAutosaveSettingsChanged(
         bool enabled,

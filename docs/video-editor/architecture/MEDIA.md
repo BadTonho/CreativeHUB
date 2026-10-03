@@ -45,10 +45,12 @@ thread; no Qt audio object crosses into the media module.
 
 The Video Editor derives compact audio waveform peaks through
 `AudioPlaybackSession` only after an audio clip is placed on the Timeline.
-Extraction runs in the background, downsamples to a combined-channel peak at
-10 ms intervals, and keeps results in a bounded, in-memory cache keyed by the
-source path and file signature. Waveforms are presentation data; they are not
-stored in `.csp` projects or shared with Motion Studio.
+Extraction runs in the background at 10 ms intervals and stores separate left
+and right channel peaks plus the source channel count in a bounded, 64 MiB
+in-memory cache keyed by path and file signature. The global Mono/Stereo display
+preference changes rendering without re-decoding. Waveforms and this preference
+are presentation data; they are not stored in `.csp` projects or shared with
+Motion Studio.
 
 Motion Studio compiles the same media asset library into its standalone
 executable. Its Media Pool has its own UI, asynchronous task orchestration,

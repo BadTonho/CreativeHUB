@@ -64,9 +64,15 @@ frames until the audio ends. Disabling export audio omits the output audio
 stream. Preview and export share sample scheduling for embedded and
 independent audio sources, including trims, gains, mutes, and silence.
 
-Waveforms, automation, recording, audio crossfades, advanced mixing, and
-audio-only file export remain future work. A Cross Dissolve changes video
-timing but keeps audio as a hard cut at the original cut: outgoing audio
-continues through the visual overlap, and incoming audio starts at the cut
-using the source position corresponding to incoming Timeline frame D. Fade to
-Black also leaves the audio cut at the junction.
+Audio clip waveforms are derived after insertion and displayed from separate
+left/right channel peaks. The global Mono/Stereo preference lives in
+`Settings > Timeline`, defaults to Mono, applies immediately, and is saved in
+`QSettings`; it does not change project data or the 64 MiB waveform cache.
+Mono mode combines each bucket using the larger channel peak. Stereo mode draws
+left above right for sources with multiple channels. A mono source remains a
+single centered waveform in either display mode. Automation, recording, audio
+crossfades, advanced mixing, and audio-only file export remain future work. A
+Cross Dissolve changes video timing but keeps audio as a hard cut at the
+original cut: outgoing audio continues through the visual overlap, and incoming
+audio starts at the cut using the source position corresponding to incoming
+Timeline frame D. Fade to Black also leaves the audio cut at the junction.

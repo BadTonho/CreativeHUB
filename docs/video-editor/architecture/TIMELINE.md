@@ -36,10 +36,12 @@ with an audio stream also have a linked Audio companion on a dedicated Audio
 track. Audio clips retain Timeline placement and duration in project frames,
 while their source in-point and duration use microseconds and do not depend on
 a source FPS. Audio clips use cached audio metadata and do not require a decoded
-visual frame. Their Timeline blocks display a derived, combined-channel
-waveform when available; waveform extraction does not alter clip timing or
-project persistence. A companion uses the video's media source and
-FFmpeg-selected audio stream.
+visual frame. Their Timeline blocks display a derived waveform when available.
+The global `Settings > Timeline` preference selects a single combined peak in
+Mono mode or separate left/top and right/bottom channels in Stereo mode. Mono
+sources remain centered in either mode. Waveform extraction and display do not
+alter clip timing, project dirty state, or project persistence. A companion
+uses the video's media source and FFmpeg-selected audio stream.
 Image clips use the cached
 first frame for every timeline frame, default to 150 frames at 30 FPS (five
 seconds), participate in the same movement, trim, overlap, snapping, history,

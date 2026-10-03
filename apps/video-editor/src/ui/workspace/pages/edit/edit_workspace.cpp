@@ -543,6 +543,9 @@ void EditWorkspace::createTimelineControls(
 
 void EditWorkspace::createTimelineViewport(QWidget* container, QVBoxLayout* layout) {
     ui_.timeline = new timeline::TimelineWidget(container);
+    ui_.timeline->setStereoWaveformDisplayEnabled(
+        settings::audioWaveformDisplayMode() ==
+        settings::AudioWaveformDisplayMode::Stereo);
     controller_->setTimelineWidget(ui_.timeline);
     ui_.timeline_scroll = new QScrollArea(container);
     ui_.timeline_scroll->setWidgetResizable(true);

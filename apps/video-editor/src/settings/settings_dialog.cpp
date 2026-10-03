@@ -5,6 +5,7 @@
 
 #include <QAbstractItemView>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QHeaderView>
 #include <QHash>
@@ -291,11 +292,40 @@ QWidget* SettingsDialog::createAutosavePage() {
 QWidget* SettingsDialog::createTimelinePage() {
     auto* page = new QWidget(this);
     auto* layout = new QVBoxLayout(page);
-    auto* message = new QLabel(
-        "Timeline preferences will be added here.", page);
-    message->setAlignment(Qt::AlignCenter);
-    message->setWordWrap(true);
-    layout->addWidget(message);
+    auto* waveform_row = new QWidget(page);
+    auto* waveform_layout = new QHBoxLayout(waveform_row);
+    waveform_layout->setContentsMargins(0, 0, 0, 0);
+    auto* waveform_label = new QLabel("Audio waveform display:", waveform_row);
+    auto* waveform_mode = new QComboBox(waveform_row);
+    waveform_mode->setObjectName("audioWaveformDisplayModeComboBox");
+    waveform_mode->addItem("Mono", static_cast<int>(
+        AudioWaveformDisplayMode::Mono));
+    waveform_mode->addItem("Stereo", static_cast<int>(
+        AudioWaveformDisplayMode::Stereo));
+    waveform_mode->setCurrentIndex(waveform_mode->findData(static_cast<int>(
+        settings::audioWaveformDisplayMode())));
+    waveform_mode->setToolTip(
+        "Choose a combined mono waveform or separate left and right channels.");
+    waveform_label->setBuddy(waveform_mode);
+    waveform_layout->addWidget(waveform_label);
+    waveform_layout->addWidget(waveform_mode);
+    waveform_layout->addStretch();
+    auto* waveform_description = new QLabel(
+        "This global preference applies immediately and does not modify projects. "
+        "Stereo media shows left and right channels in separate halves; mono media "
+        "keeps one centered waveform.", page);
+    waveform_description->setWordWrap(true);
+    layout->addWidget(waveform_row);
+    layout->addWidget(waveform_description);
+    layout->addStretch();
+    connect(waveform_mode, qOverload<int>(&QComboBox::currentIndexChanged),
+        this, [this, waveform_mode](int index) {
+            const auto mode = static_cast<AudioWaveformDisplayMode>(
+                waveform_mode->itemData(index).toInt());
+            settings::setAudioWaveformDisplayMode(mode);
+            emit audioWaveformStereoModeChanged(
+                mode == AudioWaveformDisplayMode::Stereo);
+        });
     return page;
 }
 

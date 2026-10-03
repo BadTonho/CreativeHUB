@@ -33,6 +33,7 @@ public:
     AudioPlaybackSession& operator=(const AudioPlaybackSession&) = delete;
 
     [[nodiscard]] bool has_audio() const noexcept;
+    [[nodiscard]] int source_channel_count() const noexcept;
     [[nodiscard]] const OutputSpec& output_spec() const noexcept;
     [[nodiscard]] std::int64_t current_sample_index() const noexcept;
     [[nodiscard]] bool at_end() const noexcept;

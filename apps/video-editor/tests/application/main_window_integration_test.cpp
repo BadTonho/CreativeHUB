@@ -34,6 +34,7 @@
 #include <QTimer>
 #include <QMessageBox>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QRunnable>
 
 #include <algorithm>
@@ -874,6 +875,35 @@ public:
                     "The waveform did not arrive asynchronously while the UI remained responsive.");
             require(waveform_window.project_dirty_ == dirty_before_waveform,
                     "Generating a waveform changed the project dirty state.");
+
+            const auto dirty_before_waveform_mode = waveform_window.project_dirty_;
+            bool stereo_mode_applied = false;
+            bool mono_mode_applied = false;
+            auto* waveform_timeline = waveform_window.editUi().timeline;
+            QTimer::singleShot(0, [&]() {
+                auto* settings_dialog = qobject_cast<settings::SettingsDialog*>(
+                    QApplication::activeModalWidget());
+                if (settings_dialog == nullptr) return;
+                auto* mode = settings_dialog->findChild<QComboBox*>(
+                    "audioWaveformDisplayModeComboBox");
+                if (mode == nullptr || waveform_timeline == nullptr) {
+                    settings_dialog->accept();
+                    return;
+                }
+                mode->setCurrentIndex(1);
+                stereo_mode_applied =
+                    waveform_timeline->stereoWaveformDisplayEnabled();
+                mode->setCurrentIndex(0);
+                mono_mode_applied =
+                    !waveform_timeline->stereoWaveformDisplayEnabled();
+                settings_dialog->accept();
+            });
+            waveform_window.showSettingsDialog();
+            require(stereo_mode_applied && mono_mode_applied &&
+                        settings::audioWaveformDisplayMode() ==
+                            settings::AudioWaveformDisplayMode::Mono &&
+                        waveform_window.project_dirty_ == dirty_before_waveform_mode,
+                    "Changing the waveform view mode did not apply live without dirtying the project.");
 
             std::atomic_bool blocker_entered = false;
             std::atomic_bool release_blocker = false;

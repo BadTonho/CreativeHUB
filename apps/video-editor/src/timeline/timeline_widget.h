@@ -52,6 +52,8 @@ public:
     void setAudioWaveform(
         const std::filesystem::path& source_path,
         const std::shared_ptr<const media::AudioWaveform>& waveform);
+    void setStereoWaveformDisplayEnabled(bool enabled) noexcept;
+    [[nodiscard]] bool stereoWaveformDisplayEnabled() const noexcept;
     void setFrameRate(FrameRate frame_rate) noexcept;
     void setClips(const std::vector<TimelineClip>& clips);
     void clearClips();
@@ -218,6 +220,7 @@ private:
     std::unordered_map<
         std::filesystem::path,
         std::weak_ptr<const media::AudioWaveform>> audio_waveforms_;
+    bool stereo_waveform_display_enabled_ = false;
     int timeline_viewport_width_ = 0;
     double zoom_factor_ = 1.0;
     double track_row_height_ = kDefaultTrackRowHeight;

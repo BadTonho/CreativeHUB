@@ -191,8 +191,14 @@ Selected, and Open Folder actions. Restore asks for confirmation when the
 current project is dirty, loads the snapshot as dirty working data, and clears
 the restored project's recovery set after a successful load. Invalid snapshots
 are omitted.
+The `Timeline` tab offers a global audio waveform display mode with `Mono` as
+the default and `Stereo` as the alternate. Changes apply immediately, persist
+in `QSettings`, and do not modify the open project. Mono combines the larger
+left/right peak per time bucket; Stereo draws the left channel above the right.
+Mono source media keeps one centered waveform when Stereo display is selected.
 The existing timeline choices remain in the Edit menu. Opening or closing the
-dialog, refreshing the Autosave tab, or changing a shortcut, does not change
+dialog, refreshing the Autosave tab, changing a shortcut, or changing the
+waveform display mode does not change
 project data, project dirty state, undo/redo history, or the `.csp` format.
 `SettingsDialog` remains a Video Editor component under
 `apps/video-editor/src/settings/`; `MainWindow` owns the manager from

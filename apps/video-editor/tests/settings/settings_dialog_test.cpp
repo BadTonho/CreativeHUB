@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QPushButton>
 #include <QSettings>
@@ -73,6 +74,52 @@ int main(int argc, char* argv[]) {
                 "Timeline settings tab is missing.");
         require(tabs->tabText(3) == "Shortcuts",
                 "Shortcuts settings tab is missing.");
+
+        require(settings::audioWaveformDisplayMode() ==
+                    settings::AudioWaveformDisplayMode::Mono,
+                "Audio waveform display must default to Mono.");
+        settings.setValue(settings::kAudioWaveformDisplayModeKey, 99);
+        require(settings::audioWaveformDisplayMode() ==
+                    settings::AudioWaveformDisplayMode::Mono,
+                "Invalid audio waveform preference did not fall back to Mono.");
+        settings.remove(settings::kAudioWaveformDisplayModeKey);
+        auto* waveform_mode = dialog.findChild<QComboBox*>(
+            "audioWaveformDisplayModeComboBox");
+        require(waveform_mode != nullptr && waveform_mode->count() == 2 &&
+                    waveform_mode->itemText(0) == "Mono" &&
+                    waveform_mode->itemText(1) == "Stereo" &&
+                    waveform_mode->currentIndex() == 0,
+                "Timeline waveform mode controls or defaults are incorrect.");
+        int waveform_mode_changes = 0;
+        QObject::connect(
+            &dialog, &settings::SettingsDialog::audioWaveformStereoModeChanged,
+            [&](bool stereo) {
+                ++waveform_mode_changes;
+                require(settings::audioWaveformDisplayMode() ==
+                            (stereo
+                                ? settings::AudioWaveformDisplayMode::Stereo
+                                : settings::AudioWaveformDisplayMode::Mono),
+                        "Waveform mode signal preceded global preference storage.");
+            });
+        waveform_mode->setCurrentIndex(1);
+        settings.sync();
+        require(waveform_mode_changes == 1 &&
+                    settings::audioWaveformDisplayMode() ==
+                        settings::AudioWaveformDisplayMode::Stereo &&
+                    settings.value(settings::kAudioWaveformDisplayModeKey).toInt() == 1,
+                "Stereo waveform preference was not applied and persisted immediately.");
+        {
+            settings::SettingsDialog reopened(nullptr, shortcut_manager);
+            const auto* reopened_mode = reopened.findChild<QComboBox*>(
+                "audioWaveformDisplayModeComboBox");
+            require(reopened_mode != nullptr && reopened_mode->currentIndex() == 1,
+                    "Reopened Settings lost the stereo waveform preference.");
+        }
+        waveform_mode->setCurrentIndex(0);
+        require(waveform_mode_changes == 2 &&
+                    settings::audioWaveformDisplayMode() ==
+                        settings::AudioWaveformDisplayMode::Mono,
+                "Mono waveform preference did not apply immediately.");
 
         const auto* buttons = dialog.findChild<QDialogButtonBox*>();
         require(buttons != nullptr, "Settings dialog close button is missing.");

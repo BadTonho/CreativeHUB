@@ -95,4 +95,22 @@ void setMonitorVolumePercent(int percent) {
             kMaximumMonitorVolumePercent));
 }
 
+AudioWaveformDisplayMode audioWaveformDisplayMode() {
+    const auto stored = QSettings().value(kAudioWaveformDisplayModeKey);
+    bool ok = false;
+    const auto value = stored.toInt(&ok);
+    if (!ok || value != static_cast<int>(AudioWaveformDisplayMode::Stereo)) {
+        return AudioWaveformDisplayMode::Mono;
+    }
+    return AudioWaveformDisplayMode::Stereo;
+}
+
+void setAudioWaveformDisplayMode(AudioWaveformDisplayMode mode) {
+    if (mode != AudioWaveformDisplayMode::Mono &&
+        mode != AudioWaveformDisplayMode::Stereo) {
+        mode = AudioWaveformDisplayMode::Mono;
+    }
+    QSettings().setValue(kAudioWaveformDisplayModeKey, static_cast<int>(mode));
+}
+
 } // namespace settings

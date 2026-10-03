@@ -2,6 +2,11 @@
 
 namespace settings {
 
+enum class AudioWaveformDisplayMode : int {
+    Mono = 0,
+    Stereo = 1,
+};
+
 inline constexpr char kGpuCompositionEnabledKey[] = "performance/gpu_composition_enabled";
 [[nodiscard]] bool gpuCompositionEnabled();
 void setGpuCompositionEnabled(bool enabled);
@@ -16,6 +21,8 @@ inline constexpr char kProjectAutosaveRetentionKey[] =
     "project/autosave_retention";
 inline constexpr char kMonitorVolumePercentKey[] =
     "playback/monitor_volume_percent";
+inline constexpr char kAudioWaveformDisplayModeKey[] =
+    "timeline/audio_waveform_display_mode";
 
 inline constexpr int kDefaultProjectAutosaveIntervalSeconds = 30;
 inline constexpr int kMinimumProjectAutosaveIntervalSeconds = 10;
@@ -38,5 +45,7 @@ void setProjectAutosaveIntervalSeconds(int seconds);
 void setProjectAutosaveRetention(int count);
 [[nodiscard]] int monitorVolumePercent();
 void setMonitorVolumePercent(int percent);
+[[nodiscard]] AudioWaveformDisplayMode audioWaveformDisplayMode();
+void setAudioWaveformDisplayMode(AudioWaveformDisplayMode mode);
 
 } // namespace settings

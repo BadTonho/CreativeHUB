@@ -10,7 +10,8 @@
 namespace media {
 namespace {
 
-constexpr std::size_t kMaximumWaveformPeakCount = 64U * 1024U * 1024U;
+constexpr std::size_t kMaximumWaveformPeakCount =
+    kAudioWaveformCacheByteLimit / sizeof(AudioWaveformPeak);
 constexpr std::size_t kDecodeChunkSamples = 8192;
 
 bool cancelled(const AudioPlaybackSession::CancellationPredicate& predicate) {
@@ -20,6 +21,11 @@ bool cancelled(const AudioPlaybackSession::CancellationPredicate& predicate) {
 std::uint16_t magnitude(std::int16_t sample) noexcept {
     const auto promoted = static_cast<int>(sample);
     return static_cast<std::uint16_t>(promoted < 0 ? -promoted : promoted);
+}
+
+std::uint8_t quantizePeak(std::uint16_t peak) noexcept {
+    return static_cast<std::uint8_t>(
+        (static_cast<std::uint32_t>(peak) * 255U + 16384U) / 32768U);
 }
 
 } // namespace
@@ -35,6 +41,7 @@ std::optional<AudioWaveform> decodeAudioWaveform(
     if (!session->has_audio()) return std::nullopt;
 
     AudioWaveform waveform;
+    waveform.source_channel_count = session->source_channel_count();
     while (!cancelled(should_cancel)) {
         const auto chunk = session->decode_samples(kDecodeChunkSamples, should_cancel);
         if (cancelled(should_cancel)) return std::nullopt;
@@ -62,17 +69,17 @@ std::optional<AudioWaveform> decodeAudioWaveform(
             }
             const auto bucket_index = static_cast<std::size_t>(bucket);
             if (waveform.peaks.size() <= bucket_index) {
-                waveform.peaks.resize(bucket_index + 1, 0);
+                waveform.peaks.resize(bucket_index + 1, AudioWaveformPeak{});
             }
 
             const auto channel_offset = sample_offset * 2;
-            const auto peak = std::max(
-                magnitude(chunk->samples[channel_offset]),
-                magnitude(chunk->samples[channel_offset + 1]));
-            const auto quantized = static_cast<std::uint8_t>(
-                (static_cast<std::uint32_t>(peak) * 255U + 16384U) / 32768U);
-            waveform.peaks[bucket_index] = std::max(
-                waveform.peaks[bucket_index], quantized);
+            auto& bucket_peak = waveform.peaks[bucket_index];
+            bucket_peak.left = std::max(
+                bucket_peak.left,
+                quantizePeak(magnitude(chunk->samples[channel_offset])));
+            bucket_peak.right = std::max(
+                bucket_peak.right,
+                quantizePeak(magnitude(chunk->samples[channel_offset + 1])));
         }
     }
 

@@ -132,6 +132,8 @@ void testAudioWaveformRendering(QApplication& application) {
     widget->setFrameRate({30, 1});
     widget->setTimelineViewportWidth(1200);
     widget->setZoomFactor(30.0);
+    require(!widget->stereoWaveformDisplayEnabled(),
+            "The Timeline waveform mode must default to Mono.");
 
     auto clip = makeClip("waveform.wav", 0, 1800, "waveform.wav");
     clip.kind = timeline::ClipKind::Audio;
@@ -142,8 +144,9 @@ void testAudioWaveformRendering(QApplication& application) {
     widget->setTracks({audio_track});
 
     auto waveform = std::make_shared<media::AudioWaveform>();
-    waveform->peaks.resize(6100, 0);
-    std::fill(waveform->peaks.begin() + 50, waveform->peaks.begin() + 70, 220);
+    waveform->peaks.resize(6100, media::AudioWaveformPeak{});
+    std::fill(waveform->peaks.begin() + 50, waveform->peaks.begin() + 70,
+              media::AudioWaveformPeak{220, 220});
     widget->setAudioWaveform(clip.source_path, waveform);
     scroll.setWidgetResizable(false);
     scroll.setWidget(widget);
@@ -180,8 +183,9 @@ void testAudioWaveformRendering(QApplication& application) {
     widget->setZoomFactor(15.0);
     widget->setTrackRowHeight(100.0);
     widget->setTracks({audio_track});
-    waveform->peaks.assign(700, 0);
-    std::fill(waveform->peaks.begin() + 100, waveform->peaks.begin() + 120, 220);
+    waveform->peaks.assign(700, media::AudioWaveformPeak{});
+    std::fill(waveform->peaks.begin() + 100, waveform->peaks.begin() + 120,
+              media::AudioWaveformPeak{220, 220});
     widget->setAudioWaveform(clip.source_path, waveform);
     application.processEvents();
     const std::vector<timeline::TimelineTrack> trimmed_audio_tracks{audio_track};
@@ -245,8 +249,8 @@ void testAudioWaveformRendering(QApplication& application) {
         ? peak_pixel_first_bucket : peak_pixel_end_bucket - 1;
     require(aggregated_bucket != peak_pixel_center_bucket && aggregated_bucket < 700,
             "The zoomed-out test did not select a peak missed by center-only sampling.");
-    waveform->peaks.assign(700, 0);
-    waveform->peaks[aggregated_bucket] = 255;
+    waveform->peaks.assign(700, media::AudioWaveformPeak{});
+    waveform->peaks[aggregated_bucket] = media::AudioWaveformPeak{255, 255};
     widget->setAudioWaveform(clip.source_path, waveform);
     application.processEvents();
     const auto aggregated_peak_point = widget->mapTo(
@@ -259,6 +263,69 @@ void testAudioWaveformRendering(QApplication& application) {
     require(hasChangedPixel(zoomed_out_image, silent_zoomed_out_image,
                             aggregated_peak_point, 1, 2),
             "Zooming out hid a waveform peak that fell inside the visible pixel interval.");
+
+    waveform->source_channel_count = 2;
+    waveform->peaks.assign(700, media::AudioWaveformPeak{});
+    std::fill(waveform->peaks.begin() + 100, waveform->peaks.begin() + 120,
+              media::AudioWaveformPeak{220, 0});
+    widget->setStereoWaveformDisplayEnabled(true);
+    require(widget->stereoWaveformDisplayEnabled(),
+            "The Timeline did not enable stereo waveform display.");
+    widget->setAudioWaveform(clip.source_path, waveform);
+    application.processEvents();
+    const auto stereo_image = scroll.viewport()->grab().toImage();
+    widget->clearAudioWaveforms();
+    application.processEvents();
+    const auto empty_stereo_image = scroll.viewport()->grab().toImage();
+    const auto upper_channel_point = widget->mapTo(
+        scroll.viewport(),
+        QPoint(peak_pixel_x, static_cast<int>(std::round(
+            zoomed_out_bounds.top() + zoomed_out_bounds.height() * 0.25))));
+    const auto lower_channel_point = widget->mapTo(
+        scroll.viewport(),
+        QPoint(peak_pixel_x, static_cast<int>(std::round(
+            zoomed_out_bounds.top() + zoomed_out_bounds.height() * 0.75))));
+    require(hasChangedPixel(stereo_image, empty_stereo_image,
+                            upper_channel_point, 1, 2),
+            "The left channel did not render in the upper stereo waveform half.");
+    require(!hasChangedPixel(stereo_image, empty_stereo_image,
+                             lower_channel_point, 1, 2),
+            "The left-channel signal leaked into the lower/right stereo half.");
+
+    waveform->peaks.assign(700, media::AudioWaveformPeak{});
+    std::fill(waveform->peaks.begin() + 100, waveform->peaks.begin() + 120,
+              media::AudioWaveformPeak{0, 220});
+    widget->setAudioWaveform(clip.source_path, waveform);
+    application.processEvents();
+    const auto right_channel_image = scroll.viewport()->grab().toImage();
+    widget->clearAudioWaveforms();
+    application.processEvents();
+    const auto empty_right_channel_image = scroll.viewport()->grab().toImage();
+    require(hasChangedPixel(right_channel_image, empty_right_channel_image,
+                            lower_channel_point, 1, 2),
+            "The right channel did not render in the lower stereo waveform half.");
+    require(!hasChangedPixel(right_channel_image, empty_right_channel_image,
+                             upper_channel_point, 1, 2),
+            "The right-channel signal leaked into the upper/left stereo half.");
+
+    waveform->source_channel_count = 1;
+    waveform->peaks.assign(700, media::AudioWaveformPeak{});
+    std::fill(waveform->peaks.begin() + 100, waveform->peaks.begin() + 120,
+              media::AudioWaveformPeak{220, 220});
+    widget->setAudioWaveform(clip.source_path, waveform);
+    application.processEvents();
+    const auto mono_source_image = scroll.viewport()->grab().toImage();
+    widget->clearAudioWaveforms();
+    application.processEvents();
+    const auto empty_mono_source_image = scroll.viewport()->grab().toImage();
+    const auto centered_waveform_point = widget->mapTo(
+        scroll.viewport(), QPoint(peak_pixel_x, zoomed_out_y));
+    require(hasChangedPixel(mono_source_image, empty_mono_source_image,
+                            centered_waveform_point, 1, 2),
+            "A mono source did not keep one centered waveform in stereo display mode.");
+    widget->setStereoWaveformDisplayEnabled(false);
+    require(!widget->stereoWaveformDisplayEnabled(),
+            "The Timeline did not return to Mono waveform display.");
 
     auto video_clip = clip;
     video_clip.kind = timeline::ClipKind::Video;

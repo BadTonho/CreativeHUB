@@ -154,6 +154,7 @@ struct AudioPlaybackSession::Impl {
     FramePtr frame;
     ResamplerPtr resampler;
     int stream_index = -1;
+    int source_channel_count = 0;
     AVRational stream_time_base{0, 1};
     std::int64_t stream_start_time = AV_NOPTS_VALUE;
     bool has_audio = false;
@@ -242,6 +243,7 @@ std::unique_ptr<AudioPlaybackSession::Impl> AudioPlaybackSession::openImpl(
     if (impl->decoder->sample_rate <= 0 || impl->decoder->ch_layout.nb_channels <= 0) {
         throw MediaError("The audio stream has invalid sample format metadata.");
     }
+    impl->source_channel_count = impl->decoder->ch_layout.nb_channels;
 
     AVChannelLayout output_layout{};
     av_channel_layout_default(&output_layout, output.channel_count);
@@ -276,6 +278,10 @@ std::unique_ptr<AudioPlaybackSession::Impl> AudioPlaybackSession::openImpl(
 
 bool AudioPlaybackSession::has_audio() const noexcept {
     return impl_ != nullptr && impl_->has_audio;
+}
+
+int AudioPlaybackSession::source_channel_count() const noexcept {
+    return impl_ != nullptr ? impl_->source_channel_count : 0;
 }
 
 const AudioPlaybackSession::OutputSpec& AudioPlaybackSession::output_spec() const noexcept {

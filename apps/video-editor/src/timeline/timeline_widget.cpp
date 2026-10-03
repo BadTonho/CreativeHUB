@@ -181,6 +181,16 @@ void TimelineWidget::setAudioWaveform(
     update();
 }
 
+void TimelineWidget::setStereoWaveformDisplayEnabled(bool enabled) noexcept {
+    if (stereo_waveform_display_enabled_ == enabled) return;
+    stereo_waveform_display_enabled_ = enabled;
+    update();
+}
+
+bool TimelineWidget::stereoWaveformDisplayEnabled() const noexcept {
+    return stereo_waveform_display_enabled_;
+}
+
 void TimelineWidget::setClips(const std::vector<TimelineClip>& clips) {
     TimelineTrack track{1, "Video 1", 1.0, false, clips};
     setTracks({track});
@@ -1109,22 +1119,27 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                     : waveform_entry->second.lock();
                 if (waveform != nullptr && !waveform->peaks.empty()) {
                     const auto waveform_bounds = rect.adjusted(1.0, 3.0, -1.0, -3.0);
-                    const auto visible = waveform_bounds.intersected(
-                        QRectF(event->rect()));
-                    if (!visible.isEmpty()) {
+                    const bool stereo_channels =
+                        stereo_waveform_display_enabled_ &&
+                        waveform->source_channel_count > 1;
+                    auto waveform_color = QColor("#a9e8e2");
+                    waveform_color.setAlpha(active ? 215 : 180);
+                    const auto draw_channel = [&](const QRectF& channel_bounds,
+                                                  int channel) {
+                        const auto visible = channel_bounds.intersected(
+                            QRectF(event->rect()));
+                        if (visible.isEmpty()) return;
                         const auto first_x = std::max(
                             static_cast<int>(std::floor(visible.left())),
-                            static_cast<int>(std::floor(waveform_bounds.left())));
+                            static_cast<int>(std::floor(channel_bounds.left())));
                         const auto last_x = std::min(
                             static_cast<int>(std::ceil(visible.right())),
-                            static_cast<int>(std::ceil(waveform_bounds.right())));
-                        const auto center_y = waveform_bounds.center().y();
+                            static_cast<int>(std::ceil(channel_bounds.right())));
+                        const auto center_y = channel_bounds.center().y();
                         const auto maximum_amplitude = std::max(
-                            0.0, waveform_bounds.height() * 0.44);
-                        auto waveform_color = QColor("#a9e8e2");
-                        waveform_color.setAlpha(active ? 215 : 180);
+                            0.0, channel_bounds.height() * 0.44);
                         painter.save();
-                        painter.setClipRect(waveform_bounds, Qt::IntersectClip);
+                        painter.setClipRect(channel_bounds, Qt::IntersectClip);
                         painter.setPen(QPen(waveform_color, 1.0));
                         for (int x = first_x; x <= last_x; ++x) {
                             const auto first_fraction = std::clamp(
@@ -1163,7 +1178,18 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                             auto peak = std::uint8_t{0};
                             for (auto bucket = first_bucket;
                                  bucket < bounded_end_bucket; ++bucket) {
-                                peak = std::max(peak, waveform->peaks[bucket]);
+                                if (channel < 0) {
+                                    peak = std::max({
+                                        peak,
+                                        waveform->peaks[bucket].left,
+                                        waveform->peaks[bucket].right});
+                                } else if (channel == 0) {
+                                    peak = std::max(
+                                        peak, waveform->peaks[bucket].left);
+                                } else {
+                                    peak = std::max(
+                                        peak, waveform->peaks[bucket].right);
+                                }
                             }
                             if (peak == 0) continue;
                             const auto amplitude = std::max(
@@ -1174,7 +1200,29 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                                 QPointF(x + 0.5, center_y + amplitude));
                         }
                         painter.restore();
+                    };
+                    painter.save();
+                    painter.setClipRect(waveform_bounds, Qt::IntersectClip);
+                    if (stereo_channels) {
+                        const auto channel_height = waveform_bounds.height() / 2.0;
+                        const QRectF left_bounds(
+                            waveform_bounds.left(), waveform_bounds.top(),
+                            waveform_bounds.width(), channel_height);
+                        const QRectF right_bounds(
+                            waveform_bounds.left(),
+                            waveform_bounds.top() + channel_height,
+                            waveform_bounds.width(),
+                            waveform_bounds.height() - channel_height);
+                        draw_channel(left_bounds, 0);
+                        draw_channel(right_bounds, 1);
+                        painter.setPen(QPen(QColor(169, 232, 226, 80), 1.0));
+                        painter.drawLine(
+                            QPointF(waveform_bounds.left(), waveform_bounds.center().y()),
+                            QPointF(waveform_bounds.right(), waveform_bounds.center().y()));
+                    } else {
+                        draw_channel(waveform_bounds, -1);
                     }
+                    painter.restore();
                 }
             }
 

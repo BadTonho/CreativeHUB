@@ -27,7 +27,7 @@ audioWaveformSourceSignature(const std::filesystem::path& source_path) noexcept;
 
 class AudioWaveformCache final {
 public:
-    static constexpr std::size_t kDefaultByteLimit = 64U * 1024U * 1024U;
+    static constexpr std::size_t kDefaultByteLimit = kAudioWaveformCacheByteLimit;
 
     explicit AudioWaveformCache(
         std::size_t byte_limit = kDefaultByteLimit) noexcept;

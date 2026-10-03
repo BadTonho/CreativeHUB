@@ -420,6 +420,12 @@ void MainWindow::showSettingsDialog() {
         this, [this](bool enabled) {
             if (playback_controller_) playback_controller_->setGpuCompositionEnabled(enabled);
         });
+    connect(&dialog, &settings::SettingsDialog::audioWaveformStereoModeChanged,
+        this, [this](bool enabled) {
+            if (editUi().timeline != nullptr) {
+                editUi().timeline->setStereoWaveformDisplayEnabled(enabled);
+            }
+        });
     dialog.setAutosaveSnapshots(autosaveSnapshotsForSettings());
     connect(
         &dialog,
