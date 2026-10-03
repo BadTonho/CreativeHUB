@@ -134,6 +134,10 @@ struct SetClipAudioCommand {
     double gain = 1.0;
     bool muted = false;
 };
+struct SetClipAudioGainKeyframesCommand {
+    timeline::ClipId clip_id = 0;
+    std::vector<timeline::AudioGainKeyframe> keyframes;
+};
 struct SetTrackAudioCommand {
     timeline::TrackId track_id = 0;
     double gain = 1.0;
@@ -179,6 +183,8 @@ public:
     [[nodiscard]] TimelineEditResult execute(const RemoveTrackCommand& command);
     [[nodiscard]] TimelineEditResult execute(const ClearTimelineCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetClipAudioCommand& command);
+    [[nodiscard]] TimelineEditResult execute(
+        const SetClipAudioGainKeyframesCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetTrackAudioCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetClipTextCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetTransformPropertyCommand& command);

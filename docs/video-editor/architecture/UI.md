@@ -236,6 +236,13 @@ The normal Selection Tool uses a mouse icon, is selected by default, and
 restores ordinary clip selection, movement, trimming, and seeking. The Blade
 Tool uses a blade icon without visible text; the two tools are mutually
 exclusive, while the existing `Edit > Blade Tool` action remains available.
+The Volume Tool uses a curve icon and is inactive at startup. In this mode,
+click an audio clip to add a volume point and drag a point to change its local
+time and gain from 0% to 200%. The first point creates a flat 100% curve at
+both clip edges. Right-click an intermediate point to remove it or an edge
+point to reset it to 100%. The curve multiplies static clip and track gain and
+is shared by playback and export. Video, image, and text clips do not respond
+to Volume-tool gestures; point drags create one Undo/Redo action.
 The Timeline draws one vertical row per video track, with the top row having
 the highest visual priority. Video 1 is created first; each newly created track
 is inserted above the existing tracks. It preserves absolute positions and
@@ -485,7 +492,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 14 format. Linked video-audio clips can be
+the current `.csp` version 15 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Image media context menus can open a
 shared Image Editor document, and image clip context menus can open a

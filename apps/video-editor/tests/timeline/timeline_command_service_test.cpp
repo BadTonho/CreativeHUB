@@ -576,9 +576,9 @@ void runAutomaticAudioTrackCommand() {
     const auto first = service.execute(application::AddMediaClipCommand{
         first_path, video_track_id, 45});
     require(first.changed() && first.affected_track_ids.size() == 1 &&
-                session.timeline().trackCount() == 2 &&
+                session.timeline().trackCount() == 3 &&
                 session.timeline().tracks().back().kind == timeline::TrackKind::Audio &&
-                session.timeline().tracks().back().name == "Audio 1" &&
+                session.timeline().tracks().back().name == "Audio 2" &&
                 session.timeline().tracks().back().clips.front().timeline_start_frame == 45,
             "Dropping audio over a Video track did not create an Audio track at the requested time.");
     const auto audio_track_id = first.affected_track_ids.front();
@@ -586,7 +586,7 @@ void runAutomaticAudioTrackCommand() {
     const auto second = service.execute(application::AddMediaClipCommand{
         second_path, audio_track_id, 120});
     require(second.changed() && second.affected_track_ids.front() == audio_track_id &&
-                session.timeline().trackCount() == 2 &&
+                session.timeline().trackCount() == 3 &&
                 session.timeline().tracks().back().clips.size() == 2,
             "Dropping audio over an Audio track did not reuse that lane.");
     require(service.undo().changed() &&
@@ -595,9 +595,9 @@ void runAutomaticAudioTrackCommand() {
                 session.timeline().tracks().back().clips.size() == 2,
             "Undo and Redo did not restore an audio drop on its track.");
     require(service.undo().changed() && service.undo().changed() &&
-                session.timeline().trackCount() == 1 &&
-                service.redo().changed() &&
                 session.timeline().trackCount() == 2 &&
+                service.redo().changed() &&
+                session.timeline().trackCount() == 3 &&
                 session.timeline().tracks().back().kind == timeline::TrackKind::Audio &&
                 session.timeline().tracks().back().clips.size() == 1,
             "Undo and Redo did not treat automatic Audio track creation as one edit.");
@@ -680,6 +680,28 @@ void runLinkedVideoAudioCommands() {
                 session.timeline().tracks()[refreshed_audio->track_index]
                     .clips[refreshed_audio->clip_index].audio_muted,
             "Clip audio gain and mute were not shared across a linked pair.");
+
+    const auto undo_count_before_envelope = service.undoCount();
+    const auto envelope_batch = service.beginEditBatch();
+    require(service.execute(application::SetClipAudioGainKeyframesCommand{
+                right_audio_id, {{0, 0.5}, {30, 1.5}}}).changed() &&
+                service.execute(application::SetClipAudioGainKeyframesCommand{
+                    right_audio_id, {{0, 0.25}, {30, 2.0}}}).changed() &&
+                service.finishEditBatch(envelope_batch).changed(),
+            "An audio envelope could not be adjusted in an edit batch.");
+    require(service.undoCount() == undo_count_before_envelope + 1 &&
+                session.timeline().tracks()[refreshed_audio->track_index]
+                    .clips[refreshed_audio->clip_index].audio_gain_keyframes ==
+                    std::vector<timeline::AudioGainKeyframe>{{0, 0.25}, {30, 2.0}},
+            "Multiple curve-drag updates did not become one history item.");
+    require(service.undo().changed() &&
+                session.timeline().tracks()[refreshed_audio->track_index]
+                    .clips[refreshed_audio->clip_index].audio_gain_keyframes.empty() &&
+                service.redo().changed() &&
+                session.timeline().tracks()[refreshed_audio->track_index]
+                    .clips[refreshed_audio->clip_index].audio_gain_keyframes ==
+                    std::vector<timeline::AudioGainKeyframe>{{0, 0.25}, {30, 2.0}},
+            "Undo/Redo did not restore the audio envelope as one edit.");
 
     require(service.execute(application::UnlinkAudioCommand{right_video_id}).changed(),
             "The linked pair could not be unlinked.");

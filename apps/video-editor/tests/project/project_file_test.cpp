@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 14") != std::string::npos &&
+        require(saved_json.find("\"version\": 15") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
@@ -187,7 +187,7 @@ int main(int argc, char** argv) {
                     saved_json.find("cross_dissolve") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
                     saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline frame timing and linked image references were not written to the version 14 project.");
+                "Timeline frame timing and linked image references were not written to the version 15 project.");
         require(saved_json.find("\"kind\": \"image\"") != std::string::npos &&
                     loaded.media.back().kind == media::MediaKind::Image &&
                     loaded.timeline_tracks.front().clips.back().kind == timeline::ClipKind::Image,
@@ -213,6 +213,7 @@ int main(int argc, char** argv) {
         audio_clip.source_duration_time_us = 1500000;
         audio_clip.audio_gain = 0.75;
         audio_clip.audio_muted = true;
+        audio_clip.audio_gain_keyframes = {{0, 0.0}, {45, 1.5}};
         audio_track.clips.push_back(audio_clip);
         audio_document.timeline_tracks.push_back(audio_track);
         project::save(audio_project_path, audio_document);
@@ -223,9 +224,10 @@ int main(int argc, char** argv) {
         audio_file.close();
         require(audio_json.find("\"source_start_time_us\"") != std::string::npos &&
                     audio_json.find("\"source_duration_time_us\"") != std::string::npos &&
+                    audio_json.find("\"audio_gain_keyframes\"") != std::string::npos &&
                     audio_json.find("\"source_start_frame\"") == std::string::npos &&
                     audio_json.find("\"source_duration_frames\"") == std::string::npos,
-                "Version 14 serialized fake source-frame timing for an Audio clip.");
+                "Version 15 did not serialize the Audio clip envelope and microsecond source timing.");
         const auto reopened_audio = project::load(audio_project_path);
         require(reopened_audio == audio_document &&
                     reopened_audio.timeline_tracks.front().kind ==
@@ -234,7 +236,16 @@ int main(int argc, char** argv) {
                             .source_start_time_us == 275000 &&
                     reopened_audio.timeline_tracks.front().clips.front()
                             .source_duration_time_us == 1500000,
-                "Version 14 did not preserve Audio track types and source offsets.");
+                "Version 15 did not preserve Audio track types, envelope, and source offsets.");
+        auto version_14_audio_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(audio_json)).object();
+        version_14_audio_json.insert("version", 14);
+        writeText(audio_project_path,
+                  QJsonDocument(version_14_audio_json).toJson().toStdString());
+        const auto reopened_version_14 = project::load(audio_project_path);
+        require(reopened_version_14.timeline_tracks.front().clips.front()
+                    .audio_gain_keyframes.empty(),
+                "A version 14 audio clip did not load with a flat 100% envelope.");
         auto version_13_audio_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(audio_json)).object();
         version_13_audio_json.insert("version", 13);
@@ -268,7 +279,19 @@ int main(int argc, char** argv) {
                 error.code() == project::ProjectErrorCode::InvalidTimeline;
         }
         require(rejected_mismatched_audio,
-                "Version 14 accepted an Audio clip on a Video track.");
+                "Version 15 accepted an Audio clip on a Video track.");
+        auto invalid_visual_envelope = original;
+        invalid_visual_envelope.timeline_tracks.front().clips.front()
+            .audio_gain_keyframes = {{0, 0.5}};
+        bool rejected_visual_envelope = false;
+        try {
+            project::save(directory / "visual-envelope.csp", invalid_visual_envelope);
+        } catch (const project::ProjectError& error) {
+            rejected_visual_envelope =
+                error.code() == project::ProjectErrorCode::InvalidValue;
+        }
+        require(rejected_visual_envelope,
+                "A visual clip with an audio envelope was not rejected.");
 
         const auto linked_audio_path = directory / "linked-video-audio.csp";
         project::ProjectDocument linked_audio_document;
@@ -305,7 +328,7 @@ int main(int argc, char** argv) {
             linked_video_track, linked_audio_track};
         project::save(linked_audio_path, linked_audio_document);
         require(project::load(linked_audio_path) == linked_audio_document,
-                "Version 14 did not round-trip linked video and audio clips.");
+                "Version 15 did not round-trip linked video and audio clips.");
         auto invalid_audio_link = linked_audio_document;
         invalid_audio_link.timeline_tracks.back().clips.front().linked_clip_id = 999;
         bool rejected_invalid_audio_link = false;

@@ -159,6 +159,14 @@ void validateDocument(const ProjectDocument& document,
         if (!validAudioGain(clip.audio_gain)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip audio gain.");
         }
+        if ((clip.kind != timeline::ClipKind::Audio &&
+             !clip.audio_gain_keyframes.empty()) ||
+            (clip.kind == timeline::ClipKind::Audio &&
+             !timeline::TimelineModel::validAudioGainKeyframes(
+                 clip.audio_gain_keyframes, clip.duration_frames))) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid audio gain envelope.");
+        }
         if (clip.kind == timeline::ClipKind::Text && !validTextStyle(clip.text)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains invalid text clip styling.");
         }

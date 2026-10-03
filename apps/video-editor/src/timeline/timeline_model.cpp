@@ -479,6 +479,31 @@ bool hasCrossDissolveForClip(
         });
 }
 
+std::vector<AudioGainKeyframe> sliceAudioGainEnvelope(
+    const TimelineClip& clip,
+    std::int64_t begin_frame,
+    std::int64_t end_frame) {
+    if (clip.audio_gain_keyframes.empty()) return {};
+    begin_frame = std::clamp<std::int64_t>(begin_frame, 0,
+        clip.timeline_duration_frames);
+    end_frame = std::clamp<std::int64_t>(end_frame, begin_frame,
+        clip.timeline_duration_frames);
+    std::vector<AudioGainKeyframe> result;
+    result.reserve(clip.audio_gain_keyframes.size() + 2);
+    result.push_back({0, evaluateAudioGainEnvelope(
+        clip.audio_gain_keyframes, static_cast<double>(begin_frame))});
+    for (const auto& keyframe : clip.audio_gain_keyframes) {
+        if (keyframe.frame <= begin_frame || keyframe.frame >= end_frame) continue;
+        result.push_back({keyframe.frame - begin_frame, keyframe.gain});
+    }
+    if (end_frame > begin_frame) {
+        result.push_back({end_frame - begin_frame,
+            evaluateAudioGainEnvelope(
+                clip.audio_gain_keyframes, static_cast<double>(end_frame))});
+    }
+    return result;
+}
+
 } // namespace
 
 TimelineModel::TimelineModel() {
@@ -831,6 +856,13 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
                 *source_limit - original.source_start_time_us);
         }
     }
+    if (original.kind == ClipKind::Audio) {
+        const auto begin_local = edge == ClipEdge::Left
+            ? boundary - original.timeline_start_frame : 0;
+        preview.clip.audio_gain_keyframes = sliceAudioGainEnvelope(
+            original, begin_local,
+            begin_local + preview.clip.timeline_duration_frames);
+    }
     preview.clip.keyframes = reframeKeyframes(
         original,
         preview.clip.timeline_start_frame,
@@ -901,6 +933,13 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
             neighbor.timeline_start_frame,
             neighbor.timeline_duration_frames,
             neighbor.transform);
+        if (original_neighbor.kind == ClipKind::Audio) {
+            const auto begin_local = edge == ClipEdge::Right
+                ? boundary - original_neighbor.timeline_start_frame : 0;
+            neighbor.audio_gain_keyframes = sliceAudioGainEnvelope(
+                original_neighbor, begin_local,
+                begin_local + neighbor.timeline_duration_frames);
+        }
         preview.neighbor_location = ClipLocation{
             location.track_index, *neighbor_index};
         preview.neighbor_clip = std::move(neighbor);
@@ -1421,6 +1460,12 @@ SplitClipResult TimelineModel::splitClip(
     const auto original_transform = clip.transform;
     TimelineClip right = clip;
     right.clip_id = next_clip_id_++;
+    if (clip.kind == ClipKind::Audio) {
+        clip.audio_gain_keyframes = sliceAudioGainEnvelope(
+            clip, 0, local_frame);
+        right.audio_gain_keyframes = sliceAudioGainEnvelope(
+            right, local_frame, clip.timeline_duration_frames);
+    }
     right.source_start_frame += source_offset;
     if (clip.kind == ClipKind::Audio) {
         right.source_start_time_us += audio_source_offset_us;
@@ -1534,6 +1579,8 @@ TrimClipResult TimelineModel::trimClip(
             clip.source_start_time_us;
         const auto local_start = timelineFramesForMicroseconds(
             source_delta, frame_rate_).value_or(0);
+        const auto audio_gain_keyframes = sliceAudioGainEnvelope(
+            clip, local_start, local_start + new_duration_frames);
         Transform2D trimmed_transform;
         const auto trimmed_keyframes = trimKeyframes(
             clip.transform, clip.keyframes, 0, local_start,
@@ -1543,6 +1590,7 @@ TrimClipResult TimelineModel::trimClip(
             *new_duration_us,
             *source_limit - *new_source_start_time_us);
         clip.timeline_duration_frames = new_duration_frames;
+        clip.audio_gain_keyframes = audio_gain_keyframes;
         clip.transform = trimmed_transform;
         clip.keyframes = trimmed_keyframes;
         removeInvalidTransitions(*track);
@@ -2128,6 +2176,26 @@ AudioParameterResult TimelineModel::setTrackAudio(
     }
     track->audio_gain = gain;
     track->audio_muted = muted;
+    return AudioParameterResult::Changed;
+}
+
+AudioParameterResult TimelineModel::setClipAudioGainKeyframes(
+    std::size_t track_index,
+    std::size_t clip_index,
+    std::vector<AudioGainKeyframe> keyframes) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_index >= track->clips.size()) {
+        return AudioParameterResult::InvalidIndex;
+    }
+    auto& clip = track->clips[clip_index];
+    if (clip.kind != ClipKind::Audio ||
+        !validAudioGainKeyframes(keyframes, clip.timeline_duration_frames)) {
+        return AudioParameterResult::InvalidValue;
+    }
+    if (clip.audio_gain_keyframes == keyframes) {
+        return AudioParameterResult::NoChange;
+    }
+    clip.audio_gain_keyframes = std::move(keyframes);
     return AudioParameterResult::Changed;
 }
 

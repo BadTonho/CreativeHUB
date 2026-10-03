@@ -641,6 +641,25 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                     }
                     clip.audio_muted = clip_object.value("audio_muted").toBool();
                 }
+                if (version >= audio_gain_envelope_format_version &&
+                    clip_object.contains("audio_gain_keyframes")) {
+                    const auto envelope = clip_object.value("audio_gain_keyframes");
+                    if (!envelope.isArray()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "Project JSON contains an invalid audio gain envelope.");
+                    }
+                    for (const auto& value : envelope.toArray()) {
+                        if (!value.isObject() ||
+                            !value.toObject().value("frame").isDouble() ||
+                            !value.toObject().value("gain").isDouble()) {
+                            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                      "Project JSON contains an invalid audio gain envelope point.");
+                        }
+                        clip.audio_gain_keyframes.push_back({
+                            value.toObject().value("frame").toInteger(),
+                            value.toObject().value("gain").toDouble()});
+                    }
+                }
                 if (version >= audio_companion_format_version) {
                     if (clip_object.contains("linked_clip_id")) {
                         const auto linked_id = clip_object.value("linked_clip_id");

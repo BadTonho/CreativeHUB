@@ -168,6 +168,16 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
             item.insert("audio_companion_pending", clip.audio_companion_pending);
             item.insert("audio_gain", clip.audio_gain);
             item.insert("audio_muted", clip.audio_muted);
+            if (clip.kind == timeline::ClipKind::Audio) {
+                QJsonArray audio_gain_keyframes;
+                for (const auto& keyframe : clip.audio_gain_keyframes) {
+                    QJsonObject point;
+                    point.insert("frame", static_cast<qint64>(keyframe.frame));
+                    point.insert("gain", keyframe.gain);
+                    audio_gain_keyframes.append(point);
+                }
+                item.insert("audio_gain_keyframes", audio_gain_keyframes);
+            }
             QJsonObject transform;
             QJsonObject position;
             position.insert("x", clip.transform.position_x);

@@ -39,6 +39,7 @@ struct EditWorkspaceUi final {
     QPushButton* clear_timeline = nullptr;
     QPushButton* selection_tool = nullptr;
     QPushButton* razor_tool = nullptr;
+    QPushButton* volume_tool = nullptr;
     QPushButton* snap = nullptr;
     QPushButton* zoom_out = nullptr;
     QSlider* zoom_slider = nullptr;

@@ -103,6 +103,23 @@ QIcon timelineToolIcon(bool blade) {
     return QIcon(pixmap);
 }
 
+QIcon timelineVolumeIcon() {
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(QColor("#f2f2f2"), 1.6, Qt::SolidLine,
+                        Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawLine(QPointF(2.5, 5.0), QPointF(17.5, 15.0));
+    painter.setBrush(QColor("#f2f2f2"));
+    for (const auto& point : {QPointF(3.0, 5.0), QPointF(10.0, 10.0),
+                              QPointF(17.0, 15.0)}) {
+        painter.drawEllipse(point, 2.0, 2.0);
+    }
+    return QIcon(pixmap);
+}
+
 QIcon timelineSnapIcon() {
     QPixmap pixmap(20, 20);
     pixmap.fill(Qt::transparent);
@@ -398,21 +415,27 @@ void EditWorkspace::createTimelineControls(
     ui_.clear_timeline = new QPushButton("Clear Timeline", container);
     ui_.selection_tool = new QPushButton(container);
     ui_.razor_tool = new QPushButton(container);
+    ui_.volume_tool = new QPushButton(container);
     ui_.snap = new QPushButton(container);
     ui_.selection_tool->setIcon(timelineToolIcon(false));
     ui_.razor_tool->setIcon(timelineToolIcon(true));
+    ui_.volume_tool->setIcon(timelineVolumeIcon());
     ui_.snap->setIcon(timelineSnapIcon());
     ui_.selection_tool->setIconSize(QSize(16, 16));
     ui_.razor_tool->setIconSize(QSize(16, 16));
+    ui_.volume_tool->setIconSize(QSize(16, 16));
     ui_.snap->setIconSize(QSize(16, 16));
     ui_.selection_tool->setFixedSize(32, 28);
     ui_.razor_tool->setFixedSize(32, 28);
+    ui_.volume_tool->setFixedSize(32, 28);
     ui_.snap->setFixedSize(32, 28);
     ui_.selection_tool->setCheckable(true);
     ui_.razor_tool->setCheckable(true);
+    ui_.volume_tool->setCheckable(true);
     ui_.snap->setCheckable(true);
     ui_.selection_tool->setAutoExclusive(true);
     ui_.razor_tool->setAutoExclusive(true);
+    ui_.volume_tool->setAutoExclusive(true);
     ui_.selection_tool->setChecked(true);
     controls->addWidget(ui_.previous_frame);
     controls->addWidget(ui_.play_pause);
@@ -442,6 +465,7 @@ void EditWorkspace::createTimelineControls(
     controls->addWidget(ui_.clear_timeline);
     controls->addWidget(ui_.selection_tool);
     controls->addWidget(ui_.razor_tool);
+    controls->addWidget(ui_.volume_tool);
     controls->addWidget(ui_.snap);
     controls->addSpacing(10);
     auto* tracks_label = new QLabel("Tracks", container);
@@ -512,6 +536,9 @@ void EditWorkspace::createTimelineControls(
     ui_.selection_tool->setAccessibleName("Selection Tool");
     ui_.razor_tool->setToolTip("Split a clip where you click");
     ui_.razor_tool->setAccessibleName("Blade Tool");
+    ui_.volume_tool->setToolTip(
+        "Edit per-clip audio volume points (0% to 200%)");
+    ui_.volume_tool->setAccessibleName("Volume Tool");
     ui_.snap->setToolTip(
         "Toggle magnetic snapping for clips and media drops");
     ui_.snap->setAccessibleName("Magnetic Snap");

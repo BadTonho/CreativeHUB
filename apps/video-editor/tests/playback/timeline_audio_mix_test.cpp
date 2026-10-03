@@ -185,6 +185,26 @@ void testExternalizedVideoAudioIsMixedOnlyFromItsCompanion() {
             "Muting an externalized companion fell back to the embedded video stream.");
 }
 
+void testAudioEnvelopeIsAppliedPerSample() {
+    auto clip = media::TimelineAudioMixClip{
+        0, 0, 0, timeline::ClipKind::Audio, true,
+        0, 30, 0, 0.0, 1.0, 1.0, false, false,
+        0, 1'000'000};
+    clip.audio_gain_keyframes = {{0, 0.0}, {30, 2.0}};
+    const auto spans = media::planTimelineAudioMix(
+        std::span<const media::TimelineAudioMixClip>(&clip, 1), {},
+        30.0, 30, 0, 30);
+    require(spans.size() == 1,
+            "An automated Audio clip was not scheduled for mixing.");
+    std::vector<float> mixed(60, 0.0F);
+    media::accumulateTimelineAudioChunk(
+        spans.front(), constantChunk(0, 16384, 30), mixed, 2);
+    require(std::abs(mixed[0]) < 1.0e-6F &&
+                std::abs(mixed[30] - (16384.0F / 32768.0F)) < 1.0e-5F &&
+                mixed[58] > mixed[30],
+            "The mixer did not interpolate audio gain for individual output samples.");
+}
+
 } // namespace
 
 int main() {
@@ -196,6 +216,7 @@ int main() {
         testAudioOnlyClipUsesMicrosecondSourceTiming();
         testNonVideoAndMissingAudioAreExcluded();
         testExternalizedVideoAudioIsMixedOnlyFromItsCompanion();
+        testAudioEnvelopeIsAppliedPerSample();
         std::cout << "timeline audio mix tests passed\n";
         return 0;
     } catch (const std::exception& error) {

@@ -283,6 +283,7 @@ void TimelineWidget::setRazorMode(bool enabled) {
         releaseMouse();
     }
     razor_mode_ = enabled;
+    if (enabled) volume_mode_ = false;
     interaction_controller_.cancelSplit();
     unsetCursor();
     update();
@@ -290,6 +291,18 @@ void TimelineWidget::setRazorMode(bool enabled) {
 
 bool TimelineWidget::razorMode() const noexcept {
     return razor_mode_;
+}
+
+void TimelineWidget::setVolumeMode(bool enabled) {
+    if (enabled) setRazorMode(false);
+    volume_mode_ = enabled;
+    if (volume_mode_) setCursor(Qt::CrossCursor);
+    else if (!razor_mode_) unsetCursor();
+    update();
+}
+
+bool TimelineWidget::volumeMode() const noexcept {
+    return volume_mode_;
 }
 
 void TimelineWidget::setMoveRequiresAlt(bool enabled) {
@@ -310,6 +323,10 @@ void TimelineWidget::setReadOnly(bool read_only) {
     if (read_only_ == read_only) return;
     read_only_ = read_only;
     if (read_only_) {
+        if (audio_gain_envelope_drag_.has_value()) {
+            audio_gain_envelope_drag_.reset();
+            emit audioGainEnvelopeEditFinished();
+        }
         interaction_controller_.cancelAll();
         if (QWidget::mouseGrabber() == this) releaseMouse();
         unsetCursor();
@@ -1226,6 +1243,61 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                 }
             }
 
+            if (clip.kind == ClipKind::Audio && rect.width() > 2.0 &&
+                rect.height() > 12.0) {
+                const auto& gain_points = audio_gain_envelope_drag_.has_value() &&
+                        audio_gain_envelope_drag_->clip_id == clip.clip_id
+                    ? audio_gain_envelope_drag_->keyframes
+                    : clip.audio_gain_keyframes;
+                const auto bounds = rect.adjusted(1.0, 6.0, -1.0, -6.0);
+                const auto duration = std::max<std::int64_t>(
+                    1, clip.timeline_duration_frames);
+                const auto point = [&](std::int64_t frame, double gain) {
+                    const auto x = bounds.left() + bounds.width() *
+                        std::clamp(static_cast<double>(frame) / duration, 0.0, 1.0);
+                    const auto y = bounds.bottom() - bounds.height() *
+                        std::clamp(gain / 2.0, 0.0, 1.0);
+                    return QPointF(x, y);
+                };
+                std::vector<AudioGainKeyframe> visible_points = gain_points;
+                if (visible_points.empty()) {
+                    visible_points = {{0, 1.0}, {duration, 1.0}};
+                } else {
+                    if (visible_points.front().frame > 0) {
+                        visible_points.insert(visible_points.begin(), {
+                            0, evaluateAudioGainEnvelope(visible_points, 0.0)});
+                    }
+                    if (visible_points.back().frame < duration) {
+                        visible_points.push_back({duration,
+                            evaluateAudioGainEnvelope(visible_points,
+                                static_cast<double>(duration))});
+                    }
+                }
+                QPainterPath envelope_path;
+                envelope_path.moveTo(point(
+                    visible_points.front().frame,
+                    visible_points.front().gain));
+                for (std::size_t index = 1; index < visible_points.size(); ++index) {
+                    envelope_path.lineTo(point(
+                        visible_points[index].frame,
+                        visible_points[index].gain));
+                }
+                painter.save();
+                painter.setClipRect(bounds, Qt::IntersectClip);
+                painter.setPen(QPen(QColor("#ffd56a"), 2.0,
+                                    Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+                painter.setBrush(Qt::NoBrush);
+                painter.drawPath(envelope_path);
+                if (volume_mode_ || !gain_points.empty()) {
+                    for (const auto& keyframe : gain_points) {
+                        painter.setPen(QPen(QColor("#382e17"), 1.0));
+                        painter.setBrush(QColor("#ffe39a"));
+                        painter.drawEllipse(point(keyframe.frame, keyframe.gain), 3.2, 3.2);
+                    }
+                }
+                painter.restore();
+            }
+
             painter.setPen(moving ? QColor(244, 247, 251, 100) : QColor("#f4f7fb"));
             const auto label = QString("%1  %2%3")
                 .arg(clip_index + 1)
@@ -1719,6 +1791,75 @@ void TimelineWidget::showAudioLinkMenu(
     menu.exec(global_position);
 }
 
+std::optional<std::size_t> TimelineWidget::audioGainKeyframeAt(
+    const ClipLocation& location,
+    const QPointF& position) const noexcept {
+    if (location.track_index >= tracks_.size() ||
+        location.clip_index >= tracks_[location.track_index].clips.size()) {
+        return std::nullopt;
+    }
+    const auto& clip = tracks_[location.track_index].clips[location.clip_index];
+    if (clip.kind != ClipKind::Audio || clip.audio_gain_keyframes.empty()) {
+        return std::nullopt;
+    }
+    const auto rect = clipRect(location).adjusted(1.0, 6.0, -1.0, -6.0);
+    const auto duration = std::max<std::int64_t>(1, clip.timeline_duration_frames);
+    double nearest_distance = 8.0 * 8.0;
+    std::optional<std::size_t> nearest;
+    for (std::size_t index = 0; index < clip.audio_gain_keyframes.size(); ++index) {
+        const auto& keyframe = clip.audio_gain_keyframes[index];
+        const auto x = rect.left() + rect.width() *
+            std::clamp(static_cast<double>(keyframe.frame) / duration, 0.0, 1.0);
+        const auto y = rect.bottom() - rect.height() *
+            std::clamp(keyframe.gain / 2.0, 0.0, 1.0);
+        const auto dx = position.x() - x;
+        const auto dy = position.y() - y;
+        const auto distance = dx * dx + dy * dy;
+        if (distance <= nearest_distance) {
+            nearest_distance = distance;
+            nearest = index;
+        }
+    }
+    return nearest;
+}
+
+void TimelineWidget::showAudioGainKeyframeMenu(
+    const ClipLocation& location,
+    const QPoint& position,
+    const QPoint& global_position) {
+    if (location.track_index >= tracks_.size() ||
+        location.clip_index >= tracks_[location.track_index].clips.size()) return;
+    const auto& clip = tracks_[location.track_index].clips[location.clip_index];
+    if (clip.kind != ClipKind::Audio) return;
+    const auto keyframe_index = audioGainKeyframeAt(location, position);
+    if (!keyframe_index.has_value()) return;
+    const auto keyframe = clip.audio_gain_keyframes[*keyframe_index];
+    const auto duration = clip.timeline_duration_frames;
+    const auto clip_id = clip.clip_id;
+    const auto original_points = clip.audio_gain_keyframes;
+    emitSelected(location);
+    QMenu menu(this);
+    QAction* edit_action = nullptr;
+    const bool edge = keyframe.frame == 0 || keyframe.frame == duration;
+    edit_action = menu.addAction(edge
+        ? QStringLiteral("Reset Edge Point to 100%")
+        : QStringLiteral("Remove Volume Point"));
+    if (menu.exec(global_position) != edit_action) return;
+    auto points = original_points;
+    if (edge) {
+        const auto found = std::find_if(points.begin(), points.end(),
+            [keyframe](const AudioGainKeyframe& point) {
+                return point.frame == keyframe.frame;
+            });
+        if (found != points.end()) found->gain = 1.0;
+    } else if (*keyframe_index < points.size()) {
+        points.erase(points.begin() + static_cast<std::ptrdiff_t>(*keyframe_index));
+    }
+    emit audioGainEnvelopeEditStarted();
+    emit audioGainEnvelopeChanged(clip_id, points);
+    emit audioGainEnvelopeEditFinished();
+}
+
 void TimelineWidget::contextMenuEvent(QContextMenuEvent* event) {
     if (read_only_) {
         event->ignore();
@@ -1775,7 +1916,16 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         } else {
             const auto location = clipAt(
                 event->position().x(), event->position().y());
-            if (location.has_value() &&
+            if (volume_mode_ && location.has_value() &&
+                tracks_[location->track_index].clips[location->clip_index].kind ==
+                    ClipKind::Audio &&
+                audioGainKeyframeAt(*location, event->position()).has_value()) {
+                suppress_next_context_menu_ = true;
+                showAudioGainKeyframeMenu(
+                    *location, event->position().toPoint(),
+                    event->globalPosition().toPoint());
+                event->accept();
+            } else if (location.has_value() &&
                 tracks_[location->track_index].clips[location->clip_index]
                     .linked_clip_id.has_value()) {
                 suppress_next_context_menu_ = true;
@@ -1830,6 +1980,72 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         return;
     }
     const bool alt_pressed = event->modifiers().testFlag(Qt::AltModifier);
+    if (volume_mode_) {
+        const auto& source_clip = tracks_[location->track_index]
+            .clips[location->clip_index];
+        if (source_clip.kind != ClipKind::Audio) {
+            event->ignore();
+            return;
+        }
+        const auto clip = source_clip;
+        const auto bounds = clipRect(*location).adjusted(1.0, 6.0, -1.0, -6.0);
+        const auto duration = std::max<std::int64_t>(1, clip.timeline_duration_frames);
+        const auto frame_from_x = [&]() {
+            const auto fraction = bounds.width() <= 0.0 ? 0.0 :
+                std::clamp((event->position().x() - bounds.left()) /
+                               bounds.width(), 0.0, 1.0);
+            return static_cast<std::int64_t>(std::llround(fraction * duration));
+        };
+        const auto gain_from_y = [&]() {
+            if (bounds.height() <= 0.0) return 1.0;
+            return std::clamp(2.0 * (bounds.bottom() - event->position().y()) /
+                                  bounds.height(), 0.0, 2.0);
+        };
+        emitSelected(*location);
+        auto points = clip.audio_gain_keyframes;
+        auto selected_point = audioGainKeyframeAt(*location, event->position());
+        if (!selected_point.has_value()) {
+            auto frame = frame_from_x();
+            if (points.empty()) {
+                points = {{0, 1.0}, {duration, 1.0}};
+                if (duration > 1) {
+                    frame = std::clamp<std::int64_t>(frame, 1, duration - 1);
+                } else {
+                    frame = frame <= 0 ? 0 : duration;
+                }
+            }
+            const auto gain = gain_from_y();
+            const auto found = std::lower_bound(points.begin(), points.end(), frame,
+                [](const AudioGainKeyframe& point, std::int64_t target) {
+                    return point.frame < target;
+                });
+            if (found != points.end() && found->frame == frame) {
+                selected_point = static_cast<std::size_t>(
+                    std::distance(points.begin(), found));
+                found->gain = gain;
+            } else {
+                selected_point = static_cast<std::size_t>(
+                    std::distance(points.begin(), found));
+                points.insert(found, AudioGainKeyframe{frame, gain});
+            }
+        }
+        if (!selected_point.has_value() || *selected_point >= points.size()) {
+            event->ignore();
+            return;
+        }
+        emit audioGainEnvelopeEditStarted();
+        audio_gain_envelope_drag_ = AudioGainEnvelopeDrag{
+            clip.clip_id, *selected_point, std::move(points), false};
+        if (audio_gain_envelope_drag_->keyframes != clip.audio_gain_keyframes) {
+            audio_gain_envelope_drag_->changed = true;
+            emit audioGainEnvelopeChanged(
+                clip.clip_id, audio_gain_envelope_drag_->keyframes);
+        }
+        grabMouse();
+        update();
+        event->accept();
+        return;
+    }
     if (razor_mode_) {
         const auto frame = localFrameAt(*location, event->position().x());
         if (!frame.has_value()) {
@@ -1934,6 +2150,50 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
     if (read_only_) {
         event->ignore();
+        return;
+    }
+    if (audio_gain_envelope_drag_.has_value()) {
+        const auto location = locationForClip(
+            tracks_, audio_gain_envelope_drag_->clip_id);
+        if (!location.has_value()) {
+            event->accept();
+            return;
+        }
+        const auto rect = clipRect(*location).adjusted(1.0, 6.0, -1.0, -6.0);
+        auto& drag = *audio_gain_envelope_drag_;
+        if (drag.keyframe_index >= drag.keyframes.size()) {
+            event->accept();
+            return;
+        }
+        const auto& clip = tracks_[location->track_index].clips[location->clip_index];
+        const auto duration = std::max<std::int64_t>(1, clip.timeline_duration_frames);
+        auto frame = static_cast<std::int64_t>(std::llround(
+            std::clamp((event->position().x() - rect.left()) /
+                           std::max(1.0, rect.width()), 0.0, 1.0) * duration));
+        const auto gain = rect.height() <= 0.0 ? 1.0 : std::clamp(
+            2.0 * (rect.bottom() - event->position().y()) / rect.height(), 0.0, 2.0);
+        auto& keyframe = drag.keyframes[drag.keyframe_index];
+        if (drag.keyframe_index == 0) {
+            frame = 0;
+        } else if (drag.keyframe_index + 1 == drag.keyframes.size()) {
+            frame = duration;
+        } else {
+            const auto minimum_frame =
+                drag.keyframes[drag.keyframe_index - 1].frame + 1;
+            const auto maximum_frame =
+                drag.keyframes[drag.keyframe_index + 1].frame - 1;
+            frame = minimum_frame <= maximum_frame
+                ? std::clamp(frame, minimum_frame, maximum_frame)
+                : keyframe.frame;
+        }
+        if (keyframe.frame != frame || std::abs(keyframe.gain - gain) > 1e-9) {
+            keyframe.frame = frame;
+            keyframe.gain = gain;
+            drag.changed = true;
+            emit audioGainEnvelopeChanged(drag.clip_id, drag.keyframes);
+            update();
+        }
+        event->accept();
         return;
     }
     if (interaction_controller_.rulerSeekPending()) {
@@ -2054,6 +2314,14 @@ void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
     }
     if (event->button() != Qt::LeftButton) {
         event->ignore();
+        return;
+    }
+    if (audio_gain_envelope_drag_.has_value()) {
+        audio_gain_envelope_drag_.reset();
+        releaseMouse();
+        emit audioGainEnvelopeEditFinished();
+        update();
+        event->accept();
         return;
     }
     if (interaction_controller_.rulerSeekPending()) {

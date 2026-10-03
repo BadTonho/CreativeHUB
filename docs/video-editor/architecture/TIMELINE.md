@@ -151,9 +151,11 @@ TimelineWidget draws one row per track and uses this priority by default:
 
 1. Normal drag moves a clip between tracks and absolute positions.
 2. Blade Tool splits at the frame under the cursor.
-3. An edge drag trims the current segment.
-4. Alt + drag seeks the active clip.
-5. A simple click selects a clip without moving the playhead.
+3. Volume Tool edits points on audio clips; it does not change clip movement,
+   trimming, or seeking gestures.
+4. An edge drag trims the current segment.
+5. Alt + drag seeks the active clip.
+6. A simple click selects a clip without moving the playhead.
 
 The upper time ruler is independent from clip hit testing: clicking or dragging
 there scrubs the playhead without selecting or moving a clip. Ruler scrubbing
@@ -327,6 +329,17 @@ never stored in a snapshot. The Video Editor exposes these existing parameters
 in the Inspector's Audio tab; moving the controls does not change their model,
 history, persistence, or playback semantics.
 
+Audio clips also store an optional clip-local volume envelope in project frames.
+The Volume tool adds and drags points from `0%` to `200%`, with linear
+interpolation; an empty curve evaluates to `100%`. The first point initializes
+both clip edges at `100%`. The envelope multiplies the Inspector clip gain and
+track gain and is applied per sample by the shared Preview/export mixer. One
+drag is one history entry. Moving a clip preserves its local curve; split and
+trim operations preserve the evaluated values at new edges. A linked video
+Audio companion owns its own envelope and carries it through linked operations.
+Right-clicking an intermediate point removes it; right-clicking an edge point
+restores it to `100%`.
+
 ## History and persistence
 
 Successful track and clip mutations are stored in bounded Qt-independent
@@ -335,12 +348,13 @@ positions, active track and clip, selected media, and playhead. Decoded frames,
 FFmpeg sessions, and GPU resources are never stored.
 
 The versioned `.csp` project format stores typed tracks and clips, audio source
-timing, optional audio parameters, linked video-audio companion IDs and
+timing, optional audio parameters and Audio-clip volume envelopes, linked video-audio companion IDs and
 externalized/pending state, and per-project timeline zoom and uniform track-row
 height. Versions 1 through 13 migrate online videos with audio to companions;
 offline videos receive them when restored. Version 1 sequential clips migrate
-to Video 1 when opened. Video, still-image, text, and audio media, plus offline
-video/audio export, are implemented. Waveforms, recording, advanced mixing, advanced ripple
+to Video 1 when opened. Video, still-image, text, and audio media, audio
+waveforms, per-clip volume automation, and offline video/audio export are
+implemented. Recording, track automation, advanced mixing, advanced ripple
 editing, automatic gap management, and history for every project subsystem are
 outside the current Timeline scope. See [Current Scope and Non-goals](SCOPE.md).
 

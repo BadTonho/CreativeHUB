@@ -753,6 +753,8 @@ ProjectOpenResult ProjectOpenService::prepare(
                     audio_clip.frame_count.reset();
                     audio_clip.audio_gain = project_clip.audio_gain;
                     audio_clip.audio_muted = project_clip.audio_muted;
+                    audio_clip.audio_gain_keyframes =
+                        project_clip.audio_gain_keyframes;
                     audio_clip.clip_id = project_clip.clip_id;
                     audio_clip.track_id = track_id;
                     audio_clip.transform = project_clip.transform;
@@ -799,6 +801,7 @@ ProjectOpenResult ProjectOpenService::prepare(
                 clip.frame_count = metadata.frame_count;
                 clip.audio_gain = project_clip.audio_gain;
                 clip.audio_muted = project_clip.audio_muted;
+                clip.audio_gain_keyframes = project_clip.audio_gain_keyframes;
                 clip.clip_id = project_clip.clip_id;
                 clip.track_id = track_id;
                 clip.transform = project_clip.transform;

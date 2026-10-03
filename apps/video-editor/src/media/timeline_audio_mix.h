@@ -34,6 +34,7 @@ struct TimelineAudioMixClip {
     // The video's embedded stream is suppressed when its audio is represented
     // by a linked Audio clip elsewhere on the timeline.
     bool audio_extracted = false;
+    std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
 };
 
 struct TimelineAudioMixTransition {
@@ -49,6 +50,9 @@ struct TimelineAudioMixSpan {
     std::int64_t destination_start_sample = 0;
     std::int64_t sample_count = 0;
     double gain = 1.0;
+    double local_frame_at_destination_start = 0.0;
+    double frames_per_sample = 0.0;
+    std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
 };
 
 [[nodiscard]] std::vector<TimelineAudioMixSpan> planTimelineAudioMix(

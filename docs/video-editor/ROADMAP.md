@@ -273,8 +273,10 @@ performance measurements, and Video Editor stability as the decision criteria.
 - [ ] Add color correction and grading workflows.
 - [x] Display derived, cached waveforms on independent and linked Audio clips,
   with a global Mono/Stereo view preference and separate channel peaks.
-- [ ] Expand audio editing with automation, recording, audio-only file export,
-  crossfades, and advanced mixing as user workflows require.
+- [x] Add clip-local volume automation with editable points, fade support,
+  Undo/Redo, project persistence, and matching Preview/export mixing.
+- [ ] Expand audio editing with recording, audio-only file export, crossfades,
+  track automation, and advanced mixing as user workflows require.
 - [ ] Add masks and more advanced compositing.
 - [ ] Add proxies, incremental rendering, and broader cache workflows where
   measurements show a need.

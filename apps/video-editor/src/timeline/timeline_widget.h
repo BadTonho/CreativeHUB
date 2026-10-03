@@ -65,6 +65,8 @@ public:
     [[nodiscard]] QString playheadTimecode() const;
     void setRazorMode(bool enabled);
     [[nodiscard]] bool razorMode() const noexcept;
+    void setVolumeMode(bool enabled);
+    [[nodiscard]] bool volumeMode() const noexcept;
     void setMoveRequiresAlt(bool enabled);
     [[nodiscard]] bool moveRequiresAlt() const noexcept;
     void setReadOnly(bool read_only);
@@ -126,6 +128,11 @@ signals:
         timeline::ClipId from_clip_id,
         timeline::ClipId to_clip_id);
     void audioUnlinkRequested(timeline::ClipId clip_id);
+    void audioGainEnvelopeEditStarted();
+    void audioGainEnvelopeChanged(
+        timeline::ClipId clip_id,
+        const std::vector<timeline::AudioGainKeyframe>& keyframes);
+    void audioGainEnvelopeEditFinished();
     void trimStarted();
     void seekStarted();
     void seekRequested(qint64 frame_index);
@@ -186,6 +193,13 @@ private:
     void showTransitionMenu(const QPoint& position, const QPoint& global_position);
     void showImageClipMenu(const ClipLocation& location, const QPoint& global_position);
     void showAudioLinkMenu(const ClipLocation& location, const QPoint& global_position);
+    void showAudioGainKeyframeMenu(
+        const ClipLocation& location,
+        const QPoint& position,
+        const QPoint& global_position);
+    [[nodiscard]] std::optional<std::size_t> audioGainKeyframeAt(
+        const ClipLocation& location,
+        const QPointF& position) const noexcept;
     void emitSelected(const ClipLocation& location);
     [[nodiscard]] bool isSupportedDrop(
         const QMimeData* mime_data) const noexcept;
@@ -232,6 +246,14 @@ private:
     FrameRate frame_rate_;
     TimelineInteractionController interaction_controller_;
     bool razor_mode_ = false;
+    bool volume_mode_ = false;
+    struct AudioGainEnvelopeDrag {
+        ClipId clip_id = 0;
+        std::size_t keyframe_index = 0;
+        std::vector<AudioGainKeyframe> keyframes;
+        bool changed = false;
+    };
+    std::optional<AudioGainEnvelopeDrag> audio_gain_envelope_drag_;
     QPointF move_preview_position_{};
     struct SelectedTransition {
         std::size_t track_index = 0;

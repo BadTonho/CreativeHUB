@@ -772,7 +772,8 @@ void PlaybackWorker::setComposition(
                 prepared.clip_audio_muted,
                 prepared.source_start_time_us,
                 prepared.source_duration_time_us,
-                prepared.audio_extracted});
+                prepared.audio_extracted,
+                prepared.audio_gain_keyframes});
         }
 
         composition_audio_mix_transitions_.reserve(

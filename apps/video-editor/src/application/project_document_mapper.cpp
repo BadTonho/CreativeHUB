@@ -48,6 +48,7 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             project_clip.duration_frames = clip.timeline_duration_frames;
             project_clip.audio_gain = clip.audio_gain;
             project_clip.audio_muted = clip.audio_muted;
+            project_clip.audio_gain_keyframes = clip.audio_gain_keyframes;
             project_clip.transform = clip.transform;
             project_clip.keyframes = clip.keyframes;
             project_clip.kind = clip.kind;

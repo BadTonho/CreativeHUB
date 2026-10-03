@@ -48,11 +48,17 @@ overlap within one Audio track; clips on different tracks can overlap and are
 mixed together.
 
 Clip and track gain use a linear range from `0.0` to `2.0`; either mute flag
-silences its source. A linked audio companion owns the clip gain and mute
-controls for the separated stream. The effective gain is
-`clip_gain * track_gain`. Monitoring volume affects Preview only. Gain and mute
-are Timeline edits, enter bounded Undo/Redo, and are persisted in `.csp` version
-14. Opening versions 1 through 13 creates companions for online video sources
+silences its source. A linked audio companion owns the clip gain, mute, and
+volume envelope for the separated stream. The effective sample gain is
+`clip_gain * track_gain * envelope_gain`. The envelope is a clip-local frame
+curve with linear interpolation and values from `0.0` to `2.0`; an empty curve
+means `1.0`. The Volume tool starts inactive. Its first point creates 100%
+points at both clip edges, then adds the clicked value. Dragging points records
+one Undo/Redo edit per gesture. Splits and trims preserve the evaluated curve
+at new boundaries. The shared sample mixer applies the same curve in Preview
+and export. Monitoring volume affects Preview only. Audio edits are persisted
+in `.csp` version 15; versions 1 through 14 load with a constant 100% envelope.
+Opening versions 1 through 13 creates companions for online video sources
 with audio; offline videos are marked pending until restored. Opening alone
 keeps the project clean, and repeated open/save cycles do not duplicate
 companions. Older projects use gain `1.0` and mute `false` when those optional
@@ -70,8 +76,9 @@ left/right channel peaks. The global Mono/Stereo preference lives in
 `QSettings`; it does not change project data or the 64 MiB waveform cache.
 Mono mode combines each bucket using the larger channel peak. Stereo mode draws
 left above right for sources with multiple channels. A mono source remains a
-single centered waveform in either display mode. Automation, recording, audio
-crossfades, advanced mixing, and audio-only file export remain future work. A
+single centered waveform in either display mode. Per-clip volume automation is
+implemented; recording, track automation, audio crossfades, advanced mixing,
+and audio-only file export remain future work. A
 Cross Dissolve changes video timing but keeps audio as a hard cut at the
 original cut: outgoing audio continues through the visual overlap, and incoming
 audio starts at the cut using the source position corresponding to incoming

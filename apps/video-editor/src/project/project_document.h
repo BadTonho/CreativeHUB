@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 14;
+inline constexpr int current_format_version = 15;
+inline constexpr int audio_gain_envelope_format_version = 15;
 inline constexpr int audio_companion_format_version = 14;
 inline constexpr int audio_tracks_format_version = 13;
 inline constexpr int cross_dissolve_overlap_format_version = 12;
@@ -38,6 +39,7 @@ struct ProjectClip {
     std::int64_t duration_frames = 0;
     double audio_gain = 1.0;
     bool audio_muted = false;
+    std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
     timeline::Transform2D transform;
     timeline::TransformKeyframes keyframes;
     timeline::ClipKind kind = timeline::ClipKind::Video;

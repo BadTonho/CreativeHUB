@@ -515,6 +515,39 @@ void EditWorkspaceController::setTimelineWidget(
                         QStringLiteral("Could not unlink the audio clip."));
                 }
             });
+    connect(timeline_widget_,
+            &timeline::TimelineWidget::audioGainEnvelopeEditStarted,
+            this, [this]() {
+                if (!pending_audio_envelope_edit_batch_id_.has_value()) {
+                    pending_audio_envelope_edit_batch_id_ = beginEditBatch();
+                }
+            });
+    connect(timeline_widget_, &timeline::TimelineWidget::audioGainEnvelopeChanged,
+            this, [this](timeline::ClipId clip_id,
+                         const std::vector<timeline::AudioGainKeyframe>& keyframes) {
+                try {
+                    static_cast<void>(execute(
+                        application::SetClipAudioGainKeyframesCommand{
+                            clip_id, keyframes}));
+                } catch (const std::exception& error) {
+                    logging::Logger::instance().log(
+                        logging::Level::Error, "timeline", "set_audio_gain_envelope",
+                        error.what(), {{"clip_id", std::to_string(clip_id)}});
+                    emit statusMessageRequested(
+                        QStringLiteral("Could not update the audio volume curve."));
+                }
+            });
+    connect(timeline_widget_,
+            &timeline::TimelineWidget::audioGainEnvelopeEditFinished,
+            this, [this]() {
+                if (!pending_audio_envelope_edit_batch_id_.has_value()) return;
+                const auto batch_id = *pending_audio_envelope_edit_batch_id_;
+                pending_audio_envelope_edit_batch_id_.reset();
+                const auto result = finishEditBatch(batch_id);
+                if (result.changed()) {
+                    publishCommittedEdit(result, false, true, {});
+                }
+            });
     connect(timeline_widget_, &timeline::TimelineWidget::zoomRequested,
             this, &EditWorkspaceController::applyTimelineZoom);
     connect(timeline_widget_, &timeline::TimelineWidget::zoomChanged, this,
@@ -603,6 +636,10 @@ void EditWorkspaceController::setUi(EditWorkspaceUi ui) {
     if (ui_.razor_tool != nullptr) {
         connect(ui_.razor_tool, &QPushButton::toggled,
                 this, &EditWorkspaceController::setRazorMode);
+    }
+    if (ui_.volume_tool != nullptr) {
+        connect(ui_.volume_tool, &QPushButton::toggled,
+                this, &EditWorkspaceController::setVolumeMode);
     }
     if (ui_.snap != nullptr) {
         connect(ui_.snap, &QPushButton::toggled, this, [this](bool enabled) {
@@ -1606,15 +1643,39 @@ void EditWorkspaceController::setRazorMode(bool enabled) {
     if (timeline_widget_ != nullptr && timeline_widget_->razorMode() != enabled) {
         timeline_widget_->setRazorMode(enabled);
     }
-    if (ui_.razor_tool != nullptr && ui_.razor_tool->isChecked() != enabled) {
+    if (timeline_widget_ != nullptr && timeline_widget_->volumeMode()) {
+        timeline_widget_->setVolumeMode(false);
+    }
+    if (ui_.razor_tool != nullptr) {
         const QSignalBlocker blocker(ui_.razor_tool);
         ui_.razor_tool->setChecked(enabled);
     }
-    if (ui_.selection_tool != nullptr && ui_.selection_tool->isChecked() == enabled) {
+    if (ui_.volume_tool != nullptr) {
+        const QSignalBlocker blocker(ui_.volume_tool);
+        ui_.volume_tool->setChecked(false);
+    }
+    if (ui_.selection_tool != nullptr) {
         const QSignalBlocker blocker(ui_.selection_tool);
         ui_.selection_tool->setChecked(!enabled);
     }
     emit razorToolStateChanged(enabled);
+}
+
+void EditWorkspaceController::setVolumeMode(bool enabled) {
+    if (timeline_widget_ != nullptr) timeline_widget_->setVolumeMode(enabled);
+    if (!enabled) return;
+    if (ui_.volume_tool != nullptr) {
+        const QSignalBlocker blocker(ui_.volume_tool);
+        ui_.volume_tool->setChecked(true);
+    }
+    if (ui_.razor_tool != nullptr) {
+        const QSignalBlocker blocker(ui_.razor_tool);
+        ui_.razor_tool->setChecked(false);
+    }
+    if (ui_.selection_tool != nullptr) {
+        const QSignalBlocker blocker(ui_.selection_tool);
+        ui_.selection_tool->setChecked(false);
+    }
 }
 
 void EditWorkspaceController::clearTimeline() {

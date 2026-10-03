@@ -132,6 +132,7 @@ public:
         qint64 timeline_frame);
     void setMovePlayheadOnClipSelection(bool enabled) noexcept;
     void setRazorMode(bool enabled);
+    void setVolumeMode(bool enabled);
     void clearTimeline();
     void moveActiveTimelineClip(int direction);
     void deleteActiveTimelineClip();
@@ -214,6 +215,8 @@ private:
         pending_audio_edit_batch_id_;
     std::optional<application::TimelineCommandService::EditBatchId>
         pending_transform_edit_batch_id_;
+    std::optional<application::TimelineCommandService::EditBatchId>
+        pending_audio_envelope_edit_batch_id_;
 };
 
 }  // namespace ui

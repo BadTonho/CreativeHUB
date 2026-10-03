@@ -548,6 +548,45 @@ int main() {
                     audio_model.setTrackAudio(0, 99.0, false) ==
                     timeline::AudioParameterResult::InvalidValue,
                 "Invalid audio gains were accepted.");
+        const std::vector<timeline::AudioGainKeyframe> envelope{
+            {0, 0.0}, {60, 2.0}};
+        require(timeline::evaluateAudioGainEnvelope(envelope, 0.0) == 0.0 &&
+                    std::abs(timeline::evaluateAudioGainEnvelope(envelope, 30.0) - 1.0) <
+                        1e-9 &&
+                    timeline::evaluateAudioGainEnvelope(envelope, 60.0) == 2.0 &&
+                    timeline::evaluateAudioGainEnvelope({}, 30.0) == 1.0,
+                "Audio volume automation did not evaluate linearly with a 100% empty default.");
+        require(timeline::TimelineModel::validAudioGainKeyframes(envelope, 60) &&
+                    !timeline::TimelineModel::validAudioGainKeyframes(
+                        {{0, 1.0}, {0, 0.5}}, 60) &&
+                    !timeline::TimelineModel::validAudioGainKeyframes(
+                        {{61, 1.0}}, 60) &&
+                    !timeline::TimelineModel::validAudioGainKeyframes(
+                        {{0, 2.01}}, 60),
+                "Invalid audio volume automation points passed model validation.");
+        require(audio_model.setClipAudioGainKeyframes(0, 0, envelope) ==
+                    timeline::AudioParameterResult::InvalidValue,
+                "An audio envelope was accepted on a visual clip.");
+
+        media::VideoMetadata audio_metadata;
+        audio_metadata.kind = media::MediaKind::Audio;
+        audio_metadata.source_path = directory / "media" / "automation.wav";
+        audio_metadata.display_name = "automation.wav";
+        audio_metadata.duration_seconds = 2.0;
+        require(audio_model.addClip(1, audio_metadata, 0) ==
+                    timeline::AddClipResult::Added,
+                "The audio envelope test source was not added to an Audio track.");
+        require(audio_model.setClipAudioGainKeyframes(1, 0, envelope) ==
+                    timeline::AudioParameterResult::Changed,
+                "An audio envelope could not be applied to an Audio clip.");
+        require(audio_model.splitClip(1, 0, 30) == timeline::SplitClipResult::Split &&
+                    audio_model.tracks()[1].clips[0].audio_gain_keyframes.back() ==
+                        timeline::AudioGainKeyframe{30, 1.0} &&
+                    audio_model.tracks()[1].clips[1].audio_gain_keyframes.front() ==
+                        timeline::AudioGainKeyframe{0, 1.0} &&
+                    audio_model.tracks()[1].clips[1].audio_gain_keyframes.back() ==
+                        timeline::AudioGainKeyframe{30, 2.0},
+                "Splitting an audio clip did not preserve its volume curve at the cut.");
 
         const auto second_metadata = makeMetadata(second_source, "second.mkv", 60);
         require(model.addClip(second_metadata) == timeline::AddClipResult::Added,
@@ -1169,10 +1208,12 @@ int main() {
         require(multi_track_model.addTrack("Video 2") ==
                     timeline::AddTrackResult::Added,
                 "The second video track was not created.");
-        require(multi_track_model.trackCount() == 2,
+        require(multi_track_model.trackCount() == 3,
                 "The multi-track model has the wrong track count.");
         require(multi_track_model.tracks()[0].name == "Video 2" &&
-                    multi_track_model.tracks()[1].name == "Video 1",
+                    multi_track_model.tracks()[1].name == "Video 1" &&
+                    multi_track_model.tracks()[2].kind == timeline::TrackKind::Audio &&
+                    multi_track_model.tracks()[2].name == "Audio 1",
                 "New tracks were not inserted above the existing tracks.");
         require(multi_track_model.addClip(0, first_metadata, 10) ==
                     timeline::AddClipResult::Added,
@@ -1204,9 +1245,10 @@ int main() {
         multi_track_model.clear();
         multi_track_model.restore(multi_track_snapshot);
         require(multi_track_model.snapshot() == multi_track_snapshot &&
-                    multi_track_model.trackCount() == 2 &&
+                    multi_track_model.trackCount() == 3 &&
                     multi_track_model.clipCount(0) == 1 &&
-                    multi_track_model.clipCount(1) == 2,
+                    multi_track_model.clipCount(1) == 2 &&
+                    multi_track_model.clipCount(2) == 0,
                 "A multi-track snapshot did not restore every track and clip.");
         timeline::TimelineModel identity_model;
         require(identity_model.addTrack("Identity Track") ==

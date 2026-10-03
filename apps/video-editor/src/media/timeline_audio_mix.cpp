@@ -158,12 +158,18 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
             continue;
         }
 
+        const auto local_frame_at_overlap = static_cast<double>(
+            static_cast<long double>(overlap_start - *timeline_origin_sample) *
+            timeline_frame_rate / sample_rate);
         spans.push_back(TimelineAudioMixSpan{
             clip.source_index,
             source_sample_begin,
             overlap_start - block_start_sample,
             span_sample_count,
-            gain});
+            gain,
+            local_frame_at_overlap,
+            timeline_frame_rate / sample_rate,
+            clip.audio_gain_keyframes});
     }
     return spans;
 }
@@ -215,10 +221,15 @@ void accumulateTimelineAudioChunk(
         const auto destination_offset = static_cast<std::size_t>(
             destination_begin + index) * static_cast<std::size_t>(output_channel_count);
         for (int channel = 0; channel < output_channel_count; ++channel) {
+            const auto local_frame = span.local_frame_at_destination_start +
+                static_cast<double>(destination_begin + index -
+                    span.destination_start_sample) * span.frames_per_sample;
+            const auto envelope_gain = timeline::evaluateAudioGainEnvelope(
+                span.audio_gain_keyframes, local_frame);
             mixed[destination_offset + static_cast<std::size_t>(channel)] +=
                 static_cast<float>(chunk.samples[source_offset +
                     static_cast<std::size_t>(channel)]) / 32768.0F *
-                static_cast<float>(span.gain);
+                static_cast<float>(span.gain * envelope_gain);
         }
     }
 }

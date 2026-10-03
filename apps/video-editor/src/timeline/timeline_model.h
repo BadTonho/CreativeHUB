@@ -4,9 +4,11 @@
 #include "timeline_frame_rate.h"
 #include "timeline_transform.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -65,6 +67,35 @@ struct TextStyle {
     friend bool operator==(const TextStyle&, const TextStyle&) = default;
 };
 
+struct AudioGainKeyframe {
+    std::int64_t frame = 0;
+    double gain = 1.0;
+
+    friend bool operator==(const AudioGainKeyframe&, const AudioGainKeyframe&) = default;
+};
+
+[[nodiscard]] inline double evaluateAudioGainEnvelope(
+    const std::vector<AudioGainKeyframe>& keyframes,
+    double local_frame) noexcept {
+    if (keyframes.empty() || !std::isfinite(local_frame)) return 1.0;
+    if (local_frame <= static_cast<double>(keyframes.front().frame)) {
+        return keyframes.front().gain;
+    }
+    for (std::size_t index = 1; index < keyframes.size(); ++index) {
+        const auto& left = keyframes[index - 1];
+        const auto& right = keyframes[index];
+        if (local_frame <= static_cast<double>(right.frame)) {
+            const auto duration = static_cast<double>(right.frame - left.frame);
+            if (duration <= 0.0) return right.gain;
+            const auto fraction = std::clamp(
+                (local_frame - static_cast<double>(left.frame)) / duration,
+                0.0, 1.0);
+            return left.gain + (right.gain - left.gain) * fraction;
+        }
+    }
+    return keyframes.back().gain;
+}
+
 struct TimelineClip {
     std::int64_t timeline_start_frame = 0;
     std::int64_t source_start_frame = 0;
@@ -76,6 +107,7 @@ struct TimelineClip {
     std::optional<std::int64_t> frame_count;
     double audio_gain = 1.0;
     bool audio_muted = false;
+    std::vector<AudioGainKeyframe> audio_gain_keyframes;
     ClipId clip_id = 0;
     TrackId track_id = 0;
     Transform2D transform;
@@ -281,6 +313,25 @@ public:
         std::size_t track_index,
         double gain,
         bool muted);
+    AudioParameterResult setClipAudioGainKeyframes(
+        std::size_t track_index,
+        std::size_t clip_index,
+        std::vector<AudioGainKeyframe> keyframes);
+    [[nodiscard]] static bool validAudioGainKeyframes(
+        const std::vector<AudioGainKeyframe>& keyframes,
+        std::int64_t duration_frames) noexcept {
+        if (duration_frames <= 0) return keyframes.empty();
+        std::int64_t previous = -1;
+        for (const auto& keyframe : keyframes) {
+            if (keyframe.frame < 0 || keyframe.frame > duration_frames ||
+                keyframe.frame <= previous || !std::isfinite(keyframe.gain) ||
+                keyframe.gain < 0.0 || keyframe.gain > 2.0) {
+                return false;
+            }
+            previous = keyframe.frame;
+        }
+        return true;
+    }
     TransformParameterResult setClipTransform(
         std::size_t track_index,
         std::size_t clip_index,

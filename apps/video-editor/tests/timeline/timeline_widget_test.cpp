@@ -345,6 +345,79 @@ void testAudioWaveformRendering(QApplication& application) {
             "A visual clip rendered an audio waveform.");
 }
 
+void testAudioGainEnvelopeTool(QApplication& application) {
+    timeline::TimelineWidget widget;
+    widget.resize(1200, 180);
+    widget.setFrameRate({30, 1});
+    widget.setTimelineViewportWidth(1200);
+    widget.setZoomFactor(15.0);
+    auto clip = makeClip("volume-curve.wav", 0, 150, "volume-curve.wav");
+    clip.kind = timeline::ClipKind::Audio;
+    clip.source_duration_time_us = 5'000'000;
+    timeline::TimelineTrack track{1, "Audio 1", 1.0, false, {clip}};
+    track.kind = timeline::TrackKind::Audio;
+    const std::vector<timeline::TimelineTrack> tracks{track};
+    widget.setTracks(tracks);
+    require(!widget.volumeMode(),
+            "The Timeline Volume tool should start inactive.");
+    int edit_starts = 0;
+    int edit_finishes = 0;
+    int envelope_updates = 0;
+    std::vector<timeline::AudioGainKeyframe> latest;
+    QObject::connect(&widget,
+        &timeline::TimelineWidget::audioGainEnvelopeEditStarted,
+        [&edit_starts]() { ++edit_starts; });
+    QObject::connect(&widget,
+        &timeline::TimelineWidget::audioGainEnvelopeEditFinished,
+        [&edit_finishes]() { ++edit_finishes; });
+    QObject::connect(&widget,
+        &timeline::TimelineWidget::audioGainEnvelopeChanged,
+        [&envelope_updates, &latest](timeline::ClipId,
+                                    const std::vector<timeline::AudioGainKeyframe>& points) {
+            ++envelope_updates;
+            latest = points;
+        });
+    widget.show();
+    application.processEvents();
+    widget.setVolumeMode(true);
+    require(widget.volumeMode() && !widget.razorMode(),
+            "The Volume tool did not activate exclusively from the Blade tool.");
+    const timeline::TimelineGeometry geometry(
+        tracks, QSizeF(widget.size()), widget.trackRowHeight(),
+        widget.zoomFactor(), std::nullopt, 30.0);
+    const auto bounds = geometry.clipRect(clip, 0).adjusted(1.0, 6.0, -1.0, -6.0);
+    const auto start = QPointF(bounds.left() + bounds.width() * 0.5,
+                               bounds.top() + 1.0);
+    const auto finish = QPointF(bounds.left() + bounds.width() * 0.72,
+                                bounds.center().y());
+    sendMouse(widget, QEvent::MouseButtonPress, start, Qt::LeftButton);
+    sendMouse(widget, QEvent::MouseMove, finish, Qt::LeftButton);
+    sendMouse(widget, QEvent::MouseButtonRelease, finish, Qt::NoButton);
+    require(edit_starts == 1 && edit_finishes == 1 && envelope_updates >= 2 &&
+                latest.size() == 3 && latest[0] == timeline::AudioGainKeyframe{0, 1.0} &&
+                latest[1].frame > 90 && latest[1].frame < 120 &&
+                std::abs(latest[1].gain - 1.0) < 0.05 &&
+                latest[2] == timeline::AudioGainKeyframe{150, 1.0},
+            "Volume-tool insertion and dragging did not preserve edge points and edit values.");
+    clip.audio_gain_keyframes = latest;
+    track.clips.front() = clip;
+    widget.setTracks({track});
+    const auto edge_start = QPointF(
+        bounds.left(), bounds.bottom() - bounds.height() * 0.5);
+    const auto edge_finish = QPointF(
+        bounds.left() + bounds.width() * 0.4, bounds.top() + 1.0);
+    sendMouse(widget, QEvent::MouseButtonPress, edge_start, Qt::LeftButton);
+    sendMouse(widget, QEvent::MouseMove, edge_finish, Qt::LeftButton);
+    sendMouse(widget, QEvent::MouseButtonRelease, edge_finish, Qt::NoButton);
+    require(edit_starts == 2 && edit_finishes == 2 && latest.size() == 3 &&
+                latest.front().frame == 0 && latest.front().gain > 1.8,
+            "Dragging an edge volume point moved it away from the clip boundary.");
+    widget.setRazorMode(true);
+    require(!widget.volumeMode() && widget.razorMode(),
+            "Selecting the Blade tool did not leave Volume mode.");
+    widget.close();
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -353,6 +426,7 @@ int main(int argc, char* argv[]) {
 
     try {
         testAudioWaveformRendering(application);
+        testAudioGainEnvelopeTool(application);
 
         timeline::TimelineWidget widget;
         require(widget.trackRowHeight() == 70.0,
