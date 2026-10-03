@@ -217,7 +217,9 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                 "kind",
                 transition.kind == timeline::TransitionKind::FadeToBlack
                     ? "fade_to_black"
-                    : "cross_dissolve");
+                    : transition.kind == timeline::TransitionKind::AudioCrossfade
+                        ? "audio_crossfade"
+                        : "cross_dissolve");
             item.insert("duration_frames", static_cast<qint64>(transition.duration_frames));
             transitions.append(item);
         }

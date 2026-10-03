@@ -109,6 +109,68 @@ void testIndependentAudioTrackEditing(const std::filesystem::path& directory) {
                 extended_edge->clip.timeline_duration_frames == 15 &&
                 extended_edge->clip.source_duration_time_us == 500000,
             "A trimmed Audio clip could not extend its right edge within the source bounds.");
+
+    timeline::TimelineModel crossfade_model;
+    require(crossfade_model.addClip(1, audio, 0) == timeline::AddClipResult::Added &&
+                crossfade_model.addClip(1, audio, 38) == timeline::AddClipResult::Added &&
+                crossfade_model.addClip(1, audio, 76) == timeline::AddClipResult::Added,
+            "Could not create adjacent independent audio clips for crossfade tests.");
+    const auto visual_metadata = makeMetadata(
+        directory / "crossfade-visual.mp4", "crossfade-visual.mp4", 38);
+    require(crossfade_model.addClip(0, visual_metadata, 0) ==
+                timeline::AddClipResult::Added &&
+                crossfade_model.addClip(0, visual_metadata, 38) ==
+                timeline::AddClipResult::Added,
+            "Could not create video clips for the Audio Crossfade compatibility check.");
+    require(crossfade_model.addTransition(
+                1, 0, 1, timeline::TransitionKind::AudioCrossfade, 15) ==
+                timeline::TransitionMutationResult::Added &&
+                crossfade_model.tracks()[1].clips[1].timeline_start_frame == 23 &&
+                crossfade_model.tracks()[1].clips[2].timeline_start_frame == 61 &&
+                crossfade_model.tracks()[1].transitions.front().duration_frames == 15,
+            "An Audio Crossfade did not overlap its endpoints and ripple the suffix.");
+    require(crossfade_model.updateTransition(
+                1, 0, 1, timeline::TransitionKind::AudioCrossfade, 10) ==
+                timeline::TransitionMutationResult::Updated &&
+                crossfade_model.tracks()[1].clips[1].timeline_start_frame == 28 &&
+                crossfade_model.tracks()[1].clips[2].timeline_start_frame == 66,
+            "Changing Audio Crossfade duration did not update its overlap and suffix.");
+    require(crossfade_model.removeTransition(1, 0, 1) ==
+                timeline::TransitionMutationResult::Removed &&
+                crossfade_model.tracks()[1].clips[1].timeline_start_frame == 38 &&
+                crossfade_model.tracks()[1].clips[2].timeline_start_frame == 76,
+            "Removing an Audio Crossfade did not restore the original edit points.");
+    require(crossfade_model.addTransition(
+                1, 0, 1, timeline::TransitionKind::AudioCrossfade, 39) ==
+                timeline::TransitionMutationResult::InvalidRange &&
+                crossfade_model.addTransition(
+                    0, 0, 1, timeline::TransitionKind::AudioCrossfade, 15) ==
+                timeline::TransitionMutationResult::InvalidBoundary,
+            "An Audio Crossfade accepted an invalid duration or a Video track.");
+
+    media::VideoMetadata linked_video;
+    linked_video.source_path = audio.source_path;
+    linked_video.display_name = "linked-source.mp4";
+    linked_video.duration_seconds = 1.25;
+    linked_video.frame_rate = 30.0;
+    linked_video.frame_count = 38;
+    linked_video.audio = audio.audio;
+    timeline::TimelineModel linked_model;
+    require(linked_model.addClip(0, linked_video, 0) == timeline::AddClipResult::Added &&
+                linked_model.addClip(0, linked_video, 38) == timeline::AddClipResult::Added &&
+                linked_model.addClip(1, audio, 0) == timeline::AddClipResult::Added &&
+                linked_model.addClip(1, audio, 38) == timeline::AddClipResult::Added &&
+                linked_model.addTransition(
+                    1, 0, 1, timeline::TransitionKind::AudioCrossfade, 15) ==
+                    timeline::TransitionMutationResult::Added &&
+                !linked_model.linkAudio(
+                    linked_model.tracks()[0].clips.front().clip_id,
+                    linked_model.tracks()[1].clips.front().clip_id),
+            "A linked audio clip could be added to a crossfade or linked afterward.");
+    require(linked_model.addTransition(
+                0, 0, 1, timeline::TransitionKind::AudioCrossfade, 15) ==
+                timeline::TransitionMutationResult::InvalidBoundary,
+            "An Audio Crossfade was accepted on a Video track.");
 }
 
 void testVideoAudioCompanionTracks(const std::filesystem::path& directory) {

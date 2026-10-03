@@ -872,6 +872,48 @@ void validateEmbeddedAudioMixing(
                 decodedAudioRmsRange(independent_output, 72000, 24000) > 0.04,
             "Independent and embedded audio were not mixed through the audio tail with black frames.");
 
+    auto crossfade_job = makeImageJob(
+        output, source, root / ("independent-audio-crossfade." + extension),
+        408, 24);
+    crossfade_job.project_snapshot.timeline_frame_rate = {24, 1};
+    auto& crossfade_video_track = crossfade_job.project_snapshot.timeline_tracks.front();
+    crossfade_video_track.clips.front().kind = timeline::ClipKind::Video;
+    crossfade_video_track.clips.front().source_duration_frames = 24;
+    crossfade_video_track.audio_muted = true;
+    project::ProjectTrack crossfade_audio_track;
+    crossfade_audio_track.track_id = 2;
+    crossfade_audio_track.name = "Audio 1";
+    crossfade_audio_track.kind = timeline::TrackKind::Audio;
+    crossfade_audio_track.audio_gain = 0.5;
+    project::ProjectClip outgoing_audio;
+    outgoing_audio.clip_id = 2;
+    outgoing_audio.source_path = independent_source;
+    outgoing_audio.kind = timeline::ClipKind::Audio;
+    outgoing_audio.duration_frames = 48;
+    outgoing_audio.source_duration_time_us = 2'000'000;
+    outgoing_audio.audio_gain = 0.5;
+    project::ProjectClip incoming_audio = outgoing_audio;
+    incoming_audio.clip_id = 3;
+    incoming_audio.timeline_start_frame = 36;
+    crossfade_audio_track.clips = {outgoing_audio, incoming_audio};
+    crossfade_audio_track.transitions.push_back(project::ProjectTransition{
+        0, 1, timeline::TransitionKind::AudioCrossfade, 12});
+    crossfade_job.project_snapshot.timeline_tracks.push_back(crossfade_audio_track);
+    renderJob(crossfade_job, canceled);
+    const auto crossfade_output = pathFromQString(
+        crossfade_job.settings.output_path);
+    const auto outside_crossfade_rms = decodedAudioRmsRange(
+        crossfade_output, 57600, 4800);
+    const auto inside_crossfade_rms = decodedAudioRmsRange(
+        crossfade_output, 86400, 4800);
+    const auto after_crossfade_rms = decodedAudioRmsRange(
+        crossfade_output, 105600, 4800);
+    require(outside_crossfade_rms > 0.05 &&
+                inside_crossfade_rms > outside_crossfade_rms * 1.2 &&
+                after_crossfade_rms > outside_crossfade_rms * 0.85 &&
+                after_crossfade_rms < outside_crossfade_rms * 1.15,
+            "Export did not mix the Audio Crossfade with an equal-power gain curve.");
+
     independent_track.audio_muted = true;
     independent_job.id = 405;
     independent_job.project_snapshot.timeline_tracks.back() = independent_track;

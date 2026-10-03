@@ -42,6 +42,14 @@ struct TimelineAudioMixTransition {
     std::int64_t to_clip_index = -1;
     std::int64_t boundary_frame = 0;
     timeline::TransitionKind kind = timeline::TransitionKind::CrossDissolve;
+    std::int64_t from_clip_index = -1;
+    std::int64_t duration_frames = 0;
+};
+
+struct TimelineAudioMixFade {
+    std::int64_t transition_start_sample = 0;
+    std::int64_t transition_end_sample = 0;
+    bool incoming = false;
 };
 
 struct TimelineAudioMixSpan {
@@ -53,6 +61,8 @@ struct TimelineAudioMixSpan {
     double local_frame_at_destination_start = 0.0;
     double frames_per_sample = 0.0;
     std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
+    std::int64_t timeline_start_sample = 0;
+    std::vector<TimelineAudioMixFade> transition_fades;
 };
 
 [[nodiscard]] std::vector<TimelineAudioMixSpan> planTimelineAudioMix(

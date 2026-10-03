@@ -49,7 +49,13 @@ enum class TrackKind {
 enum class TransitionKind {
     CrossDissolve,
     FadeToBlack,
+    AudioCrossfade,
 };
+
+[[nodiscard]] constexpr bool isOverlapTransition(TransitionKind kind) noexcept {
+    return kind == TransitionKind::CrossDissolve ||
+        kind == TransitionKind::AudioCrossfade;
+}
 
 enum class TextAlignment {
     Left,
@@ -429,7 +435,7 @@ private:
     transitionClipIndexes(
         const TimelineTrack& track,
         const TimelineTransition& transition) noexcept;
-    bool removeCrossDissolvesForClip(
+    bool removeOverlappingTransitionsForClip(
         std::size_t track_index,
         ClipId clip_id);
     static void removeInvalidTransitions(TimelineTrack& track) noexcept;

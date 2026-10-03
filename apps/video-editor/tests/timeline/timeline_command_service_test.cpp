@@ -584,7 +584,7 @@ void runAutomaticAudioTrackCommand() {
     const auto audio_track_id = first.affected_track_ids.front();
 
     const auto second = service.execute(application::AddMediaClipCommand{
-        second_path, audio_track_id, 120});
+        second_path, audio_track_id, 105});
     require(second.changed() && second.affected_track_ids.front() == audio_track_id &&
                 session.timeline().trackCount() == 3 &&
                 session.timeline().tracks().back().clips.size() == 2,
@@ -594,7 +594,35 @@ void runAutomaticAudioTrackCommand() {
                 service.redo().changed() &&
                 session.timeline().tracks().back().clips.size() == 2,
             "Undo and Redo did not restore an audio drop on its track.");
+    const auto crossfade = service.execute(application::AddTransitionCommand{
+        audio_track_id, first.affected_clip_ids.front(),
+        second.affected_clip_ids.front(),
+        timeline::TransitionKind::AudioCrossfade, 15});
+    require(crossfade.changed() &&
+                session.timeline().tracks().back().clips[1].timeline_start_frame == 90 &&
+                session.timeline().transitionBetween(2, 0, 1) != nullptr,
+            "The command service could not create an Audio Crossfade on the audio lane.");
+    require(service.undo().changed() &&
+                session.timeline().tracks().back().clips[1].timeline_start_frame == 105 &&
+                session.timeline().transitionBetween(2, 0, 1) == nullptr &&
+                service.redo().changed() &&
+                session.timeline().tracks().back().clips[1].timeline_start_frame == 90 &&
+                session.timeline().transitionBetween(2, 0, 1) != nullptr,
+            "Undo and Redo did not restore Audio Crossfade timing and transition state.");
+    const auto resized = service.execute(application::UpdateTransitionCommand{
+        audio_track_id, first.affected_clip_ids.front(),
+        second.affected_clip_ids.front(),
+        timeline::TransitionKind::AudioCrossfade, 10});
+    require(resized.changed() &&
+                session.timeline().tracks().back().clips[1].timeline_start_frame == 95 &&
+                service.undo().changed() &&
+                session.timeline().tracks().back().clips[1].timeline_start_frame == 90 &&
+                service.redo().changed() &&
+                session.timeline().tracks().back().clips[1].timeline_start_frame == 95,
+            "Updating an Audio Crossfade did not ripple the lane as one Undo/Redo edit.");
     require(service.undo().changed() && service.undo().changed() &&
+                service.undo().changed() &&
+                service.undo().changed() &&
                 session.timeline().trackCount() == 2 &&
                 service.redo().changed() &&
                 session.timeline().trackCount() == 3 &&

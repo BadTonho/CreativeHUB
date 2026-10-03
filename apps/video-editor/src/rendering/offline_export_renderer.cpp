@@ -480,7 +480,9 @@ std::vector<media::TimelineAudioMixTransition> audioMixTransitions(
             static_cast<std::int64_t>(transition.track_index),
             static_cast<std::int64_t>(transition.to_clip_index),
             transition.boundary,
-            transition.kind});
+            transition.kind,
+            static_cast<std::int64_t>(transition.from_clip_index),
+            transition.duration});
     }
     return result;
 }

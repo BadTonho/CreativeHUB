@@ -170,18 +170,18 @@ void run() {
         });
 
     const auto add_track = track_controller.addTrack("Overlay");
-    require(add_track.changed() && track_session.timeline().trackCount() == 2,
+    require(add_track.changed() && track_session.timeline().trackCount() == 3,
             "The Edit controller did not add a video track.");
-    const auto added_track_id = track_session.timeline().tracks().back().track_id;
+    const auto added_track_id = add_track.affected_track_ids.front();
     const auto invalid_rename = track_controller.renameTrack(added_track_id, "  ");
     require(invalid_rename.status == application::EditStatus::Rejected &&
                 track_commands.undoCount() == 1,
             "A rejected track rename changed the shared history.");
     const auto rename_track = track_controller.renameTrack(added_track_id, "Titles");
-    const auto move_track = track_controller.moveTrack(added_track_id, 0);
+    const auto move_track = track_controller.moveTrack(added_track_id, 1);
     const auto remove_track = track_controller.removeTrack(added_track_id);
     require(rename_track.changed() && move_track.changed() && remove_track.changed() &&
-                track_session.timeline().trackCount() == 1 &&
+                track_session.timeline().trackCount() == 2 &&
                 track_commands.undoCount() == 4 && committed_track_edits == 4,
             "Track editing did not preserve shared state, history, or commit signals.");
 

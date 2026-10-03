@@ -286,7 +286,7 @@ bool preserveTransitionContinuity(TimelineTrack& track) noexcept {
         transition->duration_frames = std::clamp<std::int64_t>(
             transition->duration_frames, 1, maximum_transition_duration);
         const auto from_end = from.timeline_start_frame + from.timeline_duration_frames;
-        const auto target_start = transition->kind == TransitionKind::CrossDissolve
+        const auto target_start = isOverlapTransition(transition->kind)
             ? from_end - transition->duration_frames
             : from_end;
         const auto delta = target_start - to.timeline_start_frame;
@@ -468,12 +468,12 @@ bool sameOverlapClass(const TimelineClip& left, const TimelineClip& right) noexc
          isFrameTimedMediaClipKind(right.kind));
 }
 
-bool hasCrossDissolveForClip(
+bool hasOverlapTransitionForClip(
     const TimelineTrack& track,
     ClipId clip_id) noexcept {
     return std::any_of(track.transitions.begin(), track.transitions.end(),
         [clip_id](const TimelineTransition& transition) {
-            return transition.kind == TransitionKind::CrossDissolve &&
+            return isOverlapTransition(transition.kind) &&
                 (transition.from_clip_id == clip_id ||
                  transition.to_clip_id == clip_id);
         });
@@ -537,6 +537,7 @@ bool TimelineModel::validTransitionKind(TransitionKind kind) noexcept {
     switch (kind) {
     case TransitionKind::CrossDissolve:
     case TransitionKind::FadeToBlack:
+    case TransitionKind::AudioCrossfade:
         return true;
     }
     return false;
@@ -1177,6 +1178,7 @@ bool TimelineModel::linkAudio(ClipId video_clip_id, ClipId audio_clip_id) {
     if (!video_location.has_value() || !audio_location.has_value()) return false;
     auto& video_track = tracks_[video_location->track_index];
     auto& audio_track = tracks_[audio_location->track_index];
+    if (hasOverlapTransitionForClip(audio_track, audio_clip_id)) return false;
     auto& video_clip = video_track.clips[video_location->clip_index];
     auto& audio_clip = audio_track.clips[audio_location->clip_index];
     if (video_track.kind != TrackKind::Video || video_clip.kind != ClipKind::Video ||
@@ -1375,9 +1377,9 @@ MoveClipResult TimelineModel::moveClip(
         clip.timeline_start_frame == timeline_start_frame) {
         return MoveClipResult::NoChange;
     }
-    if (hasCrossDissolveForClip(*source_track, clip.clip_id)) {
+    if (hasOverlapTransitionForClip(*source_track, clip.clip_id)) {
         auto staged = *this;
-        if (!staged.removeCrossDissolvesForClip(from.track_index, clip.clip_id)) {
+        if (!staged.removeOverlappingTransitionsForClip(from.track_index, clip.clip_id)) {
             return MoveClipResult::InvalidPosition;
         }
         const auto result = staged.moveClip(from, to, timeline_start_frame);
@@ -1415,10 +1417,10 @@ SplitClipResult TimelineModel::splitClip(
     if (track == nullptr || clip_index >= track->clips.size()) {
         return SplitClipResult::InvalidIndex;
     }
-    if (hasCrossDissolveForClip(*track, track->clips[clip_index].clip_id)) {
+    if (hasOverlapTransitionForClip(*track, track->clips[clip_index].clip_id)) {
         const auto clip_id = track->clips[clip_index].clip_id;
         auto staged = *this;
-        if (!staged.removeCrossDissolvesForClip(track_index, clip_id)) {
+        if (!staged.removeOverlappingTransitionsForClip(track_index, clip_id)) {
             return SplitClipResult::InvalidBoundary;
         }
         const auto result = staged.splitClip(track_index, clip_index, local_frame);
@@ -1507,10 +1509,10 @@ RemoveClipResult TimelineModel::removeClip(
     if (track == nullptr || clip_index >= track->clips.size()) {
         return RemoveClipResult::InvalidIndex;
     }
-    if (hasCrossDissolveForClip(*track, track->clips[clip_index].clip_id)) {
+    if (hasOverlapTransitionForClip(*track, track->clips[clip_index].clip_id)) {
         const auto clip_id = track->clips[clip_index].clip_id;
         auto staged = *this;
-        if (!staged.removeCrossDissolvesForClip(track_index, clip_id)) {
+        if (!staged.removeOverlappingTransitionsForClip(track_index, clip_id)) {
             return RemoveClipResult::InvalidIndex;
         }
         const auto result = staged.removeClip(track_index, clip_index);
@@ -1533,10 +1535,10 @@ TrimClipResult TimelineModel::trimClip(
     if (track == nullptr || clip_index >= track->clips.size()) {
         return TrimClipResult::InvalidIndex;
     }
-    if (hasCrossDissolveForClip(*track, track->clips[clip_index].clip_id)) {
+    if (hasOverlapTransitionForClip(*track, track->clips[clip_index].clip_id)) {
         const auto clip_id = track->clips[clip_index].clip_id;
         auto staged = *this;
-        if (!staged.removeCrossDissolvesForClip(track_index, clip_id)) {
+        if (!staged.removeOverlappingTransitionsForClip(track_index, clip_id)) {
             return TrimClipResult::InvalidRange;
         }
         const auto result = staged.trimClip(
@@ -1661,10 +1663,10 @@ TrimClipResult TimelineModel::trimClipEdge(
     if (track == nullptr || clip_index >= track->clips.size()) {
         return TrimClipResult::InvalidIndex;
     }
-    if (hasCrossDissolveForClip(*track, track->clips[clip_index].clip_id)) {
+    if (hasOverlapTransitionForClip(*track, track->clips[clip_index].clip_id)) {
         const auto clip_id = track->clips[clip_index].clip_id;
         auto staged = *this;
-        if (!staged.removeCrossDissolvesForClip(track_index, clip_id)) {
+        if (!staged.removeOverlappingTransitionsForClip(track_index, clip_id)) {
             return TrimClipResult::InvalidRange;
         }
         const auto result = staged.trimClipEdge(
@@ -1984,7 +1986,7 @@ TimelineModel::transitionClipIndexes(
     return std::make_pair(*from_index, *to_index);
 }
 
-bool TimelineModel::removeCrossDissolvesForClip(
+bool TimelineModel::removeOverlappingTransitionsForClip(
     std::size_t track_index,
     ClipId clip_id) {
     auto* track = trackAt(track_index);
@@ -1998,7 +2000,7 @@ bool TimelineModel::removeCrossDissolvesForClip(
     };
     std::vector<AttachedTransition> attached;
     for (const auto& transition : track->transitions) {
-        if (transition.kind != TransitionKind::CrossDissolve ||
+        if (!isOverlapTransition(transition.kind) ||
             (transition.from_clip_id != clip_id &&
              transition.to_clip_id != clip_id)) {
             continue;
@@ -2021,7 +2023,7 @@ bool TimelineModel::removeCrossDissolvesForClip(
             [&item](const TimelineTransition& candidate) {
                 return candidate.from_clip_id == item.from_id &&
                     candidate.to_clip_id == item.to_id &&
-                    candidate.kind == TransitionKind::CrossDissolve;
+                    isOverlapTransition(candidate.kind);
             });
         if (transition == track->transitions.end()) continue;
         const auto indexes = transitionClipIndexes(*track, *transition);
@@ -2072,6 +2074,16 @@ void TimelineModel::removeInvalidTransitions(TimelineTrack& track) noexcept {
         bool keep = validTransitionKind(transition.kind) &&
             indexes.has_value() && indexes->second == indexes->first + 1 &&
             transition.duration_frames > 0;
+        if (keep && transition.kind == TransitionKind::AudioCrossfade) {
+            const auto& from = track.clips[indexes->first];
+            const auto& to = track.clips[indexes->second];
+            keep = track.kind == TrackKind::Audio &&
+                from.kind == ClipKind::Audio && to.kind == ClipKind::Audio &&
+                !from.linked_clip_id.has_value() &&
+                !to.linked_clip_id.has_value();
+        } else if (keep) {
+            keep = track.kind == TrackKind::Video;
+        }
         if (keep) {
             keep = track.clips[indexes->first].kind != ClipKind::Text ||
                 track.clips[indexes->second].kind != ClipKind::Text;
@@ -2093,7 +2105,7 @@ void TimelineModel::removeInvalidTransitions(TimelineTrack& track) noexcept {
                     transition.duration_frames, maximum);
                 const auto from_end = from.timeline_start_frame +
                     from.timeline_duration_frames;
-                const auto target_start = transition.kind == TransitionKind::CrossDissolve
+                const auto target_start = isOverlapTransition(transition.kind)
                     ? from_end - transition.duration_frames
                     : from_end;
                 const auto delta = target_start - to.timeline_start_frame;
@@ -2107,7 +2119,7 @@ void TimelineModel::removeInvalidTransitions(TimelineTrack& track) noexcept {
 
         // If an invalidated Cross Dissolve left its endpoints overlapping,
         // move the later clip and its suffix to the first free frame.
-        if (!duplicate_pair && transition.kind == TransitionKind::CrossDissolve &&
+        if (!duplicate_pair && isOverlapTransition(transition.kind) &&
             indexes.has_value() &&
             indexes->second > indexes->first) {
             const auto to_index = indexes->second;
@@ -2283,14 +2295,19 @@ TransitionMutationResult TimelineModel::addTransition(
         to_clip_index >= track->clips.size()) {
         return TransitionMutationResult::InvalidIndex;
     }
-    if (track->kind != TrackKind::Video) {
-        return TransitionMutationResult::InvalidBoundary;
-    }
     if (!validTransitionKind(kind) || from_clip_index + 1 != to_clip_index) {
         return TransitionMutationResult::InvalidBoundary;
     }
     const auto& from = track->clips[from_clip_index];
     const auto& to = track->clips[to_clip_index];
+    const bool audio_crossfade = kind == TransitionKind::AudioCrossfade;
+    if ((audio_crossfade &&
+         (track->kind != TrackKind::Audio || from.kind != ClipKind::Audio ||
+          to.kind != ClipKind::Audio || from.linked_clip_id.has_value() ||
+          to.linked_clip_id.has_value())) ||
+        (!audio_crossfade && track->kind != TrackKind::Video)) {
+        return TransitionMutationResult::InvalidBoundary;
+    }
     if (from.kind == ClipKind::Text && to.kind == ClipKind::Text) {
         return TransitionMutationResult::InvalidBoundary;
     }
@@ -2311,15 +2328,31 @@ TransitionMutationResult TimelineModel::addTransition(
         return TransitionMutationResult::InvalidRange;
     }
     auto updated = *track;
-    if (kind == TransitionKind::CrossDissolve &&
+    if (isOverlapTransition(kind) &&
         !shiftTimelineSuffix(updated, to_clip_index, -duration_frames)) {
         return TransitionMutationResult::InvalidRange;
     }
     updated.transitions.push_back(TimelineTransition{
-        from.clip_id,
-        to.clip_id,
-        kind,
-        duration_frames});
+        from.clip_id, to.clip_id, kind, duration_frames});
+    if (audio_crossfade) {
+        for (std::size_t left = 0; left < updated.clips.size(); ++left) {
+            for (std::size_t right = left + 1; right < updated.clips.size(); ++right) {
+                if (!overlaps(updated.clips[left],
+                              updated.clips[right].timeline_start_frame,
+                              updated.clips[right].timeline_duration_frames)) continue;
+                const auto left_id = updated.clips[left].clip_id;
+                const auto right_id = updated.clips[right].clip_id;
+                const bool permitted_pair = left + 1 == right &&
+                    std::any_of(updated.transitions.begin(), updated.transitions.end(),
+                        [left_id, right_id](const TimelineTransition& transition) {
+                            return transition.kind == TransitionKind::AudioCrossfade &&
+                                transition.from_clip_id == left_id &&
+                                transition.to_clip_id == right_id;
+                        });
+                if (!permitted_pair) return TransitionMutationResult::InvalidRange;
+            }
+        }
+    }
     *track = std::move(updated);
     return TransitionMutationResult::Added;
 }
@@ -2336,6 +2369,18 @@ TransitionMutationResult TimelineModel::updateTransition(
         return TransitionMutationResult::InvalidIndex;
     }
     if (!validTransitionKind(kind) || from_clip_index + 1 != to_clip_index) {
+        return TransitionMutationResult::InvalidBoundary;
+    }
+    const auto& requested_from = track->clips[from_clip_index];
+    const auto& requested_to = track->clips[to_clip_index];
+    const bool audio_crossfade = kind == TransitionKind::AudioCrossfade;
+    if ((audio_crossfade &&
+         (track->kind != TrackKind::Audio ||
+          requested_from.kind != ClipKind::Audio ||
+          requested_to.kind != ClipKind::Audio ||
+          requested_from.linked_clip_id.has_value() ||
+          requested_to.linked_clip_id.has_value())) ||
+        (!audio_crossfade && track->kind != TrackKind::Video)) {
         return TransitionMutationResult::InvalidBoundary;
     }
     const auto from_id = track->clips[from_clip_index].clip_id;
@@ -2371,12 +2416,33 @@ TransitionMutationResult TimelineModel::updateTransition(
         return TransitionMutationResult::InvalidRange;
     }
     const auto from_end = from.timeline_start_frame + from.timeline_duration_frames;
-    const auto target_start = kind == TransitionKind::CrossDissolve
+    const auto target_start = isOverlapTransition(kind)
         ? from_end - duration_frames
         : from_end;
     if (!shiftTimelineSuffix(
             updated, to_clip_index, target_start - to.timeline_start_frame)) {
         return TransitionMutationResult::InvalidRange;
+    }
+    if (audio_crossfade) {
+        for (std::size_t left = 0; left < updated.clips.size(); ++left) {
+            for (std::size_t right = left + 1; right < updated.clips.size(); ++right) {
+                if (!overlaps(updated.clips[left],
+                             updated.clips[right].timeline_start_frame,
+                             updated.clips[right].timeline_duration_frames)) {
+                    continue;
+                }
+                const auto left_id = updated.clips[left].clip_id;
+                const auto right_id = updated.clips[right].clip_id;
+                const bool permitted_pair = left + 1 == right &&
+                    std::any_of(updated.transitions.begin(), updated.transitions.end(),
+                        [left_id, right_id](const TimelineTransition& transition) {
+                            return transition.kind == TransitionKind::AudioCrossfade &&
+                                transition.from_clip_id == left_id &&
+                                transition.to_clip_id == right_id;
+                        });
+                if (!permitted_pair) return TransitionMutationResult::InvalidRange;
+            }
+        }
     }
     updated_transition->kind = kind;
     updated_transition->duration_frames = duration_frames;
@@ -2404,7 +2470,7 @@ TransitionMutationResult TimelineModel::removeTransition(
         });
     if (found == track->transitions.end()) return TransitionMutationResult::NotFound;
     auto updated = *track;
-    if (found->kind == TransitionKind::CrossDissolve) {
+    if (isOverlapTransition(found->kind)) {
         const auto& from = updated.clips[from_clip_index];
         const auto& to = updated.clips[to_clip_index];
         if (from.timeline_start_frame < 0 || from.timeline_duration_frames <= 0 ||

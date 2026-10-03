@@ -1389,17 +1389,20 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                 selected_transition_->track_index == track_index &&
                 selected_transition_->from_clip_index == indexes->first &&
                 selected_transition_->to_clip_index == indexes->second;
-            const auto left = transition.kind == TransitionKind::FadeToBlack
-                ? boundary - transition_width
-                : boundary - transition_width;
+            const auto left = boundary - transition_width;
             const auto right = transition.kind == TransitionKind::FadeToBlack
                 ? boundary + transition_width
                 : boundary;
+            const auto transition_color =
+                transition.kind == TransitionKind::AudioCrossfade
+                    ? QColor("#70d7cd") : QColor("#d5a94b");
             painter.setPen(QPen(
-                selected ? QColor("#fff0a3") : QColor("#d5a94b"),
+                selected ? QColor("#fff0a3") : transition_color,
                 selected ? 2.0 : 1.0,
                 Qt::DashLine));
-            painter.setBrush(QColor(213, 169, 75, selected ? 90 : 45));
+            painter.setBrush(transition.kind == TransitionKind::AudioCrossfade
+                ? QColor(74, 185, 175, selected ? 105 : 55)
+                : QColor(213, 169, 75, selected ? 90 : 45));
             painter.drawRect(QRectF(
                 std::max(content.left(), left),
                 content.top() + 2,
@@ -1411,7 +1414,10 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                        std::max(0.0, std::min(content.right(), right) -
                            std::max(content.left(), left)), 18),
                 Qt::AlignCenter,
-                transition.kind == TransitionKind::FadeToBlack ? "Fade" : "Dissolve");
+                transition.kind == TransitionKind::AudioCrossfade
+                    ? "Crossfade"
+                    : transition.kind == TransitionKind::FadeToBlack
+                        ? "Fade" : "Dissolve");
         }
     }
 
@@ -1739,18 +1745,29 @@ void TimelineWidget::showTransitionMenu(
     }();
 
     QMenu menu(this);
-    auto* dissolve = menu.addAction("Add Cross Dissolve");
-    auto* fade = menu.addAction("Add Fade to Black");
+    QAction* dissolve = nullptr;
+    QAction* fade = nullptr;
+    QAction* crossfade = nullptr;
+    if (track.kind == TrackKind::Audio) {
+        crossfade = menu.addAction("Add Audio Crossfade");
+        crossfade->setEnabled(existing == nullptr &&
+            !from.linked_clip_id.has_value() && !to.linked_clip_id.has_value());
+    } else {
+        dissolve = menu.addAction("Add Cross Dissolve");
+        fade = menu.addAction("Add Fade to Black");
+        dissolve->setEnabled(existing == nullptr);
+        fade->setEnabled(existing == nullptr);
+    }
     menu.addSeparator();
     auto* remove = menu.addAction("Remove Transition");
-    dissolve->setEnabled(existing == nullptr);
-    fade->setEnabled(existing == nullptr);
     remove->setEnabled(existing != nullptr);
     const auto* chosen = menu.exec(global_position);
     if (chosen == dissolve) {
         emit transitionAddRequested(track.track_id, from.clip_id, to.clip_id, 0);
     } else if (chosen == fade) {
         emit transitionAddRequested(track.track_id, from.clip_id, to.clip_id, 1);
+    } else if (chosen == crossfade) {
+        emit transitionAddRequested(track.track_id, from.clip_id, to.clip_id, 2);
     } else if (chosen == remove) {
         emit transitionRemoveRequested(track.track_id, from.clip_id, to.clip_id);
     }

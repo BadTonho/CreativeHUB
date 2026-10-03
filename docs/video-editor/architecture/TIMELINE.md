@@ -429,21 +429,30 @@ D and continues normally. The incoming clip and every later clip on that track
 are shifted left by D frames, so the transition consumes sequence duration.
 The blend is linear. `Fade to Black` keeps the clips adjacent and fades the
 outgoing clip before the cut, is fully black at the cut, and fades the incoming
-clip in afterward. Audio remains a hard cut at the original cut, with no audio
-crossfade: outgoing audio continues through the visual dissolve and incoming
-audio starts at the original cut, synchronized to the incoming source frame
-shown at local frame D.
+clip in afterward. Embedded video audio remains a hard cut at the original
+cut: outgoing audio continues through the visual dissolve and incoming audio
+starts at the original cut, synchronized to the incoming source frame shown at
+local frame D.
+
+`Audio Crossfade` is available between adjacent, independent clips on the same
+Audio track. It overlaps the incoming clip by D frames, shifts it and later
+clips left by D, and applies equal-power cosine/sine gains in the shared
+Preview/export mixer. Existing clip and track gains, mutes, and clip volume
+automation multiply the transition curves. A video-linked companion must be
+unlinked before it can participate. Other clip overlaps on an Audio track
+remain rejected.
 
 The Timeline displays transition regions at the Cross Dissolve overlap and
 around Fade to Black cuts. A valid cut can be selected or opened with its
-context menu to add Cross Dissolve, add Fade to Black, or remove the
-transition. The Inspector edits the type and duration. Cross Dissolve and Fade
-to Black can also be dragged from the Effects dock onto a contiguous cut. The
+context menu to add Cross Dissolve or Fade to Black on video cuts, add Audio
+Crossfade on an eligible Audio cut, or remove the transition. The Inspector
+edits the type and duration. Cross Dissolve and Fade to Black can also be
+dragged from the Effects dock onto a contiguous video cut. The
 Timeline highlights the target cut within its hit area (at least eight
 pixels) and commits the transition on release. Updating or removing a Cross
 Dissolve ripples the incoming clip and later clips on that track atomically.
 Moving, splitting, trimming, or deleting an endpoint preserves valid
 transitions or removes them and repairs the affected overlap. Transitions are
-included in bounded Undo/Redo snapshots and persisted in `.csp` version 14.
+included in bounded Undo/Redo snapshots and persisted in `.csp` version 16.
 Projects through version 11 migrate existing Cross Dissolves to the overlap
 semantics on load; Fade to Black is unchanged.

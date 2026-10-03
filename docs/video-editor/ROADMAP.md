@@ -79,8 +79,8 @@ requirements, and implementation details still require validation below.
 - [x] Confirm the foundation scope and deferred workflows. Target a typical
   project up to 1080p and 15 minutes, with three video tracks, text, essential
   transitions, embedded video audio, and basic independent Audio tracks.
-  Advanced audio workflows, advanced grading/compositing, proxies, and plugins
-  remain later work.
+  Recording, track automation, advanced audio mixing, advanced grading,
+  compositing, proxies, and plugins remain later work.
 - [x] Set the maintainer's current PC as the reference test machine for the
   representative workload above: AMD Ryzen 5 3600, 32 GB RAM, NVIDIA GeForce
   GTX 1660 SUPER with 6 GB VRAM, and Windows 11. Record test conditions and
@@ -149,14 +149,15 @@ tasks.
 - [x] Multi-track timeline with absolute positions, gaps, cross-track overlap,
   clip selection and movement, split, trim, delete, and bounded Undo/Redo.
 - [x] Video and static raster-image clips, manual text clips, transforms,
-  linear keyframes, essential Cross Dissolve and Fade to Black transitions.
+  linear keyframes, essential Cross Dissolve and Fade to Black transitions,
+  and equal-power Audio Crossfades on independent Audio clips.
 - [x] Embedded video audio playback with per-clip and per-track gain and mute.
 - [x] Audio-only import and dedicated Audio tracks, including a default empty
   Audio 1 lane in new and reset projects, plus synchronized linked
   Audio companions for videos with sound; automatic compatible-track reuse or
   creation, microsecond source timing, paired editing/unlinking, v14 persistence
-  and legacy migration, mixed preview/export, and black frames through audio
-  tails.
+  and legacy migration, mixed preview/export, black frames through audio tails,
+  and v16 Audio Crossfade persistence.
 - [x] Qt OpenGL preview presentation with CPU fallback and grayscale preview.
 - [x] Versioned `.csp` persistence, transactional New/Open/Save/Save As,
   autosave, and recovery snapshots.
@@ -275,8 +276,11 @@ performance measurements, and Video Editor stability as the decision criteria.
   with a global Mono/Stereo view preference and separate channel peaks.
 - [x] Add clip-local volume automation with editable points, fade support,
   Undo/Redo, project persistence, and matching Preview/export mixing.
-- [ ] Expand audio editing with recording, audio-only file export, crossfades,
-  track automation, and advanced mixing as user workflows require.
+- [x] Add equal-power Audio Crossfades between adjacent independent clips on
+  the same Audio track, with Undo/Redo, version 16 persistence, and shared
+  Preview/export mixing.
+- [ ] Expand audio editing with recording, audio-only file export, track
+  automation, and advanced mixing as user workflows require.
 - [ ] Add masks and more advanced compositing.
 - [ ] Add proxies, incremental rendering, and broader cache workflows where
   measurements show a need.

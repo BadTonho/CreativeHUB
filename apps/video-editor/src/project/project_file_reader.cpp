@@ -79,7 +79,8 @@ media::MediaKind parseMediaKind(
 
 timeline::TransitionKind parseTransitionKind(
     const QJsonObject& object,
-    const std::filesystem::path& project_path) {
+    const std::filesystem::path& project_path,
+    int version) {
     const auto value = object.value("kind");
     if (!value.isString()) {
         throwJson(ProjectErrorCode::MissingField, project_path,
@@ -90,6 +91,10 @@ timeline::TransitionKind parseTransitionKind(
     }
     if (value.toString() == QLatin1String("fade_to_black")) {
         return timeline::TransitionKind::FadeToBlack;
+    }
+    if (version >= audio_crossfade_format_version &&
+        value.toString() == QLatin1String("audio_crossfade")) {
+        return timeline::TransitionKind::AudioCrossfade;
     }
     throwJson(ProjectErrorCode::InvalidValue, project_path,
               "Project JSON contains an unsupported transition kind.");
@@ -762,7 +767,8 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                     ProjectTransition transition;
                     transition.from_clip_index = static_cast<std::size_t>(from_clip);
                     transition.to_clip_index = static_cast<std::size_t>(to_clip);
-                    transition.kind = parseTransitionKind(transition_object, project_path);
+                    transition.kind = parseTransitionKind(
+                        transition_object, project_path, version);
                     transition.duration_frames = requiredInteger(
                         transition_object, "duration_frames", project_path);
                     track.transitions.push_back(std::move(transition));

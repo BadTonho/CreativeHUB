@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numbers>
 #include <optional>
+#include <utility>
 
 namespace media {
 namespace {
@@ -161,15 +163,41 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
         const auto local_frame_at_overlap = static_cast<double>(
             static_cast<long double>(overlap_start - *timeline_origin_sample) *
             timeline_frame_rate / sample_rate);
-        spans.push_back(TimelineAudioMixSpan{
-            clip.source_index,
-            source_sample_begin,
-            overlap_start - block_start_sample,
-            span_sample_count,
-            gain,
-            local_frame_at_overlap,
-            timeline_frame_rate / sample_rate,
-            clip.audio_gain_keyframes});
+        TimelineAudioMixSpan span;
+        span.source_index = clip.source_index;
+        span.source_start_sample = source_sample_begin;
+        span.destination_start_sample = overlap_start - block_start_sample;
+        span.sample_count = span_sample_count;
+        span.gain = gain;
+        span.local_frame_at_destination_start = local_frame_at_overlap;
+        span.frames_per_sample = timeline_frame_rate / sample_rate;
+        span.audio_gain_keyframes = clip.audio_gain_keyframes;
+        span.timeline_start_sample = block_start_sample;
+        if (clip.kind == timeline::ClipKind::Audio) {
+            for (const auto& transition : transitions) {
+                if (transition.kind != timeline::TransitionKind::AudioCrossfade ||
+                    transition.track_index != clip.track_index ||
+                    transition.duration_frames <= 0 ||
+                    (transition.from_clip_index != clip.clip_index &&
+                     transition.to_clip_index != clip.clip_index) ||
+                    transition.boundary_frame < transition.duration_frames) {
+                    continue;
+                }
+                const auto fade_start = sampleAtTimelineFrame(
+                    transition.boundary_frame - transition.duration_frames,
+                    timeline_frame_rate, sample_rate);
+                const auto fade_end = sampleAtTimelineFrame(
+                    transition.boundary_frame, timeline_frame_rate, sample_rate);
+                if (!fade_start.has_value() || !fade_end.has_value() ||
+                    *fade_end <= *fade_start) {
+                    continue;
+                }
+                span.transition_fades.push_back(TimelineAudioMixFade{
+                    *fade_start, *fade_end,
+                    transition.to_clip_index == clip.clip_index});
+            }
+        }
+        spans.push_back(std::move(span));
     }
     return spans;
 }
@@ -226,10 +254,31 @@ void accumulateTimelineAudioChunk(
                     span.destination_start_sample) * span.frames_per_sample;
             const auto envelope_gain = timeline::evaluateAudioGainEnvelope(
                 span.audio_gain_keyframes, local_frame);
+            const auto timeline_sample = span.timeline_start_sample +
+                destination_begin + index;
+            double transition_gain = 1.0;
+            for (const auto& fade : span.transition_fades) {
+                if (timeline_sample < fade.transition_start_sample ||
+                    timeline_sample >= fade.transition_end_sample) {
+                    continue;
+                }
+                const auto sample_duration = fade.transition_end_sample -
+                    fade.transition_start_sample;
+                if (sample_duration <= 0) continue;
+                const auto fraction = std::clamp(
+                    static_cast<double>(timeline_sample -
+                        fade.transition_start_sample) /
+                        static_cast<double>(sample_duration),
+                    0.0, 1.0);
+                const auto angle = fraction * std::numbers::pi / 2.0;
+                transition_gain *= fade.incoming
+                    ? std::sin(angle)
+                    : std::cos(angle);
+            }
             mixed[destination_offset + static_cast<std::size_t>(channel)] +=
                 static_cast<float>(chunk.samples[source_offset +
                     static_cast<std::size_t>(channel)]) / 32768.0F *
-                static_cast<float>(span.gain * envelope_gain);
+                static_cast<float>(span.gain * envelope_gain * transition_gain);
         }
     }
 }

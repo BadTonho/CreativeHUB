@@ -784,7 +784,9 @@ void PlaybackWorker::setComposition(
                     transition.track_index,
                     transition.to_clip_index,
                     transition.boundary_frame,
-                    transition.kind});
+                    transition.kind,
+                    transition.from_clip_index,
+                    transition.duration_frames});
         }
 
         const bool has_composition_range =

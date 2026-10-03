@@ -43,8 +43,9 @@ it onto a Video track creates a new `Audio N` track at the end of the track
 list. Adding video with an audio stream creates a linked Audio companion on a
 compatible Audio track, or appends a new `Audio N` track when needed. Video
 without audio does not create an Audio track. Audio clips cannot be placed on
-Video tracks, and visual clips cannot be placed on Audio tracks. Clips cannot
-overlap within one Audio track; clips on different tracks can overlap and are
+Video tracks, and visual clips cannot be placed on Audio tracks. Audio clips
+can overlap within one track only as the two endpoints of an Audio Crossfade;
+other overlaps remain rejected. Clips on different tracks can overlap and are
 mixed together.
 
 Clip and track gain use a linear range from `0.0` to `2.0`; either mute flag
@@ -58,6 +59,8 @@ one Undo/Redo edit per gesture. Splits and trims preserve the evaluated curve
 at new boundaries. The shared sample mixer applies the same curve in Preview
 and export. Monitoring volume affects Preview only. Audio edits are persisted
 in `.csp` version 15; versions 1 through 14 load with a constant 100% envelope.
+Audio Crossfades are persisted in version 16; versions 1 through 15 load
+without inferred transitions.
 Opening versions 1 through 13 creates companions for online video sources
 with audio; offline videos are marked pending until restored. Opening alone
 keeps the project clean, and repeated open/save cycles do not duplicate
@@ -77,9 +80,16 @@ left/right channel peaks. The global Mono/Stereo preference lives in
 Mono mode combines each bucket using the larger channel peak. Stereo mode draws
 left above right for sources with multiple channels. A mono source remains a
 single centered waveform in either display mode. Per-clip volume automation is
-implemented; recording, track automation, audio crossfades, advanced mixing,
-and audio-only file export remain future work. A
-Cross Dissolve changes video timing but keeps audio as a hard cut at the
-original cut: outgoing audio continues through the visual overlap, and incoming
-audio starts at the cut using the source position corresponding to incoming
-Timeline frame D. Fade to Black also leaves the audio cut at the junction.
+implemented. Independent Audio clips on the same Audio track can use an Audio
+Crossfade at an adjacent cut. It overlaps the incoming clip by D Timeline
+frames and uses equal-power cosine/sine gains per sample in the shared Preview
+and export mixer. The transition gain multiplies track gain, clip gain, mute,
+and the clip's existing volume envelope. Clips linked to video must be
+unlinked before adding the transition. Recording, track automation, advanced
+mixing, and audio-only file export remain future work.
+
+A visual Cross Dissolve changes video timing but keeps embedded video audio as
+a hard cut at the original cut: outgoing audio continues through the visual
+overlap, and incoming audio starts at the cut using the source position
+corresponding to incoming Timeline frame D. Fade to Black also leaves embedded
+video audio at the junction cut.

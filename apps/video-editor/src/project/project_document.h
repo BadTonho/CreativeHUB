@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 15;
+inline constexpr int current_format_version = 16;
+inline constexpr int audio_crossfade_format_version = 16;
 inline constexpr int audio_gain_envelope_format_version = 15;
 inline constexpr int audio_companion_format_version = 14;
 inline constexpr int audio_tracks_format_version = 13;

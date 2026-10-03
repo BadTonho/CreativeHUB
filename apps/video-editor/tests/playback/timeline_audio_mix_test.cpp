@@ -205,6 +205,66 @@ void testAudioEnvelopeIsAppliedPerSample() {
             "The mixer did not interpolate audio gain for individual output samples.");
 }
 
+void testAudioCrossfadeUsesEqualPowerAndExistingGainControls() {
+    media::TimelineAudioMixClip outgoing{
+        0, 3, 0, timeline::ClipKind::Audio, true,
+        0, 60, 0, 0.0, 0.5, 0.5, false, false,
+        0, 2'000'000};
+    media::TimelineAudioMixClip incoming{
+        1, 3, 1, timeline::ClipKind::Audio, true,
+        45, 60, 0, 0.0, 0.5, 0.5, false, false,
+        0, 2'000'000};
+    outgoing.audio_gain_keyframes = {{0, 2.0}, {60, 2.0}};
+    incoming.audio_gain_keyframes = {{0, 2.0}, {60, 2.0}};
+    const std::vector<media::TimelineAudioMixClip> clips{outgoing, incoming};
+    const media::TimelineAudioMixTransition crossfade{
+        3, 1, 60, timeline::TransitionKind::AudioCrossfade, 0, 15};
+    const auto spans = media::planTimelineAudioMix(
+        clips, std::span<const media::TimelineAudioMixTransition>(&crossfade, 1),
+        30.0, 60, 90, 30);
+    require(spans.size() == 2 && spans[0].transition_fades.size() == 1 &&
+                spans[1].transition_fades.size() == 1 &&
+                !spans[0].transition_fades.front().incoming &&
+                spans[1].transition_fades.front().incoming,
+            "The Audio Crossfade did not attach outgoing and incoming ramps to its clips.");
+
+    const auto outgoing_chunk = constantChunk(
+        spans[0].source_start_sample, 16384, 32);
+    const auto incoming_chunk = constantChunk(
+        spans[1].source_start_sample, 16384, 32);
+    std::vector<float> outgoing_mix(60, 0.0F);
+    std::vector<float> incoming_mix(60, 0.0F);
+    std::vector<float> correlated_mix(60, 0.0F);
+    media::accumulateTimelineAudioChunk(
+        spans[0], outgoing_chunk, outgoing_mix, 2);
+    media::accumulateTimelineAudioChunk(
+        spans[1], incoming_chunk, incoming_mix, 2);
+    media::accumulateTimelineAudioChunk(
+        spans[0], outgoing_chunk, correlated_mix, 2);
+    media::accumulateTimelineAudioChunk(
+        spans[1], incoming_chunk, correlated_mix, 2);
+    const auto middle = std::size_t{15} * 2U;
+    const auto expected_component = std::sqrt(0.5F) * 0.25F;
+    require(std::abs(outgoing_mix[middle] - expected_component) < 1.0e-5F &&
+                std::abs(incoming_mix[middle] - expected_component) < 1.0e-5F &&
+                correlated_mix[middle] > outgoing_mix[middle] + incoming_mix[middle] - 1.0e-6F,
+            "The per-sample equal-power curve did not multiply envelope and clip/track gain.");
+    require(std::abs(outgoing_mix[0] - 0.25F) < 1.0e-5F &&
+                std::abs(incoming_mix[0]) < 1.0e-6F &&
+                incoming_mix[(29U * 2U)] > incoming_mix[middle],
+            "The equal-power crossfade did not start/end on the correct endpoints.");
+
+    auto muted_outgoing = outgoing;
+    muted_outgoing.clip_muted = true;
+    const std::vector<media::TimelineAudioMixClip> muted_clips{
+        muted_outgoing, incoming};
+    const auto muted_spans = media::planTimelineAudioMix(
+        muted_clips, std::span<const media::TimelineAudioMixTransition>(&crossfade, 1),
+        30.0, 60, 90, 30);
+    require(muted_spans.size() == 1 && muted_spans.front().source_index == 1,
+            "Muting one crossfade endpoint incorrectly muted the other endpoint.");
+}
+
 } // namespace
 
 int main() {
@@ -217,6 +277,7 @@ int main() {
         testNonVideoAndMissingAudioAreExcluded();
         testExternalizedVideoAudioIsMixedOnlyFromItsCompanion();
         testAudioEnvelopeIsAppliedPerSample();
+        testAudioCrossfadeUsesEqualPowerAndExistingGainControls();
         std::cout << "timeline audio mix tests passed\n";
         return 0;
     } catch (const std::exception& error) {

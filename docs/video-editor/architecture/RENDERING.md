@@ -512,9 +512,10 @@ continues from there. Adding, resizing, or removing the transition ripples the
 incoming clip and the later clips on its track so the overlap remains valid.
 A Fade to Black keeps the clips adjacent and applies a linear outgoing fade
 before the junction, a black junction frame, and a linear incoming fade
-afterward. Both transition durations use Timeline frames. Audio remains a hard
-cut at the original Cross Dissolve cut; incoming audio starts at the source
-position corresponding to local frame D.
+afterward. Both video transition durations use Timeline frames. Embedded video
+audio remains a hard cut at the original Cross Dissolve cut; incoming audio
+starts at the source position corresponding to local frame D. Independent Audio
+tracks apply Audio Crossfade gains in the shared mixer.
 
 The internal `playback_transition_plan` adjusts lightweight requests for the
 visible composition sessions at each global frame. It selects the local source
@@ -526,8 +527,8 @@ the plan.
 Transition failures preserve the last valid preview and use the existing
 `playback/compose` diagnostic path with track, clip, global/local frame, path,
 and available decoder error information. Audio remains on the normal cut
-path, and advanced easing, image effects, and audio crossfades are future
-work.
+path, and advanced easing and image effects are future work. Audio Crossfades
+are applied by the shared sample mixer independently of visual composition.
 
 ## Offline export
 

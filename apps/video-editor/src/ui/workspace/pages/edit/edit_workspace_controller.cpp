@@ -20,6 +20,7 @@
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
+#include <QStandardItemModel>
 #include <QStyle>
 #include <QTimer>
 #include <QInputDialog>
@@ -1087,10 +1088,20 @@ void EditWorkspaceController::updateInspector() {
             to.timeline_duration_frames);
         if (ui_.transition_type != nullptr) {
             const QSignalBlocker blocker(ui_.transition_type);
-            ui_.transition_type->setCurrentIndex(
-                selected_transition->kind == timeline::TransitionKind::FadeToBlack
-                    ? 1
-                    : 0);
+            const bool audio_track = track.kind == timeline::TrackKind::Audio;
+            if (auto* model = qobject_cast<QStandardItemModel*>(
+                    ui_.transition_type->model())) {
+                for (int index = 0; index < ui_.transition_type->count(); ++index) {
+                    if (auto* item = model->item(index); item != nullptr) {
+                        item->setEnabled(audio_track ? index == 2 : index != 2);
+                    }
+                }
+            }
+            const auto selected_kind = selected_transition->kind;
+            const auto selected_index =
+                selected_kind == timeline::TransitionKind::AudioCrossfade ? 2
+                : selected_kind == timeline::TransitionKind::FadeToBlack ? 1 : 0;
+            ui_.transition_type->setCurrentIndex(selected_index);
         }
         if (ui_.transition_duration != nullptr) {
             const QSignalBlocker blocker(ui_.transition_duration);
@@ -1389,15 +1400,33 @@ void EditWorkspaceController::handleTimelineTransitionAdd(
     timeline::ClipId from_clip_id,
     timeline::ClipId to_clip_id,
     qint64 kind) {
-    if (kind < 0 || kind > 1) return;
+    if (kind < 0 || kind > 2) return;
     try {
+        std::int64_t duration_frames = 15;
+        if (kind == 2) {
+            const auto track_index = timeline_model_.locateTrack(track_id);
+            const auto from = timeline_model_.locateClip(from_clip_id);
+            const auto to = timeline_model_.locateClip(to_clip_id);
+            if (!track_index.has_value() || !from.has_value() || !to.has_value() ||
+                from->track_index != *track_index || to->track_index != *track_index) {
+                return;
+            }
+            const auto& track = timeline_model_.tracks()[*track_index];
+            if (track.kind != timeline::TrackKind::Audio) return;
+            duration_frames = std::min<std::int64_t>(
+                duration_frames,
+                std::min(track.clips[from->clip_index].timeline_duration_frames,
+                         track.clips[to->clip_index].timeline_duration_frames));
+            if (duration_frames <= 0) return;
+        }
         const auto result = execute(application::AddTransitionCommand{
             track_id,
             from_clip_id,
             to_clip_id,
             kind == 0 ? timeline::TransitionKind::CrossDissolve
-                      : timeline::TransitionKind::FadeToBlack,
-            15});
+                : kind == 1 ? timeline::TransitionKind::FadeToBlack
+                            : timeline::TransitionKind::AudioCrossfade,
+            duration_frames});
         if (!result.changed()) {
             emit statusMessageRequested(
                 result.status == application::EditStatus::NoChange
@@ -1467,9 +1496,11 @@ void EditWorkspaceController::applyTransitionSettings() {
         return;
     }
     try {
-        const auto kind = ui_.transition_type->currentData().toInt() == 1
-            ? timeline::TransitionKind::FadeToBlack
-            : timeline::TransitionKind::CrossDissolve;
+        const auto kind = ui_.transition_type->currentData().toInt() == 2
+            ? timeline::TransitionKind::AudioCrossfade
+            : ui_.transition_type->currentData().toInt() == 1
+                ? timeline::TransitionKind::FadeToBlack
+                : timeline::TransitionKind::CrossDissolve;
         const auto result = execute(application::UpdateTransitionCommand{
             selection.track_id,
             selection.from_clip_id,

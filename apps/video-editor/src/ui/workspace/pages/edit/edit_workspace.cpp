@@ -294,6 +294,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     ui_.transition_type = new QComboBox(ui_.transition_controls);
     ui_.transition_type->addItem("Cross Dissolve", 0);
     ui_.transition_type->addItem("Fade to Black", 1);
+    ui_.transition_type->addItem("Audio Crossfade", 2);
     ui_.transition_duration = new QSpinBox(ui_.transition_controls);
     ui_.transition_duration->setRange(1, 1);
     ui_.transition_duration->setSuffix(" frames");

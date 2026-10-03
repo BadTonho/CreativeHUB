@@ -20,7 +20,7 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 15, including migration from
+- versioned `.csp` persistence through version 16, including migration from
   versions 1 through 13, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio media kinds, typed tracks,
   per-project timeline zoom,
@@ -30,7 +30,7 @@ The Video Editor currently includes:
   audio-only tracks, synchronized mixing, per-clip and per-track gain/mute,
   legacy-project migration, and the video fallback path;
 - basic layers, normalized 2D transformations, linear keyframes, worker-side
-  composition, and current version 15 project persistence;
+  composition, and current version 16 project persistence;
 - manual text clips and basic captions, including worker-side QImage/QPainter
   rasterization, essential text styling, transforms/keyframes, and version 4
   project persistence with version 3 migration;
@@ -93,8 +93,8 @@ The Video Editor currently includes:
 
 ## Deferred beyond the foundation
 
-- recording, track-level automation, audio crossfades, audio-only file export,
-  and advanced audio effects;
+- recording, track-level automation, advanced audio effects, and audio-only
+  file export;
 - image sequences, SRT import, automatic captions, rich text, and animated text
   content;
 - advanced compositing, GPU effects/decoding/encoding, easing, masks, 3D layers, and

@@ -40,6 +40,7 @@ bool validTransitionKind(timeline::TransitionKind kind) {
     switch (kind) {
     case timeline::TransitionKind::CrossDissolve:
     case timeline::TransitionKind::FadeToBlack:
+    case timeline::TransitionKind::AudioCrossfade:
         return true;
     }
     return false;
@@ -222,10 +223,6 @@ void validateDocument(const ProjectDocument& document,
         if (!validAudioGain(track.audio_gain)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid track audio gain.");
         }
-        if (track.kind == timeline::TrackKind::Audio && !track.transitions.empty()) {
-            throwJson(ProjectErrorCode::InvalidTimeline, project_path,
-                      "Project JSON contains transitions on an audio track.");
-        }
         for (const auto& clip : track.clips) {
             if (clip.clip_id == 0 ||
                 clip.clip_id > static_cast<timeline::ClipId>(
@@ -269,8 +266,11 @@ void validateDocument(const ProjectDocument& document,
         }
         std::vector<std::pair<std::size_t, std::size_t>> transition_pairs;
         for (const auto& transition : track.transitions) {
+            const bool audio_crossfade =
+                transition.kind == timeline::TransitionKind::AudioCrossfade;
             if (!validTransitionKind(transition.kind) ||
-                track.kind == timeline::TrackKind::Audio ||
+                (audio_crossfade !=
+                 (track.kind == timeline::TrackKind::Audio)) ||
                 transition.from_clip_index >= track.clips.size() ||
                 transition.to_clip_index >= track.clips.size()) {
                 throwJson(ProjectErrorCode::InvalidTimeline, project_path,
@@ -282,10 +282,17 @@ void validateDocument(const ProjectDocument& document,
             }
             const auto& from = track.clips[transition.from_clip_index];
             const auto& to = track.clips[transition.to_clip_index];
-            if (from.kind == timeline::ClipKind::Text &&
-                to.kind == timeline::ClipKind::Text) {
+            if ((audio_crossfade &&
+                 (from.kind != timeline::ClipKind::Audio ||
+                  to.kind != timeline::ClipKind::Audio ||
+                  from.linked_clip_id.has_value() || to.linked_clip_id.has_value())) ||
+                (!audio_crossfade &&
+                 (from.kind == timeline::ClipKind::Audio ||
+                  to.kind == timeline::ClipKind::Audio)) ||
+                (from.kind == timeline::ClipKind::Text &&
+                 to.kind == timeline::ClipKind::Text)) {
                 throwJson(ProjectErrorCode::InvalidTimeline, project_path,
-                          "Project JSON contains a transition between two text clips on one track.");
+                          "Project JSON contains a transition with incompatible clip types or linked audio.");
             }
             const auto maximum = std::min(from.duration_frames, to.duration_frames);
             if (transition.duration_frames <= 0 ||
@@ -295,7 +302,7 @@ void validateDocument(const ProjectDocument& document,
             }
             const auto from_end = from.timeline_start_frame + from.duration_frames;
             const auto expected_to_start =
-                transition.kind == timeline::TransitionKind::CrossDissolve
+                timeline::isOverlapTransition(transition.kind)
                 ? from_end - transition.duration_frames
                 : from_end;
             if (to.timeline_start_frame != expected_to_start) {
@@ -320,11 +327,21 @@ void validateDocument(const ProjectDocument& document,
                 const auto second_end = second.timeline_start_frame + second.duration_frames;
                 const bool overlap = second.timeline_start_frame < first_end &&
                     first.timeline_start_frame < second_end;
+                const bool audio_crossfade_pair = first.kind == timeline::ClipKind::Audio &&
+                    second.kind == timeline::ClipKind::Audio &&
+                    std::any_of(track.transitions.begin(), track.transitions.end(),
+                        [left, right](const ProjectTransition& transition) {
+                            return transition.kind ==
+                                    timeline::TransitionKind::AudioCrossfade &&
+                                transition.from_clip_index == left &&
+                                transition.to_clip_index == right;
+                        });
                 if (overlap &&
                     ((first.kind == timeline::ClipKind::Text &&
                       second.kind == timeline::ClipKind::Text) ||
                      (first.kind == timeline::ClipKind::Audio &&
-                      second.kind == timeline::ClipKind::Audio))) {
+                      second.kind == timeline::ClipKind::Audio &&
+                      !audio_crossfade_pair))) {
                     throwJson(ProjectErrorCode::InvalidTimeline, project_path,
                               "Project JSON contains overlapping clips that are not allowed on one track.");
                 }

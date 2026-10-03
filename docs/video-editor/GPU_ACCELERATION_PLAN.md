@@ -80,8 +80,9 @@ The existing preference controls this automatically; no new setting was added.
   keyframes, frame stepping, seeking, loop/end behavior, and isolated media
   preview. GPU work must not move timing decisions into the viewer.
 - Preserve moving Cross Dissolve overlaps, opacity progression, held-frame
-  behavior where used, and Fade to Black. Keep the existing audio hard cut,
-  clip/track mixing, gains/mutes, silence in gaps, and audio-clock priority.
+  behavior where used, and Fade to Black. Keep the embedded-video audio hard
+  cut at visual Cross Dissolves, independent Audio Crossfade gains, clip/track
+  mixing, gains/mutes, silence in gaps, and audio-clock priority.
 - Preserve Full/Half/Quarter preview quality and its cache invalidation rules.
   Preview quality must not change export dimensions or project data.
 - Retain generation checks, cancellation, latest-frame delivery, and bounded

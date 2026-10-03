@@ -594,6 +594,68 @@ int main(int argc, char* argv[]) {
             QByteArrayLiteral("transitions.fade_to_black"),
             false);
 
+        auto first_audio_clip = makeClip("first-audio.wav", 0, 12000, "First audio");
+        first_audio_clip.kind = timeline::ClipKind::Audio;
+        first_audio_clip.frame_rate.reset();
+        first_audio_clip.frame_count.reset();
+        auto second_audio_clip = makeClip(
+            "second-audio.wav", 12000, 12000, "Second audio");
+        second_audio_clip.kind = timeline::ClipKind::Audio;
+        second_audio_clip.frame_rate.reset();
+        second_audio_clip.frame_count.reset();
+        timeline::TimelineTrack adjacent_audio_track{
+            9, "Audio 1", 1.0, false,
+            {first_audio_clip, second_audio_clip}};
+        adjacent_audio_track.kind = timeline::TrackKind::Audio;
+        timeline::TimelineWidget audio_transition_widget;
+        audio_transition_widget.resize(1000, 200);
+        audio_transition_widget.setTracks({adjacent_audio_track});
+        audio_transition_widget.setTimelineViewportWidth(1000);
+        audio_transition_widget.show();
+        application.processEvents();
+        qint64 audio_transition_count = 0;
+        qint64 audio_transition_kind = -1;
+        QObject::connect(
+            &audio_transition_widget,
+            &timeline::TimelineWidget::transitionAddRequested,
+            [&audio_transition_count, &audio_transition_kind,
+             &first_audio_clip, &second_audio_clip](
+                qint64 track, qint64 from, qint64 to, qint64 kind) {
+                if (track == 9 && from == first_audio_clip.clip_id &&
+                    to == second_audio_clip.clip_id) {
+                    ++audio_transition_count;
+                    audio_transition_kind = kind;
+                }
+            });
+        QTimer::singleShot(0, [&application]() {
+            for (auto* window : application.topLevelWidgets()) {
+                if (auto* menu = qobject_cast<QMenu*>(window)) {
+                    for (auto* action : menu->actions()) {
+                        if (action->text() == "Add Audio Crossfade") {
+                            const auto position = menu->actionGeometry(action).center();
+                            sendMouse(*menu, QEvent::MouseButtonPress,
+                                      position, Qt::LeftButton);
+                            sendMouse(*menu, QEvent::MouseButtonRelease,
+                                      position, Qt::NoButton);
+                            break;
+                        }
+                    }
+                    menu->close();
+                }
+            }
+        });
+        const QPoint audio_cut_position(
+            static_cast<int>(audio_transition_widget.contentXForFrame(12000) + 2),
+            60);
+        QContextMenuEvent audio_cut_context(
+            QContextMenuEvent::Mouse,
+            audio_cut_position,
+            audio_transition_widget.mapToGlobal(audio_cut_position),
+            Qt::NoModifier);
+        QApplication::sendEvent(&audio_transition_widget, &audio_cut_context);
+        require(audio_transition_count == 1 && audio_transition_kind == 2,
+                "The Audio track context menu did not add an Audio Crossfade at its cut.");
+
         bool media_drop_received = false;
         QString media_drop_path;
         qint64 media_drop_track = -1;

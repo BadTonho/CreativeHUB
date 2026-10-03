@@ -492,7 +492,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 15 format. Linked video-audio clips can be
+the current `.csp` version 16 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Image media context menus can open a
 shared Image Editor document, and image clip context menus can open a
@@ -506,8 +506,10 @@ keyboard shortcut is introduced for text creation or editing.
 
 ## Transition editing
 
-The Timeline marks valid clip cuts with a transition region. A cut context
-menu provides Add Cross Dissolve, Add Fade to Black, and Remove Transition.
+The Timeline marks valid clip cuts with a transition region. Video cut context
+menus provide Add Cross Dissolve and Add Fade to Black. An eligible Audio cut
+provides Add Audio Crossfade when both endpoint clips are independent. All
+transition menus provide Remove Transition when one exists.
 Selecting a transition switches the Inspector to type and duration controls;
 one edit creates a single Timeline history entry. The default duration is 15
 frames and it is limited by the endpoint clips.
@@ -515,8 +517,11 @@ frames and it is limited by the endpoint clips.
 Cross Dissolve occupies the final D frames before the original cut. Adding,
 resizing, or removing it ripples the incoming clip and later clips on that
 track so both clips move during the overlap. Fade to Black leaves clip
-positions unchanged. Both are evaluated by the playback worker while the UI
-presents the composed frame. Playback pauses while a transition is created,
+positions unchanged. Audio Crossfade overlaps the incoming clip by D frames
+and ripples the rest of the Audio track; its equal-power gain is evaluated per
+sample by the shared mixer used in Preview and export. Both video transitions
+are evaluated by the playback worker while the UI presents the composed frame.
+Playback pauses while a transition is created,
 edited, or removed, then the current composition is requested again. Undo/Redo
 restores clip positions, transition data, selection, and playhead while
 remaining paused. Invalid cuts and gaps are intentional no-op outcomes and

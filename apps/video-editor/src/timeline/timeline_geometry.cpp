@@ -241,7 +241,7 @@ std::optional<std::pair<std::size_t, std::size_t>> TimelineHitTester::transition
         const auto transition_width = content.width() *
             static_cast<double>(transition->duration_frames) /
             static_cast<double>(duration);
-        if (transition->kind == TransitionKind::CrossDissolve) {
+        if (isOverlapTransition(transition->kind)) {
             if (to.timeline_start_frame != boundary_frame -
                     transition->duration_frames) {
                 continue;

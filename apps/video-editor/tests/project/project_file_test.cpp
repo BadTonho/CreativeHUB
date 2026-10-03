@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -176,7 +177,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 15") != std::string::npos &&
+        require(saved_json.find("\"version\": 16") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
@@ -187,7 +188,7 @@ int main(int argc, char** argv) {
                     saved_json.find("cross_dissolve") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
                     saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline frame timing and linked image references were not written to the version 15 project.");
+                "Timeline frame timing and linked image references were not written to the version 16 project.");
         require(saved_json.find("\"kind\": \"image\"") != std::string::npos &&
                     loaded.media.back().kind == media::MediaKind::Image &&
                     loaded.timeline_tracks.front().clips.back().kind == timeline::ClipKind::Image,
@@ -215,6 +216,14 @@ int main(int argc, char** argv) {
         audio_clip.audio_muted = true;
         audio_clip.audio_gain_keyframes = {{0, 0.0}, {45, 1.5}};
         audio_track.clips.push_back(audio_clip);
+        auto incoming_audio_clip = audio_clip;
+        incoming_audio_clip.clip_id = 2;
+        incoming_audio_clip.timeline_start_frame = 44;
+        incoming_audio_clip.source_start_time_us = 1'500'000;
+        incoming_audio_clip.source_duration_time_us = 1'500'000;
+        audio_track.clips.push_back(incoming_audio_clip);
+        audio_track.transitions.push_back(project::ProjectTransition{
+            0, 1, timeline::TransitionKind::AudioCrossfade, 15});
         audio_document.timeline_tracks.push_back(audio_track);
         project::save(audio_project_path, audio_document);
         std::ifstream audio_file(audio_project_path, std::ios::binary);
@@ -227,7 +236,7 @@ int main(int argc, char** argv) {
                     audio_json.find("\"audio_gain_keyframes\"") != std::string::npos &&
                     audio_json.find("\"source_start_frame\"") == std::string::npos &&
                     audio_json.find("\"source_duration_frames\"") == std::string::npos,
-                "Version 15 did not serialize the Audio clip envelope and microsecond source timing.");
+                "Version 16 did not serialize the Audio crossfade, envelope, and microsecond source timing.");
         const auto reopened_audio = project::load(audio_project_path);
         require(reopened_audio == audio_document &&
                     reopened_audio.timeline_tracks.front().kind ==
@@ -235,11 +244,43 @@ int main(int argc, char** argv) {
                     reopened_audio.timeline_tracks.front().clips.front()
                             .source_start_time_us == 275000 &&
                     reopened_audio.timeline_tracks.front().clips.front()
-                            .source_duration_time_us == 1500000,
-                "Version 15 did not preserve Audio track types, envelope, and source offsets.");
+                            .source_duration_time_us == 1500000 &&
+                reopened_audio.timeline_tracks.front().transitions.size() == 1 &&
+                reopened_audio.timeline_tracks.front().transitions.front().kind ==
+                    timeline::TransitionKind::AudioCrossfade &&
+                reopened_audio.timeline_tracks.front().transitions.front().duration_frames == 15,
+                "Version 16 did not preserve Audio track types, envelopes, source offsets, and crossfades.");
+        auto version_15_audio_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(audio_json)).object();
+        version_15_audio_json.insert("version", 15);
+        auto version_15_timeline = version_15_audio_json.value("timeline").toObject();
+        auto version_15_tracks = version_15_timeline.value("tracks").toArray();
+        auto version_15_track = version_15_tracks.at(0).toObject();
+        version_15_track.insert("clips", QJsonArray{
+            version_15_track.value("clips").toArray().at(0)});
+        version_15_track.insert("transitions", QJsonArray{});
+        version_15_tracks.replace(0, version_15_track);
+        version_15_timeline.insert("tracks", version_15_tracks);
+        version_15_audio_json.insert("timeline", version_15_timeline);
+        writeText(audio_project_path,
+                  QJsonDocument(version_15_audio_json).toJson().toStdString());
+        const auto reopened_version_15 = project::load(audio_project_path);
+        require(reopened_version_15.timeline_tracks.front().transitions.empty() &&
+                    reopened_version_15.timeline_tracks.front().clips.front()
+                        .audio_gain_keyframes ==
+                        std::vector<timeline::AudioGainKeyframe>{{0, 0.0}, {45, 1.5}},
+                "A version 15 project inferred an Audio Crossfade or lost its volume envelope.");
         auto version_14_audio_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(audio_json)).object();
         version_14_audio_json.insert("version", 14);
+        auto version_14_timeline = version_14_audio_json.value("timeline").toObject();
+        auto version_14_tracks = version_14_timeline.value("tracks").toArray();
+        auto version_14_track = version_14_tracks.at(0).toObject();
+        version_14_track.insert("clips", QJsonArray{version_14_track.value("clips").toArray().at(0)});
+        version_14_track.insert("transitions", QJsonArray{});
+        version_14_tracks.replace(0, version_14_track);
+        version_14_timeline.insert("tracks", version_14_tracks);
+        version_14_audio_json.insert("timeline", version_14_timeline);
         writeText(audio_project_path,
                   QJsonDocument(version_14_audio_json).toJson().toStdString());
         const auto reopened_version_14 = project::load(audio_project_path);
@@ -258,7 +299,9 @@ int main(int argc, char** argv) {
         version_13_clip.remove("audio_companion_pending");
         version_13_clip.remove("linked_clip_id");
         version_13_clips.replace(0, version_13_clip);
+        version_13_clips = QJsonArray{version_13_clip};
         version_13_track.insert("clips", version_13_clips);
+        version_13_track.insert("transitions", QJsonArray{});
         version_13_tracks.replace(0, version_13_track);
         version_13_timeline.insert("tracks", version_13_tracks);
         version_13_audio_json.insert("timeline", version_13_timeline);
@@ -279,7 +322,7 @@ int main(int argc, char** argv) {
                 error.code() == project::ProjectErrorCode::InvalidTimeline;
         }
         require(rejected_mismatched_audio,
-                "Version 15 accepted an Audio clip on a Video track.");
+                "Version 16 accepted an Audio clip on a Video track.");
         auto invalid_visual_envelope = original;
         invalid_visual_envelope.timeline_tracks.front().clips.front()
             .audio_gain_keyframes = {{0, 0.5}};
