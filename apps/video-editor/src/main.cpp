@@ -54,7 +54,7 @@ int main(int argc, char* argv[]) {
         "application",
         "startup",
         "Video Editor started.",
-        {{"version", "Beta 0.1.3"}, {"log_path", pathToUtf8(logger.log_path())}});
+        {{"version", "Beta 0.1.4"}, {"log_path", pathToUtf8(logger.log_path())}});
 
     try {
         QSurfaceFormat format;
@@ -66,7 +66,7 @@ int main(int argc, char* argv[]) {
         QApplication application(argc, argv);
         application.setWindowIcon(QIcon(QStringLiteral(":/app-icon/icon.png")));
         QApplication::setApplicationName("Video Editor");
-        QApplication::setApplicationVersion("Beta 0.1.3");
+        QApplication::setApplicationVersion("Beta 0.1.4");
 
         MainWindow window;
         window.show();
