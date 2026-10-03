@@ -83,6 +83,10 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/media/audio_frame.h
     src/media/audio_playback.cpp
     src/media/audio_playback.h
+    src/media/audio_waveform.cpp
+    src/media/audio_waveform.h
+    src/media/audio_waveform_cache.cpp
+    src/media/audio_waveform_cache.h
     src/media/timeline_audio_mix.cpp
     src/media/timeline_audio_mix.h
     src/media/media_library.h

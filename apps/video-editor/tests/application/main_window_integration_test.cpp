@@ -34,7 +34,10 @@
 #include <QTimer>
 #include <QMessageBox>
 #include <QCheckBox>
+#include <QRunnable>
 
+#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -53,6 +56,46 @@ std::filesystem::path uniqueTestDirectory() {
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
     return std::filesystem::temp_directory_path() /
         ("creative-suite-main-window-test-" + std::to_string(stamp));
+}
+
+void writeLittleEndian(std::ostream& output, std::uint16_t value) {
+    const char bytes[] = {
+        static_cast<char>(value & 0xffU),
+        static_cast<char>((value >> 8U) & 0xffU)};
+    output.write(bytes, sizeof(bytes));
+}
+
+void writeLittleEndian(std::ostream& output, std::uint32_t value) {
+    writeLittleEndian(output, static_cast<std::uint16_t>(value & 0xffffU));
+    writeLittleEndian(output, static_cast<std::uint16_t>(value >> 16U));
+}
+
+void createWaveformWav(const std::filesystem::path& path) {
+    constexpr std::uint32_t sample_rate = 8000;
+    constexpr std::uint16_t channels = 2;
+    constexpr std::uint16_t block_align = channels * 2;
+    constexpr std::uint32_t sample_frames = sample_rate;
+    constexpr std::uint32_t data_size = sample_frames * block_align;
+    std::ofstream output(path, std::ios::binary);
+    if (!output) throw std::runtime_error("Could not create the waveform WAV fixture.");
+    output.write("RIFF", 4);
+    writeLittleEndian(output, 36U + data_size);
+    output.write("WAVEfmt ", 8);
+    writeLittleEndian(output, 16U);
+    writeLittleEndian(output, static_cast<std::uint16_t>(1));
+    writeLittleEndian(output, channels);
+    writeLittleEndian(output, sample_rate);
+    writeLittleEndian(output, sample_rate * block_align);
+    writeLittleEndian(output, block_align);
+    writeLittleEndian(output, static_cast<std::uint16_t>(16));
+    output.write("data", 4);
+    writeLittleEndian(output, data_size);
+    for (std::uint32_t index = 0; index < sample_frames; ++index) {
+        const auto sample = static_cast<std::uint16_t>(
+            index >= sample_rate / 4 && index < sample_rate / 2 ? 16384 : 0);
+        writeLittleEndian(output, sample);
+        writeLittleEndian(output, sample);
+    }
 }
 
 project::ProjectDocument makeMultiTrackProject(
@@ -247,7 +290,7 @@ public:
                         window.project_load_progress_->windowModality() == Qt::NonModal &&
                         window.new_project_action_ != nullptr &&
                         !window.new_project_action_->isEnabled() &&
-                        window.timeline_model_.trackCount() == 1 &&
+                        window.timeline_model_.trackCount() == 2 &&
                         !window.timeline_model_.hasClip(),
                     "Opening a project did not preserve the visible session while disabling editing.");
             const auto menu_is_available = [&window](const QString& title) {
@@ -742,6 +785,142 @@ public:
                         !window.media_controller_.library().contains(second_source) &&
                         !window.selectedMediaIndex().has_value(),
                     "An import result from an earlier project generation changed the session.");
+        }
+
+        const auto waveform_source = directory / "waveform-background.wav";
+        createWaveformWav(waveform_source);
+        {
+            MainWindow waveform_window;
+            waveform_window.show();
+            QApplication::processEvents();
+            media::VideoMetadata metadata;
+            metadata.kind = media::MediaKind::Audio;
+            metadata.source_path = waveform_source;
+            metadata.display_name = "Waveform background";
+            metadata.duration_seconds = 1.0;
+            metadata.audio = media::AudioMetadata{
+                "pcm_s16le", 8000, 2, 1.0};
+            require(waveform_window.media_controller_.commitImported({
+                        metadata, {}, metadata.display_name, "Unsorted", false}).changed(),
+                    "The waveform integration test could not register its audio source.");
+            const auto audio_track = std::find_if(
+                waveform_window.timeline_model_.tracks().begin(),
+                waveform_window.timeline_model_.tracks().end(),
+                [](const timeline::TimelineTrack& track) {
+                    return track.kind == timeline::TrackKind::Audio;
+                });
+            require(audio_track != waveform_window.timeline_model_.tracks().end(),
+                    "A new project did not provide an Audio track for the waveform test.");
+            require(waveform_window.timeline_command_service_.execute(
+                        application::AddMediaClipCommand{
+                            waveform_source, audio_track->track_id, 0}).changed(),
+                    "The waveform integration test could not add its clip.");
+
+            const auto canonical_waveform_source = media::MediaLibrary::canonicalPath(
+                waveform_source);
+            const auto signature = media::audioWaveformSourceSignature(
+                canonical_waveform_source);
+            require(signature.has_value(),
+                    "The waveform integration fixture has no file signature.");
+            std::atomic_bool request_blocker_entered = false;
+            std::atomic_bool release_request_blocker = false;
+            waveform_window.media_task_pool_.start(QRunnable::create([&]() {
+                request_blocker_entered.store(true, std::memory_order_release);
+                while (!release_request_blocker.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+            }));
+            for (int attempt = 0; attempt < 2000 &&
+                 !request_blocker_entered.load(std::memory_order_acquire); ++attempt) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            const bool request_worker_blocked =
+                request_blocker_entered.load(std::memory_order_acquire);
+            waveform_window.updateTimelineState();
+            const bool waveform_request_queued =
+                waveform_window.pending_audio_waveforms_.contains(
+                    canonical_waveform_source);
+            const auto dirty_before_waveform = waveform_window.project_dirty_;
+
+            bool event_loop_responsive = false;
+            QTimer::singleShot(0, [&event_loop_responsive, &release_request_blocker]() {
+                event_loop_responsive = true;
+                release_request_blocker.store(true, std::memory_order_release);
+            });
+            QEventLoop waveform_loop;
+            QTimer waveform_poll;
+            waveform_poll.setInterval(5);
+            QObject::connect(&waveform_poll, &QTimer::timeout, &waveform_loop, [&]() {
+                if (waveform_window.audio_waveform_cache_.find(
+                        canonical_waveform_source, *signature)) {
+                    waveform_loop.quit();
+                }
+            });
+            QTimer waveform_timeout;
+            waveform_timeout.setSingleShot(true);
+            QObject::connect(&waveform_timeout, &QTimer::timeout, &waveform_loop, [&]() {
+                release_request_blocker.store(true, std::memory_order_release);
+                waveform_loop.quit();
+            });
+            waveform_poll.start();
+            waveform_timeout.start(10000);
+            waveform_loop.exec();
+            release_request_blocker.store(true, std::memory_order_release);
+            waveform_window.media_task_pool_.waitForDone();
+            const auto cached_waveform = waveform_window.audio_waveform_cache_.find(
+                canonical_waveform_source, *signature);
+            require(request_worker_blocked && waveform_request_queued &&
+                        event_loop_responsive && cached_waveform != nullptr,
+                    "The waveform did not arrive asynchronously while the UI remained responsive.");
+            require(waveform_window.project_dirty_ == dirty_before_waveform,
+                    "Generating a waveform changed the project dirty state.");
+
+            std::atomic_bool blocker_entered = false;
+            std::atomic_bool release_blocker = false;
+            waveform_window.media_task_pool_.start(QRunnable::create([&]() {
+                blocker_entered.store(true, std::memory_order_release);
+                while (!release_blocker.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+            }));
+            for (int attempt = 0; attempt < 2000 &&
+                 !blocker_entered.load(std::memory_order_acquire); ++attempt) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            const bool blocker_started =
+                blocker_entered.load(std::memory_order_acquire);
+            std::error_code original_time_error;
+            const auto old_modified = std::filesystem::last_write_time(
+                canonical_waveform_source, original_time_error);
+            std::error_code modified_error;
+            if (blocker_started && !original_time_error) {
+                std::filesystem::last_write_time(
+                    canonical_waveform_source,
+                    old_modified + std::chrono::seconds(2),
+                    modified_error);
+            }
+            const auto changed_signature = modified_error || original_time_error
+                ? std::optional<media::AudioWaveformSourceSignature>{}
+                : media::audioWaveformSourceSignature(canonical_waveform_source);
+            if (changed_signature.has_value() && *changed_signature != *signature) {
+                waveform_window.updateTimelineState();
+            }
+            const bool regeneration_queued =
+                !waveform_window.pending_audio_waveforms_.empty();
+            waveform_window.clearProjectState();
+            release_blocker.store(true, std::memory_order_release);
+            waveform_window.media_task_pool_.waitForDone();
+            QApplication::processEvents();
+            require(blocker_started,
+                    "The waveform cancellation test could not occupy the media worker.");
+            require(!modified_error && !original_time_error &&
+                        changed_signature.has_value() &&
+                        *changed_signature != *signature && regeneration_queued,
+                    "The changed waveform source was not queued for regeneration.");
+            require(waveform_window.pending_audio_waveforms_.empty() &&
+                        !waveform_window.audio_waveform_cache_.find(
+                            canonical_waveform_source, *changed_signature),
+                    "Changing projects did not cancel an obsolete waveform request.");
         }
 
         const auto linked_source = directory / "linked-original.png";

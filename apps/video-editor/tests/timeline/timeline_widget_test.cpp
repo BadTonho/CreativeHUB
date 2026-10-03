@@ -22,10 +22,12 @@
 #include <QTimer>
 #include <QWheelEvent>
 
+#include <algorithm>
 #include <cstdint>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -106,6 +108,176 @@ bool isPlayheadPixel(const QColor& color) {
     return color.red() > 220 && color.green() > 170 && color.blue() < 150;
 }
 
+bool hasChangedPixel(
+    const QImage& image,
+    const QImage& baseline,
+    const QPoint& center,
+    int horizontal_radius,
+    int vertical_radius) {
+    for (int y = std::max(0, center.y() - vertical_radius);
+         y <= std::min(image.height() - 1, center.y() + vertical_radius); ++y) {
+        for (int x = std::max(0, center.x() - horizontal_radius);
+             x <= std::min(image.width() - 1, center.x() + horizontal_radius); ++x) {
+            if (image.pixelColor(x, y) != baseline.pixelColor(x, y)) return true;
+        }
+    }
+    return false;
+}
+
+void testAudioWaveformRendering(QApplication& application) {
+    QScrollArea scroll;
+    scroll.resize(1200, 160);
+    auto* widget = new timeline::TimelineWidget;
+    widget->resize(1200, 130);
+    widget->setFrameRate({30, 1});
+    widget->setTimelineViewportWidth(1200);
+    widget->setZoomFactor(30.0);
+
+    auto clip = makeClip("waveform.wav", 0, 1800, "waveform.wav");
+    clip.kind = timeline::ClipKind::Audio;
+    clip.source_start_time_us = 500'000;
+    clip.source_duration_time_us = 60'000'000;
+    timeline::TimelineTrack audio_track{1, "Audio 1", 1.0, false, {clip}};
+    audio_track.kind = timeline::TrackKind::Audio;
+    widget->setTracks({audio_track});
+
+    auto waveform = std::make_shared<media::AudioWaveform>();
+    waveform->peaks.resize(6100, 0);
+    std::fill(waveform->peaks.begin() + 50, waveform->peaks.begin() + 70, 220);
+    widget->setAudioWaveform(clip.source_path, waveform);
+    scroll.setWidgetResizable(false);
+    scroll.setWidget(widget);
+    scroll.show();
+    application.processEvents();
+
+    const std::vector<timeline::TimelineTrack> audio_tracks{audio_track};
+    timeline::TimelineGeometry geometry(
+        audio_tracks,
+        QSizeF(widget->size()),
+        widget->trackRowHeight(),
+        widget->zoomFactor(),
+        std::nullopt,
+        30.0);
+    const auto clip_bounds = geometry.clipRect(clip, 0);
+    const auto y = static_cast<int>(std::round(clip_bounds.center().y() - 15.0));
+    const auto source_offset_point = widget->mapTo(
+        scroll.viewport(), QPoint(static_cast<int>(clip_bounds.left()) + 2, y));
+    const auto later_silence_point = widget->mapTo(
+        scroll.viewport(), QPoint(static_cast<int>(clip_bounds.left()) + 100, y));
+    const auto audio_image = scroll.viewport()->grab().toImage();
+    widget->clearAudioWaveforms();
+    application.processEvents();
+    const auto silent_audio_image = scroll.viewport()->grab().toImage();
+    require(hasChangedPixel(audio_image, silent_audio_image, source_offset_point, 2, 2),
+            "The audio waveform did not render at the clip's source in-point.");
+    require(!hasChangedPixel(audio_image, silent_audio_image, later_silence_point, 2, 2),
+            "The audio waveform did not follow the source-time range.");
+
+    clip.timeline_duration_frames = 150;
+    clip.source_start_time_us = 1'000'000;
+    clip.source_duration_time_us = 5'000'000;
+    audio_track.clips = {clip};
+    widget->setZoomFactor(15.0);
+    widget->setTrackRowHeight(100.0);
+    widget->setTracks({audio_track});
+    waveform->peaks.assign(700, 0);
+    std::fill(waveform->peaks.begin() + 100, waveform->peaks.begin() + 120, 220);
+    widget->setAudioWaveform(clip.source_path, waveform);
+    application.processEvents();
+    const std::vector<timeline::TimelineTrack> trimmed_audio_tracks{audio_track};
+    const timeline::TimelineGeometry trimmed_geometry(
+        trimmed_audio_tracks,
+        QSizeF(widget->size()),
+        widget->trackRowHeight(),
+        widget->zoomFactor(),
+        std::nullopt,
+        30.0);
+    const auto trimmed_bounds = trimmed_geometry.clipRect(clip, 0);
+    const auto trimmed_y = static_cast<int>(
+        std::round(trimmed_bounds.center().y() - 15.0));
+    const auto trimmed_source_point = widget->mapTo(
+        scroll.viewport(), QPoint(static_cast<int>(trimmed_bounds.left()) + 2, trimmed_y));
+    const auto trimmed_silence_point = widget->mapTo(
+        scroll.viewport(), QPoint(static_cast<int>(trimmed_bounds.left()) + 100, trimmed_y));
+    const auto trimmed_image = scroll.viewport()->grab().toImage();
+    widget->clearAudioWaveforms();
+    application.processEvents();
+    const auto silent_trimmed_image = scroll.viewport()->grab().toImage();
+    require(hasChangedPixel(trimmed_image, silent_trimmed_image,
+                            trimmed_source_point, 2, 2),
+            "A trimmed clip did not render the waveform at its updated source in-point.");
+    require(!hasChangedPixel(trimmed_image, silent_trimmed_image,
+                             trimmed_silence_point, 2, 2),
+            "A trimmed clip rendered waveform peaks outside its source-time range.");
+
+    widget->setZoomFactor(5.0);
+    application.processEvents();
+    const timeline::TimelineGeometry zoomed_out_geometry(
+        trimmed_audio_tracks,
+        QSizeF(widget->size()),
+        widget->trackRowHeight(),
+        widget->zoomFactor(),
+        std::nullopt,
+        30.0);
+    const auto zoomed_out_bounds = zoomed_out_geometry.clipRect(clip, 0);
+    const auto zoomed_out_y = static_cast<int>(
+        std::round(zoomed_out_bounds.center().y() - 15.0));
+    const auto peak_pixel_x = static_cast<int>(zoomed_out_bounds.left()) + 2;
+    const auto peak_pixel_begin_fraction =
+        (static_cast<double>(peak_pixel_x) - zoomed_out_bounds.left()) /
+        zoomed_out_bounds.width();
+    const auto peak_pixel_end_fraction =
+        (static_cast<double>(peak_pixel_x + 1) - zoomed_out_bounds.left()) /
+        zoomed_out_bounds.width();
+    const auto peak_pixel_center_fraction =
+        (static_cast<double>(peak_pixel_x) + 0.5 - zoomed_out_bounds.left()) /
+        zoomed_out_bounds.width();
+    const auto peak_pixel_first_bucket = static_cast<std::size_t>(
+        (clip.source_start_time_us + peak_pixel_begin_fraction *
+            clip.source_duration_time_us) / 10'000.0);
+    const auto peak_pixel_end_bucket = static_cast<std::size_t>(std::ceil(
+        (clip.source_start_time_us + peak_pixel_end_fraction *
+            clip.source_duration_time_us) / 10'000.0));
+    const auto peak_pixel_center_bucket = static_cast<std::size_t>(
+        (clip.source_start_time_us + peak_pixel_center_fraction *
+            clip.source_duration_time_us) / 10'000.0);
+    const auto aggregated_bucket = peak_pixel_first_bucket != peak_pixel_center_bucket
+        ? peak_pixel_first_bucket : peak_pixel_end_bucket - 1;
+    require(aggregated_bucket != peak_pixel_center_bucket && aggregated_bucket < 700,
+            "The zoomed-out test did not select a peak missed by center-only sampling.");
+    waveform->peaks.assign(700, 0);
+    waveform->peaks[aggregated_bucket] = 255;
+    widget->setAudioWaveform(clip.source_path, waveform);
+    application.processEvents();
+    const auto aggregated_peak_point = widget->mapTo(
+        scroll.viewport(),
+        QPoint(peak_pixel_x, zoomed_out_y));
+    const auto zoomed_out_image = scroll.viewport()->grab().toImage();
+    widget->clearAudioWaveforms();
+    application.processEvents();
+    const auto silent_zoomed_out_image = scroll.viewport()->grab().toImage();
+    require(hasChangedPixel(zoomed_out_image, silent_zoomed_out_image,
+                            aggregated_peak_point, 1, 2),
+            "Zooming out hid a waveform peak that fell inside the visible pixel interval.");
+
+    auto video_clip = clip;
+    video_clip.kind = timeline::ClipKind::Video;
+    timeline::TimelineTrack video_track{2, "Video 1", 1.0, false, {video_clip}};
+    widget->setTracks({video_track});
+    widget->setAudioWaveform(clip.source_path, waveform);
+    application.processEvents();
+    const auto video_image = scroll.viewport()->grab().toImage();
+    widget->clearAudioWaveforms();
+    application.processEvents();
+    const auto silent_video_image = scroll.viewport()->grab().toImage();
+    const auto video_source_offset_point = widget->mapTo(
+        scroll.viewport(),
+        QPoint(static_cast<int>(zoomed_out_bounds.left()) + 2, zoomed_out_y));
+    require(!hasChangedPixel(video_image, silent_video_image,
+                             video_source_offset_point, 2, 2),
+            "A visual clip rendered an audio waveform.");
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -113,6 +285,8 @@ int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
 
     try {
+        testAudioWaveformRendering(application);
+
         timeline::TimelineWidget widget;
         require(widget.trackRowHeight() == 70.0,
                 "A new Timeline widget did not start with the 70-pixel default row height.");

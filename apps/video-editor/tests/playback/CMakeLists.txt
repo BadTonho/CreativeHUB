@@ -158,6 +158,50 @@ add_creative_suite_test(
     COMMAND creative-suite-main-editor-audio-playback-tests
 )
 
+add_executable(creative-suite-main-editor-audio-waveform-tests
+    audio_waveform_test.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/logging/logger.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/logging/logger.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/audio_frame.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/audio_playback.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/audio_playback.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/audio_waveform.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/audio_waveform.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/audio_waveform_cache.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/audio_waveform_cache.h
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/video_metadata.h
+)
+
+target_include_directories(creative-suite-main-editor-audio-waveform-tests PRIVATE
+    ${VIDEO_EDITOR_SOURCE_DIR}
+    ${FFMPEG_INCLUDE_DIRS}
+)
+
+target_link_directories(creative-suite-main-editor-audio-waveform-tests PRIVATE
+    ${FFMPEG_LIBRARY_DIRS}
+)
+
+target_link_libraries(creative-suite-main-editor-audio-waveform-tests PRIVATE
+    Qt6::Core
+    ${FFMPEG_LIBRARIES}
+)
+
+target_compile_features(creative-suite-main-editor-audio-waveform-tests PRIVATE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-audio-waveform-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-audio-waveform-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+copy_ffmpeg_test_runtime(creative-suite-main-editor-audio-waveform-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-audio-waveform-tests)
+
+add_creative_suite_test(
+    NAME creative-suite-main-editor-audio-waveform
+    COMMAND creative-suite-main-editor-audio-waveform-tests
+)
+
 if(EXISTS "${REFERENCE_VIDEO}")
     add_creative_suite_test(
         NAME creative-suite-main-editor-audio-playback-reference

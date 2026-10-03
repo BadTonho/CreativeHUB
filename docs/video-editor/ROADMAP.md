@@ -271,8 +271,9 @@ performance measurements, and Video Editor stability as the decision criteria.
 - [ ] Improve media organization, synchronization, relinking, and asset
   management.
 - [ ] Add color correction and grading workflows.
-- [ ] Expand audio editing with waveforms, automation, recording, audio-only
-  file export, crossfades, and advanced mixing as user workflows require.
+- [x] Display derived, cached waveforms on independent and linked Audio clips.
+- [ ] Expand audio editing with automation, recording, audio-only file export,
+  crossfades, and advanced mixing as user workflows require.
 - [ ] Add masks and more advanced compositing.
 - [ ] Add proxies, incremental rendering, and broader cache workflows where
   measurements show a need.

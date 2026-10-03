@@ -98,6 +98,7 @@ add_creative_suite_test(
 
 add_executable(creative-suite-main-editor-timeline-widget-tests
     timeline_widget_test.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/media/audio_waveform.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_time.h
     ${VIDEO_EDITOR_SOURCE_DIR}/media/video_metadata.h
     ${VIDEO_EDITOR_SOURCE_DIR}/timeline/timeline_model.cpp

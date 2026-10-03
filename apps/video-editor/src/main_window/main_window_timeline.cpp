@@ -38,7 +38,9 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
+#include <QPointer>
 #include <QPushButton>
+#include <QRunnable>
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -60,6 +62,7 @@
 #include <limits>
 #include <string_view>
 #include <system_error>
+#include <unordered_set>
 #include <utility>
 
 
@@ -334,12 +337,214 @@ void MainWindow::updateTimelineState() {
     if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
         edit_workspace_->controller()->updateTimelineState();
         synchronizeActiveTimelineSelection();
+        requestTimelineAudioWaveforms();
         return;
     }
     synchronizeActiveTimelineSelection();
     if (editUi().timeline != nullptr) {
         editUi().timeline->setFrameRate(timeline_model_.frameRate());
         editUi().timeline->setTracks(timeline_model_.tracks());
+    }
+    requestTimelineAudioWaveforms();
+}
+
+void MainWindow::requestTimelineAudioWaveforms() {
+    auto* timeline_widget = editUi().timeline;
+    if (timeline_widget == nullptr) return;
+
+    timeline_widget->clearAudioWaveforms();
+    std::unordered_set<std::filesystem::path> requested_sources;
+    for (const auto& track : timeline_model_.tracks()) {
+        if (track.kind != timeline::TrackKind::Audio) continue;
+        for (const auto& clip : track.clips) {
+            if (clip.kind != timeline::ClipKind::Audio) continue;
+            const auto source_path = media::MediaLibrary::canonicalPath(clip.source_path);
+            if (!requested_sources.insert(source_path).second) continue;
+
+            const auto signature = media::audioWaveformSourceSignature(source_path);
+            if (!signature.has_value()) {
+                const auto pending = pending_audio_waveforms_.find(source_path);
+                if (pending != pending_audio_waveforms_.end()) {
+                    pending->second.cancelled->store(true, std::memory_order_relaxed);
+                    pending_audio_waveforms_.erase(pending);
+                }
+                failed_audio_waveforms_.erase(source_path);
+                continue;
+            }
+
+            if (auto cached = audio_waveform_cache_.find(source_path, *signature)) {
+                failed_audio_waveforms_.erase(source_path);
+                timeline_widget->setAudioWaveform(source_path, cached);
+                continue;
+            }
+
+            const auto failed = failed_audio_waveforms_.find(source_path);
+            if (failed != failed_audio_waveforms_.end()) {
+                if (failed->second == *signature) continue;
+                failed_audio_waveforms_.erase(failed);
+            }
+
+            const auto pending = pending_audio_waveforms_.find(source_path);
+            if (pending != pending_audio_waveforms_.end()) {
+                if (pending->second.signature == *signature &&
+                    pending->second.project_generation == project_generation_) {
+                    continue;
+                }
+                pending->second.cancelled->store(true, std::memory_order_relaxed);
+                pending_audio_waveforms_.erase(pending);
+            }
+
+            const auto work_id = next_audio_waveform_work_id_++;
+            const auto project_generation = project_generation_;
+            auto cancelled = std::make_shared<std::atomic_bool>(false);
+            pending_audio_waveforms_.emplace(source_path, PendingAudioWaveform{
+                *signature, project_generation, work_id, cancelled});
+
+            QPointer<MainWindow> guard(this);
+            media_task_pool_.start(QRunnable::create(
+                [guard, source_path, signature = *signature,
+                 project_generation, work_id, cancelled]() mutable {
+                    std::optional<media::AudioWaveform> waveform;
+                    std::string failure;
+                    try {
+                        waveform = media::decodeAudioWaveform(
+                            source_path,
+                            [cancelled]() {
+                                return cancelled->load(std::memory_order_relaxed);
+                            });
+                    } catch (const std::exception& error) {
+                        failure = error.what();
+                    } catch (...) {
+                        failure = "Unknown failure while decoding the audio waveform.";
+                    }
+                    if (guard.isNull()) return;
+                    QMetaObject::invokeMethod(
+                        guard.data(),
+                        [guard, source_path, signature, project_generation, work_id,
+                         cancelled, waveform = std::move(waveform),
+                         failure = std::move(failure)]() mutable {
+                            if (guard.isNull()) return;
+                            guard->finishTimelineAudioWaveform(
+                                source_path, signature, project_generation, work_id,
+                                cancelled->load(std::memory_order_relaxed)
+                                    ? std::nullopt : std::move(waveform),
+                                std::move(failure));
+                        },
+                        Qt::QueuedConnection);
+                }));
+        }
+    }
+}
+
+void MainWindow::cancelTimelineAudioWaveforms() noexcept {
+    for (auto& [source_path, pending] : pending_audio_waveforms_) {
+        static_cast<void>(source_path);
+        pending.cancelled->store(true, std::memory_order_relaxed);
+    }
+    pending_audio_waveforms_.clear();
+}
+
+void MainWindow::finishTimelineAudioWaveform(
+    std::filesystem::path source_path,
+    media::AudioWaveformSourceSignature signature,
+    std::uint64_t project_generation,
+    std::uint64_t work_id,
+    std::optional<media::AudioWaveform> waveform,
+    std::string failure) {
+    const auto pending = pending_audio_waveforms_.find(source_path);
+    if (pending == pending_audio_waveforms_.end() ||
+        pending->second.work_id != work_id) {
+        return;
+    }
+    pending_audio_waveforms_.erase(pending);
+    if (project_generation != project_generation_) return;
+
+    const auto still_in_timeline = std::any_of(
+        timeline_model_.tracks().begin(), timeline_model_.tracks().end(),
+        [&source_path](const timeline::TimelineTrack& track) {
+            return track.kind == timeline::TrackKind::Audio &&
+                std::any_of(track.clips.begin(), track.clips.end(),
+                    [&source_path](const timeline::TimelineClip& clip) {
+                        return clip.kind == timeline::ClipKind::Audio &&
+                            clip.source_path == source_path;
+                    });
+        });
+    if (!still_in_timeline) return;
+
+    const auto current_signature = media::audioWaveformSourceSignature(source_path);
+    if (!current_signature.has_value() || *current_signature != signature) return;
+    if (!failure.empty()) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "audio",
+            "timeline_waveform",
+            failure,
+            {{"error_code", "audio_waveform_decode_failed"},
+             {"path", pathToUtf8(source_path)},
+             {"project_generation", std::to_string(project_generation)},
+             {"work_id", std::to_string(work_id)}});
+        failed_audio_waveforms_[source_path] = signature;
+        return;
+    }
+    if (!waveform.has_value() || waveform->peaks.empty()) {
+        failed_audio_waveforms_[source_path] = signature;
+        return;
+    }
+
+    std::shared_ptr<const media::AudioWaveform> cached;
+    try {
+        cached = std::make_shared<const media::AudioWaveform>(std::move(*waveform));
+    } catch (const std::exception& error) {
+        failed_audio_waveforms_[source_path] = signature;
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "audio",
+            "timeline_waveform_cache",
+            error.what(),
+            {{"error_code", "audio_waveform_cache_allocation_failed"},
+             {"path", pathToUtf8(source_path)},
+             {"project_generation", std::to_string(project_generation)},
+             {"work_id", std::to_string(work_id)}});
+        return;
+    } catch (...) {
+        failed_audio_waveforms_[source_path] = signature;
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "audio",
+            "timeline_waveform_cache",
+            "Unknown failure while allocating waveform cache storage.",
+            {{"error_code", "audio_waveform_cache_allocation_failed"},
+             {"path", pathToUtf8(source_path)},
+             {"project_generation", std::to_string(project_generation)},
+             {"work_id", std::to_string(work_id)}});
+        return;
+    }
+    const auto waveform_bytes = cached->memoryBytes();
+    const bool exceeds_cache_limit =
+        waveform_bytes > media::AudioWaveformCache::kDefaultByteLimit;
+    if (!audio_waveform_cache_.insert(source_path, signature, cached)) {
+        failed_audio_waveforms_[source_path] = signature;
+        logging::Logger::instance().log(
+            logging::Level::Warning,
+            "audio",
+            "timeline_waveform_cache",
+            exceeds_cache_limit
+                ? "The decoded waveform exceeded the bounded in-memory cache limit."
+                : "The decoded waveform could not be retained in the bounded in-memory cache.",
+            {{"error_code", exceeds_cache_limit
+                    ? "audio_waveform_cache_limit"
+                    : "audio_waveform_cache_insert_failed"},
+             {"path", pathToUtf8(source_path)},
+             {"project_generation", std::to_string(project_generation)},
+             {"work_id", std::to_string(work_id)},
+             {"waveform_bytes", std::to_string(waveform_bytes)},
+             {"cache_limit_bytes",
+              std::to_string(media::AudioWaveformCache::kDefaultByteLimit)}});
+        return;
+    }
+    failed_audio_waveforms_.erase(source_path);
+    if (editUi().timeline != nullptr) {
+        editUi().timeline->setAudioWaveform(source_path, cached);
     }
 }
 

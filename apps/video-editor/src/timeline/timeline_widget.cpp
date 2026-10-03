@@ -168,6 +168,19 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
     update();
 }
 
+void TimelineWidget::clearAudioWaveforms() {
+    audio_waveforms_.clear();
+    update();
+}
+
+void TimelineWidget::setAudioWaveform(
+    const std::filesystem::path& source_path,
+    const std::shared_ptr<const media::AudioWaveform>& waveform) {
+    if (source_path.empty() || waveform == nullptr) return;
+    audio_waveforms_[source_path] = waveform;
+    update();
+}
+
 void TimelineWidget::setClips(const std::vector<TimelineClip>& clips) {
     TimelineTrack track{1, "Video 1", 1.0, false, clips};
     setTracks({track});
@@ -1086,6 +1099,85 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                     : active ? clip_color.lighter(115) : clip_color);
             }
             painter.drawRoundedRect(rect, 3, 3);
+
+            if (clip.kind == ClipKind::Audio &&
+                clip.source_duration_time_us > 0 && rect.width() > 2.0 &&
+                rect.height() > 10.0) {
+                const auto waveform_entry = audio_waveforms_.find(clip.source_path);
+                const auto waveform = waveform_entry == audio_waveforms_.end()
+                    ? std::shared_ptr<const media::AudioWaveform>{}
+                    : waveform_entry->second.lock();
+                if (waveform != nullptr && !waveform->peaks.empty()) {
+                    const auto waveform_bounds = rect.adjusted(1.0, 3.0, -1.0, -3.0);
+                    const auto visible = waveform_bounds.intersected(
+                        QRectF(event->rect()));
+                    if (!visible.isEmpty()) {
+                        const auto first_x = std::max(
+                            static_cast<int>(std::floor(visible.left())),
+                            static_cast<int>(std::floor(waveform_bounds.left())));
+                        const auto last_x = std::min(
+                            static_cast<int>(std::ceil(visible.right())),
+                            static_cast<int>(std::ceil(waveform_bounds.right())));
+                        const auto center_y = waveform_bounds.center().y();
+                        const auto maximum_amplitude = std::max(
+                            0.0, waveform_bounds.height() * 0.44);
+                        auto waveform_color = QColor("#a9e8e2");
+                        waveform_color.setAlpha(active ? 215 : 180);
+                        painter.save();
+                        painter.setClipRect(waveform_bounds, Qt::IntersectClip);
+                        painter.setPen(QPen(waveform_color, 1.0));
+                        for (int x = first_x; x <= last_x; ++x) {
+                            const auto first_fraction = std::clamp(
+                                (static_cast<double>(x) - rect.left()) / rect.width(),
+                                0.0,
+                                1.0);
+                            const auto end_fraction = std::clamp(
+                                (static_cast<double>(x) + 1.0 - rect.left()) /
+                                    rect.width(),
+                                0.0,
+                                1.0);
+                            const auto first_source_time_us =
+                                static_cast<long double>(clip.source_start_time_us) +
+                                first_fraction * static_cast<long double>(
+                                    clip.source_duration_time_us);
+                            const auto end_source_time_us =
+                                static_cast<long double>(clip.source_start_time_us) +
+                                end_fraction * static_cast<long double>(
+                                    clip.source_duration_time_us);
+                            const auto maximum_waveform_time_us =
+                                static_cast<long double>(waveform->peaks.size()) *
+                                media::kAudioWaveformBucketDurationUs;
+                            if (end_source_time_us <= 0.0L ||
+                                first_source_time_us >= maximum_waveform_time_us) {
+                                continue;
+                            }
+                            const auto first_bucket = static_cast<std::size_t>(
+                                std::max(0.0L, first_source_time_us) /
+                                media::kAudioWaveformBucketDurationUs);
+                            const auto end_bucket = static_cast<std::size_t>(
+                                std::ceil(std::min(
+                                    end_source_time_us, maximum_waveform_time_us) /
+                                    media::kAudioWaveformBucketDurationUs));
+                            const auto bounded_end_bucket = std::min(
+                                end_bucket, waveform->peaks.size());
+                            auto peak = std::uint8_t{0};
+                            for (auto bucket = first_bucket;
+                                 bucket < bounded_end_bucket; ++bucket) {
+                                peak = std::max(peak, waveform->peaks[bucket]);
+                            }
+                            if (peak == 0) continue;
+                            const auto amplitude = std::max(
+                                1.0,
+                                maximum_amplitude * static_cast<double>(peak) / 255.0);
+                            painter.drawLine(
+                                QPointF(x + 0.5, center_y - amplitude),
+                                QPointF(x + 0.5, center_y + amplitude));
+                        }
+                        painter.restore();
+                    }
+                }
+            }
+
             painter.setPen(moving ? QColor(244, 247, 251, 100) : QColor("#f4f7fb"));
             const auto label = QString("%1  %2%3")
                 .arg(clip_index + 1)

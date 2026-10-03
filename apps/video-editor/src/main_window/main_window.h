@@ -1,5 +1,6 @@
 #pragma once
 
+#include "media/audio_waveform_cache.h"
 #include "media/media_library.h"
 #include "media/video_metadata.h"
 #include "application/editor_session.h"
@@ -23,12 +24,14 @@
 #include <QThreadPool>
 #include <QtGlobal>
 
-#include <cstdint>
 #include <atomic>
+#include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
-#include <functional>
+#include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -213,6 +216,15 @@ private:
         bool stop_playback = true);
     void updateHistoryActions();
     void updateTimelineState();
+    void requestTimelineAudioWaveforms();
+    void cancelTimelineAudioWaveforms() noexcept;
+    void finishTimelineAudioWaveform(
+        std::filesystem::path source_path,
+        media::AudioWaveformSourceSignature signature,
+        std::uint64_t project_generation,
+        std::uint64_t work_id,
+        std::optional<media::AudioWaveform> waveform,
+        std::string failure);
     void updatePlaybackAudioParameters();
     void applyMonitorVolumePercent(int percent);
     void refreshPlaybackComposition();
@@ -331,6 +343,18 @@ private:
     bool initial_window_layout_pending_ = false;
     bool playback_activation_loading_ = false;
     QThreadPool media_task_pool_;
+    media::AudioWaveformCache audio_waveform_cache_;
+    struct PendingAudioWaveform {
+        media::AudioWaveformSourceSignature signature;
+        std::uint64_t project_generation = 0;
+        std::uint64_t work_id = 0;
+        std::shared_ptr<std::atomic_bool> cancelled;
+    };
+    std::unordered_map<std::filesystem::path, PendingAudioWaveform>
+        pending_audio_waveforms_;
+    std::unordered_map<std::filesystem::path,
+        media::AudioWaveformSourceSignature> failed_audio_waveforms_;
+    std::uint64_t next_audio_waveform_work_id_ = 1;
     QProgressDialog* media_import_progress_ = nullptr;
     std::shared_ptr<std::atomic_bool> active_media_import_cancel_;
     std::uint64_t project_generation_ = 0;

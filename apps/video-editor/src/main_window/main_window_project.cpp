@@ -344,6 +344,7 @@ bool MainWindow::confirmProjectChange() {
 }
 
 void MainWindow::clearProjectState() {
+    cancelTimelineAudioWaveforms();
     try {
         project_controller_.removeCurrentUnsavedSnapshots();
     } catch (const project::ProjectError& error) {
@@ -465,6 +466,7 @@ bool MainWindow::openProjectPath(
     std::function<void(bool)> completion) {
     if (project_load_pending_) return false;
 
+    cancelTimelineAudioWaveforms();
     if (active_media_import_cancel_) {
         active_media_import_cancel_->store(true, std::memory_order_relaxed);
     }
@@ -590,6 +592,7 @@ void MainWindow::finishProjectOpen(
         auto callback = std::move(project_open_completion_);
         project_open_completion_ = {};
         if (callback) callback(succeeded);
+        if (!succeeded) requestTimelineAudioWaveforms();
     };
     if (project_generation != project_generation_) {
         statusBar()->showMessage("Project opening result was superseded.");

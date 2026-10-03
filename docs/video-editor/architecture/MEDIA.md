@@ -43,6 +43,13 @@ It owns audio FFmpeg resources through RAII and emits owned PCM chunks. The
 Qt `QAudioSink` adapter is created and written only on the playback worker
 thread; no Qt audio object crosses into the media module.
 
+The Video Editor derives compact audio waveform peaks through
+`AudioPlaybackSession` only after an audio clip is placed on the Timeline.
+Extraction runs in the background, downsamples to a combined-channel peak at
+10 ms intervals, and keeps results in a bounded, in-memory cache keyed by the
+source path and file signature. Waveforms are presentation data; they are not
+stored in `.csp` projects or shared with Motion Studio.
+
 Motion Studio compiles the same media asset library into its standalone
 executable. Its Media Pool has its own UI, asynchronous task orchestration,
 selection details, and composition lifecycle. Items reference original files
