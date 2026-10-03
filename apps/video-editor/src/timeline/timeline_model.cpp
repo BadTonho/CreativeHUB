@@ -139,6 +139,16 @@ std::string nextAudioTrackName(const std::vector<TimelineTrack>& tracks) {
     }
 }
 
+void appendDefaultTracks(
+    std::vector<TimelineTrack>& tracks,
+    TrackId& next_track_id) {
+    tracks.push_back({next_track_id++, "Video 1", 1.0, false, {}});
+    TimelineTrack audio_track{
+        next_track_id++, "Audio 1", 1.0, false, {}};
+    audio_track.kind = TrackKind::Audio;
+    tracks.push_back(std::move(audio_track));
+}
+
 std::optional<std::int64_t> timelineFramesForAudioDurationUs(
     std::int64_t duration_us,
     FrameRate timeline_rate) noexcept {
@@ -472,7 +482,7 @@ bool hasCrossDissolveForClip(
 } // namespace
 
 TimelineModel::TimelineModel() {
-    tracks_.push_back({next_track_id_++, "Video 1", 1.0, false, {}});
+    appendDefaultTracks(tracks_, next_track_id_);
     assertIdentityInvariants();
 }
 
@@ -1880,7 +1890,7 @@ void TimelineModel::restore(Snapshot snapshot) {
     next_clip_id_ = snapshot.next_clip_id;
     ensureIdentifiers();
     if (tracks_.empty()) {
-        tracks_.push_back({next_track_id_++, "Video 1", 1.0, false, {}});
+        appendDefaultTracks(tracks_, next_track_id_);
     }
     for (auto& track : tracks_) removeInvalidTransitions(track);
     for (auto& track : tracks_) {

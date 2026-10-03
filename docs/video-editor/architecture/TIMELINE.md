@@ -45,9 +45,11 @@ and transform rules as videos, and never create an audio playback session.
 
 ## Multi-track behavior
 
-Video 1 is created by default. Newly created video tracks are inserted above
-the existing video tracks, so they become the top visual priority. Audio tracks
-are appended after the video tracks. Tracks are drawn
+Empty timelines start with `Video 1` and `Audio 1`, in that order. This applies
+to a new or reset project; opening a saved project preserves its stored track
+layout. Newly created video tracks are inserted above the existing video
+tracks, so they become the top visual priority. Audio tracks are appended after
+the video tracks. Tracks are drawn
 vertically, with the top row composited above the rows below it. Tracks can be
 renamed, reordered, and removed when empty. Each track permits gaps. Add and
 move operations reject overlapping media clips; an individual edge trim may

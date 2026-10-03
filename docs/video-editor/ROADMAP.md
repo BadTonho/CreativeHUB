@@ -151,7 +151,8 @@ tasks.
 - [x] Video and static raster-image clips, manual text clips, transforms,
   linear keyframes, essential Cross Dissolve and Fade to Black transitions.
 - [x] Embedded video audio playback with per-clip and per-track gain and mute.
-- [x] Audio-only import and dedicated Audio tracks, plus synchronized linked
+- [x] Audio-only import and dedicated Audio tracks, including a default empty
+  Audio 1 lane in new and reset projects, plus synchronized linked
   Audio companions for videos with sound; automatic compatible-track reuse or
   creation, microsecond source timing, paired editing/unlinking, v14 persistence
   and legacy migration, mixed preview/export, and black frames through audio

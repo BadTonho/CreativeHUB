@@ -238,6 +238,11 @@ in the running Video Editor after UI or integration changes:
   `target_fps=30`; the media metadata continues to report each source's own
   `source_fps`. Also check standalone media playback: `target_fps` follows the
   source rate and Timeline FPS is reported as `0/0`;
+- New and reset Timeline defaults: start the editor and confirm an empty
+  `Video 1` row followed by an empty `Audio 1` row. Use File > New Project and
+  confirm both rows remain with no clips and a clean project state. Save and
+  reopen, then confirm both lanes persist. Open an existing project that stores
+  only video tracks and confirm its saved track layout is preserved;
 - Timeline timebase and migration: create a new project and confirm its
   Timeline rate is 30/1 FPS. Place 24, 30, and 60 FPS videos on the Timeline,
   including a nonzero source in-point; play and export the same section at
