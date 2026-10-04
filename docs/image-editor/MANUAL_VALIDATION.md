@@ -207,6 +207,30 @@ still pending.
     confirm the temporary output is discarded. Repeat with an existing
     destination and confirm its contents remain unchanged after cancellation.
 
+### Canvas Size
+
+1. Open a source image with a visible marker near each edge. Choose
+   **Image > Canvas Size...**, confirm the current dimensions are shown, and
+   confirm **Center** is selected by default. Cancel and verify the canvas and
+   dirty state do not change.
+2. Expand and reduce the canvas using each of the nine anchors. Confirm pixels
+   retain their original size and move to the selected anchor; reduction clips
+   the expected edges. Verify source-image extensions are transparent and
+   canvas-document extensions use the configured background.
+3. Resize a document containing raster layers, a group, a mask, text, shapes,
+   and an imported image. Confirm each object and mask moves with the content,
+   remains editable, and new edits use the updated canvas bounds. Use Undo and
+   Redo and confirm each resize is one history step.
+4. Save and reopen the `.cimg`; verify its canvas dimensions and appearance.
+   Export the full image and Quick Export a layer/group; both outputs must use
+   the new dimensions. Restore a recovery snapshot and confirm the resize is
+   retained. Relink a missing source and confirm it still requires the original
+   source dimensions.
+5. In linked mode, resize the image, save the `.cimg`, and confirm the published
+   PNG has the new dimensions and refreshes in the Video Editor preview and
+   Media Pool. Confirm the original source is unchanged and a clip-specific
+   linked variant remains isolated.
+
 ### Editable text
 
 The owner confirmed that normal typing with the default settings works again

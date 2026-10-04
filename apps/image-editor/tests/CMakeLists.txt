@@ -64,6 +64,8 @@ add_executable(creative-suite-image-editor-ui-tests
     ../src/ui/windows/image_export_worker.h
     ../src/ui/dialogs/new_canvas_dialog.cpp
     ../src/ui/dialogs/new_canvas_dialog.h
+    ../src/ui/dialogs/canvas_size_dialog.cpp
+    ../src/ui/dialogs/canvas_size_dialog.h
     ../src/ui/dialogs/image_export_dialog.cpp
     ../src/ui/dialogs/image_export_dialog.h
     ../src/ui/dialogs/shortcut_settings_dialog.cpp
@@ -125,6 +127,8 @@ add_executable(creative-suite-image-editor-export-ui-tests
     ../src/ui/windows/image_export_worker.h
     ../src/ui/dialogs/new_canvas_dialog.cpp
     ../src/ui/dialogs/new_canvas_dialog.h
+    ../src/ui/dialogs/canvas_size_dialog.cpp
+    ../src/ui/dialogs/canvas_size_dialog.h
     ../src/ui/dialogs/shortcut_settings_dialog.cpp
     ../src/ui/dialogs/shortcut_settings_dialog.h
     ../src/ui/dialogs/image_export_dialog.cpp

@@ -1,6 +1,6 @@
 # Image Editor Scope
 
-Status: **editable text, raster masks, and linked image layers are implemented;
+Status: **editable text, raster masks, linked image layers, and canvas resizing are implemented;
 manual visual validation and release acceptance remain pending**. The Image Editor is a standalone raster
 editor in `apps/image-editor/`. Its current behavior and the approved next
 release direction are recorded separately below. See the
@@ -19,13 +19,17 @@ alignment, movement, and width resizing. While editing, its box grows
 horizontally to fit the longest line up to the canvas edge, then wraps and grows
 vertically. Text is kept editable in its own `Text N` layer.
 
-Documents use the provisional `.cimg` version 11 format. The application reads
-versions 1 through 10 and writes version 11, migrating older documents on save;
-version 1 recovery envelopes accept a version 11 document payload. Source images
-remain unchanged.
+Documents use the provisional `.cimg` version 12 format. The application reads
+versions 1 through 11 and writes version 12, migrating older documents on save;
+version 1 recovery envelopes accept a version 12 document payload. Source images
+remain unchanged, and original source dimensions are retained for relinking.
 Canvas documents can use standard presets or custom dimensions. Self-contained
 canvas documents currently allow up to 32768 pixels per side and 64 million
 pixels total. These are format limits, not performance claims.
+**Image > Canvas Size** changes current document bounds without resampling layer
+content. A 3×3 anchor controls placement; new area uses the configured canvas
+background or transparency for source-image documents. The edit is undoable and
+is included in full export, Quick Export, recovery, and linked PNG publication.
 
 Flattened PNG and JPEG export are implemented. PNG preserves transparency;
 JPEG uses a configurable quality and opaque background. Quick Export can export
@@ -74,9 +78,9 @@ performance guarantee is approved yet.
 ## Compatibility and Release Order
 
 The current implementation preserves the ability to open existing `.cimg`
-versions 1 through 10 and writes the current version 11 format on save. Automated
-regression tests cover the migration, invalid text rejection, and version 11
-recovery payload. This implementation does not mark manual text checks or
+versions 1 through 11 and writes the current version 12 format on save. Automated
+regression tests cover migration, canvas-size persistence, invalid text rejection,
+and version 12 recovery payload. This implementation does not mark manual text checks or
 Video Editor linked-image acceptance complete.
 
 Per project policy, complete and accept the standalone minimum before accepting
@@ -129,7 +133,7 @@ editable stack items in one Undo/Redo edit; groups include their children.
 Background is protected, including mixed selections. Text, rename, and numeric
 fields keep normal character deletion. Deleting a missing image reference is
 allowed and can unblock exports. Original files are preserved. The document
-format remains v11 and the contextual shortcut is customizable.
+format remains v12 and the contextual shortcut is customizable.
 
 ## Outside This Release
 

@@ -12,6 +12,12 @@
 
 namespace image_editor {
 
+enum class CanvasAnchor {
+    TopLeft, Top, TopRight,
+    Left, Center, Right,
+    BottomLeft, Bottom, BottomRight,
+};
+
 class ImageDocumentSession final {
 public:
     [[nodiscard]] bool importRasterImages(const QVector<PreparedRasterImage>& images,
@@ -31,6 +37,9 @@ public:
     [[nodiscard]] bool openDocument(const QString& document_path, QString* error = nullptr);
     [[nodiscard]] bool restoreRecovery(const QString& recovery_path, QString* error = nullptr);
     [[nodiscard]] bool relinkSource(const QString& source_path, QString* error = nullptr);
+    [[nodiscard]] bool resizeCanvas(const QSize& size,
+                                    CanvasAnchor anchor = CanvasAnchor::Center,
+                                    QString* error = nullptr);
 
     [[nodiscard]] bool saveDocument(QString document_path = {}, QString* error = nullptr);
     [[nodiscard]] bool exportImage(const QString& output_path, QString* error = nullptr) const;
@@ -189,6 +198,8 @@ private:
     QString selected_group_id_;
     QString baseline_source_path_;
     QSize baseline_source_size_;
+    QSize baseline_canvas_size_;
+    QPoint baseline_canvas_base_offset_;
     ImageBaseKind baseline_base_kind_ = ImageBaseKind::SourceImage;
     QColor baseline_canvas_background_ = QColor(0, 0, 0, 0);
     QVector<ImageOperation> baseline_operations_;

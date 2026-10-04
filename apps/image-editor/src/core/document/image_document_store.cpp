@@ -31,10 +31,13 @@ constexpr int kObjectIdentityDocumentVersion = 7;
 constexpr int kLayerGroupsDocumentVersion = 8;
 constexpr int kEditableTextDocumentVersion = 9;
 constexpr int kLayerMaskDocumentVersion = 10;
-constexpr int kDocumentVersion = 11;
+constexpr int kLinkedRasterDocumentVersion = 11;
+constexpr int kCanvasSizeDocumentVersion = 12;
+constexpr int kDocumentVersion = kCanvasSizeDocumentVersion;
 constexpr int kRecoveryVersion = 1;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr auto kRecoveryFormat = "creative-suite-image-recovery";
+constexpr int kMaximumStoredCoordinate = 1'000'000;
 
 void assignError(QString* error, const QString& message) {
     if (error != nullptr) *error = message;
@@ -127,12 +130,30 @@ QJsonObject encodeOperation(const ImageOperation& operation, const QString& docu
     case OperationKind::Rotate:
         encoded.insert("kind", "rotate");
         encoded.insert("quarter_turns", operation.quarter_turns);
+        if (operation.transform_bounds.isValid() && !operation.transform_bounds.isEmpty()) {
+            encoded.insert("bounds_x", operation.transform_bounds.x());
+            encoded.insert("bounds_y", operation.transform_bounds.y());
+            encoded.insert("bounds_width", operation.transform_bounds.width());
+            encoded.insert("bounds_height", operation.transform_bounds.height());
+        }
         break;
     case OperationKind::FlipHorizontal:
         encoded.insert("kind", "flip_horizontal");
+        if (operation.transform_bounds.isValid() && !operation.transform_bounds.isEmpty()) {
+            encoded.insert("bounds_x", operation.transform_bounds.x());
+            encoded.insert("bounds_y", operation.transform_bounds.y());
+            encoded.insert("bounds_width", operation.transform_bounds.width());
+            encoded.insert("bounds_height", operation.transform_bounds.height());
+        }
         break;
     case OperationKind::FlipVertical:
         encoded.insert("kind", "flip_vertical");
+        if (operation.transform_bounds.isValid() && !operation.transform_bounds.isEmpty()) {
+            encoded.insert("bounds_x", operation.transform_bounds.x());
+            encoded.insert("bounds_y", operation.transform_bounds.y());
+            encoded.insert("bounds_width", operation.transform_bounds.width());
+            encoded.insert("bounds_height", operation.transform_bounds.height());
+        }
         break;
     case OperationKind::PaintStroke: {
         encoded.insert("kind", "paint_stroke");
@@ -240,6 +261,30 @@ bool decodeOperations(const QJsonValue& value,
         const auto object = item.toObject();
         const QString kind = object.value("kind").toString();
         ImageOperation operation;
+        const auto read_transform_bounds = [&]() {
+            if (!fixed_canvas) return true;
+            const bool has_bounds = object.contains("bounds_x") || object.contains("bounds_y") ||
+                object.contains("bounds_width") || object.contains("bounds_height");
+            if (!has_bounds) {
+                operation.transform_bounds = QRect(QPoint(), *current_size);
+                return true;
+            }
+            int x = 0, y = 0, width = 0, height = 0;
+            if (!isInteger(object.value("bounds_x"), &x) ||
+                !isInteger(object.value("bounds_y"), &y) ||
+                !isInteger(object.value("bounds_width"), &width) ||
+                !isInteger(object.value("bounds_height"), &height) ||
+                width <= 0 || height <= 0 ||
+                std::abs(static_cast<qint64>(x)) > kMaximumStoredCoordinate ||
+                std::abs(static_cast<qint64>(y)) > kMaximumStoredCoordinate ||
+                width > 32768 || height > 32768 ||
+                static_cast<qint64>(x) + width > kMaximumStoredCoordinate ||
+                static_cast<qint64>(y) + height > kMaximumStoredCoordinate) {
+                return false;
+            }
+            operation.transform_bounds = QRect(x, y, width, height);
+            return true;
+        };
         if (kind == "crop") {
             int x = 0;
             int y = 0;
@@ -248,8 +293,15 @@ bool decodeOperations(const QJsonValue& value,
             if (!isInteger(object.value("x"), &x) || !isInteger(object.value("y"), &y) ||
                 !isInteger(object.value("width"), &width) ||
                 !isInteger(object.value("height"), &height) ||
-                x < 0 || y < 0 || width <= 0 || height <= 0 ||
-                x > current_size->width() - width || y > current_size->height() - height) {
+                width <= 0 || height <= 0 || width > 32768 || height > 32768 ||
+                ((version < kCanvasSizeDocumentVersion || !fixed_canvas) &&
+                    (x < 0 || y < 0 || x > current_size->width() - width ||
+                     y > current_size->height() - height)) ||
+                (version >= kCanvasSizeDocumentVersion && fixed_canvas &&
+                    (std::abs(static_cast<qint64>(x)) > kMaximumStoredCoordinate ||
+                     std::abs(static_cast<qint64>(y)) > kMaximumStoredCoordinate ||
+                     static_cast<qint64>(x) + width > kMaximumStoredCoordinate ||
+                     static_cast<qint64>(y) + height > kMaximumStoredCoordinate))) {
                 assignError(error, QStringLiteral("The document contains an invalid crop."));
                 return false;
             }
@@ -265,11 +317,23 @@ bool decodeOperations(const QJsonValue& value,
             }
             operation.kind = OperationKind::Rotate;
             operation.quarter_turns = turns;
+            if (!read_transform_bounds()) {
+                assignError(error, QStringLiteral("The document contains invalid transform bounds."));
+                return false;
+            }
             if (!fixed_canvas) current_size->transpose();
         } else if (kind == "flip_horizontal") {
             operation.kind = OperationKind::FlipHorizontal;
+            if (!read_transform_bounds()) {
+                assignError(error, QStringLiteral("The document contains invalid transform bounds."));
+                return false;
+            }
         } else if (kind == "flip_vertical") {
             operation.kind = OperationKind::FlipVertical;
+            if (!read_transform_bounds()) {
+                assignError(error, QStringLiteral("The document contains invalid transform bounds."));
+                return false;
+            }
         } else if (kind == "paint_stroke" && version >= kPaintDocumentVersion) {
             const auto encoded_points = object.value("points").toArray();
             const QString encoded_color = object.value("color").toString();
@@ -305,8 +369,11 @@ bool decodeOperations(const QJsonValue& value,
                 }
                 const double x = x_value.toDouble();
                 const double y = y_value.toDouble();
-                if (!std::isfinite(x) || !std::isfinite(y) || x < 0.0 || y < 0.0 ||
-                    x >= current_size->width() || y >= current_size->height()) {
+                if (!std::isfinite(x) || !std::isfinite(y) ||
+                    (version < kCanvasSizeDocumentVersion &&
+                     (x < 0.0 || y < 0.0 || x >= current_size->width() || y >= current_size->height())) ||
+                    (version >= kCanvasSizeDocumentVersion &&
+                     (std::abs(x) > kMaximumStoredCoordinate || std::abs(y) > kMaximumStoredCoordinate))) {
                     assignError(error, QStringLiteral("The document contains an out-of-bounds paint stroke point."));
                     return false;
                 }
@@ -343,8 +410,11 @@ bool decodeOperations(const QJsonValue& value,
                 }
                 const double x = x_value.toDouble();
                 const double y = y_value.toDouble();
-                if (!std::isfinite(x) || !std::isfinite(y) || x < 0.0 || y < 0.0 ||
-                    x >= current_size->width() || y >= current_size->height()) {
+                if (!std::isfinite(x) || !std::isfinite(y) ||
+                    (version < kCanvasSizeDocumentVersion &&
+                     (x < 0.0 || y < 0.0 || x >= current_size->width() || y >= current_size->height())) ||
+                    (version >= kCanvasSizeDocumentVersion &&
+                     (std::abs(x) > kMaximumStoredCoordinate || std::abs(y) > kMaximumStoredCoordinate))) {
                     assignError(error, QStringLiteral("The document contains an out-of-bounds erase stroke point."));
                     return false;
                 }
@@ -387,7 +457,14 @@ bool decodeOperations(const QJsonValue& value,
             operation.shape.stroke_width = stroke_width;
             operation.shape.fill_enabled = object.value("fill_enabled").toBool();
             operation.shape.fill_color = fill_color;
-            if (!ImageDocumentStore::isValidShape(operation.shape, *current_size, error)) {
+            if (version >= kCanvasSizeDocumentVersion) {
+                ImageShapeData shifted = operation.shape;
+                shifted.start += QPointF(kMaximumStoredCoordinate, kMaximumStoredCoordinate);
+                shifted.end += QPointF(kMaximumStoredCoordinate, kMaximumStoredCoordinate);
+                if (!ImageDocumentStore::isValidShape(
+                        shifted, QSize(kMaximumStoredCoordinate * 2 + 32768,
+                                       kMaximumStoredCoordinate * 2 + 32768), error)) return false;
+            } else if (!ImageDocumentStore::isValidShape(operation.shape, *current_size, error)) {
                 return false;
             }
         } else if (kind == "text" && version >= kEditableTextDocumentVersion && fixed_canvas) {
@@ -418,10 +495,16 @@ bool decodeOperations(const QJsonValue& value,
                                          : ImageTextAlignment::Left);
             operation.text.position = QPointF(x.toDouble(), y.toDouble());
             operation.text.box_width = box_width.toDouble();
-            if (!ImageDocumentStore::isValidText(operation.text, *current_size, error)) {
+            if (version >= kCanvasSizeDocumentVersion) {
+                ImageTextData shifted = operation.text;
+                shifted.position += QPointF(kMaximumStoredCoordinate, kMaximumStoredCoordinate);
+                if (!ImageDocumentStore::isValidText(
+                        shifted, QSize(kMaximumStoredCoordinate * 2 + 32768,
+                                       kMaximumStoredCoordinate * 2 + 32768), error)) return false;
+            } else if (!ImageDocumentStore::isValidText(operation.text, *current_size, error)) {
                 return false;
             }
-        } else if (kind == "raster_image" && version >= 11 && fixed_canvas) {
+        } else if (kind == "raster_image" && version >= kLinkedRasterDocumentVersion && fixed_canvas) {
             int width = 0, height = 0;
             const auto matrix = object.value("transform").toArray();
             if (!isInteger(object.value("width"), &width) ||
@@ -476,7 +559,8 @@ bool validateLayers(const ImageDocumentData& document,
     }
     QSet<QString> ids;
     QSet<QString> group_ids;
-    const QSize canvas_size = sizeAfterOperations(document.source_size, document.operations);
+    const QSize canvas_size = document.canvas_size.isValid() && !document.canvas_size.isEmpty()
+        ? document.canvas_size : sizeAfterOperations(document.source_size, document.operations);
     qsizetype background_count = 0;
     for (qsizetype index = 0; index < document.layers.size(); ++index) {
         const auto& layer = document.layers.at(index);
@@ -640,14 +724,20 @@ bool validateLayers(const ImageDocumentData& document,
 }
 
 bool validateDocument(const ImageDocumentData& document, QString* error) {
+    const QSize legacy_canvas_size = sizeAfterOperations(document.source_size, document.operations);
+    const QSize canvas_size = document.canvas_size.isValid() && !document.canvas_size.isEmpty()
+        ? document.canvas_size : legacy_canvas_size;
     const bool valid_source = document.base_kind == ImageBaseKind::SourceImage &&
         !document.source_path.isEmpty() && document.source_size.isValid() &&
-        !document.source_size.isEmpty();
+        !document.source_size.isEmpty() && ImageDocumentStore::isValidCanvasSize(canvas_size);
     const bool valid_canvas = document.base_kind == ImageBaseKind::Canvas &&
         document.source_path.isEmpty() && ImageDocumentStore::isValidCanvasSize(document.source_size) &&
-        document.canvas_background.isValid();
+        ImageDocumentStore::isValidCanvasSize(canvas_size) && document.canvas_background.isValid();
+    const QPoint base_offset = document.canvas_base_offset;
     if ((!valid_source && !valid_canvas) ||
-        document.operations.size() > ImageDocumentStore::kMaximumOperations) {
+        document.operations.size() > ImageDocumentStore::kMaximumOperations ||
+        std::abs(static_cast<qint64>(base_offset.x())) > kMaximumStoredCoordinate ||
+        std::abs(static_cast<qint64>(base_offset.y())) > kMaximumStoredCoordinate) {
         assignError(error, QStringLiteral("The document path or image base is invalid."));
         return false;
     }
@@ -703,6 +793,12 @@ QJsonObject encodeDocument(const ImageDocumentData& document,
     root.insert("format", kDocumentFormat);
     root.insert("version", kDocumentVersion);
     root.insert("base", base);
+    const QSize canvas_size = document.canvas_size.isValid() && !document.canvas_size.isEmpty()
+        ? document.canvas_size : sizeAfterOperations(document.source_size, document.operations);
+    root.insert("canvas", QJsonObject{
+        {"width", canvas_size.width()}, {"height", canvas_size.height()},
+        {"base_offset_x", document.canvas_base_offset.x()},
+        {"base_offset_y", document.canvas_base_offset.y()}});
     root.insert("operations", encodeOperations(document.operations));
     const auto encode_layer = [&document_path](const ImageLayerData& layer) {
         QJsonObject encoded;
@@ -815,6 +911,25 @@ bool decodeDocument(const QJsonObject& root,
                           &decoded.operations, error)) {
         return false;
     }
+    if (version >= kCanvasSizeDocumentVersion) {
+        const auto canvas = root.value("canvas").toObject();
+        int width = 0, height = 0, offset_x = 0, offset_y = 0;
+        if (!isInteger(canvas.value("width"), &width) ||
+            !isInteger(canvas.value("height"), &height) ||
+            !isInteger(canvas.value("base_offset_x"), &offset_x) ||
+            !isInteger(canvas.value("base_offset_y"), &offset_y) ||
+            !ImageDocumentStore::isValidCanvasSize(QSize(width, height)) ||
+            std::abs(static_cast<qint64>(offset_x)) > kMaximumStoredCoordinate ||
+            std::abs(static_cast<qint64>(offset_y)) > kMaximumStoredCoordinate) {
+            assignError(error, QStringLiteral("The document canvas dimensions or base offset are invalid."));
+            return false;
+        }
+        decoded.canvas_size = QSize(width, height);
+        decoded.canvas_base_offset = QPoint(offset_x, offset_y);
+    } else {
+        decoded.canvas_size = current_size;
+        decoded.canvas_base_offset = {};
+    }
 
     if (version >= kLayerDocumentVersion) {
         const auto encoded_layers = root.value("layers");
@@ -823,7 +938,7 @@ bool decodeDocument(const QJsonObject& root,
             assignError(error, QStringLiteral("The document layer stack is invalid."));
             return false;
         }
-        const QSize layer_canvas_size = current_size;
+        const QSize layer_canvas_size = decoded.canvas_size;
         const auto layer_array = encoded_layers.toArray();
         decoded.layers.reserve(layer_array.size());
         qsizetype stack_item_count = 0;

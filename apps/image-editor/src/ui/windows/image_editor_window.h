@@ -89,6 +89,7 @@ private:
     void createNewCanvas(bool new_tab = false);
     void openImage();
     void openDocument();
+    void resizeCanvas();
     void relinkSource();
     void saveDocument();
     void saveDocumentAs();
@@ -167,6 +168,7 @@ private:
     bool importing_ = false;
     QHash<QString, QString> logged_raster_problems_;
     QAction* new_canvas_action_ = nullptr;
+    QAction* resize_canvas_action_ = nullptr;
     QAction* save_action_ = nullptr;
     QAction* save_as_action_ = nullptr;
     QAction* export_action_ = nullptr;

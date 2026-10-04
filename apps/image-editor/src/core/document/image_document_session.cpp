@@ -138,14 +138,17 @@ QPointF transformShapePoint(QPointF point,
                             const ImageOperation& operation,
                             const QSize& canvas_size,
                             bool inverse = false) {
+    const QRect bounds = operation.transform_bounds.isValid() &&
+        !operation.transform_bounds.isEmpty()
+        ? operation.transform_bounds : QRect(QPoint(), canvas_size);
     if (operation.kind == OperationKind::FlipHorizontal) {
-        point.setX(canvas_size.width() - 1.0 - point.x());
+        point.setX(bounds.x() + bounds.width() - 1.0 - point.x());
     } else if (operation.kind == OperationKind::FlipVertical) {
-        point.setY(canvas_size.height() - 1.0 - point.y());
+        point.setY(bounds.y() + bounds.height() - 1.0 - point.y());
     } else if (operation.kind == OperationKind::Rotate) {
         QTransform transform;
-        const qreal center_x = canvas_size.width() / 2.0;
-        const qreal center_y = canvas_size.height() / 2.0;
+        const qreal center_x = bounds.x() + bounds.width() / 2.0;
+        const qreal center_y = bounds.y() + bounds.height() / 2.0;
         transform.translate(center_x, center_y);
         transform.rotate((inverse ? -operation.quarter_turns : operation.quarter_turns) * 90.0);
         transform.translate(-center_x, -center_y);
@@ -282,9 +285,12 @@ QImage applyOperations(QImage image,
             } else {
                 QImage rotated(canvas_size, QImage::Format_ARGB32_Premultiplied);
                 rotated.fill(Qt::transparent);
+                const QRect bounds = operation.transform_bounds.isValid() &&
+                    !operation.transform_bounds.isEmpty()
+                    ? operation.transform_bounds : QRect(QPoint(), canvas_size);
                 QTransform transform;
-                const qreal center_x = canvas_size.width() / 2.0;
-                const qreal center_y = canvas_size.height() / 2.0;
+                const qreal center_x = bounds.x() + bounds.width() / 2.0;
+                const qreal center_y = bounds.y() + bounds.height() / 2.0;
                 transform.translate(center_x, center_y);
                 transform.rotate(operation.quarter_turns * 90.0);
                 transform.translate(-center_x, -center_y);
@@ -295,11 +301,32 @@ QImage applyOperations(QImage image,
             }
             break;
         case OperationKind::FlipHorizontal:
-            image = image.mirrored(true, false);
-            break;
         case OperationKind::FlipVertical:
-            image = image.mirrored(false, true);
+        {
+            const QRect bounds = operation.transform_bounds.isValid() &&
+                !operation.transform_bounds.isEmpty()
+                ? operation.transform_bounds : QRect(QPoint(), canvas_size);
+            if (bounds == QRect(QPoint(), image.size())) {
+                image = image.mirrored(operation.kind == OperationKind::FlipHorizontal,
+                                       operation.kind == OperationKind::FlipVertical);
+                break;
+            }
+            QImage flipped(canvas_size, QImage::Format_ARGB32_Premultiplied);
+            flipped.fill(Qt::transparent);
+            QTransform transform;
+            if (operation.kind == OperationKind::FlipHorizontal) {
+                transform.translate(2.0 * bounds.x() + bounds.width() - 1.0, 0.0);
+                transform.scale(-1.0, 1.0);
+            } else {
+                transform.translate(0.0, 2.0 * bounds.y() + bounds.height() - 1.0);
+                transform.scale(1.0, -1.0);
+            }
+            QPainter painter(&flipped);
+            painter.setTransform(transform);
+            painter.drawImage(0, 0, image);
+            image = std::move(flipped);
             break;
+        }
         case OperationKind::PaintStroke:
             image = paintStroke(std::move(image), operation.paint_stroke);
             break;
@@ -453,11 +480,24 @@ QImage renderComposite(const QHash<QString, QImage>& resources,
         source_image, document.operations, false, cancellation_requested);
     if (background.isNull() || exportWasCancelled(cancellation_requested)) return {};
 
-    const QSize size = background.size();
+    QSize size = document.canvas_size;
+    if (!size.isValid() || size.isEmpty()) size = background.size();
+    QImage base;
+    if (document.canvas_base_offset.isNull() && size == background.size()) {
+        base = background.convertToFormat(QImage::Format_ARGB32);
+    } else {
+        base = QImage(size, QImage::Format_ARGB32);
+        if (base.isNull()) return {};
+        base.fill(document.base_kind == ImageBaseKind::Canvas
+            ? document.canvas_background : QColor(0, 0, 0, 0));
+        QPainter base_painter(&base);
+        base_painter.setCompositionMode(QPainter::CompositionMode_Source);
+        base_painter.drawImage(document.canvas_base_offset, background);
+    }
     const auto* background_layer = document.layers.isEmpty()
         ? nullptr : &document.layers.front();
     QImage composite = background_layer != nullptr && background_layer->visible
-        ? background.convertToFormat(QImage::Format_ARGB32)
+        ? base
         : QImage(size, QImage::Format_ARGB32);
     if (composite.isNull()) return {};
     if (background_layer == nullptr || !background_layer->visible) {
@@ -512,11 +552,14 @@ QImage renderSelectedLayer(const QHash<QString, QImage>& resources,
         });
     if (selected == document.layers.cend()) return {};
 
-    QSize size = source_image.size();
-    for (const auto& operation : document.operations) {
-        if (exportWasCancelled(cancellation_requested)) return {};
-        if (operation.kind == OperationKind::Crop) size = operation.crop.size();
-        else if (operation.kind == OperationKind::Rotate) size.transpose();
+    QSize size = document.canvas_size;
+    if (!size.isValid() || size.isEmpty()) {
+        size = source_image.size();
+        for (const auto& operation : document.operations) {
+            if (exportWasCancelled(cancellation_requested)) return {};
+            if (operation.kind == OperationKind::Crop) size = operation.crop.size();
+            else if (operation.kind == OperationKind::Rotate) size.transpose();
+        }
     }
     if (!size.isValid() || size.isEmpty()) return {};
 
@@ -533,8 +576,16 @@ QImage renderSelectedLayer(const QHash<QString, QImage>& resources,
 
     QImage pixels;
     if (selected->background) {
-        pixels = applyOperations(
+        QImage source = applyOperations(
             source_image, document.operations, false, cancellation_requested);
+        pixels = QImage(size, QImage::Format_ARGB32);
+        if (!pixels.isNull()) {
+            pixels.fill(document.base_kind == ImageBaseKind::Canvas
+                ? document.canvas_background : QColor(0, 0, 0, 0));
+            QPainter painter(&pixels);
+            painter.setCompositionMode(QPainter::CompositionMode_Source);
+            painter.drawImage(document.canvas_base_offset, source);
+        }
     } else {
         pixels = QImage(size, QImage::Format_ARGB32_Premultiplied);
         if (pixels.isNull()) return {};
@@ -566,11 +617,14 @@ QImage renderSelectedGroup(const QHash<QString, QImage>& resources,
         exportWasCancelled(cancellation_requested)) return {};
     const auto* group = findGroup(document, selected_group_id);
     if (group == nullptr) return {};
-    QSize size = source_image.size();
-    for (const auto& operation : document.operations) {
-        if (exportWasCancelled(cancellation_requested)) return {};
-        if (operation.kind == OperationKind::Crop) size = operation.crop.size();
-        else if (operation.kind == OperationKind::Rotate) size.transpose();
+    QSize size = document.canvas_size;
+    if (!size.isValid() || size.isEmpty()) {
+        size = source_image.size();
+        for (const auto& operation : document.operations) {
+            if (exportWasCancelled(cancellation_requested)) return {};
+            if (operation.kind == OperationKind::Crop) size = operation.crop.size();
+            else if (operation.kind == OperationKind::Rotate) size.transpose();
+        }
     }
     if (!size.isValid() || size.isEmpty()) return {};
     return renderGroup(resources, document, *group, size, cancellation_requested, {});
@@ -609,13 +663,20 @@ QImage renderLayerThumbnail(const QHash<QString, QImage>& resources,
                 (operation.crop.y() + operation.crop.height()) * scale_y));
             const QRect scaled_crop(left, top, std::max(1, right - left),
                                     std::max(1, bottom - top));
-            scaled_operation.crop = scaled_crop.intersected(
+            scaled_operation.crop = fixed_canvas ? scaled_crop : scaled_crop.intersected(
                 QRect(QPoint(0, 0), image.size()));
             if (scaled_operation.crop.isEmpty()) return {};
             if (!fixed_canvas) virtual_size = operation.crop.size();
             break;
         }
         case OperationKind::Rotate:
+            if (operation.transform_bounds.isValid() && !operation.transform_bounds.isEmpty()) {
+                scaled_operation.transform_bounds = QRect(
+                    qRound(operation.transform_bounds.x() * scale_x),
+                    qRound(operation.transform_bounds.y() * scale_y),
+                    std::max(1, qRound(operation.transform_bounds.width() * scale_x)),
+                    std::max(1, qRound(operation.transform_bounds.height() * scale_y)));
+            }
             if (!fixed_canvas && std::abs(operation.quarter_turns) % 2 != 0) {
                 virtual_size.transpose();
             }
@@ -659,6 +720,13 @@ QImage renderLayerThumbnail(const QHash<QString, QImage>& resources,
             break;
         case OperationKind::FlipHorizontal:
         case OperationKind::FlipVertical:
+            if (operation.transform_bounds.isValid() && !operation.transform_bounds.isEmpty()) {
+                scaled_operation.transform_bounds = QRect(
+                    qRound(operation.transform_bounds.x() * scale_x),
+                    qRound(operation.transform_bounds.y() * scale_y),
+                    std::max(1, qRound(operation.transform_bounds.width() * scale_x)),
+                    std::max(1, qRound(operation.transform_bounds.height() * scale_y)));
+            }
             break;
         }
         image = applyOperations(std::move(image), {scaled_operation}, fixed_canvas, nullptr, resources);
@@ -818,6 +886,7 @@ bool ImageDocumentSession::createCanvas(const QSize& size,
     data_ = {};
     data_.base_kind = ImageBaseKind::Canvas;
     data_.source_size = size;
+    data_.canvas_size = size;
     data_.canvas_background = background;
     initializeDefaultLayers();
     source_image_ = std::move(canvas);
@@ -825,6 +894,8 @@ bool ImageDocumentSession::createCanvas(const QSize& size,
     recovery_session_id_ = QUuid::createUuid().toString(QUuid::WithoutBraces);
     baseline_source_path_.clear();
     baseline_source_size_ = size;
+    baseline_canvas_size_ = data_.canvas_size;
+    baseline_canvas_base_offset_ = data_.canvas_base_offset;
     baseline_base_kind_ = ImageBaseKind::Canvas;
     baseline_canvas_background_ = background;
     baseline_operations_.clear();
@@ -870,12 +941,15 @@ bool ImageDocumentSession::openImage(const QString& source_path, QString* error)
     data_.base_kind = ImageBaseKind::SourceImage;
     data_.source_path = absoluteCleanPath(source_path);
     data_.source_size = decoded.size();
+    data_.canvas_size = decoded.size();
     initializeDefaultLayers();
     source_image_ = std::move(decoded);
     document_path_.clear();
     recovery_session_id_.clear();
     baseline_source_path_ = data_.source_path;
     baseline_source_size_ = data_.source_size;
+    baseline_canvas_size_ = data_.canvas_size;
+    baseline_canvas_base_offset_ = data_.canvas_base_offset;
     baseline_base_kind_ = data_.base_kind;
     baseline_canvas_background_ = data_.canvas_background;
     baseline_operations_.clear();
@@ -930,6 +1004,8 @@ bool ImageDocumentSession::openDocument(const QString& document_path, QString* e
     recovery_session_id_.clear();
     baseline_source_path_ = data_.source_path;
     baseline_source_size_ = data_.source_size;
+    baseline_canvas_size_ = data_.canvas_size;
+    baseline_canvas_base_offset_ = data_.canvas_base_offset;
     baseline_base_kind_ = data_.base_kind;
     baseline_canvas_background_ = data_.canvas_background;
     baseline_operations_ = data_.operations;
@@ -987,6 +1063,8 @@ bool ImageDocumentSession::restoreRecovery(const QString& recovery_path, QString
     }
     baseline_source_path_ = data_.source_path;
     baseline_source_size_ = data_.source_size;
+    baseline_canvas_size_ = data_.canvas_size;
+    baseline_canvas_base_offset_ = data_.canvas_base_offset;
     baseline_base_kind_ = data_.base_kind;
     baseline_canvas_background_ = data_.canvas_background;
     baseline_operations_.clear();
@@ -1018,6 +1096,130 @@ bool ImageDocumentSession::relinkSource(const QString& source_path, QString* err
     return true;
 }
 
+bool ImageDocumentSession::resizeCanvas(const QSize& size,
+                                        CanvasAnchor anchor,
+                                        QString* error) {
+    if (error != nullptr) error->clear();
+    if (!hasSource() || !ImageDocumentStore::isValidCanvasSize(size)) {
+        assignError(error, QStringLiteral("Choose valid canvas dimensions before resizing."));
+        return false;
+    }
+    const QSize old_size = renderedSize();
+    if (!ImageDocumentStore::isValidCanvasSize(old_size)) {
+        assignError(error, QStringLiteral("The current canvas dimensions cannot be resized."));
+        return false;
+    }
+    if (size == old_size) return false;
+
+    int horizontal = 1;
+    int vertical = 1;
+    switch (anchor) {
+    case CanvasAnchor::TopLeft: case CanvasAnchor::Left: case CanvasAnchor::BottomLeft:
+        horizontal = 0; break;
+    case CanvasAnchor::TopRight: case CanvasAnchor::Right: case CanvasAnchor::BottomRight:
+        horizontal = 2; break;
+    default: break;
+    }
+    switch (anchor) {
+    case CanvasAnchor::TopLeft: case CanvasAnchor::Top: case CanvasAnchor::TopRight:
+        vertical = 0; break;
+    case CanvasAnchor::BottomLeft: case CanvasAnchor::Bottom: case CanvasAnchor::BottomRight:
+        vertical = 2; break;
+    default: break;
+    }
+    const auto anchored_offset = [](int difference, int alignment) {
+        if (alignment == 0) return 0;
+        if (alignment == 2) return difference;
+        return difference / 2;
+    };
+    const QPoint delta(anchored_offset(size.width() - old_size.width(), horizontal),
+                       anchored_offset(size.height() - old_size.height(), vertical));
+
+    ImageDocumentData candidate = data_;
+    const auto coordinate_safe = [](qint64 value) {
+        return std::abs(value) <= 1'000'000;
+    };
+    const auto shift_point = [&delta](QPointF* point) {
+        if (point == nullptr) return false;
+        point->rx() += delta.x();
+        point->ry() += delta.y();
+        return std::isfinite(point->x()) && std::isfinite(point->y()) &&
+            std::abs(point->x()) <= 1'000'000.0 && std::abs(point->y()) <= 1'000'000.0;
+    };
+    const auto shift_operations = [&](QVector<ImageOperation>* operations) {
+        if (operations == nullptr) return true;
+        for (auto& operation : *operations) {
+            if (operation.kind == OperationKind::Crop) {
+                const qint64 x = static_cast<qint64>(operation.crop.x()) + delta.x();
+                const qint64 y = static_cast<qint64>(operation.crop.y()) + delta.y();
+                if (!coordinate_safe(x) || !coordinate_safe(y) ||
+                    !coordinate_safe(x + operation.crop.width()) ||
+                    !coordinate_safe(y + operation.crop.height())) return false;
+                operation.crop.translate(delta);
+            } else if (operation.kind == OperationKind::Rotate ||
+                       operation.kind == OperationKind::FlipHorizontal ||
+                       operation.kind == OperationKind::FlipVertical) {
+                if (!operation.transform_bounds.isValid() || operation.transform_bounds.isEmpty())
+                    operation.transform_bounds = QRect(QPoint(), old_size);
+                const qint64 x = static_cast<qint64>(operation.transform_bounds.x()) + delta.x();
+                const qint64 y = static_cast<qint64>(operation.transform_bounds.y()) + delta.y();
+                if (!coordinate_safe(x) || !coordinate_safe(y) ||
+                    !coordinate_safe(x + operation.transform_bounds.width()) ||
+                    !coordinate_safe(y + operation.transform_bounds.height())) return false;
+                operation.transform_bounds.translate(delta);
+            } else if (operation.kind == OperationKind::PaintStroke) {
+                for (auto& point : operation.paint_stroke.points)
+                    if (!shift_point(&point)) return false;
+            } else if (operation.kind == OperationKind::EraseStroke) {
+                for (auto& point : operation.erase_stroke.points)
+                    if (!shift_point(&point)) return false;
+            } else if (operation.kind == OperationKind::Shape) {
+                if (!shift_point(&operation.shape.start) || !shift_point(&operation.shape.end))
+                    return false;
+            } else if (operation.kind == OperationKind::Text) {
+                if (!shift_point(&operation.text.position)) return false;
+            } else if (operation.kind == OperationKind::RasterImage) {
+                const auto& transform = operation.raster.transform;
+                operation.raster.transform = QTransform(
+                    transform.m11(), transform.m12(), transform.m21(), transform.m22(),
+                    transform.dx() + delta.x(), transform.dy() + delta.y());
+                if (!std::isfinite(operation.raster.transform.dx()) ||
+                    !std::isfinite(operation.raster.transform.dy()) ||
+                    std::abs(operation.raster.transform.dx()) > 1'000'000.0 ||
+                    std::abs(operation.raster.transform.dy()) > 1'000'000.0) return false;
+            }
+        }
+        return true;
+    };
+    for (auto& layer : candidate.layers) {
+        if (layer.background) continue;
+        if (!shift_operations(&layer.operations) ||
+            (layer.mask.has_value() && !shift_operations(&layer.mask->operations))) {
+            assignError(error, QStringLiteral("The canvas change would move existing content beyond the supported edit range."));
+            return false;
+        }
+    }
+    for (auto& group : candidate.groups) {
+        if (!shift_operations(&group.operations)) {
+            assignError(error, QStringLiteral("The canvas change would move existing content beyond the supported edit range."));
+            return false;
+        }
+    }
+    const qint64 base_x = static_cast<qint64>(candidate.canvas_base_offset.x()) + delta.x();
+    const qint64 base_y = static_cast<qint64>(candidate.canvas_base_offset.y()) + delta.y();
+    if (!coordinate_safe(base_x) || !coordinate_safe(base_y)) {
+        assignError(error, QStringLiteral("The canvas change would move the base image beyond the supported edit range."));
+        return false;
+    }
+    candidate.canvas_size = size;
+    candidate.canvas_base_offset = QPoint(static_cast<int>(base_x), static_cast<int>(base_y));
+
+    pushEdit();
+    data_ = std::move(candidate);
+    layer_thumbnail_cache_.clear();
+    return true;
+}
+
 bool ImageDocumentSession::saveDocument(QString document_path, QString* error) {
     if (!hasSource()) {
         assignError(error, QStringLiteral("Relink the source image before saving the document."));
@@ -1032,6 +1234,8 @@ bool ImageDocumentSession::saveDocument(QString document_path, QString* error) {
     document_path_ = absoluteCleanPath(document_path);
     baseline_source_path_ = data_.source_path;
     baseline_source_size_ = data_.source_size;
+    baseline_canvas_size_ = data_.canvas_size;
+    baseline_canvas_base_offset_ = data_.canvas_base_offset;
     baseline_base_kind_ = data_.base_kind;
     baseline_canvas_background_ = data_.canvas_background;
     baseline_operations_ = data_.operations;
@@ -1192,6 +1396,7 @@ bool ImageDocumentSession::exportImage(const QString& output_path,
 }
 
 QSize ImageDocumentSession::renderedSize() const {
+    if (data_.canvas_size.isValid() && !data_.canvas_size.isEmpty()) return data_.canvas_size;
     QSize size = data_.source_size;
     for (const auto& operation : data_.operations) {
         if (operation.kind == OperationKind::Crop) size = operation.crop.size();
@@ -1512,10 +1717,24 @@ QHash<QString, QImage> ImageDocumentSession::renderedLayerThumbnails(
             cached->background == layer.background && cached->mask == layer.mask;
 
         if (!cache_matches) {
-            QImage thumbnail = renderLayerThumbnail(raster_images_,
-                layer.background ? source_image_ : QImage{},
-                layer.background ? data_.source_size : canvas_size,
-                operations, !layer.background, maximum_size, !layer.background);
+            QImage thumbnail;
+            if (layer.background) {
+                QImage base = applyOperations(source_image_, data_.operations, false);
+                QImage canvas(canvas_size, QImage::Format_ARGB32);
+                if (!canvas.isNull()) {
+                    canvas.fill(data_.base_kind == ImageBaseKind::Canvas
+                        ? data_.canvas_background : QColor(0, 0, 0, 0));
+                    QPainter painter(&canvas);
+                    painter.setCompositionMode(QPainter::CompositionMode_Source);
+                    painter.drawImage(data_.canvas_base_offset, base);
+                    painter.end();
+                    thumbnail = canvas.scaled(maximum_size, Qt::KeepAspectRatio,
+                                              Qt::SmoothTransformation);
+                }
+            } else {
+                thumbnail = renderLayerThumbnail(raster_images_, QImage{}, canvas_size,
+                    operations, true, maximum_size, true);
+            }
             if (layer.mask.has_value() && layer.mask->enabled && !thumbnail.isNull()) {
                 QImage white(thumbnail.size(), QImage::Format_ARGB32_Premultiplied);
                 white.fill(Qt::white);
@@ -2687,6 +2906,8 @@ bool ImageDocumentSession::applySelectedGroupTransform(const ImageOperation& ope
             assignError(error, QStringLiteral("The crop area is empty."));
             return false;
         }
+    } else {
+        checked.transform_bounds = QRect(QPoint(), renderedSize());
     }
     pushEdit();
     findGroup(data_, selected_group_id_)->operations.append(std::move(checked));
@@ -2703,7 +2924,8 @@ void ImageDocumentSession::rotateLeft() {
     if (!layerTransformHasCapacity(data_.layers.at(layerIndex(selected_layer_id_)))) return;
     pushEdit();
     auto& layer = data_.layers[layerIndex(selected_layer_id_)];
-    const ImageOperation operation{OperationKind::Rotate, {}, -1};
+    ImageOperation operation{OperationKind::Rotate, {}, -1};
+    operation.transform_bounds = QRect(QPoint(), renderedSize());
     layer.operations.append(operation);
     if (layer.mask.has_value()) layer.mask->operations.append(operation);
 }
@@ -2717,7 +2939,8 @@ void ImageDocumentSession::rotateRight() {
     if (!layerTransformHasCapacity(data_.layers.at(layerIndex(selected_layer_id_)))) return;
     pushEdit();
     auto& layer = data_.layers[layerIndex(selected_layer_id_)];
-    const ImageOperation operation{OperationKind::Rotate, {}, 1};
+    ImageOperation operation{OperationKind::Rotate, {}, 1};
+    operation.transform_bounds = QRect(QPoint(), renderedSize());
     layer.operations.append(operation);
     if (layer.mask.has_value()) layer.mask->operations.append(operation);
 }
@@ -2731,7 +2954,8 @@ void ImageDocumentSession::flipHorizontal() {
     if (!layerTransformHasCapacity(data_.layers.at(layerIndex(selected_layer_id_)))) return;
     pushEdit();
     auto& layer = data_.layers[layerIndex(selected_layer_id_)];
-    const ImageOperation operation{OperationKind::FlipHorizontal, {}, 0};
+    ImageOperation operation{OperationKind::FlipHorizontal, {}, 0};
+    operation.transform_bounds = QRect(QPoint(), renderedSize());
     layer.operations.append(operation);
     if (layer.mask.has_value()) layer.mask->operations.append(operation);
 }
@@ -2745,7 +2969,8 @@ void ImageDocumentSession::flipVertical() {
     if (!layerTransformHasCapacity(data_.layers.at(layerIndex(selected_layer_id_)))) return;
     pushEdit();
     auto& layer = data_.layers[layerIndex(selected_layer_id_)];
-    const ImageOperation operation{OperationKind::FlipVertical, {}, 0};
+    ImageOperation operation{OperationKind::FlipVertical, {}, 0};
+    operation.transform_bounds = QRect(QPoint(), renderedSize());
     layer.operations.append(operation);
     if (layer.mask.has_value()) layer.mask->operations.append(operation);
 }
@@ -2793,6 +3018,8 @@ bool ImageDocumentSession::redo() {
 bool ImageDocumentSession::isDirty() const noexcept {
     return force_dirty_ || data_.source_path != baseline_source_path_ ||
         data_.source_size != baseline_source_size_ || data_.base_kind != baseline_base_kind_ ||
+        data_.canvas_size != baseline_canvas_size_ ||
+        data_.canvas_base_offset != baseline_canvas_base_offset_ ||
         data_.canvas_background != baseline_canvas_background_ ||
         data_.operations != baseline_operations_ || data_.layers != baseline_layers_ ||
         data_.groups != baseline_groups_ || data_.root_stack != baseline_root_stack_;

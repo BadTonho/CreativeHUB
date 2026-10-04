@@ -43,6 +43,8 @@ add_executable(creative-suite-image-editor
     src/ui/dialogs/image_export_dialog.h
     src/ui/dialogs/new_canvas_dialog.cpp
     src/ui/dialogs/new_canvas_dialog.h
+    src/ui/dialogs/canvas_size_dialog.cpp
+    src/ui/dialogs/canvas_size_dialog.h
     src/ui/dialogs/shortcut_settings_dialog.cpp
     src/ui/dialogs/shortcut_settings_dialog.h
     src/ui/canvas/image_canvas.cpp

@@ -4,6 +4,7 @@
 #include "image_document_store.h"
 #include "image_export_dialog.h"
 #include "image_export_worker.h"
+#include "canvas_size_dialog.h"
 #include "new_canvas_dialog.h"
 #include "shortcut_settings_dialog.h"
 #include "tool_sidebar.h"
@@ -1571,6 +1572,9 @@ void ImageEditorWindow::createActions() {
         QStringLiteral("New Canvas..."), QKeySequence::New,
         [this]() { createNewCanvas(); });
     new_canvas_action_->setObjectName(QStringLiteral("newCanvasAction"));
+    resize_canvas_action_ = makeAction(
+        QStringLiteral("Canvas Size..."), {}, [this]() { resizeCanvas(); });
+    resize_canvas_action_->setObjectName(QStringLiteral("resizeCanvasAction"));
     open_image_action_ = makeAction(
         QStringLiteral("Open Image..."), QKeySequence::Open, [this]() { openImage(); });
     open_image_action_->setObjectName(QStringLiteral("openImageAction"));
@@ -1841,6 +1845,9 @@ void ImageEditorWindow::createActions() {
     edit_menu->addAction(flip_horizontal_action_);
     edit_menu->addAction(flip_vertical_action_);
 
+    auto* image_menu = menuBar()->addMenu(QStringLiteral("Image"));
+    image_menu->addAction(resize_canvas_action_);
+
     auto* view_menu = menuBar()->addMenu(QStringLiteral("View"));
     view_menu->addAction(fit_action_);
     view_menu->addAction(next_document_tab_action_);
@@ -2013,6 +2020,7 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
         import_layer_action_->setEnabled(false);
         relink_raster_action_->setEnabled(false);
         new_canvas_action_->setEnabled(!linked);
+        resize_canvas_action_->setEnabled(false);
         open_image_action_->setEnabled(!linked);
         open_document_action_->setEnabled(!linked);
         fit_action_->setEnabled(false);
@@ -2044,6 +2052,7 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     relink_raster_action_->setEnabled(session_.hasSource() && !importing_ &&
         selected_object_ids_.size() == 1 && session_.findRaster(selected_object_ids_.front(), nullptr));
     new_canvas_action_->setEnabled(!linked);
+    resize_canvas_action_->setEnabled(session_.hasSource());
     open_image_action_->setEnabled(!linked);
     open_document_action_->setEnabled(!linked);
     save_as_action_->setEnabled(session_.hasSource() && !linked);
@@ -2143,6 +2152,21 @@ void ImageEditorWindow::createNewCanvas(bool new_tab) {
     deactivateCanvasTools();
     updateView();
     statusBar()->showMessage(QStringLiteral("New canvas created"), 3000);
+}
+
+void ImageEditorWindow::resizeCanvas() {
+    if (canvas_ == nullptr || !session_.hasSource()) return;
+    canvas_->commitTextEditing();
+    CanvasSizeDialog dialog(session_.renderedImage().size(), this);
+    if (dialog.exec() != QDialog::Accepted) return;
+    QString error;
+    if (!session_.resizeCanvas(dialog.canvasSize(), dialog.anchor(), &error)) {
+        if (!error.isEmpty()) reportError(QStringLiteral("resize_canvas"), error);
+        return;
+    }
+    selected_object_ids_.clear();
+    updateView();
+    statusBar()->showMessage(QStringLiteral("Canvas resized"), 3000);
 }
 
 bool ImageEditorWindow::confirmDiscardOrSave(bool clearRecoveryOnDiscard) {

@@ -16,6 +16,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -190,9 +191,9 @@ void testCanvasCreationPersistenceAndRecovery(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The saved canvas document could not be read."));
     const auto document_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(document_json.value("version").toInt() == 11 &&
+    require(document_json.value("version").toInt() == 12 &&
                 document_json.value("base").toObject().value("kind").toString() == "canvas",
-            QStringLiteral("Canvas save did not use the version 11 grouped-layer representation."));
+            QStringLiteral("Canvas save did not use the version 12 grouped-layer and canvas representation."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -245,6 +246,217 @@ void testCanvasCreationPersistenceAndRecovery(const QString& root) {
             QStringLiteral("A rejected canvas creation replaced the current document."));
 }
 
+void testCanvasResizingAnchorsPersistenceAndHistory(const QString& root) {
+    constexpr std::array<image_editor::CanvasAnchor, 9> anchors = {
+        image_editor::CanvasAnchor::TopLeft, image_editor::CanvasAnchor::Top,
+        image_editor::CanvasAnchor::TopRight, image_editor::CanvasAnchor::Left,
+        image_editor::CanvasAnchor::Center, image_editor::CanvasAnchor::Right,
+        image_editor::CanvasAnchor::BottomLeft, image_editor::CanvasAnchor::Bottom,
+        image_editor::CanvasAnchor::BottomRight};
+    const auto offset_for = [](const QSize& from, const QSize& to,
+                               image_editor::CanvasAnchor anchor) {
+        int column = 1;
+        int row = 1;
+        switch (anchor) {
+        case image_editor::CanvasAnchor::TopLeft:
+        case image_editor::CanvasAnchor::Left:
+        case image_editor::CanvasAnchor::BottomLeft: column = 0; break;
+        case image_editor::CanvasAnchor::TopRight:
+        case image_editor::CanvasAnchor::Right:
+        case image_editor::CanvasAnchor::BottomRight: column = 2; break;
+        default: break;
+        }
+        switch (anchor) {
+        case image_editor::CanvasAnchor::TopLeft:
+        case image_editor::CanvasAnchor::Top:
+        case image_editor::CanvasAnchor::TopRight: row = 0; break;
+        case image_editor::CanvasAnchor::BottomLeft:
+        case image_editor::CanvasAnchor::Bottom:
+        case image_editor::CanvasAnchor::BottomRight: row = 2; break;
+        default: break;
+        }
+        const auto component = [](int difference, int alignment) {
+            return alignment == 0 ? 0 : (alignment == 2 ? difference : difference / 2);
+        };
+        return QPoint(component(to.width() - from.width(), column),
+                      component(to.height() - from.height(), row));
+    };
+
+    const QString source_path = root + QStringLiteral("/resize-source.png");
+    const QImage small_source = sampleImage();
+    require(writeImage(source_path, small_source),
+            QStringLiteral("Could not create the canvas resize source image."));
+    const QSize expanded_size(10, 8);
+    for (const auto anchor : anchors) {
+        image_editor::ImageDocumentSession session;
+        QString error;
+        require(session.openImage(source_path, &error), error);
+        const QImage original = session.renderedImage();
+        const QPoint offset = offset_for(original.size(), expanded_size, anchor);
+        require(session.resizeCanvas(expanded_size, anchor, &error), error);
+        const QImage expanded = session.renderedImage();
+        require(expanded.size() == expanded_size &&
+                    session.data().source_size == original.size() &&
+                    session.data().canvas_base_offset == offset,
+                QStringLiteral("Canvas expansion did not retain the source size and anchor offset."));
+        for (int y = 0; y < original.height(); ++y) {
+            for (int x = 0; x < original.width(); ++x) {
+                require(expanded.pixelColor(x + offset.x(), y + offset.y()) == original.pixelColor(x, y),
+                        QStringLiteral("Canvas expansion scaled or misplaced base pixels."));
+            }
+        }
+        const int empty_x = offset.x() > 0 ? 0 : expanded.width() - 1;
+        const int empty_y = offset.y() > 0 ? 0 : expanded.height() - 1;
+        require(expanded.pixelColor(empty_x, empty_y).alpha() == 0,
+                QStringLiteral("A source-image canvas extension was not transparent."));
+        require(session.undo() && session.renderedImage() == original && !session.isDirty(),
+                QStringLiteral("Canvas resizing was not a single undoable edit."));
+        require(session.redo() && session.renderedImage() == expanded,
+                QStringLiteral("Canvas resize Redo did not restore the expanded pixels."));
+    }
+
+    QImage large_source(10, 8, QImage::Format_ARGB32);
+    for (int y = 0; y < large_source.height(); ++y)
+        for (int x = 0; x < large_source.width(); ++x)
+            large_source.setPixelColor(x, y, QColor(x * 17, y * 23, x + y, 255));
+    const QString large_source_path = root + QStringLiteral("/resize-large-source.png");
+    require(writeImage(large_source_path, large_source),
+            QStringLiteral("Could not create the canvas reduction source image."));
+    const QSize reduced_size(4, 3);
+    for (const auto anchor : anchors) {
+        image_editor::ImageDocumentSession session;
+        QString error;
+        require(session.openImage(large_source_path, &error), error);
+        const QPoint offset = offset_for(large_source.size(), reduced_size, anchor);
+        require(session.resizeCanvas(reduced_size, anchor, &error), error);
+        const QImage reduced = session.renderedImage();
+        require(reduced.size() == reduced_size,
+                QStringLiteral("Canvas reduction did not apply its requested dimensions."));
+        for (int y = 0; y < reduced.height(); ++y) {
+            for (int x = 0; x < reduced.width(); ++x) {
+                const QPoint source_point(x - offset.x(), y - offset.y());
+                const QColor expected = QRect(QPoint(), large_source.size()).contains(source_point)
+                    ? large_source.pixelColor(source_point) : QColor(0, 0, 0, 0);
+                require(reduced.pixelColor(x, y) == expected,
+                        QStringLiteral("Canvas reduction did not crop the source at its selected anchor."));
+            }
+        }
+        require(session.undo() && session.renderedImage() == large_source,
+                QStringLiteral("Undo did not restore the full canvas after reduction."));
+    }
+
+    image_editor::ImageDocumentSession canvas_document;
+    QString error;
+    const QColor background(31, 81, 141, 177);
+    require(canvas_document.createCanvas(QSize(4, 3), background, &error), error);
+    const QImage canvas_before_resize = canvas_document.renderedImage();
+    require(canvas_document.resizeCanvas(QSize(8, 7), image_editor::CanvasAnchor::Center, &error), error);
+    require(canvas_document.renderedImage().pixelColor(0, 0) == background &&
+                canvas_document.renderedImage().pixelColor(2, 2) ==
+                    canvas_before_resize.pixelColor(0, 0),
+            QStringLiteral("Canvas resizing did not fill the new area with the configured background."));
+
+    image_editor::ImageDocumentSession structured;
+    require(structured.openImage(source_path, &error), error);
+    const QString first_layer = structured.addLayer();
+    const QString second_layer = structured.addLayer();
+    require(!first_layer.isEmpty() && !second_layer.isEmpty(),
+            QStringLiteral("Could not create editable layers for resize coverage."));
+    require(structured.selectLayer(first_layer) &&
+                structured.applyPaintStroke({QPointF(1, 1)}, Qt::red, 2, &error), error);
+    require(structured.selectLayer(second_layer) && structured.addLayerMask(second_layer) &&
+                structured.applyLayerMaskStroke({QPointF(2, 1)}, Qt::white, 1, &error), error);
+    const QString group_id = structured.groupLayers({first_layer, second_layer}, &error);
+    require(!group_id.isEmpty(), error);
+    structured.rotateRight();
+    require(structured.resizeCanvas(QSize(10, 8), image_editor::CanvasAnchor::Center, &error), error);
+    const QPoint offset(3, 2);
+    const auto first_after = std::find_if(structured.data().layers.cbegin(), structured.data().layers.cend(),
+        [&first_layer](const auto& layer) { return layer.id == first_layer; });
+    const auto second_after = std::find_if(structured.data().layers.cbegin(), structured.data().layers.cend(),
+        [&second_layer](const auto& layer) { return layer.id == second_layer; });
+    require(first_after != structured.data().layers.cend() &&
+                second_after != structured.data().layers.cend() &&
+                first_after->operations.front().paint_stroke.points.front() == QPointF(1, 1) + offset &&
+                second_after->mask.has_value() &&
+                second_after->mask->operations.front().paint_stroke.points.front() == QPointF(2, 1) + offset &&
+                structured.data().groups.front().operations.front().transform_bounds == QRect(3, 2, 4, 3),
+            QStringLiteral("Resize did not shift layer content, masks, and group transform bounds together."));
+    const QString resized_document = root + QStringLiteral("/resized-structured.cimg");
+    require(structured.saveDocument(resized_document, &error), error);
+    QFile resized_file(resized_document);
+    require(resized_file.open(QIODevice::ReadOnly),
+            QStringLiteral("The resized document could not be read."));
+    const auto resized_json = QJsonDocument::fromJson(resized_file.readAll()).object();
+    require(resized_json.value("version").toInt() == 12 &&
+                resized_json.value("canvas").toObject().value("width").toInt() == 10 &&
+                resized_json.value("base").toObject().value("width").toInt() == 4,
+            QStringLiteral("The v12 document did not distinguish the resized canvas from its source."));
+    image_editor::ImageDocumentSession reopened;
+    require(reopened.openDocument(resized_document, &error), error);
+    require(reopened.data() == structured.data() &&
+                reopened.renderedImage() == structured.renderedImage(),
+            QStringLiteral("A resized v12 document did not preserve its editable rendering."));
+    const QString exported = root + QStringLiteral("/resized-export.png");
+    require(reopened.exportImage(exported, &error), error);
+    require(QImage(exported).size() == QSize(10, 8),
+            QStringLiteral("Full export did not use the resized document dimensions."));
+
+    const QString old_format = root + QStringLiteral("/v11-resize-compat.cimg");
+    image_editor::ImageDocumentSession old_session;
+    require(old_session.openImage(source_path, &error) && old_session.saveDocument(old_format, &error), error);
+    QFile old_file(old_format);
+    require(old_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the v12 compatibility fixture."));
+    QJsonObject old_json = QJsonDocument::fromJson(old_file.readAll()).object();
+    old_file.close();
+    old_json.insert("version", 11);
+    old_json.remove("canvas");
+    QFile old_writer(old_format);
+    require(old_writer.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            QStringLiteral("Could not write the v11 compatibility fixture."));
+    old_writer.write(QJsonDocument(old_json).toJson());
+    old_writer.close();
+    image_editor::ImageDocumentSession migrated;
+    require(migrated.openDocument(old_format, &error) &&
+                migrated.renderedImage() == small_source &&
+                migrated.renderedImage().size() == small_source.size(), error);
+    require(migrated.saveDocument({}, &error), error);
+    QFile migrated_file(old_format);
+    require(migrated_file.open(QIODevice::ReadOnly) &&
+                QJsonDocument::fromJson(migrated_file.readAll()).object().value("version").toInt() == 12,
+            QStringLiteral("Saving a v11 document did not migrate it to v12."));
+
+    const QString missing_document = root + QStringLiteral("/missing-source-resized.cimg");
+    QJsonObject missing_json;
+    QFile migrated_source_file(resized_document);
+    require(migrated_source_file.open(QIODevice::ReadOnly),
+            QStringLiteral("Could not read the saved v12 relink fixture."));
+    missing_json = QJsonDocument::fromJson(migrated_source_file.readAll()).object();
+    migrated_source_file.close();
+    QJsonObject missing_base = missing_json.value("base").toObject();
+    missing_base.insert("path", QStringLiteral("missing-original.png"));
+    missing_json.insert("base", missing_base);
+    QFile missing_writer(missing_document);
+    require(missing_writer.open(QIODevice::WriteOnly),
+            QStringLiteral("Could not write the missing-source v12 fixture."));
+    missing_writer.write(QJsonDocument(missing_json).toJson());
+    missing_writer.close();
+    image_editor::ImageDocumentSession offline;
+    require(offline.openDocument(missing_document, &error) && offline.sourceIsMissing(), error);
+    const QString wrong_size_source = root + QStringLiteral("/wrong-size-source.png");
+    QImage wrong_size(10, 8, QImage::Format_ARGB32);
+    wrong_size.fill(Qt::green);
+    require(writeImage(wrong_size_source, wrong_size),
+            QStringLiteral("Could not create the incompatible relink source."));
+    require(!offline.relinkSource(wrong_size_source, &error) && offline.sourceIsMissing(),
+            QStringLiteral("Relink accepted a replacement with the resized canvas dimensions instead of the original source dimensions."));
+    require(offline.relinkSource(source_path, &error) && offline.renderedImage().size() == QSize(10, 8), error);
+    const auto before_rejected = migrated.data();
+    require(!migrated.resizeCanvas(QSize(32768, 32768), image_editor::CanvasAnchor::Center, &error) &&
+                migrated.data() == before_rejected,
+            QStringLiteral("An over-budget resize changed the document."));
+}
+
 void testLegacyVersionOneDocument(const QString& root) {
     const QString source_path = root + QStringLiteral("/legacy-source.png");
     require(writeImage(source_path, sampleImage()),
@@ -275,8 +487,8 @@ void testLegacyVersionOneDocument(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 1 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 11,
-            QStringLiteral("Saving a version 1 document did not upgrade it to version 11."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 12,
+            QStringLiteral("Saving a version 1 document did not upgrade it to version 12."));
 }
 
 void testVersionTwoDocumentCompatibility(const QString& root) {
@@ -309,8 +521,8 @@ void testVersionTwoDocumentCompatibility(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The upgraded version 2 document could not be read."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 11,
-            QStringLiteral("Saving a version 2 document did not upgrade it to version 11."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 12,
+            QStringLiteral("Saving a version 2 document did not upgrade it to version 12."));
 
     base.remove("path");
     base.insert("kind", "canvas");
@@ -382,8 +594,8 @@ void testVersionThreeMigrationToBackground(const QString& root) {
     QFile upgraded(path);
     require(upgraded.open(QIODevice::ReadOnly),
             QStringLiteral("The migrated version 3 document could not be reopened."));
-    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 11,
-            QStringLiteral("Saving a version 3 document did not upgrade it to version 11."));
+    require(QJsonDocument::fromJson(upgraded.readAll()).object().value("version").toInt() == 12,
+            QStringLiteral("Saving a version 3 document did not upgrade it to version 12."));
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(path, &error) && reopened.renderedImage() == original_render,
             QStringLiteral("Upgrading a version 3 document changed its visible pixels."));
@@ -472,10 +684,10 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     const int serialized_maximum_diameter = maximum_brush_json.value("layers").toArray()
         .at(1).toObject().value("operations").toArray()
         .at(0).toObject().value("diameter").toInt();
-    require(maximum_brush_json.value("version").toInt() == 11 &&
+    require(maximum_brush_json.value("version").toInt() == 12 &&
                 serialized_maximum_diameter ==
                     image_editor::ImageDocumentStore::kMaximumPaintBrushDiameter,
-            QStringLiteral("The 1024 px paint diameter was not saved in version 11."));
+            QStringLiteral("The 1024 px paint diameter was not saved in version 12."));
     image_editor::ImageDocumentSession reopened_maximum_brush;
     require(reopened_maximum_brush.openDocument(maximum_brush_path, &error), error);
     require(reopened_maximum_brush.data() == maximum_brush_session.data() &&
@@ -495,11 +707,11 @@ void testPaintStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     require(document_file.open(QIODevice::ReadOnly),
             QStringLiteral("The painted document could not be read."));
     const QJsonObject saved_json = QJsonDocument::fromJson(document_file.readAll()).object();
-    require(saved_json.value("version").toInt() == 11 &&
+    require(saved_json.value("version").toInt() == 12 &&
                 saved_json.value("layers").toArray().at(1).toObject()
                     .value("operations").toArray().at(0).toObject()
                     .value("kind").toString() == "paint_stroke",
-            QStringLiteral("Paint was not serialized in the version 11 layer operations."));
+            QStringLiteral("Paint was not serialized in the version 12 layer operations."));
 
     image_editor::ImageDocumentSession reopened;
     require(reopened.openDocument(document_path, &error), error);
@@ -589,8 +801,8 @@ void testEraseStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     QFile migrated_v4_file(v4_path);
     require(migrated_v4_file.open(QIODevice::ReadOnly) &&
                 QJsonDocument::fromJson(migrated_v4_file.readAll()).object()
-                        .value("version").toInt() == 11,
-            QStringLiteral("Saving a version 4 document did not migrate it to v11."));
+                        .value("version").toInt() == 12,
+            QStringLiteral("Saving a version 4 document did not migrate it to v12."));
 
     const QVector<QPointF> erase_points{QPointF(8, 6)};
     const auto before_preview = session.data();
@@ -646,10 +858,10 @@ void testEraseStrokesPersistenceUndoRedoAndValidation(const QString& root) {
     const QJsonObject maximum_json = QJsonDocument::fromJson(maximum_file.readAll()).object();
     const auto operations = maximum_json.value("layers").toArray().at(1).toObject()
         .value("operations").toArray();
-    require(maximum_json.value("version").toInt() == 11 && operations.size() == 2 &&
+    require(maximum_json.value("version").toInt() == 12 && operations.size() == 2 &&
                 operations.at(1).toObject().value("kind").toString() == "erase_stroke" &&
                 operations.at(1).toObject().value("diameter").toInt() == 1024,
-            QStringLiteral("A maximum-size erase stroke was not serialized as version 11."));
+            QStringLiteral("A maximum-size erase stroke was not serialized as version 12."));
     QJsonObject version_four_with_erase = maximum_json;
     version_four_with_erase.insert("version", 4);
     const QString invalid_v4_path = root + QStringLiteral("/version-four-erase.cimg");
@@ -858,7 +1070,7 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     require(session.saveDocument(document_path, &error), error);
     QFile document_file(document_path);
     require(document_file.open(QIODevice::ReadOnly),
-            QStringLiteral("The version 11 shape document could not be read."));
+            QStringLiteral("The version 12 shape document could not be read."));
     QJsonObject document_json = QJsonDocument::fromJson(document_file.readAll()).object();
     document_file.close();
     const auto saved_layers = document_json.value("layers").toArray();
@@ -866,7 +1078,7 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
         saved_layers.cbegin(), saved_layers.cend(), [&rectangle_layer](const QJsonValue& value) {
             return value.toObject().value("id").toString() == rectangle_layer;
         });
-    require(document_json.value("version").toInt() == 11 &&
+    require(document_json.value("version").toInt() == 12 &&
                 saved_rectangle_layer != saved_layers.cend() &&
                 (*saved_rectangle_layer).toObject().value("name").toString() == "Shape 1" &&
                 (*saved_rectangle_layer).toObject().value("operations").toArray().size() == 1 &&
@@ -901,8 +1113,8 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     QFile migrated_v5_file(v5_path);
     require(migrated_v5_file.open(QIODevice::ReadOnly) &&
                 QJsonDocument::fromJson(migrated_v5_file.readAll()).object()
-                        .value("version").toInt() == 11,
-            QStringLiteral("Saving a version 5 document did not migrate it to v11."));
+                        .value("version").toInt() == 12,
+            QStringLiteral("Saving a version 5 document did not migrate it to v12."));
 
     image_editor::ImageDocumentSession background_shape_session;
     require(background_shape_session.createCanvas(
@@ -978,13 +1190,13 @@ void testEditableShapesRenderingPersistenceAndHistory(const QString& root) {
     image_editor::ImageDocumentSession recovered;
     require(recovered.restoreRecovery(snapshot_path, &error) &&
                 recovered.data() == session.data() && recovered.renderedImage() == session.renderedImage(),
-            QStringLiteral("Recovery did not preserve version 11 shape operations."));
+            QStringLiteral("Recovery did not preserve version 12 shape operations."));
     QFile recovery_file(snapshot_path);
     require(recovery_file.open(QIODevice::ReadOnly),
             QStringLiteral("The shape recovery wrapper could not be read."));
     const QJsonObject recovery_json = QJsonDocument::fromJson(recovery_file.readAll()).object();
     require(recovery_json.value("version").toInt() == 1 &&
-                recovery_json.value("document").toObject().value("version").toInt() == 11,
+                recovery_json.value("document").toObject().value("version").toInt() == 12,
             QStringLiteral("Shape recovery changed the recovery wrapper version."));
 
     image_editor::ImageDocumentSession transformed;
@@ -1186,11 +1398,11 @@ void testEditableTextRenderingPersistenceAndHistory(const QString& root) {
         saved_text_layers.cbegin(), saved_text_layers.cend(), [&text_layer](const QJsonValue& value) {
             return value.toObject().value("id").toString() == text_layer;
         });
-    require(document_json.value("version").toInt() == 11 &&
+    require(document_json.value("version").toInt() == 12 &&
                 text_layer_json != saved_text_layers.cend() &&
                 text_layer_json->toObject().value("operations").toArray().at(0)
                     .toObject().value("kind").toString() == "text",
-            QStringLiteral("Editable text was not serialized as a version 11 operation."));
+            QStringLiteral("Editable text was not serialized as a version 12 operation."));
 
     QJsonObject invalid_text_document = document_json;
     auto invalid_text_layers = invalid_text_document.value("layers").toArray();
@@ -1240,8 +1452,8 @@ void testEditableTextRenderingPersistenceAndHistory(const QString& root) {
             QStringLiteral("Could not read the v9 recovery wrapper."));
     const QJsonObject recovery_json = QJsonDocument::fromJson(recovery_file.readAll()).object();
     require(recovery_json.value("version").toInt() == 1 &&
-                recovery_json.value("document").toObject().value("version").toInt() == 11,
-            QStringLiteral("Text recovery changed the wrapper version or omitted the v11 payload."));
+                recovery_json.value("document").toObject().value("version").toInt() == 12,
+            QStringLiteral("Text recovery changed the wrapper version or omitted the v12 payload."));
 
     image_editor::ImageDocumentSession legacy;
     require(legacy.createCanvas(QSize(24, 24), Qt::transparent, &error), error);
@@ -1260,8 +1472,8 @@ void testEditableTextRenderingPersistenceAndHistory(const QString& root) {
     image_editor::ImageDocumentSession migrated;
     require(migrated.openDocument(legacy_path, &error) && migrated.saveDocument({}, &error), error);
     require(legacy_file.open(QIODevice::ReadOnly) &&
-                QJsonDocument::fromJson(legacy_file.readAll()).object().value("version").toInt() == 11,
-            QStringLiteral("Saving a version 8 document did not migrate its envelope to v11."));
+                QJsonDocument::fromJson(legacy_file.readAll()).object().value("version").toInt() == 12,
+            QStringLiteral("Saving a version 8 document did not migrate its envelope to v12."));
 
     image_editor::ImageDocumentSession grouped_text_session;
     require(grouped_text_session.createCanvas(QSize(180, 90), Qt::transparent, &error), error);
@@ -1475,7 +1687,7 @@ void testGeneralObjectOperations(const QString& root) {
     require(v8_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the v8 object document."));
     const QJsonObject v8 = QJsonDocument::fromJson(v8_file.readAll()).object();
     v8_file.close();
-    require(v8.value("version").toInt() == 11,
+    require(v8.value("version").toInt() == 12,
             QStringLiteral("The document did not migrate to cimg v10."));
     QJsonObject v7 = v8;
     v7.insert("version", 7);
@@ -1491,8 +1703,8 @@ void testGeneralObjectOperations(const QString& root) {
     QFile migrated_v7_file(v7_path);
     require(migrated_v7_file.open(QIODevice::ReadOnly) &&
                 QJsonDocument::fromJson(migrated_v7_file.readAll()).object()
-                        .value("version").toInt() == 11,
-            QStringLiteral("Saving a version 7 document did not migrate it to v11."));
+                        .value("version").toInt() == 12,
+            QStringLiteral("Saving a version 7 document did not migrate it to v12."));
     const auto layer_array = v7.value("layers").toArray();
     const auto operation_array = layer_array.at(1).toObject().value("operations").toArray();
     bool paint_id_persisted = false;
@@ -1546,8 +1758,8 @@ void testGeneralObjectOperations(const QString& root) {
     require(migrated.saveDocument(v6_path, &error), error);
     QFile resaved_v6(v6_path);
     require(resaved_v6.open(QIODevice::ReadOnly) &&
-                QJsonDocument::fromJson(resaved_v6.readAll()).object().value("version").toInt() == 11,
-            QStringLiteral("Saving a v6 document did not upgrade it to v11."));
+                QJsonDocument::fromJson(resaved_v6.readAll()).object().value("version").toInt() == 12,
+                QStringLiteral("Saving a v6 document did not upgrade it to v12."));
 }
 
 void testLayerManagementTransformsAndOpacity(const QString& root) {
@@ -2062,7 +2274,7 @@ void testLayerGroups(const QString& root) {
     QFile v8_file(v8_path);
     require(v8_file.open(QIODevice::ReadOnly), QStringLiteral("Could not read the v8 group document."));
     const QJsonObject v8_json = QJsonDocument::fromJson(v8_file.readAll()).object();
-    require(v8_json.value("version").toInt() == 11 &&
+    require(v8_json.value("version").toInt() == 12 &&
                 v8_json.value("layers").toArray().size() == structure.data().root_stack.size(),
             QStringLiteral("Group save did not write the v9 ordered stack."));
     image_editor::ImageDocumentSession reopened;
@@ -2079,8 +2291,8 @@ void testLayerGroups(const QString& root) {
             QStringLiteral("The group recovery snapshot could not be read."));
     const QJsonObject recovery_json = QJsonDocument::fromJson(recovery_file.readAll()).object();
     require(recovery_json.value("version").toInt() == 1 &&
-                recovery_json.value("document").toObject().value("version").toInt() == 11,
-            QStringLiteral("Group recovery changed its wrapper version or lost the v11 payload."));
+                recovery_json.value("document").toObject().value("version").toInt() == 12,
+            QStringLiteral("Group recovery changed its wrapper version or lost the v12 payload."));
 
     image_editor::ImageDocumentData invalid = structure.data();
     invalid.groups.front().layer_ids.append(invalid.layers.front().id);
@@ -2322,6 +2534,7 @@ int main(int argc, char* argv[]) {
     try {
         testDocumentEditingAndUndoRedo(root);
         testCanvasCreationPersistenceAndRecovery(root);
+        testCanvasResizingAnchorsPersistenceAndHistory(root);
         testLegacyVersionOneDocument(root);
         testVersionTwoDocumentCompatibility(root);
         testVersionThreeMigrationToBackground(root);

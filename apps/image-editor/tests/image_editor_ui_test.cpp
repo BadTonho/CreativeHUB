@@ -34,6 +34,7 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QPlainTextEdit>
 #include <QScrollBar>
 #include <QScreen>
@@ -2727,6 +2728,59 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    auto* resize_canvas_action = window.findChild<QAction*>(QStringLiteral("resizeCanvasAction"));
+    if (resize_canvas_action == nullptr || redo_action == nullptr ||
+        !resize_canvas_action->isEnabled()) {
+        std::cerr << "Image > Canvas Size is missing or disabled for an open document.\n";
+        return 1;
+    }
+    const QString size_before_cancel = status_label->text();
+    QTimer::singleShot(0, []() {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr || dialog->objectName() != QStringLiteral("canvasSizeDialog")) return;
+        auto* buttons = dialog->findChild<QDialogButtonBox*>(QStringLiteral("canvasSizeButtons"));
+        if (buttons != nullptr) buttons->button(QDialogButtonBox::Cancel)->click();
+    });
+    resize_canvas_action->trigger();
+    if (status_label->text() != size_before_cancel) {
+        std::cerr << "Cancelling Canvas Size changed the document.\n";
+        return 1;
+    }
+    bool center_anchor_default = false;
+    QTimer::singleShot(0, [&center_anchor_default]() {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr || dialog->objectName() != QStringLiteral("canvasSizeDialog")) return;
+        auto* preset = dialog->findChild<QComboBox*>(QStringLiteral("canvasSizePresetCombo"));
+        auto* width = dialog->findChild<QSpinBox*>(QStringLiteral("canvasSizeWidthSpin"));
+        auto* height = dialog->findChild<QSpinBox*>(QStringLiteral("canvasSizeHeightSpin"));
+        auto* center = dialog->findChild<QRadioButton*>(QStringLiteral("canvasSizeAnchorCenterButton"));
+        auto* bottom_right = dialog->findChild<QRadioButton*>(QStringLiteral("canvasSizeAnchorBottomrightButton"));
+        auto* buttons = dialog->findChild<QDialogButtonBox*>(QStringLiteral("canvasSizeButtons"));
+        if (preset == nullptr || width == nullptr || height == nullptr || center == nullptr ||
+            bottom_right == nullptr || buttons == nullptr) return;
+        center_anchor_default = center->isChecked();
+        preset->setCurrentIndex(5);
+        width->setValue(130);
+        height->setValue(90);
+        bottom_right->setChecked(true);
+        buttons->button(QDialogButtonBox::Ok)->click();
+    });
+    resize_canvas_action->trigger();
+    if (!center_anchor_default || !status_label->text().contains(QStringLiteral("130 × 90 px"))) {
+        std::cerr << "Canvas Size did not use the expected dimensions or centered default anchor.\n";
+        return 1;
+    }
+    undo_action->trigger();
+    if (!status_label->text().contains(QStringLiteral("100 × 80 px"))) {
+        std::cerr << "Undo did not restore the previous canvas dimensions.\n";
+        return 1;
+    }
+    redo_action->trigger();
+    if (!status_label->text().contains(QStringLiteral("130 × 90 px"))) {
+        std::cerr << "Redo did not restore the resized canvas dimensions.\n";
+        return 1;
+    }
+
     auto* add_layer_button = window.findChild<QToolButton*>(
         QStringLiteral("addImageLayerButton"));
     auto* delete_layer_button = window.findChild<QToolButton*>(
@@ -3221,13 +3275,13 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    if (shape_document_json.value("version").toInt() != 11 ||
+    if (shape_document_json.value("version").toInt() != 12 ||
         persisted_shape_layer.isEmpty() ||
         !persisted_shape_layer.value("name").toString().startsWith("Shape ") ||
         persisted_shape_layer.value("operations").toArray().size() != 1 ||
         persisted_shape.value("kind").toString() != "shape" ||
         persisted_shape.value("fill_enabled").toBool()) {
-        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in v11: version="
+        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in v12: version="
                   << shape_document_json.value("version").toInt()
                   << " operations=" << persisted_shape_layer.value("operations").toArray().size()
                   << " layer=" << persisted_shape_layer.value("name").toString().toStdString()

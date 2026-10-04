@@ -1490,15 +1490,16 @@ public:
             require(masked_image.createCanvas(QSize(16, 16), Qt::transparent, &mask_error) &&
                         masked_image.importRasterImages(image_editor::prepareRasterImport({imported_path}).images, {}, &mask_error) &&
                         masked_image.addLayerMask(masked_image.selectedLayerId()) &&
-                        masked_image.applyLayerMaskEraseStroke({QPointF(12, 12)}, 3, &mask_error) &&
+                        masked_image.applyLayerMaskEraseStroke({QPointF(12, 10)}, 3, &mask_error) &&
+                        masked_image.resizeCanvas(QSize(24, 12), image_editor::CanvasAnchor::TopLeft, &mask_error) &&
                         masked_image.saveDocument(QString::fromStdString(linked_document.string()), &mask_error) &&
                         masked_image.exportImage(QString::fromStdString(linked_output.string()), &mask_error),
-                    "The Image Editor could not publish its imported and masked v11 image: " + mask_error.toStdString());
+                    "The Image Editor could not publish its resized and masked v12 image: " + mask_error.toStdString());
 #else
-            QImage next_output(16, 16, QImage::Format_ARGB32);
+            QImage next_output(24, 12, QImage::Format_ARGB32);
             next_output.fill(QColor(25, 40, 235, 255));
             for (int x = 0; x < next_output.width(); ++x) {
-                next_output.setPixelColor(x, 15, QColor(x * 10, 245 - x * 8, 100, 255));
+                next_output.setPixelColor(x, 11, QColor(x * 10, 245 - x * 8, 100, 255));
             }
             require(writePngAtomically(linked_output, next_output),
                     "The updated linked PNG could not be atomically published.");
@@ -1513,6 +1514,8 @@ public:
             QObject::connect(&linked_refresh_poll, &QTimer::timeout,
                              &linked_refresh_loop, [&]() {
                 const bool media_refreshed = !linked_window.media_items_.empty() &&
+                    linked_window.media_items_.front().metadata.width == 24 &&
+                    linked_window.media_items_.front().metadata.height == 12 &&
                     framePixel(linked_window.media_items_.front().first_frame) ==
                         QColor(25, 40, 235, 255);
                 const auto preview = linked_window.preview_widget_->grab().toImage();
@@ -1535,6 +1538,8 @@ public:
                 : framePixel(*linked_window.timeline_model_.tracks().front()
                                   .clips[1].still_image_override);
             require(!linked_window.media_items_.empty() &&
+                        linked_window.media_items_.front().metadata.width == 24 &&
+                        linked_window.media_items_.front().metadata.height == 12 &&
                         media_color == QColor(25, 40, 235, 255) && !preview.isNull() &&
                         preview_color == QColor(25, 40, 235, 255) &&
                         linked_window.timeline_model_.tracks().front().clips[1]
@@ -1546,7 +1551,7 @@ public:
                         variant_color.name(QColor::HexArgb).toStdString());
 #if defined(CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS)
             const auto& refreshed_frame = linked_window.media_items_.front().first_frame;
-            const auto alpha_offset = static_cast<std::size_t>(12 * refreshed_frame.stride + 12 * 4 + 3);
+            const auto alpha_offset = static_cast<std::size_t>(10 * refreshed_frame.stride + 12 * 4 + 3);
             require(refreshed_frame.rgba_pixels.size() > alpha_offset &&
                         refreshed_frame.rgba_pixels[alpha_offset] == 0,
                     "The Video Editor lost transparency from the Image Editor's mask publication.");

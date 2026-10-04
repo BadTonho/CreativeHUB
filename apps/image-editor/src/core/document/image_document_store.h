@@ -2,6 +2,7 @@
 
 #include <QColor>
 #include <QPointF>
+#include <QPoint>
 #include <QRect>
 #include <QRectF>
 #include <QString>
@@ -106,6 +107,9 @@ struct ImageOperation {
     OperationKind kind = OperationKind::Crop;
     QRect crop;
     int quarter_turns = 0;
+    // Fixed-canvas transforms keep the bounds they used when created. This
+    // preserves their pivot when a later canvas resize shifts old content.
+    QRect transform_bounds;
     ImagePaintStroke paint_stroke;
     ImageEraseStroke erase_stroke;
     ImageShapeData shape;
@@ -167,7 +171,11 @@ struct ImageStackItemData {
 struct ImageDocumentData {
     ImageBaseKind base_kind = ImageBaseKind::SourceImage;
     QString source_path;
+    // Dimensions of the original source/base pixels, retained for relinking.
     QSize source_size;
+    // Current document bounds and the base image's offset within those bounds.
+    QSize canvas_size;
+    QPoint canvas_base_offset;
     QColor canvas_background = QColor(0, 0, 0, 0);
     // Version 1-3 edits remain in this sequence and render as Background content.
     QVector<ImageOperation> operations;
@@ -189,6 +197,7 @@ struct RecoveryDocumentData {
 
 class ImageDocumentStore final {
 public:
+    static constexpr int kCurrentDocumentVersion = 12;
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
     static constexpr int kMaximumPaintBrushDiameter = 1024;

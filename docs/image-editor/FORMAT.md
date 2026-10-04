@@ -1,12 +1,13 @@
 # Image Editor Document Format
 
-Status: **provisional version 11**. The `.cimg` extension is temporary until a
+Status: **provisional version 12**. The `.cimg` extension is temporary until a
 later format review. Version 4 added editable raster layers; version 5 adds
 eraser strokes; version 6 adds editable line, rectangle, and ellipse shapes;
 version 7 adds stable IDs to paint and eraser strokes; version 8 adds
 one-level layer groups; version 9 adds editable text operations; version 10
-adds raster layer masks; version 11 adds linked raster image operations.
-Versions 1 through 10 remain readable and save as v11.
+adds raster layer masks; version 11 adds linked raster image operations;
+version 12 adds independently resizable canvas bounds. Versions 1 through 11
+remain readable and save as v12.
 
 ## Document contents
 
@@ -15,13 +16,16 @@ A `.cimg` file is UTF-8 JSON with these top-level fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite-image-document`. |
-| `version` | integer | Current version is `11`. |
+| `version` | integer | Current version is `12`. |
 | `base` | object | A linked source image or a self-contained canvas. |
+| `canvas` | object | Version 12 current document bounds and base-image offset. |
 | `operations` | array | Version 1–3 edits retained as Background content. |
 | `layers` | array | Version 4 and later layer stack ordered bottom-to-top. |
 
 Source-image bases contain `kind: "source_image"`, `path`, `width`, and
-`height`. When the source is in the document directory or one of its
+`height`. These dimensions always describe the original oriented source image,
+even after a canvas resize. Relinking therefore continues to require the
+original source dimensions. When the source is in the document directory or one of its
 subdirectories, the path is stored relative to the document. External sources
 are stored with an absolute path. Relative paths are resolved from the `.cimg`
 directory. A missing source keeps the document available for relinking; the
@@ -29,8 +33,40 @@ replacement image must have the recorded dimensions.
 
 A canvas base contains `kind: "canvas"`, `width`, `height`, and a `background`
 color in `#AARRGGBB` notation. The canvas is reconstructed from these values
-without an external raster file. Canvas dimensions must be positive, at most
-32768 pixels per side, and at most 64 million pixels total.
+without an external raster file. These dimensions retain the original base
+bitmap size. Canvas dimensions must be positive, at most 32768 pixels per side,
+and at most 64 million pixels total.
+
+## Resizable canvas bounds (version 12)
+
+Version 12 stores the current document dimensions separately from the original
+base dimensions. The base image remains at its original pixel size; the offset
+positions it inside the current canvas. Editable layer, group, mask, and object
+operations are translated by the chosen anchor displacement. The resize is
+non-destructive to the source and does not resample layer content.
+
+```json
+"canvas": {
+  "width": 2400,
+  "height": 1080,
+  "base_offset_x": 240,
+  "base_offset_y": 0
+}
+```
+
+Offsets are signed integer pixel coordinates bounded to ±1,000,000. Added area
+shows the configured base color for canvas documents and transparency for
+source-image documents. Content beyond the current bounds is clipped by
+composition. Anchored resizing and its layer/group/mask translations are a
+single undoable edit. Full export, Quick Export, recovery, and linked PNG
+publication use the new bounds too. Original source dimensions remain unchanged
+for relink validation.
+
+Versions 1 through 11 have no `canvas` object. They load with the canvas equal
+to the dimensions produced by their existing base operations and a zero base
+offset, preserving their previous appearance. Saving any supported version
+writes version 12. Recovery wrapper version 1 accepts document payloads through
+v12.
 
 ## Linked raster images (version 11)
 
@@ -70,7 +106,7 @@ crop, quarter-turn, and flip commands continue to transform rendered content
 and layer masks. Image pixels render at their position in the operation list,
 then the layer mask, layer opacity, and group composition apply.
 
-Recovery retains envelope version 1 and accepts document payloads through v11.
+Recovery retains envelope version 1 and accepts document payloads through v12.
 The Video Editor consumes flattened published PNG files; its .csp schema does
 not change.
 
@@ -107,7 +143,7 @@ to an existing mask's operation sequence. Mask strokes in transformed groups
 are mapped back into the child's coordinates. Creating, removing, toggling,
 and painting a mask are undoable document edits. Mask editing target selection
 is temporary UI state and is not persisted. Versions 1–9 load without masks;
-saving upgrades the envelope to v11. A mask in an older envelope is rejected.
+saving upgrades the envelope to v12. A mask in an older envelope is rejected.
 Recovery, full export, Quick Export, and linked PNG publication include masks.
 
 ## Layer stack
@@ -133,13 +169,14 @@ combined pixels, and group opacity is applied once to that result.
 ```json
 {
   "format": "creative-suite-image-document",
-  "version": 11,
+  "version": 12,
   "base": {
     "kind": "canvas",
     "width": 1920,
     "height": 1080,
     "background": "#00000000"
   },
+  "canvas": {"width": 1920, "height": 1080, "base_offset_x": 0, "base_offset_y": 0},
   "operations": [],
   "layers": [
     {
@@ -187,15 +224,19 @@ group to preserve the one-level rule.
 
 The top-level `operations` array preserves the ordered, non-destructive edits
 from versions 1–3 and renders them as part of `Background`. This keeps old
-documents visually unchanged when they are opened and later saved as version 11.
+documents visually unchanged when they are opened and later saved as version 12.
 New edits are stored in the selected raster layer's `operations` array.
 
-Each layer operation is evaluated on the fixed document canvas. Crop keeps the
-selected rectangle in its original canvas coordinates and makes pixels outside
-it transparent; it does not resize the document. Rotation is around the canvas
-center, and content outside the canvas is clipped. Flips mirror within the
-canvas bounds. Paint points use floating-point pixel coordinates in the canvas
-at that point in the layer's operation list. A paint color uses `#AARRGGBB`, a
+Each layer operation is evaluated on the current fixed document canvas. Crop
+keeps the selected rectangle in its canvas coordinates and makes pixels outside
+it transparent; it does not resize the document. Rotation is around the recorded
+transform bounds, and content outside the canvas is clipped. Flips mirror within
+their recorded transform bounds. Version 12 stores optional `bounds_x`,
+`bounds_y`, `bounds_width`, and `bounds_height` on fixed-canvas rotate and flip
+operations so later canvas resizes do not move historical pivots. Older
+versions infer these bounds from the then-current canvas. Paint points use
+floating-point pixel coordinates in the canvas at that point in the layer's
+operation list. A paint color uses `#AARRGGBB`, a
 diameter is from 1 through 1024 pixels, and a stroke contains 1 through 100,000
 points. Version 5 adds `erase_stroke`, with the same point and diameter limits;
 it clears alpha in its raster layer with antialiased edges. It has no color
@@ -281,8 +322,8 @@ Version 1 uses the legacy `source` object. Version 2 adds canvas bases. Version
 layer-local eraser strokes. Version 6 adds editable shapes to layer operations.
 Version 7 adds IDs to paint and eraser operations. When reading versions 1–6,
 the loader generates in-memory IDs for operations that do not contain them;
-the next save writes those IDs in version 11. Versions 1 through 10 remain
-visually compatible. Saving any supported version writes version 11. New text
+the next save writes those IDs in version 12. Versions 1 through 11 remain
+visually compatible. Saving any supported version writes version 12. New text
 layers are named `Text N` and inserted using the same stack placement rule as
 shape layers; they can be grouped, hidden, assigned opacity, selected, moved,
 resized by changing their box width, and deleted as editable operations.
@@ -310,7 +351,7 @@ showing the options dialog.
 Recovery snapshots use a separate `creative-suite-image-recovery` JSON wrapper
 with the document payload, intended `.cimg` destination, and a session identity
 for unsaved canvases. Recovery wrapper version 1 accepts document payloads in
-versions 1 through 11. Autosave and recovery preserve root order, group
+versions 1 through 12. Autosave and recovery preserve root order, group
 children, properties, IDs, and operations.
 
 Unsupported versions, invalid layer stacks, and invalid operation data are
