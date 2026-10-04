@@ -90,6 +90,8 @@ int main() {
         makeDefaultInstance("video.brightness"),
         makeDefaultInstance("video.contrast"),
         makeDefaultInstance("video.saturation")};
+    require(neutral.front().enabled,
+            "New effect instances must be enabled by default.");
     auto unchanged = original;
     require(applyStack(unchanged, neutral), "Neutral effects were rejected.");
     require(unchanged.rgba_pixels == original.rgba_pixels,
@@ -131,6 +133,24 @@ int main() {
             "A multi-filter stack was rejected.");
     require(first_order.rgba_pixels != second_order.rgba_pixels,
             "The shared processor did not preserve filter order.");
+    auto disabled_grayscale = grayscale;
+    disabled_grayscale.enabled = false;
+    auto disabled_stack_frame = original;
+    auto brightness_only_frame = original;
+    require(applyStack(
+                disabled_stack_frame,
+                std::vector<EffectInstance>{disabled_grayscale, brightness}) &&
+                applyStack(brightness_only_frame,
+                           std::span<const EffectInstance>(&brightness, 1)) &&
+                disabled_stack_frame.rgba_pixels == brightness_only_frame.rgba_pixels,
+            "A disabled filter must be skipped while later enabled filters retain their order.");
+    auto all_disabled_frame = original;
+    disabled_grayscale.enabled = false;
+    require(applyStack(
+                all_disabled_frame,
+                std::span<const EffectInstance>(&disabled_grayscale, 1)) &&
+                all_disabled_frame.rgba_pixels == original.rgba_pixels,
+            "A stack containing only disabled effects must preserve every frame byte.");
     require(isValidStack(std::vector<EffectInstance>{grayscale, grayscale}),
             "Repeated filter instances must remain valid.");
 

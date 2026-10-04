@@ -461,7 +461,8 @@ tab exposes independent Clip and Track gain sliders and mute checkboxes for
 the active clip and its track, grouped vertically. Gains are shown as 0% to
 200%; dragging a slider creates one coalesced Timeline history entry. The
 `Effects` tab contains the selected video or image clip's ordered filter stack,
-including parameter editing, reordering, and removal. Its controls remain
+including per-effect enable checkboxes, parameter editing, reordering, and
+removal. Disabled rows are dimmed and their parameters remain editable. Its controls remain
 disabled with guidance when the selection is not a video or image clip. The
 active tab is restored from global user settings and does not affect project
 dirty state or `.csp` data. Selecting a clip does not change the active tab.
@@ -506,7 +507,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 17 format. Linked video-audio clips can be
+the current `.csp` version 18 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Image media context menus can open a
 shared Image Editor document, and image clip context menus can open a
@@ -523,7 +524,9 @@ keyboard shortcut is introduced for text creation or editing.
 Video and image clips may carry an ordered stack of `Grayscale`, `Brightness`,
 `Contrast`, and `Saturation` filters. Both the Effects dock's drag gesture and
 Functions' `Add`/Enter action target compatible visual clips. Filters may be
-repeated, and their stack order is editable in the Inspector; parameter edits,
+repeated, and their stack order is editable in the Inspector. Each instance can
+be disabled without losing its position or parameters; Preview and export skip
+disabled instances in the same shared processor. Toggling, parameter edits,
 removal, and reordering participate in Timeline Undo/Redo. The filter
 definitions and CPU RGBA processing live in the shared
 `creative-suite::effects` library without a Qt Widgets dependency. See

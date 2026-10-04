@@ -684,6 +684,14 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                                       "Project JSON contains an incomplete clip effect.");
                         }
                         creative_suite::effects::EffectInstance effect;
+                        if (version >= effect_enabled_format_version) {
+                            const auto enabled = effect_object.value("enabled");
+                            if (!enabled.isBool()) {
+                                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                          "Project JSON contains an invalid effect enabled state.");
+                            }
+                            effect.enabled = enabled.toBool();
+                        }
                         const auto effect_id = effect_object.value("id").toString().toUtf8();
                         effect.id.assign(effect_id.constData(),
                                          static_cast<std::size_t>(effect_id.size()));

@@ -111,8 +111,8 @@ hardware and drivers. No percentage target is set from this measurement.
 | Settings dialog | Modal shell, General, Autosave, Timeline, and Shortcuts tabs, empty and populated autosave snapshot table, refresh/restore/delete/open-folder requests, Close action, independent component construction, and editable shortcut preferences |
 | Preview performance metrics | Deterministic counter/timing aggregation, bounded p95/p99 timing histograms, decoded/stale-frame counters, playback delivery-rate derivation, failure counters, cache state, workload context, process-resource sampling, reset behavior, disabled behavior, Settings persistence and signal propagation, compositor setup/raster/fast-copy timings, pixel-identical per-pixel RGBA copy for opaque transformed layers in axis-aligned and alpha-coverage paths, opaque-destination blend fast path against the scalar reference, bounded delivery trace IDs through worker/mailbox/controller/Preview, coalesced/dropped/incomplete classification, and offscreen CPU paint instrumentation |
 | Shortcut manager | QAction registration and application, QSettings persistence, empty assignments, duplicate blocking, individual reset, and Reset All |
-| Shared visual effects | Default and bounded parameters, neutral filters, grayscale, alpha and stride preservation, ordered/repeated stacks, invalid identifiers and values, malformed frames |
-| Project persistence | Version 17 visual effect stack and parameter round-trip; versions 1–16 load without effect stacks and incompatible Audio stacks are rejected; Version 16 Audio Crossfade round-trip and timing/type validation; versions 1–15 load without inferred Audio Crossfades; version 15 Audio clip volume-envelope round-trip, bounds/order validation, and rejection on visual clips; version 14 loads with a flat 100% envelope; version 14 linked video/Audio companion IDs, externalized and pending state, and typed Audio track/clip round-trip; version 13 projects request companion migration; versions 1–12 legacy tracks default to Video; incompatible track/clip and invalid-link combinations rejected; version 12 Cross Dissolve overlap round-trip; version 11 rational Timeline-rate and source-duration round-trip; invalid rational rates; persisted stable track/clip IDs; canonical multi-track video/image/text kind round-trip; Cross-Dissolve transition geometry, individual-edge media-overlap round-trip, and text-overlap rejection; timeline zoom and row-height persistence; version 1–13 migration with legacy flat clips converted to `timeline_tracks`; duplicate/zero ID rejection; invalid input; offline media; transactional open |
+| Shared visual effects | Default-enabled instances, enabled and disabled ordered/repeated stacks, disabled filters leaving pixels unchanged, neutral and bounded parameters, grayscale, alpha and stride preservation, invalid identifiers and values, malformed frames |
+| Project persistence | Version 18 visual effect enabled-state and parameter round-trip; version 17 effect stacks migrate with every instance enabled; versions 1–16 load without effect stacks and incompatible Audio stacks are rejected; missing/non-boolean version 18 enabled states are rejected; Version 16 Audio Crossfade round-trip and timing/type validation; versions 1–15 load without inferred Audio Crossfades; version 15 Audio clip volume-envelope round-trip, bounds/order validation, and rejection on visual clips; version 14 loads with a flat 100% envelope; version 14 linked video/Audio companion IDs, externalized and pending state, and typed Audio track/clip round-trip; version 13 projects request companion migration; versions 1–12 legacy tracks default to Video; incompatible track/clip and invalid-link combinations rejected; version 12 Cross Dissolve overlap round-trip; version 11 rational Timeline-rate and source-duration round-trip; invalid rational rates; persisted stable track/clip IDs; canonical multi-track video/image/text kind round-trip; Cross-Dissolve transition geometry, individual-edge media-overlap round-trip, and text-overlap rejection; timeline zoom and row-height persistence; version 1–13 migration with legacy flat clips converted to `timeline_tracks`; duplicate/zero ID rejection; invalid input; offline media; transactional open |
 | Linked video-audio migration and editing | `tests/application/application_media_services_test.cpp` covers online v13 video migration, audio-less video, clean v14 save/reopen without duplicate companions, and deferred offline migration after media restoration; `tests/timeline/timeline_command_service_test.cpp` covers paired move, split, gain/mute, unlink, independent editing, paired deletion, and Undo/Redo |
 | MainWindow integration | Offscreen multi-track project open, preservation of tracks, clips, and stable IDs, clean dirty state immediately after opening, selection initialized by ID, equality using only the canonical loaded document, save/reopen round-trip, stale pending activation rejection, EditWorkspace-built Inspector/Audio/Effects tabs and control placement, global Effects-tab persistence without project dirty state or selection-driven tab changes, FusionWorkspace-built panels shared with WorkspaceHost, one shared Preview/Timeline/EditorSession, unchanged selection/playhead/playback/history/dirty state across workspace changes, workspace-only layout behavior, and controlled MainWindow construction and shutdown |
 | Project validation | Out-of-range JSON integers, overflowing timeline ranges, and overflowing media-source ranges are rejected before reaching editing code |
@@ -120,7 +120,7 @@ hardware and drivers. No percentage target is set from this measurement.
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode and icon-scale persistence, bounded 50%-150% icon resizing, seven-character media and folder labels, full-name inline editing, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
-| Effects UI | Four draggable visual filters, retained Text and transition entries, category filtering and stable IDs; Functions search and Add/Cancel/Enter behavior with Shift + Space; Timeline drop target compatibility; dedicated Effects Inspector tab with compatible-selection guidance, parameters, stack order/removal; Timeline command Undo/Redo; Preview and offline-export rendering through the shared CPU library |
+| Effects UI | Four draggable visual filters, retained Text and transition entries, category filtering and stable IDs; Functions search and Add/Cancel/Enter behavior with Shift + Space; Timeline drop target compatibility; dedicated Effects Inspector tab with compatible-selection guidance, per-effect checkbox and dimmed disabled rows, editable parameters while disabled, stack order/removal; one-command enable-state Undo/Redo; Preview and offline export both skip disabled filters through the shared CPU library |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
 
 ## Behavior-to-test source map
@@ -425,9 +425,12 @@ in the running Video Editor after UI or integration changes:
   remove stack entries, and verify Undo/Redo after each operation; use a PNG
   with transparent pixels and confirm its alpha remains intact; compare Preview
   with an export of the same stack and confirm filter order and appearance
-  match; save and reopen a version 17 project and confirm effect IDs, order,
-  and parameter values persist, then open a version 16 project and confirm it
-  starts with no visual filter stack; drag Text to multiple tracks
+  match; toggle a filter off and on, confirm its row dims/restores and that its
+  parameters remain editable while disabled; save and reopen a version 18
+  project and confirm effect IDs, order, enabled states, and parameter values
+  persist; open a version 17 project and confirm every existing filter starts
+  enabled, then open a version 16 project and confirm it starts with no visual
+  filter stack; drag Text to multiple tracks
   and frames, confirm it creates a five-second text clip at the drop position,
   rejects overlap, and participates in Undo/Redo and project dirty state; drag
   Cross Dissolve and Fade to Black onto contiguous clip cuts on multiple
@@ -642,8 +645,10 @@ in the running Video Editor after UI or integration changes:
   select clips without an automatic tab change; confirm the Effects controls
   are enabled for video/image clips and remain visible but disabled with
   guidance for audio, text, transitions, and no selection;
-- Effects tab: add, adjust, reorder, and remove visual filters; confirm edits
-  continue to update Preview and participate in Undo/Redo;
+- Effects tab: add, adjust, reorder, disable, re-enable, and remove visual
+  filters; confirm disabled rows are dimmed, parameters remain editable, each
+  toggle participates in Undo/Redo, and Preview matches an export with the
+  same enabled/disabled stack;
 - Audio tab: confirm the vertical Clip and Track blocks expose volume and mute
   controls, edits update playback, and Undo/Redo restores both properties;
   confirm all four controls are disabled for text clips, gaps, and no

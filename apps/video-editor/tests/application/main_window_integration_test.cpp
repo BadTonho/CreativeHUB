@@ -353,6 +353,42 @@ public:
                         inspector_ui.effect_selection_hint->isHidden(),
                     "Selecting a compatible clip must enable Effects without changing the active tab.");
 
+            auto* edit_controller = window.edit_workspace_->controller();
+            const auto selected_clip_id = first_track.clips.front().clip_id;
+            edit_controller->addEffectToSelectedClip(QStringLiteral("video.grayscale"));
+            auto* effect_item = inspector_ui.clip_effects_list->item(0);
+            require(effect_item != nullptr &&
+                        effect_item->flags().testFlag(Qt::ItemIsUserCheckable) &&
+                        effect_item->checkState() == Qt::Checked,
+                    "The Effects list must show a checked state control for each new filter.");
+            effect_item->setCheckState(Qt::Unchecked);
+            QApplication::processEvents();
+            auto selected_clip_location = window.timeline_model_.locateClip(selected_clip_id);
+            require(selected_clip_location.has_value() &&
+                        !window.timeline_model_.tracks()[selected_clip_location->track_index]
+                             .clips[selected_clip_location->clip_index].effects.front().enabled &&
+                        inspector_ui.clip_effect_parameter_value->isEnabled(),
+                    "Unchecking a filter must disable processing while keeping its parameters editable.");
+            edit_controller->applySelectedClipEffectParameter(37.0);
+            selected_clip_location = window.timeline_model_.locateClip(selected_clip_id);
+            require(selected_clip_location.has_value() &&
+                        !window.timeline_model_.tracks()[selected_clip_location->track_index]
+                             .clips[selected_clip_location->clip_index].effects.front().enabled &&
+                        creative_suite::effects::parameterValue(
+                            window.timeline_model_.tracks()[selected_clip_location->track_index]
+                                .clips[selected_clip_location->clip_index].effects.front(),
+                            "amount") == 37.0,
+                    "A disabled filter's parameters must remain editable without re-enabling it.");
+            require(edit_controller->undo().changed() && edit_controller->undo().changed() &&
+                        edit_controller->undo().changed(),
+                    "Effect parameter, checkbox, and insertion actions must each be undoable.");
+            selected_clip_location = window.timeline_model_.locateClip(selected_clip_id);
+            require(selected_clip_location.has_value() &&
+                        window.timeline_model_.tracks()[selected_clip_location->track_index]
+                            .clips[selected_clip_location->clip_index].effects.empty() &&
+                        !window.project_dirty_,
+                    "Undoing the Effects UI test must restore the clean project state.");
+
             const std::array<QDockWidget*, 7> workspace_docks{
                 window.bins_dock_, window.media_dock_, window.toolbox_dock_,
                 window.favorites_dock_, window.effects_dock_,

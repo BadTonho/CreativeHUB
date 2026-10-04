@@ -184,6 +184,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                     QJsonObject effect_object;
                     effect_object.insert("id", QString::fromUtf8(
                         effect.id.data(), static_cast<qsizetype>(effect.id.size())));
+                    effect_object.insert("enabled", effect.enabled);
                     QJsonArray parameters;
                     for (const auto& parameter : effect.parameters) {
                         QJsonObject parameter_object;

@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 17;
+inline constexpr int current_format_version = 18;
+inline constexpr int effect_enabled_format_version = 18;
 inline constexpr int clip_effects_format_version = 17;
 inline constexpr int audio_crossfade_format_version = 16;
 inline constexpr int audio_gain_envelope_format_version = 15;

@@ -126,6 +126,7 @@ int main(int argc, char** argv) {
                     original.timeline_tracks.front().clips.front().effects.back(),
                     "amount", 24.0),
                 "Could not set a non-default effect value for project coverage.");
+        original.timeline_tracks.front().clips.front().effects.back().enabled = false;
         project::ProjectClip second_track_title;
         second_track_title.clip_id = 5;
         second_track_title.timeline_start_frame = 0;
@@ -189,7 +190,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 17") != std::string::npos &&
+        require(saved_json.find("\"version\": 18") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
@@ -200,9 +201,80 @@ int main(int argc, char** argv) {
                     saved_json.find("cross_dissolve") != std::string::npos &&
                     saved_json.find("\"effects\"") != std::string::npos &&
                     saved_json.find("video.grayscale") != std::string::npos &&
+                    saved_json.find("\"enabled\": false") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
                     saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline frame timing, effects, and linked image references were not written to the version 17 project.");
+                "Timeline frame timing, effect states, and linked image references were not written to the version 18 project.");
+
+        auto version_17_effects_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        version_17_effects_json.insert("version", 17);
+        auto version_17_timeline = version_17_effects_json.value("timeline").toObject();
+        auto version_17_tracks = version_17_timeline.value("tracks").toArray();
+        for (qsizetype track_index = 0; track_index < version_17_tracks.size(); ++track_index) {
+            auto track = version_17_tracks[track_index].toObject();
+            auto clips = track.value("clips").toArray();
+            for (qsizetype clip_index = 0; clip_index < clips.size(); ++clip_index) {
+                auto clip = clips[clip_index].toObject();
+                auto effects = clip.value("effects").toArray();
+                for (qsizetype effect_index = 0; effect_index < effects.size(); ++effect_index) {
+                    auto effect = effects[effect_index].toObject();
+                    effect.remove("enabled");
+                    effects.replace(effect_index, effect);
+                }
+                if (!effects.isEmpty()) clip.insert("effects", effects);
+                clips.replace(clip_index, clip);
+            }
+            track.insert("clips", clips);
+            version_17_tracks.replace(track_index, track);
+        }
+        version_17_timeline.insert("tracks", version_17_tracks);
+        version_17_effects_json.insert("timeline", version_17_timeline);
+        const auto version_17_effects_path = directory / "version-17-effects.csp";
+        writeText(version_17_effects_path,
+                  QJsonDocument(version_17_effects_json).toJson().toStdString());
+        const auto reopened_version_17_effects = project::load(version_17_effects_path);
+        require(reopened_version_17_effects.timeline_tracks.front().clips.front()
+                        .effects.size() == 2 &&
+                    std::all_of(
+                        reopened_version_17_effects.timeline_tracks.front().clips.front()
+                            .effects.begin(),
+                        reopened_version_17_effects.timeline_tracks.front().clips.front()
+                            .effects.end(),
+                        [](const auto& effect) { return effect.enabled; }),
+                "Version 17 effects must migrate as enabled by default.");
+
+        for (const auto invalid_enabled_value : {
+                 QJsonValue(QStringLiteral("false")), QJsonValue(1),
+                 QJsonValue(QJsonValue::Undefined)}) {
+            auto invalid_effect_state_json = QJsonDocument::fromJson(
+                QByteArray::fromStdString(saved_json)).object();
+            auto invalid_timeline = invalid_effect_state_json.value("timeline").toObject();
+            auto invalid_tracks = invalid_timeline.value("tracks").toArray();
+            auto invalid_track = invalid_tracks.at(0).toObject();
+            auto invalid_clips = invalid_track.value("clips").toArray();
+            auto invalid_clip = invalid_clips.at(0).toObject();
+            auto invalid_effects = invalid_clip.value("effects").toArray();
+            auto invalid_effect = invalid_effects.at(0).toObject();
+            invalid_effect.insert("enabled", invalid_enabled_value);
+            invalid_effects.replace(0, invalid_effect);
+            invalid_clip.insert("effects", invalid_effects);
+            invalid_clips.replace(0, invalid_clip);
+            invalid_track.insert("clips", invalid_clips);
+            invalid_tracks.replace(0, invalid_track);
+            invalid_timeline.insert("tracks", invalid_tracks);
+            invalid_effect_state_json.insert("timeline", invalid_timeline);
+            const auto invalid_effect_state_path = directory / "invalid-effect-enabled.csp";
+            writeText(invalid_effect_state_path,
+                      QJsonDocument(invalid_effect_state_json).toJson().toStdString());
+            try {
+                static_cast<void>(project::load(invalid_effect_state_path));
+                throw std::runtime_error("An invalid effect enabled state was accepted.");
+            } catch (const project::ProjectError& error) {
+                require(error.code() == project::ProjectErrorCode::InvalidValue,
+                        "An invalid effect enabled state returned the wrong error category.");
+            }
+        }
         auto version_16_effects_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
         version_16_effects_json.insert("version", 16);

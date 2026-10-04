@@ -1575,6 +1575,13 @@ void validateVisualEffectPreview() {
     }
     require(found_filtered_source_pixel,
             "Preview did not apply the clip's grayscale stack before composition.");
+
+    image_layer.effects.front().enabled = false;
+    worker.setComposition({image_layer}, {}, 603);
+    worker.renderCompositionFrame(0, 0, 603);
+    require(frames.size() == 3 && frames.back() != nullptr &&
+                frames.back()->rgba_pixels == baseline->rgba_pixels,
+            "Preview changed the composed frame for a disabled visual effect.");
 }
 
 void validatePlaybackFrameMailbox() {

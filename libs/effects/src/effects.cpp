@@ -138,6 +138,7 @@ bool applyStack(
     if (effects.empty()) return true;
 
     for (const auto& effect : effects) {
+        if (!effect.enabled) continue;
         const auto amount = parameterValue(effect, "amount");
         const auto id = std::string_view(effect.id);
         for (int y = 0; y < frame.height; ++y) {

@@ -17,6 +17,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QPlainTextEdit>
+#include <QPalette>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -448,6 +449,45 @@ void EditWorkspaceController::addEffectToSelectedClip(const QString& effect_id) 
 void EditWorkspaceController::selectClipEffect(int index) {
     selected_effect_index_ = index;
     updateInspector();
+}
+
+void EditWorkspaceController::setSelectedClipEffectEnabled(int index, bool enabled) {
+    const auto location = selectedTimelineClipLocation();
+    if (!location.has_value() ||
+        location->track_index >= timeline_model_.trackCount() ||
+        location->clip_index >= timeline_model_.clipCount(location->track_index)) {
+        return;
+    }
+    const auto& clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    if ((clip.kind != timeline::ClipKind::Video &&
+         clip.kind != timeline::ClipKind::Image) ||
+        index < 0 || static_cast<std::size_t>(index) >= clip.effects.size()) {
+        return;
+    }
+    const auto& current_effect = clip.effects[static_cast<std::size_t>(index)];
+    if (current_effect.enabled == enabled) return;
+
+    const auto clip_id = clip.clip_id;
+    auto effects = clip.effects;
+    effects[static_cast<std::size_t>(index)].enabled = enabled;
+    selected_effect_index_ = index;
+    try {
+        const auto result = execute(application::SetClipEffectsCommand{
+            clip_id, std::move(effects)});
+        if (result.changed()) {
+            publishCommittedEdit(
+                result, false, true,
+                enabled ? QStringLiteral("Effect enabled.")
+                        : QStringLiteral("Effect disabled."));
+        }
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "timeline", "set_clip_effect_enabled", error.what(),
+            {{"clip_id", std::to_string(clip_id)},
+             {"effect_index", std::to_string(index)}});
+        emit statusMessageRequested(QStringLiteral("Could not change the effect state."));
+    }
 }
 
 void EditWorkspaceController::moveSelectedClipEffect(int direction) {
@@ -1276,11 +1316,24 @@ void EditWorkspaceController::updateInspector() {
                 for (const auto& effect : selected_clip->effects) {
                     const auto* definition =
                         creative_suite::effects::findDefinition(effect.id);
-                    list->addItem(definition != nullptr
+                    auto* item = new QListWidgetItem(definition != nullptr
                         ? QString::fromUtf8(definition->name.data(),
                                             static_cast<qsizetype>(definition->name.size()))
-                        : QString::fromStdString(effect.id));
+                        : QString::fromStdString(effect.id), list);
+                    item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+                    item->setCheckState(effect.enabled ? Qt::Checked : Qt::Unchecked);
                 }
+            }
+        }
+        if (effects_enabled) {
+            for (std::size_t index = 0; index < effect_count; ++index) {
+                auto* item = list->item(static_cast<int>(index));
+                const auto& effect = selected_clip->effects[index];
+                item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+                item->setCheckState(effect.enabled ? Qt::Checked : Qt::Unchecked);
+                item->setForeground(effect.enabled
+                    ? list->palette().brush(QPalette::Text)
+                    : list->palette().brush(QPalette::Disabled, QPalette::Text));
             }
         }
         list->setCurrentRow(effects_enabled ? selected_effect_index_ : -1);

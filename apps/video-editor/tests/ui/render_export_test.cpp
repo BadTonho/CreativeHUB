@@ -532,6 +532,28 @@ void validateVisualEffectExport(
     const auto minimum = std::min({red, green, blue});
     require(maximum - minimum <= 12 && red > 40 && red < 115,
             "Offline export did not apply the grayscale effect to the image clip.");
+
+    const auto disabled_target = root / ("visual-effects-disabled." + extension);
+    auto disabled_job = makeImageJob(output, image_path, disabled_target, 112, 2);
+    auto disabled_grayscale = creative_suite::effects::makeDefaultInstance(
+        "video.grayscale");
+    disabled_grayscale.enabled = false;
+    disabled_job.project_snapshot.timeline_tracks.front().clips.front().effects = {
+        disabled_grayscale};
+    renderJob(disabled_job, canceled);
+    auto disabled_decoder = media::VideoPlaybackSession::open(disabled_target);
+    const auto disabled_frame = disabled_decoder->decode_next_frame();
+    require(disabled_frame.has_value() && *disabled_frame != nullptr,
+            "The disabled-effect export did not contain a decodable video frame.");
+
+    const auto baseline_target = root / ("visual-effects-baseline." + extension);
+    auto baseline_job = makeImageJob(output, image_path, baseline_target, 113, 2);
+    renderJob(baseline_job, canceled);
+    auto baseline_decoder = media::VideoPlaybackSession::open(baseline_target);
+    const auto baseline_frame = baseline_decoder->decode_next_frame();
+    require(baseline_frame.has_value() && *baseline_frame != nullptr &&
+                (*disabled_frame)->rgba_pixels == (*baseline_frame)->rgba_pixels,
+            "Offline export changed the frame for a disabled visual effect.");
 }
 
 void validateQueueContinuesAfterFailure(

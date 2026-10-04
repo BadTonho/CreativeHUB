@@ -92,6 +92,7 @@ public:
     [[nodiscard]] bool selectedClipSupportsEffects() const noexcept;
     void addEffectToSelectedClip(const QString& effect_id);
     void selectClipEffect(int index);
+    void setSelectedClipEffectEnabled(int index, bool enabled);
     void moveSelectedClipEffect(int direction);
     void removeSelectedClipEffect();
     void beginEffectEdit();

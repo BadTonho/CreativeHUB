@@ -20,6 +20,7 @@ struct ParameterValue {
 struct EffectInstance {
     std::string id;
     std::vector<ParameterValue> parameters;
+    bool enabled = true;
 
     friend bool operator==(const EffectInstance&, const EffectInstance&) = default;
 };

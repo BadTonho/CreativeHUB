@@ -156,19 +156,32 @@ void run() {
     auto effect_stack = media_drop_session.timeline().tracks().front().clips.front().effects;
     require(effect_stack.size() == 2 &&
                 effect_stack[0].id == "video.grayscale" &&
-                effect_stack[1].id == "video.brightness",
+                effect_stack[1].id == "video.brightness" &&
+                effect_stack[0].enabled && effect_stack[1].enabled,
             "Effects-panel drop and Functions application did not append filters to the selected clip.");
 
     media_drop_controller.selectClipEffect(0);
+    const auto history_before_effect_toggle = media_drop_commands.undoCount();
+    media_drop_controller.setSelectedClipEffectEnabled(0, false);
+    effect_stack = media_drop_session.timeline().tracks().front().clips.front().effects;
+    require(!effect_stack[0].enabled && effect_stack[1].enabled &&
+                media_drop_commands.undoCount() == history_before_effect_toggle + 1,
+            "Disabling one effect did not create exactly one history command or preserve its stack position.");
+    require(media_drop_controller.undo().changed() &&
+                media_drop_session.timeline().tracks().front().clips.front().effects[0].enabled &&
+                media_drop_controller.redo().changed() &&
+                !media_drop_session.timeline().tracks().front().clips.front().effects[0].enabled,
+            "Effect enable state did not participate in Undo/Redo.");
+
     const auto history_before_effect_parameter = media_drop_commands.undoCount();
     media_drop_controller.beginEffectEdit();
     media_drop_controller.applySelectedClipEffectParameter(55.0);
     media_drop_controller.applySelectedClipEffectParameter(35.0);
     media_drop_controller.finishEffectEdit();
     effect_stack = media_drop_session.timeline().tracks().front().clips.front().effects;
-    require(effect_stack[0].parameters.front().value == 35.0 &&
+    require(!effect_stack[0].enabled && effect_stack[0].parameters.front().value == 35.0 &&
                 media_drop_commands.undoCount() == history_before_effect_parameter + 1,
-            "Inspector parameter edits did not update the filter with one grouped history entry.");
+            "Inspector parameter edits did not remain available while disabled or use one grouped history entry.");
 
     media_drop_controller.moveSelectedClipEffect(1);
     effect_stack = media_drop_session.timeline().tracks().front().clips.front().effects;

@@ -18,10 +18,11 @@ document format, and user interface.
 | `video.saturation` | Saturation | 0–200% | 100% |
 
 Definitions are discoverable through `builtInEffects()` and `findDefinition()`.
-Instances hold an ID and explicit parameter IDs/values. A stack may contain
-repeated instances; evaluation follows vector order. Validation rejects
-unknown IDs, missing or duplicate parameters, non-finite values, and values
-outside the definition's range.
+Instances hold an ID, explicit parameter IDs/values, and an `enabled` flag that
+defaults to true. A stack may contain repeated instances; evaluation follows
+vector order while skipping disabled instances without changing their stored
+position or parameters. Validation rejects unknown IDs, missing or duplicate
+parameters, non-finite values, and values outside the definition's range.
 
 ## Processing
 
@@ -35,9 +36,12 @@ next filter runs.
 
 The Video Editor evaluates each clip's stack before compositing its layer.
 Preview and offline export call the same processor and preserve the clip's
-stack order. Filter parameters are Timeline project data; caches and temporary
-preview state are not added by this library. The Video Editor persists stacks
-under the `.csp` version 17 clip schema described in [PROJECT.md](PROJECT.md).
+stack order. Disabled instances are validated but do not modify the frame;
+active instances retain their relative order. Filter parameters and enabled
+states are Timeline project data; caches and temporary preview state are not
+added by this library. The Video Editor persists stacks under the `.csp`
+version 18 clip schema described in [PROJECT.md](PROJECT.md). Version 17
+stacks migrate with every instance enabled.
 
 `applyColorAdjustment()` is a fused processing entry point for applications
 whose Color Adjustment combines brightness (-100 to 100), contrast (0–200%),
@@ -55,9 +59,9 @@ callback propagate to the caller.
 ## Verification
 
 `libs/tests/effects_test.cpp` covers neutral values, parameter bounds,
-grayscale, alpha and stride preservation, stack order, repeated instances,
-invalid IDs, malformed RGBA frames, fused Color Adjustment compatibility,
-and cancellation. Motion Studio consumer coverage lives in
+grayscale, alpha and stride preservation, stack order, enabled-state defaults,
+disabled-instance skipping, repeated instances, invalid IDs, malformed RGBA
+frames, fused Color Adjustment compatibility, and cancellation. Motion Studio consumer coverage lives in
 `apps/motion-editor/tests/preview_renderer_test.cpp` and exercises delegation,
 pixel parity, cancellation, and timing. Video Editor boundary coverage lives
 in the project, Timeline command, Preview, offline export, Effects dock,

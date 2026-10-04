@@ -406,6 +406,13 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
             edit_controller, &ui::EditWorkspaceController::applyTextStyle);
     connect(ui_.clip_effects_list, &QListWidget::currentRowChanged,
             edit_controller, &ui::EditWorkspaceController::selectClipEffect);
+    connect(ui_.clip_effects_list, &QListWidget::itemChanged,
+            edit_controller, [edit_controller, list = ui_.clip_effects_list](
+                                 QListWidgetItem* item) {
+                if (item == nullptr) return;
+                edit_controller->setSelectedClipEffectEnabled(
+                    list->row(item), item->checkState() == Qt::Checked);
+            });
     connect(ui_.clip_effect_up, &QPushButton::clicked,
             edit_controller, [edit_controller]() {
                 edit_controller->moveSelectedClipEffect(-1);
