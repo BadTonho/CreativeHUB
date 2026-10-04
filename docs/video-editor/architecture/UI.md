@@ -142,6 +142,16 @@ and reuse their imported frame during composition playback. Animated GIF is
 not part of the current import scope. Import failures are logged per path and
 do not discard valid files selected in the same operation.
 
+The Media list and bin tree accept files dragged from the operating system.
+Dropping on the list imports into the selected bin; dropping on a bin imports
+there. The Timeline accepts one or more local files and imports them
+asynchronously, then places successfully imported media in their original
+order starting at the captured drop frame. Timeline placement is all-or-nothing
+and creates one Undo/Redo entry; imported media stays in the Media Browser if
+the destination is incompatible, occupied, removed, or stale. Folders and
+non-local URLs are rejected. Existing internal Media Browser drags and Open
+Media remain available.
+
 The Timeline is hosted inside a scrollable viewport. Media and effect drops are
 handled through that viewport and their coordinates are converted back to the
 Timeline content before the target track and frame are resolved. Only the
@@ -161,6 +171,9 @@ release. These previews do not mutate the project and do not emit the move or
 drop operation early. Optional drag metadata carries frame count, frame rate,
 duration, and display name for the preview only; the original media-path MIME
 continues to drive the actual drop. Effect drags retain their existing marker.
+Operating-system file drops use the same target-area rules and capture the
+track and frame before import begins; their multi-file insertion is committed
+only after the complete ordered batch passes Timeline validation.
 
 File actions provide New Project, Project Settings, Open Project, Save Project,
 and Save Project As. New Project first opens a dialog for the 16:9 1920×1080 or

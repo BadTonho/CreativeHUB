@@ -116,5 +116,16 @@ reparented onto another bin together with its descendants. These operations
 update the project-owned bin paths only; they do not change media decoding,
 Timeline clips, playback, or preview state.
 
-Files dragged directly from the operating system are outside the current
-milestone.
+The Video Editor's Media list, bin tree, and Timeline also accept local file
+URLs supplied by the operating system. The widgets validate that each URL is a
+local regular file, preserve its input order, and pass filesystem paths to the
+existing application-owned asynchronous `MediaImportService`, which delegates
+to the shared `MediaImporter`. This UI adapter is Video Editor-specific; the
+shared media library does not depend on Qt drag events or target-widget rules.
+Media-list drops use the selected bin, while bin-tree drops use the bin under
+the pointer. Timeline drops capture a stable track ID and frame, then
+preflight all successfully imported candidates against a staged Timeline and
+commit the accepted sequence atomically. If the project generation changes,
+the pending placement is discarded. Directories, remote URLs, failed media,
+and stale project results are never placed in the Timeline; successful media
+imports remain available in the Browser when Timeline placement is rejected.

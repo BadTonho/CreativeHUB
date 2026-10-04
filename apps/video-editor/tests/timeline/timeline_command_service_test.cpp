@@ -4,6 +4,7 @@
 
 #include <creative_suite/effects/effects.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
@@ -113,6 +114,93 @@ void addVideoWithAudioMedia(
     const auto result = controller.commitImported({
         metadata, {}, metadata.display_name, "Unsorted", false});
     require(result.changed(), "Could not add test video-with-audio media.");
+}
+
+void runExternalMediaBatchCommands() {
+    application::EditorSession session;
+    application::TimelineCommandService service(session);
+    const auto video_track_id = session.timeline().tracks().front().track_id;
+    const auto first_video = std::filesystem::temp_directory_path() / "drop-first.mp4";
+    const auto audio_only = std::filesystem::temp_directory_path() / "drop-audio.wav";
+    const auto second_video = std::filesystem::temp_directory_path() / "drop-second.mp4";
+    addVideoWithAudioMedia(session, first_video);
+    addAudioMedia(session, audio_only);
+    addVideoWithAudioMedia(session, second_video);
+
+    const auto before = session.timeline().snapshot();
+    const auto added = service.execute(application::AddMediaClipsCommand{
+        {first_video, audio_only, second_video}, video_track_id, 0});
+    require(added.changed() && added.invalidate_playback &&
+                service.undoCount() == 1 && added.selection.active_clip_id.has_value(),
+            "Dropping a media batch did not create one atomic Timeline edit.");
+    require(added.affected_clip_ids.size() == 5,
+            "A mixed media batch did not include its linked audio companions.");
+
+    const auto first_location = session.timeline().locateClip(1);
+    const auto audio_location = session.timeline().locateClip(3);
+    const auto second_location = session.timeline().locateClip(4);
+    require(first_location.has_value() && audio_location.has_value() &&
+                second_location.has_value(),
+            "The media batch did not preserve source order while inserting clips.");
+    const auto& first = session.timeline().tracks()[first_location->track_index]
+        .clips[first_location->clip_index];
+    const auto& audio = session.timeline().tracks()[audio_location->track_index]
+        .clips[audio_location->clip_index];
+    const auto& second = session.timeline().tracks()[second_location->track_index]
+        .clips[second_location->clip_index];
+    require(first.timeline_start_frame == 0 && audio.timeline_start_frame == 120 &&
+                second.timeline_start_frame == 180 &&
+                first.linked_clip_id.has_value() && second.linked_clip_id.has_value() &&
+                first.timeline_duration_frames == 120 &&
+                audio.timeline_duration_frames == 60,
+            "Batch placement did not sequence actual durations or preserve video audio links.");
+    const auto audio_track_count = std::count_if(
+        session.timeline().tracks().begin(), session.timeline().tracks().end(),
+        [](const timeline::TimelineTrack& track) {
+            return track.kind == timeline::TrackKind::Audio;
+        });
+    require(audio_track_count == 1,
+            "Audio-only drops did not reuse an available companion audio track.");
+    require(service.undo().changed() && session.timeline().snapshot() == before &&
+                service.undoCount() == 0 && service.canRedo(),
+            "Undo did not remove the entire media batch in one step.");
+    require(service.redo().changed() && service.undoCount() == 1 &&
+                session.timeline().locateClip(5).has_value(),
+            "Redo did not restore the complete media batch.");
+
+    application::EditorSession collision_session;
+    application::TimelineCommandService collision_service(collision_session);
+    const auto collision_track = collision_session.timeline().tracks().front().track_id;
+    const auto blocker_path = std::filesystem::temp_directory_path() / "drop-blocker.mp4";
+    const auto batch_first = std::filesystem::temp_directory_path() / "drop-batch-first.mp4";
+    const auto batch_second = std::filesystem::temp_directory_path() / "drop-batch-second.mp4";
+    addMedia(collision_session, blocker_path);
+    addMedia(collision_session, batch_first);
+    addMedia(collision_session, batch_second);
+    require(collision_service.execute(application::AddMediaClipCommand{
+                blocker_path, collision_track, 120}).changed(),
+            "Could not prepare the batch collision blocker.");
+    const auto collision_before = collision_session.timeline().snapshot();
+    const auto undo_before = collision_service.undoCount();
+    const auto rejected = collision_service.execute(application::AddMediaClipsCommand{
+        {batch_first, batch_second}, collision_track, 0});
+    require(rejected.status == application::EditStatus::Rejected &&
+                rejected.reason == application::EditReason::Overlap &&
+                collision_session.timeline().snapshot() == collision_before &&
+                collision_service.undoCount() == undo_before,
+            "A late collision partially inserted a dropped batch.");
+
+    require(collision_session.legacyTimelineForUi().addTrack(
+                "Audio 1", timeline::TrackKind::Audio) == timeline::AddTrackResult::Added,
+            "Could not prepare an incompatible audio drop target.");
+    const auto audio_track = collision_session.timeline().tracks().back().track_id;
+    const auto incompatible_before = collision_session.timeline().snapshot();
+    const auto incompatible = collision_service.execute(application::AddMediaClipsCommand{
+        {batch_first}, audio_track, 0});
+    require(incompatible.status == application::EditStatus::Rejected &&
+                incompatible.reason == application::EditReason::InvalidTarget &&
+                collision_session.timeline().snapshot() == incompatible_before,
+            "An incompatible video drop changed the Timeline.");
 }
 
 void run() {
@@ -1486,6 +1574,7 @@ void runProjectSettingsCommands() {
 
 int main() {
     try {
+        runExternalMediaBatchCommands();
         run();
         runVisualEffectCommands();
         runInspectorAndTrackCommands();

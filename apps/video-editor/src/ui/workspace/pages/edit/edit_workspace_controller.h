@@ -60,6 +60,10 @@ public:
         const std::filesystem::path& source_path,
         timeline::TrackId track_id,
         std::optional<std::int64_t> timeline_frame);
+    [[nodiscard]] application::TimelineEditResult addMediaClips(
+        const std::vector<std::filesystem::path>& source_paths,
+        timeline::TrackId track_id,
+        std::int64_t timeline_frame);
     void addTextClipAt(timeline::TrackId track_id, qint64 timeline_frame);
     void promptAddVideoTrack(QWidget* dialog_parent);
     void promptRenameActiveTrack(QWidget* dialog_parent);
@@ -180,6 +184,10 @@ signals:
         const QString& status_message);
     void timelineMediaDropRequested(
         const QString& source_path,
+        timeline::TrackId track_id,
+        qint64 timeline_frame);
+    void timelineExternalFilesDropRequested(
+        const QStringList& source_paths,
         timeline::TrackId track_id,
         qint64 timeline_frame);
     void timelineImageClipEditRequested(timeline::ClipId clip_id);

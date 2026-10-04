@@ -1,4 +1,5 @@
 #include "timeline_widget.h"
+#include "ui/media_browser/external_file_urls.h"
 #include "timeline_time.h"
 
 #include "../ui/media_browser/media_drag_mime.h"
@@ -1625,7 +1626,8 @@ void TimelineWidget::dropEvent(QDropEvent* event) {
 bool TimelineWidget::isSupportedDrop(const QMimeData* mime_data) const noexcept {
     return mime_data != nullptr &&
         (mime_data->hasFormat(ui::kMediaPathMimeType) ||
-         mime_data->hasFormat(ui::kEffectIdMimeType));
+         mime_data->hasFormat(ui::kEffectIdMimeType) ||
+         !media_browser_ui::localFilesFromUrls(mime_data).isEmpty());
 }
 
 void TimelineWidget::clearDragPreview() {
@@ -1679,6 +1681,14 @@ bool TimelineWidget::updateDropHover(
                 media_target_valid = !target_is_audio;
             }
         }
+    } else if (supported && !media_browser_ui::localFilesFromUrls(mime_data).isEmpty()) {
+        preview.media = true;
+        preview.duration_frames = 1;
+        preview.label = QStringLiteral("Import media");
+        media_target_valid = accepted &&
+            (tracks_[*track].kind == TrackKind::Video ||
+             tracks_[*track].kind == TrackKind::Audio);
+        preview.valid = media_target_valid;
     } else if (supported && mime_data->hasFormat(ui::kEffectIdMimeType)) {
         const auto effect_id = QString::fromUtf8(
             mime_data->data(ui::kEffectIdMimeType));
@@ -1725,11 +1735,23 @@ bool TimelineWidget::processDrop(
     const auto frame = globalFrameAt(position.x());
     const bool is_media_drop = mime_data != nullptr &&
         mime_data->hasFormat(ui::kMediaPathMimeType);
+    const auto external_paths = media_browser_ui::localFilesFromUrls(mime_data);
+    const bool is_external_file_drop = !external_paths.isEmpty();
     const bool is_effect_drop = mime_data != nullptr &&
         mime_data->hasFormat(ui::kEffectIdMimeType);
-    if ((!is_media_drop && !is_effect_drop) ||
+    if ((!is_media_drop && !is_external_file_drop && !is_effect_drop) ||
         !track.has_value() || !frame.has_value()) {
         return false;
+    }
+
+    if (is_external_file_drop) {
+        const auto& target_track = tracks_[*track];
+        if (target_track.kind != TrackKind::Video &&
+            target_track.kind != TrackKind::Audio) return false;
+        QStringList paths = external_paths;
+        clearDropHover();
+        emit externalFilesDropRequested(paths, target_track.track_id, *frame);
+        return true;
     }
 
     auto target_frame = *frame;

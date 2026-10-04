@@ -1,10 +1,16 @@
 #include "ui/media_browser/media_browser_list_widget.h"
 #include "ui/media_browser/media_drag_mime.h"
-#include "ui/media_browser/media_drag_mime.h"
+#include "ui/media_browser/external_file_urls.h"
 #include "main_window/main_window_support.h"
 
 #include <QApplication>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QFile>
 #include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QIcon>
 #include <QListWidgetItem>
 #include <QLineEdit>
@@ -13,6 +19,8 @@
 #include <QSettings>
 #include <QStyleOptionViewItem>
 #include <QStyle>
+#include <QTemporaryDir>
+#include <QUrl>
 
 #include <cstdio>
 #include <stdexcept>
@@ -59,6 +67,9 @@ int main(int argc, char* argv[]) {
             "Offline status must remain visible in the compact item label.");
 
         MediaBrowserListWidget widget;
+        widget.resize(420, 240);
+        widget.show();
+        application.processEvents();
         require(
             widget.displayMode() == MediaBrowserListWidget::DisplayMode::List,
             "Media Browser must default to list mode.");
@@ -103,6 +114,63 @@ int main(int argc, char* argv[]) {
         QPixmap thumbnail(16, 16);
         thumbnail.fill(Qt::blue);
         item->setIcon(QIcon(thumbnail));
+
+        QTemporaryDir drop_directory;
+        require(drop_directory.isValid(), "Could not create temporary drop fixtures.");
+        const QString dropped_file = drop_directory.path() +
+            QStringLiteral("/vídeo de teste.mp4");
+        QFile fixture(dropped_file);
+        require(fixture.open(QIODevice::WriteOnly), "Could not create a Unicode drop fixture.");
+        fixture.write("fixture");
+        fixture.close();
+        const QString dropped_folder = drop_directory.path() + QStringLiteral("/folder");
+        require(QDir().mkpath(dropped_folder), "Could not create a folder drop fixture.");
+        QMimeData external_drop;
+        external_drop.setUrls({
+            QUrl::fromLocalFile(dropped_file),
+            QUrl::fromLocalFile(dropped_folder),
+            QUrl(QStringLiteral("https://example.invalid/video.mp4"))});
+        const auto local_files = media_browser_ui::localFilesFromUrls(&external_drop);
+        require(local_files == QStringList{QFileInfo(dropped_file).absoluteFilePath()},
+                "OS drops must retain ordered local files and reject folders and remote URLs.");
+
+        QStringList received_external_paths;
+        QString received_destination_bin;
+        QObject::connect(
+            &widget,
+            &MediaBrowserListWidget::externalFilesDropRequested,
+            [&received_external_paths, &received_destination_bin](
+                const QStringList& paths, const QString& destination) {
+                received_external_paths = paths;
+                received_destination_bin = destination;
+            });
+        auto* destination_bin = new QListWidgetItem("Footage", &widget);
+        destination_bin->setData(
+            media_browser_ui::kMediaItemTypeRole,
+            media_browser_ui::kMediaItemTypeBin);
+        destination_bin->setData(
+            media_browser_ui::kMediaBinPathRole,
+            QStringLiteral("Footage"));
+        destination_bin->setFlags(destination_bin->flags() | Qt::ItemIsDropEnabled);
+        widget.scrollToItem(destination_bin);
+        application.processEvents();
+        const auto bin_position = widget.visualItemRect(destination_bin).center();
+        const auto widget_bin_position = widget.viewport()->mapTo(&widget, bin_position);
+        QDragEnterEvent list_enter(
+            widget_bin_position, Qt::CopyAction, &external_drop,
+            Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(&widget, &list_enter);
+        QDragMoveEvent list_move(
+            widget_bin_position, Qt::CopyAction, &external_drop,
+            Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(&widget, &list_move);
+        QDropEvent list_drop(
+            QPointF(widget_bin_position), Qt::CopyAction, &external_drop,
+            Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(&widget, &list_drop);
+        require(received_external_paths == local_files &&
+                    received_destination_bin == QStringLiteral("Footage"),
+                "The Media Browser did not route system files to the dropped-on bin.");
 
         widget.setDisplayMode(MediaBrowserListWidget::DisplayMode::Grid);
         require(

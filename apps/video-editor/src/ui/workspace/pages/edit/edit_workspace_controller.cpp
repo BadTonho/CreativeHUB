@@ -288,6 +288,73 @@ application::TimelineEditResult EditWorkspaceController::addMediaClip(
     }
 }
 
+application::TimelineEditResult EditWorkspaceController::addMediaClips(
+    const std::vector<std::filesystem::path>& source_paths,
+    timeline::TrackId track_id,
+    std::int64_t timeline_frame) {
+    application::TimelineEditResult rejected;
+    const auto track_index = timeline_model_.locateTrack(track_id);
+    if (source_paths.empty() || timeline_frame < 0 || !track_index.has_value()) {
+        rejected.reason = timeline_frame < 0
+            ? application::EditReason::InvalidPosition
+            : application::EditReason::InvalidTarget;
+        publishResult(rejected);
+        emit statusMessageRequested(
+            QStringLiteral("The files cannot be placed at that Timeline position."));
+        return rejected;
+    }
+
+    try {
+        collapseTimelineSelectionToPrimary();
+        const auto result = command_service_.execute(
+            application::AddMediaClipsCommand{
+                source_paths, track_id, timeline_frame});
+        publishResult(result);
+        if (!result.changed()) {
+            const auto message = result.reason == application::EditReason::Overlap
+                ? QStringLiteral("The imported files overlap existing Timeline clips.")
+                : result.reason == application::EditReason::InvalidTarget
+                    ? QStringLiteral("The drop target is incompatible with one or more files.")
+                    : result.reason == application::EditReason::OfflineMedia
+                        ? QStringLiteral("Offline media cannot be added to the Timeline.")
+                        : result.reason == application::EditReason::InvalidTimingMetadata
+                            ? QStringLiteral("One or more files have invalid timing metadata.")
+                            : QStringLiteral("The imported files cannot be placed at that position.");
+            emit statusMessageRequested(message);
+            emit warningMessageRequested(
+                QStringLiteral("Could not add files to the Timeline"), message);
+            return result;
+        }
+
+        publishCommittedEdit(
+            result, true, true, QStringLiteral("Files added to the Timeline."));
+        if (result.selection.active_clip_id.has_value()) {
+            const auto location = timeline_model_.locateClip(
+                *result.selection.active_clip_id);
+            if (location.has_value() && location->track_index == 0) {
+                emit activateTimelineClipRequested(
+                    *result.selection.active_clip_id, 0, false, false);
+            } else {
+                emit showTimelineClipPreviewRequested(
+                    *result.selection.active_clip_id);
+            }
+        }
+        return result;
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "timeline", "add_media_batch", error.what(),
+            {{"track_id", std::to_string(track_id)},
+             {"timeline_frame", std::to_string(timeline_frame)},
+             {"item_count", std::to_string(source_paths.size())}});
+        emit statusMessageRequested(
+            QStringLiteral("Could not add the files to the Timeline."));
+        emit warningMessageRequested(
+            QStringLiteral("Timeline error"),
+            QStringLiteral("The files could not be added to the Timeline."));
+        return rejected;
+    }
+}
+
 void EditWorkspaceController::addTextClipAt(
     timeline::TrackId track_id,
     qint64 timeline_frame) {
@@ -950,6 +1017,8 @@ void EditWorkspaceController::setTimelineWidget(
             this, &EditWorkspaceController::handleTimelineSeek);
     connect(timeline_widget_, &timeline::TimelineWidget::mediaDropRequested,
             this, &EditWorkspaceController::timelineMediaDropRequested);
+    connect(timeline_widget_, &timeline::TimelineWidget::externalFilesDropRequested,
+            this, &EditWorkspaceController::timelineExternalFilesDropRequested);
     connect(timeline_widget_, &timeline::TimelineWidget::effectDropRequested,
             this, &EditWorkspaceController::handleTimelineEffectDrop);
     connect(timeline_widget_, &timeline::TimelineWidget::editImageClipRequested,

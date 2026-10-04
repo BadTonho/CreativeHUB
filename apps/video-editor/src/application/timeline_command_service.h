@@ -94,6 +94,12 @@ struct AddMediaClipCommand {
     std::optional<std::int64_t> timeline_start_frame;
 };
 
+struct AddMediaClipsCommand {
+    std::vector<std::filesystem::path> source_paths;
+    timeline::TrackId track_id = 0;
+    std::int64_t timeline_start_frame = 0;
+};
+
 struct AddTextClipCommand {
     timeline::TrackId track_id = 0;
     std::int64_t timeline_start_frame = 0;
@@ -200,6 +206,7 @@ public:
     [[nodiscard]] TimelineEditResult execute(const RippleDeleteClipCommand& command);
     [[nodiscard]] TimelineEditResult execute(const UnlinkAudioCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddMediaClipCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const AddMediaClipsCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddTextClipCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddTransitionCommand& command);
     [[nodiscard]] TimelineEditResult execute(const UpdateTransitionCommand& command);

@@ -99,9 +99,9 @@ requirements, and implementation details still require validation below.
   positions and leave a gap; provide a separate Ripple Delete / Close Gap
   command when the user wants following clips to move earlier.
 - [x] Include direct operating-system file drops. Dropping on the Media Browser
-  imports media; dropping on the Timeline imports and inserts it using the
-  existing Timeline media-drop behavior. Use the existing import pipeline and
-  its supported media types.
+  imports to the selected or target bin; ordered Timeline batches use the
+  asynchronous import pipeline and insert atomically, including automatic
+  Audio tracks and linked video-audio companions.
 - [x] Include one adjustable YouTube export preset that follows the project
   canvas and frame rate. Its planned 1080p SDR defaults are MP4/H.264, AAC-LC
   stereo at 48 kHz and 192 kbps, Fast Start, BT.709 color, and VBR video at
@@ -145,6 +145,9 @@ tasks.
 - [x] C++20 Qt Widgets application with FFmpeg media probing and decoding.
 - [x] Media Browser with bins, project-owned labels, duplicate-path handling,
   offline state, and restoration by reimport.
+- [x] Drag local files from the operating system into the Media Browser or
+  Timeline. Browser drops honor the selected or target bin; ordered Timeline
+  batches import asynchronously and place as one Undo/Redo edit.
 - [x] Multi-track timeline with absolute positions, gaps, cross-track overlap,
   clip selection and movement, split, trim, delete, and bounded Undo/Redo.
 - [x] Video and static raster-image clips, manual text clips, transforms,

@@ -213,6 +213,8 @@ QWidget* MainWindow::createMediaBins() {
             this, &MainWindow::handleMediaBrowserMediaDrop);
     connect(bin_tree_, &MediaBrowserBinTreeWidget::binDropRequested,
             this, &MainWindow::handleMediaBrowserBinDrop);
+    connect(bin_tree_, &MediaBrowserBinTreeWidget::externalFilesDropRequested,
+            this, &MainWindow::handleExternalMediaFilesDrop);
     connect(bin_tree_, &QTreeWidget::itemChanged, this,
             &MainWindow::handleMediaBrowserBinItemChanged);
 
@@ -299,6 +301,8 @@ QWidget* MainWindow::createMediaPanel() {
             &MainWindow::showMediaContextMenu);
     connect(media_list_, &QListWidget::itemChanged, this,
             &MainWindow::handleMediaBrowserListItemChanged);
+    connect(media_list_, &MediaBrowserListWidget::externalFilesDropRequested,
+            this, &MainWindow::handleExternalMediaFilesDrop);
 
     layout->addWidget(media_list_, 1);
 
@@ -1292,7 +1296,9 @@ void MainWindow::openMedia() {
     static_cast<void>(startMediaImport(std::move(paths)));
 }
 
-bool MainWindow::startMediaImport(std::vector<std::filesystem::path> paths) {
+bool MainWindow::startMediaImport(
+    std::vector<std::filesystem::path> paths,
+    std::optional<MediaImportIntent> intent) {
     if (paths.empty()) return false;
     if (active_media_import_cancel_) {
         statusBar()->showMessage("A media import batch is already running or cancelling.");
@@ -1300,6 +1306,7 @@ bool MainWindow::startMediaImport(std::vector<std::filesystem::path> paths) {
     }
 
     const auto work_id = next_media_work_id_++;
+    active_media_import_intent_ = std::move(intent);
     active_media_work_id_ = work_id;
     const auto project_generation = project_generation_;
     const auto selection_generation = selection_generation_;
@@ -1369,6 +1376,8 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
         media_import_progress_ = nullptr;
     }
     active_media_import_cancel_.reset();
+    auto import_intent = std::move(active_media_import_intent_);
+    active_media_import_intent_.reset();
 
     if (result.project_generation != project_generation_) return;
 
@@ -1381,7 +1390,20 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
     std::filesystem::path path_to_select;
     QStringList failures;
     QStringList timing_warnings;
+    std::vector<std::filesystem::path> timeline_candidates;
     const bool selection_is_current = result.selection_generation == selection_generation_;
+
+    std::string destination_bin = "Unsorted";
+    if (import_intent.has_value() &&
+        import_intent->destination == MediaImportIntent::Destination::Browser) {
+        const auto requested = import_intent->bin_path;
+        if (requested == "Unsorted" ||
+            std::find(bin_paths_.begin(), bin_paths_.end(), requested) != bin_paths_.end()) {
+            destination_bin = requested.empty() ? "Unsorted" : requested;
+        } else {
+            failures.push_back("The destination bin no longer exists; imported media was placed in Unsorted.");
+        }
+    }
 
     for (auto& file : result.files) {
         if (file.status == application::MediaImportFileStatus::Discarded) continue;
@@ -1399,6 +1421,11 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
         }
         if (!file.item.has_value()) continue;
 
+        if (import_intent.has_value() &&
+            import_intent->destination == MediaImportIntent::Destination::Browser) {
+            file.item->bin_path = destination_bin;
+        }
+
         const auto existing_index = media_controller_.library().indexForPath(file.path);
         const bool was_offline = existing_index != media_controller_.library().size() &&
             media_controller_.library().items()[existing_index].offline;
@@ -1406,12 +1433,21 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
             ? std::optional<media::VideoMetadata>(file.item->metadata)
             : std::nullopt;
         const auto committed = media_controller_.commitImported(std::move(*file.item));
+        bool duplicate = false;
         if (committed.status == application::MediaCommandStatus::Rejected) {
             if (committed.code == application::MediaCommandCode::Duplicate) {
+                duplicate = true;
                 ++duplicate_count;
+                if (import_intent.has_value() &&
+                    import_intent->destination == MediaImportIntent::Destination::Browser &&
+                    existing_index != media_controller_.library().size()) {
+                    const auto moved = media_controller_.moveToBin(file.path, destination_bin);
+                    if (moved.changed()) changed = true;
+                }
                 if (selection_is_current) path_to_select = file.path;
+            } else {
+                continue;
             }
-            continue;
         }
         if (committed.changed()) {
             changed = true;
@@ -1456,8 +1492,18 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
             }
             if (selection_is_current) path_to_select = file.path;
         } else {
-            ++duplicate_count;
+            if (!duplicate) ++duplicate_count;
             if (selection_is_current) path_to_select = file.path;
+        }
+
+        if (import_intent.has_value() &&
+            import_intent->destination == MediaImportIntent::Destination::Timeline) {
+            const auto imported_index = media_controller_.library().indexForPath(file.path);
+            if (imported_index != media_controller_.library().size() &&
+                !media_controller_.library().items()[imported_index].offline) {
+                timeline_candidates.push_back(
+                    media_controller_.library().items()[imported_index].metadata.source_path);
+            }
         }
     }
 
@@ -1467,7 +1513,41 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
         refreshPlaybackComposition();
     }
     if (changed) updateProjectDirtyState();
-    if (!path_to_select.empty()) populateMediaBrowser(path_to_select);
+    if (import_intent.has_value() &&
+        import_intent->destination == MediaImportIntent::Destination::Browser) {
+        populateMediaBrowser(path_to_select, destination_bin);
+    } else if (!path_to_select.empty()) {
+        populateMediaBrowser(path_to_select);
+    }
+
+    if (import_intent.has_value() &&
+        import_intent->destination == MediaImportIntent::Destination::Timeline &&
+        !result.cancelled && !timeline_candidates.empty()) {
+        const auto placement = edit_workspace_->controller()->addMediaClips(
+            timeline_candidates,
+            import_intent->track_id,
+            import_intent->timeline_frame);
+        if (placement.changed() && placement.selection.active_clip_id.has_value()) {
+            const auto selected = std::find_if(
+                media_items_.begin(), media_items_.end(),
+                [this, &placement](const ImportedMedia& item) {
+                    const auto location = timeline_model_.locateClip(
+                        *placement.selection.active_clip_id);
+                    return location.has_value() &&
+                        normalizedPath(item.metadata.source_path) == normalizedPath(
+                            timeline_model_.tracks()[location->track_index]
+                                .clips[location->clip_index].source_path);
+                });
+            if (selected != media_items_.end()) {
+                updateMediaDetails(static_cast<int>(
+                    std::distance(media_items_.begin(), selected)));
+            }
+        }
+    } else if (import_intent.has_value() && result.cancelled &&
+               import_intent->destination == MediaImportIntent::Destination::Timeline) {
+        statusBar()->showMessage(
+            "Media import cancelled; no files were added to the Timeline.");
+    }
     statusBar()->showMessage(
         QString("Media import %1: %2 imported, %3 restored, %4 duplicate(s), %5 failed.")
             .arg(result.cancelled ? "cancelled" : "complete")
@@ -1486,6 +1566,44 @@ void MainWindow::finishMediaImport(application::MediaImportBatchResult result) {
     } else if (imported_count + restored_count == 1 && duplicate_count == 0) {
         statusBar()->showMessage("Media imported with preview frame.");
     }
+}
+
+void MainWindow::handleExternalMediaFilesDrop(
+    const QStringList& paths,
+    const QString& destination_bin) {
+    std::vector<std::filesystem::path> local_paths;
+    local_paths.reserve(static_cast<std::size_t>(paths.size()));
+    for (const auto& path : paths) {
+        const QFileInfo info(path);
+        if (info.isFile()) local_paths.push_back(normalizedPath(info.filesystemFilePath()));
+    }
+    if (local_paths.empty()) return;
+
+    MediaImportIntent intent;
+    intent.destination = MediaImportIntent::Destination::Browser;
+    intent.bin_path = destination_bin.isEmpty()
+        ? selectedBinPath()
+        : destination_bin.toStdString();
+    static_cast<void>(startMediaImport(std::move(local_paths), std::move(intent)));
+}
+
+void MainWindow::handleExternalTimelineFilesDrop(
+    const QStringList& paths,
+    timeline::TrackId track_id,
+    qint64 timeline_frame) {
+    std::vector<std::filesystem::path> local_paths;
+    local_paths.reserve(static_cast<std::size_t>(paths.size()));
+    for (const auto& path : paths) {
+        const QFileInfo info(path);
+        if (info.isFile()) local_paths.push_back(normalizedPath(info.filesystemFilePath()));
+    }
+    if (local_paths.empty()) return;
+
+    MediaImportIntent intent;
+    intent.destination = MediaImportIntent::Destination::Timeline;
+    intent.track_id = track_id;
+    intent.timeline_frame = timeline_frame;
+    static_cast<void>(startMediaImport(std::move(local_paths), std::move(intent)));
 }
 
 void MainWindow::updateMediaDetails(int row) {

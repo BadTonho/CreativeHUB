@@ -10,6 +10,7 @@
 #include "timeline_zoom.h"
 
 #include <QString>
+#include <QStringList>
 #include <QPointF>
 #include <QRectF>
 #include <QWidget>
@@ -109,6 +110,10 @@ signals:
         qint64 mode);
     void mediaDropRequested(
         const QString& source_path,
+        timeline::TrackId track_id,
+        qint64 timeline_frame);
+    void externalFilesDropRequested(
+        const QStringList& source_paths,
         timeline::TrackId track_id,
         qint64 timeline_frame);
     void effectDropRequested(

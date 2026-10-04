@@ -417,7 +417,9 @@ void testProjectControllerDirtyAutosaveSaveAndReset() {
 
     controller.reset();
     require(!controller.projectPath().has_value() && !controller.dirty() &&
-                session.mediaLibrary().empty() && session.timeline().trackCount() == 1,
+                session.mediaLibrary().empty() && session.timeline().trackCount() == 2 &&
+                session.timeline().tracks()[0].kind == timeline::TrackKind::Video &&
+                session.timeline().tracks()[1].kind == timeline::TrackKind::Audio,
             "Reset did not return the session to a clean blank project.");
     std::filesystem::remove_all(root);
 }

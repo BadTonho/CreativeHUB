@@ -101,9 +101,14 @@ reordering or bin deletion in this milestone.
 Context menus support creating bins, moving media, removing media from the
 Browser, and restoring an available offline item. Media Browser items can be
 dragged to the Timeline through the internal
-`application/x-creative-suite-media-path` MIME type. Only already imported
-items participate in this drag-and-drop flow; operating-system file drops and
-full manual relinking are future work.
+`application/x-creative-suite-media-path` MIME type. Local files can also be
+dropped from the operating system onto the Media list or a bin. The list uses
+the selected bin; a bin drop assigns that destination directly. Multi-file
+drops keep the source order, ignore folders and non-local URLs, and use the
+existing asynchronous importer. Per-file import failures do not discard other
+successful files. Duplicate paths retain their catalog identity; a duplicate
+dropped onto a bin is assigned to that bin. Full manual relinking remains
+future work.
 
 Still images imported through Open Media use the cached RGBA frame as a visual
 thumbnail and can be dropped into the Timeline as five-second static clips.
@@ -121,6 +126,16 @@ The Timeline's scrollable viewport forwards valid media and effect drag events
 to the Timeline content and converts the pointer position before calculating
 the destination frame. The track header, ruler, and empty viewport space do not
 accept drops.
+
+Operating-system file drops onto the Timeline capture the target track and
+absolute frame before asynchronous import starts. Accepted files are placed in
+the original drop order, with each next clip starting at the end of the
+previous clip. Audio-only media uses a compatible Audio track or creates one;
+videos with audio receive their linked Audio companions. The complete Timeline
+placement is preflighted and committed as one Undo/Redo edit. If any imported
+item is incompatible, overlaps existing content, or the target track no longer
+exists, none of the batch is placed; successful imports remain in the Media
+Browser. If the project changes during import, the stale drop is discarded.
 
 Media organization changes mark the project dirty but do not create entries in
 the Timeline Undo/Redo history. Selection, bin filtering, and tree expansion

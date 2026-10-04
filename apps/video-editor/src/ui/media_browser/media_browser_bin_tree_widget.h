@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QTreeWidget>
+#include <QStringList>
 
 class QDragMoveEvent;
 class QDragEnterEvent;
@@ -21,6 +22,9 @@ signals:
         const QString& destinationBin);
     void binDropRequested(
         const QString& sourceBin,
+        const QString& destinationBin);
+    void externalFilesDropRequested(
+        const QStringList& paths,
         const QString& destinationBin);
 
 protected:

@@ -1,6 +1,7 @@
 #include "timeline_command_service.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <utility>
 
@@ -916,6 +917,158 @@ TimelineEditResult TimelineCommandService::execute(const AddMediaClipCommand& co
     output.affected_clip_ids = {next_clip_id};
     if (audio_companion_id.has_value()) {
         output.affected_clip_ids.push_back(*audio_companion_id);
+    }
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(const AddMediaClipsCommand& command) {
+    if (command.source_paths.empty() || command.timeline_start_frame < 0) {
+        return result(EditStatus::Rejected, EditReason::InvalidPosition);
+    }
+    auto staged_timeline = session_.timeline_;
+    const auto initial_track = staged_timeline.locateTrack(command.track_id);
+    if (!initial_track.has_value()) {
+        return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    }
+    const auto initial_kind = staged_timeline.tracks()[*initial_track].kind;
+    if (initial_kind != timeline::TrackKind::Video &&
+        initial_kind != timeline::TrackKind::Audio) {
+        return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    }
+
+    auto cursor = command.timeline_start_frame;
+    std::vector<timeline::ClipId> primary_clip_ids;
+    std::vector<timeline::ClipId> inserted_clip_ids;
+    primary_clip_ids.reserve(command.source_paths.size());
+    const auto nextAudioTrackName = [&staged_timeline]() {
+        std::size_t number = 1;
+        for (;;) {
+            const auto name = "Audio " + std::to_string(number++);
+            const auto used = std::any_of(
+                staged_timeline.tracks().begin(), staged_timeline.tracks().end(),
+                [&name](const timeline::TimelineTrack& track) {
+                    return track.kind == timeline::TrackKind::Audio &&
+                        track.name == name;
+                });
+            if (!used) return name;
+        }
+    };
+
+    for (const auto& source_path : command.source_paths) {
+        const auto media_index = session_.media_library_.indexForPath(source_path);
+        if (media_index == session_.media_library_.size()) {
+            return result(EditStatus::Rejected, EditReason::MediaNotFound);
+        }
+        const auto& item = session_.media_library_.items()[media_index];
+        if (item.offline) return result(EditStatus::Rejected, EditReason::OfflineMedia);
+        const bool audio_only = item.metadata.kind == media::MediaKind::Audio;
+        if (!audio_only && initial_kind != timeline::TrackKind::Video) {
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+
+        std::size_t destination_track = 0;
+        if (audio_only && initial_kind == timeline::TrackKind::Video) {
+            std::optional<std::size_t> free_audio_track;
+            const auto duration_seconds = item.metadata.duration_seconds;
+            if (!duration_seconds.has_value() || !std::isfinite(*duration_seconds) ||
+                *duration_seconds <= 0.0) {
+                return result(EditStatus::Rejected, EditReason::InvalidTimingMetadata);
+            }
+            const auto rate = staged_timeline.frameRate();
+            const long double raw_duration = static_cast<long double>(*duration_seconds) *
+                rate.numerator / rate.denominator;
+            const auto exclusive_max = std::ldexp(1.0L, 63);
+            if (!std::isfinite(raw_duration) || raw_duration >= exclusive_max) {
+                return result(EditStatus::Rejected, EditReason::InvalidTimingMetadata);
+            }
+            const auto duration = std::max<std::int64_t>(
+                1, static_cast<std::int64_t>(std::ceil(raw_duration)));
+            if (duration > std::numeric_limits<std::int64_t>::max() - cursor) {
+                return result(EditStatus::Rejected, EditReason::InvalidPosition);
+            }
+            for (std::size_t index = 0; index < staged_timeline.tracks().size(); ++index) {
+                const auto& track = staged_timeline.tracks()[index];
+                if (track.kind != timeline::TrackKind::Audio) continue;
+                const bool overlaps = std::any_of(
+                    track.clips.begin(), track.clips.end(),
+                    [cursor, duration](const timeline::TimelineClip& clip) {
+                        return clip.timeline_start_frame < cursor + duration &&
+                            cursor < clip.timeline_start_frame + clip.timeline_duration_frames;
+                    });
+                if (!overlaps) {
+                    free_audio_track = index;
+                    break;
+                }
+            }
+            if (!free_audio_track.has_value()) {
+                if (staged_timeline.addTrack(
+                        nextAudioTrackName(), timeline::TrackKind::Audio) !=
+                    timeline::AddTrackResult::Added) {
+                    return result(EditStatus::Rejected, EditReason::InvalidTarget);
+                }
+                free_audio_track = staged_timeline.tracks().size() - 1;
+            }
+            destination_track = *free_audio_track;
+        } else {
+            const auto found = staged_timeline.locateTrack(command.track_id);
+            if (!found.has_value()) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+            destination_track = *found;
+        }
+
+        const auto primary_id = staged_timeline.snapshot().next_clip_id;
+        const auto added = staged_timeline.addClip(
+            destination_track, item.metadata, cursor);
+        if (added != timeline::AddClipResult::Added) {
+            return result(EditStatus::Rejected, reasonForAdd(added));
+        }
+        primary_clip_ids.push_back(primary_id);
+        inserted_clip_ids.push_back(primary_id);
+        if (item.metadata.kind == media::MediaKind::Video &&
+            item.metadata.audio.has_value()) {
+            timeline::ClipId companion_id = 0;
+            const auto companion = staged_timeline.addAudioCompanion(
+                primary_id, item.metadata, &companion_id);
+            if (companion != timeline::AddClipResult::Added) {
+                return result(EditStatus::Rejected, reasonForAdd(companion));
+            }
+            if (companion_id != 0) inserted_clip_ids.push_back(companion_id);
+        }
+        const auto location = staged_timeline.locateClip(primary_id);
+        if (!location.has_value()) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        const auto duration = staged_timeline.tracks()[location->track_index]
+            .clips[location->clip_index].timeline_duration_frames;
+        if (duration <= 0 || duration >
+                std::numeric_limits<std::int64_t>::max() - cursor) {
+            return result(EditStatus::Rejected, EditReason::InvalidTimingMetadata);
+        }
+        cursor += duration;
+    }
+
+    auto before = session_.captureEditState();
+    session_.timeline_ = std::move(staged_timeline);
+    recordSuccessfulEdit(std::move(before));
+    if (primary_clip_ids.empty()) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto last_id = primary_clip_ids.back();
+    const auto last_location = session_.timeline_.locateClip(last_id);
+    if (!last_location.has_value()) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    selectClip(*last_location);
+    session_.selection_.selected_source_path =
+        session_.timeline_.tracks()[last_location->track_index]
+            .clips[last_location->clip_index].source_path;
+    session_.playhead_frame_ = 0;
+    session_.preserved_playhead_frame_.reset();
+    auto output = result(EditStatus::Applied);
+    output.affected_clip_ids = std::move(inserted_clip_ids);
+    for (const auto clip_id : output.affected_clip_ids) {
+        const auto location = session_.timeline_.locateClip(clip_id);
+        if (!location.has_value()) continue;
+        const auto track_id = session_.timeline_.tracks()[location->track_index].track_id;
+        if (std::find(output.affected_track_ids.begin(),
+                      output.affected_track_ids.end(), track_id) ==
+            output.affected_track_ids.end()) {
+            output.affected_track_ids.push_back(track_id);
+        }
     }
     output.invalidate_playback = true;
     return output;

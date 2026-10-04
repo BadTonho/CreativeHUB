@@ -1,15 +1,20 @@
 #include "ui/media_browser/media_browser_bin_tree_widget.h"
 
 #include "ui/media_browser/media_drag_mime.h"
+#include "ui/media_browser/external_file_urls.h"
 
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
+#include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <QMimeData>
 #include <QTreeWidgetItem>
+#include <QTemporaryDir>
+#include <QUrl>
 
 #include <algorithm>
 #include <cstdio>
@@ -115,6 +120,43 @@ int main(int argc, char* argv[]) {
                 "The media source path was not preserved in the drop.");
         require(received_media_destination == "Footage",
                 "The media drop destination was incorrect.");
+
+        QTemporaryDir drop_directory;
+        require(drop_directory.isValid(), "Could not create temporary external-drop fixtures.");
+        const QString dropped_file = drop_directory.path() +
+            QStringLiteral("/take 01 ü.mkv");
+        QFile fixture(dropped_file);
+        require(fixture.open(QIODevice::WriteOnly), "Could not create an external-drop file.");
+        fixture.write("fixture");
+        fixture.close();
+        QMimeData external_mime;
+        external_mime.setUrls({QUrl::fromLocalFile(dropped_file)});
+        QStringList external_paths_received;
+        QString external_bin_received;
+        QObject::connect(
+            &tree,
+            &MediaBrowserBinTreeWidget::externalFilesDropRequested,
+            [&external_paths_received, &external_bin_received](
+                const QStringList& paths, const QString& destination) {
+                external_paths_received = paths;
+                external_bin_received = destination;
+            });
+        QDragEnterEvent external_enter(
+            footage_position, Qt::CopyAction, &external_mime,
+            Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(tree.viewport(), &external_enter);
+        QDragMoveEvent external_move(
+            footage_position, Qt::CopyAction, &external_mime,
+            Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(tree.viewport(), &external_move);
+        QDropEvent external_drop(
+            QPointF(footage_position), Qt::CopyAction, &external_mime,
+            Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(tree.viewport(), &external_drop);
+        require(external_paths_received == QStringList{
+                    QFileInfo(dropped_file).absoluteFilePath()} &&
+                    external_bin_received == QStringLiteral("Footage"),
+                "The bin tree did not import dropped system files into the target bin.");
 
         bool bin_drop_received = false;
         QString received_source_bin;

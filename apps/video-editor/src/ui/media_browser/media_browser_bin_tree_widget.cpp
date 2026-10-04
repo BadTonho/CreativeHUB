@@ -1,6 +1,7 @@
 #include "media_browser_bin_tree_widget.h"
 
 #include "media_drag_mime.h"
+#include "external_file_urls.h"
 
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
@@ -88,7 +89,8 @@ void MediaBrowserBinTreeWidget::drawBranches(
 void MediaBrowserBinTreeWidget::dragEnterEvent(QDragEnterEvent* event) {
     if (event != nullptr && event->mimeData() != nullptr &&
         (event->mimeData()->hasFormat(ui::kMediaPathMimeType) ||
-         event->mimeData()->hasFormat(ui::kMediaBinPathMimeType))) {
+         event->mimeData()->hasFormat(ui::kMediaBinPathMimeType) ||
+         !media_browser_ui::localFilesFromUrls(event->mimeData()).isEmpty())) {
         event->acceptProposedAction();
         return;
     }
@@ -97,7 +99,8 @@ void MediaBrowserBinTreeWidget::dragEnterEvent(QDragEnterEvent* event) {
 
 void MediaBrowserBinTreeWidget::dragMoveEvent(QDragMoveEvent* event) {
     if (event != nullptr && acceptsDrop(event->mimeData(), event->position().toPoint())) {
-        event->setDropAction(Qt::MoveAction);
+        event->setDropAction(event->mimeData()->hasUrls()
+            ? Qt::CopyAction : Qt::MoveAction);
         event->accept();
         return;
     }
@@ -114,6 +117,13 @@ void MediaBrowserBinTreeWidget::dropEvent(QDropEvent* event) {
 
     const QString destination_bin = dropTargetPath(event->position().toPoint());
     const auto* drop_data = event->mimeData();
+    const auto external_paths = media_browser_ui::localFilesFromUrls(drop_data);
+    if (!external_paths.isEmpty()) {
+        emit externalFilesDropRequested(external_paths, destination_bin);
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+        return;
+    }
     if (drop_data->hasFormat(ui::kMediaPathMimeType)) {
         const QString source_path = QString::fromUtf8(
             drop_data->data(ui::kMediaPathMimeType));
@@ -177,6 +187,7 @@ bool MediaBrowserBinTreeWidget::acceptsDrop(
     const QMimeData* mimeData,
     const QPoint& position) const {
     if (mimeData == nullptr || dropTargetPath(position).isEmpty()) return false;
+    if (!media_browser_ui::localFilesFromUrls(mimeData).isEmpty()) return true;
     if (mimeData->hasFormat(ui::kMediaPathMimeType)) return true;
     if (!mimeData->hasFormat(ui::kMediaBinPathMimeType)) return false;
 

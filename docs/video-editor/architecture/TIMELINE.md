@@ -158,6 +158,17 @@ selections and pauses playback, but preserves the current playhead and last
 rendered preview frame without creating an error log entry; dragging from a
 gap is a no-op.
 
+Dragging one or more local files from the operating system onto a track starts
+an asynchronous import and captures that track's stable ID and absolute drop
+frame. Successfully imported items are placed in input order, with consecutive
+clips starting at the previous clip's end. Audio-only clips are routed to an
+available compatible Audio track when the target is visual, while video audio
+companions remain linked. The command stages and validates the complete
+sequence before recording one Undo/Redo edit. A collision, incompatible
+candidate, removed destination track, or invalid timing rejects the entire
+placement; imported files remain in the Media Browser. Project-generation
+changes discard pending drops before they can affect a different document.
+
 ## Editing gestures
 
 TimelineWidget draws one row per track and uses this priority by default:

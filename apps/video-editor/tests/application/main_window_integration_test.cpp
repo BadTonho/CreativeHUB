@@ -1135,6 +1135,78 @@ public:
                         !window.media_controller_.library().contains(second_source) &&
                         !window.selectedMediaIndex().has_value(),
                     "An import result from an earlier project generation changed the session.");
+
+            const auto drop_bin = window.media_controller_.createBin("DropTarget");
+            require(drop_bin.changed(),
+                    "The external-drop integration test could not create its destination bin.");
+            window.edit_workspace_->controller()->clearTimeline();
+            window.timeline_command_service_.clearHistory();
+            const auto video_track = std::find_if(
+                window.timeline_model_.tracks().begin(),
+                window.timeline_model_.tracks().end(),
+                [](const timeline::TimelineTrack& track) {
+                    return track.kind == timeline::TrackKind::Video;
+                });
+            require(video_track != window.timeline_model_.tracks().end(),
+                    "The external-drop integration test has no video track.");
+            const auto video_track_id = video_track->track_id;
+
+            const auto waitForDropImport = [&window](const char* failure_message) {
+                QEventLoop loop;
+                QTimer timeout;
+                timeout.setSingleShot(true);
+                QTimer poll;
+                QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+                QObject::connect(&poll, &QTimer::timeout, &loop, [&]() {
+                    if (!window.active_media_import_cancel_) loop.quit();
+                });
+                timeout.start(30000);
+                poll.start(10);
+                loop.exec();
+                require(!window.active_media_import_cancel_, failure_message);
+            };
+            const auto first_source_qt = QString::fromStdWString(first_source.wstring());
+            const auto second_source_qt = QString::fromStdWString(second_source.wstring());
+            window.media_list_->externalFilesDropRequested(
+                QStringList{first_source_qt}, QStringLiteral("DropTarget"));
+            waitForDropImport(
+                "The Media Browser did not complete an operating-system file drop.");
+            const auto first_media_index =
+                window.media_controller_.library().indexForPath(first_source);
+            require(first_media_index != window.media_controller_.library().size() &&
+                        window.media_controller_.library().items()[first_media_index].bin_path ==
+                            "DropTarget",
+                    "A file dropped on the Media Browser did not use its target bin.");
+
+            window.edit_workspace_->ui().timeline->externalFilesDropRequested(
+                QStringList{first_source_qt, second_source_qt},
+                video_track_id, 0);
+            waitForDropImport(
+                "The Timeline did not complete an operating-system file drop.");
+            const auto placed_track_index = window.timeline_model_.locateTrack(
+                video_track_id);
+            require(placed_track_index.has_value(),
+                    "The Timeline drop target disappeared during import.");
+            const auto& placed_clips = window.timeline_model_.tracks()[
+                *placed_track_index].clips;
+            require(placed_clips.size() == 2 &&
+                        placed_clips[0].source_path ==
+                            media::MediaLibrary::canonicalPath(first_source) &&
+                        placed_clips[1].source_path ==
+                            media::MediaLibrary::canonicalPath(second_source) &&
+                        placed_clips[0].timeline_start_frame == 0 &&
+                        placed_clips[1].timeline_start_frame ==
+                            placed_clips[0].timeline_duration_frames &&
+                        window.timeline_command_service_.undoCount() == 1,
+                    "External Timeline drops did not preserve order, sequence, and one-step history.");
+            static_cast<void>(window.edit_workspace_->controller()->undo());
+            const auto emptied_track_index = window.timeline_model_.locateTrack(
+                video_track_id);
+            require(emptied_track_index.has_value() &&
+                        window.timeline_model_.tracks()[*emptied_track_index].clips.empty() &&
+                        window.media_controller_.library().contains(first_source) &&
+                        window.media_controller_.library().contains(second_source),
+                    "Undo of a dropped Timeline batch removed imported media or left partial clips.");
         }
 
         const auto waveform_source = directory / "waveform-background.wav";

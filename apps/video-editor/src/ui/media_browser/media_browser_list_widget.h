@@ -7,6 +7,10 @@ class QMimeData;
 class QIcon;
 class QMouseEvent;
 class QPixmap;
+class QDragEnterEvent;
+class QDragMoveEvent;
+class QDropEvent;
+class QEvent;
 
 namespace media_browser_ui {
 
@@ -36,6 +40,8 @@ inline constexpr int kDragPreviewImageHeight = 72;
 } // namespace media_browser_ui
 
 class MediaBrowserListWidget final : public QListWidget {
+    Q_OBJECT
+
 public:
     static constexpr int kMinimumIconScalePercent = 50;
     static constexpr int kMaximumIconScalePercent = 150;
@@ -53,7 +59,16 @@ public:
     [[nodiscard]] int iconScalePercent() const noexcept;
     void setIconScalePercent(int percent);
 
+signals:
+    void externalFilesDropRequested(
+        const QStringList& paths,
+        const QString& destinationBin);
+
 protected:
+    bool event(QEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;

@@ -170,6 +170,11 @@ void MainWindow::createWorkspace() {
         &MainWindow::handleMediaDropAt);
     connect(
         edit_workspace_->controller(),
+        &ui::EditWorkspaceController::timelineExternalFilesDropRequested,
+        this,
+        &MainWindow::handleExternalTimelineFilesDrop);
+    connect(
+        edit_workspace_->controller(),
         &ui::EditWorkspaceController::seekTimelineRequested,
         this,
         [this](qint64 global_frame) {

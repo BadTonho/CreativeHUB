@@ -1,9 +1,13 @@
 #include "media_browser_list_widget.h"
 
 #include "media_drag_mime.h"
+#include "external_file_urls.h"
 
 #include <QApplication>
 #include <QDrag>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QFontMetrics>
 #include <QHelpEvent>
 #include <QIcon>
@@ -189,6 +193,9 @@ MediaBrowserListWidget::MediaBrowserListWidget(QWidget* parent)
     : QListWidget(parent) {
     setDragEnabled(true);
     setDragDropMode(QAbstractItemView::DragOnly);
+    setDropIndicatorShown(false);
+    setAcceptDrops(true);
+    viewport()->setAcceptDrops(false);
     setDefaultDropAction(Qt::CopyAction);
     setEditTriggers(
         QAbstractItemView::DoubleClicked |
@@ -208,6 +215,80 @@ MediaBrowserListWidget::MediaBrowserListWidget(QWidget* parent)
         kMinimumIconScalePercent,
         kMaximumIconScalePercent);
     applyDisplayMode();
+}
+
+void MediaBrowserListWidget::dragEnterEvent(QDragEnterEvent* event) {
+    if (event != nullptr &&
+        !media_browser_ui::localFilesFromUrls(event->mimeData()).isEmpty()) {
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+        return;
+    }
+    if (event != nullptr) event->ignore();
+}
+
+bool MediaBrowserListWidget::event(QEvent* event) {
+    if (event != nullptr) {
+        switch (event->type()) {
+        case QEvent::DragEnter: {
+            auto* drag = static_cast<QDragEnterEvent*>(event);
+            if (!media_browser_ui::localFilesFromUrls(drag->mimeData()).isEmpty()) {
+                dragEnterEvent(drag);
+                return true;
+            }
+            break;
+        }
+        case QEvent::DragMove: {
+            auto* drag = static_cast<QDragMoveEvent*>(event);
+            if (!media_browser_ui::localFilesFromUrls(drag->mimeData()).isEmpty()) {
+                dragMoveEvent(drag);
+                return true;
+            }
+            break;
+        }
+        case QEvent::Drop: {
+            auto* drop = static_cast<QDropEvent*>(event);
+            if (!media_browser_ui::localFilesFromUrls(drop->mimeData()).isEmpty()) {
+                dropEvent(drop);
+                return true;
+            }
+            break;
+        }
+        default:
+            break;
+        }
+    }
+    return QListWidget::event(event);
+}
+
+void MediaBrowserListWidget::dragMoveEvent(QDragMoveEvent* event) {
+    if (event != nullptr &&
+        !media_browser_ui::localFilesFromUrls(event->mimeData()).isEmpty()) {
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+        return;
+    }
+    if (event != nullptr) event->ignore();
+}
+
+void MediaBrowserListWidget::dropEvent(QDropEvent* event) {
+    if (event == nullptr) return;
+    const auto paths = media_browser_ui::localFilesFromUrls(event->mimeData());
+    if (paths.isEmpty()) {
+        event->ignore();
+        return;
+    }
+    QString destination_bin;
+    const auto viewport_position = viewport()->mapFrom(
+        this, event->position().toPoint());
+    if (const auto* item = itemAt(viewport_position); item != nullptr &&
+        item->data(media_browser_ui::kMediaItemTypeRole).toInt() ==
+            media_browser_ui::kMediaItemTypeBin) {
+        destination_bin = item->data(media_browser_ui::kMediaBinPathRole).toString();
+    }
+    emit externalFilesDropRequested(paths, destination_bin);
+    event->setDropAction(Qt::CopyAction);
+    event->accept();
 }
 
 MediaBrowserListWidget::DisplayMode

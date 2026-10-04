@@ -96,6 +96,12 @@ private:
 
     using ImportedMedia = application::ImportedMedia;
     using ActiveTransition = timeline::TransitionSelection;
+    struct MediaImportIntent {
+        enum class Destination { Browser, Timeline } destination = Destination::Browser;
+        std::string bin_path;
+        timeline::TrackId track_id = 0;
+        std::int64_t timeline_frame = 0;
+    };
     void createMenus();
     void createWorkspace();
     void setWorkspacePage(ui::WorkspacePageId page);
@@ -133,7 +139,8 @@ private:
         const QString& project_name);
     void openMedia();
     [[nodiscard]] bool startMediaImport(
-        std::vector<std::filesystem::path> paths);
+        std::vector<std::filesystem::path> paths,
+        std::optional<MediaImportIntent> intent = std::nullopt);
     void finishMediaImport(application::MediaImportBatchResult result);
     void updateMediaDetails(int row);
     void populateMediaBrowser(
@@ -146,6 +153,13 @@ private:
     void handleMediaBrowserMediaDrop(
         const QString& source_path,
         const QString& destination_bin);
+    void handleExternalMediaFilesDrop(
+        const QStringList& paths,
+        const QString& destination_bin);
+    void handleExternalTimelineFilesDrop(
+        const QStringList& paths,
+        timeline::TrackId track_id,
+        qint64 timeline_frame);
     void handleMediaBrowserBinDrop(
         const QString& source_bin,
         const QString& destination_bin);
@@ -351,6 +365,7 @@ private:
     const bool& project_dirty_ = editor_session_.projectDirtyState();
     bool initial_window_layout_pending_ = false;
     bool playback_activation_loading_ = false;
+    std::optional<MediaImportIntent> active_media_import_intent_;
     QThreadPool media_task_pool_;
     media::AudioWaveformCache audio_waveform_cache_;
     struct PendingAudioWaveform {
