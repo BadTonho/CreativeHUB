@@ -142,6 +142,11 @@ struct SetClipEffectsCommand {
     timeline::ClipId clip_id = 0;
     std::vector<creative_suite::effects::EffectInstance> effects;
 };
+struct ApplyClipAttributesCommand {
+    timeline::ClipId clip_id = 0;
+    timeline::TimelineClipAttributes attributes;
+    timeline::ClipAttributeOptions options;
+};
 struct SetTrackAudioCommand {
     timeline::TrackId track_id = 0;
     double gain = 1.0;
@@ -190,6 +195,7 @@ public:
     [[nodiscard]] TimelineEditResult execute(
         const SetClipAudioGainKeyframesCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetClipEffectsCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const ApplyClipAttributesCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetTrackAudioCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetClipTextCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetTransformPropertyCommand& command);

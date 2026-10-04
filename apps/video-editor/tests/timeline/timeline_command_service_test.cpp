@@ -103,10 +103,13 @@ void addAudioMedia(application::EditorSession& session,
 
 void addVideoWithAudioMedia(
     application::EditorSession& session,
-    const std::filesystem::path& path) {
+    const std::filesystem::path& path,
+    double duration_seconds = 4.0) {
     application::MediaController controller(session);
     auto metadata = makeMetadata(path);
-    metadata.audio = media::AudioMetadata{"aac", 48000, 2, 4.0};
+    metadata.duration_seconds = duration_seconds;
+    metadata.frame_count = static_cast<std::int64_t>(duration_seconds * 30.0);
+    metadata.audio = media::AudioMetadata{"aac", 48000, 2, duration_seconds};
     const auto result = controller.commitImported({
         metadata, {}, metadata.display_name, "Unsorted", false});
     require(result.changed(), "Could not add test video-with-audio media.");
@@ -820,6 +823,188 @@ void runLinkedVideoAudioCommands() {
             "Deleting one linked clip did not remove the paired clips together.");
 }
 
+void runClipAttributeCommands() {
+    application::EditorSession session;
+    application::TimelineCommandService service(session);
+    const auto video_track_id = session.timeline().tracks().front().track_id;
+    const auto source_path = std::filesystem::temp_directory_path() /
+        "service-attribute-source.mkv";
+    const auto short_path = std::filesystem::temp_directory_path() /
+        "service-attribute-short.mkv";
+    const auto long_path = std::filesystem::temp_directory_path() /
+        "service-attribute-long.mkv";
+    const auto audio_path = std::filesystem::temp_directory_path() /
+        "service-attribute-target.wav";
+    addVideoWithAudioMedia(session, source_path);
+    addVideoWithAudioMedia(session, short_path, 1.0);
+    addVideoWithAudioMedia(session, long_path, 5.0);
+    addAudioMedia(session, audio_path);
+
+    const auto source = service.execute(application::AddMediaClipCommand{
+        source_path, video_track_id, 0});
+    const auto short_target = service.execute(application::AddMediaClipCommand{
+        short_path, video_track_id, 120});
+    const auto long_target = service.execute(application::AddMediaClipCommand{
+        long_path, video_track_id, 150});
+    require(source.changed() && short_target.changed() && long_target.changed() &&
+                source.affected_clip_ids.size() == 2 &&
+                short_target.affected_clip_ids.size() == 2 &&
+                long_target.affected_clip_ids.size() == 2,
+            "The clip-attribute test could not create linked video/audio pairs.");
+    const auto source_video_id = source.affected_clip_ids[0];
+    const auto source_audio_id = source.affected_clip_ids[1];
+    const auto short_video_id = short_target.affected_clip_ids[0];
+    const auto short_audio_id = short_target.affected_clip_ids[1];
+    const auto long_video_id = long_target.affected_clip_ids[0];
+
+    require(service.execute(application::SetClipAudioCommand{
+                source_video_id, 0.6, true}).changed() &&
+                service.execute(application::SetClipAudioGainKeyframesCommand{
+                    source_audio_id, {{0, 0.0}, {60, 1.0}, {120, 2.0}}}).changed() &&
+                service.execute(application::SetTransformPropertyCommand{
+                    source_video_id, timeline::TransformProperty::PositionX, 0, 0.2}).changed() &&
+                service.execute(application::ToggleTransformKeyframeCommand{
+                    source_video_id, timeline::TransformProperty::PositionX, 0}).changed() &&
+                service.execute(application::ToggleTransformKeyframeCommand{
+                    source_video_id, timeline::TransformProperty::PositionX, 60}).changed() &&
+                service.execute(application::SetTransformPropertyCommand{
+                    source_video_id, timeline::TransformProperty::PositionX, 60, 0.8}).changed() &&
+                service.execute(application::ToggleTransformKeyframeCommand{
+                    source_video_id, timeline::TransformProperty::PositionX, 120}).changed() &&
+                service.execute(application::SetTransformPropertyCommand{
+                    source_video_id, timeline::TransformProperty::PositionX, 119, 0.4}).changed(),
+            "The clip-attribute source could not prepare audio and transform animation.");
+    require(service.execute(application::SetClipAudioCommand{
+                short_video_id, 1.5, false}).changed() &&
+                service.execute(application::SetClipAudioGainKeyframesCommand{
+                    short_audio_id, {{0, 1.5}, {30, 1.5}}}).changed(),
+            "The short linked target could not prepare distinct audio attributes.");
+
+    const auto source_video_location = session.timeline().locateClip(source_video_id);
+    const auto source_audio_location = session.timeline().locateClip(source_audio_id);
+    require(source_video_location.has_value() && source_audio_location.has_value(),
+            "The clip-attribute source pair could not be located.");
+    const auto& source_video = session.timeline().tracks()[source_video_location->track_index]
+        .clips[source_video_location->clip_index];
+    const auto& source_audio = session.timeline().tracks()[source_audio_location->track_index]
+        .clips[source_audio_location->clip_index];
+    timeline::TimelineClipAttributes attributes;
+    attributes.source_kind = source_video.kind;
+    attributes.transform = source_video.transform;
+    attributes.transform_keyframes = source_video.keyframes;
+    attributes.audio_gain = source_video.audio_gain;
+    attributes.audio_muted = source_video.audio_muted;
+    attributes.audio_volume_envelope = source_audio.audio_gain_keyframes;
+
+    const auto short_location = session.timeline().locateClip(short_video_id);
+    require(short_location.has_value(), "The short paste target could not be located.");
+    const auto before_short_paste = session.timeline().tracks()[short_location->track_index]
+        .clips[short_location->clip_index];
+    const auto history_before_short_paste = service.undoCount();
+    const auto pasted_short = service.execute(application::ApplyClipAttributesCommand{
+        short_video_id, attributes,
+        timeline::ClipAttributeOptions{false, true, true, true, false}});
+    const auto short_video_after = session.timeline().locateClip(short_video_id);
+    const auto short_audio_after = session.timeline().locateClip(short_audio_id);
+    require(pasted_short.changed() && short_video_after.has_value() &&
+                short_audio_after.has_value() &&
+                service.undoCount() == history_before_short_paste + 1,
+            "Pasting transform and audio attributes did not create one atomic history entry.");
+    const auto& pasted_video = session.timeline().tracks()[short_video_after->track_index]
+        .clips[short_video_after->clip_index];
+    const auto& pasted_audio = session.timeline().tracks()[short_audio_after->track_index]
+        .clips[short_audio_after->clip_index];
+    require(pasted_video.linked_clip_id == short_audio_id &&
+                pasted_audio.linked_clip_id == short_video_id,
+            "Short-target paste did not preserve the linked pair.");
+    require(pasted_video.audio_gain == 0.6 && pasted_video.audio_muted &&
+                pasted_audio.audio_gain == 0.6 && pasted_audio.audio_muted,
+            "Short-target paste did not apply gain and mute to the linked pair.");
+    require(pasted_audio.audio_gain_keyframes ==
+                std::vector<timeline::AudioGainKeyframe>{{0, 0.0}, {30, 0.5}},
+            "Short-target paste did not sample the audio envelope at the target end.");
+    require(pasted_video.transform.position_x == 0.2,
+            "Short-target paste did not preserve the transform base value.");
+    require(pasted_video.keyframes.position_x.size() == 2,
+            "Short-target paste did not limit transform keyframes to the target duration.");
+    require(pasted_video.keyframes.position_x.back().frame == 29,
+            "Short-target paste did not add a transform keyframe at the target endpoint.");
+    require(std::abs(pasted_video.keyframes.position_x.back().value - 0.49) < 1e-9,
+            "Short-target paste did not sample the transform curve at the target endpoint.");
+    require(service.undo().changed() &&
+                session.timeline().tracks()[short_video_after->track_index]
+                    .clips[short_video_after->clip_index] == before_short_paste &&
+                service.redo().changed() &&
+                session.timeline().tracks()[session.timeline().locateClip(short_audio_id)->track_index]
+                    .clips[session.timeline().locateClip(short_audio_id)->clip_index]
+                    .audio_gain_keyframes ==
+                    std::vector<timeline::AudioGainKeyframe>{{0, 0.0}, {30, 0.5}},
+            "Undo/Redo did not restore/reapply all short-target attributes as one edit.");
+
+    const auto long_paste = service.execute(application::ApplyClipAttributesCommand{
+        long_video_id, attributes,
+        timeline::ClipAttributeOptions{false, true, false, true, false}});
+    const auto long_video_location = session.timeline().locateClip(long_video_id);
+    const auto long_audio_id = *session.timeline().tracks()[long_video_location->track_index]
+        .clips[long_video_location->clip_index].linked_clip_id;
+    const auto long_audio_location = session.timeline().locateClip(long_audio_id);
+    require(long_paste.changed() && long_audio_location.has_value() &&
+                session.timeline().tracks()[long_video_location->track_index]
+                    .clips[long_video_location->clip_index].keyframes.position_x ==
+                    attributes.transform_keyframes.position_x &&
+                session.timeline().tracks()[long_audio_location->track_index]
+                    .clips[long_audio_location->clip_index].audio_gain_keyframes ==
+                    *attributes.audio_volume_envelope &&
+                timeline::evaluateAudioGainEnvelope(
+                    *attributes.audio_volume_envelope, 150.0) == 2.0,
+            "Long-target paste scaled local frame positions instead of preserving offsets and the final value.");
+
+    const auto audio_target = service.execute(application::AddMediaClipCommand{
+        audio_path, video_track_id, 350});
+    require(audio_target.changed() && audio_target.affected_clip_ids.size() == 1,
+            "The clip-attribute test could not add a standalone audio destination.");
+    const auto audio_clip_id = audio_target.affected_clip_ids.front();
+    const auto audio_paste = service.execute(application::ApplyClipAttributesCommand{
+        audio_clip_id, attributes,
+        timeline::ClipAttributeOptions{false, false, true, true, false}});
+    const auto audio_location = session.timeline().locateClip(audio_clip_id);
+    require(audio_paste.changed() && audio_location.has_value() &&
+                session.timeline().tracks()[audio_location->track_index]
+                    .clips[audio_location->clip_index].audio_gain == 0.6 &&
+                session.timeline().tracks()[audio_location->track_index]
+                    .clips[audio_location->clip_index].audio_muted &&
+                session.timeline().tracks()[audio_location->track_index]
+                    .clips[audio_location->clip_index].audio_gain_keyframes ==
+                    std::vector<timeline::AudioGainKeyframe>{{0, 0.0}, {60, 1.0}},
+            "Audio attributes could not be pasted from a linked video into an audio-only clip.");
+
+    const auto audio_before_invalid = session.timeline().tracks()[audio_location->track_index]
+        .clips[audio_location->clip_index];
+    const auto history_before_invalid = service.undoCount();
+    const auto invalid_audio_attributes = [&]() {
+        auto invalid = attributes;
+        invalid.audio_gain = 8.0;
+        return invalid;
+    }();
+    const auto rejected = service.execute(application::ApplyClipAttributesCommand{
+        short_video_id, invalid_audio_attributes,
+        timeline::ClipAttributeOptions{false, true, true, false, false}});
+    require(rejected.status == application::EditStatus::Rejected,
+            "An invalid audio gain was accepted during a multi-group paste.");
+    require(service.undoCount() == history_before_invalid,
+            "A rejected multi-group paste added an undo entry.");
+    require(session.timeline().tracks()[audio_location->track_index]
+                .clips[audio_location->clip_index] == audio_before_invalid,
+            "A rejected multi-group paste changed another clip's model state.");
+
+    const auto incompatible = service.execute(application::ApplyClipAttributesCommand{
+        audio_clip_id, attributes,
+        timeline::ClipAttributeOptions{true, false, false, false, false}});
+    require(incompatible.status == application::EditStatus::Rejected &&
+                service.undoCount() == history_before_invalid,
+            "Effects were accepted when pasted from a video clip onto an audio-only clip.");
+}
+
 } // namespace
 
 int main() {
@@ -830,6 +1015,7 @@ int main() {
         runReconnectTimingCommand();
         runAutomaticAudioTrackCommand();
         runLinkedVideoAudioCommands();
+        runClipAttributeCommands();
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

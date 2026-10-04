@@ -530,12 +530,22 @@ disabled instances in the same shared processor. Toggling, parameter edits,
 removal, and reordering participate in Timeline Undo/Redo. The filter
 definitions and CPU RGBA processing live in the shared
 `creative-suite::effects` library without a Qt Widgets dependency. See
-[the effects contract](EFFECTS.md). The `Edit > Copy Effects` and
-`Edit > Paste Effects` commands copy a visual clip's complete stack—including
-order, parameters, and enabled states—and replace another visual clip's stack
-with one Undo/Redo edit. The copied stack is kept in memory for the current
-editor session and does not change project state until pasted. The commands
-are disabled when the selected clip is incompatible or has no effects to copy.
+[the effects contract](EFFECTS.md). `Edit > Copy Attributes` stores the
+selected Timeline clip's editable properties in an in-memory clipboard;
+`Edit > Paste Attributes` opens a modal chooser with compatible categories
+checked and incompatible categories disabled. Categories cover ordered visual
+effects, transform and animation, audio gain and mute, audio volume envelope,
+and text content/style. For linked video/audio clips, audio attributes are read
+from and applied to the audio companion while the reciprocal link is preserved.
+Keyframes keep their local frame offsets; when the destination is shorter, the
+curve is clipped at its end while preserving the evaluated endpoint, and longer
+destinations hold the source's last value. Applying categories is atomic and
+creates one Undo/Redo edit. Copying does not dirty the project; clip media,
+timing, track, link, and transition attributes are never copied. `Ctrl+C`
+copies attributes when a Timeline clip is selected, while focused text fields
+retain normal text-copy behavior. `Ctrl+Shift+V` opens the chooser whenever an
+attribute snapshot exists, including when no destination is selected; in that
+case all groups and Apply are disabled with guidance.
 
 ## Transition editing
 

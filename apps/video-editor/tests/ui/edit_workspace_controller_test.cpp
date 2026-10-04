@@ -225,6 +225,25 @@ void run() {
     require(added_effect_target.changed(),
             "The effect-copy fixture could not add a destination clip.");
     const auto target_clip_id = added_effect_target.affected_clip_ids.front();
+    const auto alternate_path = std::filesystem::temp_directory_path() /
+        ("edit-workspace-alternate-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count()) + ".mkv");
+    auto alternate_metadata = online_metadata;
+    alternate_metadata.source_path = alternate_path;
+    require(media_drop_library.commitImported({
+                alternate_metadata, {}, "Alternate media", "Unsorted", false}).changed(),
+            "The test could not register alternate media for selection-independent copy.");
+    const auto alternate_track = media_drop_controller.addTrack("Media selection fixture");
+    require(alternate_track.changed(),
+            "The test could not add a separate Timeline track for the alternate selection.");
+    const auto alternate_clip = media_drop_controller.addMediaClip(
+        alternate_path, alternate_track.affected_track_ids.front(), 0);
+    require(alternate_clip.changed(),
+            "The test could not add alternate media to distinguish panel selection from Timeline selection.");
+    require(media_drop_controller.execute(application::SetTransformPropertyCommand{
+                alternate_clip.affected_clip_ids.front(),
+                timeline::TransformProperty::PositionX, 0, 0.95}).changed(),
+            "The test could not distinguish the alternate media's attributes.");
     auto target_effects = std::vector<creative_suite::effects::EffectInstance>{
         creative_suite::effects::makeDefaultInstance("video.brightness"),
         creative_suite::effects::makeDefaultInstance("video.contrast")};
@@ -238,74 +257,138 @@ void run() {
                 target_clip_id, target_effects}).changed(),
             "The effect-copy fixture could not set the destination stack.");
 
-    media_drop_controller.handleTimelineClipSelectionChanged(
-        media_drop_track, source_clip_id);
-    require(media_drop_controller.canCopySelectedClipEffects() &&
-                !media_drop_controller.canPasteCopiedClipEffects(),
-            "Copy must be available for a visual clip with effects, before a stack is copied.");
+    require(media_drop_controller.execute(application::SetTransformPropertyCommand{
+                source_clip_id, timeline::TransformProperty::PositionX, 0, 0.25}).changed() &&
+                media_drop_controller.execute(application::ToggleTransformKeyframeCommand{
+                    source_clip_id, timeline::TransformProperty::PositionX, 120}).changed() &&
+                media_drop_controller.execute(application::SetTransformPropertyCommand{
+                    source_clip_id, timeline::TransformProperty::PositionX, 120, 0.75}).changed() &&
+                media_drop_controller.execute(application::SetClipAudioCommand{
+                    source_clip_id, 0.5, true}).changed() &&
+                media_drop_controller.execute(application::SetTransformPropertyCommand{
+                    target_clip_id, timeline::TransformProperty::PositionX, 0, 0.9}).changed() &&
+                media_drop_controller.execute(application::SetClipAudioCommand{
+                    target_clip_id, 1.5, false}).changed(),
+            "The clip-attribute fixture could not prepare visual and audio values.");
+
+    media_drop_controller.handleTimelineClipSelectionChanged(media_drop_track, source_clip_id);
+    require(media_drop_controller.canCopySelectedClipAttributes() &&
+                !media_drop_controller.canPasteCopiedClipAttributes(),
+            "Copy Attributes must be available for any selected Timeline clip before copying.");
     const auto history_before_copy = media_drop_commands.undoCount();
     const auto dirty_before_copy = media_drop_session.projectDirty();
-    media_drop_controller.copySelectedClipEffects();
+    media_drop_controller.copySelectedClipAttributes();
     require(media_drop_commands.undoCount() == history_before_copy &&
-                media_drop_session.projectDirty() == dirty_before_copy,
-            "Copying an effect stack must not edit or dirty the project.");
+                media_drop_session.projectDirty() == dirty_before_copy &&
+                media_drop_controller.canPasteCopiedClipAttributes(),
+            "Copying clip attributes must fill the in-memory clipboard without editing the project.");
+
+    media_drop_session.selectionForUi().selected_source_path = alternate_path;
+    media_drop_controller.copySelectedClipAttributes();
+    media_drop_controller.handleTimelineClipSelectionChanged(
+        effect_target_track_id, target_clip_id);
+    require(media_drop_controller.applyCopiedClipAttributes(
+                timeline::ClipAttributeOptions{true, false, false, false, false}).changed() &&
+                media_drop_session.timeline().tracks()[
+                    media_drop_session.timeline().locateClip(target_clip_id)->track_index]
+                    .clips[media_drop_session.timeline().locateClip(target_clip_id)->clip_index]
+                    .effects == copied_stack,
+            "Copy Attributes followed Media Browser selection instead of the selected Timeline clip.");
+    require(media_drop_controller.undo().changed(),
+            "The selection-independent copy fixture could not restore the destination stack.");
+    media_drop_controller.handleTimelineClipSelectionChanged(media_drop_track, source_clip_id);
+    media_drop_controller.copySelectedClipAttributes();
 
     media_drop_controller.handleTimelineClipSelectionChanged(
         effect_target_track_id, target_clip_id);
-    require(media_drop_controller.canPasteCopiedClipEffects(),
-            "A copied visual stack must be pasteable after selecting another visual clip.");
     const auto history_before_paste = media_drop_commands.undoCount();
-    media_drop_controller.pasteCopiedClipEffects();
-    const auto target_location = media_drop_session.timeline().locateClip(target_clip_id);
-    require(target_location.has_value() &&
+    const auto pasted_visual = media_drop_controller.applyCopiedClipAttributes(
+        timeline::ClipAttributeOptions{true, true, true, false, false});
+    auto target_location = media_drop_session.timeline().locateClip(target_clip_id);
+    require(pasted_visual.changed() && target_location.has_value() &&
                 media_drop_session.timeline().tracks()[target_location->track_index]
                         .clips[target_location->clip_index].effects == copied_stack &&
+                media_drop_session.timeline().tracks()[target_location->track_index]
+                        .clips[target_location->clip_index].transform.position_x == 0.25 &&
+                media_drop_session.timeline().tracks()[target_location->track_index]
+                        .clips[target_location->clip_index].keyframes.position_x.size() == 1 &&
+                media_drop_session.timeline().tracks()[target_location->track_index]
+                        .clips[target_location->clip_index].keyframes.position_x.front().value == 0.75 &&
+                media_drop_session.timeline().tracks()[target_location->track_index]
+                        .clips[target_location->clip_index].audio_gain == 0.5 &&
+                media_drop_session.timeline().tracks()[target_location->track_index]
+                        .clips[target_location->clip_index].audio_muted &&
                 media_drop_commands.undoCount() == history_before_paste + 1,
-            "Pasting must replace the destination stack, preserving order, parameters, enabled state, and one history entry.");
+            "Paste Attributes did not apply the selected visual and audio groups as one edit.");
     require(media_drop_controller.undo().changed() &&
                 media_drop_session.timeline().tracks()[target_location->track_index]
                         .clips[target_location->clip_index].effects == target_effects &&
+                media_drop_session.timeline().tracks()[target_location->track_index]
+                        .clips[target_location->clip_index].transform.position_x == 0.9 &&
+                media_drop_session.timeline().tracks()[target_location->track_index]
+                        .clips[target_location->clip_index].audio_gain == 1.5 &&
                 media_drop_controller.redo().changed() &&
                 media_drop_session.timeline().tracks()[target_location->track_index]
                         .clips[target_location->clip_index].effects == copied_stack,
-            "Pasting an effect stack did not restore and reapply the destination through Undo/Redo.");
+            "Pasting clip attributes did not restore and reapply all selected groups through Undo/Redo.");
 
-    media_drop_controller.handleTimelineClipSelectionChanged(
-        media_drop_track, source_clip_id);
+    media_drop_controller.handleTimelineClipSelectionChanged(media_drop_track, source_clip_id);
     require(media_drop_controller.execute(application::SetClipEffectsCommand{
-                source_clip_id, {}}).changed() &&
-                !media_drop_controller.canCopySelectedClipEffects() &&
-                media_drop_controller.canPasteCopiedClipEffects(),
-            "An empty source stack must disable Copy without clearing the in-memory clipboard.");
-    require(media_drop_controller.execute(application::SetClipEffectsCommand{
-                target_clip_id, {}}).changed(),
-            "The empty destination fixture could not clear its effects.");
+                source_clip_id, {}}).changed(),
+            "The empty effects source fixture could not be prepared.");
+    media_drop_controller.copySelectedClipAttributes();
     media_drop_controller.handleTimelineClipSelectionChanged(
         effect_target_track_id, target_clip_id);
-    require(media_drop_controller.canPasteCopiedClipEffects(),
-            "A copied stack must also paste onto a compatible visual clip with no effects.");
-    const auto history_before_empty_target_paste = media_drop_commands.undoCount();
-    media_drop_controller.pasteCopiedClipEffects();
-    const auto empty_target_location =
-        media_drop_session.timeline().locateClip(target_clip_id);
-    require(empty_target_location.has_value() &&
-                media_drop_session.timeline().tracks()[empty_target_location->track_index]
-                        .clips[empty_target_location->clip_index].effects == copied_stack &&
-                media_drop_commands.undoCount() == history_before_empty_target_paste + 1,
-            "Pasting onto an empty destination did not apply the copied stack as one edit.");
-    media_drop_controller.handleTimelineClipSelectionCleared();
-    require(!media_drop_controller.canCopySelectedClipEffects() &&
-                !media_drop_controller.canPasteCopiedClipEffects(),
-            "Effect copy and paste must be unavailable without a selected clip.");
+    require(media_drop_controller.applyCopiedClipAttributes(
+                timeline::ClipAttributeOptions{true, false, false, false, false}).changed() &&
+                media_drop_session.timeline().tracks()[target_location->track_index]
+                    .clips[target_location->clip_index].effects.empty(),
+            "Pasting an empty effects group did not clear the destination stack.");
+
     const auto incompatible_text = media_drop_controller.execute(
         application::AddTextClipCommand{effect_target_track_id, 700, 90, 30.0});
     require(incompatible_text.changed(),
-            "The effect-copy fixture could not add an incompatible text clip.");
+            "The attribute-copy fixture could not add an incompatible text clip.");
     media_drop_controller.handleTimelineClipSelectionChanged(
         effect_target_track_id, incompatible_text.affected_clip_ids.front());
-    require(!media_drop_controller.canCopySelectedClipEffects() &&
-                !media_drop_controller.canPasteCopiedClipEffects(),
-            "Text clips must not allow visual effect copy or paste.");
+    const auto history_before_rejected_paste = media_drop_commands.undoCount();
+    const auto rejected_paste = media_drop_controller.applyCopiedClipAttributes(
+        timeline::ClipAttributeOptions{true, false, false, false, false});
+    require(rejected_paste.status == application::EditStatus::Rejected &&
+                media_drop_commands.undoCount() == history_before_rejected_paste,
+            "The command service accepted effects on an incompatible text clip.");
+
+    const auto source_text = media_drop_controller.execute(
+        application::AddTextClipCommand{effect_target_track_id, 820, 90, 30.0});
+    const auto target_text = media_drop_controller.execute(
+        application::AddTextClipCommand{effect_target_track_id, 940, 90, 30.0});
+    require(source_text.changed() && target_text.changed(),
+            "The attribute-copy fixture could not create two text clips.");
+    timeline::TextStyle source_style;
+    source_style.content = "Copied title";
+    source_style.font_size_pixels = 80.0;
+    timeline::TextStyle target_style;
+    target_style.content = "Original title";
+    target_style.font_size_pixels = 24.0;
+    require(media_drop_controller.execute(application::SetClipTextCommand{
+                source_text.affected_clip_ids.front(), source_style}).changed() &&
+                media_drop_controller.execute(application::SetClipTextCommand{
+                    target_text.affected_clip_ids.front(), target_style}).changed(),
+            "The text attribute fixture could not set source and destination styles.");
+    media_drop_controller.handleTimelineClipSelectionChanged(
+        effect_target_track_id, source_text.affected_clip_ids.front());
+    media_drop_controller.copySelectedClipAttributes();
+    media_drop_controller.handleTimelineClipSelectionChanged(
+        effect_target_track_id, target_text.affected_clip_ids.front());
+    require(media_drop_controller.applyCopiedClipAttributes(
+                timeline::ClipAttributeOptions{false, false, false, false, true}).changed(),
+            "Text attributes could not be pasted between text clips.");
+    const auto target_text_location = media_drop_session.timeline().locateClip(
+        target_text.affected_clip_ids.front());
+    require(target_text_location.has_value() &&
+                media_drop_session.timeline().tracks()[target_text_location->track_index]
+                    .clips[target_text_location->clip_index].text == source_style,
+            "Paste Attributes did not transfer text content and formatting.");
 
     const auto history_before_occupied_drop = media_drop_commands.undoCount();
     const auto committed_before_occupied_drop = committed_media_drops;

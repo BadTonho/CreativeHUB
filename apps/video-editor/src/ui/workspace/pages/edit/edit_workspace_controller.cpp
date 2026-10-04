@@ -11,6 +11,8 @@
 #include <QColorDialog>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFont>
 #include <QFontComboBox>
@@ -29,6 +31,7 @@
 #include <QTimer>
 #include <QInputDialog>
 #include <QLineEdit>
+#include <QVBoxLayout>
 
 #include <algorithm>
 #include <cmath>
@@ -380,68 +383,191 @@ bool EditWorkspaceController::selectedClipSupportsEffects() const noexcept {
     return kind == timeline::ClipKind::Video || kind == timeline::ClipKind::Image;
 }
 
-bool EditWorkspaceController::canCopySelectedClipEffects() const noexcept {
+bool EditWorkspaceController::canCopySelectedClipAttributes() const noexcept {
     if (active_transition_.has_value()) return false;
-    const auto location = selectedTimelineClipLocation();
-    if (!location.has_value() ||
-        location->track_index >= timeline_model_.trackCount() ||
-        location->clip_index >= timeline_model_.clipCount(location->track_index)) {
-        return false;
-    }
-    const auto& clip = timeline_model_.tracks()[location->track_index]
-        .clips[location->clip_index];
-    return (clip.kind == timeline::ClipKind::Video ||
-            clip.kind == timeline::ClipKind::Image) &&
-        !clip.effects.empty();
+    return selectedAttributeClipLocation().has_value();
 }
 
-bool EditWorkspaceController::canPasteCopiedClipEffects() const noexcept {
-    return !copied_effects_.empty() && !active_transition_.has_value() &&
-        selectedClipSupportsEffects();
+bool EditWorkspaceController::canPasteCopiedClipAttributes() const noexcept {
+    return copied_clip_attributes_.has_value();
 }
 
-void EditWorkspaceController::copySelectedClipEffects() {
-    if (!canCopySelectedClipEffects()) return;
-    const auto location = selectedTimelineClipLocation();
+void EditWorkspaceController::copySelectedClipAttributes() {
+    if (!canCopySelectedClipAttributes()) return;
+    const auto location = selectedAttributeClipLocation();
     if (!location.has_value()) return;
 
     const auto& clip = timeline_model_.tracks()[location->track_index]
         .clips[location->clip_index];
     try {
-        copied_effects_ = clip.effects;
-        emit statusMessageRequested(QStringLiteral("Effects copied."));
-    } catch (const std::exception& error) {
-        logging::Logger::instance().log(
-            logging::Level::Error, "timeline", "copy_clip_effects", error.what(),
-            {{"clip_id", std::to_string(clip.clip_id)}});
-        emit statusMessageRequested(QStringLiteral("Could not copy effects."));
-    }
-}
-
-void EditWorkspaceController::pasteCopiedClipEffects() {
-    if (!canPasteCopiedClipEffects()) return;
-    const auto location = selectedTimelineClipLocation();
-    if (!location.has_value()) return;
-
-    const auto& clip = timeline_model_.tracks()[location->track_index]
-        .clips[location->clip_index];
-    const auto previous_selection = selected_effect_index_;
-    try {
-        selected_effect_index_ = 0;
-        const auto result = execute(application::SetClipEffectsCommand{
-            clip.clip_id, copied_effects_});
-        if (result.changed()) {
-            publishCommittedEdit(
-                result, false, true, QStringLiteral("Effects pasted."));
-        } else {
-            selected_effect_index_ = previous_selection;
+        timeline::TimelineClipAttributes attributes;
+        attributes.source_kind = clip.kind;
+        attributes.transform = clip.transform;
+        attributes.transform_keyframes = clip.keyframes;
+        attributes.effects = clip.effects;
+        attributes.audio_gain = clip.audio_gain;
+        attributes.audio_muted = clip.audio_muted;
+        attributes.text = clip.text;
+        if (clip.kind == timeline::ClipKind::Audio) {
+            attributes.audio_volume_envelope = clip.audio_gain_keyframes;
+        } else if (clip.linked_clip_id.has_value()) {
+            const auto linked = timeline_model_.locateClip(*clip.linked_clip_id);
+            if (linked.has_value()) {
+                const auto& linked_clip = timeline_model_.tracks()[linked->track_index]
+                    .clips[linked->clip_index];
+                if (linked_clip.kind == timeline::ClipKind::Audio) {
+                    attributes.audio_volume_envelope =
+                        linked_clip.audio_gain_keyframes;
+                }
+            }
         }
+        copied_clip_attributes_ = std::move(attributes);
+        emit statusMessageRequested(QStringLiteral("Clip attributes copied."));
     } catch (const std::exception& error) {
-        selected_effect_index_ = previous_selection;
         logging::Logger::instance().log(
-            logging::Level::Error, "timeline", "paste_clip_effects", error.what(),
+            logging::Level::Error, "timeline", "copy_clip_attributes", error.what(),
             {{"clip_id", std::to_string(clip.clip_id)}});
-        emit statusMessageRequested(QStringLiteral("Could not paste effects."));
+        emit statusMessageRequested(QStringLiteral("Could not copy clip attributes."));
+    }
+}
+
+void EditWorkspaceController::showPasteCopiedClipAttributesDialog(
+    QWidget* dialog_parent) {
+    if (!canPasteCopiedClipAttributes()) return;
+
+    std::optional<timeline::TimelineClip> target_clip;
+    bool target_has_audio_envelope = false;
+    if (!active_transition_.has_value()) {
+        const auto location = selectedAttributeClipLocation();
+        if (location.has_value() && location->track_index < timeline_model_.trackCount() &&
+            location->clip_index < timeline_model_.clipCount(location->track_index)) {
+            target_clip = timeline_model_.tracks()[location->track_index]
+                .clips[location->clip_index];
+            target_has_audio_envelope =
+                target_clip->kind == timeline::ClipKind::Audio;
+            if (!target_has_audio_envelope && target_clip->linked_clip_id.has_value()) {
+                const auto linked = timeline_model_.locateClip(*target_clip->linked_clip_id);
+                if (linked.has_value()) {
+                    target_has_audio_envelope =
+                        timeline_model_.tracks()[linked->track_index]
+                            .clips[linked->clip_index].kind == timeline::ClipKind::Audio;
+                }
+            }
+        }
+    }
+    const auto compatibility = target_clip.has_value()
+        ? timeline::clipAttributeCompatibility(
+            *copied_clip_attributes_, target_clip->kind,
+            target_has_audio_envelope)
+        : timeline::ClipAttributeCompatibility{};
+
+    QDialog dialog(dialog_parent);
+    dialog.setWindowTitle(QStringLiteral("Paste Attributes"));
+    dialog.setModal(true);
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* description = new QLabel(
+        target_clip.has_value()
+            ? QStringLiteral("Choose the clip attributes to apply to the selected clip.")
+            : QStringLiteral("Select a Timeline clip to choose compatible attributes."),
+        &dialog);
+    description->setWordWrap(true);
+    layout->addWidget(description);
+
+    const auto add_option = [&dialog, layout](
+        const QString& label, const QString& object_name,
+        bool enabled, const QString& explanation) {
+        auto* check_box = new QCheckBox(label, &dialog);
+        check_box->setObjectName(object_name);
+        check_box->setChecked(enabled);
+        check_box->setEnabled(enabled);
+        if (!enabled) check_box->setToolTip(explanation);
+        layout->addWidget(check_box);
+        return check_box;
+    };
+    auto* effects = add_option(
+        QStringLiteral("Effects"), QStringLiteral("pasteAttributesEffects"),
+        compatibility.effects,
+        QStringLiteral("Effects can be pasted between video and image clips."));
+    auto* transform = add_option(
+        QStringLiteral("Transform & Animation"),
+        QStringLiteral("pasteAttributesTransform"), compatibility.transform,
+        QStringLiteral("Transform can be pasted between visual clips."));
+    auto* audio = add_option(
+        QStringLiteral("Audio Gain & Mute"),
+        QStringLiteral("pasteAttributesAudioGain"),
+        compatibility.audio_gain_and_mute,
+        QStringLiteral("Audio controls can be pasted between video and audio clips."));
+    auto* envelope = add_option(
+        QStringLiteral("Audio Volume Envelope"),
+        QStringLiteral("pasteAttributesAudioEnvelope"),
+        compatibility.audio_volume_envelope,
+        QStringLiteral("Both clips need an audio clip or linked audio companion."));
+    auto* text = add_option(
+        QStringLiteral("Text"), QStringLiteral("pasteAttributesText"),
+        compatibility.text,
+        QStringLiteral("Text attributes can be pasted between text clips."));
+
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Apply | QDialogButtonBox::Cancel, &dialog);
+    auto* apply_button = buttons->button(QDialogButtonBox::Apply);
+    apply_button->setEnabled(compatibility.effects || compatibility.transform ||
+        compatibility.audio_gain_and_mute || compatibility.audio_volume_envelope ||
+        compatibility.text);
+    QObject::connect(apply_button, &QPushButton::clicked,
+                     &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected,
+                     &dialog, &QDialog::reject);
+    const auto update_apply_enabled = [=]() {
+        apply_button->setEnabled(effects->isChecked() || transform->isChecked() ||
+            audio->isChecked() || envelope->isChecked() || text->isChecked());
+    };
+    for (auto* option : {effects, transform, audio, envelope, text}) {
+        QObject::connect(option, &QCheckBox::toggled,
+                         &dialog, update_apply_enabled);
+    }
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted) return;
+    const timeline::ClipAttributeOptions options{
+        effects->isChecked(), transform->isChecked(), audio->isChecked(),
+        envelope->isChecked(), text->isChecked()};
+    static_cast<void>(applyCopiedClipAttributes(options));
+}
+
+application::TimelineEditResult EditWorkspaceController::applyCopiedClipAttributes(
+    const timeline::ClipAttributeOptions& options) {
+    if (!copied_clip_attributes_.has_value() || active_transition_.has_value()) {
+        return execute(application::ApplyClipAttributesCommand{});
+    }
+    const auto location = selectedAttributeClipLocation();
+    if (!location.has_value()) {
+        return execute(application::ApplyClipAttributesCommand{});
+    }
+    const auto& clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    try {
+        const auto result = execute(application::ApplyClipAttributesCommand{
+            clip.clip_id, *copied_clip_attributes_, options});
+        if (result.changed()) {
+            selected_effect_index_ = options.effects &&
+                    !copied_clip_attributes_->effects.empty()
+                ? 0 : -1;
+            inspector_effect_clip_id_ = options.effects ? clip.clip_id : 0;
+            publishCommittedEdit(
+                result, false, true, QStringLiteral("Clip attributes pasted."));
+        } else if (result.status == application::EditStatus::Rejected) {
+            emit statusMessageRequested(
+                QStringLiteral("Those attributes cannot be applied to this clip."));
+        }
+        return result;
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "timeline", "paste_clip_attributes", error.what(),
+            {{"clip_id", std::to_string(clip.clip_id)}});
+        emit statusMessageRequested(QStringLiteral("Could not paste clip attributes."));
+        return application::TimelineEditResult{
+            .status = application::EditStatus::Rejected,
+            .reason = application::EditReason::InvalidTarget};
     }
 }
 
@@ -1117,6 +1243,14 @@ EditWorkspaceController::selectedTimelineClipLocation() const noexcept {
         }
     }
     return std::nullopt;
+}
+
+std::optional<timeline::ClipLocation>
+EditWorkspaceController::selectedAttributeClipLocation() const noexcept {
+    if (active_transition_.has_value() || !active_timeline_clip_id_.has_value()) {
+        return std::nullopt;
+    }
+    return timeline_model_.locateClip(*active_timeline_clip_id_);
 }
 
 bool EditWorkspaceController::canPlaybackSelectedMedia() const noexcept {

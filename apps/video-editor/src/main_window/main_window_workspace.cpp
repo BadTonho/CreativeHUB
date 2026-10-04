@@ -17,6 +17,7 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QCoreApplication>
@@ -33,6 +34,7 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QLineEdit>
+#include <QPlainTextEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMetaObject>
@@ -44,6 +46,7 @@
 #include <QSlider>
 #include <QStatusBar>
 #include <QToolBar>
+#include <QTextEdit>
 #include <QUrl>
 #include <QWidget>
 #include <QTreeWidget>
@@ -257,7 +260,7 @@ void MainWindow::createWorkspace() {
         edit_workspace_->controller(),
         &ui::EditWorkspaceController::timelineSelectionPresentationChanged,
         this,
-        &MainWindow::updateEffectClipboardActions);
+        &MainWindow::updateAttributeClipboardActions);
     connect(
         edit_workspace_->controller(),
         &ui::EditWorkspaceController::refreshPlaybackUiRequested,
@@ -417,7 +420,7 @@ void MainWindow::createWorkspace() {
             function_palette_, &ui::FunctionPalette::setEffectTargetAvailable);
     connect(edit_workspace_->controller(),
             &ui::EditWorkspaceController::effectTargetAvailabilityChanged,
-            this, &MainWindow::updateEffectClipboardActions);
+            this, &MainWindow::updateAttributeClipboardActions);
     function_palette_->setEffectTargetAvailable(
         edit_workspace_->controller()->selectedClipSupportsEffects());
 
@@ -586,31 +589,44 @@ void MainWindow::createMenus() {
         &QAction::triggered,
         edit_workspace_->controller(),
         &ui::EditWorkspaceController::splitActiveClipAtPlayhead);
-    copy_effects_action_ = edit_menu->addAction("Copy Effects");
-    disableDuringProjectLoad(copy_effects_action_);
-    copy_effects_action_->setObjectName(QStringLiteral("edit.copy_effects"));
-    copy_effects_action_->setShortcut(QKeySequence("Ctrl+Shift+C"));
-    copy_effects_action_->setShortcutContext(Qt::WindowShortcut);
+    copy_attributes_action_ = edit_menu->addAction("Copy Attributes");
+    disableDuringProjectLoad(copy_attributes_action_);
+    copy_attributes_action_->setObjectName(QStringLiteral("edit.copy_attributes"));
+    copy_attributes_action_->setShortcut(QKeySequence("Ctrl+C"));
+    copy_attributes_action_->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
-        QStringLiteral("edit.copy_effects"), QStringLiteral("Copy Effects"),
-        copy_effects_action_);
-    connect(copy_effects_action_, &QAction::triggered, this, [this]() {
+        QStringLiteral("edit.copy_attributes"), QStringLiteral("Copy Attributes"),
+        copy_attributes_action_);
+    connect(copy_attributes_action_, &QAction::triggered, this, [this]() {
+        auto* focus = QApplication::focusWidget();
+        if (auto* line_edit = qobject_cast<QLineEdit*>(focus)) {
+            line_edit->copy();
+            return;
+        }
+        if (auto* text_edit = qobject_cast<QTextEdit*>(focus)) {
+            text_edit->copy();
+            return;
+        }
+        if (auto* plain_text_edit = qobject_cast<QPlainTextEdit*>(focus)) {
+            plain_text_edit->copy();
+            return;
+        }
         if (edit_workspace_ == nullptr || edit_workspace_->controller() == nullptr) return;
-        edit_workspace_->controller()->copySelectedClipEffects();
-        updateEffectClipboardActions();
+        edit_workspace_->controller()->copySelectedClipAttributes();
+        updateAttributeClipboardActions();
     });
-    paste_effects_action_ = edit_menu->addAction("Paste Effects");
-    disableDuringProjectLoad(paste_effects_action_);
-    paste_effects_action_->setObjectName(QStringLiteral("edit.paste_effects"));
-    paste_effects_action_->setShortcut(QKeySequence("Ctrl+Shift+V"));
-    paste_effects_action_->setShortcutContext(Qt::WindowShortcut);
+    paste_attributes_action_ = edit_menu->addAction("Paste Attributes");
+    disableDuringProjectLoad(paste_attributes_action_);
+    paste_attributes_action_->setObjectName(QStringLiteral("edit.paste_attributes"));
+    paste_attributes_action_->setShortcut(QKeySequence("Ctrl+Shift+V"));
+    paste_attributes_action_->setShortcutContext(Qt::WindowShortcut);
     register_shortcut(
-        QStringLiteral("edit.paste_effects"), QStringLiteral("Paste Effects"),
-        paste_effects_action_);
-    connect(paste_effects_action_, &QAction::triggered, this, [this]() {
+        QStringLiteral("edit.paste_attributes"), QStringLiteral("Paste Attributes"),
+        paste_attributes_action_);
+    connect(paste_attributes_action_, &QAction::triggered, this, [this]() {
         if (edit_workspace_ == nullptr || edit_workspace_->controller() == nullptr) return;
-        edit_workspace_->controller()->pasteCopiedClipEffects();
-        updateEffectClipboardActions();
+        edit_workspace_->controller()->showPasteCopiedClipAttributesDialog(this);
+        updateAttributeClipboardActions();
     });
     edit_menu->addSeparator();
     add_video_track_action_ = edit_menu->addAction("Add Video Track");
@@ -935,7 +951,7 @@ void MainWindow::createMenus() {
 
     shortcut_manager_->load();
     updateHistoryActions();
-    updateEffectClipboardActions();
+    updateAttributeClipboardActions();
 }
 
 void MainWindow::restoreWorkspaceLayout() {

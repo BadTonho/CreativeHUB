@@ -506,6 +506,30 @@ std::vector<AudioGainKeyframe> sliceAudioGainEnvelope(
 
 } // namespace
 
+ClipAttributeCompatibility clipAttributeCompatibility(
+    const TimelineClipAttributes& source,
+    ClipKind target_kind,
+    bool target_has_audio_volume_envelope) noexcept {
+    const auto is_visual = [](ClipKind kind) {
+        return kind == ClipKind::Video || kind == ClipKind::Image;
+    };
+    const auto is_transformable = [](ClipKind kind) {
+        return kind != ClipKind::Audio;
+    };
+    const auto has_audio_controls = [](ClipKind kind) {
+        return kind == ClipKind::Video || kind == ClipKind::Audio;
+    };
+    return {
+        .effects = is_visual(source.source_kind) && is_visual(target_kind),
+        .transform = is_transformable(source.source_kind) && is_transformable(target_kind),
+        .audio_gain_and_mute = has_audio_controls(source.source_kind) &&
+            has_audio_controls(target_kind),
+        .audio_volume_envelope = source.audio_volume_envelope.has_value() &&
+            target_has_audio_volume_envelope,
+        .text = source.source_kind == ClipKind::Text && target_kind == ClipKind::Text,
+    };
+}
+
 TimelineModel::TimelineModel() {
     appendDefaultTracks(tracks_, next_track_id_);
     assertIdentityInvariants();
@@ -2223,6 +2247,40 @@ TransformParameterResult TimelineModel::setClipTransform(
     auto& clip = track->clips[clip_index];
     if (clip.transform == transform) return TransformParameterResult::NoChange;
     clip.transform = transform;
+    return TransformParameterResult::Changed;
+}
+
+TransformParameterResult TimelineModel::setClipTransformAttributes(
+    std::size_t track_index,
+    std::size_t clip_index,
+    const Transform2D& transform,
+    TransformKeyframes keyframes) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_index >= track->clips.size()) {
+        return TransformParameterResult::InvalidIndex;
+    }
+    auto& clip = track->clips[clip_index];
+    if (!validTransform(transform) ||
+        !creative_suite::animation::validTransformKeyframes(keyframes) ||
+        clip.timeline_duration_frames <= 0) {
+        return TransformParameterResult::InvalidValue;
+    }
+    for (const auto property : {TransformProperty::PositionX,
+                                TransformProperty::PositionY,
+                                TransformProperty::Scale,
+                                TransformProperty::Rotation,
+                                TransformProperty::Opacity}) {
+        for (const auto& keyframe : keyframesFor(keyframes, property)) {
+            if (keyframe.frame < 0 || keyframe.frame >= clip.timeline_duration_frames) {
+                return TransformParameterResult::InvalidValue;
+            }
+        }
+    }
+    if (clip.transform == transform && clip.keyframes == keyframes) {
+        return TransformParameterResult::NoChange;
+    }
+    clip.transform = transform;
+    clip.keyframes = std::move(keyframes);
     return TransformParameterResult::Changed;
 }
 

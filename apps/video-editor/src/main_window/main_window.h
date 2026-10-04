@@ -215,7 +215,7 @@ private:
         const application::TimelineEditResult& result,
         bool stop_playback = true);
     void updateHistoryActions();
-    void updateEffectClipboardActions();
+    void updateAttributeClipboardActions();
     void updateTimelineState();
     void requestTimelineAudioWaveforms();
     void cancelTimelineAudioWaveforms() noexcept;
@@ -301,8 +301,8 @@ private:
     QAction* save_project_action_ = nullptr;
     QAction* save_project_as_action_ = nullptr;
     QAction* delete_clip_action_ = nullptr;
-    QAction* copy_effects_action_ = nullptr;
-    QAction* paste_effects_action_ = nullptr;
+    QAction* copy_attributes_action_ = nullptr;
+    QAction* paste_attributes_action_ = nullptr;
     QAction* undo_action_ = nullptr;
     QAction* redo_action_ = nullptr;
     QAction* razor_tool_action_ = nullptr;

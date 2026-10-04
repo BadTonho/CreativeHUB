@@ -135,6 +135,43 @@ struct TimelineClip {
     friend bool operator==(const TimelineClip&, const TimelineClip&) = default;
 };
 
+// A clipboard snapshot of editable clip attributes. Timeline identity, timing,
+// media source, track membership, transitions, and linkage are deliberately
+// excluded so attribute paste cannot duplicate or reposition a clip.
+struct TimelineClipAttributes {
+    ClipKind source_kind = ClipKind::Video;
+    Transform2D transform;
+    TransformKeyframes transform_keyframes;
+    std::vector<creative_suite::effects::EffectInstance> effects;
+    double audio_gain = 1.0;
+    bool audio_muted = false;
+    std::optional<std::vector<AudioGainKeyframe>> audio_volume_envelope;
+    TextStyle text;
+};
+
+struct ClipAttributeOptions {
+    bool effects = false;
+    bool transform = false;
+    bool audio_gain_and_mute = false;
+    bool audio_volume_envelope = false;
+    bool text = false;
+
+    friend bool operator==(const ClipAttributeOptions&, const ClipAttributeOptions&) = default;
+};
+
+struct ClipAttributeCompatibility {
+    bool effects = false;
+    bool transform = false;
+    bool audio_gain_and_mute = false;
+    bool audio_volume_envelope = false;
+    bool text = false;
+};
+
+[[nodiscard]] ClipAttributeCompatibility clipAttributeCompatibility(
+    const TimelineClipAttributes& source,
+    ClipKind target_kind,
+    bool target_has_audio_volume_envelope) noexcept;
+
 struct TimelineTransition {
     ClipId from_clip_id = 0;
     ClipId to_clip_id = 0;
@@ -345,6 +382,11 @@ public:
         std::size_t track_index,
         std::size_t clip_index,
         const Transform2D& transform);
+    TransformParameterResult setClipTransformAttributes(
+        std::size_t track_index,
+        std::size_t clip_index,
+        const Transform2D& transform,
+        TransformKeyframes keyframes);
     TransformParameterResult setClipKeyframe(
         std::size_t track_index,
         std::size_t clip_index,

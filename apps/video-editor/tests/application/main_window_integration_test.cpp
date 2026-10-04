@@ -18,8 +18,11 @@
 
 #include <QApplication>
 #include <QAction>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QEventLoop>
 #include <QDockWidget>
+#include <QClipboard>
 #include <QLineEdit>
 #include <QLabel>
 #include <QImage>
@@ -193,29 +196,29 @@ public:
             require(!inspector_ui.clip_effects_controls->isEnabled() &&
                         !inspector_ui.effect_selection_hint->isHidden(),
                     "The Effects tab must guide users and disable controls when no clip is selected.");
-            require(render_window.copy_effects_action_ != nullptr &&
-                        render_window.paste_effects_action_ != nullptr &&
-                        render_window.copy_effects_action_->shortcut() ==
-                            QKeySequence(QStringLiteral("Ctrl+Shift+C")) &&
-                        render_window.paste_effects_action_->shortcut() ==
+            require(render_window.copy_attributes_action_ != nullptr &&
+                        render_window.paste_attributes_action_ != nullptr &&
+                        render_window.copy_attributes_action_->shortcut() ==
+                            QKeySequence(QStringLiteral("Ctrl+C")) &&
+                        render_window.paste_attributes_action_->shortcut() ==
                             QKeySequence(QStringLiteral("Ctrl+Shift+V")) &&
-                        !render_window.copy_effects_action_->isEnabled() &&
-                        !render_window.paste_effects_action_->isEnabled() &&
+                        !render_window.copy_attributes_action_->isEnabled() &&
+                        !render_window.paste_attributes_action_->isEnabled() &&
                         !render_window.shortcut_manager_->shortcut(
-                            QStringLiteral("edit.copy_effects")).isEmpty() &&
+                            QStringLiteral("edit.copy_attributes")).isEmpty() &&
                         !render_window.shortcut_manager_->shortcut(
-                            QStringLiteral("edit.paste_effects")).isEmpty(),
-                    "Copy Effects and Paste Effects must be registered shortcuts and unavailable without a compatible selection and clipboard.");
+                            QStringLiteral("edit.paste_attributes")).isEmpty(),
+                    "Copy Attributes and Paste Attributes must be registered shortcuts and unavailable before a clip is copied.");
             require(render_window.shortcut_manager_->setShortcut(
-                        QStringLiteral("edit.copy_effects"),
+                        QStringLiteral("edit.copy_attributes"),
                         QKeySequence(QStringLiteral("Ctrl+Alt+C"))) &&
-                        render_window.copy_effects_action_->shortcut() ==
+                        render_window.copy_attributes_action_->shortcut() ==
                             QKeySequence(QStringLiteral("Ctrl+Alt+C")) &&
                         render_window.shortcut_manager_->resetShortcut(
-                            QStringLiteral("edit.copy_effects")) &&
-                        render_window.copy_effects_action_->shortcut() ==
-                            QKeySequence(QStringLiteral("Ctrl+Shift+C")),
-                    "Copy Effects must support shortcut customization and reset to its default.");
+                            QStringLiteral("edit.copy_attributes")) &&
+                        render_window.copy_attributes_action_->shortcut() ==
+                            QKeySequence(QStringLiteral("Ctrl+C")),
+                    "Copy Attributes must support shortcut customization and reset to its default.");
             const bool dirty_before_inspector_tab_change = render_window.project_dirty_;
             inspector_tabs->setCurrentIndex(2);
             QApplication::processEvents();
@@ -1303,22 +1306,72 @@ public:
             selection.active_track_id = source_track_id;
             selection.active_clip_id = source_clip_id;
             selection.active_transition.reset();
-            effects_window.updateEffectClipboardActions();
-            require(effects_window.copy_effects_action_->isEnabled() &&
-                        !effects_window.paste_effects_action_->isEnabled(),
-                    "Copy Effects must be enabled for a selected stack and Paste disabled before copying.");
+            effects_window.updateAttributeClipboardActions();
+            require(effects_window.copy_attributes_action_->isEnabled() &&
+                        !effects_window.paste_attributes_action_->isEnabled(),
+                    "Copy Attributes must be enabled for a selected Timeline clip and Paste disabled before copying.");
             const bool dirty_before_copy = effects_window.project_dirty_;
-            effects_window.copy_effects_action_->trigger();
+            effects_window.show();
+            QApplication::processEvents();
+            QLineEdit text_field;
+            text_field.setText(QStringLiteral("normal text copy"));
+            text_field.show();
+            text_field.selectAll();
+            text_field.setFocus();
+            QApplication::processEvents();
+            require(QApplication::focusWidget() == &text_field,
+                    "The text-copy fixture could not focus its editable field.");
+            QApplication::clipboard()->clear();
+            effects_window.copy_attributes_action_->trigger();
+            require(QApplication::clipboard()->text() == QStringLiteral("normal text copy"),
+                    "Ctrl+C must preserve normal text-field copy when a clip is selected.");
+            text_field.hide();
+            effects_window.hide();
+            QApplication::processEvents();
+            require(QApplication::focusWidget() == nullptr,
+                    "The attribute-copy fixture could not clear text focus before testing clip copy.");
+            effects_window.copy_attributes_action_->trigger();
+            effects_window.show();
+            QApplication::processEvents();
             require(effects_window.project_dirty_ == dirty_before_copy &&
-                        effects_window.paste_effects_action_->isEnabled(),
-                    "Copy Effects must fill the in-memory clipboard without dirtying the project.");
+                        effects_window.paste_attributes_action_->isEnabled(),
+                    "Copy Attributes must fill the in-memory clipboard without dirtying the project.");
 
             selection.active_track_id = target_track_id;
             selection.active_clip_id = target_clip_id;
-            effects_window.updateEffectClipboardActions();
+            effects_window.updateAttributeClipboardActions();
             const auto history_before_paste =
                 effects_window.timeline_command_service_.undoCount();
-            effects_window.paste_effects_action_->trigger();
+            bool paste_dialog_verified = false;
+            QTimer::singleShot(0, [&paste_dialog_verified]() {
+                auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+                if (dialog == nullptr) return;
+                auto* effects = dialog->findChild<QCheckBox*>(
+                    QStringLiteral("pasteAttributesEffects"));
+                auto* transform = dialog->findChild<QCheckBox*>(
+                    QStringLiteral("pasteAttributesTransform"));
+                auto* audio = dialog->findChild<QCheckBox*>(
+                    QStringLiteral("pasteAttributesAudioGain"));
+                auto* envelope = dialog->findChild<QCheckBox*>(
+                    QStringLiteral("pasteAttributesAudioEnvelope"));
+                auto* text = dialog->findChild<QCheckBox*>(
+                    QStringLiteral("pasteAttributesText"));
+                auto* buttons = dialog->findChild<QDialogButtonBox*>();
+                paste_dialog_verified = effects != nullptr && effects->isEnabled() &&
+                    effects->isChecked() && transform != nullptr &&
+                    transform->isEnabled() && transform->isChecked() &&
+                    text != nullptr && !text->isEnabled() && buttons != nullptr;
+                if (transform != nullptr) transform->setChecked(false);
+                if (audio != nullptr) audio->setChecked(false);
+                if (envelope != nullptr) envelope->setChecked(false);
+                if (auto* apply = buttons != nullptr
+                        ? buttons->button(QDialogButtonBox::Apply) : nullptr) {
+                    apply->click();
+                }
+            });
+            effects_window.paste_attributes_action_->trigger();
+            require(paste_dialog_verified,
+                    "Paste Attributes must show compatible groups checked and incompatible groups disabled.");
             const auto target_location =
                 effects_window.timeline_model_.locateClip(target_clip_id);
             require(target_location.has_value() &&
@@ -1326,14 +1379,39 @@ public:
                                 .clips[target_location->clip_index].effects == source_effects &&
                         effects_window.timeline_command_service_.undoCount() ==
                             history_before_paste + 1,
-                    "Paste Effects did not replace the destination stack in one edit.");
+                    "Paste Attributes did not replace the selected group in one edit.");
             require(effects_window.edit_workspace_->controller()->undo().changed() &&
                         effects_window.timeline_model_.tracks()[target_location->track_index]
                                 .clips[target_location->clip_index].effects == previous_effects &&
                         effects_window.edit_workspace_->controller()->redo().changed() &&
                         effects_window.timeline_model_.tracks()[target_location->track_index]
                                 .clips[target_location->clip_index].effects == source_effects,
-                    "Paste Effects did not integrate with Undo/Redo.");
+                    "Paste Attributes did not integrate with Undo/Redo.");
+
+            selection.active_track_id.reset();
+            selection.active_clip_id.reset();
+            selection.selected_source_path.reset();
+            selection.active_transition.reset();
+            effects_window.updateAttributeClipboardActions();
+            bool no_target_dialog_verified = false;
+            QTimer::singleShot(0, [&no_target_dialog_verified]() {
+                auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+                if (dialog == nullptr) return;
+                auto* effects = dialog->findChild<QCheckBox*>(
+                    QStringLiteral("pasteAttributesEffects"));
+                auto* buttons = dialog->findChild<QDialogButtonBox*>();
+                auto* apply = buttons != nullptr
+                    ? buttons->button(QDialogButtonBox::Apply) : nullptr;
+                no_target_dialog_verified = effects != nullptr &&
+                    !effects->isEnabled() && apply != nullptr && !apply->isEnabled();
+                if (auto* cancel = buttons != nullptr
+                        ? buttons->button(QDialogButtonBox::Cancel) : nullptr) {
+                    cancel->click();
+                }
+            });
+            effects_window.paste_attributes_action_->trigger();
+            require(no_target_dialog_verified,
+                    "Paste Attributes without a selected clip must explain the missing target and disable Apply.");
         }
 
         std::error_code cleanup_error;

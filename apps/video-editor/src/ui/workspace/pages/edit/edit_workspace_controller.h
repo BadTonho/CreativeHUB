@@ -90,10 +90,12 @@ public:
     void updateHistoryActions();
     void updateInspector();
     [[nodiscard]] bool selectedClipSupportsEffects() const noexcept;
-    [[nodiscard]] bool canCopySelectedClipEffects() const noexcept;
-    [[nodiscard]] bool canPasteCopiedClipEffects() const noexcept;
-    void copySelectedClipEffects();
-    void pasteCopiedClipEffects();
+    [[nodiscard]] bool canCopySelectedClipAttributes() const noexcept;
+    [[nodiscard]] bool canPasteCopiedClipAttributes() const noexcept;
+    void copySelectedClipAttributes();
+    void showPasteCopiedClipAttributesDialog(QWidget* dialog_parent);
+    [[nodiscard]] application::TimelineEditResult applyCopiedClipAttributes(
+        const timeline::ClipAttributeOptions& options);
     void addEffectToSelectedClip(const QString& effect_id);
     void selectClipEffect(int index);
     void setSelectedClipEffectEnabled(int index, bool enabled);
@@ -202,6 +204,8 @@ signals:
 
 private:
     void synchronizeActiveTimelineSelection() noexcept;
+    [[nodiscard]] std::optional<timeline::ClipLocation>
+    selectedAttributeClipLocation() const noexcept;
     [[nodiscard]] bool addEffectToClip(
         timeline::ClipId clip_id,
         const QString& effect_id);
@@ -237,7 +241,7 @@ private:
         pending_audio_envelope_edit_batch_id_;
     std::optional<application::TimelineCommandService::EditBatchId>
         pending_effect_edit_batch_id_;
-    std::vector<creative_suite::effects::EffectInstance> copied_effects_;
+    std::optional<timeline::TimelineClipAttributes> copied_clip_attributes_;
     timeline::ClipId inspector_effect_clip_id_ = 0;
     int selected_effect_index_ = -1;
     std::optional<bool> last_effect_target_available_;
