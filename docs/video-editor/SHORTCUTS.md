@@ -13,6 +13,8 @@ It must change in the same commit as any shortcut change.
 | Ctrl + Right | Nudge the active clip one frame right when valid | Video Editor |
 | Delete | Delete the active timeline clip | Video Editor |
 | Ctrl + K | Split the active clip at the playhead | Video Editor |
+| Ctrl + Shift + C | Copy the selected visual clip's effects stack | Video Editor; enabled when the selected video or image clip has effects |
+| Ctrl + Shift + V | Replace the selected visual clip's effects stack with the copied stack | Video Editor; enabled when a stack is copied and a video or image clip is selected |
 | Ctrl + Z | Undo the last successful Timeline edit | Video Editor |
 | Ctrl + Y / Ctrl + Shift + Z | Redo the last undone edit | Video Editor |
 | Ctrl + N | Create a new project | Video Editor |
@@ -35,6 +37,14 @@ media is available.
 The Functions filter picker searches visual effects. Press Enter or choose Add
 to apply the selected filter to a selected video or image clip; with no
 compatible selection, browsing remains available and Add is disabled.
+
+`Edit > Copy Effects` copies the selected video or image clip's complete
+effects stack, including order, parameter values, and enabled states.
+`Edit > Paste Effects` replaces the selected compatible clip's entire stack
+with the copied stack as one Undo/Redo edit. The in-memory stack remains
+available while the editor is open and is not written to the project until it
+is pasted. Copy is unavailable when the selected visual clip has no effects;
+paste is unavailable without a copied stack or compatible clip.
 
 Keyboard shortcuts can be customized in `Settings > Shortcuts`. Changes apply
 immediately and are stored as global user preferences. Clear a shortcut to

@@ -380,6 +380,71 @@ bool EditWorkspaceController::selectedClipSupportsEffects() const noexcept {
     return kind == timeline::ClipKind::Video || kind == timeline::ClipKind::Image;
 }
 
+bool EditWorkspaceController::canCopySelectedClipEffects() const noexcept {
+    if (active_transition_.has_value()) return false;
+    const auto location = selectedTimelineClipLocation();
+    if (!location.has_value() ||
+        location->track_index >= timeline_model_.trackCount() ||
+        location->clip_index >= timeline_model_.clipCount(location->track_index)) {
+        return false;
+    }
+    const auto& clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    return (clip.kind == timeline::ClipKind::Video ||
+            clip.kind == timeline::ClipKind::Image) &&
+        !clip.effects.empty();
+}
+
+bool EditWorkspaceController::canPasteCopiedClipEffects() const noexcept {
+    return !copied_effects_.empty() && !active_transition_.has_value() &&
+        selectedClipSupportsEffects();
+}
+
+void EditWorkspaceController::copySelectedClipEffects() {
+    if (!canCopySelectedClipEffects()) return;
+    const auto location = selectedTimelineClipLocation();
+    if (!location.has_value()) return;
+
+    const auto& clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    try {
+        copied_effects_ = clip.effects;
+        emit statusMessageRequested(QStringLiteral("Effects copied."));
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "timeline", "copy_clip_effects", error.what(),
+            {{"clip_id", std::to_string(clip.clip_id)}});
+        emit statusMessageRequested(QStringLiteral("Could not copy effects."));
+    }
+}
+
+void EditWorkspaceController::pasteCopiedClipEffects() {
+    if (!canPasteCopiedClipEffects()) return;
+    const auto location = selectedTimelineClipLocation();
+    if (!location.has_value()) return;
+
+    const auto& clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    const auto previous_selection = selected_effect_index_;
+    try {
+        selected_effect_index_ = 0;
+        const auto result = execute(application::SetClipEffectsCommand{
+            clip.clip_id, copied_effects_});
+        if (result.changed()) {
+            publishCommittedEdit(
+                result, false, true, QStringLiteral("Effects pasted."));
+        } else {
+            selected_effect_index_ = previous_selection;
+        }
+    } catch (const std::exception& error) {
+        selected_effect_index_ = previous_selection;
+        logging::Logger::instance().log(
+            logging::Level::Error, "timeline", "paste_clip_effects", error.what(),
+            {{"clip_id", std::to_string(clip.clip_id)}});
+        emit statusMessageRequested(QStringLiteral("Could not paste effects."));
+    }
+}
+
 void EditWorkspaceController::publishEffectTargetAvailability(bool available) {
     if (last_effect_target_available_ == available) return;
     last_effect_target_available_ = available;

@@ -530,7 +530,12 @@ disabled instances in the same shared processor. Toggling, parameter edits,
 removal, and reordering participate in Timeline Undo/Redo. The filter
 definitions and CPU RGBA processing live in the shared
 `creative-suite::effects` library without a Qt Widgets dependency. See
-[the effects contract](EFFECTS.md).
+[the effects contract](EFFECTS.md). The `Edit > Copy Effects` and
+`Edit > Paste Effects` commands copy a visual clip's complete stack—including
+order, parameters, and enabled states—and replace another visual clip's stack
+with one Undo/Redo edit. The copied stack is kept in memory for the current
+editor session and does not change project state until pasted. The commands
+are disabled when the selected clip is incompatible or has no effects to copy.
 
 ## Transition editing
 

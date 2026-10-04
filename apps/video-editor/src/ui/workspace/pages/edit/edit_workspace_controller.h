@@ -90,6 +90,10 @@ public:
     void updateHistoryActions();
     void updateInspector();
     [[nodiscard]] bool selectedClipSupportsEffects() const noexcept;
+    [[nodiscard]] bool canCopySelectedClipEffects() const noexcept;
+    [[nodiscard]] bool canPasteCopiedClipEffects() const noexcept;
+    void copySelectedClipEffects();
+    void pasteCopiedClipEffects();
     void addEffectToSelectedClip(const QString& effect_id);
     void selectClipEffect(int index);
     void setSelectedClipEffectEnabled(int index, bool enabled);
@@ -233,6 +237,7 @@ private:
         pending_audio_envelope_edit_batch_id_;
     std::optional<application::TimelineCommandService::EditBatchId>
         pending_effect_edit_batch_id_;
+    std::vector<creative_suite::effects::EffectInstance> copied_effects_;
     timeline::ClipId inspector_effect_clip_id_ = 0;
     int selected_effect_index_ = -1;
     std::optional<bool> last_effect_target_available_;

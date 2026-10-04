@@ -11,6 +11,7 @@
 #include "settings/settings_dialog.h"
 #include "timeline/timeline_widget.h"
 #include "ui/media_browser/media_browser_list_widget.h"
+#include <creative_suite/effects/effects.h>
 #if defined(CREATIVE_SUITE_TEST_IMAGE_EDITOR_MASKS)
 #include "image_document_session.h"
 #endif
@@ -23,6 +24,7 @@
 #include <QLabel>
 #include <QImage>
 #include <QImageWriter>
+#include <QKeySequence>
 #include <QMenu>
 #include <QMenuBar>
 #include <QSaveFile>
@@ -49,6 +51,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -190,6 +193,29 @@ public:
             require(!inspector_ui.clip_effects_controls->isEnabled() &&
                         !inspector_ui.effect_selection_hint->isHidden(),
                     "The Effects tab must guide users and disable controls when no clip is selected.");
+            require(render_window.copy_effects_action_ != nullptr &&
+                        render_window.paste_effects_action_ != nullptr &&
+                        render_window.copy_effects_action_->shortcut() ==
+                            QKeySequence(QStringLiteral("Ctrl+Shift+C")) &&
+                        render_window.paste_effects_action_->shortcut() ==
+                            QKeySequence(QStringLiteral("Ctrl+Shift+V")) &&
+                        !render_window.copy_effects_action_->isEnabled() &&
+                        !render_window.paste_effects_action_->isEnabled() &&
+                        !render_window.shortcut_manager_->shortcut(
+                            QStringLiteral("edit.copy_effects")).isEmpty() &&
+                        !render_window.shortcut_manager_->shortcut(
+                            QStringLiteral("edit.paste_effects")).isEmpty(),
+                    "Copy Effects and Paste Effects must be registered shortcuts and unavailable without a compatible selection and clipboard.");
+            require(render_window.shortcut_manager_->setShortcut(
+                        QStringLiteral("edit.copy_effects"),
+                        QKeySequence(QStringLiteral("Ctrl+Alt+C"))) &&
+                        render_window.copy_effects_action_->shortcut() ==
+                            QKeySequence(QStringLiteral("Ctrl+Alt+C")) &&
+                        render_window.shortcut_manager_->resetShortcut(
+                            QStringLiteral("edit.copy_effects")) &&
+                        render_window.copy_effects_action_->shortcut() ==
+                            QKeySequence(QStringLiteral("Ctrl+Shift+C")),
+                    "Copy Effects must support shortcut customization and reset to its default.");
             const bool dirty_before_inspector_tab_change = render_window.project_dirty_;
             inspector_tabs->setCurrentIndex(2);
             QApplication::processEvents();
@@ -1205,6 +1231,109 @@ public:
                         refreshed_frame.rgba_pixels[alpha_offset] == 0,
                     "The Video Editor lost transparency from the Image Editor's mask publication.");
 #endif
+        }
+
+        {
+            MainWindow effects_window;
+            media::VideoMetadata image_metadata;
+            image_metadata.kind = media::MediaKind::Image;
+            image_metadata.source_path = first_source;
+            image_metadata.display_name = "Effect clipboard fixture";
+            image_metadata.width = 2;
+            image_metadata.height = 2;
+            image_metadata.frame_rate = 30.0;
+            image_metadata.duration_seconds = 5.0;
+            image_metadata.frame_count = 150;
+            media::VideoFrame image_frame;
+            image_frame.width = 2;
+            image_frame.height = 2;
+            image_frame.stride = 8;
+            image_frame.rgba_pixels = {
+                255, 0, 0, 255, 0, 255, 0, 255,
+                0, 0, 255, 255, 255, 255, 255, 255};
+            require(effects_window.media_controller_.commitImported({
+                        image_metadata, image_frame,
+                        image_metadata.display_name, "Unsorted", false}).changed(),
+                    "The effects clipboard integration test could not register an image.");
+
+            const auto source_track_id =
+                effects_window.timeline_model_.tracks().front().track_id;
+            const auto source_add = effects_window.timeline_command_service_.execute(
+                application::AddMediaClipCommand{
+                    first_source, source_track_id, 0});
+            require(source_add.changed(),
+                    "The effects clipboard integration test could not add its source clip.");
+            const auto source_clip_id = source_add.affected_clip_ids.front();
+            const auto target_track_add =
+                effects_window.timeline_command_service_.execute(
+                    application::AddTrackCommand{"Effects Paste Target"});
+            require(target_track_add.changed(),
+                    "The effects clipboard integration test could not add a destination track.");
+            const auto target_track_id = target_track_add.affected_track_ids.front();
+            const auto target_add = effects_window.timeline_command_service_.execute(
+                application::AddMediaClipCommand{
+                    first_source, target_track_id, 0});
+            require(target_add.changed(),
+                    "The effects clipboard integration test could not add its destination clip.");
+            const auto target_clip_id = target_add.affected_clip_ids.front();
+
+            auto source_effects = std::vector<creative_suite::effects::EffectInstance>{
+                creative_suite::effects::makeDefaultInstance("video.grayscale"),
+                creative_suite::effects::makeDefaultInstance("video.saturation")};
+            require(creative_suite::effects::setParameterValue(
+                        source_effects[0], "amount", 64.0) &&
+                        creative_suite::effects::setParameterValue(
+                            source_effects[1], "amount", 135.0),
+                    "The effects clipboard integration test could not prepare its source stack.");
+            source_effects[0].enabled = false;
+            auto previous_effects = std::vector<creative_suite::effects::EffectInstance>{
+                creative_suite::effects::makeDefaultInstance("video.brightness")};
+            require(creative_suite::effects::setParameterValue(
+                        previous_effects[0], "amount", 30.0),
+                    "The effects clipboard integration test could not prepare its destination stack.");
+            require(effects_window.timeline_command_service_.execute(
+                        application::SetClipEffectsCommand{
+                            source_clip_id, source_effects}).changed() &&
+                        effects_window.timeline_command_service_.execute(
+                            application::SetClipEffectsCommand{
+                                target_clip_id, previous_effects}).changed(),
+                    "The effects clipboard integration test could not set both effect stacks.");
+
+            auto& selection = effects_window.editor_session_.selectionForUi();
+            selection.active_track_id = source_track_id;
+            selection.active_clip_id = source_clip_id;
+            selection.active_transition.reset();
+            effects_window.updateEffectClipboardActions();
+            require(effects_window.copy_effects_action_->isEnabled() &&
+                        !effects_window.paste_effects_action_->isEnabled(),
+                    "Copy Effects must be enabled for a selected stack and Paste disabled before copying.");
+            const bool dirty_before_copy = effects_window.project_dirty_;
+            effects_window.copy_effects_action_->trigger();
+            require(effects_window.project_dirty_ == dirty_before_copy &&
+                        effects_window.paste_effects_action_->isEnabled(),
+                    "Copy Effects must fill the in-memory clipboard without dirtying the project.");
+
+            selection.active_track_id = target_track_id;
+            selection.active_clip_id = target_clip_id;
+            effects_window.updateEffectClipboardActions();
+            const auto history_before_paste =
+                effects_window.timeline_command_service_.undoCount();
+            effects_window.paste_effects_action_->trigger();
+            const auto target_location =
+                effects_window.timeline_model_.locateClip(target_clip_id);
+            require(target_location.has_value() &&
+                        effects_window.timeline_model_.tracks()[target_location->track_index]
+                                .clips[target_location->clip_index].effects == source_effects &&
+                        effects_window.timeline_command_service_.undoCount() ==
+                            history_before_paste + 1,
+                    "Paste Effects did not replace the destination stack in one edit.");
+            require(effects_window.edit_workspace_->controller()->undo().changed() &&
+                        effects_window.timeline_model_.tracks()[target_location->track_index]
+                                .clips[target_location->clip_index].effects == previous_effects &&
+                        effects_window.edit_workspace_->controller()->redo().changed() &&
+                        effects_window.timeline_model_.tracks()[target_location->track_index]
+                                .clips[target_location->clip_index].effects == source_effects,
+                    "Paste Effects did not integrate with Undo/Redo.");
         }
 
         std::error_code cleanup_error;
