@@ -156,9 +156,16 @@ bool writePngAtomically(const std::filesystem::path& path, const QImage& image) 
 
 class MainWindowIntegrationTest final {
 public:
-    static void run(
+    static void runProjectSettingsOnly(
         const std::filesystem::path& first_source,
         const std::filesystem::path& second_source) {
+        run(first_source, second_source, true);
+    }
+
+    static void run(
+        const std::filesystem::path& first_source,
+        const std::filesystem::path& second_source,
+        bool project_settings_only = false) {
         const auto directory = uniqueTestDirectory();
         std::filesystem::create_directories(directory);
 
@@ -272,6 +279,137 @@ public:
                     "Selecting Quarter must persist and check the selected Playback Preview Quality.");
             require(render_window.project_dirty_ == dirty_before_quality_change,
                     "Changing Playback Preview Quality must not dirty the project.");
+
+            auto* render_settings = render_window.render_workspace_->settingsPanel();
+            auto* render_resolution = render_settings != nullptr
+                ? render_settings->findChild<QComboBox*>("renderResolutionCombo")
+                : nullptr;
+            auto* render_frame_rate = render_settings != nullptr
+                ? render_settings->findChild<QDoubleSpinBox*>("renderFrameRate")
+                : nullptr;
+            require(render_resolution != nullptr && render_frame_rate != nullptr,
+                    "The Render settings controls were not available to Project Settings.");
+            const auto edit_project_settings_from_dialog =
+                [&render_window](int canvas_index, int frame_rate_index, bool accept) {
+                    bool handled = false;
+                    bool choices_valid = false;
+                    QTimer::singleShot(0, [&] {
+                        auto* dialog = qobject_cast<QDialog*>(
+                            QApplication::activeModalWidget());
+                        auto* canvas = dialog != nullptr
+                            ? dialog->findChild<QComboBox*>(
+                                  "projectSettingsCanvasCombo")
+                            : nullptr;
+                        auto* frame_rate = dialog != nullptr
+                            ? dialog->findChild<QComboBox*>(
+                                  "projectSettingsFrameRateCombo")
+                            : nullptr;
+                        auto* buttons = dialog != nullptr
+                            ? dialog->findChild<QDialogButtonBox*>()
+                            : nullptr;
+                        if (dialog == nullptr || canvas == nullptr ||
+                            frame_rate == nullptr || buttons == nullptr ||
+                            dialog->objectName() !=
+                                QStringLiteral("projectSettingsDialog")) {
+                            return;
+                        }
+                        choices_valid = canvas->count() == 2 &&
+                            canvas->currentIndex() == 0 &&
+                            canvas->itemData(0).toSize() == QSize(1920, 1080) &&
+                            canvas->itemData(1).toSize() == QSize(1080, 1920) &&
+                            frame_rate->count() == 6 &&
+                            frame_rate->currentData().toMap()
+                                .value(QStringLiteral("numerator")).toLongLong() == 30 &&
+                            frame_rate->currentData().toMap()
+                                .value(QStringLiteral("denominator")).toLongLong() == 1;
+                        canvas->setCurrentIndex(canvas_index);
+                        frame_rate->setCurrentIndex(frame_rate_index);
+                        if (accept) {
+                            buttons->button(QDialogButtonBox::Ok)->click();
+                        } else {
+                            dialog->reject();
+                        }
+                        handled = true;
+                    });
+                    render_window.project_settings_action_->trigger();
+                    return handled && choices_valid;
+                };
+            require(edit_project_settings_from_dialog(1, 0, false) &&
+                        render_window.currentProjectDocument().canvas_width == 1920 &&
+                        render_window.currentProjectDocument().timeline_frame_rate ==
+                            timeline::FrameRate{30, 1} && !render_window.project_dirty_,
+                    "Canceling Project Settings changed the active project.");
+            require(edit_project_settings_from_dialog(1, 0, true),
+                    "Project Settings did not show its defaults or supported choices.");
+            require(render_window.currentProjectDocument().canvas_width == 1080 &&
+                        render_window.currentProjectDocument().canvas_height == 1920 &&
+                        render_window.currentProjectDocument().timeline_frame_rate ==
+                            timeline::FrameRate{24, 1} && render_window.project_dirty_ &&
+                        render_resolution->currentText() ==
+                            QStringLiteral("Project (1080 × 1920)") &&
+                        render_frame_rate->value() == 24.0,
+                    "Project Settings did not update the project and Render defaults.");
+            const auto project_settings_undo =
+                render_window.edit_workspace_->controller()->undo();
+            auto* resolution_after_undo = render_settings->findChild<QComboBox*>(
+                "renderResolutionCombo");
+            auto* frame_rate_after_undo = render_settings->findChild<QDoubleSpinBox*>(
+                "renderFrameRate");
+            const auto document_after_undo = render_window.currentProjectDocument();
+            require(project_settings_undo.changed() &&
+                        document_after_undo.canvas_width == 1920 &&
+                        document_after_undo.canvas_height == 1080 &&
+                        document_after_undo.timeline_frame_rate ==
+                            timeline::FrameRate{30, 1} && !render_window.project_dirty_ &&
+                        resolution_after_undo != nullptr &&
+                        resolution_after_undo->currentText() ==
+                            QStringLiteral("Project (1920 × 1080)") &&
+                        frame_rate_after_undo != nullptr &&
+                        frame_rate_after_undo->value() == 30.0,
+                    "Undo did not restore Project Settings and Render defaults.");
+            require(render_window.edit_workspace_->controller()->redo().changed() &&
+                        render_window.currentProjectDocument().canvas_width == 1080 &&
+                        render_window.currentProjectDocument().timeline_frame_rate ==
+                            timeline::FrameRate{24, 1},
+                    "Redo did not reapply Project Settings.");
+            require(render_window.edit_workspace_->controller()->undo().changed() &&
+                        !render_window.project_dirty_,
+                    "Undo could not return Project Settings to the saved baseline.");
+
+            const auto unusual_rate_change = render_window.timeline_command_service_.execute(
+                application::SetProjectSettingsCommand{1920, 1080, {30000, 1001}});
+            require(unusual_rate_change.changed(),
+                    "The Project Settings UI test could not prepare a nonstandard current rate.");
+            render_window.applyTimelineEditResult(unusual_rate_change, true);
+            render_window.updateTimelineState();
+            render_window.refreshPlaybackComposition();
+            bool unusual_rate_option_valid = false;
+            QTimer::singleShot(0, [&] {
+                auto* dialog = qobject_cast<QDialog*>(
+                    QApplication::activeModalWidget());
+                auto* frame_rate = dialog != nullptr
+                    ? dialog->findChild<QComboBox*>(
+                          "projectSettingsFrameRateCombo")
+                    : nullptr;
+                if (dialog == nullptr || frame_rate == nullptr) return;
+                const auto value = frame_rate->currentData().toMap();
+                unusual_rate_option_valid = frame_rate->count() == 7 &&
+                    frame_rate->currentIndex() == 6 &&
+                    value.value(QStringLiteral("numerator")).toLongLong() == 30000 &&
+                    value.value(QStringLiteral("denominator")).toLongLong() == 1001;
+                dialog->reject();
+            });
+            render_window.project_settings_action_->trigger();
+            require(unusual_rate_option_valid &&
+                        render_window.currentProjectDocument().timeline_frame_rate ==
+                            timeline::FrameRate{30000, 1001},
+                    "Project Settings did not preserve a valid nonstandard current rate in its choices.");
+            require(render_window.edit_workspace_->controller()->undo().changed() &&
+                        render_window.currentProjectDocument().timeline_frame_rate ==
+                            timeline::FrameRate{30, 1} && !render_window.project_dirty_,
+                    "Undo did not restore the nonstandard-rate test fixture.");
+            if (project_settings_only) return;
+
             bool gpu_ui_forwarded = false;
             QTimer::singleShot(0, [&] {
                 auto* dialog = qobject_cast<settings::SettingsDialog*>(QApplication::activeModalWidget());
@@ -342,10 +480,6 @@ public:
                         created_portrait.timeline_frame_rate == timeline::FrameRate{60, 1} &&
                         !render_window.project_dirty_,
                     "Creating a portrait 60 fps project did not apply clean project settings.");
-            auto* render_resolution = render_window.render_workspace_->settingsPanel()
-                ->findChild<QComboBox*>("renderResolutionCombo");
-            auto* render_frame_rate = render_window.render_workspace_->settingsPanel()
-                ->findChild<QDoubleSpinBox*>("renderFrameRate");
             require(render_resolution != nullptr &&
                         render_resolution->currentText() ==
                             QStringLiteral("Project (1080 × 1920)") &&
@@ -370,7 +504,6 @@ public:
                             QStringLiteral("Project (1920 × 1080)") &&
                         render_frame_rate->value() == 30.0,
                     "The New Project defaults or clean-state behavior changed.");
-
             const std::array<QDockWidget*, 7> docks{
                 render_window.bins_dock_, render_window.media_dock_,
                 render_window.toolbox_dock_, render_window.favorites_dock_,
@@ -1568,6 +1701,15 @@ public:
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
     application.setQuitOnLastWindowClosed(false);
+    if (argc == 4 && std::string(argv[3]) == "--project-settings") {
+        try {
+            MainWindowIntegrationTest::runProjectSettingsOnly(argv[1], argv[2]);
+            return 0;
+        } catch (const std::exception& error) {
+            std::cerr << error.what() << '\n';
+            return 1;
+        }
+    }
     if (argc != 3) {
         std::cerr << "Expected two media fixture paths.\n";
         return 1;

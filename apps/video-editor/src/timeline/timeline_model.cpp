@@ -330,6 +330,60 @@ bool preserveTransitionContinuity(TimelineTrack& track) noexcept {
     return true;
 }
 
+template <typename Keyframe>
+bool rescaleKeyframes(
+    std::vector<Keyframe>& keyframes,
+    FrameRate source_rate,
+    FrameRate target_rate,
+    std::int64_t maximum_frame) {
+    if (maximum_frame < 0) return keyframes.empty();
+    std::vector<Keyframe> converted;
+    converted.reserve(keyframes.size());
+    for (auto keyframe : keyframes) {
+        const auto frame = rescaleTimelineFrame(
+            keyframe.frame, source_rate, target_rate);
+        if (!frame.has_value()) return false;
+        keyframe.frame = std::min(*frame, maximum_frame);
+        if (!converted.empty() && converted.back().frame == keyframe.frame) {
+            converted.back() = std::move(keyframe);
+        } else {
+            converted.push_back(std::move(keyframe));
+        }
+    }
+    keyframes = std::move(converted);
+    return true;
+}
+
+bool rescaleTransformKeyframes(
+    TransformKeyframes& keyframes,
+    FrameRate source_rate,
+    FrameRate target_rate,
+    std::int64_t clip_duration) {
+    if (clip_duration <= 0) return false;
+    const auto maximum_frame = clip_duration - 1;
+    return rescaleKeyframes(keyframes.position_x, source_rate, target_rate, maximum_frame) &&
+        rescaleKeyframes(keyframes.position_y, source_rate, target_rate, maximum_frame) &&
+        rescaleKeyframes(keyframes.scale, source_rate, target_rate, maximum_frame) &&
+        rescaleKeyframes(keyframes.rotation, source_rate, target_rate, maximum_frame) &&
+        rescaleKeyframes(keyframes.opacity, source_rate, target_rate, maximum_frame) &&
+        creative_suite::animation::validTransformKeyframes(keyframes);
+}
+
+bool hasPermittedOverlapTransition(
+    const TimelineTrack& track,
+    std::size_t left_index,
+    std::size_t right_index) noexcept {
+    if (right_index != left_index + 1) return false;
+    const auto left_id = track.clips[left_index].clip_id;
+    const auto right_id = track.clips[right_index].clip_id;
+    return std::any_of(track.transitions.begin(), track.transitions.end(),
+        [left_id, right_id](const TimelineTransition& transition) {
+            return transition.kind == TransitionKind::AudioCrossfade &&
+                transition.from_clip_id == left_id &&
+                transition.to_clip_id == right_id;
+        });
+}
+
 bool shiftTimelineSuffix(
     TimelineTrack& track,
     std::size_t first_index,
@@ -2168,6 +2222,128 @@ TimelineModel::Snapshot TimelineModel::snapshot() const {
     result.next_clip_id = next_clip_id_;
     result.frame_rate = frame_rate_;
     return result;
+}
+
+std::optional<TimelineModel::Snapshot> TimelineModel::rescaleSnapshotFrameRate(
+    const Snapshot& source_snapshot,
+    FrameRate target_frame_rate) {
+    if (!validFrameRate(source_snapshot.frame_rate) ||
+        !validFrameRate(target_frame_rate)) {
+        return std::nullopt;
+    }
+
+    const auto source_rate = reducedFrameRate(source_snapshot.frame_rate);
+    target_frame_rate = reducedFrameRate(target_frame_rate);
+    Snapshot converted = source_snapshot;
+    converted.frame_rate = target_frame_rate;
+
+    for (auto& track : converted.tracks) {
+        for (auto& clip : track.clips) {
+            if (clip.timeline_start_frame < 0 || clip.timeline_duration_frames <= 0 ||
+                clip.timeline_start_frame > std::numeric_limits<std::int64_t>::max() -
+                    clip.timeline_duration_frames) {
+                return std::nullopt;
+            }
+            const auto source_end = clip.timeline_start_frame +
+                clip.timeline_duration_frames;
+            const auto converted_start = rescaleTimelineFrame(
+                clip.timeline_start_frame, source_rate, target_frame_rate);
+            const auto converted_end = rescaleTimelineFrame(
+                source_end, source_rate, target_frame_rate);
+            if (!converted_start.has_value() || !converted_end.has_value() ||
+                *converted_end <= *converted_start) {
+                return std::nullopt;
+            }
+            clip.timeline_start_frame = *converted_start;
+            clip.timeline_duration_frames = *converted_end - *converted_start;
+
+            if (!rescaleTransformKeyframes(
+                    clip.keyframes, source_rate, target_frame_rate,
+                    clip.timeline_duration_frames)) {
+                return std::nullopt;
+            }
+            if (clip.kind == ClipKind::Audio) {
+                if (!rescaleKeyframes(
+                        clip.audio_gain_keyframes, source_rate, target_frame_rate,
+                        clip.timeline_duration_frames)) {
+                    return std::nullopt;
+                }
+                if (!validAudioGainKeyframes(
+                        clip.audio_gain_keyframes, clip.timeline_duration_frames)) {
+                    return std::nullopt;
+                }
+            } else if (!clip.audio_gain_keyframes.empty()) {
+                return std::nullopt;
+            }
+
+            if (clip.kind == ClipKind::Text) {
+                clip.duration_seconds = static_cast<double>(
+                    static_cast<long double>(clip.timeline_duration_frames) *
+                    target_frame_rate.denominator / target_frame_rate.numerator);
+                clip.frame_rate = target_frame_rate.asDouble();
+                clip.frame_count = clip.timeline_duration_frames;
+            }
+        }
+
+        for (auto& transition : track.transitions) {
+            const auto from = std::find_if(track.clips.begin(), track.clips.end(),
+                [&transition](const TimelineClip& clip) {
+                    return clip.clip_id == transition.from_clip_id;
+                });
+            const auto to = std::find_if(track.clips.begin(), track.clips.end(),
+                [&transition](const TimelineClip& clip) {
+                    return clip.clip_id == transition.to_clip_id;
+                });
+            if (from == track.clips.end() || to == track.clips.end() ||
+                to != from + 1) {
+                return std::nullopt;
+            }
+            const auto from_end = from->timeline_start_frame +
+                from->timeline_duration_frames;
+            if (isOverlapTransition(transition.kind)) {
+                transition.duration_frames = from_end - to->timeline_start_frame;
+            } else {
+                const auto duration = rescaleTimelineFrame(
+                    transition.duration_frames, source_rate, target_frame_rate);
+                if (!duration.has_value()) return std::nullopt;
+                transition.duration_frames = *duration;
+            }
+            if (transition.duration_frames <= 0 ||
+                transition.duration_frames > std::min(
+                    from->timeline_duration_frames, to->timeline_duration_frames) ||
+                (isOverlapTransition(transition.kind)
+                    ? to->timeline_start_frame != from_end - transition.duration_frames
+                    : to->timeline_start_frame != from_end)) {
+                return std::nullopt;
+            }
+            if ((transition.kind == TransitionKind::AudioCrossfade) !=
+                    (track.kind == TrackKind::Audio) ||
+                (transition.kind == TransitionKind::AudioCrossfade &&
+                    (from->kind != ClipKind::Audio || to->kind != ClipKind::Audio ||
+                     from->linked_clip_id.has_value() || to->linked_clip_id.has_value())) ||
+                (transition.kind != TransitionKind::AudioCrossfade &&
+                    track.kind != TrackKind::Video)) {
+                return std::nullopt;
+            }
+        }
+
+        for (std::size_t left = 0; left < track.clips.size(); ++left) {
+            const auto& first = track.clips[left];
+            const auto first_end = first.timeline_start_frame +
+                first.timeline_duration_frames;
+            for (std::size_t right = left + 1; right < track.clips.size(); ++right) {
+                const auto& second = track.clips[right];
+                if (second.timeline_start_frame >= first_end) continue;
+                if ((first.kind == ClipKind::Text && second.kind == ClipKind::Text) ||
+                    (first.kind == ClipKind::Audio && second.kind == ClipKind::Audio &&
+                     !hasPermittedOverlapTransition(track, left, right))) {
+                    return std::nullopt;
+                }
+            }
+        }
+    }
+
+    return converted;
 }
 
 void TimelineModel::ensureIdentifiers() {

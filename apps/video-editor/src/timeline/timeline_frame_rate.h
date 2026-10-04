@@ -32,6 +32,29 @@ struct FrameRate {
     return std::isfinite(value) && value > 0.0 && value <= 1000.0;
 }
 
+// Converts an absolute or local frame coordinate between Timeline rates,
+// rounding to the nearest frame. Keeping this mapping centralized ensures
+// clip boundaries that share a time remain aligned after a rate change.
+[[nodiscard]] inline std::optional<std::int64_t> rescaleTimelineFrame(
+    std::int64_t frame,
+    FrameRate source_rate,
+    FrameRate target_rate) noexcept {
+    if (frame < 0 || !validFrameRate(source_rate) ||
+        !validFrameRate(target_rate)) {
+        return std::nullopt;
+    }
+    const long double scaled = static_cast<long double>(frame) *
+        static_cast<long double>(source_rate.denominator) *
+        static_cast<long double>(target_rate.numerator) /
+        (static_cast<long double>(source_rate.numerator) *
+         static_cast<long double>(target_rate.denominator));
+    const auto exclusive_max = std::ldexp(1.0L, 63);
+    if (!std::isfinite(scaled) || scaled >= exclusive_max - 0.5L) {
+        return std::nullopt;
+    }
+    return static_cast<std::int64_t>(std::llround(scaled));
+}
+
 [[nodiscard]] inline FrameRate reducedFrameRate(FrameRate rate) noexcept {
     if (rate.numerator <= 0 || rate.denominator <= 0) return {};
     const auto divisor = std::gcd(rate.numerator, rate.denominator);

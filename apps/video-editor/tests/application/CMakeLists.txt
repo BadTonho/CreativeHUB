@@ -32,6 +32,16 @@ add_creative_suite_test(
 set_tests_properties(creative-suite-main-editor-main-window PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1"
 )
+add_creative_suite_test(
+    NAME creative-suite-main-editor-project-settings-ui
+    COMMAND creative-suite-main-editor-main-window-tests
+        "${PROJECT_SOURCE_DIR}/prototypes/testdata/reference.mkv"
+        "${PROJECT_SOURCE_DIR}/prototypes/testdata/reference-second.mkv"
+        --project-settings
+)
+set_tests_properties(creative-suite-main-editor-project-settings-ui PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1;CREATIVE_SUITE_DISABLE_GPU_PREVIEW=1"
+)
 
 add_executable(creative-suite-main-editor-application-media-tests
     application_media_services_test.cpp

@@ -20,6 +20,18 @@ frame to the nearest corresponding source frame using the clip's source rate
 and the persisted project rate. Trimming and splitting use the same conversion
 and enforce the available source-frame bounds.
 
+`File > Project Settings` can change the active project's canvas and Timeline
+rate. Canvas changes preserve clip transform values and do not automatically
+fit or reposition content. Rate changes preserve elapsed Timeline time by
+rescaling shared clip boundaries and local keyframe positions to the nearest
+new frame. Transform keyframes that map to the same frame keep the last point;
+audio-envelope points use the same rule. Linked video/audio clips remain
+synchronized, source-media rates and audio microsecond ranges are unchanged,
+and transitions are checked against the converted clip geometry. A conversion
+that collapses a clip or violates a track or transition invariant is rejected
+before the document changes. Each accepted settings change is one Undo/Redo
+operation, including canvas, Timeline, playhead, and preserved playhead state.
+
 Still images use a 30 FPS source timebase and hold their decoded frame. Their
 default five-second duration is converted to the project's Timeline rate.
 Projects written before format version 11 infer the project rate from the first

@@ -43,6 +43,18 @@ canvas and receive that default; versions 3 through 18 require the existing
 1920×1080 canvas values. Version 19 rejects other dimensions. Opening an older
 project does not dirty it; its next save writes version 19.
 
+`File > Project Settings` edits the current canvas and Timeline frame rate
+using these existing fields; it does not introduce a new format version.
+Changing the canvas preserves clip transforms and keyframes as stored. Changing
+the Timeline rate maps absolute clip boundaries, local transform and audio
+envelope keyframes, transitions, the playhead, and its preserved position to
+the nearest frame at the new rate. Linked audio companions remain aligned and
+audio source ranges stay in microseconds. A rate outside the New Project list
+is shown as the current rate so it can be retained. The prepared change is
+applied atomically as one Undo/Redo edit and marks the document dirty. If any
+clip would become zero-length or a Timeline invariant would fail, the complete
+change is rejected. Saving still writes version 19.
+
 ## Version 12 Cross Dissolve overlap
 
 Version 12 keeps the transition record fields (`from_clip`, `to_clip`, `kind`,

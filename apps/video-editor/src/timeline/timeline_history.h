@@ -18,6 +18,8 @@ struct EditState {
     std::optional<TransitionSelection> active_transition;
     std::int64_t playhead_frame = 0;
     std::optional<std::int64_t> preserved_playhead_frame;
+    int canvas_width = 1920;
+    int canvas_height = 1080;
 
     friend bool operator==(const EditState&, const EditState&) = default;
 };

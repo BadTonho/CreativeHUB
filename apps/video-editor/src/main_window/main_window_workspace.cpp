@@ -510,6 +510,11 @@ void MainWindow::createMenus() {
         QStringLiteral("file.new_project"), QStringLiteral("New Project"),
         new_project_action_);
     connect(new_project_action_, &QAction::triggered, this, &MainWindow::newProject);
+    project_settings_action_ = file_menu->addAction("Project Settings...");
+    project_settings_action_->setObjectName(QStringLiteral("projectSettingsAction"));
+    disableDuringProjectLoad(project_settings_action_);
+    connect(project_settings_action_, &QAction::triggered,
+            this, &MainWindow::showProjectSettingsDialog);
     auto* open_media_action = file_menu->addAction("Open &Media...");
     disableDuringProjectLoad(open_media_action);
     connect(open_media_action, &QAction::triggered, this, &MainWindow::openMedia);

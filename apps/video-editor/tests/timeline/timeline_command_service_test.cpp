@@ -1346,6 +1346,142 @@ void runClipAttributeCommands() {
             "Batch Paste Attributes did not undo and redo as a single edit.");
 }
 
+void runProjectSettingsCommands() {
+    application::EditorSession session;
+    application::TimelineCommandService service(session);
+    const auto video_track_id = session.timeline().tracks().front().track_id;
+    const auto video_path = std::filesystem::temp_directory_path() /
+        "project-settings-video.mp4";
+    const auto first_audio_path = std::filesystem::temp_directory_path() /
+        "project-settings-audio-a.wav";
+    const auto second_audio_path = std::filesystem::temp_directory_path() /
+        "project-settings-audio-b.wav";
+    addVideoWithAudioMedia(session, video_path);
+    addAudioMedia(session, first_audio_path);
+    addAudioMedia(session, second_audio_path);
+
+    const auto video_add = service.execute(application::AddMediaClipCommand{
+        video_path, video_track_id, 30});
+    require(video_add.changed() && video_add.affected_clip_ids.size() == 2,
+            "Project Settings test video and linked audio could not be added.");
+    const auto video_id = video_add.affected_clip_ids.front();
+    const auto linked_audio_id = video_add.affected_clip_ids.back();
+    const auto audio_a = service.execute(application::AddMediaClipCommand{
+        first_audio_path, video_track_id, 0});
+    require(audio_a.changed() && !audio_a.affected_track_ids.empty(),
+            "Project Settings test first audio clip could not be added.");
+    const auto audio_track_id = audio_a.affected_track_ids.front();
+    const auto audio_b = service.execute(application::AddMediaClipCommand{
+        second_audio_path, audio_track_id, 60});
+    require(audio_a.changed() && audio_b.changed(),
+            "Project Settings test audio clips could not be added.");
+    const auto audio_a_id = audio_a.affected_clip_ids.front();
+    const auto audio_b_id = audio_b.affected_clip_ids.front();
+    require(service.execute(application::AddTransitionCommand{
+                audio_track_id, audio_a_id, audio_b_id,
+                timeline::TransitionKind::AudioCrossfade, 15}).changed(),
+            "Project Settings test Audio Crossfade could not be added.");
+
+    auto video_location = session.timeline().locateClip(video_id);
+    auto audio_location = session.timeline().locateClip(audio_a_id);
+    require(video_location.has_value() && audio_location.has_value() &&
+                session.legacyTimelineForUi().setClipKeyframe(
+                    video_location->track_index, video_location->clip_index,
+                    timeline::TransformProperty::PositionX, 60, 0.25) ==
+                    timeline::TransformParameterResult::Changed &&
+                session.legacyTimelineForUi().setClipAudioGainKeyframes(
+                    audio_location->track_index, audio_location->clip_index,
+                    {{0, 0.5}, {30, 1.5}}) ==
+                    timeline::AudioParameterResult::Changed,
+            "Project Settings test keyframes could not be prepared.");
+    session.setPlayheadFrame(30);
+    session.preservedPlayheadFrameForUi() = 15;
+
+    const auto before = session.timeline().snapshot();
+    const auto before_video = session.timeline().locateClip(video_id);
+    require(before_video.has_value(), "Project Settings test video disappeared.");
+    const auto old_linked = session.timeline().tracks()[
+        session.timeline().locateClip(linked_audio_id)->track_index]
+        .clips[session.timeline().locateClip(linked_audio_id)->clip_index];
+    const auto old_audio_envelope = session.timeline().tracks()[audio_location->track_index]
+        .clips[audio_location->clip_index].audio_gain_keyframes;
+    const auto settings_change = service.execute(application::SetProjectSettingsCommand{
+        1080, 1920, {60, 1}});
+    require(settings_change.changed() && settings_change.project_settings_changed &&
+                settings_change.invalidate_playback && service.undoCount() > 0 &&
+                session.canvasWidth() == 1080 && session.canvasHeight() == 1920 &&
+                session.timeline().frameRate() == timeline::FrameRate{60, 1} &&
+                session.playheadFrame() == 60 &&
+                session.preservedPlayheadFrameForUi() == std::optional<std::int64_t>(30),
+            "Project Settings did not update canvas, frame rate, and playhead together.");
+
+    video_location = session.timeline().locateClip(video_id);
+    audio_location = session.timeline().locateClip(audio_a_id);
+    const auto linked_location = session.timeline().locateClip(linked_audio_id);
+    const auto audio_b_location = session.timeline().locateClip(audio_b_id);
+    require(video_location.has_value() && audio_location.has_value() &&
+                linked_location.has_value() && audio_b_location.has_value(),
+            "A clip was lost during Project Settings conversion.");
+    const auto& converted_video = session.timeline().tracks()[video_location->track_index]
+        .clips[video_location->clip_index];
+    const auto& converted_linked = session.timeline().tracks()[linked_location->track_index]
+        .clips[linked_location->clip_index];
+    const auto& converted_audio = session.timeline().tracks()[audio_location->track_index]
+        .clips[audio_location->clip_index];
+    const auto* converted_crossfade = session.timeline().transitionBetween(
+        audio_b_location->track_index,
+        audio_location->clip_index,
+        audio_b_location->clip_index);
+    require(converted_video.timeline_start_frame == 60 &&
+                converted_video.timeline_duration_frames == 240 &&
+                converted_video.keyframes.position_x.size() == 1 &&
+                converted_video.keyframes.position_x.front().frame == 120 &&
+                converted_linked.timeline_start_frame == converted_video.timeline_start_frame &&
+                converted_linked.timeline_duration_frames == converted_video.timeline_duration_frames &&
+                converted_linked.source_start_time_us == old_linked.source_start_time_us &&
+                converted_linked.source_duration_time_us == old_linked.source_duration_time_us &&
+                converted_audio.audio_gain_keyframes ==
+                    std::vector<timeline::AudioGainKeyframe>{{0, 0.5}, {60, 1.5}} &&
+                old_audio_envelope != converted_audio.audio_gain_keyframes &&
+                converted_crossfade != nullptr &&
+                converted_crossfade->duration_frames == 30 &&
+                session.timeline().tracks()[audio_b_location->track_index]
+                    .clips[audio_b_location->clip_index].timeline_start_frame == 90,
+            "Project Settings failed to preserve clip times, linked audio, keyframes, or transitions.");
+
+    const auto undo = service.undo();
+    require(undo.changed() && undo.project_settings_changed &&
+                session.canvasWidth() == 1920 && session.canvasHeight() == 1080 &&
+                session.timeline().snapshot() == before &&
+                session.timeline().frameRate() == timeline::FrameRate{30, 1} &&
+                session.playheadFrame() == 30 &&
+                session.preservedPlayheadFrameForUi() == std::optional<std::int64_t>(15),
+            "Undo did not restore all Project Settings and Timeline values.");
+    const auto redo = service.redo();
+    require(redo.changed() && redo.project_settings_changed &&
+                session.canvasWidth() == 1080 && session.canvasHeight() == 1920 &&
+                session.timeline().frameRate() == timeline::FrameRate{60, 1} &&
+                session.playheadFrame() == 60,
+            "Redo did not reapply Project Settings as one action.");
+
+    application::EditorSession short_session;
+    application::TimelineCommandService short_service(short_session);
+    require(short_service.execute(application::SetProjectSettingsCommand{
+                1920, 1080, {60, 1}}).changed(),
+            "Could not prepare a 60 fps short-clip rejection case.");
+    const auto short_track_id = short_session.timeline().tracks().front().track_id;
+    require(short_service.execute(application::AddTextClipCommand{
+                short_track_id, 0, 1, 60.0}).changed(),
+            "Could not add the one-frame text clip for conversion rejection.");
+    const auto before_rejection = short_session.captureEditState();
+    const auto rejected = short_service.execute(application::SetProjectSettingsCommand{
+        1080, 1920, {24, 1}});
+    require(rejected.status == application::EditStatus::Rejected &&
+                rejected.reason == application::EditReason::InvalidRange &&
+                short_session.captureEditState() == before_rejection,
+            "A frame-rate conversion that collapsed a clip partially changed the project.");
+}
+
 } // namespace
 
 int main() {
@@ -1358,6 +1494,7 @@ int main() {
         runLinkedVideoAudioCommands();
         runRippleDeleteCommands();
         runClipAttributeCommands();
+        runProjectSettingsCommands();
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

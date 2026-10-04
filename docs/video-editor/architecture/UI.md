@@ -162,12 +162,20 @@ drop operation early. Optional drag metadata carries frame count, frame rate,
 duration, and display name for the preview only; the original media-path MIME
 continues to drive the actual drop. Effect drags retain their existing marker.
 
-File actions provide New Project, Open Project, Save Project, and Save Project
-As. New Project first opens a dialog for the 16:9 1920×1080 or 9:16 1080×1920
-canvas and 24/25/30/48/50/60 fps. It defaults to 16:9 at 30 fps. Canceling the
-dialog leaves the current project untouched; after accepting the settings, a
-dirty project uses the existing Save, Discard, and Cancel prompt. Open and
-close keep their existing dirty-project prompt.
+File actions provide New Project, Project Settings, Open Project, Save Project,
+and Save Project As. New Project first opens a dialog for the 16:9 1920×1080 or
+9:16 1080×1920 canvas and 24/25/30/48/50/60 fps. It defaults to 16:9 at 30 fps.
+Canceling leaves the current project untouched; after accepting the settings,
+a dirty project uses the existing Save, Discard, and Cancel prompt.
+
+Project Settings opens with the current canvas and Timeline rate. It offers the
+same two canvas sizes and six common rates, plus the current rate when it is
+outside that list. Canvas changes preserve existing clip transformations.
+Changing the rate preserves elapsed time by converting Timeline frame values;
+the entire operation is one Undo/Redo step. Cancel leaves the project as is,
+and an invalid conversion is rejected without partial changes. Successful
+changes update the Timeline, Preview, and Render defaults and mark the project
+dirty. Open and close keep their existing dirty-project prompt.
 
 ## User settings
 

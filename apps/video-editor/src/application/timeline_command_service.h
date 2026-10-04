@@ -38,6 +38,7 @@ struct TimelineEditResult {
     std::optional<std::int64_t> preserved_playhead_frame;
     bool invalidate_playback = false;
     bool stopped_at_collision = false;
+    bool project_settings_changed = false;
 
     [[nodiscard]] bool changed() const noexcept {
         return status == EditStatus::Applied;
@@ -134,6 +135,12 @@ struct MoveTrackCommand {
 struct RemoveTrackCommand { timeline::TrackId track_id = 0; };
 struct ClearTimelineCommand {};
 
+struct SetProjectSettingsCommand {
+    int canvas_width = 1920;
+    int canvas_height = 1080;
+    timeline::FrameRate frame_rate{30, 1};
+};
+
 struct SetClipAudioCommand {
     timeline::ClipId clip_id = 0;
     double gain = 1.0;
@@ -202,6 +209,7 @@ public:
     [[nodiscard]] TimelineEditResult execute(const MoveTrackCommand& command);
     [[nodiscard]] TimelineEditResult execute(const RemoveTrackCommand& command);
     [[nodiscard]] TimelineEditResult execute(const ClearTimelineCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const SetProjectSettingsCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetClipAudioCommand& command);
     [[nodiscard]] TimelineEditResult execute(
         const SetClipAudioGainKeyframesCommand& command);

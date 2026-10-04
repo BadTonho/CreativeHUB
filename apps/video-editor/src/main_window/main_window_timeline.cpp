@@ -3,6 +3,7 @@
 
 #include "logging/logger.h"
 #include "ui/preview/preview_widget.h"
+#include "ui/workspace/pages/render/render_workspace.h"
 #include "project/project_file.h"
 #include "settings/user_preferences.h"
 #include "timeline/timeline_clip_edge_command.h"
@@ -332,6 +333,9 @@ void MainWindow::applyTimelineEditResult(
             playback_controller_->invalidate(stop_playback);
         }
         playback_is_playing_ = false;
+    }
+    if (result.project_settings_changed && render_workspace_ != nullptr) {
+        render_workspace_->refreshProjectSettings();
     }
     updateHistoryActions();
     updateProjectDirtyState();

@@ -160,6 +160,7 @@ private:
     [[nodiscard]] std::optional<std::size_t> selectedMediaIndex() const noexcept;
     [[nodiscard]] std::string selectedBinPath() const;
     void newProject();
+    void showProjectSettingsDialog();
     void openProject();
     void saveProject();
     void saveProjectAs();
@@ -300,6 +301,7 @@ private:
     system_monitor::PerformanceSampler performance_sampler_;
     bool media_browser_inline_rename_pending_ = false;
     QAction* new_project_action_ = nullptr;
+    QAction* project_settings_action_ = nullptr;
     QAction* open_project_action_ = nullptr;
     QAction* save_project_action_ = nullptr;
     QAction* save_project_as_action_ = nullptr;

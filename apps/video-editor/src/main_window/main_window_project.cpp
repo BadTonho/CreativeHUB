@@ -45,6 +45,7 @@
 #include <QSlider>
 #include <QStatusBar>
 #include <QUrl>
+#include <QVariantMap>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QTreeWidget>
@@ -116,6 +117,98 @@ std::optional<NewProjectConfiguration> chooseNewProjectConfiguration(
     }
     return NewProjectConfiguration{
         canvas.width(), canvas.height(), {rate, 1}};
+}
+
+QVariantMap frameRateData(timeline::FrameRate rate) {
+    rate = timeline::reducedFrameRate(rate);
+    return {{QStringLiteral("numerator"), QVariant::fromValue<qlonglong>(rate.numerator)},
+            {QStringLiteral("denominator"), QVariant::fromValue<qlonglong>(rate.denominator)}};
+}
+
+std::optional<timeline::FrameRate> frameRateFromData(const QVariant& data) {
+    const auto value = data.toMap();
+    const timeline::FrameRate rate{
+        value.value(QStringLiteral("numerator")).toLongLong(),
+        value.value(QStringLiteral("denominator")).toLongLong()};
+    return timeline::validFrameRate(rate)
+        ? std::optional<timeline::FrameRate>(timeline::reducedFrameRate(rate))
+        : std::nullopt;
+}
+
+std::optional<NewProjectConfiguration> chooseProjectSettings(
+    QWidget* parent,
+    int current_canvas_width,
+    int current_canvas_height,
+    timeline::FrameRate current_frame_rate) {
+    QDialog dialog(parent);
+    dialog.setObjectName(QStringLiteral("projectSettingsDialog"));
+    dialog.setWindowTitle(QStringLiteral("Project Settings"));
+    dialog.setModal(true);
+
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* form = new QFormLayout();
+    auto* canvas_combo = new QComboBox(&dialog);
+    canvas_combo->setObjectName(QStringLiteral("projectSettingsCanvasCombo"));
+    canvas_combo->addItem(QStringLiteral("16:9 — 1920 × 1080"), QSize(1920, 1080));
+    canvas_combo->addItem(QStringLiteral("9:16 — 1080 × 1920"), QSize(1080, 1920));
+    const int current_canvas_index = current_canvas_width == 1080 &&
+            current_canvas_height == 1920
+        ? 1 : 0;
+    canvas_combo->setCurrentIndex(current_canvas_index);
+    form->addRow(QStringLiteral("Canvas"), canvas_combo);
+
+    auto* frame_rate_combo = new QComboBox(&dialog);
+    frame_rate_combo->setObjectName(QStringLiteral("projectSettingsFrameRateCombo"));
+    const std::array<timeline::FrameRate, 6> standard_rates{{
+        {24, 1}, {25, 1}, {30, 1}, {48, 1}, {50, 1}, {60, 1}}};
+    int selected_rate_index = -1;
+    for (const auto rate : standard_rates) {
+        const int index = frame_rate_combo->count();
+        frame_rate_combo->addItem(
+            QStringLiteral("%1 fps").arg(rate.numerator), frameRateData(rate));
+        if (timeline::reducedFrameRate(current_frame_rate) == rate) {
+            selected_rate_index = index;
+        }
+    }
+    if (selected_rate_index < 0 && timeline::validFrameRate(current_frame_rate)) {
+        current_frame_rate = timeline::reducedFrameRate(current_frame_rate);
+        frame_rate_combo->addItem(
+            QStringLiteral("Current — %1 fps (%2/%3)")
+                .arg(current_frame_rate.asDouble(), 0, 'f', 3)
+                .arg(current_frame_rate.numerator)
+                .arg(current_frame_rate.denominator),
+            frameRateData(current_frame_rate));
+        selected_rate_index = frame_rate_combo->count() - 1;
+    }
+    frame_rate_combo->setCurrentIndex(selected_rate_index);
+    form->addRow(QStringLiteral("Frame rate"), frame_rate_combo);
+    auto* hint = new QLabel(
+        QStringLiteral("Frame rate changes preserve timeline time. Clip transforms are kept when the canvas changes."),
+        &dialog);
+    hint->setWordWrap(true);
+    layout->addLayout(form);
+    layout->addWidget(hint);
+
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Apply"));
+    buttons->button(QDialogButtonBox::Ok)->setObjectName(
+        QStringLiteral("projectSettingsApplyButton"));
+    QObject::connect(buttons, &QDialogButtonBox::accepted,
+                     &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected,
+                     &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted) return std::nullopt;
+    const auto canvas = canvas_combo->currentData().toSize();
+    const auto frame_rate = frameRateFromData(frame_rate_combo->currentData());
+    if (!project::isSupportedCanvasSize(canvas.width(), canvas.height()) ||
+        !frame_rate.has_value()) {
+        return std::nullopt;
+    }
+    return NewProjectConfiguration{
+        canvas.width(), canvas.height(), *frame_rate};
 }
 
 QString autosaveSnapshotDateText(
@@ -476,6 +569,37 @@ void MainWindow::newProject() {
         QMessageBox::warning(this, "Could not create project", "The new project could not be created.");
         statusBar()->showMessage("Could not create project.");
     }
+}
+
+void MainWindow::showProjectSettingsDialog() {
+    const auto configuration = chooseProjectSettings(
+        this,
+        editor_session_.canvasWidth(),
+        editor_session_.canvasHeight(),
+        timeline_model_.frameRate());
+    if (!configuration.has_value()) return;
+
+    const auto result = timeline_command_service_.execute(
+        application::SetProjectSettingsCommand{
+            configuration->canvas_width,
+            configuration->canvas_height,
+            configuration->frame_rate});
+    if (result.status == application::EditStatus::NoChange) return;
+    if (!result.changed()) {
+        statusBar()->showMessage(
+            "Project settings could not be applied to the current Timeline.");
+        QMessageBox::warning(
+            this, QStringLiteral("Could not apply Project Settings"),
+            QStringLiteral("The selected frame rate would make a clip or transition invalid."));
+        return;
+    }
+
+    applyTimelineEditResult(result, true);
+    updateTimelineState();
+    if (timeline_model_.hasClip()) refreshPlaybackComposition();
+    updatePlaybackControls();
+    updatePlaybackStatus();
+    statusBar()->showMessage(QStringLiteral("Project settings updated."));
 }
 
 void MainWindow::openProject() {

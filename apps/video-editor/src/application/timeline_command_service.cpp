@@ -232,6 +232,55 @@ TimelineCommandService::migratePendingMediaTiming(
     return migration;
 }
 
+TimelineEditResult TimelineCommandService::execute(
+    const SetProjectSettingsCommand& command) {
+    if (!project::isSupportedCanvasSize(
+            command.canvas_width, command.canvas_height) ||
+        !timeline::validFrameRate(command.frame_rate)) {
+        return result(EditStatus::Rejected, EditReason::InvalidValue);
+    }
+
+    const auto before = session_.captureEditState();
+    const auto target_rate = timeline::reducedFrameRate(command.frame_rate);
+    if (before.canvas_width == command.canvas_width &&
+        before.canvas_height == command.canvas_height &&
+        before.timeline.frame_rate == target_rate) {
+        return result(EditStatus::NoChange);
+    }
+
+    auto converted_timeline = timeline::TimelineModel::rescaleSnapshotFrameRate(
+        before.timeline, target_rate);
+    const auto converted_playhead = timeline::rescaleTimelineFrame(
+        before.playhead_frame, before.timeline.frame_rate, target_rate);
+    const auto converted_preserved_playhead = before.preserved_playhead_frame.has_value()
+        ? timeline::rescaleTimelineFrame(
+              *before.preserved_playhead_frame, before.timeline.frame_rate, target_rate)
+        : std::optional<std::int64_t>{};
+    if (!converted_timeline.has_value() || !converted_playhead.has_value() ||
+        (before.preserved_playhead_frame.has_value() &&
+         !converted_preserved_playhead.has_value())) {
+        return result(EditStatus::Rejected, EditReason::InvalidRange);
+    }
+
+    session_.timeline_.restore(std::move(*converted_timeline));
+    session_.canvas_width_ = command.canvas_width;
+    session_.canvas_height_ = command.canvas_height;
+    session_.playhead_frame_ = *converted_playhead;
+    session_.preserved_playhead_frame_ = converted_preserved_playhead;
+    recordSuccessfulEdit(before);
+
+    auto output = result(EditStatus::Applied);
+    output.project_settings_changed = true;
+    output.invalidate_playback = true;
+    for (const auto& track : session_.timeline_.tracks()) {
+        output.affected_track_ids.push_back(track.track_id);
+        for (const auto& clip : track.clips) {
+            output.affected_clip_ids.push_back(clip.clip_id);
+        }
+    }
+    return output;
+}
+
 TimelineEditResult TimelineCommandService::result(
     EditStatus status,
     EditReason reason) const {
@@ -1573,10 +1622,16 @@ TimelineEditResult TimelineCommandService::undo() {
     if (active_edit_batch_.has_value()) {
         static_cast<void>(finishEditBatch(active_edit_batch_->id));
     }
-    auto state = session_.history_.undo(session_.captureEditState());
+    const auto current = session_.captureEditState();
+    auto state = session_.history_.undo(current);
     if (!state) return result(EditStatus::UndoUnavailable);
+    const bool project_settings_changed =
+        state->canvas_width != current.canvas_width ||
+        state->canvas_height != current.canvas_height ||
+        state->timeline.frame_rate != current.timeline.frame_rate;
     session_.restoreEditState(std::move(*state));
     auto output = result(EditStatus::Applied);
+    output.project_settings_changed = project_settings_changed;
     for (const auto& track : session_.timeline_.tracks()) {
         output.affected_track_ids.push_back(track.track_id);
         for (const auto& clip : track.clips) output.affected_clip_ids.push_back(clip.clip_id);
@@ -1589,10 +1644,16 @@ TimelineEditResult TimelineCommandService::redo() {
     if (active_edit_batch_.has_value()) {
         static_cast<void>(finishEditBatch(active_edit_batch_->id));
     }
-    auto state = session_.history_.redo(session_.captureEditState());
+    const auto current = session_.captureEditState();
+    auto state = session_.history_.redo(current);
     if (!state) return result(EditStatus::RedoUnavailable);
+    const bool project_settings_changed =
+        state->canvas_width != current.canvas_width ||
+        state->canvas_height != current.canvas_height ||
+        state->timeline.frame_rate != current.timeline.frame_rate;
     session_.restoreEditState(std::move(*state));
     auto output = result(EditStatus::Applied);
+    output.project_settings_changed = project_settings_changed;
     for (const auto& track : session_.timeline_.tracks()) {
         output.affected_track_ids.push_back(track.track_id);
         for (const auto& clip : track.clips) output.affected_clip_ids.push_back(clip.clip_id);

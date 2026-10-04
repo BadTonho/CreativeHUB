@@ -459,6 +459,9 @@ public:
         std::size_t from_clip_index,
         std::size_t to_clip_index) const noexcept;
     [[nodiscard]] Snapshot snapshot() const;
+    [[nodiscard]] static std::optional<Snapshot> rescaleSnapshotFrameRate(
+        const Snapshot& snapshot,
+        FrameRate target_frame_rate);
     void restore(Snapshot snapshot);
     void updateDisplayNameForSource(
         const std::filesystem::path& source_path,

@@ -163,6 +163,9 @@ tasks.
 - [x] New Project canvas and frame-rate choices: 16:9 (1920×1080) or 9:16
   (1080×1920), 24/25/30/48/50/60 fps, defaulting to 16:9 at 30 fps; version 19
   persists portrait canvas settings while versions 1–18 remain 16:9.
+- [x] Project Settings for an open project: change between supported canvases
+  and frame rates, preserve elapsed Timeline time and linked audio alignment,
+  and apply the update atomically with Undo/Redo using the existing v19 fields.
 - [x] Local structured logging with bounded retention and actionable error
   context.
 - [x] Automated regression coverage for current media, playback, timeline,

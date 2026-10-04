@@ -86,6 +86,8 @@ timeline::EditState EditorSession::captureEditState() const {
     state.active_transition = selection_.active_transition;
     state.playhead_frame = playhead_frame_;
     state.preserved_playhead_frame = preserved_playhead_frame_;
+    state.canvas_width = canvas_width_;
+    state.canvas_height = canvas_height_;
     return state;
 }
 
@@ -97,6 +99,8 @@ void EditorSession::restoreEditState(timeline::EditState state) {
     selection_.active_transition = state.active_transition;
     playhead_frame_ = std::max<std::int64_t>(0, state.playhead_frame);
     preserved_playhead_frame_ = state.preserved_playhead_frame;
+    canvas_width_ = state.canvas_width;
+    canvas_height_ = state.canvas_height;
     assertInvariants();
 }
 
@@ -104,6 +108,7 @@ void EditorSession::assertInvariants() const {
 #ifndef NDEBUG
     timeline_.assertIdentityInvariants();
     assert(playhead_frame_ >= 0);
+    assert(project::isSupportedCanvasSize(canvas_width_, canvas_height_));
 
     if (selection_.active_track_id.has_value()) {
         assert(timeline_.locateTrack(*selection_.active_track_id).has_value());
