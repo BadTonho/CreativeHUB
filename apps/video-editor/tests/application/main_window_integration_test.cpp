@@ -35,6 +35,9 @@
 #include <QMessageBox>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDoubleSpinBox>
+#include <QSlider>
+#include <QTabWidget>
 #include <QRunnable>
 
 #include <algorithm>
@@ -170,6 +173,29 @@ public:
             MainWindow render_window;
             render_window.show();
             QApplication::processEvents();
+            const auto& inspector_ui = render_window.edit_workspace_->ui();
+            auto* inspector_tabs = inspector_ui.inspector_tabs;
+            require(inspector_tabs != nullptr && inspector_tabs->count() == 3 &&
+                        inspector_tabs->tabText(0) == QStringLiteral("Inspector") &&
+                        inspector_tabs->tabText(1) == QStringLiteral("Audio") &&
+                        inspector_tabs->tabText(2) == QStringLiteral("Effects") &&
+                        inspector_tabs->widget(0)->isAncestorOf(
+                            inspector_ui.transform_spins[0]) &&
+                        inspector_tabs->widget(1)->isAncestorOf(inspector_ui.clip_volume) &&
+                        inspector_tabs->widget(2)->isAncestorOf(
+                            inspector_ui.clip_effects_controls) &&
+                        inspector_tabs->widget(2)->isAncestorOf(
+                            inspector_ui.effect_selection_hint),
+                    "Inspector, Audio, and Effects controls must live on their dedicated tabs.");
+            require(!inspector_ui.clip_effects_controls->isEnabled() &&
+                        !inspector_ui.effect_selection_hint->isHidden(),
+                    "The Effects tab must guide users and disable controls when no clip is selected.");
+            const bool dirty_before_inspector_tab_change = render_window.project_dirty_;
+            inspector_tabs->setCurrentIndex(2);
+            QApplication::processEvents();
+            require(QSettings().value("inspector/active_tab").toInt() == 2 &&
+                        render_window.project_dirty_ == dirty_before_inspector_tab_change,
+                    "Selecting the Effects tab must persist globally without dirtying the project.");
             auto* full_quality = render_window.findChild<QAction*>(
                 "playbackPreviewQualityFull");
             auto* half_quality = render_window.findChild<QAction*>(
@@ -234,6 +260,8 @@ public:
                 reopened_window.timeline_dock_};
             require(reopened_window.edit_workspace_button_->isChecked(),
                     "The application must reopen in Edit after closing from Render.");
+            require(reopened_window.edit_workspace_->ui().inspector_tabs->currentIndex() == 2,
+                    "The Effects Inspector tab must be restored after reopening the application.");
             auto* reopened_quarter_quality = reopened_window.findChild<QAction*>(
                 "playbackPreviewQualityQuarter");
             auto* reopened_full_quality = reopened_window.findChild<QAction*>(
@@ -313,6 +341,17 @@ public:
             open_loop.exec();
             require(open_succeeded && !window.project_load_pending_,
                     "The background project open did not finish successfully.");
+            const auto& inspector_ui = window.edit_workspace_->ui();
+            const auto& first_track = window.editor_session_.timeline().tracks().front();
+            require(!first_track.clips.empty(),
+                    "The Inspector tab test requires the opened project to contain a video clip.");
+            window.edit_workspace_->controller()->handleTimelineClipSelectionChanged(
+                first_track.track_id, first_track.clips.front().clip_id);
+            QApplication::processEvents();
+            require(inspector_ui.inspector_tabs->currentIndex() == 2 &&
+                        inspector_ui.clip_effects_controls->isEnabled() &&
+                        inspector_ui.effect_selection_hint->isHidden(),
+                    "Selecting a compatible clip must enable Effects without changing the active tab.");
 
             const std::array<QDockWidget*, 7> workspace_docks{
                 window.bins_dock_, window.media_dock_, window.toolbox_dock_,

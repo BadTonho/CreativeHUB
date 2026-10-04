@@ -59,6 +59,7 @@ struct EditWorkspaceUi final {
     std::array<QSlider*, 5> transform_sliders{};
     std::array<QPushButton*, 5> transform_keys{};
     QWidget* text_controls = nullptr;
+    QLabel* effect_selection_hint = nullptr;
     QWidget* clip_effects_controls = nullptr;
     QListWidget* clip_effects_list = nullptr;
     QPushButton* clip_effect_up = nullptr;

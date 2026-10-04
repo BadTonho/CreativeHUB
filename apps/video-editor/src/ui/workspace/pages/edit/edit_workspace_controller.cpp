@@ -1245,8 +1245,11 @@ void EditWorkspaceController::updateInspector() {
             ? -1
             : static_cast<int>(selected_clip->effects.size() - 1);
     }
+    if (ui_.effect_selection_hint != nullptr) {
+        ui_.effect_selection_hint->setVisible(!effects_enabled);
+    }
     if (ui_.clip_effects_controls != nullptr) {
-        ui_.clip_effects_controls->setVisible(effects_enabled);
+        ui_.clip_effects_controls->setEnabled(effects_enabled);
     }
     if (ui_.clip_effects_list != nullptr) {
         auto* list = ui_.clip_effects_list;

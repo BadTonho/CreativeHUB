@@ -169,6 +169,15 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
 
     ui_.inspector_tabs = new QTabWidget(container);
     auto* inspector_page = new QWidget(ui_.inspector_tabs);
+    auto* effects_page = new QWidget(ui_.inspector_tabs);
+    auto* effects_page_layout = new QVBoxLayout(effects_page);
+    effects_page_layout->setContentsMargins(12, 12, 12, 12);
+    effects_page_layout->setSpacing(8);
+    ui_.effect_selection_hint = new QLabel(
+        "Select a video or image clip to view and edit its effects.", effects_page);
+    ui_.effect_selection_hint->setWordWrap(true);
+    ui_.effect_selection_hint->setStyleSheet("color: #9aa4b2;");
+    effects_page_layout->addWidget(ui_.effect_selection_hint);
     auto* layout = new QVBoxLayout(inspector_page);
     layout->setContentsMargins(12, 12, 12, 12);
     layout->setSpacing(8);
@@ -255,7 +264,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     }
     layout->addLayout(form);
 
-    ui_.clip_effects_controls = new QGroupBox("Effects", inspector_page);
+    ui_.clip_effects_controls = new QGroupBox("Clip Effects", effects_page);
     auto* effects_layout = new QVBoxLayout(ui_.clip_effects_controls);
     effects_layout->setContentsMargins(8, 8, 8, 8);
     effects_layout->setSpacing(5);
@@ -285,8 +294,9 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     effect_parameter_layout->addWidget(ui_.clip_effect_parameter_slider, 1);
     effect_parameter_layout->addWidget(ui_.clip_effect_parameter_value);
     effects_layout->addWidget(effect_parameter_row);
-    ui_.clip_effects_controls->setVisible(false);
-    layout->addWidget(ui_.clip_effects_controls);
+    ui_.clip_effects_controls->setEnabled(false);
+    effects_page_layout->addWidget(ui_.clip_effects_controls);
+    effects_page_layout->addStretch();
 
     ui_.text_controls = new QWidget(inspector_page);
     auto* text_layout = new QVBoxLayout(ui_.text_controls);
@@ -378,6 +388,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
 
     ui_.inspector_tabs->addTab(inspector_page, "Inspector");
     ui_.inspector_tabs->addTab(audio_page, "Audio");
+    ui_.inspector_tabs->addTab(effects_page, "Effects");
     outer_layout->addWidget(ui_.inspector_tabs);
 
     QSettings settings;

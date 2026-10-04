@@ -114,13 +114,13 @@ hardware and drivers. No percentage target is set from this measurement.
 | Shared visual effects | Default and bounded parameters, neutral filters, grayscale, alpha and stride preservation, ordered/repeated stacks, invalid identifiers and values, malformed frames |
 | Project persistence | Version 17 visual effect stack and parameter round-trip; versions 1–16 load without effect stacks and incompatible Audio stacks are rejected; Version 16 Audio Crossfade round-trip and timing/type validation; versions 1–15 load without inferred Audio Crossfades; version 15 Audio clip volume-envelope round-trip, bounds/order validation, and rejection on visual clips; version 14 loads with a flat 100% envelope; version 14 linked video/Audio companion IDs, externalized and pending state, and typed Audio track/clip round-trip; version 13 projects request companion migration; versions 1–12 legacy tracks default to Video; incompatible track/clip and invalid-link combinations rejected; version 12 Cross Dissolve overlap round-trip; version 11 rational Timeline-rate and source-duration round-trip; invalid rational rates; persisted stable track/clip IDs; canonical multi-track video/image/text kind round-trip; Cross-Dissolve transition geometry, individual-edge media-overlap round-trip, and text-overlap rejection; timeline zoom and row-height persistence; version 1–13 migration with legacy flat clips converted to `timeline_tracks`; duplicate/zero ID rejection; invalid input; offline media; transactional open |
 | Linked video-audio migration and editing | `tests/application/application_media_services_test.cpp` covers online v13 video migration, audio-less video, clean v14 save/reopen without duplicate companions, and deferred offline migration after media restoration; `tests/timeline/timeline_command_service_test.cpp` covers paired move, split, gain/mute, unlink, independent editing, paired deletion, and Undo/Redo |
-| MainWindow integration | Offscreen multi-track project open, preservation of tracks, clips, and stable IDs, clean dirty state immediately after opening, selection initialized by ID, equality using only the canonical loaded document, save/reopen round-trip, stale pending activation rejection, EditWorkspace-built Inspector and Timeline plus FusionWorkspace-built panels shared with WorkspaceHost, one shared Preview/Timeline/EditorSession, unchanged selection/playhead/playback/history/dirty state across workspace changes, workspace-only layout behavior, and controlled MainWindow construction and shutdown |
+| MainWindow integration | Offscreen multi-track project open, preservation of tracks, clips, and stable IDs, clean dirty state immediately after opening, selection initialized by ID, equality using only the canonical loaded document, save/reopen round-trip, stale pending activation rejection, EditWorkspace-built Inspector/Audio/Effects tabs and control placement, global Effects-tab persistence without project dirty state or selection-driven tab changes, FusionWorkspace-built panels shared with WorkspaceHost, one shared Preview/Timeline/EditorSession, unchanged selection/playhead/playback/history/dirty state across workspace changes, workspace-only layout behavior, and controlled MainWindow construction and shutdown |
 | Project validation | Out-of-range JSON integers, overflowing timeline ranges, and overflowing media-source ranges are rejected before reaching editing code |
 | Autosave and recovery | Retention, Unicode project paths, recovery filtering, and actionable log entries for malformed snapshots |
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode and icon-scale persistence, bounded 50%-150% icon resizing, seven-character media and folder labels, full-name inline editing, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
-| Effects UI | Four draggable visual filters, retained Text and transition entries, category filtering and stable IDs; Functions search and Add/Cancel/Enter behavior with Shift + Space; Timeline drop target compatibility; Inspector parameters, stack order/removal; Timeline command Undo/Redo; Preview and offline-export rendering through the shared CPU library |
+| Effects UI | Four draggable visual filters, retained Text and transition entries, category filtering and stable IDs; Functions search and Add/Cancel/Enter behavior with Shift + Space; Timeline drop target compatibility; dedicated Effects Inspector tab with compatible-selection guidance, parameters, stack order/removal; Timeline command Undo/Redo; Preview and offline-export rendering through the shared CPU library |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
 
 ## Behavior-to-test source map
@@ -637,9 +637,13 @@ in the running Video Editor after UI or integration changes:
   confirm that the numeric fields remain editable, values stay within their
   property ranges, keyframe edits still target the current frame, and one
   slider drag creates one Undo/Redo entry;
-- Inspector tabs: switch between `Inspector` and `Audio`, close and reopen the
-  application to confirm the last active tab is restored, and select clips
-  without an automatic tab change;
+- Inspector tabs: switch between `Inspector`, `Audio`, and `Effects`, close and
+  reopen the application to confirm the last active tab is restored, and
+  select clips without an automatic tab change; confirm the Effects controls
+  are enabled for video/image clips and remain visible but disabled with
+  guidance for audio, text, transitions, and no selection;
+- Effects tab: add, adjust, reorder, and remove visual filters; confirm edits
+  continue to update Preview and participate in Undo/Redo;
 - Audio tab: confirm the vertical Clip and Track blocks expose volume and mute
   controls, edits update playback, and Undo/Redo restores both properties;
   confirm all four controls are disabled for text clips, gaps, and no
