@@ -73,6 +73,7 @@ target_include_directories(creative-suite-motion-editor-core PUBLIC
 target_link_libraries(creative-suite-motion-editor-core PUBLIC
     creative-suite::animation
     creative-suite::composition
+    creative-suite::effects
     creative-suite::diagnostics
     creative-suite::system-monitor
     creative-suite::media-assets

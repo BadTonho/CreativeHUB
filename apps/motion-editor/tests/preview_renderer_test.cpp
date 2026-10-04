@@ -6,6 +6,7 @@
 #include "diagnostics/performance_metrics.h"
 
 #include <creative_suite/diagnostics/logger.h>
+#include <creative_suite/effects/effects.h>
 #include <creative_suite/media/video_playback.h>
 
 #include <QGuiApplication>
@@ -441,6 +442,52 @@ int main(int argc, char* argv[])
                 transparent_edge.rgba_pixels[1] == 0 &&
                 transparent_edge.rgba_pixels[11] > 0,
             "Gaussian blur preserves red through transparent edges without dark fringes");
+
+    auto shared_color_reference = effectTestFrame(19, 7, 8);
+    auto motion_color_result = shared_color_reference;
+    const creative_suite::effects::ColorAdjustmentParameters shared_color_parameters{
+        27.0, 143.0, 62.0};
+    require(creative_suite::effects::applyColorAdjustment(
+                shared_color_reference, shared_color_parameters) ==
+                creative_suite::effects::ProcessingResult::Completed,
+            "shared fused color adjustment accepts Motion's parameter range");
+    int fused_color_timing_records = 0;
+    require(motion::ui::applyLayerEffects(
+                motion_color_result,
+                {motion::model::ColorAdjustmentEffect{
+                    true, shared_color_parameters.brightness,
+                    shared_color_parameters.contrast_percent,
+                    shared_color_parameters.saturation_percent}},
+                {},
+                [&](motion::ui::LayerEffectKind kind, std::uint64_t) {
+                    if (kind == motion::ui::LayerEffectKind::ColorAdjustment)
+                        ++fused_color_timing_records;
+                }) &&
+                motion_color_result.rgba_pixels == shared_color_reference.rgba_pixels &&
+                fused_color_timing_records == 1,
+            "Motion delegates fused color pixels to the shared library and retains timing");
+
+    auto cancellable_color = effectTestFrame(19, 7, 8);
+    const auto cancellable_color_original = cancellable_color.rgba_pixels;
+    int color_cancellation_checks = 0;
+    int cancelled_color_timing_records = 0;
+    require(!motion::ui::applyLayerEffects(
+                cancellable_color,
+                {motion::model::ColorAdjustmentEffect{true, 20.0, 100.0, 100.0}},
+                [&] { return ++color_cancellation_checks == 3; },
+                [&](motion::ui::LayerEffectKind kind, std::uint64_t) {
+                    if (kind == motion::ui::LayerEffectKind::ColorAdjustment)
+                        ++cancelled_color_timing_records;
+                }) &&
+                color_cancellation_checks == 3 && cancelled_color_timing_records == 1,
+            "Motion propagates shared row cancellation and still records effect timing");
+    require(!std::equal(cancellable_color.rgba_pixels.begin(),
+                        cancellable_color.rgba_pixels.begin() + cancellable_color.stride,
+                        cancellable_color_original.begin()) &&
+                std::equal(cancellable_color.rgba_pixels.begin() + cancellable_color.stride,
+                           cancellable_color.rgba_pixels.end(),
+                           cancellable_color_original.begin() + cancellable_color.stride),
+            "Motion discards a partially processed color frame after cancellation");
 
     creative_suite::media::RgbaFrame neutral_color;
     neutral_color.width = 7;

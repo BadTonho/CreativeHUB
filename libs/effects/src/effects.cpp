@@ -48,6 +48,20 @@ std::uint8_t toByte(double value) noexcept {
     return static_cast<std::uint8_t>(std::clamp(std::lround(value), 0L, 255L));
 }
 
+std::uint8_t toByteFromUnit(double value) noexcept {
+    return static_cast<std::uint8_t>(
+        std::lround(std::clamp(value, 0.0, 1.0) * 255.0));
+}
+
+bool validColorAdjustment(const ColorAdjustmentParameters& parameters) noexcept {
+    return std::isfinite(parameters.brightness) &&
+        parameters.brightness >= -100.0 && parameters.brightness <= 100.0 &&
+        std::isfinite(parameters.contrast_percent) &&
+        parameters.contrast_percent >= 0.0 && parameters.contrast_percent <= 200.0 &&
+        std::isfinite(parameters.saturation_percent) &&
+        parameters.saturation_percent >= 0.0 && parameters.saturation_percent <= 200.0;
+}
+
 }  // namespace
 
 std::span<const Definition> builtInEffects() noexcept {
@@ -160,6 +174,44 @@ bool applyStack(
         }
     }
     return true;
+}
+
+ProcessingResult applyColorAdjustment(
+    media::RgbaFrame& frame,
+    const ColorAdjustmentParameters& parameters,
+    const std::function<bool()>& should_cancel) {
+    if (!validFrame(frame) || !validColorAdjustment(parameters))
+        return ProcessingResult::InvalidInput;
+    if (parameters.brightness == 0.0 && parameters.contrast_percent == 100.0 &&
+        parameters.saturation_percent == 100.0) {
+        return ProcessingResult::Completed;
+    }
+
+    const double brightness = parameters.brightness / 100.0;
+    const double contrast = parameters.contrast_percent / 100.0;
+    const double saturation = parameters.saturation_percent / 100.0;
+    for (int y = 0; y < frame.height; ++y) {
+        if (should_cancel && should_cancel()) return ProcessingResult::Cancelled;
+        auto* row = frame.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
+        for (int x = 0; x < frame.width; ++x) {
+            auto* pixel = row + static_cast<std::size_t>(x) * 4U;
+            double red = static_cast<double>(pixel[0]) / 255.0 + brightness;
+            double green = static_cast<double>(pixel[1]) / 255.0 + brightness;
+            double blue = static_cast<double>(pixel[2]) / 255.0 + brightness;
+            red = (red - 0.5) * contrast + 0.5;
+            green = (green - 0.5) * contrast + 0.5;
+            blue = (blue - 0.5) * contrast + 0.5;
+            const double luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+            red = luma + (red - luma) * saturation;
+            green = luma + (green - luma) * saturation;
+            blue = luma + (blue - luma) * saturation;
+            pixel[0] = toByteFromUnit(red);
+            pixel[1] = toByteFromUnit(green);
+            pixel[2] = toByteFromUnit(blue);
+        }
+    }
+    return ProcessingResult::Completed;
 }
 
 }  // namespace creative_suite::effects

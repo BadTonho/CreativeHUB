@@ -2,6 +2,7 @@
 
 #include <creative_suite/media/video_frame.h>
 
+#include <functional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -39,6 +40,19 @@ struct Definition {
     std::span<const ParameterDefinition> parameters;
 };
 
+struct ColorAdjustmentParameters {
+    // Brightness is [-100, 100]; contrast and saturation are [0, 200] percent.
+    double brightness = 0.0;
+    double contrast_percent = 100.0;
+    double saturation_percent = 100.0;
+};
+
+enum class ProcessingResult {
+    Completed,
+    Cancelled,
+    InvalidInput,
+};
+
 [[nodiscard]] std::span<const Definition> builtInEffects() noexcept;
 [[nodiscard]] const Definition* findDefinition(std::string_view id) noexcept;
 [[nodiscard]] EffectInstance makeDefaultInstance(std::string_view id);
@@ -57,5 +71,15 @@ struct Definition {
 [[nodiscard]] bool applyStack(
     media::RgbaFrame& frame,
     std::span<const EffectInstance> effects) noexcept;
+
+// Applies brightness, contrast around 0.5, and Rec. 709 saturation in one
+// pixel pass, rounding RGB only after all three operations. Cancellation is
+// checked before each row. A cancelled call may have changed earlier rows, so
+// the caller must discard that frame. Invalid input leaves the frame unchanged.
+// Callback exceptions propagate.
+[[nodiscard]] ProcessingResult applyColorAdjustment(
+    media::RgbaFrame& frame,
+    const ColorAdjustmentParameters& parameters,
+    const std::function<bool()>& should_cancel = {});
 
 }  // namespace creative_suite::effects

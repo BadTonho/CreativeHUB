@@ -1,6 +1,8 @@
 #include "layer_effect_processor.h"
 #include "layer_effect_worker_pool.h"
 
+#include <creative_suite/effects/effects.h>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -56,11 +58,6 @@ void validateFrame(const creative_suite::media::RgbaFrame& frame)
     if (required > frame.rgba_pixels.size()) {
         throw std::invalid_argument("The effect input frame storage is incomplete.");
     }
-}
-
-std::uint8_t byteFromUnit(double value) noexcept
-{
-    return static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0, 1.0) * 255.0));
 }
 
 bool horizontalBoxBlurPass(const creative_suite::media::RgbaFrame& source,
@@ -249,39 +246,6 @@ bool applyGaussianBlur(creative_suite::media::RgbaFrame& frame,
     });
 }
 
-void applyColorAdjustment(creative_suite::media::RgbaFrame& frame,
-                          const model::ColorAdjustmentEffect& effect,
-                          const std::function<bool()>& should_cancel)
-{
-    if (effect.brightness == 0.0 && effect.contrast_percent == 100.0 &&
-        effect.saturation_percent == 100.0) return;
-
-    const double brightness = effect.brightness / 100.0;
-    const double contrast = effect.contrast_percent / 100.0;
-    const double saturation = effect.saturation_percent / 100.0;
-    for (int y = 0; y < frame.height; ++y) {
-        if (should_cancel && should_cancel()) return;
-        auto* row = frame.rgba_pixels.data() +
-            static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
-        for (int x = 0; x < frame.width; ++x) {
-            auto* pixel = row + static_cast<std::size_t>(x) * 4U;
-            double red = static_cast<double>(pixel[0]) / 255.0 + brightness;
-            double green = static_cast<double>(pixel[1]) / 255.0 + brightness;
-            double blue = static_cast<double>(pixel[2]) / 255.0 + brightness;
-            red = (red - 0.5) * contrast + 0.5;
-            green = (green - 0.5) * contrast + 0.5;
-            blue = (blue - 0.5) * contrast + 0.5;
-            const double luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-            red = luma + (red - luma) * saturation;
-            green = luma + (green - luma) * saturation;
-            blue = luma + (blue - luma) * saturation;
-            pixel[0] = byteFromUnit(red);
-            pixel[1] = byteFromUnit(green);
-            pixel[2] = byteFromUnit(blue);
-        }
-    }
-}
-
 } // namespace
 
 bool hasEnabledLayerEffects(const std::vector<model::LayerEffect>& effects) noexcept
@@ -322,8 +286,16 @@ bool applyLayerEffects(
             } else {
                 return measureEffect(record_effect_timing, LayerEffectKind::ColorAdjustment,
                     [&] {
-                        applyColorAdjustment(frame, value, should_cancel);
-                        return !(should_cancel && should_cancel());
+                        const auto result = creative_suite::effects::applyColorAdjustment(
+                            frame,
+                            {value.brightness, value.contrast_percent,
+                             value.saturation_percent},
+                            should_cancel);
+                        if (result == creative_suite::effects::ProcessingResult::InvalidInput) {
+                            throw std::invalid_argument(
+                                "The shared Color Adjustment processor rejected a valid Motion frame.");
+                        }
+                        return result == creative_suite::effects::ProcessingResult::Completed;
                     });
             }
         }, effect);

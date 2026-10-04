@@ -86,15 +86,24 @@ both levels.
 
 ### Layer effects
 
-Motion Studio owns the effect types, parameter validation, ordered per-layer
-stacks, inspector controls, drag-and-drop and Up/Down reordering, edit history,
-and CPU processing. Reordering an effect preserves its enabled state and
-parameters, updates the live preview, and records one composition history
+Motion Studio owns the effect types, model validation, ordered per-layer
+stacks, inspector controls, drag-and-drop and Up/Down reordering, and edit
+history. Color Adjustment processing uses the shared CPU library while Gaussian
+Blur remains Motion-owned. Reordering an effect preserves its enabled state
+and parameters, updates the live preview, and records one composition history
 action. Current effects are Gaussian Blur and Color Adjustment; stacks may
-repeat effect types and disabled effects are retained. The renderer applies enabled effects to a
-layer's RGBA8 frame before its transform and shared raster composition. It
-serves preview, playback, and export, so each output path uses the same effect
-order and parameter behavior. Blur uses a bounded three-pass box approximation
+repeat effect types and disabled effects are retained. The renderer applies
+enabled effects to a layer's RGBA8 frame before its transform and shared raster
+composition. Preview, playback, and export use the same ordered stack and
+parameter behavior. Color Adjustment delegates to
+`creative-suite::effects` through its fused CPU entry point. Brightness,
+contrast around 0.5, and Rec. 709 saturation run in one pixel pass and round
+RGB only after all three operations. This preserves the previous Motion pixel
+result, alpha, and row padding. The shared call checks cancellation at row
+boundaries; Motion discards a cancelled partial frame and continues recording
+effect timing. Its `ColorAdjustmentEffect` variant, enabled/order handling,
+Inspector, history, and `.motion` format remain
+Motion-owned. Blur uses a bounded three-pass box approximation
 to a Gaussian, with premultiplied RGB and alpha. Its rolling sums use integer
 accumulation and equivalent rounding, with the vertical pass traversed in
 32-pixel-wide tiles. A reusable, Motion Studio-owned pool parallelizes
@@ -109,10 +118,10 @@ schema v3. Single- and multi-worker tests compare bytes against the prior
 implementation and cover concurrent calls and cancellation. Neutral Color
 Adjustment skips pixel processing and preserves RGBA bytes exactly, while still
 recording per-effect timings. Each blur timing is one wall-clock duration for the full effect,
-including worker scheduling and pass synchronization. Non-neutral
-color adjustment operates on RGBA8 channel values and preserves alpha. These
-are static, Motion Studio-only effects; no shared effects engine or Video
-Editor API is introduced. Compare automatic mode and worker limits 1, 2, 4, and
+including worker scheduling and pass synchronization. Motion's effects remain
+static, while Color Adjustment's shared implementation is covered by the
+consumer and library regression tests. Compare automatic mode and worker
+limits 1, 2, 4, and
 8 with three 10-second runs per setting, as documented in [ROADMAP.md](ROADMAP.md).
 The worker limit is read once per process and logged with each active preview
 sample. Keep the automatic policy until the comparison shows a repeatable
@@ -130,6 +139,7 @@ specified in [FORMAT.md](FORMAT.md).
 | creative-suite::media-frame | creative_suite::media::RgbaFrame owns RGBA8 pixel storage and stride. It does not define a color space. | Shared frame handoff between decoders, raster layers, and composition. |
 | creative-suite::animation | 2D transform data, keyframe storage, interpolation/easing validation, and linear/cubic-Bezier evaluation. It has no timeline, UI, or document dependency. | Evaluate the five transform properties consistently for Motion Studio preview, playback, and export. Motion Studio owns the Graph Editor, presets, history actions, and frame mapping. |
 | creative-suite::composition | CPU composition of raster frames using shared transforms, opacity, and alpha coverage. It has no UI, timeline, or project dependency. | Motion Studio uses it to composite active image, video, text, and shape frames in document order. Text and vector-shape rasterization remains Motion Studio-owned. |
+| creative-suite::effects | CPU RGBA visual processing with stable Video Editor filter definitions and a fused Color Adjustment entry point. It owns neither an application model nor UI. | Motion Studio delegates Color Adjustment processing and cancellation; it retains its effect variant, Inspector, history, blur implementation, and `.motion` persistence. |
 | creative-suite::composition-opengl | Optional public Qt/OpenGL 3.2 Core adapter for the shared ordered RGBA layer contract, worker resources, cancellation, 4K axis lookup buffers, RGBA readback, known allocation metrics and shared texture leases/fences with bounded reservations. Video Editor is the first preview/export consumer; see its [export contract](../video-editor/GPU_EXPORT.md). | Future Motion integration reuses this backend; current preview, effects and export remain CPU. |
 | creative-suite::diagnostics | Structured local logging with caller-selected application log directories; the legacy no-argument default remains compatible with the Video Editor. | Reuse with a Motion Studio-specific application identifier and log directory. |
 | creative-suite::video-media | FFmpeg video playback session with a neutral optional DecodeObserver, including actual timestamp-seek outcomes and durations. It depends on FFmpeg and shared diagnostics, not preview UI. | Motion Studio keeps one playback session per source on its preview worker, uses sequential decoding for short forward gaps during playback, and reports seek/decode path metrics. Interactive seeking and export retain timestamp-based decoding. Its application-owned monotonic clock schedules composition frames; audio remains out of scope. |
@@ -291,11 +301,12 @@ than in shared media types. The FFmpeg session is implemented once in
 `creative-suite::video-media`; a Video Editor adapter maps its observer
 callbacks to existing preview metrics.
 
-The Video Editor's existing compositor, animation, media, and diagnostics
-regression tests are consumers of the shared libraries. Keep those tests
-passing as the shared implementation evolves. When Motion Studio starts
-consuming the libraries, add regression coverage for its composition, media,
-and document boundaries as well.
+The Video Editor's existing compositor, animation, media, diagnostics, and
+effects regression tests are consumers of the shared libraries. Keep those
+tests passing as the shared implementation evolves. Motion Studio's effects
+consumer is covered by its preview-renderer tests, with shared pixel behavior
+covered by `libs/tests/effects_test.cpp`; its composition, media, and document
+boundaries retain their application-side regression coverage.
 
 ## Extraction gates
 
@@ -324,7 +335,7 @@ documents receive empty effect stacks. The recovery wrapper remains at version
 1 and accepts nested documents through v4. Other application formats remain
 unchanged.
 The Motion Studio timeline and export path consume shared media, playback,
-composition, diagnostics, and video-encoding libraries directly without
+composition, effects, diagnostics, and video-encoding libraries directly without
 linking Video Editor application types or targets. Layer insertion, timing,
 transforms, preview, and export behavior
 remain provisional until validated on Windows, macOS, and Linux and covered by
