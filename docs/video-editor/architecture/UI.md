@@ -253,7 +253,7 @@ focused. It is registered in `ShortcutManager` and can be customized in
 project or Timeline state.
 
 The `Help > System` action opens a modal diagnostic dialog showing the Video
-Editor version (`Beta 0.1.5`) and the full path of the running executable.
+Editor version (`Beta 0.1.6`) and the full path of the running executable.
 The executable path is included so manual validation can distinguish the
 freshly built Release binary from an older installed copy. This information is
 display-only and does not affect project data or user preferences.
