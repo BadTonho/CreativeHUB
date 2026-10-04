@@ -3,6 +3,7 @@
 
 #include "logging/logger.h"
 #include "ui/preview/preview_widget.h"
+#include "ui/workspace/pages/render/render_workspace.h"
 #include "project/project_file.h"
 #include "settings/settings_dialog.h"
 #include "settings/user_preferences.h"
@@ -17,6 +18,9 @@
 #include <QFileInfo>
 #include <QDesktopServices>
 #include <QDoubleSpinBox>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -34,6 +38,7 @@
 #include <QPointer>
 #include <QProgressDialog>
 #include <QRunnable>
+#include <QSize>
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -60,6 +65,58 @@
 using namespace main_window_detail;
 
 namespace {
+
+struct NewProjectConfiguration {
+    int canvas_width = 1920;
+    int canvas_height = 1080;
+    timeline::FrameRate frame_rate{30, 1};
+};
+
+std::optional<NewProjectConfiguration> chooseNewProjectConfiguration(
+    QWidget* parent) {
+    QDialog dialog(parent);
+    dialog.setObjectName(QStringLiteral("newProjectDialog"));
+    dialog.setWindowTitle(QStringLiteral("New Project"));
+    dialog.setModal(true);
+
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* form = new QFormLayout();
+    auto* canvas_combo = new QComboBox(&dialog);
+    canvas_combo->setObjectName(QStringLiteral("newProjectCanvasCombo"));
+    canvas_combo->addItem(QStringLiteral("16:9 — 1920 × 1080"), QSize(1920, 1080));
+    canvas_combo->addItem(QStringLiteral("9:16 — 1080 × 1920"), QSize(1080, 1920));
+    form->addRow(QStringLiteral("Canvas"), canvas_combo);
+
+    auto* frame_rate_combo = new QComboBox(&dialog);
+    frame_rate_combo->setObjectName(QStringLiteral("newProjectFrameRateCombo"));
+    for (const int rate : {24, 25, 30, 48, 50, 60}) {
+        frame_rate_combo->addItem(
+            QStringLiteral("%1 fps").arg(rate), rate);
+    }
+    frame_rate_combo->setCurrentIndex(2);
+    form->addRow(QStringLiteral("Frame rate"), frame_rate_combo);
+    layout->addLayout(form);
+
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    buttons->button(QDialogButtonBox::Ok)->setObjectName(
+        QStringLiteral("newProjectCreateButton"));
+    QObject::connect(buttons, &QDialogButtonBox::accepted,
+                     &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected,
+                     &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted) return std::nullopt;
+    const auto canvas = canvas_combo->currentData().toSize();
+    const auto rate = frame_rate_combo->currentData().toInt();
+    if (!project::isSupportedCanvasSize(canvas.width(), canvas.height()) ||
+        rate <= 0) {
+        return std::nullopt;
+    }
+    return NewProjectConfiguration{
+        canvas.width(), canvas.height(), {rate, 1}};
+}
 
 QString autosaveSnapshotDateText(
     const project::AutosaveSnapshot& snapshot) {
@@ -343,7 +400,10 @@ bool MainWindow::confirmProjectChange() {
     return false;
 }
 
-void MainWindow::clearProjectState() {
+void MainWindow::clearProjectState(
+    int canvas_width,
+    int canvas_height,
+    timeline::FrameRate frame_rate) {
     cancelTimelineAudioWaveforms();
     try {
         project_controller_.removeCurrentUnsavedSnapshots();
@@ -365,7 +425,7 @@ void MainWindow::clearProjectState() {
     }
     playback_is_playing_ = false;
 
-    project_controller_.reset();
+    project_controller_.reset(canvas_width, canvas_height, frame_rate);
     ++project_generation_;
     clearActiveTimelineSelection();
     playback_frame_index_ = 0;
@@ -384,6 +444,9 @@ void MainWindow::clearProjectState() {
     populateMediaBrowser();
     preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
     updateTimelineState();
+    if (render_workspace_ != nullptr) {
+        render_workspace_->refreshProjectSettings();
+    }
     updatePlaybackControls();
     updatePlaybackStatus();
     updateHistoryActions();
@@ -391,10 +454,15 @@ void MainWindow::clearProjectState() {
 }
 
 void MainWindow::newProject() {
+    const auto configuration = chooseNewProjectConfiguration(this);
+    if (!configuration.has_value()) return;
     if (!confirmProjectChange()) return;
 
     try {
-        clearProjectState();
+        clearProjectState(
+            configuration->canvas_width,
+            configuration->canvas_height,
+            configuration->frame_rate);
         statusBar()->showMessage("New project created.");
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
@@ -702,6 +770,10 @@ void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
 
     populateMediaBrowser();
     refreshLinkedImageTargets();
+
+    if (render_workspace_ != nullptr) {
+        render_workspace_->refreshProjectSettings();
+    }
 
     preview_widget_->clearFrame("Preview area\n\nImport media to display its first frame.");
     updateProjectDirtyState();

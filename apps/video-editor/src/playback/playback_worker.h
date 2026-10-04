@@ -144,6 +144,7 @@ public slots:
         bool clip_audio_muted);
     virtual void setMonitorVolume(double gain);
     virtual void setPreviewQuality(PreviewQuality quality);
+    virtual void setCompositionCanvasSize(int width, int height);
     virtual void setGpuCompositionEnabled(bool enabled, QOffscreenSurface* surface);
     virtual void setGpuTextureDelivery(bool enabled, quint64 epoch, QOpenGLContext* share_context);
     virtual void recoverPreviewFrame(rendering::PreviewFramePayload frame, qint64 local_frame,
@@ -296,6 +297,8 @@ private:
     bool playing_ = false;
     bool diagnostics_logged_ = false;
     PreviewQuality preview_quality_ = PreviewQuality::Full;
+    int composition_canvas_width_ = 1920;
+    int composition_canvas_height_ = 1080;
     GpuCompose gpu_compose_;
     std::unique_ptr<creative_suite::composition::OpenGlFrameCompositor> gpu_compositor_;
     QOffscreenSurface* gpu_surface_ = nullptr;

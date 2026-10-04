@@ -13,7 +13,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 18;
+inline constexpr int current_format_version = 19;
+inline constexpr int portrait_canvas_format_version = 19;
 inline constexpr int effect_enabled_format_version = 18;
 inline constexpr int clip_effects_format_version = 17;
 inline constexpr int audio_crossfade_format_version = 16;
@@ -34,6 +35,12 @@ inline constexpr int canvas_format_version = 3;
 inline constexpr int legacy_v2_format_version = 2;
 inline constexpr int legacy_format_version = 1;
 inline constexpr const char* format_identifier = "creative-suite.main-editor";
+
+[[nodiscard]] constexpr bool isSupportedCanvasSize(
+    int width, int height) noexcept {
+    return (width == 1920 && height == 1080) ||
+        (width == 1080 && height == 1920);
+}
 
 struct ProjectClip {
     std::filesystem::path source_path;

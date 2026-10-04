@@ -12,8 +12,14 @@
 
 namespace rendering {
 
-std::optional<media::VideoFrame> renderText(const timeline::TextStyle& text_style) {
-    if (!timeline::TimelineModel::validTextStyle(text_style)) return std::nullopt;
+std::optional<media::VideoFrame> renderText(
+    const timeline::TextStyle& text_style,
+    int canvas_width,
+    int canvas_height) {
+    if (!timeline::TimelineModel::validTextStyle(text_style) ||
+        canvas_width <= 0 || canvas_height <= 0) {
+        return std::nullopt;
+    }
 
     try {
         const auto content = QString::fromUtf8(
@@ -30,11 +36,12 @@ std::optional<media::VideoFrame> renderText(const timeline::TextStyle& text_styl
                      ? Qt::AlignRight
                      : Qt::AlignHCenter) |
             Qt::AlignVCenter;
-        const QRect available(0, 0, 1800, 1080);
+        const QRect available(
+            0, 0, std::max(1, canvas_width - 120), canvas_height);
         const QRect measured = metrics.boundingRect(
             available, flags, content.isEmpty() ? QStringLiteral(" ") : content);
-        const int width = std::clamp(measured.width() + 24, 1, 1920);
-        const int height = std::clamp(measured.height() + 24, 1, 1080);
+        const int width = std::clamp(measured.width() + 24, 1, canvas_width);
+        const int height = std::clamp(measured.height() + 24, 1, canvas_height);
 
         QImage image(width, height, QImage::Format_RGBA8888);
         image.fill(Qt::transparent);

@@ -41,6 +41,14 @@ int main(int argc, char** argv) {
         }
         require(has_alpha, "Rasterized text contained no visible pixels.");
 
+        const auto portrait_text_frame = rendering::renderText(style, 1080, 1920);
+        require(portrait_text_frame.has_value() &&
+                    portrait_text_frame->width <= 1080 &&
+                    portrait_text_frame->height <= 1920,
+                "Text rasterization did not respect the portrait project canvas.");
+        require(!rendering::renderText(style, 0, 1920).has_value(),
+                "Text rasterization accepted invalid project canvas dimensions.");
+
         media::VideoFrame video;
         video.width = 4;
         video.height = 4;

@@ -1,8 +1,7 @@
 # Current Scope and Non-goals
 
 Status: the current implementation and approved foundation direction are
-documented separately below. Planned foundation capabilities are not yet
-implemented or release-validated.
+documented separately below. Some approved release capabilities remain planned.
 
 ## Implemented today
 
@@ -20,17 +19,17 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 18, including migration from
+- versioned `.csp` persistence through version 19, including migration from
   versions 1 through 13, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio media kinds, typed tracks,
-  per-project timeline zoom,
-  track-row height, and optional shared/clip-specific Image Editor links. The
-  current canvas is fixed at 1920x1080 and new projects default to 30 fps;
+  per-project timeline zoom, track-row height, and optional shared/clip-specific
+  Image Editor links. New projects offer 1920×1080 (16:9) and 1080×1920 (9:16)
+  canvases plus 24, 25, 30, 48, 50, and 60 fps, defaulting to 16:9 at 30 fps;
 - embedded video audio exposed as linked Audio-track companions, independent
   audio-only tracks, synchronized mixing, per-clip and per-track gain/mute,
   legacy-project migration, and the video fallback path;
 - basic layers, normalized 2D transformations, linear keyframes, worker-side
-  composition, and current version 18 project persistence;
+  composition, and current version 19 project persistence;
 - CPU visual filters for video and image clips (Grayscale, Brightness, Contrast,
   and Saturation), with ordered per-clip stacks, Functions quick access,
   individual enable/bypass controls, and version 18 persistence;
@@ -57,19 +56,12 @@ The Video Editor currently includes:
   the Edit Preview as its Viewer and replaces the Timeline dock with a
   visual-only Node Editor, alongside an Inspector placeholder.
 
-## Approved foundation direction (planned, not yet implemented)
+## Approved foundation direction
 
 - Serve content creators broadly, with YouTube long-form videos and Shorts as
   the initial priority. Keep the interface easy to explore and retain shortcuts
   for frequent editing tasks; the foundation does not promise parity with
   advanced post-production tools.
-- Support 1920x1080 (16:9) and 1080x1920 (9:16) project canvases. Default new
-  projects to 16:9 at 30 fps. Offer Timeline rates of 24, 25, 30, 48, 50, and
-  60 fps. Other aspect ratios are not part of this foundation scope.
-- Preserve opening existing `.csp` versions 1 through 13 as 16:9 projects.
-  The current v13 format only permits a 1920x1080 canvas. Before implementing
-  portrait canvases, define and test the versioned persistence change without
-  breaking older projects.
 - Accept 4K source media in 1080p projects, but do not promise real-time
   playback for 4K sources. Use the maintainer's current PC as the reference
   test machine for the 30 fps real-time target on a typical 1080p/30 fps

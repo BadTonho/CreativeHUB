@@ -11,6 +11,8 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
     const EditorSession& session,
     TimelinePresentationState presentation) {
     project::ProjectDocument document;
+    document.canvas_width = session.canvasWidth();
+    document.canvas_height = session.canvasHeight();
     document.timeline_frame_rate = session.timeline().frameRate();
     document.timeline_zoom = presentation.zoom;
     document.timeline_row_height = presentation.row_height;

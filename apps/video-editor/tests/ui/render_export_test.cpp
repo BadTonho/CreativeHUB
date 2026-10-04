@@ -379,8 +379,8 @@ ui::RenderJob makeImageJob(
     clip.duration_frames = duration_frames;
     clip.kind = timeline::ClipKind::Image;
     track.clips.push_back(clip);
-    job.project_snapshot.canvas_width = 32;
-    job.project_snapshot.canvas_height = 24;
+    job.project_snapshot.canvas_width = 1920;
+    job.project_snapshot.canvas_height = 1080;
     job.project_snapshot.timeline_tracks.push_back(std::move(track));
     return job;
 }
@@ -1015,6 +1015,22 @@ void validateConfiguredFullResolutionExport(
                 (*first_frame)->width == size.width() && (*first_frame)->height == size.height(),
             "Playback Preview Quality must not reduce the configured offline export resolution.");
     }
+
+    auto portrait_job = makeImageJob(
+        output, image_path, root / ("portrait-project." + extension), 105, 1);
+    portrait_job.settings.width = 1080;
+    portrait_job.settings.height = 1920;
+    portrait_job.settings.export_audio = false;
+    portrait_job.project_snapshot.canvas_width = 1080;
+    portrait_job.project_snapshot.canvas_height = 1920;
+    std::atomic_bool canceled{false};
+    renderJob(portrait_job, canceled);
+    auto portrait_decoder = media::VideoPlaybackSession::open(
+        pathFromQString(portrait_job.settings.output_path));
+    const auto portrait_frame = portrait_decoder->decode_next_frame();
+    require(portrait_frame.has_value() && *portrait_frame != nullptr &&
+                (*portrait_frame)->width == 1080 && (*portrait_frame)->height == 1920,
+            "A portrait project did not render at its configured portrait output resolution.");
 }
 
 class FaultGpu final : public rendering::ExportGpuCompositor {

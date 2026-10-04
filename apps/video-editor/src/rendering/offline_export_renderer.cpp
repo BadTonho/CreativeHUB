@@ -212,6 +212,8 @@ std::optional<media::VideoFrame> composeFrame(
     const std::vector<RenderTransition>& transitions,
     std::int64_t timeline_frame,
     timeline::FrameRate timeline_frame_rate,
+    int canvas_width,
+    int canvas_height,
     detail::ExportComposition& compositor,
     std::int64_t output_frame,
     OfflineExportMetrics& metrics,
@@ -240,7 +242,10 @@ std::optional<media::VideoFrame> composeFrame(
 
             if (clip.kind == timeline::ClipKind::Text) {
                 if (!render_clip.text.has_value()) {
-                    auto text = rendering::renderText(clip.text);
+                    auto text = rendering::renderText(
+                        clip.text,
+                        canvas_width,
+                        canvas_height);
                     if (!text.has_value()) {
                         throw std::runtime_error("A text clip could not be rasterized.");
                     }
@@ -637,6 +642,8 @@ void OfflineExportRenderer::render(
             auto frame = composeFrame(
                 clips, transitions, timeline_frame,
                 job.project_snapshot.timeline_frame_rate,
+                job.project_snapshot.canvas_width,
+                job.project_snapshot.canvas_height,
                 compositor, frame_index, metrics, cancel_requested);
             if (!frame.has_value()) throw std::runtime_error("Composing an output frame failed.");
             checkCanceled(cancel_requested);

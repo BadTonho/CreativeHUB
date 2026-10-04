@@ -4,6 +4,7 @@
 #include "ui/workspace/pages/render/render_output_capabilities.h"
 
 #include <QObject>
+#include <QSize>
 #include <QStringList>
 
 #include <array>
@@ -43,6 +44,7 @@ public:
 
     void createPanels(QWidget* parent);
     void setActive(bool active);
+    void refreshProjectSettings();
     void setPreviewWidget(QWidget* preview_widget);
     [[nodiscard]] QWidget* takePreviewWidget();
 
@@ -66,6 +68,7 @@ private:
     void populateContainerOptions();
     void updateEncoderOptions();
     void updateResolutionFields();
+    void rebuildResolutionOptions(QSize preferred_resolution, bool use_project_resolution);
     void updateQualitySuggestions();
     void updateQueueActions();
     void startQueue();

@@ -16,8 +16,8 @@ The Video Editor window declaration and implementation live together under
 
 The preview uses provisional Qt OpenGL with a CPU fallback. View > Grayscale
 Preview is optional and off by default. `View > Playback Preview Quality`
-offers exclusive Full (1920×1080), Half (960×540), and Quarter (480×270)
-composition sizes. Full is the default; the global selection is saved in
+offers exclusive Full, Half, and Quarter composition sizes derived from the
+active project's canvas while preserving its aspect ratio. Full is the default; the global selection is saved in
 `QSettings` as `preview/playback_quality` and does not change project data.
 The choice applies only to Timeline composition playback. It does not affect
 the Media Browser's isolated source preview or offline export, which continues
@@ -163,8 +163,11 @@ duration, and display name for the preview only; the original media-path MIME
 continues to drive the actual drop. Effect drags retain their existing marker.
 
 File actions provide New Project, Open Project, Save Project, and Save Project
-As. Save prompts are transactional and New, Open, and close use Save, Discard,
-and Cancel when the project is dirty.
+As. New Project first opens a dialog for the 16:9 1920×1080 or 9:16 1080×1920
+canvas and 24/25/30/48/50/60 fps. It defaults to 16:9 at 30 fps. Canceling the
+dialog leaves the current project untouched; after accepting the settings, a
+dirty project uses the existing Save, Discard, and Cancel prompt. Open and
+close keep their existing dirty-project prompt.
 
 ## User settings
 
@@ -490,7 +493,7 @@ cut command.
 
 The Inspector exposes Position X/Y, uniform Scale, Rotation, and Opacity for
 the selected Timeline clip occurrence. Values use normalized coordinates for
-the fixed 1920x1080 canvas. Each property has one diamond keyframe toggle. The
+the active project canvas. Each property has one diamond keyframe toggle. The
 outlined diamond means that the current local frame has no keyframe; a filled,
 highlighted diamond means that the playhead is on a keyframe. Clicking the
 diamond adds a keyframe at the evaluated value or removes the keyframe at the
@@ -520,7 +523,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 18 format. Linked video-audio clips can be
+the current `.csp` version 19 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Image media context menus can open a
 shared Image Editor document, and image clip context menus can open a

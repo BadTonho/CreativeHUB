@@ -8,6 +8,8 @@
 namespace rendering {
 
 [[nodiscard]] std::optional<media::VideoFrame> renderText(
-    const timeline::TextStyle& text_style);
+    const timeline::TextStyle& text_style,
+    int canvas_width = 1920,
+    int canvas_height = 1080);
 
 } // namespace rendering

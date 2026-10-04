@@ -141,6 +141,25 @@ int main(int argc, char** argv) {
 
         const auto loaded = project::load(project_path);
         require(loaded == original, "A project did not round-trip through JSON.");
+        auto portrait_project = original;
+        portrait_project.canvas_width = 1080;
+        portrait_project.canvas_height = 1920;
+        const auto portrait_project_path = directory / "portrait.csp";
+        project::save(portrait_project_path, portrait_project);
+        require(project::load(portrait_project_path) == portrait_project,
+                "A version 19 portrait project did not preserve its canvas and project data.");
+
+        auto invalid_canvas_project = portrait_project;
+        invalid_canvas_project.canvas_width = 1440;
+        bool unsupported_canvas_rejected = false;
+        try {
+            project::save(directory / "unsupported-canvas.csp", invalid_canvas_project);
+        } catch (const project::ProjectError& error) {
+            unsupported_canvas_rejected =
+                error.code() == project::ProjectErrorCode::InvalidValue;
+        }
+        require(unsupported_canvas_rejected,
+                "A project canvas outside the two supported formats was accepted.");
         require(loaded.timeline_tracks.size() == 2 &&
                     loaded.timeline_tracks[1].name == "Video 2" &&
                     loaded.timeline_tracks[1].clips.size() == 1 &&
@@ -190,7 +209,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 18") != std::string::npos &&
+        require(saved_json.find("\"version\": 19") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
                     saved_json.find("\"denominator\": 1001") != std::string::npos &&
@@ -204,7 +223,60 @@ int main(int argc, char** argv) {
                     saved_json.find("\"enabled\": false") != std::string::npos &&
                     saved_json.find("image_editor_link") != std::string::npos &&
                     saved_json.find("image_editor_variant") != std::string::npos,
-                "Timeline frame timing, effect states, and linked image references were not written to the version 18 project.");
+                "Timeline frame timing, effect states, and linked image references were not written to the version 19 project.");
+
+        auto legacy_v18_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        legacy_v18_json.insert("version", 18);
+        const auto legacy_v18_path = directory / "legacy-v18.csp";
+        writeText(legacy_v18_path,
+                  QJsonDocument(legacy_v18_json).toJson().toStdString());
+        const auto legacy_v18 = project::load(legacy_v18_path);
+        require(legacy_v18.canvas_width == 1920 &&
+                    legacy_v18.canvas_height == 1080 &&
+                    legacy_v18.timeline_frame_rate == original.timeline_frame_rate,
+                "A version 18 project did not retain its legacy canvas and saved Timeline rate.");
+
+        auto legacy_portrait_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        legacy_portrait_json.insert("version", 18);
+        auto legacy_portrait_canvas = legacy_portrait_json.value("canvas").toObject();
+        legacy_portrait_canvas.insert("width", 1080);
+        legacy_portrait_canvas.insert("height", 1920);
+        legacy_portrait_json.insert("canvas", legacy_portrait_canvas);
+        const auto legacy_portrait_path = directory / "legacy-portrait.csp";
+        writeText(legacy_portrait_path,
+                  QJsonDocument(legacy_portrait_json).toJson().toStdString());
+        bool legacy_portrait_rejected = false;
+        try {
+            static_cast<void>(project::load(legacy_portrait_path));
+        } catch (const project::ProjectError& error) {
+            legacy_portrait_rejected =
+                error.code() == project::ProjectErrorCode::InvalidValue;
+        }
+        require(legacy_portrait_rejected,
+                "A pre-v19 project with portrait canvas dimensions was accepted.");
+
+        auto unsupported_current_canvas_json = QJsonDocument::fromJson(
+            QByteArray::fromStdString(saved_json)).object();
+        auto unsupported_current_canvas = unsupported_current_canvas_json
+            .value("canvas").toObject();
+        unsupported_current_canvas.insert("width", 1440);
+        unsupported_current_canvas.insert("height", 1080);
+        unsupported_current_canvas_json.insert("canvas", unsupported_current_canvas);
+        const auto unsupported_current_canvas_path =
+            directory / "unsupported-current-canvas.csp";
+        writeText(unsupported_current_canvas_path,
+                  QJsonDocument(unsupported_current_canvas_json).toJson().toStdString());
+        bool unsupported_current_canvas_rejected = false;
+        try {
+            static_cast<void>(project::load(unsupported_current_canvas_path));
+        } catch (const project::ProjectError& error) {
+            unsupported_current_canvas_rejected =
+                error.code() == project::ProjectErrorCode::InvalidValue;
+        }
+        require(unsupported_current_canvas_rejected,
+                "A version 19 project with unsupported dimensions was accepted.");
 
         auto version_17_effects_json = QJsonDocument::fromJson(
             QByteArray::fromStdString(saved_json)).object();
@@ -645,8 +717,10 @@ int main(int argc, char** argv) {
                         timeline::TransitionKind::CrossDissolve &&
                     migrated_track.transitions[1].kind ==
                         timeline::TransitionKind::FadeToBlack &&
+                    migrated_version_11.timeline_frame_rate ==
+                        original.timeline_frame_rate &&
                     !migrated_version_11.timing_migration_required,
-                "A version 11 project did not migrate Cross Dissolve ripple on only its affected track while preserving Fade to Black.");
+                "A version 11 project did not preserve its Timeline rate or migrate Cross Dissolve ripple while preserving Fade to Black.");
         project::save(project_path, migrated_version_11);
         const auto reopened_migrated_version_11 = project::load(project_path);
         auto expected_reopened_version_11 = migrated_version_11;

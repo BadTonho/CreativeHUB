@@ -55,7 +55,10 @@ public:
         bool enabled,
         int retention,
         TimelinePresentationState presentation = {});
-    void reset();
+    void reset(
+        int canvas_width = 1920,
+        int canvas_height = 1080,
+        timeline::FrameRate frame_rate = {30, 1});
     void commitPrepared(
         media::MediaLibrary library,
         std::map<std::filesystem::path, media::LinkedImageReference> image_editor_links,

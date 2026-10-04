@@ -187,7 +187,7 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     layout->addWidget(title);
 
     auto* description = new QLabel(
-        "Values are normalized to the 1920×1080 project canvas.", inspector_page);
+        "Values are normalized to the project canvas.", inspector_page);
     description->setWordWrap(true);
     description->setStyleSheet("color: #9aa4b2;");
     layout->addWidget(description);

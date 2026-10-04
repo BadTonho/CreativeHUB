@@ -304,8 +304,11 @@ void PlaybackController::refreshComposition() {
         }
     }
     const auto preview_quality = preview_quality_;
+    const int canvas_width = session_.canvasWidth();
+    const int canvas_height = session_.canvasHeight();
     const auto global_timeline_frame = timelineFrame();
     queueWorker([this, revision, active_track, active_clip, preview_quality,
+                 canvas_width, canvas_height,
                  global_timeline_frame,
                  layers = std::move(layers),
                  transitions = std::move(transitions)]
@@ -313,6 +316,7 @@ void PlaybackController::refreshComposition() {
         if (composition_revision_.load(std::memory_order_acquire) != revision) return;
         const auto generation = published_generation_.load(std::memory_order_acquire);
         worker.setPreviewQuality(preview_quality);
+        worker.setCompositionCanvasSize(canvas_width, canvas_height);
         worker.setComposition(std::move(layers), std::move(transitions), generation);
         worker.setActiveCompositionClip(
             active_track, active_clip, static_cast<qint64>(global_timeline_frame));

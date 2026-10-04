@@ -399,21 +399,7 @@ void RenderWorkspace::createSettingsPanel() {
     resolution_combo_->setObjectName("renderResolutionCombo");
     resolution_combo_->setAccessibleName(QStringLiteral("Output resolution"));
     configureCompactCombo(resolution_combo_);
-    resolution_combo_->addItem(
-        QStringLiteral("Project (%1 × %2)").arg(project_width_).arg(project_height_),
-        QSize(project_width_, project_height_));
-    const std::vector<QSize> common_resolutions{
-        QSize(1280, 720), QSize(1920, 1080), QSize(2560, 1440), QSize(3840, 2160)};
-    for (const auto& resolution : common_resolutions) {
-        if (resolution.width() == project_width_ &&
-            resolution.height() == project_height_) {
-            continue;
-        }
-        resolution_combo_->addItem(
-            QStringLiteral("%1 × %2").arg(resolution.width()).arg(resolution.height()),
-            resolution);
-    }
-    resolution_combo_->addItem(QStringLiteral("Custom dimensions"), QVariant{});
+    rebuildResolutionOptions(QSize(project_width_, project_height_), true);
     video_form->addRow(QStringLiteral("Resolution"), resolution_combo_);
 
     custom_width_ = new QSpinBox(video_group);
@@ -812,9 +798,79 @@ void RenderWorkspace::updateEncoderOptions() {
 }
 
 void RenderWorkspace::updateResolutionFields() {
+    if (resolution_combo_ == nullptr) return;
     const bool custom = resolution_combo_->currentIndex() == resolution_combo_->count() - 1;
-    custom_width_->setVisible(custom);
-    custom_height_->setVisible(custom);
+    if (custom_width_ != nullptr) custom_width_->setVisible(custom);
+    if (custom_height_ != nullptr) custom_height_->setVisible(custom);
+}
+
+void RenderWorkspace::rebuildResolutionOptions(
+    QSize preferred_resolution,
+    bool use_project_resolution) {
+    if (resolution_combo_ == nullptr) return;
+    const QSignalBlocker blocker(resolution_combo_);
+    resolution_combo_->clear();
+    resolution_combo_->addItem(
+        QStringLiteral("Project (%1 × %2)").arg(project_width_).arg(project_height_),
+        QSize(project_width_, project_height_));
+    const std::vector<QSize> common_resolutions{
+        QSize(1280, 720), QSize(1920, 1080), QSize(1080, 1920),
+        QSize(2560, 1440), QSize(3840, 2160)};
+    for (const auto& resolution : common_resolutions) {
+        if (resolution.width() == project_width_ &&
+            resolution.height() == project_height_) {
+            continue;
+        }
+        resolution_combo_->addItem(
+            QStringLiteral("%1 × %2").arg(resolution.width()).arg(resolution.height()),
+            resolution);
+    }
+    const int custom_index = resolution_combo_->count();
+    resolution_combo_->addItem(QStringLiteral("Custom dimensions"), QVariant{});
+
+    int selected_index = use_project_resolution ? 0 : -1;
+    if (selected_index < 0 && preferred_resolution.isValid()) {
+        for (int index = 1; index < custom_index; ++index) {
+            if (resolution_combo_->itemData(index).toSize() == preferred_resolution) {
+                selected_index = index;
+                break;
+            }
+        }
+        if (selected_index < 0) {
+            selected_index = custom_index;
+            if (custom_width_ != nullptr) {
+                custom_width_->setValue(preferred_resolution.width());
+            }
+            if (custom_height_ != nullptr) {
+                custom_height_->setValue(preferred_resolution.height());
+            }
+        }
+    }
+    resolution_combo_->setCurrentIndex(selected_index >= 0
+        ? selected_index
+        : custom_index);
+    updateResolutionFields();
+}
+
+void RenderWorkspace::refreshProjectSettings() {
+    project::ProjectDocument active_project;
+    if (project_snapshot_provider_) active_project = project_snapshot_provider_();
+    project_width_ = std::max(1, active_project.canvas_width);
+    project_height_ = std::max(1, active_project.canvas_height);
+
+    const bool use_project_resolution = resolution_combo_ == nullptr ||
+        resolution_combo_->currentIndex() == 0;
+    const QSize previous_resolution = resolution_combo_ != nullptr
+        ? resolution_combo_->currentData().toSize()
+        : QSize{};
+    const QSize preferred_resolution = previous_resolution.isValid()
+        ? previous_resolution
+        : QSize(custom_width_ != nullptr ? custom_width_->value() : project_width_,
+                custom_height_ != nullptr ? custom_height_->value() : project_height_);
+    rebuildResolutionOptions(preferred_resolution, use_project_resolution);
+
+    frame_rate_user_modified_ = false;
+    updateDefaultFrameRate();
 }
 
 void RenderWorkspace::updateQualitySuggestions() {

@@ -777,15 +777,15 @@ void MainWindow::createMenus() {
             });
         };
     add_playback_quality_action(
-        "Full (1920 × 1080)",
+        "Full (Project Canvas)",
         "playbackPreviewQualityFull",
         playback::PreviewQuality::Full);
     add_playback_quality_action(
-        "Half (960 × 540)",
+        "Half (Project Canvas)",
         "playbackPreviewQualityHalf",
         playback::PreviewQuality::Half);
     add_playback_quality_action(
-        "Quarter (480 × 270)",
+        "Quarter (Project Canvas)",
         "playbackPreviewQualityQuarter",
         playback::PreviewQuality::Quarter);
     view_menu->addSeparator();

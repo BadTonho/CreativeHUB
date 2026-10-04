@@ -79,8 +79,8 @@ bool validKeyframeList(
 
 void validateDocument(const ProjectDocument& document,
                       const std::filesystem::path& project_path) {
-    if (document.canvas_width != 1920 || document.canvas_height != 1080) {
-        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an unsupported canvas size; only 1920x1080 is supported.");
+    if (!isSupportedCanvasSize(document.canvas_width, document.canvas_height)) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an unsupported canvas size; expected 1920x1080 or 1080x1920.");
     }
     if (!document.timing_migration_required &&
         !timeline::validFrameRate(document.timeline_frame_rate)) {

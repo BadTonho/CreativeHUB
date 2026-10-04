@@ -131,17 +131,25 @@ ProjectOperationResult ProjectController::autosave(
     return result;
 }
 
-void ProjectController::reset() {
+void ProjectController::reset(
+    int canvas_width,
+    int canvas_height,
+    timeline::FrameRate frame_rate) {
+    if (!project::isSupportedCanvasSize(canvas_width, canvas_height) ||
+        !timeline::validFrameRate(frame_rate)) {
+        throw std::invalid_argument("The new project settings are invalid.");
+    }
     timeline::TimelineModel::Snapshot empty_timeline;
+    empty_timeline.frame_rate = timeline::reducedFrameRate(frame_rate);
     session_.timeline_.restore(std::move(empty_timeline));
     session_.history_.clear();
     session_.media_library_.clear();
     session_.image_editor_links_.clear();
     session_.selection_ = {};
     session_.project_path_.reset();
-    project::ProjectDocument blank;
-    blank.bins = {std::string(media::default_bin)};
-    session_.saved_project_document_ = std::move(blank);
+    session_.canvas_width_ = canvas_width;
+    session_.canvas_height_ = canvas_height;
+    session_.saved_project_document_ = ProjectDocumentMapper::toDocument(session_);
     session_.project_dirty_ = false;
     session_.playhead_frame_ = 0;
     session_.preserved_playhead_frame_.reset();
@@ -167,6 +175,8 @@ void ProjectController::commitPrepared(
     session_.saved_project_document_ = saved_baseline.has_value()
         ? std::move(saved_baseline)
         : std::optional<project::ProjectDocument>(loaded_document);
+    session_.canvas_width_ = loaded_document.canvas_width;
+    session_.canvas_height_ = loaded_document.canvas_height;
     session_.project_dirty_ = false;
     session_.playhead_frame_ = 0;
     session_.preserved_playhead_frame_.reset();

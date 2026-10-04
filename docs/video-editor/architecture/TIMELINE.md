@@ -10,8 +10,9 @@ It does not own decoded frames, FFmpeg resources, or Qt objects.
 
 ## Timeline timebase
 
-Each project stores a reduced rational Timeline frame rate. New projects start
-at 30/1 FPS; the project-creation UI does not expose a rate selector yet.
+Each project stores a reduced rational Timeline frame rate. File > New Project
+offers 24, 25, 30, 48, 50, and 60 FPS, defaulting to 30/1 FPS. The choice is
+stored in the existing project timebase field.
 Timeline positions, clip durations, playhead positions, transitions, and
 keyframes use Timeline frames. Video clips separately store their source
 duration and source in-point in source frames. Sampling maps a local Timeline
@@ -396,8 +397,9 @@ the new start. Invalid boundaries remain intentional no-op outcomes.
 
 At a global frame, all visible video clips are composed from the bottom track
 up to the top track. The compositor runs outside the UI worker boundary and
-produces one RGBA frame or leased shared texture for the preview. The provisional canvas is 1920x1080;
-empty areas use the dark preview background. Audio is mixed from every active
+produces one RGBA frame or leased shared texture for the preview. The project
+canvas is 1920x1080 or 1080x1920; empty areas use the dark preview background.
+Audio is mixed from every active
 Audio clip and from active video clips whose embedded audio has not been
 externalized, independently of which clip supplies the visible image.
 

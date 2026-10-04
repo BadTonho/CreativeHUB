@@ -385,8 +385,15 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
         const auto canvas = canvas_value.toObject();
         const auto width = requiredInteger(canvas, "width", project_path);
         const auto height = requiredInteger(canvas, "height", project_path);
-        if (width != 1920 || height != 1080) {
-            throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an unsupported canvas size; only 1920x1080 is supported.");
+        const bool supported_canvas = version >= portrait_canvas_format_version
+            ? ((width == 1920 && height == 1080) ||
+               (width == 1080 && height == 1920))
+            : width == 1920 && height == 1080;
+        if (!supported_canvas) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      version >= portrait_canvas_format_version
+                          ? "Project JSON contains an unsupported canvas size; expected 1920x1080 or 1080x1920."
+                          : "Legacy project versions only support a 1920x1080 canvas.");
         }
         document.canvas_width = static_cast<int>(width);
         document.canvas_height = static_cast<int>(height);

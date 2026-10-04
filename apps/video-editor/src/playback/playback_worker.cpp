@@ -579,7 +579,8 @@ void PlaybackWorker::recoverPreviewFrame(rendering::PreviewFramePayload frame,
     try {
     if (frame.gpu && frame.playback_generation == generation_ &&
         frame.composition_revision == composition_revision_ && frame.timeline_frame == current_timeline_frame_ &&
-        frame.width() == 1920 / divisor && frame.height() == 1080 / divisor) {
+        frame.width() == std::max(1, composition_canvas_width_ / divisor) &&
+        frame.height() == std::max(1, composition_canvas_height_ / divisor)) {
         auto read = [&](auto& backend) {
             if (!backend) return false;
             creative_suite::composition::OpenGlCompositionTimings timings;
@@ -629,6 +630,20 @@ void PlaybackWorker::setPreviewQuality(PreviewQuality quality) {
     if (preview_quality_ == quality) return;
 
     preview_quality_ = quality;
+    clearCompositionCache();
+}
+
+void PlaybackWorker::setCompositionCanvasSize(int width, int height) {
+    if ((width != 1920 || height != 1080) &&
+        (width != 1080 || height != 1920)) {
+        return;
+    }
+    if (composition_canvas_width_ == width &&
+        composition_canvas_height_ == height) {
+        return;
+    }
+    composition_canvas_width_ = width;
+    composition_canvas_height_ = height;
     clearCompositionCache();
 }
 
@@ -2563,7 +2578,10 @@ PlaybackWorker::decodeCompositionLayers(
                     rendering::PreviewPerformanceScope timing(
                         metrics,
                         rendering::PreviewTiming::TextRasterization);
-                    rendered = rendering::renderText(spec.text);
+                    rendered = rendering::renderText(
+                        spec.text,
+                        composition_canvas_width_,
+                        composition_canvas_height_);
                 }
                 if (!rendered.has_value()) {
                     throw media::MediaError("The text layer could not be rasterized.");
@@ -2664,16 +2682,16 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     last_composition_texture_.reset();
     if (timings) *timings = {};
     auto adapter_started = timings != nullptr ? Clock::now() : Clock::time_point{};
-    int width = 1920;
-    int height = 1080;
+    int width = composition_canvas_width_;
+    int height = composition_canvas_height_;
     switch (preview_quality_) {
     case PreviewQuality::Half:
-        width /= 2;
-        height /= 2;
+        width = std::max(1, width / 2);
+        height = std::max(1, height / 2);
         break;
     case PreviewQuality::Quarter:
-        width /= 4;
-        height /= 4;
+        width = std::max(1, width / 4);
+        height = std::max(1, height / 4);
         break;
     case PreviewQuality::Full:
         break;

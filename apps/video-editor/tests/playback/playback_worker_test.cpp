@@ -1481,6 +1481,17 @@ void validateCompositionPreviewQuality() {
     require(emitted_dimensions == std::vector<std::pair<int, int>>{
                 {1920, 1080}, {960, 540}, {480, 270}, {1920, 1080}},
             "Changing Playback Preview Quality did not recompute the current frame at the selected dimensions.");
+
+    worker.setCompositionCanvasSize(1080, 1920);
+    worker.setComposition({layer, text_layer}, {}, 72);
+    worker.setPreviewQuality(playback::PreviewQuality::Full);
+    worker.renderCompositionFrame(0, 0, 72);
+    worker.setPreviewQuality(playback::PreviewQuality::Half);
+    worker.renderCompositionFrame(0, 0, 72);
+    require(emitted_dimensions.size() == 6 &&
+                emitted_dimensions[4] == std::pair<int, int>{1080, 1920} &&
+                emitted_dimensions[5] == std::pair<int, int>{540, 960},
+            "Portrait Preview composition did not follow the project canvas at each quality level.");
 }
 
 void validateStaticImageComposition() {

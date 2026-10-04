@@ -205,7 +205,10 @@ private:
         const media::LinkedImageReference& link,
         const std::filesystem::path& source_path,
         std::optional<timeline::ClipId> clip_id = std::nullopt);
-    void clearProjectState();
+    void clearProjectState(
+        int canvas_width = 1920,
+        int canvas_height = 1080,
+        timeline::FrameRate frame_rate = {30, 1});
     void applyLoadedProject(application::PreparedProject prepared);
     void handleMediaDropAt(
         const QString& source_path,

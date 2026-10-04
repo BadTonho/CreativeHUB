@@ -179,6 +179,13 @@ public:
             MainWindow render_window;
             render_window.show();
             QApplication::processEvents();
+            const auto startup_project = render_window.currentProjectDocument();
+            require(startup_project.canvas_width == 1920 &&
+                        startup_project.canvas_height == 1080 &&
+                        startup_project.timeline_frame_rate ==
+                            timeline::FrameRate{30, 1} &&
+                        !render_window.project_dirty_,
+                    "The editor must open on a clean default 16:9, 30 fps project.");
             const auto& inspector_ui = render_window.edit_workspace_->ui();
             auto* inspector_tabs = inspector_ui.inspector_tabs;
             require(inspector_tabs != nullptr && inspector_tabs->count() == 3 &&
@@ -279,6 +286,91 @@ public:
             render_window.showSettingsDialog();
             require(gpu_ui_forwarded && render_window.project_dirty_ == dirty_before_quality_change,
                     "Settings GPU checkbox did not reach controller or modified project.");
+
+            const auto create_project_from_dialog =
+                [&render_window](int canvas_index, int frame_rate_index, bool accept) {
+                    bool handled = false;
+                    bool choices_valid = false;
+                    QTimer::singleShot(0, [&] {
+                        auto* dialog = qobject_cast<QDialog*>(
+                            QApplication::activeModalWidget());
+                        auto* canvas = dialog != nullptr
+                            ? dialog->findChild<QComboBox*>("newProjectCanvasCombo")
+                            : nullptr;
+                        auto* frame_rate = dialog != nullptr
+                            ? dialog->findChild<QComboBox*>("newProjectFrameRateCombo")
+                            : nullptr;
+                        auto* buttons = dialog != nullptr
+                            ? dialog->findChild<QDialogButtonBox*>()
+                            : nullptr;
+                        if (canvas == nullptr || frame_rate == nullptr ||
+                            buttons == nullptr) {
+                            return;
+                        }
+                        constexpr std::array<int, 6> expected_rates{
+                            24, 25, 30, 48, 50, 60};
+                        choices_valid = canvas->count() == 2 &&
+                            canvas->currentIndex() == 0 &&
+                            canvas->itemData(0).toSize() == QSize(1920, 1080) &&
+                            canvas->itemData(1).toSize() == QSize(1080, 1920) &&
+                            frame_rate->count() == static_cast<int>(expected_rates.size()) &&
+                            frame_rate->currentData().toInt() == 30;
+                        for (std::size_t index = 0; choices_valid &&
+                             index < expected_rates.size(); ++index) {
+                            choices_valid = frame_rate->itemData(
+                                static_cast<int>(index)).toInt() == expected_rates[index];
+                        }
+                        if (canvas_index >= 0) canvas->setCurrentIndex(canvas_index);
+                        if (frame_rate_index >= 0) {
+                            frame_rate->setCurrentIndex(frame_rate_index);
+                        }
+                        if (accept) {
+                            buttons->button(QDialogButtonBox::Ok)->click();
+                        } else {
+                            dialog->reject();
+                        }
+                        handled = true;
+                    });
+                    render_window.new_project_action_->trigger();
+                    return handled && choices_valid;
+                };
+            require(create_project_from_dialog(1, 5, true),
+                    "The project-creation dialog did not expose its canvas and frame-rate choices.");
+            auto created_portrait = render_window.currentProjectDocument();
+            require(created_portrait.canvas_width == 1080 &&
+                        created_portrait.canvas_height == 1920 &&
+                        created_portrait.timeline_frame_rate == timeline::FrameRate{60, 1} &&
+                        !render_window.project_dirty_,
+                    "Creating a portrait 60 fps project did not apply clean project settings.");
+            auto* render_resolution = render_window.render_workspace_->settingsPanel()
+                ->findChild<QComboBox*>("renderResolutionCombo");
+            auto* render_frame_rate = render_window.render_workspace_->settingsPanel()
+                ->findChild<QDoubleSpinBox*>("renderFrameRate");
+            require(render_resolution != nullptr &&
+                        render_resolution->currentText() ==
+                            QStringLiteral("Project (1080 × 1920)") &&
+                        render_frame_rate != nullptr &&
+                        render_frame_rate->value() == 60.0,
+                    "Render defaults did not follow the active portrait canvas and project FPS.");
+            require(create_project_from_dialog(-1, -1, false),
+                    "Canceling project creation did not close its dialog.");
+            require(render_window.currentProjectDocument().canvas_width == 1080 &&
+                        render_window.currentProjectDocument().canvas_height == 1920 &&
+                        render_window.editor_session_.timeline().frameRate() ==
+                            timeline::FrameRate{60, 1},
+                    "Canceling project creation changed the active project.");
+            require(create_project_from_dialog(-1, -1, true),
+                    "Creating a project with the default choices failed.");
+            const auto created_default = render_window.currentProjectDocument();
+            require(created_default.canvas_width == 1920 &&
+                        created_default.canvas_height == 1080 &&
+                        created_default.timeline_frame_rate == timeline::FrameRate{30, 1} &&
+                        !render_window.project_dirty_ &&
+                        render_resolution->currentText() ==
+                            QStringLiteral("Project (1920 × 1080)") &&
+                        render_frame_rate->value() == 30.0,
+                    "The New Project defaults or clean-state behavior changed.");
+
             const std::array<QDockWidget*, 7> docks{
                 render_window.bins_dock_, render_window.media_dock_,
                 render_window.toolbox_dock_, render_window.favorites_dock_,

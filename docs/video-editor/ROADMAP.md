@@ -123,14 +123,13 @@ requirements, and implementation details still require validation below.
 Build on the implemented local-media, multitrack-editing, preview/playback,
 transform, keyframe, text, essential-transition, embedded and independent
 audio, project save/open, Undo/Redo, autosave, and recovery workflows. Complete
-the release gates below and add the approved portrait canvas, project-rate choices,
-operating-system file drops, and adjustable YouTube preset. Preserve a clear,
+the release gates below and add operating-system file drops and the adjustable
+YouTube preset. Preserve a clear,
 discoverable interface with shortcuts for frequent actions.
 
-The current project format still accepts only a 1920x1080 canvas. Future
-implementation of portrait canvases and project-rate choices must preserve
-opening existing `.csp` projects as 16:9; define and validate any required
-format migration before changing persistence.
+Version 19 supports both approved canvas sizes. Projects from versions 1
+through 18 continue opening as 16:9, and their stored or migrated Timeline FPS
+behavior remains unchanged.
 
 Waveforms, recording, advanced audio mixing, automatic captions, advanced color
 grading, masks, 3D layers, proxies,
@@ -161,6 +160,9 @@ tasks.
 - [x] Qt OpenGL preview presentation with CPU fallback and grayscale preview.
 - [x] Versioned `.csp` persistence, transactional New/Open/Save/Save As,
   autosave, and recovery snapshots.
+- [x] New Project canvas and frame-rate choices: 16:9 (1920×1080) or 9:16
+  (1080×1920), 24/25/30/48/50/60 fps, defaulting to 16:9 at 30 fps; version 19
+  persists portrait canvas settings while versions 1–18 remain 16:9.
 - [x] Local structured logging with bounded retention and actionable error
   context.
 - [x] Automated regression coverage for current media, playback, timeline,
@@ -204,10 +206,6 @@ and required manual validation pass.
   keeps later clips in place; Ripple Delete moves the selected track's
   sequence, follows linked companions, and stops at collisions without removing
   blockers. See the Timeline contract and manual regression checklist.
-- [ ] Add project creation choices for the approved 16:9 and 9:16 canvases and
-  24/25/30/48/50/60 fps rates, defaulting to 16:9 at 30 fps. Preserve the
-  existing behavior of `.csp` versions 1 through 13 as 16:9 when opening them;
-  define and test the versioned persistence change before implementation.
 - [ ] Implement direct operating-system file drops as decided in section 1.
   Dropping on the Media Browser imports; dropping on the Timeline uses the
   existing media-drop behavior. Keep the import dialog and Media Browser drag

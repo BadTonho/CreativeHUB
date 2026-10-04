@@ -42,6 +42,13 @@ The OpenGL surface retains RGBA until upload or a GPU lease through every draw;
 only the CPU fallback creates a copied image. Non-contiguous rows use a reusable
 staging buffer instead of allocating a new buffer for every upload.
 
+Timeline composition uses the active project's 1920×1080 or 1080×1920 canvas.
+Full Preview quality renders at the canvas size; Half and Quarter divide both
+dimensions while preserving portrait or landscape orientation. Text layers
+are rasterized against that same project canvas. Offline Render's Project
+resolution uses the active project dimensions, while the existing fixed and
+custom output resolutions remain available.
+
 Composed Preview playback mixes embedded audio from active video clips only
 when their audio has not been externalized, and independent audio from every
 active Audio clip, including clips whose video is covered by a higher-priority
@@ -490,9 +497,9 @@ Manual text clips are rasterized with `QImage` and `QPainter` in the playback
 worker, never in the UI thread. The renderer produces a transparent RGBA
 layer using the clip's UTF-8 content, font family, pixel size, color, and
 horizontal alignment. The default style is Sans Serif at 48 pixels, white,
-and centered. The resulting layer enters the same 1920x1080 worker-side
-composition as video layers, with text above video within a track and the
-existing track priority between tracks.
+and centered. The resulting layer enters the worker-side composition at the
+active project's 1920x1080 or 1080x1920 canvas size, with text above video
+within a track and the existing track priority between tracks.
 
 Text is rendered only while visible at the global playhead. Rasterization and
 composition failures preserve the last valid preview and are reported with

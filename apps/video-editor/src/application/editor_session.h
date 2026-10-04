@@ -48,6 +48,8 @@ public:
     [[nodiscard]] const std::optional<std::filesystem::path>& projectPath() const noexcept;
     [[nodiscard]] const std::optional<project::ProjectDocument>&
     savedProjectDocument() const noexcept;
+    [[nodiscard]] int canvasWidth() const noexcept { return canvas_width_; }
+    [[nodiscard]] int canvasHeight() const noexcept { return canvas_height_; }
 
     [[nodiscard]] bool projectDirty() const noexcept;
     [[nodiscard]] const bool& projectDirtyState() const noexcept;
@@ -75,6 +77,8 @@ private:
     EditorSelection selection_;
     std::optional<std::filesystem::path> project_path_;
     std::optional<project::ProjectDocument> saved_project_document_;
+    int canvas_width_ = 1920;
+    int canvas_height_ = 1080;
     bool project_dirty_ = false;
     std::int64_t playhead_frame_ = 0;
     std::optional<std::int64_t> preserved_playhead_frame_;
