@@ -156,6 +156,7 @@ public:
     void clearTimeline();
     void moveActiveTimelineClip(int direction);
     void deleteActiveTimelineClip();
+    void rippleDeleteActiveTimelineClip();
     void splitActiveClipAtPlayhead();
     void handleTimelineSeekStarted();
     void handleTimelineSeek(qint64 global_frame);

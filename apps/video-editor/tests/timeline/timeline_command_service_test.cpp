@@ -823,6 +823,280 @@ void runLinkedVideoAudioCommands() {
             "Deleting one linked clip did not remove the paired clips together.");
 }
 
+void runRippleDeleteCommands() {
+    {
+        application::EditorSession session;
+        application::TimelineCommandService service(session);
+        const auto video_track_id = session.timeline().tracks().front().track_id;
+        const auto audio_track_id = session.timeline().tracks().back().track_id;
+        const auto first_path = std::filesystem::temp_directory_path() /
+            "service-ripple-first.mkv";
+        const auto second_path = std::filesystem::temp_directory_path() /
+            "service-ripple-second.mkv";
+        const auto third_path = std::filesystem::temp_directory_path() /
+            "service-ripple-third.mkv";
+        const auto audio_path = std::filesystem::temp_directory_path() /
+            "service-ripple-other-track.wav";
+        addMedia(session, first_path);
+        addMedia(session, second_path);
+        addMedia(session, third_path);
+        addAudioMedia(session, audio_path);
+
+        const auto other_track_audio = service.execute(
+            application::AddMediaClipCommand{audio_path, audio_track_id, 0});
+        const auto first = service.execute(application::AddMediaClipCommand{
+            first_path, video_track_id, 0});
+        const auto second = service.execute(application::AddMediaClipCommand{
+            second_path, video_track_id, 120});
+        const auto third = service.execute(application::AddMediaClipCommand{
+            third_path, video_track_id, 240});
+        require(other_track_audio.changed() && first.changed() && second.changed() &&
+                    third.changed(),
+                "The Ripple Delete sequence fixture could not be created.");
+        const auto first_id = first.affected_clip_ids.front();
+        const auto second_id = second.affected_clip_ids.front();
+        const auto third_id = third.affected_clip_ids.front();
+        const auto other_track_audio_id = other_track_audio.affected_clip_ids.front();
+        service.clearHistory();
+        const auto before = session.timeline().snapshot();
+        const auto invalid_ripple = service.execute(
+            application::RippleDeleteClipCommand{999999});
+        require(invalid_ripple.status == application::EditStatus::Rejected &&
+                    invalid_ripple.reason == application::EditReason::InvalidTarget &&
+                    session.timeline().snapshot() == before && service.undoCount() == 0,
+                "Ripple Delete accepted a stale clip ID or changed the Timeline on rejection.");
+
+        const auto ripple = service.execute(
+            application::RippleDeleteClipCommand{first_id});
+        const auto moved_second = session.timeline().locateClip(second_id);
+        const auto moved_third = session.timeline().locateClip(third_id);
+        const auto fixed_audio = session.timeline().locateClip(other_track_audio_id);
+        require(ripple.changed() && ripple.invalidate_playback &&
+                    !ripple.stopped_at_collision && service.undoCount() == 1 &&
+                    !session.timeline().locateClip(first_id).has_value() &&
+                    moved_second.has_value() && moved_third.has_value() &&
+                    fixed_audio.has_value() &&
+                    session.timeline().tracks()[moved_second->track_index]
+                        .clips[moved_second->clip_index].timeline_start_frame == 0 &&
+                    session.timeline().tracks()[moved_third->track_index]
+                        .clips[moved_third->clip_index].timeline_start_frame == 120 &&
+                    session.timeline().tracks()[fixed_audio->track_index]
+                        .clips[fixed_audio->clip_index].timeline_start_frame == 0 &&
+                    ripple.affected_track_ids.size() == 1 &&
+                    session.selection().active_clip_id == second_id,
+                "Ripple Delete did not close the selected track's gap while preserving other tracks and selecting the remaining clip.");
+        require(service.undo().changed(),
+                "Ripple Delete could not be undone.");
+        const auto after_undo = session.timeline().snapshot();
+        require(after_undo == before,
+                "Undo did not restore the complete pre-ripple Timeline state.");
+        require(service.redo().changed(),
+                "Ripple Delete could not be redone.");
+        const auto redone_second = session.timeline().locateClip(second_id);
+        require(redone_second.has_value() &&
+                    session.timeline().tracks()[redone_second->track_index]
+                        .clips[redone_second->clip_index].timeline_start_frame == 0,
+                "Redo did not restore the Ripple Delete positions.");
+        require(service.undo().changed() &&
+                    service.execute(application::DeleteClipCommand{first_id}).changed() &&
+                    session.timeline().tracks()[session.timeline().locateClip(second_id)->track_index]
+                        .clips[session.timeline().locateClip(second_id)->clip_index]
+                        .timeline_start_frame == 120,
+                "Ordinary Delete stopped leaving the following clip at its original position.");
+    }
+
+    {
+        application::EditorSession session;
+        application::TimelineCommandService service(session);
+        const auto track_id = session.timeline().tracks().front().track_id;
+        const auto first = service.execute(application::AddTextClipCommand{
+            track_id, 0, 30, 30.0});
+        const auto second = service.execute(application::AddTextClipCommand{
+            track_id, 30, 30, 30.0});
+        const auto third = service.execute(application::AddTextClipCommand{
+            track_id, 60, 30, 30.0});
+        require(first.changed() && second.changed() && third.changed(),
+                "The text Ripple Delete fixture could not be created.");
+        const auto first_id = first.affected_clip_ids.front();
+        const auto second_id = second.affected_clip_ids.front();
+        const auto third_id = third.affected_clip_ids.front();
+        service.clearHistory();
+        const auto ripple = service.execute(
+            application::RippleDeleteClipCommand{first_id});
+        const auto second_location = session.timeline().locateClip(second_id);
+        const auto third_location = session.timeline().locateClip(third_id);
+        require(ripple.changed() && second_location.has_value() &&
+                    third_location.has_value() &&
+                    session.timeline().tracks()[second_location->track_index]
+                        .clips[second_location->clip_index].timeline_start_frame == 0 &&
+                    session.timeline().tracks()[third_location->track_index]
+                        .clips[third_location->clip_index].timeline_start_frame == 30,
+                "Ripple Delete did not close the gap between text clips.");
+        require(service.undo().changed() &&
+                    session.timeline().locateClip(first_id).has_value() &&
+                    service.redo().changed() &&
+                    !session.timeline().locateClip(first_id).has_value(),
+                "Text Ripple Delete did not share a single Undo/Redo action.");
+    }
+
+    {
+        application::EditorSession session;
+        application::TimelineCommandService service(session);
+        const auto audio_track_id = session.timeline().tracks().back().track_id;
+        const auto audio_path = std::filesystem::temp_directory_path() /
+            "service-ripple-audio-only.wav";
+        addAudioMedia(session, audio_path);
+        const auto first = service.execute(application::AddMediaClipCommand{
+            audio_path, audio_track_id, 0});
+        const auto second = service.execute(application::AddMediaClipCommand{
+            audio_path, audio_track_id, 60});
+        const auto third = service.execute(application::AddMediaClipCommand{
+            audio_path, audio_track_id, 120});
+        require(first.changed() && second.changed() && third.changed(),
+                "The audio Ripple Delete fixture could not be created.");
+        const auto first_id = first.affected_clip_ids.front();
+        const auto second_id = second.affected_clip_ids.front();
+        const auto third_id = third.affected_clip_ids.front();
+        service.clearHistory();
+        const auto ripple = service.execute(
+            application::RippleDeleteClipCommand{second_id});
+        const auto third_location = session.timeline().locateClip(third_id);
+        require(ripple.changed() && !session.timeline().locateClip(second_id) &&
+                    third_location.has_value() &&
+                    session.timeline().tracks()[third_location->track_index]
+                        .clips[third_location->clip_index].timeline_start_frame == 60 &&
+                    session.timeline().tracks()[
+                        session.timeline().locateClip(first_id)->track_index]
+                        .clips[session.timeline().locateClip(first_id)->clip_index]
+                        .timeline_start_frame == 0,
+                "Ripple Delete did not close a gap between audio-only clips.");
+    }
+
+    {
+        application::EditorSession session;
+        application::TimelineCommandService service(session);
+        const auto video_track_id = session.timeline().tracks().front().track_id;
+        const auto audio_track_id = session.timeline().tracks().back().track_id;
+        const auto target_path = std::filesystem::temp_directory_path() /
+            "service-ripple-linked-target.mkv";
+        const auto follower_path = std::filesystem::temp_directory_path() /
+            "service-ripple-linked-follower.mkv";
+        const auto tail_path = std::filesystem::temp_directory_path() /
+            "service-ripple-linked-tail.mkv";
+        const auto blocker_path = std::filesystem::temp_directory_path() /
+            "service-ripple-audio-blocker.wav";
+        addVideoWithAudioMedia(session, target_path);
+        addVideoWithAudioMedia(session, follower_path);
+        addVideoWithAudioMedia(session, tail_path);
+        addAudioMedia(session, blocker_path);
+        const auto blocker = service.execute(application::AddMediaClipCommand{
+            blocker_path, audio_track_id, 0});
+        const auto target = service.execute(application::AddMediaClipCommand{
+            target_path, video_track_id, 0});
+        const auto follower = service.execute(application::AddMediaClipCommand{
+            follower_path, video_track_id, 120});
+        const auto tail = service.execute(application::AddMediaClipCommand{
+            tail_path, video_track_id, 240});
+        require(target.changed() && blocker.changed() && follower.changed() &&
+                    tail.changed() && target.affected_clip_ids.size() == 2 &&
+                    follower.affected_clip_ids.size() == 2 &&
+                    tail.affected_clip_ids.size() == 2,
+                "The linked collision fixture could not be created.");
+        const auto target_id = target.affected_clip_ids.front();
+        const auto target_audio_id = target.affected_clip_ids.back();
+        const auto follower_video_id = follower.affected_clip_ids.front();
+        const auto follower_audio_id = follower.affected_clip_ids.back();
+        const auto tail_video_id = tail.affected_clip_ids.front();
+        const auto tail_audio_id = tail.affected_clip_ids.back();
+        const auto blocker_id = blocker.affected_clip_ids.front();
+        service.clearHistory();
+        const auto before = session.timeline().snapshot();
+        const auto ripple = service.execute(
+            application::RippleDeleteClipCommand{target_id});
+        const auto follower_video_location = session.timeline().locateClip(follower_video_id);
+        const auto follower_audio_location = session.timeline().locateClip(follower_audio_id);
+        const auto tail_video_location = session.timeline().locateClip(tail_video_id);
+        const auto tail_audio_location = session.timeline().locateClip(tail_audio_id);
+        const auto blocker_location = session.timeline().locateClip(blocker_id);
+        require(ripple.changed() && ripple.stopped_at_collision &&
+                    service.undoCount() == 1 &&
+                    !session.timeline().locateClip(target_audio_id).has_value() &&
+                    follower_video_location.has_value() &&
+                    follower_audio_location.has_value() &&
+                    tail_video_location.has_value() && tail_audio_location.has_value() &&
+                    blocker_location.has_value() &&
+                    session.timeline().tracks()[follower_video_location->track_index]
+                        .clips[follower_video_location->clip_index].timeline_start_frame == 60 &&
+                    session.timeline().tracks()[follower_audio_location->track_index]
+                        .clips[follower_audio_location->clip_index].timeline_start_frame == 60 &&
+                    session.timeline().tracks()[tail_video_location->track_index]
+                        .clips[tail_video_location->clip_index].timeline_start_frame == 240 &&
+                    session.timeline().tracks()[tail_audio_location->track_index]
+                        .clips[tail_audio_location->clip_index].timeline_start_frame == 240 &&
+                    session.timeline().tracks()[blocker_location->track_index]
+                        .clips[blocker_location->clip_index].timeline_start_frame == 0,
+                "Ripple Delete did not stop both linked sequences at the audio blocker and leave the remaining gap.");
+        require(service.undo().changed() &&
+                    session.timeline().snapshot() == before &&
+                    service.redo().changed() &&
+                    session.timeline().tracks()[session.timeline().locateClip(tail_video_id)->track_index]
+                        .clips[session.timeline().locateClip(tail_video_id)->clip_index]
+                        .timeline_start_frame == 240,
+                "A collision-stopped Ripple Delete did not undo and redo as one edit.");
+    }
+
+    {
+        application::EditorSession session;
+        application::TimelineCommandService service(session);
+        const auto audio_track_id = session.timeline().tracks().back().track_id;
+        const auto audio_path = std::filesystem::temp_directory_path() /
+            "service-ripple-crossfade.wav";
+        addAudioMedia(session, audio_path);
+        const auto first = service.execute(application::AddMediaClipCommand{
+            audio_path, audio_track_id, 0});
+        const auto second = service.execute(application::AddMediaClipCommand{
+            audio_path, audio_track_id, 60});
+        const auto third = service.execute(application::AddMediaClipCommand{
+            audio_path, audio_track_id, 120});
+        require(first.changed() && second.changed() && third.changed(),
+                "The Ripple Delete transition fixture could not be created.");
+        const auto first_id = first.affected_clip_ids.front();
+        const auto second_id = second.affected_clip_ids.front();
+        const auto third_id = third.affected_clip_ids.front();
+        require(service.execute(application::AddTransitionCommand{
+                    audio_track_id, first_id, second_id,
+                    timeline::TransitionKind::AudioCrossfade, 15}).changed() &&
+                    service.execute(application::AddTransitionCommand{
+                        audio_track_id, second_id, third_id,
+                        timeline::TransitionKind::AudioCrossfade, 15}).changed(),
+                "The Ripple Delete transition fixture could not add adjacent crossfades.");
+        service.clearHistory();
+        const auto ripple = service.execute(
+            application::RippleDeleteClipCommand{first_id});
+        const auto second_location = session.timeline().locateClip(second_id);
+        const auto third_location = session.timeline().locateClip(third_id);
+        require(ripple.changed() && second_location.has_value() &&
+                    third_location.has_value() &&
+                    session.timeline().transitionBetween(
+                        second_location->track_index,
+                        second_location->clip_index,
+                        third_location->clip_index) != nullptr &&
+                    session.timeline().transitionBetween(
+                        second_location->track_index, 0, 1)->kind ==
+                        timeline::TransitionKind::AudioCrossfade &&
+                    session.timeline().tracks()[second_location->track_index]
+                        .clips[second_location->clip_index].timeline_start_frame == 0 &&
+                    session.timeline().tracks()[third_location->track_index]
+                        .clips[third_location->clip_index].timeline_start_frame == 45,
+                "Ripple Delete did not discard the removed clip's transition while preserving and shifting the remaining crossfade.");
+        require(service.undo().changed() &&
+                    session.timeline().locateClip(first_id).has_value() &&
+                    service.redo().changed() &&
+                    !session.timeline().locateClip(first_id).has_value(),
+                "Ripple Delete did not restore affected audio transitions through Undo/Redo.");
+    }
+}
+
 void runClipAttributeCommands() {
     application::EditorSession session;
     application::TimelineCommandService service(session);
@@ -1082,6 +1356,7 @@ int main() {
         runReconnectTimingCommand();
         runAutomaticAudioTrackCommand();
         runLinkedVideoAudioCommands();
+        runRippleDeleteCommands();
         runClipAttributeCommands();
         return 0;
     } catch (const std::exception& error) {

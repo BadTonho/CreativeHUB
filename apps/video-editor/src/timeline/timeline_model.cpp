@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <system_error>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -1549,6 +1550,236 @@ RemoveClipResult TimelineModel::removeClip(
     return RemoveClipResult::Removed;
 }
 
+std::optional<RippleDeleteOutcome> TimelineModel::rippleDeleteClip(ClipId clip_id) {
+    const auto source_location = locateClip(clip_id);
+    if (!source_location.has_value()) return std::nullopt;
+    const auto& source_track = tracks_[source_location->track_index];
+    if (source_location->clip_index >= source_track.clips.size()) return std::nullopt;
+    const auto source_clip = source_track.clips[source_location->clip_index];
+    if (source_clip.timeline_start_frame < 0 ||
+        source_clip.timeline_duration_frames <= 0 ||
+        source_clip.timeline_start_frame > std::numeric_limits<std::int64_t>::max() -
+            source_clip.timeline_duration_frames) {
+        return std::nullopt;
+    }
+
+    const auto source_track_id = source_track.track_id;
+    const auto source_track_index = source_location->track_index;
+    const auto source_clip_index = source_location->clip_index;
+    const auto ripple_frames = source_clip.timeline_duration_frames;
+    std::vector<ClipId> downstream_clip_ids;
+    for (std::size_t index = source_clip_index + 1;
+         index < source_track.clips.size(); ++index) {
+        downstream_clip_ids.push_back(source_track.clips[index].clip_id);
+    }
+
+    RippleDeleteOutcome outcome;
+    std::unordered_set<ClipId> moving_ids;
+    for (const auto downstream_id : downstream_clip_ids) {
+        const auto location = locateClip(downstream_id);
+        if (!location.has_value()) return std::nullopt;
+        const auto& clip = tracks_[location->track_index].clips[location->clip_index];
+        moving_ids.insert(clip.clip_id);
+        if (!clip.linked_clip_id.has_value()) continue;
+        const auto peer = locateClip(*clip.linked_clip_id);
+        if (!peer.has_value()) return std::nullopt;
+        moving_ids.insert(*clip.linked_clip_id);
+    }
+
+    TimelineModel staged = *this;
+    const auto staged_source = staged.locateClip(clip_id);
+    if (!staged_source.has_value() || staged_source->track_index != source_track_index ||
+        staged.removeClip(staged_source->track_index, staged_source->clip_index) !=
+            RemoveClipResult::Removed) {
+        return std::nullopt;
+    }
+    outcome.removed_clip_ids.push_back(clip_id);
+    const auto add_track = [&outcome](TrackId track_id) {
+        if (std::find(outcome.affected_track_ids.begin(),
+                      outcome.affected_track_ids.end(), track_id) ==
+            outcome.affected_track_ids.end()) {
+            outcome.affected_track_ids.push_back(track_id);
+        }
+    };
+    const auto add_clip = [](std::vector<ClipId>& ids, ClipId value) {
+        if (std::find(ids.begin(), ids.end(), value) == ids.end()) ids.push_back(value);
+    };
+    add_track(source_track_id);
+
+    if (source_clip.linked_clip_id.has_value()) {
+        const auto peer = staged.locateClip(*source_clip.linked_clip_id);
+        if (!peer.has_value()) return std::nullopt;
+        const auto peer_track_id = staged.tracks_[peer->track_index].track_id;
+        if (staged.removeClip(peer->track_index, peer->clip_index) !=
+            RemoveClipResult::Removed) {
+            return std::nullopt;
+        }
+        add_clip(outcome.removed_clip_ids, *source_clip.linked_clip_id);
+        add_track(peer_track_id);
+    }
+
+    std::unordered_map<ClipId, std::int64_t> displacement_by_clip;
+    const auto maximum_shift_before_blocker = [&staged, &moving_ids](
+        const TimelineClip& moving_clip,
+        std::size_t moving_track_index,
+        std::int64_t requested_shift) -> std::optional<std::int64_t> {
+        if (moving_clip.timeline_start_frame < 0 ||
+            moving_clip.timeline_duration_frames <= 0 || requested_shift < 0) {
+            return std::nullopt;
+        }
+        if (!clipTimelineEnd(moving_clip).has_value()) return std::nullopt;
+        auto maximum_shift = std::min(requested_shift,
+                                      moving_clip.timeline_start_frame);
+        const auto& track = staged.tracks_[moving_track_index];
+        for (const auto& obstacle : track.clips) {
+            const bool same_overlap_class = obstacle.kind == moving_clip.kind ||
+                (isFrameTimedMediaClipKind(obstacle.kind) &&
+                 isFrameTimedMediaClipKind(moving_clip.kind));
+            if (obstacle.clip_id == moving_clip.clip_id ||
+                moving_ids.contains(obstacle.clip_id) ||
+                obstacle.timeline_start_frame > moving_clip.timeline_start_frame ||
+                !same_overlap_class) {
+                continue;
+            }
+            const auto obstacle_end = clipTimelineEnd(obstacle);
+            if (!obstacle_end.has_value()) return std::nullopt;
+            const auto available = *obstacle_end >= moving_clip.timeline_start_frame
+                ? std::int64_t{0}
+                : moving_clip.timeline_start_frame - *obstacle_end;
+            maximum_shift = std::min(maximum_shift, available);
+        }
+        return maximum_shift;
+    };
+
+    for (const auto downstream_id : downstream_clip_ids) {
+        const auto primary_location = staged.locateClip(downstream_id);
+        if (!primary_location.has_value() ||
+            primary_location->track_index != source_track_index) {
+            return std::nullopt;
+        }
+        const auto primary_clip = staged.tracks_[primary_location->track_index]
+            .clips[primary_location->clip_index];
+        std::optional<ClipLocation> peer_location;
+        TimelineClip peer_clip;
+        if (primary_clip.linked_clip_id.has_value()) {
+            peer_location = staged.locateClip(*primary_clip.linked_clip_id);
+            if (!peer_location.has_value()) return std::nullopt;
+            peer_clip = staged.tracks_[peer_location->track_index]
+                .clips[peer_location->clip_index];
+        }
+
+        auto allowed_shift = maximum_shift_before_blocker(
+            primary_clip, primary_location->track_index, ripple_frames);
+        if (!allowed_shift.has_value()) return std::nullopt;
+        if (peer_location.has_value()) {
+            const auto peer_shift = maximum_shift_before_blocker(
+                peer_clip, peer_location->track_index, ripple_frames);
+            if (!peer_shift.has_value()) return std::nullopt;
+            allowed_shift = std::min(*allowed_shift, *peer_shift);
+        }
+
+        if (*allowed_shift > 0) {
+            auto refreshed_primary = staged.locateClip(primary_clip.clip_id);
+            if (!refreshed_primary.has_value()) return std::nullopt;
+            auto& mutable_primary = staged.tracks_[refreshed_primary->track_index]
+                .clips[refreshed_primary->clip_index];
+            mutable_primary.timeline_start_frame -= *allowed_shift;
+            displacement_by_clip[primary_clip.clip_id] = *allowed_shift;
+            add_clip(outcome.moved_clip_ids, primary_clip.clip_id);
+            add_track(staged.tracks_[refreshed_primary->track_index].track_id);
+
+            if (peer_location.has_value()) {
+                auto refreshed_peer = staged.locateClip(peer_clip.clip_id);
+                if (!refreshed_peer.has_value()) return std::nullopt;
+                auto& mutable_peer = staged.tracks_[refreshed_peer->track_index]
+                    .clips[refreshed_peer->clip_index];
+                mutable_peer.timeline_start_frame -= *allowed_shift;
+                displacement_by_clip[peer_clip.clip_id] = *allowed_shift;
+                add_clip(outcome.moved_clip_ids, peer_clip.clip_id);
+                add_track(staged.tracks_[refreshed_peer->track_index].track_id);
+            }
+        }
+
+        if (*allowed_shift < ripple_frames) {
+            outcome.stopped_at_collision = true;
+            break;
+        }
+    }
+
+    for (auto& track : staged.tracks_) {
+        std::stable_sort(track.clips.begin(), track.clips.end(),
+            [](const TimelineClip& left, const TimelineClip& right) {
+                return left.timeline_start_frame < right.timeline_start_frame;
+            });
+        for (auto transition = track.transitions.begin();
+             transition != track.transitions.end();) {
+            const auto from_shift = displacement_by_clip.find(
+                transition->from_clip_id);
+            const auto to_shift = displacement_by_clip.find(
+                transition->to_clip_id);
+            const auto from_displacement = from_shift == displacement_by_clip.end()
+                ? std::int64_t{0} : from_shift->second;
+            const auto to_displacement = to_shift == displacement_by_clip.end()
+                ? std::int64_t{0} : to_shift->second;
+            if (from_displacement == to_displacement) {
+                ++transition;
+                continue;
+            }
+
+            const auto indexes = transitionClipIndexes(track, *transition);
+            bool keep = indexes.has_value() &&
+                indexes->second == indexes->first + 1;
+            if (keep && isOverlapTransition(transition->kind)) {
+                const auto& from = track.clips[indexes->first];
+                const auto& to = track.clips[indexes->second];
+                const auto from_end = clipTimelineEnd(from);
+                const auto overlap = from_end.has_value()
+                    ? *from_end - to.timeline_start_frame : 0;
+                const auto maximum = std::min(
+                    from.timeline_duration_frames, to.timeline_duration_frames);
+                keep = overlap > 0 && maximum > 0;
+                if (keep) transition->duration_frames = std::min(overlap, maximum);
+            } else if (keep) {
+                const auto& from = track.clips[indexes->first];
+                const auto& to = track.clips[indexes->second];
+                const auto from_end = clipTimelineEnd(from);
+                keep = from_end.has_value() && *from_end == to.timeline_start_frame;
+            }
+            if (keep) {
+                ++transition;
+            } else {
+                transition = track.transitions.erase(transition);
+            }
+        }
+        removeInvalidTransitions(track);
+    }
+
+    for (std::size_t track_index = 0;
+         track_index < staged.tracks_.size(); ++track_index) {
+        const auto& track = staged.tracks_[track_index];
+        for (std::size_t left = 0; left < track.clips.size(); ++left) {
+            for (std::size_t right = left + 1; right < track.clips.size(); ++right) {
+                if (!overlapsSameKind(
+                        track.clips[left], track.clips[right].kind,
+                        track.clips[right].timeline_start_frame,
+                        track.clips[right].timeline_duration_frames)) {
+                    continue;
+                }
+                const auto* transition = staged.transitionBetween(
+                    track_index, left, right);
+                if (right != left + 1 || transition == nullptr ||
+                    !isOverlapTransition(transition->kind)) {
+                    return std::nullopt;
+                }
+            }
+        }
+    }
+
+    staged.assertIdentityInvariants();
+    *this = std::move(staged);
+    return outcome;
+}
+
 TrimClipResult TimelineModel::trimClip(
     std::size_t track_index,
     std::size_t clip_index,
@@ -1969,7 +2200,10 @@ void TimelineModel::restore(Snapshot snapshot) {
     for (auto& track : tracks_) removeInvalidTransitions(track);
     for (auto& track : tracks_) {
         for (auto& clip : track.clips) {
-            if (clip.source_duration_frames > 0 || clip.kind == ClipKind::Text) continue;
+            if (clip.source_duration_frames > 0 ||
+                clip.kind == ClipKind::Text || clip.kind == ClipKind::Audio) {
+                continue;
+            }
             clip.source_duration_frames = sourceDurationForClip(clip, frame_rate_);
         }
     }

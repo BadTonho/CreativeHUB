@@ -1156,6 +1156,14 @@ void MainWindow::updatePlaybackControls() {
         delete_clip_action_->setEnabled(
             canPlaybackSelectedMedia() && !playback_activation_loading_);
     }
+    if (ripple_delete_clip_action_ != nullptr) {
+        const auto selected_clip_id = editor_session_.selection().active_clip_id;
+        ripple_delete_clip_action_->setEnabled(
+            selected_clip_id.has_value() &&
+            !editor_session_.selection().active_transition.has_value() &&
+            timeline_model_.locateClip(*selected_clip_id).has_value() &&
+            !playback_activation_loading_);
+    }
 }
 
 void MainWindow::updatePlaybackStatus() {

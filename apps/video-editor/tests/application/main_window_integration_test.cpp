@@ -209,6 +209,26 @@ public:
                         !render_window.shortcut_manager_->shortcut(
                             QStringLiteral("edit.paste_attributes")).isEmpty(),
                     "Copy Attributes and Paste Attributes must be registered shortcuts and unavailable before a clip is copied.");
+            require(render_window.delete_clip_action_ != nullptr &&
+                        render_window.ripple_delete_clip_action_ != nullptr &&
+                        render_window.delete_clip_action_->shortcut() ==
+                            QKeySequence(Qt::Key_Delete) &&
+                        render_window.ripple_delete_clip_action_->shortcut() ==
+                            QKeySequence(QStringLiteral("Shift+Delete")) &&
+                        !render_window.ripple_delete_clip_action_->isEnabled() &&
+                        !render_window.shortcut_manager_->shortcut(
+                            QStringLiteral("edit.ripple_delete_clip")).isEmpty(),
+                    "Ripple Delete must be a separate registered command with Shift+Delete and be disabled without a selected clip.");
+            require(render_window.shortcut_manager_->setShortcut(
+                        QStringLiteral("edit.ripple_delete_clip"),
+                        QKeySequence(QStringLiteral("Ctrl+Alt+Delete"))) &&
+                        render_window.ripple_delete_clip_action_->shortcut() ==
+                            QKeySequence(QStringLiteral("Ctrl+Alt+Delete")) &&
+                        render_window.shortcut_manager_->resetShortcut(
+                            QStringLiteral("edit.ripple_delete_clip")) &&
+                        render_window.ripple_delete_clip_action_->shortcut() ==
+                            QKeySequence(QStringLiteral("Shift+Delete")),
+                    "Ripple Delete must support shortcut customization and reset to Shift+Delete.");
             require(render_window.shortcut_manager_->setShortcut(
                         QStringLiteral("edit.copy_attributes"),
                         QKeySequence(QStringLiteral("Ctrl+Alt+C"))) &&
@@ -1312,9 +1332,11 @@ public:
             selection.active_clip_id = source_clip_id;
             selection.active_transition.reset();
             effects_window.updateAttributeClipboardActions();
+            effects_window.updatePlaybackControls();
             require(effects_window.copy_attributes_action_->isEnabled() &&
-                        !effects_window.paste_attributes_action_->isEnabled(),
-                    "Copy Attributes must be enabled for a selected Timeline clip and Paste disabled before copying.");
+                        !effects_window.paste_attributes_action_->isEnabled() &&
+                        effects_window.ripple_delete_clip_action_->isEnabled(),
+                    "Copy Attributes and Ripple Delete must be enabled for a selected Timeline clip, while Paste remains disabled before copying.");
             const bool dirty_before_copy = effects_window.project_dirty_;
             effects_window.show();
             QApplication::processEvents();
@@ -1330,6 +1352,13 @@ public:
             effects_window.copy_attributes_action_->trigger();
             require(QApplication::clipboard()->text() == QStringLiteral("normal text copy"),
                     "Ctrl+C must preserve normal text-field copy when a clip is selected.");
+            QApplication::clipboard()->clear();
+            effects_window.ripple_delete_clip_action_->trigger();
+            require(text_field.text().isEmpty() &&
+                        QApplication::clipboard()->text() ==
+                            QStringLiteral("normal text copy") &&
+                        effects_window.timeline_model_.locateClip(source_clip_id).has_value(),
+                    "Shift+Delete must preserve normal text-field cut instead of Ripple Delete.");
             text_field.hide();
             effects_window.hide();
             QApplication::processEvents();

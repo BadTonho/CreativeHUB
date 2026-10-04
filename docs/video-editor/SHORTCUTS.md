@@ -11,7 +11,8 @@ It must change in the same commit as any shortcut change.
 | Right Arrow | Next frame, crossing a clip boundary when applicable | Video Editor |
 | Ctrl + Left | Nudge the active clip one frame left when valid | Video Editor |
 | Ctrl + Right | Nudge the active clip one frame right when valid | Video Editor |
-| Delete | Delete the active timeline clip | Video Editor |
+| Delete | Delete the active timeline clip and leave later clips in place | Video Editor; editable text fields keep their normal Delete behavior |
+| Shift + Delete | Ripple-delete the active clip, closing the gap on its track until a collision | Video Editor; editable text fields keep their normal cut behavior |
 | Ctrl + K | Split the active clip at the playhead | Video Editor |
 | Ctrl + C | Copy the primary selected Timeline clip's editable attributes; focused text fields keep their normal copy behavior | Video Editor; enabled when a Timeline clip is selected |
 | Ctrl + Shift + V | Open Paste Attributes for the selected Timeline clip or multi-selection | Video Editor; enabled after a Timeline clip has been copied |

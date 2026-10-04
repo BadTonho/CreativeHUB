@@ -37,6 +37,7 @@ struct TimelineEditResult {
     std::int64_t playhead_frame = 0;
     std::optional<std::int64_t> preserved_playhead_frame;
     bool invalidate_playback = false;
+    bool stopped_at_collision = false;
 
     [[nodiscard]] bool changed() const noexcept {
         return status == EditStatus::Applied;
@@ -75,6 +76,10 @@ struct TrimClipRangeCommand {
 };
 
 struct DeleteClipCommand {
+    timeline::ClipId clip_id = 0;
+};
+
+struct RippleDeleteClipCommand {
     timeline::ClipId clip_id = 0;
 };
 
@@ -185,6 +190,7 @@ public:
     [[nodiscard]] TimelineEditResult execute(const TrimClipEdgeCommand& command);
     [[nodiscard]] TimelineEditResult execute(const TrimClipRangeCommand& command);
     [[nodiscard]] TimelineEditResult execute(const DeleteClipCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const RippleDeleteClipCommand& command);
     [[nodiscard]] TimelineEditResult execute(const UnlinkAudioCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddMediaClipCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddTextClipCommand& command);

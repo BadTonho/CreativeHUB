@@ -228,6 +228,19 @@ replaces the tracks during an active pointer gesture, the Timeline releases its
 mouse grab before resetting the gesture so the rest of the editor remains
 clickable.
 
+`Edit > Ripple Delete Selected Clip` (Shift + Delete) removes the primary
+selected clip and closes the gap by moving later clips left by the removed
+clip's Timeline duration. Only its track is compacted; other tracks keep their
+positions. A linked video/audio pair is removed together, and linked companions
+of later clips follow the same movement. If a moving clip or its companion
+reaches a non-moving clip, it moves only as far as the collision permits and
+the rest of that track's downstream sequence stays in place, leaving any
+remaining gap open. Colliding clips are preserved. Affected transitions are
+kept only when their endpoints and geometry remain valid. The command is one
+Undo/Redo edit. Ordinary Delete continues to leave the gap, and both commands
+target only the primary clip during a multi-selection. In editable text fields,
+Shift + Delete keeps its normal cut behavior.
+
 While a clip is being moved, the original occurrence remains visible with a
 dimmed treatment and a semitransparent ghost follows the calculated target
 track and frame. The ghost uses the source duration and label, and turns red

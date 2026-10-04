@@ -141,7 +141,7 @@ and its subdirectories; shared-library tests are registered in
 | Logging and system metrics | `tests/logging/logger_test.cpp`; `tests/system/system_memory_usage_test.cpp`, `system_memory_details_dialog_test.cpp`, `performance_usage_test.cpp` | The manual checklist documents checking the app log folder and platform resource values; runtime and platform results remain pending. |
 | Media import, probing, decode, and Media Pool | `tests/media/video_decoder_test.cpp`, `media_library_test.cpp`; `tests/application/application_media_services_test.cpp`; `tests/ui/media_browser_list_widget_test.cpp`, `media_browser_bin_tree_widget_test.cpp` | Packaged UI, image plugins, media paths, and codec checks remain pending; see the [roadmap](ROADMAP.md). |
 | Project data, validation, migration, autosave, and recovery | `tests/project/project_file_test.cpp`, `autosave_manager_test.cpp`; `tests/application/main_window_integration_test.cpp` | The owner reports repeatedly migrating the same long-lived `.csp` project as persisted-format versions advance. Save/reopen and invalid-project preservation worked; reopening through recovery after forgetting to save has restored the project every time it was needed. Representative project-size and detailed failure workflows remain pending. |
-| Timeline model, commands, geometry, gestures, and widgets | `tests/timeline/timeline_model_test.cpp`, `timeline_command_service_test.cpp`, `timeline_geometry_test.cpp`, `timeline_interaction_controller_test.cpp`, `timeline_trim_gesture_test.cpp`, `timeline_widget_test.cpp`, `timeline_end_buttons_test.cpp` | Manual UI validation is documented; rendering, pointer feel, scaling, and accessibility checks remain pending. |
+| Timeline model, commands, geometry, gestures, and widgets | `tests/timeline/timeline_model_test.cpp`, `timeline_command_service_test.cpp`, `timeline_geometry_test.cpp`, `timeline_interaction_controller_test.cpp`, `timeline_trim_gesture_test.cpp`, `timeline_widget_test.cpp`, `timeline_end_buttons_test.cpp`; `tests/application/main_window_integration_test.cpp` | Automated Ripple Delete coverage checks video, audio, and text tracks, linked companions, collision stops, blocker preservation, transitions, Undo/Redo, shortcut customization, text-field cut routing, and the unchanged Delete gap behavior. Follow the manual Ripple Delete checklist below; rendering, pointer feel, scaling, and accessibility checks remain pending. |
 | Playback, seeking, frame stepping, transitions, and audio | `tests/playback/video_playback_test.cpp`, `playback_worker_test.cpp`, `playback_controller_test.cpp`, `playback_deadline_scheduler_test.cpp`, `frame_step_navigation_test.cpp`, `timeline_audio_mix_test.cpp`, `audio_playback_test.cpp`, `audio_waveform_test.cpp` | Waveform extraction covers mono/stereo source metadata, distinct left/right peaks, combined Mono peaks, opposite-phase content, cancellation, invalid media, cache reuse, signature invalidation, and the 64 MiB limit. Mixer tests verify per-sample linear envelope gain alongside static clip/track gain and mute. Timeline widget coverage checks waveform and curve rendering, audio-only clips, and excludes visual clips. Driver/audio-device behavior and the approved reference workload remain in the broader manual matrix. |
 | Rendering, transforms, text, and preview metrics | `tests/rendering/transform_compositor_test.cpp`, `text_compositor_test.cpp`, `preview_performance_metrics_test.cpp`; `tests/ui/preview_widget_test.cpp`, `opengl_preview_test.cpp` (`creative-suite-main-editor-opengl-preview`) | The native OpenGL integration test checks framebuffer output and CPU fallback on a valid context; it skips only if the platform cannot create a valid context. Real-driver visual and platform checks remain manual. |
 | Experimental GPU timeline composition | `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`); `tests/rendering/gpu_timeline_composition_test.cpp` (`creative-suite-main-editor-gpu-timeline`); worker/controller/settings/metrics/main-window tests | Automated coverage present: native CPU/GPU parity with exact alpha/geometry and RGB tolerance 2, worker lifecycle, limits/cancel/failure/fallback/retry, settings persistence/live toggle/cache, transitions/keyframes/text/quality/playback and masked PNG producer/refresh. Stage 2 adds direct/RGBA parity, cross-thread lease returns, pool/retiring budget, Busy retries, direct cache/recovery, texture orientation/grayscale/resize and zero final-frame transfers. Windows native results and remaining human/platform checks: [GPU_COMPOSITION_RESULTS.md](GPU_COMPOSITION_RESULTS.md). Unavailable contexts skip; skips do not approve drivers. |
@@ -848,6 +848,21 @@ compatible destinations. Use Undo once to restore all destinations, then Redo
 to reapply them. A normal click should collapse selection to one clip; a gap
 click should clear it. Start an individual edit and confirm only the primary
 remains selected. Confirm text fields still use normal `Ctrl+C` copy.
+
+## Ripple Delete manual check
+
+In the Timeline, select a clip with following clips on its track and press
+`Shift+Delete` or choose `Edit > Ripple Delete Selected Clip`. Confirm the
+selected clip is removed, later clips on that track move left, and clips on
+other tracks stay fixed. Repeat with a linked video/audio pair and confirm its
+companion and the companions of shifted clips remain synchronized. Create a
+blocker on one companion's track so Ripple Delete stops at it; confirm the
+blocker remains intact, the movement stops at the nearest valid frame, and the
+remaining gap stays open. Use Undo and Redo once each to restore and reapply the
+whole operation. Finally, use ordinary `Delete` and confirm it leaves the
+following clips in place, and focus an editable text field to confirm
+`Shift+Delete` cuts text instead of removing a Timeline clip. Check the
+customized shortcut in `Settings > Shortcuts` and reset it to `Shift+Delete`.
 
 ## Experimental GPU timeline checklist
 

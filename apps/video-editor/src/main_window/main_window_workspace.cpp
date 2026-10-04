@@ -577,6 +577,36 @@ void MainWindow::createMenus() {
         &QAction::triggered,
         edit_workspace_->controller(),
         &ui::EditWorkspaceController::deleteActiveTimelineClip);
+    ripple_delete_clip_action_ = edit_menu->addAction("Ripple Delete Selected Clip");
+    disableDuringProjectLoad(ripple_delete_clip_action_);
+    ripple_delete_clip_action_->setObjectName(
+        QStringLiteral("edit.ripple_delete_clip"));
+    ripple_delete_clip_action_->setShortcut(QKeySequence("Shift+Delete"));
+    ripple_delete_clip_action_->setShortcutContext(Qt::WindowShortcut);
+    register_shortcut(
+        QStringLiteral("edit.ripple_delete_clip"),
+        QStringLiteral("Ripple Delete Selected Clip"),
+        ripple_delete_clip_action_);
+    ripple_delete_clip_action_->setEnabled(false);
+    connect(ripple_delete_clip_action_, &QAction::triggered, this, [this]() {
+        auto* focus = QApplication::focusWidget();
+        if (auto* line_edit = qobject_cast<QLineEdit*>(focus)) {
+            line_edit->cut();
+            return;
+        }
+        if (auto* text_edit = qobject_cast<QTextEdit*>(focus)) {
+            text_edit->cut();
+            return;
+        }
+        if (auto* plain_text_edit = qobject_cast<QPlainTextEdit*>(focus)) {
+            plain_text_edit->cut();
+            return;
+        }
+        if (edit_workspace_ != nullptr &&
+            edit_workspace_->controller() != nullptr) {
+            edit_workspace_->controller()->rippleDeleteActiveTimelineClip();
+        }
+    });
     auto* split_clip_action = edit_menu->addAction("Split Clip at Playhead");
     disableDuringProjectLoad(split_clip_action);
     split_clip_action->setShortcut(QKeySequence("Ctrl+K"));

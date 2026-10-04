@@ -259,6 +259,12 @@ enum class MoveClipResult {
 
 enum class SplitClipResult { Split, InvalidIndex, InvalidBoundary };
 enum class RemoveClipResult { Removed, InvalidIndex };
+struct RippleDeleteOutcome {
+    std::vector<ClipId> removed_clip_ids;
+    std::vector<ClipId> moved_clip_ids;
+    std::vector<TrackId> affected_track_ids;
+    bool stopped_at_collision = false;
+};
 enum class TrimClipResult { Trimmed, NoChange, InvalidIndex, InvalidRange };
 enum class AudioParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class TransformParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
@@ -323,6 +329,7 @@ public:
         std::size_t clip_index,
         std::int64_t local_frame);
     RemoveClipResult removeClip(std::size_t track_index, std::size_t clip_index);
+    [[nodiscard]] std::optional<RippleDeleteOutcome> rippleDeleteClip(ClipId clip_id);
     TrimClipResult trimClip(
         std::size_t track_index,
         std::size_t clip_index,

@@ -2436,6 +2436,51 @@ void EditWorkspaceController::deleteActiveTimelineClip() {
     }
 }
 
+void EditWorkspaceController::rippleDeleteActiveTimelineClip() {
+    const auto location = selectedTimelineClipLocation();
+    if (!location.has_value() || playback_is_loading_) return;
+    const auto clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+
+    try {
+        const auto result = execute(
+            application::RippleDeleteClipCommand{clip.clip_id});
+        if (!result.changed()) return;
+        const auto message = result.stopped_at_collision
+            ? QStringLiteral("Ripple Delete stopped at a collision; a gap remains.")
+            : QStringLiteral("Timeline clip ripple-deleted.");
+        publishCommittedEdit(result, true, true, message);
+        const auto next = selectedTimelineClipLocation();
+        if (!next.has_value()) return;
+        const auto& next_clip = timeline_model_.tracks()[next->track_index]
+            .clips[next->clip_index];
+        emit selectMediaBrowserClipRequested(next_clip.clip_id);
+        if (next_clip.kind == timeline::ClipKind::Text) {
+            emit activateTimelineClipRequested(next_clip.clip_id, 0, false, false);
+        } else {
+            const auto next_media = std::find_if(
+                session_.mediaItems().begin(), session_.mediaItems().end(),
+                [&next_clip](const application::ImportedMedia& item) {
+                    return item.metadata.source_path.lexically_normal() ==
+                               next_clip.source_path.lexically_normal() && !item.offline;
+                });
+            if (next_media != session_.mediaItems().end()) {
+                emit activateTimelineClipRequested(
+                    next_clip.clip_id, 0, false, false);
+            }
+        }
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error,
+            "timeline",
+            "ripple_delete_clip",
+            error.what(),
+            {{"clip_id", std::to_string(clip.clip_id)}});
+        emit statusMessageRequested(
+            QStringLiteral("Could not ripple-delete the timeline clip."));
+    }
+}
+
 void EditWorkspaceController::splitActiveClipAtPlayhead() {
     const auto location = selectedTimelineClipLocation();
     if (!location.has_value() || playback_is_loading_) return;

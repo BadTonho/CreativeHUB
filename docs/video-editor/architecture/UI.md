@@ -478,6 +478,14 @@ reports a short status message while the detailed cause goes to the local log.
 User-facing keyboard shortcuts are maintained in docs/video-editor/SHORTCUTS.md and must be
 updated in the same change as any shortcut change.
 
+`Edit > Ripple Delete Selected Clip` is enabled when the primary Timeline clip
+can be edited and defaults to Shift + Delete. The action removes that clip and
+its linked companion, then moves later clips on the same track left until a
+collision limits the movement. Linked companions of those clips follow; other
+tracks remain fixed. The existing Delete action continues to leave a gap. When
+an editable text field has focus, Shift + Delete routes to the field's normal
+cut command.
+
 ## Transform Inspector
 
 The Inspector exposes Position X/Y, uniform Scale, Rotation, and Opacity for

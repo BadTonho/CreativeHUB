@@ -200,8 +200,10 @@ and required manual validation pass.
   FFmpeg builds and supported platforms. Measure quality and performance,
   verify hardware-encoder combinations, and complete manual export validation
   with representative video, image, text, transition, and audio projects.
-- [ ] Add the explicit Ripple Delete / Close Gap command. Ordinary deletion
-  must keep subsequent clips in place and leave the gap.
+- [x] Add the explicit Ripple Delete / Close Gap command. Ordinary deletion
+  keeps later clips in place; Ripple Delete moves the selected track's
+  sequence, follows linked companions, and stops at collisions without removing
+  blockers. See the Timeline contract and manual regression checklist.
 - [ ] Add project creation choices for the approved 16:9 and 9:16 canvases and
   24/25/30/48/50/60 fps rates, defaulting to 16:9 at 30 fps. Preserve the
   existing behavior of `.csp` versions 1 through 13 as 16:9 when opening them;

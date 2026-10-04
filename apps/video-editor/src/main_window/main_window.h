@@ -301,6 +301,7 @@ private:
     QAction* save_project_action_ = nullptr;
     QAction* save_project_as_action_ = nullptr;
     QAction* delete_clip_action_ = nullptr;
+    QAction* ripple_delete_clip_action_ = nullptr;
     QAction* copy_attributes_action_ = nullptr;
     QAction* paste_attributes_action_ = nullptr;
     QAction* undo_action_ = nullptr;

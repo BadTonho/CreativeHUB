@@ -708,6 +708,60 @@ TimelineEditResult TimelineCommandService::execute(const DeleteClipCommand& comm
     return output;
 }
 
+TimelineEditResult TimelineCommandService::execute(
+    const RippleDeleteClipCommand& command) {
+    const auto location = session_.timeline_.locateClip(command.clip_id);
+    if (!location.has_value()) {
+        return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    }
+    const auto track_id = session_.timeline_.tracks()[location->track_index].track_id;
+    auto before = session_.captureEditState();
+    const auto outcome = session_.timeline_.rippleDeleteClip(command.clip_id);
+    if (!outcome.has_value()) {
+        return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    }
+
+    recordSuccessfulEdit(std::move(before));
+    session_.selection_.active_transition.reset();
+    session_.playhead_frame_ = 0;
+    session_.preserved_playhead_frame_.reset();
+    if (!session_.timeline_.hasClip()) {
+        session_.selection_.active_track_id.reset();
+        session_.selection_.active_clip_id.reset();
+    } else {
+        const auto remaining_track = session_.timeline_.locateTrack(track_id);
+        if (remaining_track.has_value() &&
+            session_.timeline_.clipCount(*remaining_track) > 0) {
+            const auto next_index = std::min(
+                location->clip_index,
+                session_.timeline_.clipCount(*remaining_track) - 1);
+            selectClip(timeline::ClipLocation{*remaining_track, next_index});
+        } else {
+            for (std::size_t track = 0;
+                 track < session_.timeline_.trackCount(); ++track) {
+                if (session_.timeline_.clipCount(track) > 0) {
+                    selectClip(timeline::ClipLocation{track, 0});
+                    break;
+                }
+            }
+        }
+    }
+
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = outcome->affected_track_ids;
+    output.affected_clip_ids = outcome->removed_clip_ids;
+    for (const auto clip_id : outcome->moved_clip_ids) {
+        if (std::find(output.affected_clip_ids.begin(),
+                      output.affected_clip_ids.end(), clip_id) ==
+            output.affected_clip_ids.end()) {
+            output.affected_clip_ids.push_back(clip_id);
+        }
+    }
+    output.invalidate_playback = true;
+    output.stopped_at_collision = outcome->stopped_at_collision;
+    return output;
+}
+
 TimelineEditResult TimelineCommandService::execute(const UnlinkAudioCommand& command) {
     const auto location = session_.timeline_.locateClip(command.clip_id);
     if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
