@@ -861,6 +861,9 @@ void runClipAttributeCommands() {
                 source_video_id, 0.6, true}).changed() &&
                 service.execute(application::SetClipAudioGainKeyframesCommand{
                     source_audio_id, {{0, 0.0}, {60, 1.0}, {120, 2.0}}}).changed() &&
+                service.execute(application::SetClipEffectsCommand{
+                    source_video_id, {creative_suite::effects::makeDefaultInstance(
+                        "video.grayscale")}}).changed() &&
                 service.execute(application::SetTransformPropertyCommand{
                     source_video_id, timeline::TransformProperty::PositionX, 0, 0.2}).changed() &&
                 service.execute(application::ToggleTransformKeyframeCommand{
@@ -964,6 +967,11 @@ void runClipAttributeCommands() {
     require(audio_target.changed() && audio_target.affected_clip_ids.size() == 1,
             "The clip-attribute test could not add a standalone audio destination.");
     const auto audio_clip_id = audio_target.affected_clip_ids.front();
+    const auto text_target = service.execute(application::AddTextClipCommand{
+        video_track_id, 500, 90, 30.0});
+    require(text_target.changed(),
+            "The clip-attribute test could not add a mixed-type destination.");
+    const auto text_clip_id = text_target.affected_clip_ids.front();
     const auto audio_paste = service.execute(application::ApplyClipAttributesCommand{
         audio_clip_id, attributes,
         timeline::ClipAttributeOptions{false, false, true, true, false}});
@@ -1003,6 +1011,65 @@ void runClipAttributeCommands() {
     require(incompatible.status == application::EditStatus::Rejected &&
                 service.undoCount() == history_before_invalid,
             "Effects were accepted when pasted from a video clip onto an audio-only clip.");
+
+    attributes.effects = {
+        creative_suite::effects::makeDefaultInstance("video.grayscale")};
+    const std::vector<timeline::ClipId> mixed_targets{
+        short_video_id, audio_clip_id, text_clip_id};
+    const auto history_before_batch = service.undoCount();
+    const auto batch_paste = service.execute(
+        application::ApplyClipAttributesBatchCommand{
+            mixed_targets, attributes,
+            timeline::ClipAttributeOptions{true, true, true, true, true}});
+    const auto short_video_batch_location = session.timeline().locateClip(short_video_id);
+    const auto short_audio_batch_location = session.timeline().locateClip(short_audio_id);
+    const auto audio_batch_location = session.timeline().locateClip(audio_clip_id);
+    const auto text_batch_location = session.timeline().locateClip(text_clip_id);
+    require(batch_paste.changed() && service.undoCount() == history_before_batch + 1 &&
+                short_video_batch_location.has_value() &&
+                short_audio_batch_location.has_value() &&
+                audio_batch_location.has_value() && text_batch_location.has_value(),
+            "Mixed-compatible attribute paste did not create one atomic history entry.");
+    const auto& batch_video = session.timeline().tracks()[
+        short_video_batch_location->track_index].clips[
+            short_video_batch_location->clip_index];
+    const auto& batch_video_audio = session.timeline().tracks()[
+        short_audio_batch_location->track_index].clips[
+            short_audio_batch_location->clip_index];
+    const auto& batch_audio = session.timeline().tracks()[
+        audio_batch_location->track_index].clips[audio_batch_location->clip_index];
+    const auto& batch_text = session.timeline().tracks()[
+        text_batch_location->track_index].clips[text_batch_location->clip_index];
+    require(batch_video.effects == attributes.effects &&
+                batch_video.transform.position_x == attributes.transform.position_x &&
+                batch_video_audio.audio_gain_keyframes ==
+                    std::vector<timeline::AudioGainKeyframe>{{0, 0.0}, {30, 0.5}} &&
+                batch_audio.effects.empty() && batch_audio.audio_gain == 0.6 &&
+                batch_audio.audio_muted &&
+                batch_audio.audio_gain_keyframes ==
+                    std::vector<timeline::AudioGainKeyframe>{{0, 0.0}, {60, 1.0}} &&
+                batch_text.transform.position_x == attributes.transform.position_x &&
+                batch_text.effects.empty() && batch_text.audio_gain == 1.0,
+            "Batch paste did not skip incompatible groups per destination or route linked audio attributes.");
+    const auto before_invalid_batch = session.timeline().snapshot();
+    const auto history_before_invalid_batch = service.undoCount();
+    const auto invalid_batch = service.execute(
+        application::ApplyClipAttributesBatchCommand{
+            {audio_clip_id, 999999}, attributes,
+            timeline::ClipAttributeOptions{false, false, true, false, false}});
+    require(invalid_batch.status == application::EditStatus::Rejected &&
+                invalid_batch.reason == application::EditReason::InvalidTarget &&
+                service.undoCount() == history_before_invalid_batch &&
+                session.timeline().snapshot() == before_invalid_batch,
+            "A stale batch destination caused partial attribute changes.");
+    require(service.undo().changed() &&
+                session.timeline().tracks()[short_video_batch_location->track_index]
+                    .clips[short_video_batch_location->clip_index].effects.empty() &&
+                service.redo().changed() &&
+                session.timeline().tracks()[session.timeline().locateClip(short_video_id)->track_index]
+                    .clips[session.timeline().locateClip(short_video_id)->clip_index]
+                    .effects == attributes.effects,
+            "Batch Paste Attributes did not undo and redo as a single edit.");
 }
 
 } // namespace

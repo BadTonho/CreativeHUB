@@ -58,6 +58,8 @@ public:
     void setClips(const std::vector<TimelineClip>& clips);
     void clearClips();
     void setActiveClip(std::optional<ClipLocation> location);
+    void setSelectedClipIds(const std::vector<ClipId>& clip_ids);
+    [[nodiscard]] std::vector<ClipId> selectedClipIds() const;
     void setActiveClipIndex(std::optional<std::size_t> clip_index);
     void setPlayheadFrame(std::int64_t frame_index);
     [[nodiscard]] std::int64_t playheadFrame() const noexcept;
@@ -200,7 +202,8 @@ private:
     [[nodiscard]] std::optional<std::size_t> audioGainKeyframeAt(
         const ClipLocation& location,
         const QPointF& position) const noexcept;
-    void emitSelected(const ClipLocation& location);
+    void emitSelected(const ClipLocation& location, bool collapse_multi_selection = true);
+    void collapseSelectionTo(std::optional<ClipLocation> location);
     [[nodiscard]] bool isSupportedDrop(
         const QMimeData* mime_data) const noexcept;
     [[nodiscard]] std::int64_t mediaDropDuration(
@@ -240,6 +243,7 @@ private:
     double track_row_height_ = kDefaultTrackRowHeight;
     bool snap_enabled_ = true;
     std::optional<ClipLocation> active_clip_;
+    std::vector<ClipId> selected_clip_ids_;
     std::int64_t playhead_frame_ = 0;
     bool move_requires_alt_ = false;
     bool read_only_ = false;

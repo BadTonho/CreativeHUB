@@ -13,8 +13,8 @@ It must change in the same commit as any shortcut change.
 | Ctrl + Right | Nudge the active clip one frame right when valid | Video Editor |
 | Delete | Delete the active timeline clip | Video Editor |
 | Ctrl + K | Split the active clip at the playhead | Video Editor |
-| Ctrl + C | Copy the selected Timeline clip's editable attributes; focused text fields keep their normal copy behavior | Video Editor; enabled when a Timeline clip is selected |
-| Ctrl + Shift + V | Open Paste Attributes for the selected Timeline clip | Video Editor; enabled after a Timeline clip has been copied |
+| Ctrl + C | Copy the primary selected Timeline clip's editable attributes; focused text fields keep their normal copy behavior | Video Editor; enabled when a Timeline clip is selected |
+| Ctrl + Shift + V | Open Paste Attributes for the selected Timeline clip or multi-selection | Video Editor; enabled after a Timeline clip has been copied |
 | Ctrl + Z | Undo the last successful Timeline edit | Video Editor |
 | Ctrl + Y / Ctrl + Shift + Z | Redo the last undone edit | Video Editor |
 | Ctrl + N | Create a new project | Video Editor |
@@ -33,20 +33,26 @@ requirement; in that mode, Alt + dragging moves clips and normal dragging
 seeks. Edge dragging trims, and the persistent Blade Tool changes a click into
 a split request. Playback shortcuts are disabled when no playable selected
 media is available.
+In the Selection tool, Ctrl + click adds/removes clips for Paste Attributes;
+normal click returns to a single selected clip.
 
 The Functions filter picker searches visual effects. Press Enter or choose Add
 to apply the selected filter to a selected video or image clip; with no
 compatible selection, browsing remains available and Add is disabled.
 
-`Edit > Copy Attributes` stores the selected clip's editable attributes in
-memory until another clip is copied or the editor closes. `Edit > Paste
-Attributes` opens a dialog with compatible attribute groups checked by default
-and incompatible groups disabled. The groups cover effects, transform and
-animation, audio gain and mute, audio volume envelope, and text. Applying the
-chosen groups is one Undo/Redo edit. Copying does not dirty the project. Paste
-does not copy or move the source media, clip timing, track, link, or transition;
-without a selected destination, the dialog explains that a clip must be selected
-and keeps Apply disabled.
+`Edit > Copy Attributes` stores the primary selected clip's editable attributes
+in memory until another clip is copied or the editor closes. In the Selection
+tool, Ctrl + click toggles clips into a temporary multi-selection; the last
+added clip is primary. A regular click reduces the selection to one clip.
+`Edit > Paste Attributes` opens a dialog that shows the compatible destination
+count for each group. Groups are checked by default when one or more selected
+clips support them, and applying a group skips the incompatible clips. Effects,
+transform and animation, audio gain and mute, audio volume envelope, and text
+are pasted in a single Undo/Redo edit. Copying does not dirty the project. Paste
+does not copy or move media, timing, track, link, or transition; without a
+selected destination, the dialog explains that a clip must be selected and
+keeps Apply disabled. Other editing commands continue to target the primary
+clip and reduce the group to that clip when an individual edit begins.
 
 Keyboard shortcuts can be customized in `Settings > Shortcuts`. Changes apply
 immediately and are stored as global user preferences. Clear a shortcut to

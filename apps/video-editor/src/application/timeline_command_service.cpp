@@ -1238,6 +1238,169 @@ TimelineEditResult TimelineCommandService::execute(
     return output;
 }
 
+TimelineEditResult TimelineCommandService::execute(
+    const ApplyClipAttributesBatchCommand& command) {
+    std::vector<timeline::ClipId> targets;
+    targets.reserve(command.clip_ids.size());
+    for (const auto clip_id : command.clip_ids) {
+        if (!session_.timeline_.locateClip(clip_id).has_value()) {
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+        if (std::find(targets.begin(), targets.end(), clip_id) == targets.end()) {
+            targets.push_back(clip_id);
+        }
+    }
+    if (targets.empty() || !anyAttributeSelected(command.options)) {
+        return result(EditStatus::NoChange);
+    }
+
+    const auto before = session_.captureEditState();
+    auto candidate = session_.timeline_;
+    auto output = result(EditStatus::NoChange);
+    const auto remember_affected = [&output](
+        const timeline::TimelineModel& model, timeline::ClipId clip_id) {
+        const auto location = model.locateClip(clip_id);
+        if (!location.has_value()) return;
+        const auto track_id = model.tracks()[location->track_index].track_id;
+        if (std::find(output.affected_track_ids.begin(),
+                      output.affected_track_ids.end(), track_id) ==
+            output.affected_track_ids.end()) {
+            output.affected_track_ids.push_back(track_id);
+        }
+        if (std::find(output.affected_clip_ids.begin(),
+                      output.affected_clip_ids.end(), clip_id) ==
+            output.affected_clip_ids.end()) {
+            output.affected_clip_ids.push_back(clip_id);
+        }
+    };
+
+    for (const auto clip_id : targets) {
+        const auto target_location = candidate.locateClip(clip_id);
+        if (!target_location.has_value()) {
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+        const auto target_clip = candidate.tracks()[target_location->track_index]
+            .clips[target_location->clip_index];
+        std::optional<timeline::ClipLocation> audio_location;
+        if (target_clip.kind == timeline::ClipKind::Audio) {
+            audio_location = target_location;
+        } else if (target_clip.linked_clip_id.has_value()) {
+            const auto linked = candidate.locateClip(*target_clip.linked_clip_id);
+            if (linked.has_value() &&
+                candidate.tracks()[linked->track_index].clips[linked->clip_index].kind ==
+                    timeline::ClipKind::Audio) {
+                audio_location = linked;
+            }
+        }
+        const auto compatibility = timeline::clipAttributeCompatibility(
+            command.attributes, target_clip.kind, audio_location.has_value());
+        bool target_changed = false;
+        bool linked_clip_changed = false;
+
+        if (command.options.effects && compatibility.effects) {
+            const auto mutation = candidate.setClipEffects(
+                target_location->track_index, target_location->clip_index,
+                command.attributes.effects);
+            if (mutation != timeline::EffectMutationResult::Changed &&
+                mutation != timeline::EffectMutationResult::NoChange) {
+                return result(EditStatus::Rejected, reasonForEffects(mutation));
+            }
+            target_changed |= mutation == timeline::EffectMutationResult::Changed;
+        }
+        if (command.options.transform && compatibility.transform) {
+            const auto adjusted_keyframes = keyframesForDuration(
+                command.attributes.transform, command.attributes.transform_keyframes,
+                target_clip.timeline_duration_frames);
+            const auto mutation = candidate.setClipTransformAttributes(
+                target_location->track_index, target_location->clip_index,
+                command.attributes.transform, adjusted_keyframes);
+            if (mutation != timeline::TransformParameterResult::Changed &&
+                mutation != timeline::TransformParameterResult::NoChange) {
+                return result(EditStatus::Rejected, reasonForTransform(mutation));
+            }
+            target_changed |= mutation == timeline::TransformParameterResult::Changed;
+        }
+        if (command.options.audio_gain_and_mute &&
+            compatibility.audio_gain_and_mute) {
+            const auto mutation = candidate.setClipAudio(
+                target_location->track_index, target_location->clip_index,
+                command.attributes.audio_gain, command.attributes.audio_muted);
+            if (mutation != timeline::AudioParameterResult::Changed &&
+                mutation != timeline::AudioParameterResult::NoChange) {
+                return result(EditStatus::Rejected, reasonForAudio(mutation));
+            }
+            target_changed |= mutation == timeline::AudioParameterResult::Changed;
+            if (target_clip.linked_clip_id.has_value()) {
+                const auto linked = candidate.locateClip(*target_clip.linked_clip_id);
+                if (!linked.has_value()) {
+                    return result(EditStatus::Rejected, EditReason::InvalidTarget);
+                }
+                const auto peer_mutation = candidate.setClipAudio(
+                    linked->track_index, linked->clip_index,
+                    command.attributes.audio_gain, command.attributes.audio_muted);
+                if (peer_mutation != timeline::AudioParameterResult::Changed &&
+                    peer_mutation != timeline::AudioParameterResult::NoChange) {
+                    return result(EditStatus::Rejected, reasonForAudio(peer_mutation));
+                }
+                target_changed |= peer_mutation == timeline::AudioParameterResult::Changed;
+                linked_clip_changed |= peer_mutation ==
+                    timeline::AudioParameterResult::Changed;
+            }
+        }
+        if (command.options.audio_volume_envelope &&
+            compatibility.audio_volume_envelope) {
+            if (!audio_location.has_value() ||
+                !command.attributes.audio_volume_envelope.has_value()) {
+                return result(EditStatus::Rejected, EditReason::InvalidTarget);
+            }
+            const auto& audio_clip = candidate.tracks()[audio_location->track_index]
+                .clips[audio_location->clip_index];
+            const auto envelope = audioEnvelopeForDuration(
+                *command.attributes.audio_volume_envelope,
+                audio_clip.timeline_duration_frames);
+            const auto mutation = candidate.setClipAudioGainKeyframes(
+                audio_location->track_index, audio_location->clip_index, envelope);
+            if (mutation != timeline::AudioParameterResult::Changed &&
+                mutation != timeline::AudioParameterResult::NoChange) {
+                return result(EditStatus::Rejected, reasonForAudio(mutation));
+            }
+            target_changed |= mutation == timeline::AudioParameterResult::Changed;
+            linked_clip_changed |= audio_location.has_value() &&
+                candidate.tracks()[audio_location->track_index]
+                    .clips[audio_location->clip_index].clip_id != clip_id &&
+                mutation == timeline::AudioParameterResult::Changed;
+        }
+        if (command.options.text && compatibility.text) {
+            const auto mutation = candidate.setClipText(
+                target_location->track_index, target_location->clip_index,
+                command.attributes.text);
+            if (mutation != timeline::TextParameterResult::Changed &&
+                mutation != timeline::TextParameterResult::NoChange) {
+                return result(EditStatus::Rejected,
+                    mutation == timeline::TextParameterResult::InvalidValue
+                        ? EditReason::InvalidValue : EditReason::InvalidTarget);
+            }
+            target_changed |= mutation == timeline::TextParameterResult::Changed;
+        }
+
+        if (target_changed) {
+            remember_affected(candidate, clip_id);
+            if (linked_clip_changed && target_clip.linked_clip_id.has_value()) {
+                remember_affected(candidate, *target_clip.linked_clip_id);
+            }
+        }
+    }
+
+    if (before.timeline == candidate.snapshot()) return result(EditStatus::NoChange);
+    session_.timeline_ = std::move(candidate);
+    recordSuccessfulEdit(before);
+    output.status = EditStatus::Applied;
+    output.selection = session_.selection();
+    output.playhead_frame = session_.playheadFrame();
+    output.invalidate_playback = true;
+    return output;
+}
+
 TimelineEditResult TimelineCommandService::execute(const SetClipTextCommand& command) {
     const auto location = session_.timeline_.locateClip(command.clip_id);
     if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);

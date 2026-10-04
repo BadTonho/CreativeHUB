@@ -34,6 +34,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <exception>
 #include <iterator>
@@ -435,39 +436,38 @@ void EditWorkspaceController::showPasteCopiedClipAttributesDialog(
     QWidget* dialog_parent) {
     if (!canPasteCopiedClipAttributes()) return;
 
-    std::optional<timeline::TimelineClip> target_clip;
-    bool target_has_audio_envelope = false;
-    if (!active_transition_.has_value()) {
-        const auto location = selectedAttributeClipLocation();
-        if (location.has_value() && location->track_index < timeline_model_.trackCount() &&
-            location->clip_index < timeline_model_.clipCount(location->track_index)) {
-            target_clip = timeline_model_.tracks()[location->track_index]
-                .clips[location->clip_index];
-            target_has_audio_envelope =
-                target_clip->kind == timeline::ClipKind::Audio;
-            if (!target_has_audio_envelope && target_clip->linked_clip_id.has_value()) {
-                const auto linked = timeline_model_.locateClip(*target_clip->linked_clip_id);
-                if (linked.has_value()) {
-                    target_has_audio_envelope =
-                        timeline_model_.tracks()[linked->track_index]
-                            .clips[linked->clip_index].kind == timeline::ClipKind::Audio;
-                }
+    const auto target_clip_ids = selectedAttributeClipIds();
+    std::array<int, 5> compatible_counts{};
+    for (const auto clip_id : target_clip_ids) {
+        const auto location = timeline_model_.locateClip(clip_id);
+        if (!location.has_value()) continue;
+        const auto& clip = timeline_model_.tracks()[location->track_index]
+            .clips[location->clip_index];
+        bool has_audio_envelope = clip.kind == timeline::ClipKind::Audio;
+        if (!has_audio_envelope && clip.linked_clip_id.has_value()) {
+            const auto linked = timeline_model_.locateClip(*clip.linked_clip_id);
+            if (linked.has_value()) {
+                has_audio_envelope = timeline_model_.tracks()[linked->track_index]
+                    .clips[linked->clip_index].kind == timeline::ClipKind::Audio;
             }
         }
+        const auto compatibility = timeline::clipAttributeCompatibility(
+            *copied_clip_attributes_, clip.kind, has_audio_envelope);
+        compatible_counts[0] += compatibility.effects;
+        compatible_counts[1] += compatibility.transform;
+        compatible_counts[2] += compatibility.audio_gain_and_mute;
+        compatible_counts[3] += compatibility.audio_volume_envelope;
+        compatible_counts[4] += compatibility.text;
     }
-    const auto compatibility = target_clip.has_value()
-        ? timeline::clipAttributeCompatibility(
-            *copied_clip_attributes_, target_clip->kind,
-            target_has_audio_envelope)
-        : timeline::ClipAttributeCompatibility{};
 
     QDialog dialog(dialog_parent);
     dialog.setWindowTitle(QStringLiteral("Paste Attributes"));
     dialog.setModal(true);
     auto* layout = new QVBoxLayout(&dialog);
     auto* description = new QLabel(
-        target_clip.has_value()
-            ? QStringLiteral("Choose the clip attributes to apply to the selected clip.")
+        !target_clip_ids.empty()
+            ? QStringLiteral("Choose which attributes to apply to compatible clips (%1 selected).")
+                .arg(target_clip_ids.size())
             : QStringLiteral("Select a Timeline clip to choose compatible attributes."),
         &dialog);
     description->setWordWrap(true);
@@ -475,44 +475,49 @@ void EditWorkspaceController::showPasteCopiedClipAttributesDialog(
 
     const auto add_option = [&dialog, layout](
         const QString& label, const QString& object_name,
-        bool enabled, const QString& explanation) {
-        auto* check_box = new QCheckBox(label, &dialog);
+        int compatible_count, int target_count, const QString& explanation) {
+        auto* check_box = new QCheckBox(
+            QStringLiteral("%1 (%2/%3 compatible)")
+                .arg(label).arg(compatible_count).arg(target_count),
+            &dialog);
         check_box->setObjectName(object_name);
-        check_box->setChecked(enabled);
-        check_box->setEnabled(enabled);
-        if (!enabled) check_box->setToolTip(explanation);
+        check_box->setChecked(compatible_count > 0);
+        check_box->setEnabled(compatible_count > 0);
+        if (compatible_count == 0) check_box->setToolTip(explanation);
         layout->addWidget(check_box);
         return check_box;
     };
     auto* effects = add_option(
         QStringLiteral("Effects"), QStringLiteral("pasteAttributesEffects"),
-        compatibility.effects,
+        compatible_counts[0], static_cast<int>(target_clip_ids.size()),
         QStringLiteral("Effects can be pasted between video and image clips."));
     auto* transform = add_option(
         QStringLiteral("Transform & Animation"),
-        QStringLiteral("pasteAttributesTransform"), compatibility.transform,
+        QStringLiteral("pasteAttributesTransform"), compatible_counts[1],
+        static_cast<int>(target_clip_ids.size()),
         QStringLiteral("Transform can be pasted between visual clips."));
     auto* audio = add_option(
         QStringLiteral("Audio Gain & Mute"),
         QStringLiteral("pasteAttributesAudioGain"),
-        compatibility.audio_gain_and_mute,
+        compatible_counts[2], static_cast<int>(target_clip_ids.size()),
         QStringLiteral("Audio controls can be pasted between video and audio clips."));
     auto* envelope = add_option(
         QStringLiteral("Audio Volume Envelope"),
         QStringLiteral("pasteAttributesAudioEnvelope"),
-        compatibility.audio_volume_envelope,
+        compatible_counts[3], static_cast<int>(target_clip_ids.size()),
         QStringLiteral("Both clips need an audio clip or linked audio companion."));
     auto* text = add_option(
         QStringLiteral("Text"), QStringLiteral("pasteAttributesText"),
-        compatibility.text,
+        compatible_counts[4], static_cast<int>(target_clip_ids.size()),
         QStringLiteral("Text attributes can be pasted between text clips."));
 
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Apply | QDialogButtonBox::Cancel, &dialog);
     auto* apply_button = buttons->button(QDialogButtonBox::Apply);
-    apply_button->setEnabled(compatibility.effects || compatibility.transform ||
-        compatibility.audio_gain_and_mute || compatibility.audio_volume_envelope ||
-        compatibility.text);
+    const bool any_compatible = std::any_of(
+        compatible_counts.begin(), compatible_counts.end(),
+        [](int count) { return count > 0; });
+    apply_button->setEnabled(any_compatible);
     QObject::connect(apply_button, &QPushButton::clicked,
                      &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected,
@@ -537,33 +542,59 @@ void EditWorkspaceController::showPasteCopiedClipAttributesDialog(
 application::TimelineEditResult EditWorkspaceController::applyCopiedClipAttributes(
     const timeline::ClipAttributeOptions& options) {
     if (!copied_clip_attributes_.has_value() || active_transition_.has_value()) {
-        return execute(application::ApplyClipAttributesCommand{});
+        return execute(application::ApplyClipAttributesBatchCommand{});
     }
-    const auto location = selectedAttributeClipLocation();
-    if (!location.has_value()) {
-        return execute(application::ApplyClipAttributesCommand{});
+    const auto targets = selectedAttributeClipIds();
+    if (targets.empty()) {
+        return execute(application::ApplyClipAttributesBatchCommand{});
     }
-    const auto& clip = timeline_model_.tracks()[location->track_index]
-        .clips[location->clip_index];
+    const bool has_compatible_target = std::any_of(
+        targets.begin(), targets.end(), [this, &options](timeline::ClipId clip_id) {
+            const auto location = timeline_model_.locateClip(clip_id);
+            if (!location.has_value()) return false;
+            const auto& clip = timeline_model_.tracks()[location->track_index]
+                .clips[location->clip_index];
+            bool has_audio_envelope = clip.kind == timeline::ClipKind::Audio;
+            if (!has_audio_envelope && clip.linked_clip_id.has_value()) {
+                const auto linked = timeline_model_.locateClip(*clip.linked_clip_id);
+                has_audio_envelope = linked.has_value() &&
+                    timeline_model_.tracks()[linked->track_index]
+                        .clips[linked->clip_index].kind == timeline::ClipKind::Audio;
+            }
+            const auto compatibility = timeline::clipAttributeCompatibility(
+                *copied_clip_attributes_, clip.kind, has_audio_envelope);
+            return (options.effects && compatibility.effects) ||
+                (options.transform && compatibility.transform) ||
+                (options.audio_gain_and_mute && compatibility.audio_gain_and_mute) ||
+                (options.audio_volume_envelope &&
+                 compatibility.audio_volume_envelope) ||
+                (options.text && compatibility.text);
+        });
+    if (!has_compatible_target) {
+        return application::TimelineEditResult{
+            .status = application::EditStatus::Rejected,
+            .reason = application::EditReason::InvalidTarget};
+    }
     try {
-        const auto result = execute(application::ApplyClipAttributesCommand{
-            clip.clip_id, *copied_clip_attributes_, options});
+        const auto result = execute(application::ApplyClipAttributesBatchCommand{
+            targets, *copied_clip_attributes_, options});
         if (result.changed()) {
             selected_effect_index_ = options.effects &&
                     !copied_clip_attributes_->effects.empty()
                 ? 0 : -1;
-            inspector_effect_clip_id_ = options.effects ? clip.clip_id : 0;
+            inspector_effect_clip_id_ = options.effects ? active_timeline_clip_id_.value_or(0) : 0;
             publishCommittedEdit(
-                result, false, true, QStringLiteral("Clip attributes pasted."));
+                result, false, true,
+                QStringLiteral("Clip attributes pasted to compatible clips."));
         } else if (result.status == application::EditStatus::Rejected) {
             emit statusMessageRequested(
-                QStringLiteral("Those attributes cannot be applied to this clip."));
+                QStringLiteral("Those attributes cannot be applied to the selected clips."));
         }
         return result;
     } catch (const std::exception& error) {
         logging::Logger::instance().log(
             logging::Level::Error, "timeline", "paste_clip_attributes", error.what(),
-            {{"clip_id", std::to_string(clip.clip_id)}});
+            {{"selected_clip_count", std::to_string(targets.size())}});
         emit statusMessageRequested(QStringLiteral("Could not paste clip attributes."));
         return application::TimelineEditResult{
             .status = application::EditStatus::Rejected,
@@ -737,6 +768,7 @@ void EditWorkspaceController::removeSelectedClipEffect() {
 void EditWorkspaceController::beginEffectEdit() {
     if (pending_effect_edit_batch_id_.has_value() ||
         !selectedClipSupportsEffects()) return;
+    collapseTimelineSelectionToPrimary();
     pending_effect_edit_batch_id_ = beginEditBatch();
 }
 
@@ -1251,6 +1283,36 @@ EditWorkspaceController::selectedAttributeClipLocation() const noexcept {
         return std::nullopt;
     }
     return timeline_model_.locateClip(*active_timeline_clip_id_);
+}
+
+std::vector<timeline::ClipId>
+EditWorkspaceController::selectedAttributeClipIds() const {
+    if (active_transition_.has_value() || !active_timeline_clip_id_.has_value()) {
+        return {};
+    }
+    std::vector<timeline::ClipId> ids = timeline_widget_ != nullptr
+        ? timeline_widget_->selectedClipIds()
+        : std::vector<timeline::ClipId>{};
+    std::erase_if(ids, [this](timeline::ClipId clip_id) {
+        return !timeline_model_.locateClip(clip_id).has_value();
+    });
+    if (std::find(ids.begin(), ids.end(), *active_timeline_clip_id_) == ids.end()) {
+        ids = {*active_timeline_clip_id_};
+    } else {
+        std::erase(ids, *active_timeline_clip_id_);
+        ids.push_back(*active_timeline_clip_id_);
+    }
+    return ids;
+}
+
+void EditWorkspaceController::collapseTimelineSelectionToPrimary() {
+    if (timeline_widget_ == nullptr) return;
+    if (active_timeline_clip_id_.has_value() &&
+        timeline_model_.locateClip(*active_timeline_clip_id_).has_value()) {
+        timeline_widget_->setSelectedClipIds({*active_timeline_clip_id_});
+    } else {
+        timeline_widget_->setSelectedClipIds({});
+    }
 }
 
 bool EditWorkspaceController::canPlaybackSelectedMedia() const noexcept {
@@ -1768,6 +1830,7 @@ void EditWorkspaceController::beginAudioEdit() {
         !active_timeline_clip_id_.has_value()) {
         return;
     }
+    collapseTimelineSelectionToPrimary();
     pending_audio_edit_batch_id_ = beginEditBatch();
 }
 
@@ -1818,6 +1881,7 @@ void EditWorkspaceController::beginTransformEdit() {
         !active_timeline_clip_id_.has_value()) {
         return;
     }
+    collapseTimelineSelectionToPrimary();
     pending_transform_edit_batch_id_ = beginEditBatch();
 }
 

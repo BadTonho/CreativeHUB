@@ -425,7 +425,12 @@ Clicking a gap clears the active Timeline clip and the current Media Browser
 item, pauses playback, and preserves the current playhead and last rendered
 preview frame. Dragging from a gap performs no edit and does not create a
 ghost. Existing movement between tracks remains available when the gesture
-starts on an actual clip.
+starts on an actual clip. In the Selection tool, Ctrl + click toggles a clip in
+the temporary multi-selection; the last added clip is the primary selection.
+A regular click returns to one selected clip, and clicking an empty gap clears
+the entire selection. The temporary group exists only as Paste Attributes
+destinations. Other Timeline edits continue to target the primary clip and
+collapse the group when an individual edit begins.
 
 Videos with audio show a linked Audio clip on a dedicated Audio track. The pair
 moves, trims, splits, and deletes together by default. The clip context menu's
@@ -531,21 +536,25 @@ removal, and reordering participate in Timeline Undo/Redo. The filter
 definitions and CPU RGBA processing live in the shared
 `creative-suite::effects` library without a Qt Widgets dependency. See
 [the effects contract](EFFECTS.md). `Edit > Copy Attributes` stores the
-selected Timeline clip's editable properties in an in-memory clipboard;
-`Edit > Paste Attributes` opens a modal chooser with compatible categories
-checked and incompatible categories disabled. Categories cover ordered visual
+primary Timeline clip's editable properties in an in-memory clipboard;
+`Edit > Paste Attributes` opens a modal chooser for the selected clip or
+temporary multi-selection. Each category reports how many selected clips are
+compatible. A category starts checked when at least one target supports it;
+applying it skips incompatible targets. Categories cover ordered visual
 effects, transform and animation, audio gain and mute, audio volume envelope,
 and text content/style. For linked video/audio clips, audio attributes are read
 from and applied to the audio companion while the reciprocal link is preserved.
-Keyframes keep their local frame offsets; when the destination is shorter, the
+Keyframes keep their local frame offsets; when a destination is shorter, the
 curve is clipped at its end while preserving the evaluated endpoint, and longer
-destinations hold the source's last value. Applying categories is atomic and
-creates one Undo/Redo edit. Copying does not dirty the project; clip media,
-timing, track, link, and transition attributes are never copied. `Ctrl+C`
-copies attributes when a Timeline clip is selected, while focused text fields
-retain normal text-copy behavior. `Ctrl+Shift+V` opens the chooser whenever an
-attribute snapshot exists, including when no destination is selected; in that
-case all groups and Apply are disabled with guidance.
+destinations hold the source's last value. Applying selected categories to all
+compatible destinations is atomic and creates one Undo/Redo edit. A stale
+destination rejects the whole operation. Copying does not dirty the project;
+clip media, timing, track, link, and transition attributes are never copied.
+`Ctrl+C` copies attributes from the primary Timeline clip when a clip is
+selected, while focused text fields retain normal text-copy behavior.
+`Ctrl+Shift+V` opens the chooser whenever an attribute snapshot exists,
+including when no destination is selected; in that case all groups and Apply
+are disabled with guidance.
 
 ## Transition editing
 

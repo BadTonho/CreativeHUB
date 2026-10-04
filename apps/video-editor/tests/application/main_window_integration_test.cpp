@@ -1279,6 +1279,11 @@ public:
             require(target_add.changed(),
                     "The effects clipboard integration test could not add its destination clip.");
             const auto target_clip_id = target_add.affected_clip_ids.front();
+            const auto mixed_text_target = effects_window.timeline_command_service_.execute(
+                application::AddTextClipCommand{target_track_id, 150, 90, 30.0});
+            require(mixed_text_target.changed(),
+                    "The effects clipboard integration test could not add a mixed-type destination.");
+            const auto mixed_text_clip_id = mixed_text_target.affected_clip_ids.front();
 
             auto source_effects = std::vector<creative_suite::effects::EffectInstance>{
                 creative_suite::effects::makeDefaultInstance("video.grayscale"),
@@ -1339,6 +1344,9 @@ public:
 
             selection.active_track_id = target_track_id;
             selection.active_clip_id = target_clip_id;
+            effects_window.edit_workspace_->controller()->updateTimelineState();
+            effects_window.edit_workspace_->ui().timeline->setSelectedClipIds(
+                {target_clip_id, mixed_text_clip_id});
             effects_window.updateAttributeClipboardActions();
             const auto history_before_paste =
                 effects_window.timeline_command_service_.undoCount();
@@ -1358,8 +1366,11 @@ public:
                     QStringLiteral("pasteAttributesText"));
                 auto* buttons = dialog->findChild<QDialogButtonBox*>();
                 paste_dialog_verified = effects != nullptr && effects->isEnabled() &&
-                    effects->isChecked() && transform != nullptr &&
-                    transform->isEnabled() && transform->isChecked() &&
+                    effects->isChecked() &&
+                    effects->text().contains(QStringLiteral("1/2 compatible")) &&
+                    transform != nullptr && transform->isEnabled() &&
+                    transform->isChecked() &&
+                    transform->text().contains(QStringLiteral("2/2 compatible")) &&
                     text != nullptr && !text->isEnabled() && buttons != nullptr;
                 if (transform != nullptr) transform->setChecked(false);
                 if (audio != nullptr) audio->setChecked(false);
@@ -1387,11 +1398,21 @@ public:
                         effects_window.timeline_model_.tracks()[target_location->track_index]
                                 .clips[target_location->clip_index].effects == source_effects,
                     "Paste Attributes did not integrate with Undo/Redo.");
+            require(effects_window.edit_workspace_->ui().timeline->selectedClipIds().size() == 2,
+                    "Paste Attributes did not preserve the destination multi-selection.");
+            const auto single_clip_edit =
+                effects_window.edit_workspace_->controller()->execute(
+                    application::SetClipEffectsCommand{target_clip_id, source_effects});
+            require(single_clip_edit.status == application::EditStatus::NoChange &&
+                        effects_window.edit_workspace_->ui().timeline->selectedClipIds() ==
+                            std::vector<timeline::ClipId>{target_clip_id},
+                    "Starting an individual Timeline edit did not reduce the selection to its primary clip.");
 
             selection.active_track_id.reset();
             selection.active_clip_id.reset();
             selection.selected_source_path.reset();
             selection.active_transition.reset();
+            effects_window.edit_workspace_->controller()->updateTimelineState();
             effects_window.updateAttributeClipboardActions();
             bool no_target_dialog_verified = false;
             QTimer::singleShot(0, [&no_target_dialog_verified]() {

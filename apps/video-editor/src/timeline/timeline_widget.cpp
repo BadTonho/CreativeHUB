@@ -135,6 +135,9 @@ void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
 
     tracks_ = tracks;
     if (tracks_.empty()) tracks_.push_back(TimelineTrack{1, "Video 1", 1.0, false, {}});
+    std::erase_if(selected_clip_ids_, [this](ClipId clip_id) {
+        return !locationForClip(tracks_, clip_id).has_value();
+    });
     if (active_clip_.has_value() &&
         (active_clip_->track_index >= tracks_.size() ||
          active_clip_->clip_index >= tracks_[active_clip_->track_index].clips.size())) {
@@ -206,6 +209,7 @@ void TimelineWidget::clearClips() {
     updateVerticalExtent();
     updateHorizontalExtent();
     active_clip_.reset();
+    selected_clip_ids_.clear();
     playhead_frame_ = 0;
     interaction_controller_.cancelAll();
     clearDragPreview();
@@ -222,9 +226,35 @@ void TimelineWidget::setActiveClip(std::optional<ClipLocation> location) {
         location.reset();
     }
     active_clip_ = location;
+    if (!location.has_value()) {
+        selected_clip_ids_.clear();
+    } else {
+        const auto clip_id = tracks_[location->track_index]
+            .clips[location->clip_index].clip_id;
+        if (std::find(selected_clip_ids_.begin(), selected_clip_ids_.end(), clip_id) ==
+            selected_clip_ids_.end()) {
+            selected_clip_ids_ = {clip_id};
+        }
+    }
     interaction_controller_.clearTransientPreview();
     emit trackHeaderVisualsChanged();
     emit playheadVisualChanged();
+    update();
+}
+
+std::vector<ClipId> TimelineWidget::selectedClipIds() const {
+    return selected_clip_ids_;
+}
+
+void TimelineWidget::setSelectedClipIds(const std::vector<ClipId>& clip_ids) {
+    selected_clip_ids_.clear();
+    for (const auto clip_id : clip_ids) {
+        if (locationForClip(tracks_, clip_id).has_value() &&
+            std::find(selected_clip_ids_.begin(), selected_clip_ids_.end(), clip_id) ==
+                selected_clip_ids_.end()) {
+            selected_clip_ids_.push_back(clip_id);
+        }
+    }
     update();
 }
 
@@ -1005,12 +1035,26 @@ TimelineWidget::transitionClipIndexesAt(double x, double y) const noexcept {
         tracks_, geometry(), x, y, interaction_controller_.trimGesture().preview());
 }
 
-void TimelineWidget::emitSelected(const ClipLocation& location) {
+void TimelineWidget::emitSelected(
+    const ClipLocation& location,
+    bool collapse_multi_selection) {
     active_clip_ = location;
+    if (collapse_multi_selection) collapseSelectionTo(location);
     selected_transition_.reset();
     emit transitionSelectionCleared();
     const auto& clip = tracks_[location.track_index].clips[location.clip_index];
     emit clipSelected(tracks_[location.track_index].track_id, clip.clip_id);
+}
+
+void TimelineWidget::collapseSelectionTo(
+    std::optional<ClipLocation> location) {
+    if (!location.has_value() || location->track_index >= tracks_.size() ||
+        location->clip_index >= tracks_[location->track_index].clips.size()) {
+        selected_clip_ids_.clear();
+        return;
+    }
+    selected_clip_ids_ = {
+        tracks_[location->track_index].clips[location->clip_index].clip_id};
 }
 
 void TimelineWidget::paintEvent(QPaintEvent* event) {
@@ -1104,6 +1148,9 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
             const auto& clip = displayedClip(location);
             const bool active = active_clip_.has_value() &&
                 *active_clip_ == location;
+            const bool selected = std::find(
+                selected_clip_ids_.begin(), selected_clip_ids_.end(), clip.clip_id) !=
+                selected_clip_ids_.end();
             const auto clip_id = clip.clip_id;
             const bool moving = interaction_controller_.moveActive() &&
                 interaction_controller_.movingClipId() == clip_id;
@@ -1122,10 +1169,12 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
                 painter.setBrush(QColor(
                     clip_color.red(), clip_color.green(), clip_color.blue(), 55));
             } else {
-                painter.setPen(active ? QColor("#ffcf5c") : clip_color.lighter(135));
+                painter.setPen(active ? QColor("#ffcf5c")
+                    : selected ? QColor("#70d8ce") : clip_color.lighter(135));
                 painter.setBrush(trimming
                     ? QColor("#8a5a2f")
-                    : active ? clip_color.lighter(115) : clip_color);
+                    : active ? clip_color.lighter(115)
+                    : selected ? clip_color.lighter(125) : clip_color);
             }
             painter.drawRoundedRect(rect, 3, 3);
 
@@ -2012,6 +2061,7 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         if (trackAt(event->position().y()).has_value() &&
             globalFrameAt(event->position().x()).has_value()) {
             active_clip_.reset();
+            selected_clip_ids_.clear();
             selected_transition_.reset();
             emit clipSelectionCleared();
             emit transitionSelectionCleared();
@@ -2103,9 +2153,43 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if (event->modifiers().testFlag(Qt::ControlModifier)) {
+        const auto& clicked_clip = tracks_[location->track_index]
+            .clips[location->clip_index];
+        const auto existing = std::find(
+            selected_clip_ids_.begin(), selected_clip_ids_.end(), clicked_clip.clip_id);
+        if (existing == selected_clip_ids_.end()) {
+            selected_clip_ids_.push_back(clicked_clip.clip_id);
+            emitSelected(*location, false);
+        } else {
+            const bool was_primary = active_clip_.has_value() &&
+                tracks_[active_clip_->track_index]
+                    .clips[active_clip_->clip_index].clip_id == clicked_clip.clip_id;
+            selected_clip_ids_.erase(existing);
+            if (selected_clip_ids_.empty()) {
+                active_clip_.reset();
+                selected_transition_.reset();
+                emit clipSelectionCleared();
+                emit transitionSelectionCleared();
+            } else if (was_primary) {
+                const auto next_primary = locationForClip(
+                    tracks_, selected_clip_ids_.back());
+                if (next_primary.has_value()) emitSelected(*next_primary, false);
+            }
+            emit trackHeaderVisualsChanged();
+        }
+        update();
+        event->accept();
+        return;
+    }
     const auto edge = trimEdgeAt(*location, event->position().x());
     const auto transition_indexes = transitionClipIndexesAt(
         event->position().x(), event->position().y());
+    if (transition_indexes.has_value()) {
+        collapseSelectionTo(active_clip_);
+    } else {
+        collapseSelectionTo(location);
+    }
     const auto trim_mode = edge.has_value()
         ? trimEditModeAt(*location, *edge, event->position().x())
         : ClipEdgeEditMode::Individual;

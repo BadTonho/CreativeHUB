@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <string>
 #include <optional>
+#include <type_traits>
 
 class QWidget;
 
@@ -34,6 +35,10 @@ public:
 
     template <typename Command>
     [[nodiscard]] application::TimelineEditResult execute(const Command& command) {
+        if constexpr (!std::is_same_v<std::remove_cvref_t<Command>,
+                                      application::ApplyClipAttributesBatchCommand>) {
+            collapseTimelineSelectionToPrimary();
+        }
         const auto result = command_service_.execute(command);
         publishResult(result);
         return result;
@@ -204,8 +209,11 @@ signals:
 
 private:
     void synchronizeActiveTimelineSelection() noexcept;
+    void collapseTimelineSelectionToPrimary();
     [[nodiscard]] std::optional<timeline::ClipLocation>
     selectedAttributeClipLocation() const noexcept;
+    [[nodiscard]] std::vector<timeline::ClipId>
+    selectedAttributeClipIds() const;
     [[nodiscard]] bool addEffectToClip(
         timeline::ClipId clip_id,
         const QString& effect_id);

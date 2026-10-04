@@ -418,6 +418,72 @@ void testAudioGainEnvelopeTool(QApplication& application) {
     widget.close();
 }
 
+void testTimelineMultiSelection() {
+    timeline::TimelineWidget widget;
+    widget.resize(1200, 180);
+    widget.setTimelineViewportWidth(1200);
+    widget.setZoomFactor(20.0);
+    auto first = makeClip("selection-first.mkv", 0, 60, "First");
+    auto second = makeClip("selection-second.mkv", 100, 60, "Second");
+    auto third = makeClip("selection-third.mkv", 200, 60, "Third");
+    first.clip_id = 8101;
+    second.clip_id = 8102;
+    third.clip_id = 8103;
+    const timeline::TimelineTrack track{
+        81, "Video 1", 1.0, false, {first, second, third}};
+    widget.setTracks({track});
+    widget.show();
+    const timeline::TimelineGeometry geometry(
+        {track}, QSizeF(widget.size()), widget.trackRowHeight(),
+        widget.zoomFactor(), std::nullopt, 30.0);
+    const auto first_point = geometry.clipRect(first, 0).center();
+    const auto second_point = geometry.clipRect(second, 0).center();
+    const auto third_point = geometry.clipRect(third, 0).center();
+    const auto gap_point = QPointF(
+        widget.contentXForFrame(80), geometry.trackRect(0).center().y());
+    timeline::ClipId primary_id = 0;
+    QObject::connect(
+        &widget, &timeline::TimelineWidget::clipSelected,
+        [&primary_id](timeline::TrackId, timeline::ClipId clip_id) {
+            primary_id = clip_id;
+        });
+    const auto click = [&widget](
+        const QPointF& point, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+        sendMouse(widget, QEvent::MouseButtonPress, point, Qt::LeftButton, modifiers);
+        sendMouse(widget, QEvent::MouseButtonRelease, point, Qt::NoButton, modifiers);
+    };
+
+    click(first_point);
+    require(widget.selectedClipIds() == std::vector<timeline::ClipId>{first.clip_id},
+            "A normal click did not select only one Timeline clip.");
+    click(second_point, Qt::ControlModifier);
+    require(widget.selectedClipIds() ==
+                (std::vector<timeline::ClipId>{first.clip_id, second.clip_id}) &&
+                widget.selectedClipIds().back() == second.clip_id &&
+                primary_id == second.clip_id,
+            "Ctrl+click did not add a clip and make it the primary selection.");
+    click(third_point);
+    require(widget.selectedClipIds() == std::vector<timeline::ClipId>{third.clip_id} &&
+                primary_id == third.clip_id,
+            "A normal click did not collapse the selection to the newly selected clip.");
+    click(first_point, Qt::ControlModifier);
+    require(widget.selectedClipIds() ==
+                (std::vector<timeline::ClipId>{third.clip_id, first.clip_id}) &&
+                primary_id == first.clip_id,
+            "Adding another clip did not make that clip the primary selection.");
+    click(third_point, Qt::ControlModifier);
+    require(widget.selectedClipIds() == std::vector<timeline::ClipId>{first.clip_id},
+            "Ctrl+click did not remove an already selected non-primary clip.");
+    click(first_point, Qt::ControlModifier);
+    require(widget.selectedClipIds().empty(),
+            "Ctrl+click did not clear the selection when toggling off its last clip.");
+    click(first_point);
+    click(gap_point);
+    require(widget.selectedClipIds().empty(),
+            "Clicking an empty Timeline gap did not clear the multi-selection.");
+    widget.close();
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -427,6 +493,7 @@ int main(int argc, char* argv[]) {
     try {
         testAudioWaveformRendering(application);
         testAudioGainEnvelopeTool(application);
+        testTimelineMultiSelection();
 
         timeline::TimelineWidget widget;
         require(widget.trackRowHeight() == 70.0,

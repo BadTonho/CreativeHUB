@@ -122,6 +122,7 @@ hardware and drivers. No percentage target is set from this measurement.
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
 | Effects UI | Four draggable visual filters, retained Text and transition entries, category filtering and stable IDs; Functions search and Add/Cancel/Enter behavior with Shift + Space; Timeline drop target compatibility; dedicated Effects Inspector tab with compatible-selection guidance, per-effect checkbox and dimmed disabled rows, editable parameters while disabled, stack order/removal; one-command enable-state Undo/Redo; Preview and offline export both skip disabled filters through the shared CPU library |
 | Clip attribute copy/paste | `tests/ui/edit_workspace_controller_test.cpp` covers complete in-memory attribute snapshots, effects including clearing with an empty source stack, transform/keyframes, clip audio gain/mute, text content/style, compatibility rejection, no dirty/history change on copy, and a single undoable paste; `tests/timeline/timeline_command_service_test.cpp` covers atomic group application, linked audio pairs, standalone audio destinations, local keyframe offsets, endpoint clipping for shorter clips, unchanged frame positions and held values for longer clips, rejection without partial mutation; `tests/application/main_window_integration_test.cpp` covers Ctrl+C/Ctrl+Shift+V registration, shortcut customization, text-field copy behavior, modal category defaults/disabled groups, no-target guidance, Apply, and Undo/Redo |
+| Multi-clip Paste Attributes | `tests/timeline/timeline_widget_test.cpp` covers Ctrl+click toggling, selection order/primary behavior, normal-click collapse and gap clearing; `tests/timeline/timeline_command_service_test.cpp` covers atomic multi-destination paste, per-target compatibility skipping, linked video/audio routing, stale-target rejection without partial changes, and one-step Undo/Redo; `tests/application/main_window_integration_test.cpp` checks category compatible counts and mixed-selection defaults |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |
 
 ## Behavior-to-test source map
@@ -834,6 +835,19 @@ changes one of these behaviors.
   media or machine-specific paths.
 - Update this matrix when a new subsystem, user-facing rule, or keyboard
   shortcut is introduced.
+
+## Multi-clip Paste Attributes manual check
+
+Select a source clip and press `Ctrl+C`. In the Selection tool, Ctrl+click
+several destinations of different types; confirm the last added clip is
+highlighted as primary. Open `Edit > Paste Attributes` with `Ctrl+Shift+V` and
+check that each category shows its compatible destination count, categories
+with at least one compatible clip start checked, and categories with no
+compatible clips are disabled. Apply a category and confirm it changes only
+compatible destinations. Use Undo once to restore all destinations, then Redo
+to reapply them. A normal click should collapse selection to one clip; a gap
+click should clear it. Start an individual edit and confirm only the primary
+remains selected. Confirm text fields still use normal `Ctrl+C` copy.
 
 ## Experimental GPU timeline checklist
 
