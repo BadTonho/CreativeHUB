@@ -1,5 +1,6 @@
 #include "image_editor_window.h"
 #include "image_export_dialog.h"
+#include "image_export_controller.h"
 #include "image_export_worker.h"
 
 #include <QAction>
@@ -398,6 +399,34 @@ int main(int argc, char* argv[]) {
         !unchanged_destination.open(QIODevice::ReadOnly) ||
         unchanged_destination.readAll() != previous_destination) {
         std::cerr << "The export worker replaced a destination after cancellation.\n";
+        return 1;
+    }
+
+    image_editor::ImageDocumentSession controller_session;
+    QString controller_error;
+    if (!controller_session.openImage(source_path, &controller_error)) {
+        std::cerr << "Could not create the export controller snapshot: "
+                  << controller_error.toStdString() << ".\n";
+        return 1;
+    }
+    const auto controller_snapshot = controller_session.exportSnapshot();
+    const QString controller_output = temporary.filePath(
+        QStringLiteral("controller-export.png"));
+    const auto controller_result = image_editor::ImageExportController::run(
+        nullptr, controller_snapshot, controller_output);
+    if (controller_result.status != image_editor::ImageExportStatus::Succeeded ||
+        !controller_result.error.isEmpty() || !QFile::exists(controller_output)) {
+        std::cerr << "The export controller did not complete and report a successful export.\n";
+        return 1;
+    }
+
+    const QString controller_failure_output = temporary.filePath(
+        QStringLiteral("missing-controller-directory/export.png"));
+    const auto controller_failure = image_editor::ImageExportController::run(
+        nullptr, controller_snapshot, controller_failure_output);
+    if (controller_failure.status != image_editor::ImageExportStatus::Failed ||
+        controller_failure.error.isEmpty() || QFile::exists(controller_failure_output)) {
+        std::cerr << "The export controller did not return the output failure.\n";
         return 1;
     }
 

@@ -1,5 +1,7 @@
 #include "image_export_worker.h"
 
+#include <utility>
+
 namespace image_editor {
 
 ImageExportWorker::ImageExportWorker(

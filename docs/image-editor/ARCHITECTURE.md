@@ -108,6 +108,13 @@ cancellation, progress, and atomic file writing. This split keeps rendering
 and file encoding independent of session history while preserving the session
 and export entry points used by the UI.
 
+`ImageExportController` in `ui/export/` owns the UI-side export job lifecycle:
+it runs `ImageExportWorker` on a background thread, connects cancellation and
+progress, waits for safe thread completion, and returns the core export result.
+`ImageEditorWindow` keeps destination selection, JPEG preferences, Quick Export
+scope, snapshot capture, and user-facing status or error reporting. The shared
+progress dialog remains in `ui/dialogs/` because image import also uses it.
+
 ## Runtime boundaries
 
 - `ImageDocumentSession` owns either a decoded, linked source image or a

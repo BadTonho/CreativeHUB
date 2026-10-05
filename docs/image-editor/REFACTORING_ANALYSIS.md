@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos e estado por aba implementados**.
+Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos, estado por aba e execução da exportação de imagem implementados**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -301,6 +301,18 @@ alternância de abas, além da cobertura existente de fechamento e recuperação
 O aplicativo e o alvo de UI compilaram em Release no Windows; o teste focado de
 abas passou, a suíte CTest passou em 70/70 e `git diff --check` passou em
 2026-10-05. A verificação visual permanece com o mantenedor.
+
+A execução da exportação foi movida de `ImageEditorWindow` para
+`ImageExportController`, em `ui/export/`. O controller coordena worker, thread,
+diálogo de progresso, cancelamento e encerramento seguro; a janela continua
+responsável por destino, preferências JPEG, escopo, snapshot e mensagens ao
+usuário. O worker agora fica ao lado do controller. Os testes existentes de
+JPEG/PNG, Quick Export, progresso e cancelamento foram mantidos, com cobertura
+direta do resultado de sucesso e falha do controller.
+O aplicativo e os alvos de UI/exportação compilaram em Release no Windows; o
+teste focado de exportação passou, a suíte CTest configurada passou em 12/12 e
+`git diff --check` passou em 2026-10-05. A inspeção visual permanece com o
+mantenedor.
 
 ## Referências
 

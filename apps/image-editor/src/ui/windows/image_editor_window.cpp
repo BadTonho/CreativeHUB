@@ -3,7 +3,7 @@
 #include "image_canvas.h"
 #include "image_document_store.h"
 #include "image_export_dialog.h"
-#include "image_export_worker.h"
+#include "image_export_controller.h"
 #include "canvas_size_dialog.h"
 #include "new_canvas_dialog.h"
 #include "shortcut_settings_dialog.h"
@@ -2677,47 +2677,15 @@ void ImageEditorWindow::exportImage(bool quick_export) {
         : ImageExportScope::Composite;
 
     const ImageExportSnapshot snapshot = activeSession().exportSnapshot();
-    auto cancellation_requested = std::make_shared<std::atomic_bool>(false);
-    QThread worker_thread;
-    auto* worker = new ImageExportWorker(
-        snapshot, output, options, cancellation_requested);
-    worker->moveToThread(&worker_thread);
+    const ImageExportResult result = ImageExportController::run(
+        this, snapshot, output, options);
 
-    ImageExportProgressDialog progress_dialog(this);
-    bool succeeded = false;
-    bool cancelled = false;
-    QString export_error;
-    connect(&worker_thread, &QThread::started,
-            worker, &ImageExportWorker::run);
-    connect(worker, &ImageExportWorker::phaseChanged,
-            &progress_dialog, &ImageExportProgressDialog::setPhaseText);
-    connect(&progress_dialog, &ImageExportProgressDialog::cancelRequested,
-            this, [cancellation_requested]() {
-                cancellation_requested->store(true, std::memory_order_relaxed);
-            });
-    connect(worker, &ImageExportWorker::finished, this,
-            [&progress_dialog, &succeeded, &cancelled, &export_error](
-                bool completed, bool was_cancelled, const QString& error) {
-                succeeded = completed;
-                cancelled = was_cancelled;
-                export_error = error;
-                progress_dialog.finish();
-            });
-    connect(worker, &ImageExportWorker::finished,
-            &worker_thread, &QThread::quit, Qt::DirectConnection);
-    connect(&worker_thread, &QThread::finished,
-            worker, &QObject::deleteLater);
-
-    worker_thread.start();
-    progress_dialog.exec();
-    worker_thread.wait();
-
-    if (cancelled) {
+    if (result.status == ImageExportStatus::Cancelled) {
         statusBar()->showMessage(QStringLiteral("Image export cancelled"), 3000);
         return;
     }
-    if (!succeeded) {
-        reportError(QStringLiteral("export_image"), export_error, output);
+    if (result.status != ImageExportStatus::Succeeded) {
+        reportError(QStringLiteral("export_image"), result.error, output);
         return;
     }
     statusBar()->showMessage(QStringLiteral("Image exported"), 3000);
