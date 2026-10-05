@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha, Seleção de Área, Seleção de Objetos e Formas implementadas**.
+Status: **análise provisória; extrações de Pintura, Borracha, Seleção de Área, Seleção de Objetos, Formas e Texto implementadas**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -23,7 +23,7 @@ arquivos grandes:
 
 | Área | Responsabilidades atuais | Oportunidade |
 | --- | --- | --- |
-| `ui/canvas/image_canvas.cpp` e `.h` | Desenho e navegação do canvas, conversão de coordenadas, recorte, edição de texto e roteamento de eventos | Continuar delegando o estado e o comportamento das ferramentas a módulos próprios; texto ainda permanece no canvas até uma etapa separada. |
+| `ui/canvas/image_canvas.cpp` e `.h` | Desenho e navegação do canvas, conversão de coordenadas, recorte, hospedagem dos widgets das ferramentas e roteamento de eventos | Continuar delegando o estado e o comportamento das ferramentas a módulos próprios, sem mover a apresentação do documento ou a conversão de coordenadas para cada ferramenta. |
 | `ui/windows/image_editor_window.cpp` e `.h` | Layout da janela, ativação e opções das ferramentas, ações e atalhos, abas de documentos, abrir/salvar, importar/exportar, confirmação de recuperação, registro de erros e fluxo de imagens vinculadas | Extrair responsabilidades coesas quando forem alteradas, mantendo a janela principal responsável por montar e coordenar a aplicação. |
 | `core/document/image_document_session.cpp` e `.h` | Ciclo de vida do documento, recursos de imagem, composição e prévias, operações de edição, gerenciamento de camadas/grupos/máscaras, seleção e Desfazer/Refazer | Manter uma sessão como fachada do estado e do histórico do documento e mover renderização e operações de domínio para módulos internos focados. |
 | `core/document/image_document_store.cpp` e `.h` | Serialização `.cimg`, validação, migrações, caminhos e serialização de recuperação | Avaliar auxiliares específicos do formato apenas quando houver necessidade; preservar as regras de compatibilidade e gravação atômica como uma fronteira testada. |
@@ -90,6 +90,13 @@ geometria proposta. A janela continua sincronizando a seleção de objetos e
 camadas e confirma a geometria na sessão do documento; a ferramenta não altera
 o documento.
 
+`TextTool` mantém a criação da caixa, a prévia do gesto e o `QPlainTextEdit`
+hospedado como filho do canvas. Também cuida do crescimento e da geometria do
+editor, da renderização dos objetos de texto e das teclas de confirmação e
+cancelamento. `ImageCanvas` converte as posições, fornece o contexto de tamanho
+e zoom e encaminha os sinais públicos existentes; a janela continua dona das
+opções compartilhadas e confirma o resultado na sessão do documento.
+
 As interfaces das ferramentas devem usar contextos leves e resultados/eventos
 para prévia e confirmação. Evite copiar buffers de imagem completos entre
 interface e núcleo durante eventos comuns do mouse.
@@ -132,7 +139,9 @@ montando os widgets e traduzindo ações da aplicação em operações do docume
    a janela/sessão confirmar as alterações no histórico do documento.
 5. Concluída: extrair a criação e a prévia de Formas para `ShapeTool`, mantendo
    as configurações compartilhadas na janela e a confirmação pela sessão.
-6. Extrair Texto, incluindo suas interações específicas de prévia e edição.
+6. Concluída: extrair Texto para `ui/tools/text/`, incluindo criação de caixas,
+   prévia, editor ao vivo e renderização, sem alterar os sinais do canvas nem o
+   fluxo de confirmação pela janela.
 7. Separar renderização e operações do documento de `ImageDocumentSession`
    quando uma mudança de funcionalidade oferecer uma divisão clara.
 8. Rever as divisões da janela principal e da persistência apenas quando seus
@@ -189,6 +198,19 @@ e dos alvos de UI/exportação passou no Windows; os cinco testes focados do
 Image Editor e a suíte CTest completa passaram (5/5 e 70/70) em 2026-10-05.
 `git diff --check` também passou. A validação visual manual permanece com o
 mantenedor.
+
+A extração de Texto moveu a criação de caixas, a prévia, o editor inline,
+crescimento e geometria, tratamento de teclas e renderização para `TextTool`.
+`ImageCanvas` continua fornecendo coordenadas e contexto visual, hospedando o
+editor como filho e encaminhando os sinais públicos; a janela mantém opções e
+confirmações no histórico. `testTextToolState` cobre criação por clique e
+arraste, prévia, estilo, confirmação e cancelamento. A cobertura de integração
+existente continua verificando foco, digitação, seleção, crescimento, edição de
+texto existente, histórico e publicação. A verificação visual manual fica com
+o mantenedor. A compilação Release do aplicativo e dos alvos de UI/exportação
+passou no Windows. Os testes focados do Image Editor passaram em 6/6, incluindo
+o teste de texto nativo; a suíte CTest completa passou em 70/70 em 2026-10-05.
+`git diff --check` passou.
 
 ## Referências
 

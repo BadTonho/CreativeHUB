@@ -37,15 +37,20 @@ persistence, and recovery.
   and renders transformed previews. `ImageEditorWindow` coordinates the active
   layer, requests transient compositions from the session, and commits released
   geometry through the document history. The tool also provides hit testing to
-  the canvas for entering text editing; text editing itself stays with the
-  canvas.
+  the canvas for entering text editing; `TextTool` owns the inline editing UI.
 - `src/ui/tools/shapes/shape_tool.*` owns the in-progress shape gesture,
   Shift-constrained geometry, invalid-geometry rejection, and shape preview.
   Its shared painter renders both the preview and committed shape overlays.
   `ImageCanvas` maps pointer positions to image coordinates and emits the
   existing `shapeCreated` signal; `ImageEditorWindow` continues to own shared
   shape settings and commits completed shapes through the document session.
-  Tool families use subdirectories such as `brush/`, `selection/`, `shapes/`,
+- `src/ui/tools/text/text_tool.*` owns text-frame creation, the hosted inline
+  editor, its live layout and keyboard handling, and committed-text rendering.
+  It reports start, commit, and cancellation through internal signals;
+  `ImageCanvas` maps pointer coordinates, supplies the image/view context, and
+  forwards its stable public signals. `ImageEditorWindow` retains shared text
+  options and commits confirmed edits through the document session.
+- Tool families use subdirectories such as `brush/`, `selection/`, `shapes/`,
   and `text/` to keep the tools area navigable as it grows.
 
 ## Linked image resources and geometry

@@ -4,25 +4,13 @@
 #include "../transparency_checkerboard.h"
 
 #include <QEvent>
-#include <QApplication>
-#include <QAbstractTextDocumentLayout>
-#include <QCoreApplication>
 #include <QCursor>
-#include <QFrame>
-#include <QFontMetricsF>
 #include <QKeyEvent>
-#include <QMetaObject>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPlainTextEdit>
-#include <QScrollBar>
-#include <QTextBlock>
 #include <QPen>
-#include <QTextLayout>
-#include <QTextCursor>
-#include <QTextOption>
-#include <QSignalBlocker>
 #include <QWheelEvent>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -37,26 +25,20 @@ namespace {
 
 } // namespace
 
-ImageCanvas::ImageCanvas(QWidget* parent) : QWidget(parent) {
+ImageCanvas::ImageCanvas(QWidget* parent) : QWidget(parent), text_tool_(this) {
     setAcceptDrops(true);
     setFocusPolicy(Qt::StrongFocus);
     setMinimumSize(240, 180);
     setMouseTracking(true);
     setAutoFillBackground(false);
-    text_editor_ = new QPlainTextEdit(this);
-    text_editor_->setObjectName(QStringLiteral("imageCanvasTextEditor"));
-    text_editor_->setFrameShape(QFrame::NoFrame);
-    text_editor_->setContentsMargins(0, 0, 0, 0);
-    text_editor_->document()->setDocumentMargin(1.0);
-    text_editor_->setLineWrapMode(QPlainTextEdit::WidgetWidth);
-    text_editor_->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    text_editor_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    text_editor_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    text_editor_->installEventFilter(this);
-    text_editor_->hide();
-    connect(text_editor_, &QPlainTextEdit::textChanged, this, [this]() {
-        updateTextEditorContentAndGeometry();
-    });
+    connect(&text_tool_, &TextTool::textCommitted,
+            this, &ImageCanvas::textCommitted);
+    connect(&text_tool_, &TextTool::textEditingStarted,
+            this, &ImageCanvas::textEditingStarted);
+    connect(&text_tool_, &TextTool::textEditingCancelled,
+            this, &ImageCanvas::textEditingCancelled);
+    connect(&text_tool_, &TextTool::repaintRequested, this,
+            qOverload<>(&ImageCanvas::update));
 }
 
 void ImageCanvas::setImage(QImage image, bool resetView) {
@@ -156,7 +138,7 @@ void ImageCanvas::setShapeCreationMode(bool enabled) {
 }
 
 void ImageCanvas::setTextCreationMode(bool enabled) {
-    if (!enabled && text_editor_ != nullptr && text_editor_->isVisible()) {
+    if (!enabled && text_tool_.editing()) {
         finishTextEditing(true);
     }
     text_creation_mode_ = enabled;
@@ -169,7 +151,7 @@ void ImageCanvas::setTextCreationMode(bool enabled) {
         object_selection_mode_ = false;
     }
     static_cast<void>(shape_tool_.cancelGesture());
-    creating_text_frame_ = false;
+    static_cast<void>(text_tool_.cancelFrame());
     clearObjectInteraction();
     transient_image_ = {};
     crop_selection_ = {};
@@ -211,7 +193,7 @@ void ImageCanvas::setAreaSelectionMode(bool enabled) {
     static_cast<void>(area_selection_tool_.cancelGesture());
     selecting_crop_ = false;
     static_cast<void>(shape_tool_.cancelGesture());
-    creating_text_frame_ = false;
+    static_cast<void>(text_tool_.cancelFrame());
     clearObjectInteraction();
     transient_image_ = {};
     resetBrushTools(false);
@@ -271,41 +253,12 @@ void ImageCanvas::setShapeStyle(const ImageShapeData& style) {
 }
 
 void ImageCanvas::setTextStyle(const ImageTextData& style) {
-    text_style_ = style;
-    if (text_editor_ != nullptr && text_editor_->isVisible()) {
-        const QString content = text_editing_.content;
-        const QString id = text_editing_.id;
-        const QPointF position = text_editing_.position;
-        const qreal box_width = text_editing_.box_width;
-        text_editing_ = style;
-        text_editing_.id = id;
-        text_editing_.content = content;
-        text_editing_.position = position;
-        text_editing_.box_width = box_width;
-        applyTextEditorStyle();
-        updateTextEditorContentAndGeometry();
-    }
+    text_tool_.setStyle(style);
     update();
 }
 
 void ImageCanvas::beginTextEditing(const ImageTextData& text, bool existing) {
-    if (text_editor_ == nullptr) return;
-    if (text_editor_->isVisible()) finishTextEditing(true);
-    text_editing_ = text;
-    text_editing_existing_ = existing;
-    text_editing_initial_box_width_ = std::max<qreal>(1.0, text.box_width);
-    const QSignalBlocker blocker(text_editor_);
-    text_editor_->setPlainText(text.content);
-    applyTextEditorStyle();
-    text_editor_->show();
-    text_editor_->raise();
-    updateTextEditorGeometry();
-    if (auto* application = QCoreApplication::instance()) {
-        application->installEventFilter(this);
-    }
-    text_editor_->setFocus(Qt::OtherFocusReason);
-    text_editor_->moveCursor(existing ? QTextCursor::Start : QTextCursor::End);
-    emit textEditingStarted(text_editing_, existing);
+    text_tool_.beginEditing(text, existing, textToolContext());
 }
 
 void ImageCanvas::commitTextEditing() {
@@ -313,7 +266,7 @@ void ImageCanvas::commitTextEditing() {
 }
 
 bool ImageCanvas::textEditing() const noexcept {
-    return text_editor_ != nullptr && text_editor_->isVisible();
+    return text_tool_.editing();
 }
 
 void ImageCanvas::setObjectPlacements(QVector<ImageObjectPlacement> placements,
@@ -377,6 +330,10 @@ QRectF ImageCanvas::imageTargetRect() const {
     return {origin, scaled};
 }
 
+TextToolContext ImageCanvas::textToolContext() const {
+    return {image_.size(), imageTargetRect(), zoom_};
+}
+
 QRect ImageCanvas::cropToImageCoordinates(const QRectF& selection) const {
     const QRectF target = imageTargetRect();
     const QRectF clipped = selection.normalized().intersected(target);
@@ -431,46 +388,12 @@ void ImageCanvas::clearObjectInteraction() {
     object_selection_tool_.clearGesture();
 }
 
-void ImageCanvas::drawTextOverlay(QPainter& painter,
-                                  const ImageTextData& text,
-                                  int opacity) const {
-    const QRectF target = imageTargetRect();
-    painter.save();
-    painter.setClipRect(target);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    painter.setOpacity(std::clamp(opacity, 0, 100) / 100.0);
-    painter.translate(target.topLeft());
-    painter.scale(zoom_, zoom_);
-    QFont font(text.font_family);
-    font.setPixelSize(text.font_pixel_size);
-    painter.setFont(font);
-    painter.setPen(text.color);
-    QTextOption option;
-    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    option.setAlignment(text.alignment == ImageTextAlignment::Center
-        ? Qt::AlignHCenter : (text.alignment == ImageTextAlignment::Right
-            ? Qt::AlignRight : Qt::AlignLeft));
-    QTextLayout layout(text.content, font);
-    layout.setTextOption(option);
-    layout.beginLayout();
-    qreal height = 0.0;
-    while (true) {
-        QTextLine line = layout.createLine();
-        if (!line.isValid()) break;
-        line.setLineWidth(text.box_width);
-        line.setPosition(QPointF(0.0, height));
-        height += line.height();
-    }
-    layout.endLayout();
-    layout.draw(&painter, text.position);
-    painter.restore();
-}
-
 void ImageCanvas::drawObjectOverlay(QPainter& painter,
                                     const ImageObjectPlacement& object) const {
     const auto& operation = object.operation;
     if (operation.kind == OperationKind::Text) {
-        drawTextOverlay(painter, operation.text, object.layer_opacity);
+        TextTool::paintText(painter, operation.text,
+                            textToolContext(), object.layer_opacity);
         return;
     }
     if (operation.kind == OperationKind::Shape) {
@@ -619,135 +542,12 @@ void ImageCanvas::resetBrushTools(bool clear_preview_notification) {
     transient_image_ = {};
 }
 
-void ImageCanvas::applyTextEditorStyle() {
-    if (text_editor_ == nullptr) return;
-    QFont font(text_editing_.font_family);
-    font.setPixelSize(std::max(1, qRound(text_editing_.font_pixel_size * zoom_)));
-    text_editor_->setFont(font);
-    text_editor_->setStyleSheet(QStringLiteral(
-        "QPlainTextEdit { color: %1; background: rgba(255,255,255,24); "
-        "border: 1px solid #299bea; padding: 0px; "
-        "selection-background-color: #359bdc; selection-color: #ffffff; }")
-        .arg(text_editing_.color.name(QColor::HexArgb)));
-    QTextOption option = text_editor_->document()->defaultTextOption();
-    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    option.setAlignment(text_editing_.alignment == ImageTextAlignment::Center
-        ? Qt::AlignHCenter : (text_editing_.alignment == ImageTextAlignment::Right
-            ? Qt::AlignRight : Qt::AlignLeft));
-    text_editor_->document()->setDefaultTextOption(option);
-}
-
 void ImageCanvas::updateTextEditorGeometry() {
-    if (text_editor_ == nullptr || !text_editor_->isVisible() || image_.isNull()) return;
-    const QRectF target = imageTargetRect();
-    const QRectF text_bounds = imageTextBounds(text_editing_);
-    const qreal minimum_height = text_editing_.font_pixel_size * 1.5;
-    const qreal height = text_editing_.content.isEmpty()
-        ? minimum_height : std::max(minimum_height, text_bounds.height());
-    const int width = std::max(24, qRound(text_editing_.box_width * zoom_));
-    const int left = qRound(target.left() + text_editing_.position.x() * zoom_);
-    const int top = qRound(target.top() + text_editing_.position.y() * zoom_);
-    QFont font(text_editing_.font_family);
-    font.setPixelSize(std::max(1, qRound(text_editing_.font_pixel_size * zoom_)));
-    const bool keep_focus = text_editor_->hasFocus();
-    const QTextCursor cursor = text_editor_->textCursor();
-    if (text_editor_->font() != font) text_editor_->setFont(font);
-    // Lay out at the new width before measuring height. The native editor's
-    // rounded font size and fixed screen-pixel margins can wrap differently
-    // from the canvas renderer, especially below 100% zoom.
-    QRect editor_geometry(left, top, width, text_editor_->height());
-    if (text_editor_->geometry() != editor_geometry) {
-        text_editor_->setGeometry(editor_geometry);
-    }
-    qreal native_height = 0.0;
-    auto* document_layout = text_editor_->document()->documentLayout();
-    for (QTextBlock block = text_editor_->document()->begin(); block.isValid();
-         block = block.next()) {
-        native_height += document_layout->blockBoundingRect(block).height();
-    }
-    const qreal vertical_inset = text_editor_->height() - text_editor_->viewport()->height()
-        + 2.0 * text_editor_->document()->documentMargin();
-    const int pixel_height = std::max({24, qRound(height * zoom_),
-        static_cast<int>(std::ceil(native_height + vertical_inset))});
-    editor_geometry.setHeight(pixel_height);
-    if (text_editor_->geometry() != editor_geometry) {
-        text_editor_->setGeometry(editor_geometry);
-    }
-    // The growing box contains every line, so retain the start of the text in
-    // view after a temporary wrap during the input event.
-    text_editor_->verticalScrollBar()->setValue(0);
-    text_editor_->horizontalScrollBar()->setValue(0);
-    if (keep_focus) {
-        if (!text_editor_->hasFocus()) text_editor_->setFocus(Qt::OtherFocusReason);
-        // Relayout after a resize or font change must not discard the caret or
-        // selection placed by the latest mouse or keyboard input.
-        if (text_editor_->textCursor() != cursor) text_editor_->setTextCursor(cursor);
-    }
-}
-
-void ImageCanvas::updateTextEditorContentAndGeometry() {
-    if (text_editor_ == nullptr || !text_editor_->isVisible() || image_.isNull()) return;
-
-    text_editing_.content = text_editor_->toPlainText();
-
-    QFont font(text_editing_.font_family);
-    font.setPixelSize(std::clamp(text_editing_.font_pixel_size, 1, 1024));
-    const QFontMetricsF metrics(font);
-    const QFontMetricsF native_metrics(text_editor_->font(), text_editor_->viewport());
-    qreal content_width = 0.0;
-    qreal native_content_width = 0.0;
-    const QStringList lines = text_editing_.content.split(QLatin1Char('\n'),
-                                                          Qt::KeepEmptyParts);
-    for (const QString& line : lines) {
-        content_width = std::max(content_width, metrics.horizontalAdvance(line));
-        native_content_width = std::max(native_content_width,
-            native_metrics.horizontalAdvance(line));
-    }
-
-    const qreal available_width = std::max<qreal>(1.0,
-        image_.width() - text_editing_.position.x());
-    const qreal minimum_width = std::min(text_editing_initial_box_width_, available_width);
-    constexpr qreal kTextEditorHorizontalInset = 4.0;
-    const qreal native_inset = text_editor_->width() - text_editor_->viewport()->width()
-        + 2.0 * text_editor_->document()->documentMargin()
-        + text_editor_->cursorWidth() + 2.0;
-    const qreal desired_width = text_editing_.content.isEmpty() ? minimum_width
-        : std::max({minimum_width, content_width + kTextEditorHorizontalInset,
-            (native_content_width + native_inset) / zoom_});
-    text_editing_.box_width = std::clamp(desired_width, minimum_width, available_width);
-
-    // Resizing QPlainTextEdit synchronously from its textChanged signal can
-    // interrupt its active layout/key handling. Apply the latest geometry
-    // after the input event finishes instead.
-    if (!text_editor_geometry_update_pending_) {
-        text_editor_geometry_update_pending_ = true;
-        QMetaObject::invokeMethod(this, [this]() {
-            text_editor_geometry_update_pending_ = false;
-            updateTextEditorGeometry();
-            if (text_editor_ != nullptr && text_editor_->isVisible()) {
-                text_editor_->viewport()->repaint();
-            }
-        }, Qt::QueuedConnection);
-    }
-    update();
+    text_tool_.setViewContext(textToolContext());
 }
 
 void ImageCanvas::finishTextEditing(bool commit) {
-    if (text_editor_ == nullptr || !text_editor_->isVisible()) return;
-    text_editing_.content = text_editor_->toPlainText();
-    const ImageTextData text = text_editing_;
-    const bool existing = text_editing_existing_;
-    if (auto* application = QCoreApplication::instance()) {
-        application->removeEventFilter(this);
-    }
-    text_editor_->hide();
-    text_editor_->clear();
-    text_editing_ = {};
-    text_editing_existing_ = false;
-    text_editing_initial_box_width_ = 1.0;
-    if (commit) emit textCommitted(text, existing);
-    else emit textEditingCancelled();
-    update();
+    text_tool_.finishEditing(commit);
 }
 
 void ImageCanvas::paintEvent(QPaintEvent*) {
@@ -787,8 +587,8 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     selection_context.image_to_widget.scale(zoom_, zoom_);
     area_selection_tool_.paintOverlay(painter, selection_context);
     // While editing, QPlainTextEdit draws the live text, caret, and selection
-    // together. Painting a second copy here makes selection appear duplicated
-    // and misaligned as the editor grows. Committed text uses drawTextOverlay.
+    // together. Painting a second copy here duplicates selection; TextTool
+    // paints committed text objects below.
 
     if (crop_mode_ && selecting_crop_) {
         const QRectF selection = crop_selection_.normalized().intersected(target);
@@ -803,19 +603,7 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     if (eraser_mode_) eraser_tool_.paintOverlay(painter, brush_context);
 
     shape_tool_.paintOverlay(painter, {target, zoom_});
-    if (creating_text_frame_) {
-        const QRectF frame(imageTargetRect().left() +
-                               std::min(text_frame_start_.x(), text_frame_current_.x()) * zoom_,
-                           imageTargetRect().top() + text_frame_start_.y() * zoom_,
-                           std::abs(text_frame_current_.x() - text_frame_start_.x()) * zoom_,
-                           1.0);
-        painter.save();
-        painter.setClipRect(target);
-        painter.setPen(QPen(QColor(64, 181, 246), 1.0, Qt::DashLine));
-        painter.setBrush(QColor(64, 181, 246, 24));
-        painter.drawRect(frame);
-        painter.restore();
-    }
+    text_tool_.paintFramePreview(painter, textToolContext());
     if (object_selection_tool_.transformingObjects() &&
         !object_selection_tool_.transformContainsRaster()) {
         for (const auto& object : object_selection_tool_.currentTransformObjects())
@@ -836,8 +624,8 @@ void ImageCanvas::resizeEvent(QResizeEvent* event) {
 
 void ImageCanvas::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) setFocus(Qt::MouseFocusReason);
-    if (event->button() == Qt::LeftButton && text_editor_ != nullptr &&
-        text_editor_->isVisible() && !text_editor_->geometry().contains(event->position().toPoint())) {
+    if (event->button() == Qt::LeftButton && text_tool_.editing() &&
+        !text_tool_.editor()->geometry().contains(event->position().toPoint())) {
         finishTextEditing(true);
         if (text_creation_mode_ && imageTargetRect().contains(event->position())) {
             event->accept();
@@ -900,10 +688,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
             event->accept();
             return;
         }
-        creating_text_frame_ = true;
-        text_frame_start_ = point;
-        text_frame_current_ = point;
-        update();
+        text_tool_.beginFrame(point);
         event->accept();
         return;
     }
@@ -979,9 +764,8 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (creating_text_frame_) {
-        text_frame_current_ = widgetToImageCoordinates(event->position());
-        update();
+    if (text_tool_.frameGestureActive()) {
+        text_tool_.updateFrame(widgetToImageCoordinates(event->position()));
         event->accept();
         return;
     }
@@ -1057,23 +841,10 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (event->button() == Qt::LeftButton && creating_text_frame_) {
-        text_frame_current_ = widgetToImageCoordinates(event->position());
-        const QPointF start = text_frame_start_;
-        const QPointF end = text_frame_current_;
-        creating_text_frame_ = false;
-        update();
-        const qreal width = std::abs(end.x() - start.x());
-        ImageTextData text = text_style_;
-        text.id.clear();
-        text.content.clear();
-        const bool dragged_to_set_width = width >= 4.0;
-        const qreal left = dragged_to_set_width ? std::min(start.x(), end.x()) : start.x();
-        text.position = QPointF(left, start.y());
-        const qreal available_width = std::max<qreal>(1.0, image_.width() - left);
-        const qreal initial_width = dragged_to_set_width ? width : text_style_.box_width;
-        text.box_width = std::clamp(initial_width, 1.0, available_width);
-        beginTextEditing(text, false);
+    if (event->button() == Qt::LeftButton && text_tool_.frameGestureActive()) {
+        const auto text = text_tool_.finishFrame(
+            widgetToImageCoordinates(event->position()), textToolContext());
+        if (text) beginTextEditing(*text, false);
         event->accept();
         return;
     }
@@ -1148,43 +919,6 @@ void ImageCanvas::mouseDoubleClickEvent(QMouseEvent* event) {
     dispatchObjectSelectionToolEvents(selection.events);
     beginTextEditing(placement.operation.text, true);
     event->accept();
-}
-
-bool ImageCanvas::eventFilter(QObject* watched, QEvent* event) {
-    if (event->type() == QEvent::ShortcutOverride && text_editor_ != nullptr &&
-        text_editor_->isVisible()) {
-        QWidget* focus_widget = QApplication::focusWidget();
-        const bool text_editor_has_focus = focus_widget == text_editor_ ||
-            (focus_widget != nullptr && text_editor_->isAncestorOf(focus_widget));
-        auto* key_event = static_cast<QKeyEvent*>(event);
-        const auto modifiers = key_event->modifiers();
-        const bool altgr = modifiers.testFlag(Qt::GroupSwitchModifier);
-        const bool command_modifier =
-            modifiers.testFlag(Qt::ControlModifier) || modifiers.testFlag(Qt::MetaModifier);
-        const bool menu_modifier = modifiers.testFlag(Qt::AltModifier) && !altgr;
-        // Unmodified key presses belong to the focused text editor even when a
-        // platform sends ShortcutOverride without the corresponding text. This
-        // prevents one-key window shortcuts from swallowing typed characters.
-        if (text_editor_has_focus && (!command_modifier || altgr) && !menu_modifier) {
-            key_event->accept();
-            // Accept the override so Qt does not activate a shortcut, but let
-            // the event reach the focused widget and continue its key handling.
-            return false;
-        }
-    }
-    if (watched == text_editor_ && event->type() == QEvent::KeyPress) {
-        auto* key_event = static_cast<QKeyEvent*>(event);
-        if (key_event->key() == Qt::Key_Escape) {
-            finishTextEditing(false);
-            return true;
-        }
-        if ((key_event->key() == Qt::Key_Return || key_event->key() == Qt::Key_Enter) &&
-            key_event->modifiers().testFlag(Qt::ControlModifier)) {
-            finishTextEditing(true);
-            return true;
-        }
-    }
-    return QWidget::eventFilter(watched, event);
 }
 
 void ImageCanvas::leaveEvent(QEvent* event) {

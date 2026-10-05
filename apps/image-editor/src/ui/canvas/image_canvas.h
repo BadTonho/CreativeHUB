@@ -6,6 +6,7 @@
 #include "../tools/selection/area_selection_tool.h"
 #include "../tools/selection/object/object_selection_tool.h"
 #include "../tools/shapes/shape_tool.h"
+#include "../tools/text/text_tool.h"
 
 #include <QImage>
 #include <QColor>
@@ -21,7 +22,6 @@ class QEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QPainter;
-class QPlainTextEdit;
 class QWheelEvent;
 class QDragEnterEvent;
 class QDropEvent;
@@ -109,7 +109,6 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
     void keyReleaseEvent(QKeyEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
-    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     [[nodiscard]] QRectF imageTargetRect() const;
@@ -124,16 +123,12 @@ private:
         const QPointF& position, Qt::KeyboardModifiers modifiers) const;
     void dispatchObjectSelectionToolEvents(
         const QVector<ObjectSelectionToolEvent>& events);
-    void drawTextOverlay(QPainter& painter,
-                         const ImageTextData& text,
-                         int opacity = 100) const;
     void drawObjectOverlay(QPainter& painter,
                            const ImageObjectPlacement& object) const;
     [[nodiscard]] QPointF unboundedImagePoint(const QPointF& position) const;
     void clearObjectInteraction();
-    void updateTextEditorContentAndGeometry();
+    [[nodiscard]] TextToolContext textToolContext() const;
     void updateTextEditorGeometry();
-    void applyTextEditorStyle();
     void finishTextEditing(bool commit);
 
     QImage image_;
@@ -165,15 +160,7 @@ private:
     AreaSelectionTool area_selection_tool_;
     ObjectSelectionTool object_selection_tool_;
     ShapeTool shape_tool_;
-    ImageTextData text_style_;
-    ImageTextData text_editing_;
-    QPlainTextEdit* text_editor_ = nullptr;
-    bool text_editing_existing_ = false;
-    bool text_editor_geometry_update_pending_ = false;
-    qreal text_editing_initial_box_width_ = 1.0;
-    bool creating_text_frame_ = false;
-    QPointF text_frame_start_;
-    QPointF text_frame_current_;
+    TextTool text_tool_;
     QColor brush_color_ = Qt::black;
     int brush_diameter_ = 12;
 };

@@ -4,6 +4,7 @@
 #include "selection/area_selection_tool.h"
 #include "selection/object/object_selection_tool.h"
 #include "shapes/shape_tool.h"
+#include "text/text_tool.h"
 #include "tool_sidebar.h"
 
 #include <QAction>
@@ -1395,6 +1396,107 @@ bool testShapeToolState() {
     return true;
 }
 
+bool testTextToolState() {
+    using image_editor::ImageTextAlignment;
+    using image_editor::ImageTextData;
+    using image_editor::TextTool;
+    using image_editor::TextToolContext;
+
+    QWidget host;
+    host.resize(400, 300);
+    host.show();
+    QCoreApplication::processEvents();
+
+    TextTool tool(&host);
+    TextToolContext context;
+    context.image_size = QSize(320, 240);
+    context.image_target = QRectF(40.0, 30.0, 320.0, 240.0);
+    context.zoom = 1.0;
+    ImageTextData style;
+    style.id = QStringLiteral("style-id-is-not-copied");
+    style.font_family = QStringLiteral("DejaVu Sans");
+    style.font_pixel_size = 26;
+    style.color = QColor(200, 30, 80);
+    style.alignment = ImageTextAlignment::Right;
+    style.box_width = 110.0;
+    tool.setStyle(style);
+
+    ImageTextData committed_text;
+    bool committed_existing = true;
+    int started_count = 0;
+    int cancelled_count = 0;
+    QObject::connect(&tool, &TextTool::textCommitted,
+        [&committed_text, &committed_existing](const ImageTextData& text, bool existing) {
+            committed_text = text;
+            committed_existing = existing;
+        });
+    QObject::connect(&tool, &TextTool::textEditingStarted,
+        [&started_count](const ImageTextData&, bool) { ++started_count; });
+    QObject::connect(&tool, &TextTool::textEditingCancelled,
+        [&cancelled_count]() { ++cancelled_count; });
+
+    tool.beginFrame(QPointF(20.0, 40.0));
+    tool.updateFrame(QPointF(70.0, 40.0));
+    QImage preview(400, 300, QImage::Format_ARGB32_Premultiplied);
+    preview.fill(Qt::transparent);
+    {
+        QPainter painter(&preview);
+        tool.paintFramePreview(painter, context);
+    }
+    bool preview_visible = false;
+    for (int y = 0; y < preview.height() && !preview_visible; ++y) {
+        for (int x = 0; x < preview.width(); ++x) {
+            if (preview.pixelColor(x, y).alpha() > 0) {
+                preview_visible = true;
+                break;
+            }
+        }
+    }
+    const auto dragged_text = tool.finishFrame(QPointF(70.0, 40.0), context);
+    if (!preview_visible || !dragged_text || tool.frameGestureActive() ||
+        dragged_text->id != QString{} || !dragged_text->content.isEmpty() ||
+        dragged_text->position != QPointF(20.0, 40.0) ||
+        dragged_text->box_width != 50.0 || dragged_text->font_family != style.font_family ||
+        dragged_text->font_pixel_size != style.font_pixel_size ||
+        dragged_text->color != style.color || dragged_text->alignment != style.alignment) {
+        std::cerr << "Text Tool did not preview or return a styled dragged text frame.\n";
+        return false;
+    }
+
+    tool.beginEditing(*dragged_text, false, context);
+    auto* editor = tool.editor();
+    if (editor == nullptr || editor->objectName() != QStringLiteral("imageCanvasTextEditor") ||
+        !tool.editing() || !editor->isVisible() || started_count != 1 ||
+        editor->document()->defaultTextOption().alignment() != Qt::AlignRight) {
+        std::cerr << "Text Tool did not configure and show the inline editor with its style.\n";
+        return false;
+    }
+    QTest::keyClicks(editor, QStringLiteral("hello"));
+    QCoreApplication::processEvents();
+    tool.finishEditing(true);
+    if (tool.editing() || committed_text.content != QStringLiteral("hello") ||
+        committed_text.position != dragged_text->position || committed_existing) {
+        std::cerr << "Text Tool did not return the edited text when confirming.\n";
+        return false;
+    }
+
+    tool.beginFrame(QPointF(80.0, 60.0));
+    const auto clicked_text = tool.finishFrame(QPointF(80.0, 60.0), context);
+    if (!clicked_text || clicked_text->position != QPointF(80.0, 60.0) ||
+        clicked_text->box_width != style.box_width) {
+        std::cerr << "A click did not create a text frame using the configured width.\n";
+        return false;
+    }
+    tool.beginEditing(*clicked_text, false, context);
+    QTest::keyClicks(editor, QStringLiteral("discard"));
+    tool.finishEditing(false);
+    if (tool.editing() || cancelled_count != 1 || started_count != 2) {
+        std::cerr << "Text Tool did not cancel the active inline text edit.\n";
+        return false;
+    }
+    return true;
+}
+
 bool testObjectSelectionToolState() {
     image_editor::ObjectSelectionTool tool;
 
@@ -2357,6 +2459,7 @@ int main(int argc, char* argv[]) {
     if (!testAreaSelectionToolState()) return 1;
     if (!testAreaSelectionToolUi(temporary.path())) return 1;
     if (!testShapeToolState()) return 1;
+    if (!testTextToolState()) return 1;
     if (!testObjectSelectionToolState()) return 1;
 
     if (!testGeneralCanvasSelection()) return 1;
