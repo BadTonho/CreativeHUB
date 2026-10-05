@@ -80,6 +80,8 @@ add_executable(creative-suite-image-editor-ui-tests
     ../src/ui/tools/brush/eraser_tool.h
     ../src/ui/tools/selection/area_selection_tool.cpp
     ../src/ui/tools/selection/area_selection_tool.h
+    ../src/ui/tools/selection/object/object_selection_tool.cpp
+    ../src/ui/tools/selection/object/object_selection_tool.h
     ../src/ui/tools/tool_sidebar.cpp
     ../src/ui/tools/tool_sidebar.h
     ../src/ui/layers/layer_panel.cpp
@@ -151,6 +153,8 @@ add_executable(creative-suite-image-editor-export-ui-tests
     ../src/ui/tools/brush/eraser_tool.h
     ../src/ui/tools/selection/area_selection_tool.cpp
     ../src/ui/tools/selection/area_selection_tool.h
+    ../src/ui/tools/selection/object/object_selection_tool.cpp
+    ../src/ui/tools/selection/object/object_selection_tool.h
     ../src/ui/tools/tool_sidebar.cpp
     ../src/ui/tools/tool_sidebar.h
     ../src/ui/layers/layer_panel.cpp

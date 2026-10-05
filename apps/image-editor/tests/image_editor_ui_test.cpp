@@ -2,6 +2,7 @@
 #include "image_editor_window.h"
 #include "layer_panel.h"
 #include "selection/area_selection_tool.h"
+#include "selection/object/object_selection_tool.h"
 #include "tool_sidebar.h"
 
 #include <QAction>
@@ -1272,6 +1273,180 @@ bool testAreaSelectionToolState() {
     return true;
 }
 
+bool testObjectSelectionToolState() {
+    image_editor::ObjectSelectionTool tool;
+
+    image_editor::ImageObjectPlacement top_shape;
+    top_shape.layer_id = QStringLiteral("top-layer");
+    top_shape.operation.kind = image_editor::OperationKind::Shape;
+    top_shape.operation.shape.id = QStringLiteral("top-object");
+    top_shape.operation.shape.kind = image_editor::ImageShapeKind::Rectangle;
+    top_shape.operation.shape.start = QPointF(12, 8);
+    top_shape.operation.shape.end = QPointF(44, 36);
+    top_shape.operation.shape.stroke_enabled = false;
+    top_shape.operation.shape.fill_enabled = true;
+    top_shape.operation.shape.fill_color = Qt::green;
+
+    image_editor::ImageObjectPlacement other_shape;
+    other_shape.layer_id = QStringLiteral("other-layer");
+    other_shape.operation.kind = image_editor::OperationKind::Shape;
+    other_shape.operation.shape.id = QStringLiteral("other-object");
+    other_shape.operation.shape.kind = image_editor::ImageShapeKind::Ellipse;
+    other_shape.operation.shape.start = QPointF(60, 10);
+    other_shape.operation.shape.end = QPointF(80, 30);
+    other_shape.operation.shape.stroke_enabled = false;
+    other_shape.operation.shape.fill_enabled = true;
+    other_shape.operation.shape.fill_color = Qt::blue;
+
+    image_editor::ImageObjectPlacement paint;
+    paint.layer_id = QStringLiteral("paint-layer");
+    paint.operation.kind = image_editor::OperationKind::PaintStroke;
+    paint.operation.paint_stroke.id = QStringLiteral("paint-object");
+    paint.operation.paint_stroke.points = {QPointF(10, 40), QPointF(40, 40)};
+    paint.operation.paint_stroke.color = Qt::red;
+    paint.operation.paint_stroke.diameter = 4;
+
+    const QVector<image_editor::ImageObjectPlacement> placements{
+        top_shape, other_shape, paint};
+    tool.setObjects(placements, {});
+
+    const auto at = [](const QPointF& point, bool shift = false) {
+        image_editor::ObjectSelectionToolContext context;
+        context.widget_position = point;
+        context.image_position = point;
+        context.unbounded_image_position = point;
+        context.image_bounds = QRectF(0, 0, 100, 80);
+        context.image_target = QRectF(0, 0, 100, 80);
+        context.zoom = 1.0;
+        context.pointer_on_image = true;
+        context.shift = shift;
+        return context;
+    };
+    const auto findEvent = [](const image_editor::ObjectSelectionToolResult& result,
+                              image_editor::ObjectSelectionToolEventType type)
+        -> const image_editor::ObjectSelectionToolEvent* {
+        for (const auto& event : result.events) if (event.type == type) return &event;
+        return nullptr;
+    };
+
+    if (tool.hitTestAt(QPointF(16, 12), 1.0) != 0) {
+        std::cerr << "Object hit testing did not prefer the topmost object.\n";
+        return false;
+    }
+    auto result = tool.press(at(QPointF(16, 12)));
+    const auto* selected = findEvent(result,
+        image_editor::ObjectSelectionToolEventType::ObjectsSelected);
+    if (!result.handled || selected == nullptr ||
+        selected->object_ids != QStringList{QStringLiteral("top-object")} ||
+        selected->active_layer_id != QStringLiteral("top-layer") ||
+        !result.deferred_transform_start) {
+        std::cerr << "Click selection did not report the selected object and its pending move.\n";
+        return false;
+    }
+    result = tool.beginTransform(*result.deferred_transform_start);
+    if (findEvent(result, image_editor::ObjectSelectionToolEventType::TransformStarted) == nullptr ||
+        !tool.cancelGesture()) {
+        std::cerr << "The selected object move gesture did not start or cancel.\n";
+        return false;
+    }
+
+    result = tool.press(at(QPointF(70, 20), true));
+    selected = findEvent(result, image_editor::ObjectSelectionToolEventType::ObjectsSelected);
+    if (selected == nullptr || selected->object_ids != QStringList{
+            QStringLiteral("top-object"), QStringLiteral("other-object")}) {
+        std::cerr << "Shift-click did not add an object to the selection.\n";
+        return false;
+    }
+    result = tool.press(at(QPointF(70, 20), true));
+    selected = findEvent(result, image_editor::ObjectSelectionToolEventType::ObjectsSelected);
+    if (selected == nullptr ||
+        selected->object_ids != QStringList{QStringLiteral("top-object")}) {
+        std::cerr << "Shift-click did not remove an object from the selection.\n";
+        return false;
+    }
+
+    tool.setObjects(placements, {});
+    result = tool.press(at(QPointF(5, 5)));
+    if (!result.handled || !tool.selectingObjects()) {
+        std::cerr << "Clicking empty canvas did not begin a marquee gesture.\n";
+        return false;
+    }
+    result = tool.move(at(QPointF(82, 45)));
+    if (!result.handled) {
+        std::cerr << "The selection marquee did not update.\n";
+        return false;
+    }
+    result = tool.release(at(QPointF(82, 45)));
+    selected = findEvent(result, image_editor::ObjectSelectionToolEventType::ObjectsSelected);
+    if (selected == nullptr || selected->object_ids.size() != 3 ||
+        !selected->object_ids.contains(QStringLiteral("top-object")) ||
+        !selected->object_ids.contains(QStringLiteral("other-object")) ||
+        !selected->object_ids.contains(QStringLiteral("paint-object"))) {
+        std::cerr << "The marquee did not select every intersecting object.\n";
+        return false;
+    }
+    result = tool.press(at(QPointF(95, 70)));
+    if (!result.handled) {
+        std::cerr << "Clicking empty canvas did not start a clearing gesture.\n";
+        return false;
+    }
+    result = tool.release(at(QPointF(95, 70)));
+    selected = findEvent(result, image_editor::ObjectSelectionToolEventType::ObjectsSelected);
+    if (selected == nullptr || !selected->object_ids.isEmpty()) {
+        std::cerr << "Clicking empty canvas did not clear the selection.\n";
+        return false;
+    }
+
+    tool.setObjects({top_shape}, {QStringLiteral("top-object")});
+    result = tool.press(at(QPointF(28, 22)));
+    if (!result.deferred_transform_start) {
+        std::cerr << "Selecting an object did not request its move gesture.\n";
+        return false;
+    }
+    result = tool.beginTransform(*result.deferred_transform_start);
+    if (findEvent(result, image_editor::ObjectSelectionToolEventType::TransformStarted) == nullptr) {
+        std::cerr << "Selecting an object did not start its move gesture.\n";
+        return false;
+    }
+    result = tool.move(at(QPointF(32, 26)));
+    if (!result.handled) {
+        std::cerr << "Moving a selected object was not handled by the tool.\n";
+        return false;
+    }
+    if (tool.currentTransformObjects().isEmpty() ||
+        tool.currentTransformObjects().front().operation.shape.start ==
+            top_shape.operation.shape.start) {
+        std::cerr << "Moving an object did not produce a geometry preview.\n";
+        return false;
+    }
+    if (!tool.cancelGesture() || tool.objects().front().operation.shape.start !=
+            top_shape.operation.shape.start) {
+        std::cerr << "Cancelling a transform changed the source object.\n";
+        return false;
+    }
+
+    result = tool.press(at(QPointF(28, 22)));
+    if (!result.deferred_transform_start) {
+        std::cerr << "The object transform could not be restarted after cancellation.\n";
+        return false;
+    }
+    result = tool.beginTransform(*result.deferred_transform_start);
+    result = tool.move(at(QPointF(32, 26)));
+    if (!result.handled) {
+        std::cerr << "The restarted object transform did not accept movement.\n";
+        return false;
+    }
+    result = tool.release(at(QPointF(32, 26)));
+    const auto* changed = findEvent(result,
+        image_editor::ObjectSelectionToolEventType::GeometryChanged);
+    if (changed == nullptr || changed->objects.size() != 1 ||
+        changed->objects.front().operation.shape.start == top_shape.operation.shape.start) {
+        std::cerr << "Releasing a transform did not report one changed object.\n";
+        return false;
+    }
+    return true;
+}
+
 bool testGeneralCanvasSelection() {
     image_editor::ImageCanvas canvas;
     canvas.resize(640, 480);
@@ -2059,6 +2234,7 @@ int main(int argc, char* argv[]) {
     }
     if (!testAreaSelectionToolState()) return 1;
     if (!testAreaSelectionToolUi(temporary.path())) return 1;
+    if (!testObjectSelectionToolState()) return 1;
 
     if (!testGeneralCanvasSelection()) return 1;
     if (!testLayerGroupsUi(temporary.path())) {

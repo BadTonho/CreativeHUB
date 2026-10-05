@@ -11,12 +11,10 @@
 #include <QFrame>
 #include <QFontMetricsF>
 #include <QKeyEvent>
-#include <QLineF>
 #include <QMetaObject>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
-#include <QPainterPathStroker>
 #include <QPlainTextEdit>
 #include <QScrollBar>
 #include <QTextBlock>
@@ -36,104 +34,6 @@
 
 namespace image_editor {
 namespace {
-
-QString objectId(const ImageOperation& operation) {
-    switch (operation.kind) {
-    case OperationKind::PaintStroke: return operation.paint_stroke.id;
-    case OperationKind::EraseStroke: return operation.erase_stroke.id;
-    case OperationKind::Shape: return operation.shape.id;
-    case OperationKind::Text: return operation.text.id;
-    case OperationKind::RasterImage: return operation.raster.id;
-    default: return {};
-    }
-}
-
-QPainterPath strokePath(const QVector<QPointF>& points, qreal width) {
-    QPainterPath path;
-    if (points.isEmpty()) return path;
-    if (points.size() == 1) {
-        const qreal radius = std::max<qreal>(0.5, width / 2.0);
-        path.addEllipse(points.front(), radius, radius);
-        return path;
-    }
-    path.moveTo(points.front());
-    for (qsizetype index = 1; index < points.size(); ++index) {
-        path.lineTo(points.at(index));
-    }
-    QPainterPathStroker stroker;
-    stroker.setWidth(width);
-    stroker.setCapStyle(Qt::RoundCap);
-    stroker.setJoinStyle(Qt::RoundJoin);
-    return stroker.createStroke(path);
-}
-
-QPainterPath objectPath(const ImageOperation& operation, qreal extra = 0.0) {
-    if (operation.kind == OperationKind::RasterImage) {
-        QPainterPath path;
-        path.addRect(QRectF(QPointF(), QSizeF(operation.raster.source_size)));
-        return operation.raster.transform.map(path);
-    }
-    if (operation.kind == OperationKind::PaintStroke) {
-        return strokePath(operation.paint_stroke.points,
-                          operation.paint_stroke.diameter + extra * 2.0);
-    }
-    if (operation.kind == OperationKind::EraseStroke) {
-        return strokePath(operation.erase_stroke.points,
-                          operation.erase_stroke.diameter + extra * 2.0);
-    }
-    if (operation.kind == OperationKind::Text) {
-        QPainterPath path;
-        path.addRect(imageTextBounds(operation.text));
-        return path;
-    }
-    if (operation.kind != OperationKind::Shape) return {};
-
-    const auto& shape = operation.shape;
-    QPainterPath path;
-    if (shape.kind == ImageShapeKind::Line) {
-        path.moveTo(shape.start);
-        path.lineTo(shape.end);
-    } else if (shape.kind == ImageShapeKind::Rectangle) {
-        path.addRect(QRectF(shape.start, shape.end).normalized());
-    } else {
-        path.addEllipse(QRectF(shape.start, shape.end).normalized());
-    }
-    QPainterPath result;
-    if (shape.kind != ImageShapeKind::Line && shape.fill_enabled) result = path;
-    if (shape.stroke_enabled) {
-        QPainterPathStroker stroker;
-        stroker.setWidth(std::max<qreal>(1.0, shape.stroke_width + extra * 2.0));
-        stroker.setCapStyle(Qt::RoundCap);
-        stroker.setJoinStyle(Qt::RoundJoin);
-        result = result.united(stroker.createStroke(path));
-    }
-    return result;
-}
-
-QVector<QPointF>* operationPoints(ImageOperation* operation) {
-    if (operation == nullptr) return nullptr;
-    if (operation->kind == OperationKind::PaintStroke) return &operation->paint_stroke.points;
-    if (operation->kind == OperationKind::EraseStroke) return &operation->erase_stroke.points;
-    return nullptr;
-}
-
-int operationDiameter(const ImageOperation& operation) {
-    if (operation.kind == OperationKind::PaintStroke) return operation.paint_stroke.diameter;
-    if (operation.kind == OperationKind::EraseStroke) return operation.erase_stroke.diameter;
-    if (operation.kind == OperationKind::Shape) return operation.shape.stroke_width;
-    return 1;
-}
-
-void setOperationDiameter(ImageOperation* operation, int diameter) {
-    if (operation == nullptr) return;
-    if (operation->kind == OperationKind::PaintStroke) operation->paint_stroke.diameter = diameter;
-    else if (operation->kind == OperationKind::EraseStroke) operation->erase_stroke.diameter = diameter;
-    else if (operation->kind == OperationKind::Shape) operation->shape.stroke_width = diameter;
-}
-
-QRectF visibleObjectBounds(const ImageOperation& operation) {
-    return objectPath(operation).boundingRect();
-}
 
 } // namespace
 
@@ -418,18 +318,8 @@ bool ImageCanvas::textEditing() const noexcept {
 
 void ImageCanvas::setObjectPlacements(QVector<ImageObjectPlacement> placements,
                                       QStringList selected_object_ids) {
-    object_placements_ = std::move(placements);
-    QStringList visible_ids;
-    for (const auto& placement : object_placements_) {
-        const QString id = objectId(placement.operation);
-        if (!id.isEmpty()) visible_ids.append(id);
-    }
-    selected_object_ids_.clear();
-    for (const auto& id : selected_object_ids) {
-        if (visible_ids.contains(id) && !selected_object_ids_.contains(id)) {
-            selected_object_ids_.append(id);
-        }
-    }
+    object_selection_tool_.setObjects(std::move(placements),
+                                      std::move(selected_object_ids));
     update();
 }
 
@@ -531,61 +421,8 @@ QPointF ImageCanvas::constrainShapePoint(const QPointF& point,
                             (delta.y() < 0.0 ? -1.0 : 1.0) * side);
 }
 
-int ImageCanvas::objectHitAt(const QPointF& image_point) const {
-    const qreal tolerance = 9.0 / std::max(zoom_, 0.01);
-    for (qsizetype index = 0; index < object_placements_.size(); ++index) {
-        const auto& operation = object_placements_.at(index).operation;
-        if (operation.kind == OperationKind::PaintStroke &&
-            operation.paint_stroke.color.alpha() == 0) continue;
-        if (operation.kind == OperationKind::Shape &&
-            (!operation.shape.stroke_enabled || operation.shape.stroke_color.alpha() == 0) &&
-            (!operation.shape.fill_enabled || operation.shape.fill_color.alpha() == 0)) continue;
-        if (operation.kind == OperationKind::Text && operation.text.color.alpha() == 0) continue;
-        if (objectPath(operation, tolerance).contains(image_point)) {
-            return static_cast<int>(index);
-        }
-    }
-    return -1;
-}
-
-QVector<ImageObjectPlacement> ImageCanvas::selectedObjects() const {
-    QVector<ImageObjectPlacement> result;
-    const auto& source = transforming_objects_ ? transform_current_objects_ : object_placements_;
-    for (const auto& placement : source) {
-        if (selected_object_ids_.contains(objectId(placement.operation))) {
-            result.append(placement);
-        }
-    }
-    return result;
-}
-
-QRectF ImageCanvas::objectBounds(const QVector<ImageObjectPlacement>& objects) const {
-    QRectF bounds;
-    bool first = true;
-    for (const auto& object : objects) {
-        const QRectF object_bounds = visibleObjectBounds(object.operation);
-        if (object_bounds.isEmpty()) continue;
-        bounds = first ? object_bounds : bounds.united(object_bounds);
-        first = false;
-    }
-    return first ? QRectF{} : bounds;
-}
-
-
-bool ImageCanvas::rasterTransform() const {
-    return transform_initial_objects_.size() == 1 &&
-        transform_initial_objects_.front().operation.kind == OperationKind::RasterImage;
-}
 QPointF ImageCanvas::unboundedImagePoint(const QPointF& position) const {
     return (position - imageTargetRect().topLeft()) / std::max(zoom_, 0.01);
-}
-QPointF ImageCanvas::rotationHandle(const ImageOperation& operation) const {
-    const auto& r = operation.raster;
-    const QPointF center = r.transform.map(QPointF(r.source_size.width() / 2.0, r.source_size.height() / 2.0));
-    const QPointF top = r.transform.map(QPointF(r.source_size.width() / 2.0, 0));
-    QPointF direction = top - center;
-    const qreal length = std::hypot(direction.x(), direction.y());
-    return top + direction / std::max(length, 0.001) * (28.0 / std::max(zoom_, 0.01));
 }
 namespace {
 QStringList dropPaths(const QMimeData* mime) {
@@ -609,265 +446,8 @@ void ImageCanvas::dropEvent(QDropEvent* event) {
     emit imagesDropped(paths, unboundedImagePoint(event->position()));
 }
 
-int ImageCanvas::resizeHandleAt(const QPointF& image_point) const {
-    if (selected_object_ids_.isEmpty()) return -1;
-    const auto selected = selectedObjects();
-    if (selected.size() == 1 && selected.front().operation.kind == OperationKind::RasterImage) {
-        const auto& op = selected.front().operation;
-        const qreal tolerance = 9.0 / std::max(zoom_, 0.01);
-        if (QLineF(image_point, rotationHandle(op)).length() <= tolerance) return 6;
-        const auto& r = op.raster;
-        const qreal w = r.source_size.width(), h = r.source_size.height();
-        const QPointF corners[] = {{0, 0}, {w, 0}, {0, h}, {w, h}};
-        for (int i = 0; i < 4; ++i)
-            if (QLineF(image_point, r.transform.map(corners[i])).length() <= tolerance) return i;
-        return -1;
-    }
-    if (selected.size() == 1 && selected.front().operation.kind == OperationKind::Text) {
-        const QRectF bounds = imageTextBounds(selected.front().operation.text);
-        const qreal tolerance = 9.0 / std::max(zoom_, 0.01);
-        const QPointF handles[] = {
-            QPointF(bounds.left(), bounds.center().y()),
-            QPointF(bounds.right(), bounds.center().y())};
-        for (int index = 0; index < 2; ++index) {
-            if (QLineF(image_point, handles[index]).length() <= tolerance) return 4 + index;
-        }
-        return -1;
-    }
-    const QRectF bounds = objectBounds(selectedObjects());
-    if (bounds.isEmpty()) return -1;
-    const qreal tolerance = 9.0 / std::max(zoom_, 0.01);
-    const QPointF handles[] = {bounds.topLeft(), bounds.topRight(),
-                               bounds.bottomLeft(), bounds.bottomRight()};
-    for (int index = 0; index < 4; ++index) {
-        if (QLineF(image_point, handles[index]).length() <= tolerance) return index;
-    }
-    return -1;
-}
-
-QVector<ImageObjectPlacement> ImageCanvas::selectionHits(const QRectF& bounds) const {
-    QVector<ImageObjectPlacement> hits;
-    if (bounds.isEmpty()) return hits;
-    QPainterPath selection;
-    selection.addRect(bounds.normalized());
-    for (const auto& placement : object_placements_) {
-        const auto& operation = placement.operation;
-        if (operation.kind == OperationKind::PaintStroke &&
-            operation.paint_stroke.color.alpha() == 0) continue;
-        if (operation.kind == OperationKind::Shape &&
-            (!operation.shape.stroke_enabled || operation.shape.stroke_color.alpha() == 0) &&
-            (!operation.shape.fill_enabled || operation.shape.fill_color.alpha() == 0)) continue;
-        if (operation.kind == OperationKind::Text && operation.text.color.alpha() == 0) continue;
-        const QPainterPath geometry = objectPath(operation);
-        if (geometry.intersects(selection) || selection.contains(geometry)) hits.append(placement);
-    }
-    return hits;
-}
-
-QVector<ImageObjectPlacement> ImageCanvas::transformObjects(
-    const QVector<ImageObjectPlacement>& objects, qreal scale_x, qreal scale_y,
-    const QPointF& origin, const QPointF& destination) const {
-    QVector<ImageObjectPlacement> transformed = objects;
-    const qreal width_scale = std::sqrt(std::abs(scale_x * scale_y));
-    const int max_diameter = ImageDocumentStore::kMaximumPaintBrushDiameter;
-    for (auto& placement : transformed) {
-        auto& operation = placement.operation;
-        const auto map_point = [origin, destination, scale_x, scale_y](const QPointF& point) {
-            return QPointF(destination.x() + (point.x() - origin.x()) * scale_x,
-                           destination.y() + (point.y() - origin.y()) * scale_y);
-        };
-        if (auto* points = operationPoints(&operation)) {
-            for (QPointF& point : *points) point = map_point(point);
-        } else if (operation.kind == OperationKind::Shape) {
-            operation.shape.start = map_point(operation.shape.start);
-            operation.shape.end = map_point(operation.shape.end);
-        } else if (operation.kind == OperationKind::Text) {
-            operation.text.position = map_point(operation.text.position);
-            operation.text.box_width = std::max<qreal>(1.0,
-                operation.text.box_width * std::abs(scale_x));
-        } else if (operation.kind == OperationKind::RasterImage) {
-            operation.raster.transform *= QTransform(scale_x, 0, 0, scale_y,
-                destination.x() - origin.x() * scale_x,
-                destination.y() - origin.y() * scale_y);
-        }
-        const int diameter = std::clamp(
-            static_cast<int>(std::lround(operationDiameter(operation) * width_scale)),
-            1, max_diameter);
-        setOperationDiameter(&operation, diameter);
-    }
-    return transformed;
-}
-
-void ImageCanvas::beginObjectTransform(bool resize, int handle,
-                                       const QPointF& image_point) {
-    transform_initial_objects_ = selectedObjects();
-    if (transform_initial_objects_.isEmpty()) return;
-    transform_current_objects_ = transform_initial_objects_;
-    transform_initial_bounds_ = objectBounds(transform_initial_objects_);
-    transform_start_ = image_point;
-    resizing_objects_ = resize;
-    rotating_objects_ = handle == 6;
-    resizing_handle_ = handle;
-    transforming_objects_ = true;
-    moved_interaction_ = false;
-    resizing_text_width_ = resize && transform_initial_objects_.size() == 1 &&
-        transform_initial_objects_.front().operation.kind == OperationKind::Text;
-    if (resize && resizing_text_width_) {
-        const bool left_handle = handle == 4;
-        transform_fixed_anchor_ = left_handle
-            ? transform_initial_bounds_.topRight() : transform_initial_bounds_.topLeft();
-    } else if (resize && !rotating_objects_) {
-        const QPointF anchors[] = {transform_initial_bounds_.bottomRight(),
-                                   transform_initial_bounds_.bottomLeft(),
-                                   transform_initial_bounds_.topRight(),
-                                   transform_initial_bounds_.topLeft()};
-        transform_fixed_anchor_ = anchors[handle];
-    }
-    emit objectTransformStarted(selected_object_ids_);
-    update();
-}
-
-void ImageCanvas::updateObjectTransform(const QPointF& image_point, bool freeform) {
-    if (!transforming_objects_ || transform_initial_objects_.isEmpty()) return;
-    if (rasterTransform()) {
-        const auto& original = transform_initial_objects_.front().operation.raster;
-        auto& raster = transform_current_objects_.front().operation.raster;
-        raster.transform = original.transform;
-        if (rotating_objects_) {
-            const QPointF pivot = original.transform.map(QPointF(original.source_size.width() / 2.0,
-                original.source_size.height() / 2.0));
-            const auto a = transform_start_ - pivot;
-            const auto b = image_point - pivot;
-            qreal degrees = (std::atan2(b.y(), b.x()) - std::atan2(a.y(), a.x())) * 180.0 / std::acos(-1.0);
-            if (shift_constrain_held_) {
-                const qreal base = std::atan2(original.transform.m12(), original.transform.m11()) * 180.0 / std::acos(-1.0);
-                degrees = std::round((degrees + base) / 15.0) * 15.0 - base;
-            }
-            QTransform rotation;
-            rotation.translate(pivot.x(), pivot.y());
-            rotation.rotate(degrees);
-            rotation.translate(-pivot.x(), -pivot.y());
-            raster.transform *= rotation;
-        } else if (resizing_objects_) {
-            const qreal width = original.source_size.width(), height = original.source_size.height();
-            const QPointF corners[] = {{0, 0}, {width, 0}, {0, height}, {width, height}};
-            const QPointF anchor = corners[3 - resizing_handle_];
-            const QPointF initial = corners[resizing_handle_] - anchor;
-            const QPointF dragged = original.transform.inverted().map(image_point) - anchor;
-            qreal sx = std::max(0.001, dragged.x() / initial.x());
-            qreal sy = std::max(0.001, dragged.y() / initial.y());
-            if (!freeform) sx = sy = std::max(sx, sy);
-            const QTransform local(sx, 0, 0, sy, anchor.x() * (1 - sx), anchor.y() * (1 - sy));
-            raster.transform = local * original.transform;
-        } else {
-            const QPointF delta = image_point - transform_start_;
-            raster.transform *= QTransform::fromTranslate(delta.x(), delta.y());
-        }
-        moved_interaction_ = true;
-        emit objectsPreviewRequested(transform_current_objects_);
-        update();
-        return;
-    }
-    const QSize size = image_.size();
-    if (!resizing_objects_) {
-        QPointF delta = image_point - transform_start_;
-        delta.setX(std::clamp(delta.x(), -transform_initial_bounds_.left(),
-            std::max(0.0, size.width() - transform_initial_bounds_.right())));
-        delta.setY(std::clamp(delta.y(), -transform_initial_bounds_.top(),
-            std::max(0.0, size.height() - transform_initial_bounds_.bottom())));
-        moved_interaction_ = moved_interaction_ || !qFuzzyIsNull(delta.x()) ||
-            !qFuzzyIsNull(delta.y());
-        transform_current_objects_ = transformObjects(
-            transform_initial_objects_, 1.0, 1.0,
-            transform_initial_bounds_.topLeft(),
-            transform_initial_bounds_.topLeft() + delta);
-        if (std::any_of(transform_current_objects_.cbegin(), transform_current_objects_.cend(),
-            [](const ImageObjectPlacement& p) { return p.operation.kind == OperationKind::RasterImage; }))
-            emit objectsPreviewRequested(transform_current_objects_);
-        update();
-        return;
-    }
-
-    if (resizing_text_width_) {
-        QPointF dragged = image_point;
-        dragged.setX(std::clamp(dragged.x(), 0.0, static_cast<qreal>(size.width() - 1)));
-        const bool left_handle = resizing_handle_ == 4;
-        auto& text = transform_current_objects_.front().operation.text;
-        const qreal anchor_x = transform_fixed_anchor_.x();
-        const qreal width = std::max<qreal>(1.0, std::abs(dragged.x() - anchor_x));
-        text.position.setX(left_handle ? anchor_x - width : anchor_x);
-        text.box_width = width;
-        moved_interaction_ = true;
-        updateTextEditorGeometry();
-        update();
-        return;
-    }
-
-    QPointF dragged = image_point;
-    dragged.setX(std::clamp(dragged.x(), 0.0, static_cast<qreal>(size.width() - 1)));
-    dragged.setY(std::clamp(dragged.y(), 0.0, static_cast<qreal>(size.height() - 1)));
-    const bool left_handle = resizing_handle_ == 0 || resizing_handle_ == 2;
-    const bool top_handle = resizing_handle_ == 0 || resizing_handle_ == 1;
-    const qreal original_width = std::max<qreal>(1.0, transform_initial_bounds_.width());
-    const qreal original_height = std::max<qreal>(1.0, transform_initial_bounds_.height());
-    qreal target_width = std::abs(dragged.x() - transform_fixed_anchor_.x());
-    qreal target_height = std::abs(dragged.y() - transform_fixed_anchor_.y());
-    target_width = std::max<qreal>(1.0, target_width);
-    target_height = std::max<qreal>(1.0, target_height);
-    qreal scale_x = target_width / original_width;
-    qreal scale_y = target_height / original_height;
-    if (!freeform) {
-        qreal scale = std::max(scale_x, scale_y);
-        const qreal available_width = left_handle
-            ? transform_fixed_anchor_.x()
-            : (size.width() - 1.0 - transform_fixed_anchor_.x());
-        const qreal available_height = top_handle
-            ? transform_fixed_anchor_.y()
-            : (size.height() - 1.0 - transform_fixed_anchor_.y());
-        scale = std::min(scale, std::min(available_width / original_width,
-                                         available_height / original_height));
-        scale_x = std::max<qreal>(1.0 / original_width, scale);
-        scale_y = std::max<qreal>(1.0 / original_height, scale);
-    } else {
-        const qreal available_width = left_handle
-            ? transform_fixed_anchor_.x()
-            : (size.width() - 1.0 - transform_fixed_anchor_.x());
-        const qreal available_height = top_handle
-            ? transform_fixed_anchor_.y()
-            : (size.height() - 1.0 - transform_fixed_anchor_.y());
-        scale_x = std::clamp(scale_x, 1.0 / original_width,
-                             std::max(1.0 / original_width, available_width / original_width));
-        scale_y = std::clamp(scale_y, 1.0 / original_height,
-                             std::max(1.0 / original_height, available_height / original_height));
-    }
-    const qreal new_width = original_width * scale_x;
-    const qreal new_height = original_height * scale_y;
-    QPointF new_top_left = transform_initial_bounds_.topLeft();
-    if (left_handle) new_top_left.setX(transform_fixed_anchor_.x() - new_width);
-    if (top_handle) new_top_left.setY(transform_fixed_anchor_.y() - new_height);
-    moved_interaction_ = true;
-    transform_current_objects_ = transformObjects(
-        transform_initial_objects_, scale_x, scale_y,
-        transform_initial_bounds_.topLeft(), new_top_left);
-    if (std::any_of(transform_current_objects_.cbegin(), transform_current_objects_.cend(),
-        [](const ImageObjectPlacement& p) { return p.operation.kind == OperationKind::RasterImage; }))
-        emit objectsPreviewRequested(transform_current_objects_);
-    update();
-}
-
 void ImageCanvas::clearObjectInteraction() {
-    selecting_objects_ = false;
-    selection_toggle_ = false;
-    transforming_objects_ = false;
-    resizing_objects_ = false;
-    rotating_objects_ = false;
-    resizing_text_width_ = false;
-    moved_interaction_ = false;
-    resizing_handle_ = -1;
-    object_selection_rect_ = {};
-    transform_initial_objects_.clear();
-    transform_current_objects_.clear();
-    transform_initial_bounds_ = {};
+    object_selection_tool_.clearGesture();
 }
 
 void ImageCanvas::drawShapeOverlay(QPainter& painter,
@@ -1009,6 +589,41 @@ BrushToolContext ImageCanvas::brushToolContext(const QPointF& position) const {
     context.mask_editing = mask_editing_;
     context.area_selection = areaSelectionClipPath();
     return context;
+}
+
+ObjectSelectionToolContext ImageCanvas::objectSelectionToolContext(
+    const QPointF& position, Qt::KeyboardModifiers modifiers) const {
+    ObjectSelectionToolContext context;
+    context.widget_position = position;
+    context.image_position = widgetToImageCoordinates(position);
+    context.unbounded_image_position = unboundedImagePoint(position);
+    context.image_bounds = QRectF(QPointF(0.0, 0.0), QSizeF(image_.size()));
+    context.image_target = imageTargetRect();
+    context.zoom = zoom_;
+    context.pointer_on_image = context.image_target.contains(position);
+    context.shift = modifiers.testFlag(Qt::ShiftModifier);
+    context.alt = modifiers.testFlag(Qt::AltModifier);
+    return context;
+}
+
+void ImageCanvas::dispatchObjectSelectionToolEvents(
+    const QVector<ObjectSelectionToolEvent>& events) {
+    for (const auto& event : events) {
+        switch (event.type) {
+        case ObjectSelectionToolEventType::ObjectsSelected:
+            emit objectsSelected(event.object_ids, event.active_layer_id);
+            break;
+        case ObjectSelectionToolEventType::TransformStarted:
+            emit objectTransformStarted(event.object_ids);
+            break;
+        case ObjectSelectionToolEventType::PreviewRequested:
+            emit objectsPreviewRequested(event.objects);
+            break;
+        case ObjectSelectionToolEventType::GeometryChanged:
+            emit objectsGeometryChanged(event.objects);
+            break;
+        }
+    }
 }
 
 void ImageCanvas::dispatchBrushToolEvents(const QVector<BrushToolEvent>& events) {
@@ -1256,62 +871,16 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
         painter.drawRect(frame);
         painter.restore();
     }
-    if (transforming_objects_) {
-        const bool raster = std::any_of(transform_current_objects_.cbegin(), transform_current_objects_.cend(),
-            [](const ImageObjectPlacement& p) { return p.operation.kind == OperationKind::RasterImage; });
-        if (!raster) for (const auto& object : transform_current_objects_) drawObjectOverlay(painter, object);
+    if (object_selection_tool_.transformingObjects() &&
+        !object_selection_tool_.transformContainsRaster()) {
+        for (const auto& object : object_selection_tool_.currentTransformObjects())
+            drawObjectOverlay(painter, object);
     }
-    if (object_selection_mode_ && !selected_object_ids_.isEmpty()) {
-        const QRectF bounds = objectBounds(selectedObjects());
-        if (!bounds.isEmpty()) {
-            const QRectF widget_bounds(
-                target.left() + bounds.left() * zoom_,
-                target.top() + bounds.top() * zoom_,
-                bounds.width() * zoom_, bounds.height() * zoom_);
-            painter.save();
-            painter.setClipRect(target);
-            painter.setRenderHint(QPainter::Antialiasing, true);
-            painter.setPen(QPen(QColor(45, 155, 235), 1.0, Qt::DashLine));
-            painter.setBrush(Qt::NoBrush);
-            painter.drawRect(widget_bounds);
-            QVector<QPointF> handles;
-            const auto selected = selectedObjects();
-            if (selected.size() == 1 && selected.front().operation.kind == OperationKind::Text) {
-                handles = {QPointF(widget_bounds.left(), widget_bounds.center().y()),
-                           QPointF(widget_bounds.right(), widget_bounds.center().y())};
-            } else if (selected.size() == 1 && selected.front().operation.kind == OperationKind::RasterImage) {
-                painter.setClipping(false);
-                const auto& op = selected.front().operation;
-                const auto& r = op.raster;
-                const qreal w = r.source_size.width(), h = r.source_size.height();
-                const QPointF corners[] = {{0, 0}, {w, 0}, {0, h}, {w, h}};
-                for (const auto& corner : corners) handles.append(target.topLeft() + r.transform.map(corner) * zoom_);
-                QPolygonF outline{handles[0], handles[1], handles[3], handles[2]};
-                painter.drawPolygon(outline);
-                const QPointF handle = target.topLeft() + rotationHandle(op) * zoom_;
-                painter.drawLine((handles[0] + handles[1]) / 2, handle);
-                painter.setBrush(QColor(244, 247, 251));
-                painter.drawEllipse(handle, 5, 5);
-            } else {
-                handles = {widget_bounds.topLeft(), widget_bounds.topRight(),
-                           widget_bounds.bottomLeft(), widget_bounds.bottomRight()};
-            }
-            for (const QPointF& handle : handles) {
-                const QRectF box(handle.x() - 4.0, handle.y() - 4.0, 8.0, 8.0);
-                painter.setPen(QPen(QColor(25, 28, 34), 1.0));
-                painter.setBrush(QColor(244, 247, 251));
-                painter.drawRect(box);
-            }
-            painter.restore();
-        }
-    }
-    if (object_selection_mode_ && selecting_objects_) {
-        const QRectF selection = object_selection_rect_.normalized().intersected(target);
-        painter.fillRect(selection, QColor(38, 150, 220, 36));
-        painter.setPen(QPen(QColor(120, 205, 255), 1.2, Qt::DashLine));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRect(selection);
-    }
+    ObjectSelectionToolRenderContext object_selection_context;
+    object_selection_context.image_target = target;
+    object_selection_context.zoom = zoom_;
+    object_selection_context.selection_mode_active = object_selection_mode_;
+    object_selection_tool_.paintOverlay(painter, object_selection_context);
 }
 
 void ImageCanvas::resizeEvent(QResizeEvent* event) {
@@ -1382,11 +951,11 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
     if (text_creation_mode_ && event->button() == Qt::LeftButton &&
         imageTargetRect().contains(event->position())) {
         const QPointF point = widgetToImageCoordinates(event->position());
-        const int hit = objectHitAt(point);
-        if (hit >= 0 && object_placements_.at(hit).operation.kind == OperationKind::Text) {
-            const auto& placement = object_placements_.at(hit);
-            selected_object_ids_ = {placement.operation.text.id};
-            emit objectsSelected(selected_object_ids_, placement.layer_id);
+        const int hit = object_selection_tool_.hitTestAt(point, zoom_);
+        const auto& placements = object_selection_tool_.objects();
+        if (hit >= 0 && placements.at(hit).operation.kind == OperationKind::Text) {
+            const auto result = object_selection_tool_.selectObjectAt(hit);
+            dispatchObjectSelectionToolEvents(result.events);
             event->accept();
             return;
         }
@@ -1397,52 +966,21 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (object_selection_mode_ && event->button() == Qt::LeftButton && !image_.isNull() &&
-        (imageTargetRect().contains(event->position()) || resizeHandleAt(unboundedImagePoint(event->position())) >= 0)) {
-        const QPointF point = unboundedImagePoint(event->position());
-        const int handle = resizeHandleAt(point);
-        if (handle >= 0) {
-            beginObjectTransform(true, handle, point);
-            event->accept();
-            return;
-        }
-        const int hit = objectHitAt(point);
-        if (hit < 0) {
-            selecting_objects_ = true;
-            selection_toggle_ = modifiers.testFlag(Qt::ShiftModifier);
-            moved_interaction_ = false;
-            selection_start_ = event->position();
-            object_selection_rect_ = QRectF(selection_start_, selection_start_);
-            update();
-            event->accept();
-            return;
-        }
-        const ImageObjectPlacement placement = object_placements_.at(hit);
-        const QString id = objectId(placement.operation);
-        if (modifiers.testFlag(Qt::ShiftModifier)) {
-            if (selected_object_ids_.contains(id)) selected_object_ids_.removeAll(id);
-            else selected_object_ids_.append(id);
-            QString active_layer = placement.layer_id;
-            if (!selected_object_ids_.contains(id)) {
-                active_layer.clear();
-                for (const auto& selected : object_placements_) {
-                    if (selected_object_ids_.contains(objectId(selected.operation))) {
-                        active_layer = selected.layer_id;
-                        break;
-                    }
-                }
+    if (object_selection_mode_ && event->button() == Qt::LeftButton && !image_.isNull()) {
+        const auto context = objectSelectionToolContext(event->position(), modifiers);
+        const auto result = object_selection_tool_.press(context);
+        if (result.handled) {
+            const auto deferred_transform_start = result.deferred_transform_start;
+            dispatchObjectSelectionToolEvents(result.events);
+            if (deferred_transform_start) {
+                const auto transform = object_selection_tool_.beginTransform(
+                    *deferred_transform_start);
+                dispatchObjectSelectionToolEvents(transform.events);
             }
-            emit objectsSelected(selected_object_ids_, active_layer);
             update();
             event->accept();
             return;
         }
-        if (!selected_object_ids_.contains(id)) selected_object_ids_ = {id};
-        emit objectsSelected(selected_object_ids_, placement.layer_id);
-        beginObjectTransform(false, -1, point);
-        update();
-        event->accept();
-        return;
     }
     if (paint_mode_ && event->button() == Qt::LeftButton &&
         imageTargetRect().contains(event->position())) {
@@ -1515,19 +1053,12 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (selecting_objects_) {
-        object_selection_rect_ = QRectF(selection_start_, event->position()).normalized();
-        moved_interaction_ = moved_interaction_ ||
-            QLineF(selection_start_, event->position()).length() >= 4.0;
+    if (object_selection_tool_.gestureActive()) {
+        const auto result = object_selection_tool_.move(
+            objectSelectionToolContext(event->position(), event->modifiers()));
+        dispatchObjectSelectionToolEvents(result.events);
+        if (object_selection_tool_.resizingTextWidth()) updateTextEditorGeometry();
         update();
-        event->accept();
-        return;
-    }
-    if (transforming_objects_) {
-        const QPointF point = rasterTransform() ? unboundedImagePoint(event->position())
-                                               : widgetToImageCoordinates(event->position());
-        if (rotating_objects_) shift_constrain_held_ = event->modifiers().testFlag(Qt::ShiftModifier);
-        updateObjectTransform(point, event->modifiers().testFlag(Qt::AltModifier));
         event->accept();
         return;
     }
@@ -1606,38 +1137,12 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (event->button() == Qt::LeftButton && selecting_objects_) {
-        selecting_objects_ = false;
-        const bool was_drag = moved_interaction_;
-        const QRectF widget_bounds = object_selection_rect_.normalized();
-        object_selection_rect_ = {};
-        if (was_drag) {
-            const QRectF image_bounds(widgetToImageCoordinates(widget_bounds.topLeft()),
-                                      widgetToImageCoordinates(widget_bounds.bottomRight()));
-            const auto hits = selectionHits(image_bounds.normalized());
-            if (!selection_toggle_) selected_object_ids_.clear();
-            for (const auto& hit : hits) {
-                const QString id = objectId(hit.operation);
-                if (selection_toggle_ && selected_object_ids_.contains(id)) {
-                    selected_object_ids_.removeAll(id);
-                } else if (!selected_object_ids_.contains(id)) {
-                    selected_object_ids_.append(id);
-                }
-            }
-            QString active_layer;
-            for (const auto& placement : object_placements_) {
-                if (selected_object_ids_.contains(objectId(placement.operation))) {
-                    active_layer = placement.layer_id;
-                    break;
-                }
-            }
-            emit objectsSelected(selected_object_ids_, active_layer);
-        } else if (!selection_toggle_) {
-            selected_object_ids_.clear();
-            emit objectsSelected({}, {});
-        }
-        moved_interaction_ = false;
-        selection_toggle_ = false;
+    if (event->button() == Qt::LeftButton && object_selection_tool_.gestureActive()) {
+        const bool was_transforming = object_selection_tool_.transformingObjects();
+        const auto result = object_selection_tool_.release(
+            objectSelectionToolContext(event->position(), event->modifiers()));
+        if (was_transforming) transient_image_ = {};
+        dispatchObjectSelectionToolEvents(result.events);
         update();
         event->accept();
         return;
@@ -1656,16 +1161,6 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
              (shape.start.x() != shape.end.x() && shape.start.y() != shape.end.y()))) {
             emit shapeCreated(shape);
         }
-        event->accept();
-        return;
-    }
-    if (event->button() == Qt::LeftButton && transforming_objects_) {
-        const auto changed_objects = transform_current_objects_;
-        const bool changed = changed_objects != transform_initial_objects_;
-        clearObjectInteraction();
-        transient_image_ = {};
-        update();
-        if (changed) emit objectsGeometryChanged(changed_objects);
         event->accept();
         return;
     }
@@ -1709,14 +1204,16 @@ void ImageCanvas::mouseDoubleClickEvent(QMouseEvent* event) {
         QWidget::mouseDoubleClickEvent(event);
         return;
     }
-    const int hit = objectHitAt(widgetToImageCoordinates(event->position()));
-    if (hit < 0 || object_placements_.at(hit).operation.kind != OperationKind::Text) {
+    const int hit = object_selection_tool_.hitTestAt(
+        widgetToImageCoordinates(event->position()), zoom_);
+    const auto& placements = object_selection_tool_.objects();
+    if (hit < 0 || placements.at(hit).operation.kind != OperationKind::Text) {
         QWidget::mouseDoubleClickEvent(event);
         return;
     }
-    const auto placement = object_placements_.at(hit);
-    selected_object_ids_ = {placement.operation.text.id};
-    emit objectsSelected(selected_object_ids_, placement.layer_id);
+    const auto placement = placements.at(hit);
+    const auto selection = object_selection_tool_.selectObjectAt(hit);
+    dispatchObjectSelectionToolEvents(selection.events);
     beginTextEditing(placement.operation.text, true);
     event->accept();
 }
@@ -1785,8 +1282,7 @@ void ImageCanvas::keyPressEvent(QKeyEvent* event) {
         event->accept();
         return;
     }
-    if (event->key() == Qt::Key_Escape &&
-        (selecting_objects_ || transforming_objects_)) {
+    if (event->key() == Qt::Key_Escape && object_selection_tool_.gestureActive()) {
         clearObjectInteraction();
         transient_image_ = {};
         update();

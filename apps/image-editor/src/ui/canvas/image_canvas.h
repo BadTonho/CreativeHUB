@@ -4,6 +4,7 @@
 #include "../tools/brush/eraser_tool.h"
 #include "../tools/brush/paint_tool.h"
 #include "../tools/selection/area_selection_tool.h"
+#include "../tools/selection/object/object_selection_tool.h"
 
 #include <QImage>
 #include <QColor>
@@ -118,19 +119,14 @@ private:
     void dispatchBrushToolEvents(const QVector<BrushToolEvent>& events);
     void updateBrushToolCursor(const QPointF& position);
     void resetBrushTools(bool clear_preview_notification);
+    [[nodiscard]] ObjectSelectionToolContext objectSelectionToolContext(
+        const QPointF& position, Qt::KeyboardModifiers modifiers) const;
+    void dispatchObjectSelectionToolEvents(
+        const QVector<ObjectSelectionToolEvent>& events);
     [[nodiscard]] QPointF constrainShapePoint(const QPointF& point,
                                              const QPointF& anchor,
                                              ImageShapeKind kind,
                                              bool shift) const;
-    [[nodiscard]] int objectHitAt(const QPointF& image_point) const;
-    [[nodiscard]] int resizeHandleAt(const QPointF& image_point) const;
-    [[nodiscard]] QRectF objectBounds(const QVector<ImageObjectPlacement>& objects) const;
-    [[nodiscard]] QVector<ImageObjectPlacement> selectedObjects() const;
-    [[nodiscard]] QVector<ImageObjectPlacement> selectionHits(const QRectF& bounds) const;
-    [[nodiscard]] QVector<ImageObjectPlacement> transformObjects(
-        const QVector<ImageObjectPlacement>& objects,
-        qreal scale_x, qreal scale_y, const QPointF& origin,
-        const QPointF& destination) const;
     void drawShapeOverlay(QPainter& painter,
                           const ImageShapeData& shape,
                           int opacity = 100) const;
@@ -139,10 +135,6 @@ private:
                          int opacity = 100) const;
     void drawObjectOverlay(QPainter& painter,
                            const ImageObjectPlacement& object) const;
-    void beginObjectTransform(bool resize, int handle, const QPointF& image_point);
-    void updateObjectTransform(const QPointF& image_point, bool freeform);
-    [[nodiscard]] QPointF rotationHandle(const ImageOperation& operation) const;
-    [[nodiscard]] bool rasterTransform() const;
     [[nodiscard]] QPointF unboundedImagePoint(const QPointF& position) const;
     void clearObjectInteraction();
     void updateTextEditorContentAndGeometry();
@@ -168,18 +160,8 @@ private:
     bool shift_constrain_held_ = false;
     bool panning_ = false;
     bool creating_shape_ = false;
-    bool selecting_objects_ = false;
-    bool selection_toggle_ = false;
-    bool transforming_objects_ = false;
-    bool resizing_objects_ = false;
-    bool resizing_text_width_ = false;
-    bool rotating_objects_ = false;
-    bool moved_interaction_ = false;
-    int resizing_handle_ = -1;
     QPointF crop_start_;
     QRectF crop_selection_;
-    QPointF selection_start_;
-    QRectF object_selection_rect_;
     QPointF pan_start_;
     QPointF initial_pan_;
     QPointF brush_resize_start_;
@@ -188,6 +170,7 @@ private:
     PaintTool paint_tool_;
     EraserTool eraser_tool_;
     AreaSelectionTool area_selection_tool_;
+    ObjectSelectionTool object_selection_tool_;
     ImageShapeData shape_style_;
     ImageTextData text_style_;
     ImageTextData text_editing_;
@@ -199,13 +182,6 @@ private:
     QPointF text_frame_start_;
     QPointF text_frame_current_;
     ImageShapeData shape_interaction_current_;
-    QVector<ImageObjectPlacement> object_placements_;
-    QStringList selected_object_ids_;
-    QVector<ImageObjectPlacement> transform_initial_objects_;
-    QVector<ImageObjectPlacement> transform_current_objects_;
-    QRectF transform_initial_bounds_;
-    QPointF transform_start_;
-    QPointF transform_fixed_anchor_;
     QColor brush_color_ = Qt::black;
     int brush_diameter_ = 12;
 };

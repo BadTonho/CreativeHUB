@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha e Seleção de Área implementadas**.
+Status: **análise provisória; extrações de Pintura, Borracha, Seleção de Área e Seleção de Objetos implementadas**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -82,10 +82,17 @@ para coordenadas da imagem, controla a exclusividade do modo e encaminha os
 sinais públicos já usados pela janela e pelas ferramentas de pincel. A seleção
 continua fora do documento e do histórico.
 
-A interface das ferramentas deve receber entradas leves em coordenadas da
-imagem e referências para callbacks de prévia e confirmação. Evite copiar
-buffers de imagem completos entre interface e núcleo durante eventos comuns do
-mouse.
+`ObjectSelectionTool` mantém a seleção temporária e os gestos de letreiro,
+movimentação, redimensionamento e rotação. Também calcula hit testing,
+geometria das alças e a prévia da seleção. Recebe posições convertidas pelo
+canvas e produz eventos com IDs selecionados, composições temporárias ou
+geometria proposta. A janela continua sincronizando a seleção de objetos e
+camadas e confirma a geometria na sessão do documento; a ferramenta não altera
+o documento.
+
+As interfaces das ferramentas devem usar contextos leves e resultados/eventos
+para prévia e confirmação. Evite copiar buffers de imagem completos entre
+interface e núcleo durante eventos comuns do mouse.
 
 ## Fronteiras do núcleo e da janela
 
@@ -120,8 +127,9 @@ montando os widgets e traduzindo ações da aplicação em operações do docume
    dados persistidos.
 3. Concluída: extrair Seleção de Área para `ui/tools/selection/`, preservando
    sua natureza temporária e os sinais públicos do canvas.
-4. Extrair Seleção de Objetos para módulo próprio, preservando a diferença
-   entre seleção temporária e edição do documento.
+4. Concluída: extrair Seleção de Objetos para módulo próprio, incluindo
+   seleção e transformações temporárias; preservar os sinais do canvas e deixar
+   a janela/sessão confirmar as alterações no histórico do documento.
 5. Extrair Formas e Texto, incluindo suas interações específicas de prévia e
    edição.
 6. Separar renderização e operações do documento de `ImageDocumentSession`
@@ -161,6 +169,15 @@ do início da etapa seguinte.
   validação manual permanece pendente com o mantenedor. Esta extração não
   transforma a proposta gradual em uma decisão final para as demais ferramentas
   ou para a arquitetura completa.
+
+A extração de Seleção de Objetos compilou em Release no aplicativo e nos alvos
+de UI/exportação. Os cinco testes focados do Image Editor passaram, e a suíte
+CTest completa passou em 70/70 no Windows Release. A cobertura automatizada
+inclui hit testing do objeto superior, Shift adicionar/remover, seleção por
+letreiro, limpar ao clicar no vazio, cancelamento e geometria de transformação;
+os testes de canvas e raster mantêm a cobertura de prévias, alças, rotação,
+redimensionamento e integração com o histórico. A validação visual manual desta
+extração continua pendente com o mantenedor.
 
 ## Referências
 

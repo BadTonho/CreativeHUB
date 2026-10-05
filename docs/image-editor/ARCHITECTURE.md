@@ -29,6 +29,16 @@ persistence, and recovery.
   `ImageCanvas` maps pointer positions to image coordinates, forwards the
   existing selection signals, and supplies the active clip path to brush tools.
   The selection remains UI state and is not stored in the document or history.
+- `src/ui/tools/selection/object/object_selection_tool.*` owns temporary object
+  selection, hit testing, marquee gestures, transform handles, move/resize/
+  rotation geometry, cancellation, and selection overlays. It reports selected
+  IDs and proposed geometry through internal events; it never edits the
+  document. `ImageCanvas` maps pointer events, preserves its public signals,
+  and renders transformed previews. `ImageEditorWindow` coordinates the active
+  layer, requests transient compositions from the session, and commits released
+  geometry through the document history. The tool also provides hit testing to
+  the canvas for entering text editing; text editing itself stays with the
+  canvas.
   Tool families use subdirectories such as `brush/`, `selection/`, `shapes/`,
   and `text/` to keep the tools area navigable as it grows.
 
