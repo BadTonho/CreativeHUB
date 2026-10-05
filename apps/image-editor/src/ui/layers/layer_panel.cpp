@@ -179,7 +179,7 @@ public:
 
 class LayerTreeWidget final : public QTreeWidget {
 public:
-    using DropHandler = std::function<void(QTreeWidgetItem*, QTreeWidgetItem*,
+    using DropHandler = std::function<void(const QString&, bool, QTreeWidgetItem*,
                                            QAbstractItemView::DropIndicatorPosition)>;
     using QTreeWidget::QTreeWidget;
     DropHandler drop_handler;
@@ -191,15 +191,41 @@ public:
     }
 
 protected:
+    void startDrag(Qt::DropActions supported_actions) override {
+        const auto* source = currentItem();
+        dragged_item_id_ = source == nullptr
+            ? QString{} : source->data(0, kItemIdRole).toString();
+        dragged_item_is_group_ = source != nullptr &&
+            source->data(0, kGroupRole).toBool();
+        drag_source_active_ = !dragged_item_id_.isEmpty();
+        QTreeWidget::startDrag(supported_actions);
+        drag_source_active_ = false;
+        dragged_item_id_.clear();
+        dragged_item_is_group_ = false;
+    }
+
     void dropEvent(QDropEvent* event) override {
         if (drop_handler) {
-            drop_handler(currentItem(), itemAt(event->position().toPoint()),
+            const auto* current = currentItem();
+            const QString source_id = drag_source_active_
+                ? dragged_item_id_
+                : (current == nullptr ? QString{} : current->data(0, kItemIdRole).toString());
+            const bool source_group = drag_source_active_
+                ? dragged_item_is_group_
+                : (current != nullptr && current->data(0, kGroupRole).toBool());
+            drop_handler(source_id, source_group,
+                         itemAt(event->position().toPoint()),
                          dropIndicatorPosition());
             event->acceptProposedAction();
             return;
         }
         QTreeWidget::dropEvent(event);
     }
+
+private:
+    QString dragged_item_id_;
+    bool dragged_item_is_group_ = false;
+    bool drag_source_active_ = false;
 };
 
 QTreeWidgetItem* makeLayerItem(const ImageLayerData& layer,
@@ -460,12 +486,15 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
         }
     });
 
-    tree->drop_handler = [this](QTreeWidgetItem* source,
+    tree->drop_handler = [this](const QString& source_id, bool source_group,
                                 QTreeWidgetItem* target,
                                 QAbstractItemView::DropIndicatorPosition indicator) {
-        if (source == nullptr || source->data(0, kBackgroundRole).toBool()) return;
-        const QString source_id = source->data(0, kItemIdRole).toString();
-        const bool source_group = source->data(0, kGroupRole).toBool();
+        if (source_id.isEmpty()) return;
+        const auto source_layer = std::find_if(document_.layers.cbegin(),
+            document_.layers.cend(), [&source_id](const ImageLayerData& layer) {
+                return layer.id == source_id;
+            });
+        if (source_layer != document_.layers.cend() && source_layer->background) return;
         QString target_group_id;
         qsizetype insertion_index = document_.root_stack.size();
         if (target != nullptr && target->data(0, kGroupRole).toBool() &&

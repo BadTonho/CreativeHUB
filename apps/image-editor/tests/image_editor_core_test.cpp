@@ -2233,6 +2233,21 @@ void testImageLayerStackEditor() {
             added->document.layers.at(3).id == added->selected_layer_id,
             QStringLiteral("Adding a layer did not prepare an inserted candidate and selection."));
 
+    const auto moved_to_top = ImageLayerStackEditor::moveItem(
+        document, first.id, false, {}, document.root_stack.size(), second.id, {});
+    require(moved_to_top.has_value() && document == original &&
+            moved_to_top->document.root_stack == QVector<ImageStackItemData>{
+                {background.id, false}, {second.id, false}, {third.id, false},
+                {first.id, false}} &&
+            moved_to_top->document.layers.size() == document.layers.size(),
+            QStringLiteral("Moving a root layer upward lost it from the stack."));
+    const auto moved_to_bottom = ImageLayerStackEditor::moveItem(
+        moved_to_top->document, first.id, false, {}, 1, second.id, {});
+    require(moved_to_bottom.has_value() &&
+            moved_to_bottom->document.root_stack == document.root_stack &&
+            moved_to_bottom->document.layers == document.layers,
+            QStringLiteral("Moving a root layer downward lost it from the stack."));
+
     const auto grouped = ImageLayerStackEditor::groupLayers(
         document, {second.id, first.id}, {}, &error);
     require(grouped.has_value() && error.isEmpty() && document == original &&

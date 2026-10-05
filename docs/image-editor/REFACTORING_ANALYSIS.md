@@ -283,6 +283,14 @@ consumidores de publicação do Video Editor, e a suíte CTest completa passou e
 70/70 no Windows Release em 2026-10-05. `git diff --check` passou. A inspeção
 visual manual permanece com o mantenedor.
 
+Um defeito relatado no arraste de camadas levou o painel a capturar o ID e o
+tipo da linha ao iniciar o gesto, em vez de inferir a origem pela seleção no
+momento da soltura. A cobertura direta do editor agora verifica a movimentação
+de camadas da raiz para cima e para baixo sem perder itens; o checklist manual
+também pede conferir o arraste e a composição. Aplicação, core e UI compilaram
+em Release, e os testes focados de core e UI passaram em 2/2 no Windows em
+2026-10-05. A confirmação visual do arraste permanece com o mantenedor.
+
 ## Referências
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — fronteiras atuais de execução e do

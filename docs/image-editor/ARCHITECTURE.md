@@ -247,7 +247,8 @@ and export entry points used by the UI.
   The sidebar tools and crop action cannot be active at the same time.
 - `LayerPanel` is hosted by a resizable, dockable right-side `QDockWidget`. It
   presents the stack as a top-to-bottom tree with groups, Ctrl/Shift
-  multi-selection, and drag reordering or reparenting. Group Selected accepts
+  multi-selection, and drag reordering or reparenting. A drag retains its source
+  layer ID from the start of the gesture through the drop. Group Selected accepts
   only contiguous sibling raster layers. Ungroup preserves children; Delete
   removes a group and its children together. Groups cannot nest, and group
   thumbnails show the transformed composite. Each raster row has an isolated,
