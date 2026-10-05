@@ -51,6 +51,8 @@ add_executable(creative-suite-image-editor
     src/ui/export/image_export_controller.h
     src/ui/export/image_export_worker.cpp
     src/ui/export/image_export_worker.h
+    src/ui/import/image_import_controller.cpp
+    src/ui/import/image_import_controller.h
     src/ui/dialogs/image_export_dialog.cpp
     src/ui/dialogs/image_export_dialog.h
     src/ui/dialogs/new_canvas_dialog.cpp
@@ -88,6 +90,7 @@ target_include_directories(creative-suite-image-editor PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/canvas
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/dialogs
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/export
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/import
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/windows
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/tools
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/layers

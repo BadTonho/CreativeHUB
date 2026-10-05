@@ -1,5 +1,6 @@
 #include "image_editor_window.h"
 #include "image_canvas.h"
+#include "image_import_controller.h"
 #include <QAction>
 #include <QApplication>
 #include <QFileDialog>
@@ -27,6 +28,22 @@ bool testRasterImagesUi(const QString& root) {
     QImage bg(64,64,QImage::Format_ARGB32); bg.fill(Qt::transparent);
     QImage photo(32,32,QImage::Format_ARGB32); photo.fill(Qt::red);
     if (!bg.save(background) || !photo.save(source)) return false;
+    const auto decoded = ImageImportController::run(nullptr, {source});
+    if (!check(decoded.status==RasterImportStatus::Ready && decoded.images.size()==1 &&
+        decoded.images.front().image.size()==photo.size() &&
+        decoded.images.front().image.pixelColor(0,0)==Qt::red &&
+        decoded.failed_path.isEmpty(),
+        "Import controller did not return the decoded raster.")) return false;
+    const auto decode_failure = ImageImportController::run(
+        nullptr, {root+"/missing-import-controller-image.png"});
+    if (!check(decode_failure.status==RasterImportStatus::Failed &&
+        decode_failure.images.isEmpty() && !decode_failure.cause.isEmpty() &&
+        !decode_failure.failed_path.isEmpty(),
+        "Import controller did not return the decoder error.")) return false;
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        if (widget->objectName()=="imageImportProgressDialog")
+            return check(false,"Import controller left its progress dialog open.");
+    }
     ImageDocumentSession fixture;
     if (!fixture.openImage(background) || !fixture.saveDocument(doc)) return false;
     ImageEditorWindow window; window.resize(1100,800); window.show();

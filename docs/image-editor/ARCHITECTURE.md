@@ -15,6 +15,8 @@ persistence, and recovery.
   renderer, image exporter, and `.cimg` serialization.
 - `src/core/recovery/` contains local recovery snapshot persistence.
 - `src/core/diagnostics/` contains bounded technical error logging.
+- `src/ui/import/` contains the UI controller for cancellable raster decode
+  jobs; image format decoding remains in the core document module.
 - `src/ui/canvas/`, `src/ui/dialogs/`, `src/ui/layers/`, `src/ui/tools/`, and
   `src/ui/windows/` contain the canvas widget, creation dialogs, layer dock
   panel, tool sidebar and tool families, and main application window
@@ -61,11 +63,12 @@ persistence, and recovery.
 ## Linked image resources and geometry
 
 `prepareRasterImport` decodes PNG, JPEG, BMP, WebP, and TIFF through the existing
-Qt reader with automatic orientation. The window runs it on a worker thread
-behind a cancellable modal progress dialog. Cancellation is checked between
-files and after each blocking decode; Qt's decode call itself cannot be
-interrupted. The document remains stable while the worker runs. Only a
-complete successful batch enters the session, as one Undo/Redo edit.
+Qt reader with automatic orientation. `ImageImportController` runs it on a
+worker thread behind the shared cancellable modal progress dialog and waits
+for safe thread completion. Cancellation is checked between files and after
+each blocking decode; Qt's decode call itself cannot be interrupted. The
+window keeps import/relink validation and applies only a complete successful
+batch to the active session as one Undo/Redo edit.
 
 `RasterImage` stores a UUID, path, oriented source size, and an invertible
 affine matrix. `ImageDocumentSession` caches implicitly shared QImages by path.

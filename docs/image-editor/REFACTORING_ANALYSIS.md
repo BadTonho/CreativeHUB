@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos, estado por aba e execução da exportação de imagem implementados**.
+Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos, estado por aba e execução de importação/exportação de imagem implementados**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -313,6 +313,18 @@ O aplicativo e os alvos de UI/exportação compilaram em Release no Windows; o
 teste focado de exportação passou, a suíte CTest configurada passou em 12/12 e
 `git diff --check` passou em 2026-10-05. A inspeção visual permanece com o
 mantenedor.
+
+A execução da importação foi movida de `ImageEditorWindow` para
+`ImageImportController`, em `ui/import/`. O controller executa
+`prepareRasterImport` em segundo plano, apresenta o diálogo compartilhado,
+propaga o cancelamento e aguarda a thread; a janela mantém validações, sessão
+ativa, aplicação do lote ou da religação, seleção, logging e mensagens. Os
+testes de raster já cobrem importação em lote, arraste, religação e
+cancelamento; o teste de UI acrescenta cobertura direta do resultado de sucesso
+e de erro do controller. O aplicativo e os alvos de UI, exportação e raster
+compilaram em Release; os três testes focados passaram e a suíte CTest completa
+passou em 12/12 no Windows em 2026-10-05. `git diff --check` passou. A inspeção
+visual fica com o mantenedor.
 
 ## Referências
 

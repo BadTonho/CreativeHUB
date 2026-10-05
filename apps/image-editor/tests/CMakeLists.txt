@@ -64,6 +64,8 @@ add_executable(creative-suite-image-editor-ui-tests
     ../src/ui/export/image_export_controller.h
     ../src/ui/export/image_export_worker.cpp
     ../src/ui/export/image_export_worker.h
+    ../src/ui/import/image_import_controller.cpp
+    ../src/ui/import/image_import_controller.h
     ../src/ui/dialogs/new_canvas_dialog.cpp
     ../src/ui/dialogs/new_canvas_dialog.h
     ../src/ui/dialogs/canvas_size_dialog.cpp
@@ -99,6 +101,7 @@ target_include_directories(creative-suite-image-editor-ui-tests PRIVATE
     ../src/ui/canvas
     ../src/ui/dialogs
     ../src/ui/export
+    ../src/ui/import
     ../src/ui/windows
     ../src/ui/tools
     ../src/ui/layers
@@ -146,6 +149,8 @@ add_executable(creative-suite-image-editor-export-ui-tests
     ../src/ui/export/image_export_controller.h
     ../src/ui/export/image_export_worker.cpp
     ../src/ui/export/image_export_worker.h
+    ../src/ui/import/image_import_controller.cpp
+    ../src/ui/import/image_import_controller.h
     ../src/ui/dialogs/new_canvas_dialog.cpp
     ../src/ui/dialogs/new_canvas_dialog.h
     ../src/ui/dialogs/canvas_size_dialog.cpp
@@ -181,6 +186,7 @@ target_include_directories(creative-suite-image-editor-export-ui-tests PRIVATE
     ../src/ui/canvas
     ../src/ui/dialogs
     ../src/ui/export
+    ../src/ui/import
     ../src/ui/windows
     ../src/ui/tools
     ../src/ui/layers

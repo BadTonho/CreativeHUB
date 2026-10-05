@@ -4,6 +4,7 @@
 #include "image_document_store.h"
 #include "image_export_dialog.h"
 #include "image_export_controller.h"
+#include "image_import_controller.h"
 #include "canvas_size_dialog.h"
 #include "new_canvas_dialog.h"
 #include "shortcut_settings_dialog.h"
@@ -49,7 +50,6 @@
 #include <QStatusBar>
 #include <QStackedWidget>
 #include <QTabBar>
-#include <QThread>
 #include <QTextEdit>
 #include <QToolBar>
 #include <QToolButton>
@@ -59,7 +59,6 @@
 #include <QWidgetAction>
 
 #include <memory>
-#include <atomic>
 #include <algorithm>
 #include <utility>
 
@@ -1612,25 +1611,12 @@ bool ImageEditorWindow::importImagePaths(const QStringList& paths,
     }
     activeCanvas()->commitTextEditing();
     importing_ = true;
-    auto cancellation = std::make_shared<std::atomic_bool>(false);
-    RasterImportResult result;
-    ImageExportProgressDialog dialog(this);
-    dialog.setObjectName(QStringLiteral("imageImportProgressDialog"));
-    dialog.setWindowTitle(relink_id.isEmpty() ? QStringLiteral("Importing Images") : QStringLiteral("Relinking Image"));
-    dialog.setPhaseText(QStringLiteral("Decoding images…"));
-    dialog.setCancellationText(QStringLiteral("Cancelling image import…"));
-    connect(&dialog, &ImageExportProgressDialog::cancelRequested, this, [cancellation]() {
-        cancellation->store(true, std::memory_order_relaxed);
-    });
-    std::unique_ptr<QThread> thread(QThread::create([&result, paths, cancellation]() {
-        result = prepareRasterImport(paths, cancellation.get());
-    }));
-    connect(thread.get(), &QThread::finished, &dialog, &ImageExportProgressDialog::finish);
-    thread->start();
-    dialog.exec();
-    thread->wait();
+    const RasterImportResult result = ImageImportController::run(
+        this, paths, relink_id.isEmpty()
+            ? ImageImportPurpose::Layers
+            : ImageImportPurpose::Relink);
     importing_ = false;
-    if (cancellation->load(std::memory_order_relaxed) || result.status == RasterImportStatus::Cancelled) {
+    if (result.status == RasterImportStatus::Cancelled) {
         statusBar()->showMessage(QStringLiteral("Image import cancelled"), 3000);
         return false;
     }
