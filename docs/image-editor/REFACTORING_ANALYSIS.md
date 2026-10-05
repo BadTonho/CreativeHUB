@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos, estado por aba, execução de importação/exportação de imagem e histórico de edição implementados**.
+Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos, estado por aba, execução de importação/exportação de imagem, histórico de edição e codec do formato `.cimg` implementados**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -26,7 +26,7 @@ arquivos grandes:
 | `ui/canvas/image_canvas.cpp` e `.h` | Desenho e navegação do canvas, conversão de coordenadas, recorte, hospedagem dos widgets das ferramentas e roteamento de eventos | Continuar delegando o estado e o comportamento das ferramentas a módulos próprios, sem mover a apresentação do documento ou a conversão de coordenadas para cada ferramenta. |
 | `ui/windows/image_editor_window.cpp` e `.h` | Layout da janela, ativação e opções das ferramentas, ações e atalhos, abas de documentos, abrir/salvar, importar/exportar, confirmação de recuperação, registro de erros e fluxo de imagens vinculadas | Extrair responsabilidades coesas quando forem alteradas, mantendo a janela principal responsável por montar e coordenar a aplicação. |
 | `core/document/image_document_session.cpp` e `.h` | Ciclo de vida do documento, recursos de imagem, composição e prévias, operações de edição, gerenciamento de camadas/grupos/máscaras e seleção; delega as pilhas de Desfazer/Refazer | Manter a sessão como fachada e responsável por restaurar e validar o estado; deixar renderização, operações de domínio e mecânica do histórico em módulos internos focados. |
-| `core/document/image_document_store.cpp` e `.h` | Serialização `.cimg`, validação, migrações, caminhos e serialização de recuperação | Avaliar auxiliares específicos do formato apenas quando houver necessidade; preservar as regras de compatibilidade e gravação atômica como uma fronteira testada. |
+| `core/document/image_document_store.cpp` e `.h` | Fachada pública de persistência, leitura/gravação atômica, caminhos de arquivo e envelope de recuperação | Manter a API estável e delegar JSON versionado, migração e validação a `ImageDocumentCodec`; preservar a compatibilidade `.cimg` como uma fronteira testada. |
 
 No momento desta análise, os arquivos têm aproximadamente 1.816 linhas em
 `image_canvas.cpp`, 2.837 em `image_editor_window.cpp`, 3.173 em
@@ -339,6 +339,18 @@ para operações integradas. A aplicação e os alvos afetados do Image Editor
 compilaram em Release no Windows; os oito testes focados passaram e a suíte
 CTest completa passou em 12/12 em 2026-10-05. `git diff --check` passou. Não
 houve mudança visual, então a verificação manual da interface não se aplica.
+
+A serialização e a migração do formato foram movidas para o módulo interno e
+sem estado `ImageDocumentCodec`. Ele codifica e decodifica o JSON versionado,
+valida os dados e gera IDs ausentes; `ImageDocumentStore` mantém sua API
+pública, a leitura/gravação atômica e o envelope de recuperação. Os métodos
+públicos de validação do store delegam ao codec. Testes diretos cobrem uma
+ida e volta v13, a migração v3 para v13 e a rejeição de uma versão não
+suportada; os fixtures existentes continuam cobrindo as versões antigas,
+documentos inválidos, caminhos raster, recuperação e falhas de gravação. O
+aplicativo e os alvos afetados do Image Editor compilaram em Release; os oito
+testes focados e a suíte CTest completa passaram (8/8 e 12/12) no Windows em
+2026-10-05. `git diff --check` passou. Não houve alteração visual.
 
 ## Referências
 

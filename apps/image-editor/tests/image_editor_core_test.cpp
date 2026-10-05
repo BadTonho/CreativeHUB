@@ -1,4 +1,5 @@
 #include "image_document_session.h"
+#include "image_document_codec.h"
 #include "image_document_history.h"
 #include "image_document_renderer.h"
 #include "image_document_store.h"
@@ -634,6 +635,73 @@ void testCanvasResizingAnchorsPersistenceAndHistory(const QString& root) {
     require(!migrated.resizeCanvas(QSize(32768, 32768), image_editor::CanvasAnchor::Center, &error) &&
                 migrated.data() == before_rejected,
             QStringLiteral("An over-budget resize changed the document."));
+}
+
+void testImageDocumentCodec() {
+    using namespace image_editor;
+
+    ImageDocumentSession source;
+    QString error;
+    require(source.createCanvas(QSize(8, 6), Qt::transparent, &error), error);
+    require(source.applyPaintStroke({QPointF(3, 2)}, Qt::red, 2, &error), error);
+
+    const QString document_path = QStringLiteral("codec-round-trip.cimg");
+    QJsonObject encoded;
+    require(ImageDocumentCodec::encodeDocument(
+                source.data(), document_path, &encoded, &error), error);
+    require(encoded.value("format").toString() ==
+                QStringLiteral("creative-suite-image-document") &&
+                encoded.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("The codec should emit the current versioned document envelope."));
+    ImageDocumentData decoded;
+    require(ImageDocumentCodec::decodeDocument(
+                encoded, document_path, &decoded, &error) && decoded == source.data(), error);
+    QString null_output_error;
+    require(!ImageDocumentCodec::encodeDocument(
+                source.data(), document_path, nullptr, &null_output_error) &&
+                !null_output_error.isEmpty(),
+            QStringLiteral("The codec should reject a missing encoded-document output."));
+    null_output_error.clear();
+    require(!ImageDocumentCodec::decodeDocument(
+                encoded, document_path, nullptr, &null_output_error) &&
+                !null_output_error.isEmpty(),
+            QStringLiteral("The codec should reject a missing decoded-document output."));
+
+    QJsonObject legacy_base;
+    legacy_base.insert("kind", "canvas");
+    legacy_base.insert("width", 8);
+    legacy_base.insert("height", 6);
+    legacy_base.insert("background", "#00000000");
+    QJsonObject point;
+    point.insert("x", 3.0);
+    point.insert("y", 2.0);
+    QJsonObject stroke;
+    stroke.insert("kind", "paint_stroke");
+    stroke.insert("color", "#FFFF0000");
+    stroke.insert("diameter", 2);
+    stroke.insert("points", QJsonArray{point});
+    QJsonObject legacy;
+    legacy.insert("format", "creative-suite-image-document");
+    legacy.insert("version", 3);
+    legacy.insert("base", legacy_base);
+    legacy.insert("operations", QJsonArray{stroke});
+    ImageDocumentData migrated;
+    require(ImageDocumentCodec::decodeDocument(
+                legacy, document_path, &migrated, &error) &&
+                migrated.base_kind == ImageBaseKind::Canvas &&
+                migrated.operations.size() == 1 &&
+                !migrated.operations.front().paint_stroke.id.isEmpty(), error);
+    QJsonObject upgraded;
+    require(ImageDocumentCodec::encodeDocument(
+                migrated, document_path, &upgraded, &error) &&
+                upgraded.value("version").toInt() == ImageDocumentStore::kCurrentDocumentVersion,
+            QStringLiteral("A legacy document should migrate to the current version when encoded."));
+
+    QJsonObject unsupported = legacy;
+    unsupported.insert("version", ImageDocumentStore::kCurrentDocumentVersion + 1);
+    require(!ImageDocumentCodec::decodeDocument(
+                unsupported, document_path, &decoded, &error) && !error.isEmpty(),
+            QStringLiteral("The codec should reject an unsupported document version."));
 }
 
 void testLegacyVersionOneDocument(const QString& root) {
@@ -2977,6 +3045,7 @@ int main(int argc, char* argv[]) {
         testCanvasCreationPersistenceAndRecovery(root);
         testCanvasResizingAnchorsPersistenceAndHistory(root);
         testStatelessDocumentRenderer();
+        testImageDocumentCodec();
         testLegacyVersionOneDocument(root);
         testVersionTwoDocumentCompatibility(root);
         testVersionThreeMigrationToBackground(root);

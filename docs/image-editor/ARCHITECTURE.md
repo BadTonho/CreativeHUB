@@ -137,18 +137,19 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   bottom to top. A group composites its children first, applies crop, rotation,
   and flips to the combined pixels, then applies group opacity once. Export and
   recovery use that same composition; linked source files remain unchanged.
-- `ImageDocumentStore` reads and atomically writes versioned `.cimg` documents
-  and recovery snapshots. Version 4 stores layer UUIDs and properties; version
-  5 adds layer-local eraser strokes; version 6 adds editable shape operations;
-  version 7 adds stable UUIDs to paint and eraser strokes; version 8 adds
-  one-level groups. Version 9 adds text, version 10 adds raster layer masks,
-  version 11 adds linked raster images, version 12 adds independent current
-  canvas bounds with a base-image offset, and version 13 adds persisted
-  selection clips on paint and eraser strokes. Area Selection itself remains
-  temporary per tab. The original base dimensions remain available for relink
-  validation. The reader continues to accept versions 1–12 and generates
-  in-memory IDs for older strokes. Its data format is specified in
-  [`FORMAT.md`](FORMAT.md).
+- `ImageDocumentStore` reads and atomically writes `.cimg` documents and
+  recovery snapshots. `ImageDocumentCodec` translates document data to and
+  from versioned JSON, validates it, and migrates supported older versions.
+  Version 4 stores layer UUIDs and properties; version 5 adds layer-local
+  eraser strokes; version 6 adds editable shape operations; version 7 adds
+  stable UUIDs to paint and eraser strokes; version 8 adds one-level groups.
+  Version 9 adds text, version 10 adds raster layer masks, version 11 adds
+  linked raster images, version 12 adds independent current canvas bounds with
+  a base-image offset, and version 13 adds persisted selection clips on paint
+  and eraser strokes. Area Selection itself remains temporary per tab. The
+  original base dimensions remain available for relink validation. The codec
+  continues to accept versions 1–12 and generates in-memory IDs for older
+  strokes. The data format is specified in [`FORMAT.md`](FORMAT.md).
 - `ImageExportSnapshot` captures the current source image, document data, and
   selected layer and group IDs; its implicitly shared image and document
   buffers exclude undo history and thumbnail caches. The default composite
