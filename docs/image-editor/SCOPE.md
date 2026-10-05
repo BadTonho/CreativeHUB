@@ -19,11 +19,15 @@ alignment, movement, and width resizing. While editing, its box grows
 horizontally to fit the longest line up to the canvas edge, then wraps and grows
 vertically. Text is kept editable in its own `Text N` layer.
 
-Documents use the provisional `.cimg` version 12 format. The application reads
-versions 1 through 11 and writes version 12, migrating older documents on save;
-version 1 recovery envelopes accept a version 12 document payload. Source images
+Documents use the provisional `.cimg` version 13 format. The application reads
+versions 1 through 12 and writes version 13, migrating older documents on save;
+version 1 recovery envelopes accept a version 13 document payload. Source images
 remain unchanged, and original source dimensions are retained for relinking.
-Canvas documents can use standard presets or custom dimensions. Self-contained
+Area Selection is a separate tool from object Selection. Rectangle and ellipse
+gestures can replace, add to, or subtract from the temporary per-tab selection.
+New Paint and Eraser strokes, including mask edits, persist their clipping
+geometry in `.cimg` v13; the selection itself does not dirty or serialize with
+the document. Canvas documents can use standard presets or custom dimensions. Self-contained
 canvas documents currently allow up to 32768 pixels per side and 64 million
 pixels total. These are format limits, not performance claims.
 **Image > Canvas Size** changes current document bounds without resampling layer
@@ -78,9 +82,9 @@ performance guarantee is approved yet.
 ## Compatibility and Release Order
 
 The current implementation preserves the ability to open existing `.cimg`
-versions 1 through 11 and writes the current version 12 format on save. Automated
-regression tests cover migration, canvas-size persistence, invalid text rejection,
-and version 12 recovery payload. This implementation does not mark manual text checks or
+versions 1 through 12 and writes the current version 13 format on save. Automated
+regression tests cover migration, canvas-size persistence, clipped paint/erase,
+and version 13 recovery payload. This implementation does not mark manual text checks or
 Video Editor linked-image acceptance complete.
 
 Per project policy, complete and accept the standalone minimum before accepting
@@ -133,7 +137,7 @@ editable stack items in one Undo/Redo edit; groups include their children.
 Background is protected, including mixed selections. Text, rename, and numeric
 fields keep normal character deletion. Deleting a missing image reference is
 allowed and can unblock exports. Original files are preserved. The document
-format remains v12 and the contextual shortcut is customizable.
+format remains v13 and the contextual shortcut is customizable.
 
 ## Outside This Release
 

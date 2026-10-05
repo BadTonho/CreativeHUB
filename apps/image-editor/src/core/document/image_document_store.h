@@ -2,6 +2,7 @@
 
 #include <QColor>
 #include <QPointF>
+#include <QPainterPath>
 #include <QPoint>
 #include <QRect>
 #include <QRectF>
@@ -42,6 +43,8 @@ struct ImagePaintStroke {
     QVector<QPointF> points;
     QColor color = Qt::black;
     int diameter = 12;
+    // Optional, persistent pixel-selection clip in this stroke's local space.
+    std::optional<QPainterPath> clipping_path;
 
     bool operator==(const ImagePaintStroke&) const = default;
 };
@@ -50,6 +53,7 @@ struct ImageEraseStroke {
     QString id;
     QVector<QPointF> points;
     int diameter = 12;
+    std::optional<QPainterPath> clipping_path;
 
     bool operator==(const ImageEraseStroke&) const = default;
 };
@@ -197,9 +201,10 @@ struct RecoveryDocumentData {
 
 class ImageDocumentStore final {
 public:
-    static constexpr int kCurrentDocumentVersion = 12;
+    static constexpr int kCurrentDocumentVersion = 13;
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
+    static constexpr qsizetype kMaximumStrokeClipPathElements = 100'000;
     static constexpr int kMaximumPaintBrushDiameter = 1024;
     static constexpr int kMaximumShapeStrokeWidth = 1024;
     static constexpr int kMaximumTextFontPixelSize = 1024;

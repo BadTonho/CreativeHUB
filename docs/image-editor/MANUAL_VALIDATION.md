@@ -483,6 +483,35 @@ preview is intentionally not part of this milestone.
 This checklist records the manual acceptance work; it does not replace the
 automated document, operation, export, recovery, and UI-boundary tests.
 
+## Area Selection
+
+Use a disposable image or canvas. Record the OS, Qt version, build, image size,
+and outcome. Visual and cross-application acceptance has not yet been recorded.
+
+1. Open an image and activate **Area Selection** with `M`. Confirm the options
+   bar starts at Rectangle + Replace. Draw a rectangle, switch to Ellipse, and
+   verify the dashed outline and translucent area. Add an ellipse, subtract a
+   rectangle, then use `Ctrl+D` to clear the result.
+2. Create a selection, switch to Paint and Eraser, and make strokes across its
+   edge. Confirm pixels change only inside the selected geometry. Switch back to
+   Area Selection and confirm the selection persists. Start another drag and
+   press `Esc`; confirm it cancels the gesture without changing the prior area.
+3. Create an empty result with Subtract and confirm Paint and Eraser make no
+   change. Clear it with **Edit > Deselect**. Verify selection gestures and
+   clearing do not add an Undo step or mark the document modified.
+4. Repeat clipped painting and erasing on a layer mask and on a child layer in
+   a rotated or flipped group. Save/reopen the `.cimg`, then compare the canvas,
+   PNG export, and Quick Export. Confirm old v1–v12 documents retain unrestricted
+   legacy brush strokes.
+5. With an active selection, resize the canvas using each side and center anchor.
+   Confirm the selection moves with the content and is cropped to the new bounds.
+   Undo and redo the resize and confirm the selection returns to each matching
+   canvas position without dirtying the document from selection alone.
+6. In Video Editor, open a linked image in Image Editor, paint through an area
+   selection, save, and confirm the published PNG and the linked Video Editor
+   preview show the clipped result. Save/reopen the Video Editor project and
+   verify its media identity and timeline remain unchanged.
+
 ### Recorded smoke test
 
 - [x] User-confirmed basic handoff: open a linked image from the Video Editor,

@@ -39,6 +39,12 @@ namespace {
 
 constexpr qsizetype kMaximumPaintPreviewPoints = 100'000;
 
+QPainterPath rectPath(const QRectF& rect) {
+    QPainterPath path;
+    path.addRect(rect);
+    return path;
+}
+
 QString objectId(const ImageOperation& operation) {
     switch (operation.kind) {
     case OperationKind::PaintStroke: return operation.paint_stroke.id;
@@ -175,6 +181,7 @@ void ImageCanvas::setImage(QImage image, bool resetView) {
         pan_ = {};
         fit_to_window_ = true;
         crop_selection_ = {};
+        clearAreaSelection();
         fitToWindow();
     }
     update();
@@ -184,6 +191,7 @@ void ImageCanvas::setCropMode(bool enabled) {
     if (erasing_ || !transient_image_.isNull()) emit erasePreviewCleared();
     crop_mode_ = enabled;
     if (enabled) {
+        area_selection_mode_ = false;
         paint_mode_ = false;
         eraser_mode_ = false;
         shape_creation_mode_ = false;
@@ -206,6 +214,7 @@ void ImageCanvas::setPaintMode(bool enabled) {
     if (erasing_ || !transient_image_.isNull()) emit erasePreviewCleared();
     paint_mode_ = enabled;
     if (enabled) {
+        area_selection_mode_ = false;
         crop_mode_ = false;
         eraser_mode_ = false;
         shape_creation_mode_ = false;
@@ -229,6 +238,7 @@ void ImageCanvas::setEraserMode(bool enabled) {
     if (erasing_ || !transient_image_.isNull()) emit erasePreviewCleared();
     eraser_mode_ = enabled;
     if (enabled) {
+        area_selection_mode_ = false;
         crop_mode_ = false;
         paint_mode_ = false;
         shape_creation_mode_ = false;
@@ -251,6 +261,7 @@ void ImageCanvas::setEraserMode(bool enabled) {
 void ImageCanvas::setShapeCreationMode(bool enabled) {
     shape_creation_mode_ = enabled;
     if (enabled) {
+        area_selection_mode_ = false;
         crop_mode_ = false;
         paint_mode_ = false;
         eraser_mode_ = false;
@@ -276,6 +287,7 @@ void ImageCanvas::setTextCreationMode(bool enabled) {
     }
     text_creation_mode_ = enabled;
     if (enabled) {
+        area_selection_mode_ = false;
         crop_mode_ = false;
         paint_mode_ = false;
         eraser_mode_ = false;
@@ -298,6 +310,7 @@ void ImageCanvas::setTextCreationMode(bool enabled) {
 void ImageCanvas::setObjectSelectionMode(bool enabled) {
     object_selection_mode_ = enabled;
     if (enabled) {
+        area_selection_mode_ = false;
         crop_mode_ = false;
         paint_mode_ = false;
         eraser_mode_ = false;
@@ -315,6 +328,83 @@ void ImageCanvas::setObjectSelectionMode(bool enabled) {
     brush_cursor_visible_ = false;
     setCursor(Qt::ArrowCursor);
     update();
+}
+
+void ImageCanvas::setAreaSelectionMode(bool enabled) {
+    area_selection_mode_ = enabled;
+    if (enabled) {
+        crop_mode_ = false;
+        paint_mode_ = false;
+        eraser_mode_ = false;
+        shape_creation_mode_ = false;
+        text_creation_mode_ = false;
+        object_selection_mode_ = false;
+    }
+    selecting_area_ = false;
+    selecting_crop_ = false;
+    painting_ = false;
+    erasing_ = false;
+    creating_shape_ = false;
+    creating_text_frame_ = false;
+    clearObjectInteraction();
+    paint_points_.clear();
+    transient_image_ = {};
+    brush_cursor_visible_ = false;
+    setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
+    update();
+}
+
+void ImageCanvas::setAreaSelectionOptions(AreaSelectionShape shape,
+                                          AreaSelectionCombineMode combine_mode) {
+    area_selection_shape_ = shape;
+    area_selection_combine_mode_ = combine_mode;
+}
+
+void ImageCanvas::clearAreaSelection() {
+    const bool changed = area_selection_active_ || !area_selection_path_.isEmpty();
+    area_selection_active_ = false;
+    area_selection_path_ = {};
+    cancelAreaSelectionGesture();
+    if (changed) emit areaSelectionChanged(false);
+    update();
+}
+
+void ImageCanvas::translateAreaSelection(const QPoint& delta) {
+    if (!area_selection_active_ || delta.isNull()) return;
+    area_selection_path_.translate(delta);
+    update();
+}
+
+void ImageCanvas::cancelAreaSelectionGesture() {
+    if (!selecting_area_) return;
+    selecting_area_ = false;
+    area_selection_start_ = {};
+    area_selection_current_ = {};
+    update();
+}
+
+std::optional<QPainterPath> ImageCanvas::areaSelectionClipPath() const {
+    if (!area_selection_active_) return {};
+    return visibleAreaSelectionPath();
+}
+
+QPainterPath ImageCanvas::visibleAreaSelectionPath() const {
+    if (!area_selection_active_ || image_.isNull()) return {};
+    const QRectF canvas_bounds(QPointF(0.0, 0.0), QSizeF(image_.size()));
+    return area_selection_path_.intersected(rectPath(canvas_bounds));
+}
+
+QPainterPath ImageCanvas::areaSelectionGesturePath() const {
+    if (!selecting_area_ || image_.isNull()) return {};
+    const QPointF start = widgetToImageCoordinates(area_selection_start_);
+    const QPointF end = widgetToImageCoordinates(area_selection_current_);
+    const QRectF bounds = QRectF(start, end).normalized();
+    if (bounds.width() <= 0.0 || bounds.height() <= 0.0) return {};
+    QPainterPath path;
+    if (area_selection_shape_ == AreaSelectionShape::Ellipse) path.addEllipse(bounds);
+    else path.addRect(bounds);
+    return path.intersected(rectPath(
+        QRectF(QPointF(0.0, 0.0), QSizeF(image_.size()))));
 }
 
 void ImageCanvas::setShapeStyle(const ImageShapeData& style) {
@@ -1126,6 +1216,45 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     }
     painter.restore();
     painter.drawImage(target, transient_image_.isNull() ? image_ : transient_image_);
+    QPainterPath displayed_area_selection = visibleAreaSelectionPath();
+    if (selecting_area_) {
+        const QPainterPath gesture = areaSelectionGesturePath();
+        if (!gesture.isEmpty()) {
+            if (area_selection_combine_mode_ == AreaSelectionCombineMode::Replace) {
+                displayed_area_selection = gesture;
+            } else if (area_selection_combine_mode_ == AreaSelectionCombineMode::Add) {
+                displayed_area_selection = area_selection_active_
+                ? visibleAreaSelectionPath().united(gesture) : gesture;
+            } else {
+                displayed_area_selection = area_selection_active_
+                    ? visibleAreaSelectionPath().subtracted(gesture) : QPainterPath{};
+            }
+        }
+    }
+    if (area_selection_active_ || selecting_area_) {
+        displayed_area_selection = displayed_area_selection.intersected(
+            rectPath(QRectF(QPointF(0.0, 0.0), QSizeF(image_.size()))));
+        QTransform image_to_widget;
+        image_to_widget.translate(target.left(), target.top());
+        image_to_widget.scale(zoom_, zoom_);
+        const QPainterPath widget_selection = image_to_widget.map(displayed_area_selection);
+        painter.save();
+        painter.setClipRect(target);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.fillPath(widget_selection, QColor(70, 165, 235, 28));
+        QPen dark_outline(QColor(20, 24, 30), 2.0, Qt::DashLine);
+        dark_outline.setCosmetic(true);
+        dark_outline.setDashOffset(0.0);
+        painter.setPen(dark_outline);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawPath(widget_selection);
+        QPen light_outline(QColor(245, 248, 252), 1.0, Qt::DashLine);
+        light_outline.setCosmetic(true);
+        light_outline.setDashOffset(3.0);
+        painter.setPen(light_outline);
+        painter.drawPath(widget_selection);
+        painter.restore();
+    }
     // While editing, QPlainTextEdit draws the live text, caret, and selection
     // together. Painting a second copy here makes selection appear duplicated
     // and misaligned as the editor grows. Committed text uses drawTextOverlay.
@@ -1152,6 +1281,13 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
             painter.save();
             painter.setClipRect(target);
             painter.setRenderHint(QPainter::Antialiasing, true);
+            if (area_selection_active_) {
+                QTransform image_to_widget;
+                image_to_widget.translate(target.left(), target.top());
+                image_to_widget.scale(zoom_, zoom_);
+                painter.setClipPath(image_to_widget.map(visibleAreaSelectionPath()),
+                                   Qt::IntersectClip);
+            }
             const QColor stroke_color = eraser_mode_
                 ? QColor(240, 80, 125, 115) : brush_color_;
             QPen pen(stroke_color, brush_diameter_ * zoom_, Qt::SolidLine,
@@ -1302,6 +1438,15 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if (area_selection_mode_ && event->button() == Qt::LeftButton &&
+        imageTargetRect().contains(event->position())) {
+        selecting_area_ = true;
+        area_selection_start_ = event->position();
+        area_selection_current_ = event->position();
+        update();
+        event->accept();
+        return;
+    }
     if (shape_creation_mode_ && event->button() == Qt::LeftButton &&
         imageTargetRect().contains(event->position())) {
         creating_shape_ = true;
@@ -1437,6 +1582,12 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
+    if (selecting_area_) {
+        area_selection_current_ = event->position();
+        update();
+        event->accept();
+        return;
+    }
     if (creating_text_frame_) {
         text_frame_current_ = widgetToImageCoordinates(event->position());
         update();
@@ -1514,6 +1665,38 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         const QRect selection = cropToImageCoordinates(crop_selection_);
         crop_selection_ = {};
         if (selection.width() > 1 && selection.height() > 1) emit cropSelected(selection);
+        update();
+        event->accept();
+        return;
+    }
+    if (event->button() == Qt::LeftButton && selecting_area_) {
+        area_selection_current_ = event->position();
+        const QPainterPath gesture = areaSelectionGesturePath();
+        selecting_area_ = false;
+        area_selection_start_ = {};
+        area_selection_current_ = {};
+        if (!gesture.isEmpty()) {
+            QPainterPath combined;
+            if (area_selection_combine_mode_ == AreaSelectionCombineMode::Replace) {
+                combined = gesture;
+            } else if (area_selection_combine_mode_ == AreaSelectionCombineMode::Add) {
+                combined = area_selection_active_
+                    ? visibleAreaSelectionPath().united(gesture) : gesture;
+            } else {
+                combined = area_selection_active_
+                    ? visibleAreaSelectionPath().subtracted(gesture) : QPainterPath{};
+            }
+            combined = combined.intersected(rectPath(
+                QRectF(QPointF(0.0, 0.0), QSizeF(image_.size()))));
+            if (combined.elementCount() > ImageDocumentStore::kMaximumStrokeClipPathElements) {
+                emit areaSelectionRejected(QStringLiteral(
+                    "The selection would exceed the supported geometry limit."));
+            } else {
+                area_selection_path_ = std::move(combined);
+                area_selection_active_ = true;
+                emit areaSelectionChanged(true);
+            }
+        }
         update();
         event->accept();
         return;
@@ -1725,6 +1908,11 @@ void ImageCanvas::keyPressEvent(QKeyEvent* event) {
         creating_shape_ = false;
         shape_interaction_current_ = {};
         update();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Escape && selecting_area_) {
+        cancelAreaSelectionGesture();
         event->accept();
         return;
     }

@@ -21,9 +21,11 @@ duplicate combinations are rejected. Use **Reset All** to restore the defaults.
 | Redo | Qt standard Redo sequence (`Ctrl+Y` on Windows/Linux; `Cmd+Shift+Z` on macOS) |
 | Paint tool | `B` (toggle Paint on or off when an editable layer is available) |
 | Eraser tool | `E` (toggle Eraser on or off when an editable layer is available) |
+| Area Selection tool | `M` (toggle Area Selection on or off) |
+| Deselect | `Ctrl+D` |
 | Insert a line break while editing text | `Enter` |
 | Confirm text editing | `Ctrl+Enter` |
-| Cancel text editing, crop selection, shape creation, object selection, or a mask brush gesture | `Esc` |
+| Cancel text editing, crop selection, an Area Selection gesture, shape creation, object selection, or a mask brush gesture | `Esc` |
 | Shapes tool | Unassigned by default |
 | Text tool | Unassigned by default |
 | Selection tool | Unassigned by default |
@@ -42,6 +44,16 @@ duplicate combinations are rejected. Use **Reset All** to restore the defaults.
 
 Use the mouse wheel to zoom, the middle mouse button to pan, and the Crop
 Selection toolbar or Edit menu action to start a crop gesture.
+
+Area Selection is independent of object Selection. Choose Rectangle or Ellipse
+and Replace, Add, or Subtract in the options bar, then drag on the canvas. The
+temporary selection belongs to its document tab and does not mark the document
+modified. Switching tools preserves it. Paint and Eraser, including mask edits,
+are clipped to the selected area; without a selection they remain unrestricted.
+An empty selection blocks painting and erasing. `Esc` cancels only the in-flight
+selection gesture and retains the previous selection. **Edit > Deselect** clears
+the selection without adding an Undo entry. The saved clip on each new stroke
+preserves its selected area after saving and reopening the document.
 
 **Delete Selection** follows keyboard focus. In the canvas with Selection active,
 it removes the selected objects while preserving their layers, masks, and other

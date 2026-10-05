@@ -33,7 +33,8 @@ constexpr int kEditableTextDocumentVersion = 9;
 constexpr int kLayerMaskDocumentVersion = 10;
 constexpr int kLinkedRasterDocumentVersion = 11;
 constexpr int kCanvasSizeDocumentVersion = 12;
-constexpr int kDocumentVersion = kCanvasSizeDocumentVersion;
+constexpr int kStrokeClipDocumentVersion = 13;
+constexpr int kDocumentVersion = kStrokeClipDocumentVersion;
 constexpr int kRecoveryVersion = 1;
 constexpr auto kDocumentFormat = "creative-suite-image-document";
 constexpr auto kRecoveryFormat = "creative-suite-image-recovery";
@@ -117,6 +118,93 @@ QString storedPath(const QString& path, const QString& document_path) {
         ? QDir::fromNativeSeparators(relative) : absolute;
 }
 
+QJsonArray encodeClipPath(const QPainterPath& path) {
+    QJsonArray encoded;
+    for (int index = 0; index < path.elementCount(); ++index) {
+        const auto element = path.elementAt(index);
+        encoded.append(QJsonObject{{"type", static_cast<int>(element.type)},
+                                   {"x", element.x}, {"y", element.y}});
+    }
+    return encoded;
+}
+
+bool decodeClipPath(const QJsonValue& value, Qt::FillRule fill_rule,
+                    QPainterPath* path) {
+    if (!value.isArray() || path == nullptr) return false;
+    const auto elements = value.toArray();
+    if (elements.isEmpty() ||
+        elements.size() > ImageDocumentStore::kMaximumStrokeClipPathElements) return false;
+
+    QPainterPath decoded;
+    const auto coordinate = [](const QJsonObject& object, const char* name, qreal* result) {
+        const QJsonValue value = object.value(QLatin1String(name));
+        if (!value.isDouble() || !std::isfinite(value.toDouble()) ||
+            std::abs(value.toDouble()) > kMaximumStoredCoordinate) return false;
+        *result = value.toDouble();
+        return true;
+    };
+    for (qsizetype index = 0; index < elements.size(); ++index) {
+        if (!elements.at(index).isObject()) return false;
+        const QJsonObject object = elements.at(index).toObject();
+        int type = -1;
+        qreal x = 0.0;
+        qreal y = 0.0;
+        if (!isInteger(object.value("type"), &type) ||
+            !coordinate(object, "x", &x) || !coordinate(object, "y", &y)) return false;
+        switch (static_cast<QPainterPath::ElementType>(type)) {
+        case QPainterPath::MoveToElement:
+            decoded.moveTo(x, y);
+            break;
+        case QPainterPath::LineToElement:
+            decoded.lineTo(x, y);
+            break;
+        case QPainterPath::CurveToElement: {
+            if (index + 2 >= elements.size() || !elements.at(index + 1).isObject() ||
+                !elements.at(index + 2).isObject()) return false;
+            const QJsonObject control2 = elements.at(index + 1).toObject();
+            const QJsonObject end = elements.at(index + 2).toObject();
+            int control2_type = -1;
+            int end_type = -1;
+            qreal control2_x = 0.0, control2_y = 0.0, end_x = 0.0, end_y = 0.0;
+            if (!isInteger(control2.value("type"), &control2_type) ||
+                control2_type != QPainterPath::CurveToDataElement ||
+                !isInteger(end.value("type"), &end_type) ||
+                end_type != QPainterPath::CurveToDataElement ||
+                !coordinate(control2, "x", &control2_x) ||
+                !coordinate(control2, "y", &control2_y) ||
+                !coordinate(end, "x", &end_x) || !coordinate(end, "y", &end_y)) return false;
+            decoded.cubicTo(QPointF(x, y), QPointF(control2_x, control2_y),
+                            QPointF(end_x, end_y));
+            index += 2;
+            break;
+        }
+        case QPainterPath::CurveToDataElement:
+        default:
+            return false;
+        }
+    }
+    if (decoded.isEmpty() || decoded.elementCount() >
+            ImageDocumentStore::kMaximumStrokeClipPathElements) return false;
+    decoded.setFillRule(fill_rule);
+    *path = std::move(decoded);
+    return true;
+}
+
+bool decodeStrokeClip(const QJsonObject& object, int version,
+                      std::optional<QPainterPath>* clipping_path) {
+    if (clipping_path == nullptr || version < kStrokeClipDocumentVersion ||
+        !object.contains("clip_path")) return clipping_path != nullptr;
+    int fill_rule = -1;
+    if (!isInteger(object.value("clip_rule"), &fill_rule) ||
+        (fill_rule != static_cast<int>(Qt::OddEvenFill) &&
+         fill_rule != static_cast<int>(Qt::WindingFill))) return false;
+    QPainterPath path;
+    if (!decodeClipPath(object.value("clip_path"),
+                        static_cast<Qt::FillRule>(fill_rule), &path)) return false;
+    *clipping_path = std::move(path);
+    return true;
+}
+
 QJsonObject encodeOperation(const ImageOperation& operation, const QString& document_path = {}) {
     QJsonObject encoded;
     switch (operation.kind) {
@@ -168,6 +256,11 @@ QJsonObject encodeOperation(const ImageOperation& operation, const QString& docu
             points.append(encoded_point);
         }
         encoded.insert("points", points);
+        if (operation.paint_stroke.clipping_path.has_value()) {
+            encoded.insert("clip_path", encodeClipPath(*operation.paint_stroke.clipping_path));
+            encoded.insert("clip_rule", static_cast<int>(
+                operation.paint_stroke.clipping_path->fillRule()));
+        }
         break;
     }
     case OperationKind::EraseStroke: {
@@ -182,6 +275,11 @@ QJsonObject encodeOperation(const ImageOperation& operation, const QString& docu
             points.append(encoded_point);
         }
         encoded.insert("points", points);
+        if (operation.erase_stroke.clipping_path.has_value()) {
+            encoded.insert("clip_path", encodeClipPath(*operation.erase_stroke.clipping_path));
+            encoded.insert("clip_rule", static_cast<int>(
+                operation.erase_stroke.clipping_path->fillRule()));
+        }
         break;
     }
     case OperationKind::Shape: {
@@ -345,7 +443,9 @@ bool decodeOperations(const QJsonValue& value,
                 !isArgbHexColor(encoded_color) || !color.isValid() ||
                 !isInteger(object.value("diameter"), &diameter) ||
                 diameter < 1 || diameter > ImageDocumentStore::kMaximumPaintBrushDiameter ||
-                (version >= kObjectIdentityDocumentVersion && !isCanonicalUuid(id))) {
+                (version >= kObjectIdentityDocumentVersion && !isCanonicalUuid(id)) ||
+                !decodeStrokeClip(object, version,
+                                  &operation.paint_stroke.clipping_path)) {
                 assignError(error, QStringLiteral("The document contains an invalid paint stroke."));
                 return false;
             }
@@ -387,7 +487,9 @@ bool decodeOperations(const QJsonValue& value,
                 encoded_points.size() > ImageDocumentStore::kMaximumPaintStrokePoints ||
                 !isInteger(object.value("diameter"), &diameter) || diameter < 1 ||
                 diameter > ImageDocumentStore::kMaximumPaintBrushDiameter ||
-                (version >= kObjectIdentityDocumentVersion && !isCanonicalUuid(id))) {
+                (version >= kObjectIdentityDocumentVersion && !isCanonicalUuid(id)) ||
+                !decodeStrokeClip(object, version,
+                                  &operation.erase_stroke.clipping_path)) {
                 assignError(error, QStringLiteral("The document contains an invalid erase stroke."));
                 return false;
             }

@@ -27,6 +27,9 @@ class ImageCanvas final : public QWidget {
     Q_OBJECT
 
 public:
+    enum class AreaSelectionShape { Rectangle, Ellipse };
+    enum class AreaSelectionCombineMode { Replace, Add, Subtract };
+
     explicit ImageCanvas(QWidget* parent = nullptr);
 
     void setImage(QImage image, bool resetView = true);
@@ -36,6 +39,16 @@ public:
     void setShapeCreationMode(bool enabled);
     void setTextCreationMode(bool enabled);
     void setObjectSelectionMode(bool enabled);
+    void setAreaSelectionMode(bool enabled);
+    void setAreaSelectionOptions(AreaSelectionShape shape,
+                                 AreaSelectionCombineMode combine_mode);
+    void clearAreaSelection();
+    void translateAreaSelection(const QPoint& delta);
+    void cancelAreaSelectionGesture();
+    [[nodiscard]] bool hasAreaSelection() const noexcept { return area_selection_active_; }
+    [[nodiscard]] bool areaSelectionGestureActive() const noexcept { return selecting_area_; }
+    [[nodiscard]] bool areaSelectionMode() const noexcept { return area_selection_mode_; }
+    [[nodiscard]] std::optional<QPainterPath> areaSelectionClipPath() const;
     void setShapeStyle(const ImageShapeData& style);
     void setTextStyle(const ImageTextData& style);
     void beginTextEditing(const ImageTextData& text, bool existing);
@@ -75,6 +88,8 @@ signals:
     void objectTransformStarted(const QStringList& object_ids);
     void objectsGeometryChanged(
         const QVector<image_editor::ImageObjectPlacement>& objects);
+    void areaSelectionChanged(bool active);
+    void areaSelectionRejected(const QString& reason);
 
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override;
@@ -124,6 +139,8 @@ private:
     [[nodiscard]] bool rasterTransform() const;
     [[nodiscard]] QPointF unboundedImagePoint(const QPointF& position) const;
     void clearObjectInteraction();
+    [[nodiscard]] QPainterPath areaSelectionGesturePath() const;
+    [[nodiscard]] QPainterPath visibleAreaSelectionPath() const;
     void updateTextEditorContentAndGeometry();
     void updateTextEditorGeometry();
     void applyTextEditorStyle();
@@ -141,6 +158,7 @@ private:
     bool shape_creation_mode_ = false;
     bool text_creation_mode_ = false;
     bool object_selection_mode_ = false;
+    bool area_selection_mode_ = false;
     bool eraser_preview_enabled_ = false;
     bool selecting_crop_ = false;
     bool painting_ = false;
@@ -150,6 +168,7 @@ private:
     bool panning_ = false;
     bool creating_shape_ = false;
     bool selecting_objects_ = false;
+    bool selecting_area_ = false;
     bool selection_toggle_ = false;
     bool transforming_objects_ = false;
     bool resizing_objects_ = false;
@@ -161,6 +180,12 @@ private:
     QRectF crop_selection_;
     QPointF selection_start_;
     QRectF object_selection_rect_;
+    QPointF area_selection_start_;
+    QPointF area_selection_current_;
+    QPainterPath area_selection_path_;
+    bool area_selection_active_ = false;
+    AreaSelectionShape area_selection_shape_ = AreaSelectionShape::Rectangle;
+    AreaSelectionCombineMode area_selection_combine_mode_ = AreaSelectionCombineMode::Replace;
     QPointF pan_start_;
     QPointF initial_pan_;
     QPointF brush_resize_start_;

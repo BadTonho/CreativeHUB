@@ -52,10 +52,12 @@ public:
     [[nodiscard]] bool applyPaintStroke(const QVector<QPointF>& points,
                                         const QColor& color,
                                         int diameter,
-                                        QString* error = nullptr);
+                                        QString* error = nullptr,
+                                        std::optional<QPainterPath> clipping_path = {});
     [[nodiscard]] bool applyEraseStroke(const QVector<QPointF>& points,
                                         int diameter,
-                                        QString* error = nullptr);
+                                        QString* error = nullptr,
+                                        std::optional<QPainterPath> clipping_path = {});
     [[nodiscard]] QString addShape(ImageShapeData shape, QString* error = nullptr);
     [[nodiscard]] bool updateShape(const ImageShapeData& shape,
                                    QString* error = nullptr);
@@ -96,12 +98,15 @@ public:
     [[nodiscard]] bool setLayerMaskEnabled(const QString& layer_id, bool enabled);
     [[nodiscard]] bool applyLayerMaskStroke(const QVector<QPointF>& points,
                                             const QColor& color, int diameter,
-                                            QString* error = nullptr);
+                                            QString* error = nullptr,
+                                            std::optional<QPainterPath> clipping_path = {});
     [[nodiscard]] bool applyLayerMaskEraseStroke(const QVector<QPointF>& points,
                                                  int diameter,
-                                                 QString* error = nullptr);
+                                                 QString* error = nullptr,
+                                                 std::optional<QPainterPath> clipping_path = {});
     [[nodiscard]] QImage renderedImageWithMaskStroke(
-        const QVector<QPointF>& points, const QColor& color, int diameter) const;
+        const QVector<QPointF>& points, const QColor& color, int diameter,
+        std::optional<QPainterPath> clipping_path = {}) const;
     [[nodiscard]] QHash<QString, QImage> renderedLayerMaskThumbnails(
         const QSize& maximum_size) const;
     [[nodiscard]] QString addGroup(QString* error = nullptr);
@@ -135,7 +140,8 @@ public:
 
     [[nodiscard]] QImage renderedImage() const;
     [[nodiscard]] QImage renderedImageWithEraseStroke(
-        const QVector<QPointF>& points, int diameter) const;
+        const QVector<QPointF>& points, int diameter,
+        std::optional<QPainterPath> clipping_path = {}) const;
     [[nodiscard]] QHash<QString, QImage> renderedLayerThumbnails(
         const QSize& maximum_size) const;
     [[nodiscard]] bool hasSource() const noexcept { return !source_image_.isNull(); }

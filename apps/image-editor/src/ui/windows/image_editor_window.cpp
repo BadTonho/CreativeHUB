@@ -463,30 +463,37 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
     connect(canvas, &ImageCanvas::cropSelected, this,
             [this](const QRect& crop) { handleCrop(crop); });
     connect(canvas, &ImageCanvas::paintStrokeSelected, this,
-            [this](const QVector<QPointF>& points, const QColor& color, int diameter) {
-                handlePaintStroke(points, color, diameter);
+            [this, canvas](const QVector<QPointF>& points, const QColor& color, int diameter) {
+                handlePaintStroke(points, color, diameter, canvas->areaSelectionClipPath());
             });
     connect(canvas, &ImageCanvas::erasePreviewRequested, this,
-            [this](const QVector<QPointF>& points, int diameter) {
+            [this, canvas](const QVector<QPointF>& points, int diameter) {
                 if (canvas_ == nullptr) return;
                 canvas_->setTransientImage(
                     editingMask()
-                        ? session_.renderedImageWithMaskStroke(points, Qt::black, diameter)
-                        : session_.renderedImageWithEraseStroke(points, diameter));
+                        ? session_.renderedImageWithMaskStroke(
+                            points, Qt::black, diameter, canvas->areaSelectionClipPath())
+                        : session_.renderedImageWithEraseStroke(
+                            points, diameter, canvas->areaSelectionClipPath()));
             });
     connect(canvas, &ImageCanvas::maskPaintPreviewRequested, this,
-            [this](const QVector<QPointF>& points, const QColor& color, int diameter) {
+            [this, canvas](const QVector<QPointF>& points, const QColor& color, int diameter) {
                 if (canvas_ != nullptr)
                     canvas_->setTransientImage(
-                        session_.renderedImageWithMaskStroke(points, color, diameter));
+                        session_.renderedImageWithMaskStroke(
+                            points, color, diameter, canvas->areaSelectionClipPath()));
             });
     connect(canvas, &ImageCanvas::erasePreviewCleared, canvas, [canvas]() {
         canvas->setTransientImage({});
     });
     connect(canvas, &ImageCanvas::eraseStrokeSelected, this,
-            [this](const QVector<QPointF>& points, int diameter) {
-                handleEraseStroke(points, diameter);
+            [this, canvas](const QVector<QPointF>& points, int diameter) {
+                handleEraseStroke(points, diameter, canvas->areaSelectionClipPath());
             });
+    connect(canvas, &ImageCanvas::areaSelectionChanged, this,
+            [this](bool) { updateDeleteActions(); });
+    connect(canvas, &ImageCanvas::areaSelectionRejected, this,
+            [this](const QString& reason) { statusBar()->showMessage(reason, 4000); });
     connect(canvas, &ImageCanvas::shapeCreated, this,
             [this](const ImageShapeData& shape) { handleShapeCreated(shape); });
     connect(canvas, &ImageCanvas::textCommitted, this,
@@ -738,6 +745,7 @@ void ImageEditorWindow::resetActiveDocumentSelection() {
     selected_stack_items_.clear();
     selected_mask_layer_id_.clear();
     logged_raster_problems_.clear();
+    if (canvas_ != nullptr) canvas_->clearAreaSelection();
 }
 
 bool ImageEditorWindow::hasActiveDocumentTab() const noexcept {
@@ -899,6 +907,32 @@ void ImageEditorWindow::createToolOptionsBar() {
     tool_options_toolbar_->addAction(selection_options_action_);
     selection_options_action_->setVisible(false);
 
+    area_selection_options_widget_ = new QWidget(tool_options_toolbar_);
+    area_selection_options_widget_->setObjectName(QStringLiteral("areaSelectionOptionsWidget"));
+    auto* area_layout = new QHBoxLayout(area_selection_options_widget_);
+    area_layout->setContentsMargins(8, 3, 8, 3);
+    area_layout->setSpacing(7);
+    area_layout->addWidget(new QLabel(QStringLiteral("Shape"), area_selection_options_widget_));
+    area_selection_shape_combo_ = new QComboBox(area_selection_options_widget_);
+    area_selection_shape_combo_->setObjectName(QStringLiteral("areaSelectionShapeComboBox"));
+    area_selection_shape_combo_->setAccessibleName(QStringLiteral("Area selection shape"));
+    area_selection_shape_combo_->addItem(QStringLiteral("Rectangle"), 0);
+    area_selection_shape_combo_->addItem(QStringLiteral("Ellipse"), 1);
+    area_layout->addWidget(area_selection_shape_combo_);
+    area_layout->addWidget(new QLabel(QStringLiteral("Mode"), area_selection_options_widget_));
+    area_selection_mode_combo_ = new QComboBox(area_selection_options_widget_);
+    area_selection_mode_combo_->setObjectName(QStringLiteral("areaSelectionModeComboBox"));
+    area_selection_mode_combo_->setAccessibleName(QStringLiteral("Area selection mode"));
+    area_selection_mode_combo_->addItem(QStringLiteral("Replace"), 0);
+    area_selection_mode_combo_->addItem(QStringLiteral("Add"), 1);
+    area_selection_mode_combo_->addItem(QStringLiteral("Subtract"), 2);
+    area_layout->addWidget(area_selection_mode_combo_);
+    area_selection_options_action_ = new QWidgetAction(tool_options_toolbar_);
+    area_selection_options_action_->setObjectName(QStringLiteral("areaSelectionOptionsAction"));
+    area_selection_options_action_->setDefaultWidget(area_selection_options_widget_);
+    tool_options_toolbar_->addAction(area_selection_options_action_);
+    area_selection_options_action_->setVisible(false);
+
     const auto refreshColorButton = [](QPushButton* button, const QColor& color) {
         button->setStyleSheet(QStringLiteral("background-color: %1;").arg(
             color.name(QColor::HexArgb)));
@@ -927,6 +961,24 @@ void ImageEditorWindow::createToolOptionsBar() {
     connect(eraser_preview_check_, &QCheckBox::toggled, this, [this](bool enabled) {
         if (canvas_ != nullptr) canvas_->setEraserPreviewEnabled(enabled);
     });
+    const auto updateAreaSelectionOptions = [this]() {
+        area_selection_shape_ = area_selection_shape_combo_->currentData().toInt();
+        area_selection_mode_ = area_selection_mode_combo_->currentData().toInt();
+        if (canvas_ != nullptr) {
+            canvas_->setAreaSelectionOptions(
+                area_selection_shape_ == 1 ? ImageCanvas::AreaSelectionShape::Ellipse
+                    : ImageCanvas::AreaSelectionShape::Rectangle,
+                area_selection_mode_ == 1 ? ImageCanvas::AreaSelectionCombineMode::Add
+                    : (area_selection_mode_ == 2
+                        ? ImageCanvas::AreaSelectionCombineMode::Subtract
+                        : ImageCanvas::AreaSelectionCombineMode::Replace));
+        }
+    };
+    connect(area_selection_shape_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [updateAreaSelectionOptions](int) { updateAreaSelectionOptions(); });
+    connect(area_selection_mode_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [updateAreaSelectionOptions](int) { updateAreaSelectionOptions(); });
+    updateAreaSelectionOptions();
     connect(shape_stroke_check_, &QCheckBox::toggled, this, [this](bool enabled) {
         if (shape_style_.kind == ImageShapeKind::Line && !enabled) enabled = true;
         if (!enabled && !shape_style_.fill_enabled) {
@@ -1101,6 +1153,10 @@ void ImageEditorWindow::updateToolOptions() {
     text_options_action_->setVisible(tool_active && text_options_active);
     text_options_widget_->setVisible(tool_active && text_options_active);
     selection_options_action_->setVisible(tool_active && tool == ToolSidebar::Tool::Select);
+    area_selection_options_action_->setVisible(
+        tool_active && tool == ToolSidebar::Tool::AreaSelect);
+    area_selection_options_widget_->setVisible(
+        tool_active && tool == ToolSidebar::Tool::AreaSelect);
     updateTextOptions();
     updateShapeOptions();
 }
@@ -1391,10 +1447,14 @@ void ImageEditorWindow::updateDeleteActions() {
         tool_sidebar_->activeTool() == ToolSidebar::Tool::Select && !canvas_->textEditing();
     if (delete_selected_shape_button_ != nullptr) delete_selected_shape_button_->setEnabled(can_delete_objects);
     if (delete_objects_action_ != nullptr) delete_objects_action_->setEnabled(can_delete_objects);
-    if (delete_selection_action_ == nullptr) return;
     QWidget* focus = QApplication::focusWidget();
     const bool layers = focus != nullptr && layer_panel_->isAncestorOf(focus);
     const bool canvas = focus == canvas_ || focus == this;
+    if (deselect_area_selection_action_ != nullptr) {
+        deselect_area_selection_action_->setEnabled(canvas_ != nullptr &&
+            canvas_->hasAreaSelection() && !editingFieldHasFocus());
+    }
+    if (delete_selection_action_ == nullptr) return;
     delete_selection_action_->setEnabled(!editingFieldHasFocus() &&
         ((layers && session_.hasDocument() && !layer_panel_->selectedStackItems().isEmpty()) ||
          (canvas && can_delete_objects)));
@@ -1438,6 +1498,10 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
         const QSignalBlocker blocker(select_tool_action_);
         select_tool_action_->setChecked(tool == ToolSidebar::Tool::Select);
     }
+    if (area_selection_tool_action_ != nullptr) {
+        const QSignalBlocker blocker(area_selection_tool_action_);
+        area_selection_tool_action_->setChecked(tool == ToolSidebar::Tool::AreaSelect);
+    }
 
     if ((tool == ToolSidebar::Tool::Shapes || tool == ToolSidebar::Tool::Select) &&
         !shape_colors_initialized_) {
@@ -1452,12 +1516,14 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
     if (tool == ToolSidebar::Tool::Paint && has_source) {
         canvas_->setTextCreationMode(false);
         canvas_->setEraserMode(false);
+        canvas_->setAreaSelectionMode(false);
         canvas_->setShapeCreationMode(false);
         canvas_->setObjectSelectionMode(false);
         canvas_->setPaintMode(true);
     } else if (tool == ToolSidebar::Tool::Eraser && has_source) {
         canvas_->setTextCreationMode(false);
         canvas_->setPaintMode(false);
+        canvas_->setAreaSelectionMode(false);
         canvas_->setShapeCreationMode(false);
         canvas_->setObjectSelectionMode(false);
         canvas_->setEraserMode(true);
@@ -1465,17 +1531,27 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
         canvas_->setTextCreationMode(false);
         canvas_->setPaintMode(false);
         canvas_->setEraserMode(false);
+        canvas_->setAreaSelectionMode(false);
         canvas_->setObjectSelectionMode(false);
         canvas_->setShapeCreationMode(true);
     } else if (tool == ToolSidebar::Tool::Select && has_source) {
         canvas_->setTextCreationMode(false);
         canvas_->setPaintMode(false);
         canvas_->setEraserMode(false);
+        canvas_->setAreaSelectionMode(false);
         canvas_->setShapeCreationMode(false);
         canvas_->setObjectSelectionMode(true);
+    } else if (tool == ToolSidebar::Tool::AreaSelect && has_source) {
+        canvas_->setTextCreationMode(false);
+        canvas_->setPaintMode(false);
+        canvas_->setEraserMode(false);
+        canvas_->setShapeCreationMode(false);
+        canvas_->setObjectSelectionMode(false);
+        canvas_->setAreaSelectionMode(true);
     } else if (tool == ToolSidebar::Tool::Text && has_source) {
         canvas_->setPaintMode(false);
         canvas_->setEraserMode(false);
+        canvas_->setAreaSelectionMode(false);
         canvas_->setShapeCreationMode(false);
         canvas_->setObjectSelectionMode(false);
         canvas_->setTextCreationMode(true);
@@ -1483,11 +1559,19 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
         canvas_->setTextCreationMode(false);
         canvas_->setPaintMode(false);
         canvas_->setEraserMode(false);
+        canvas_->setAreaSelectionMode(false);
         canvas_->setShapeCreationMode(false);
         canvas_->setObjectSelectionMode(false);
     }
     canvas_->setShapeStyle(shape_style_);
     canvas_->setTextStyle(text_style_);
+    canvas_->setAreaSelectionOptions(
+        area_selection_shape_ == 1 ? ImageCanvas::AreaSelectionShape::Ellipse
+            : ImageCanvas::AreaSelectionShape::Rectangle,
+        area_selection_mode_ == 1 ? ImageCanvas::AreaSelectionCombineMode::Add
+            : (area_selection_mode_ == 2
+                ? ImageCanvas::AreaSelectionCombineMode::Subtract
+                : ImageCanvas::AreaSelectionCombineMode::Replace));
     canvas_->setEraserPreviewEnabled(eraser_preview_check_->isChecked());
     const int diameter = tool == ToolSidebar::Tool::Eraser
         ? eraser_diameter_ : paint_diameter_;
@@ -1651,13 +1735,27 @@ void ImageEditorWindow::createActions() {
     undo_action_ = makeAction(
         QStringLiteral("Undo"), QKeySequence::Undo, [this]() {
             canvas_->commitTextEditing();
-            if (session_.undo()) updateView();
+            const QPoint old_offset = session_.data().canvas_base_offset;
+            if (session_.undo()) {
+                updateView(true);
+                if (canvas_ != nullptr) {
+                    canvas_->translateAreaSelection(
+                        session_.data().canvas_base_offset - old_offset);
+                }
+            }
         });
     undo_action_->setObjectName(QStringLiteral("undoAction"));
     redo_action_ = makeAction(
         QStringLiteral("Redo"), QKeySequence::Redo, [this]() {
             canvas_->commitTextEditing();
-            if (session_.redo()) updateView();
+            const QPoint old_offset = session_.data().canvas_base_offset;
+            if (session_.redo()) {
+                updateView(true);
+                if (canvas_ != nullptr) {
+                    canvas_->translateAreaSelection(
+                        session_.data().canvas_base_offset - old_offset);
+                }
+            }
         });
     redo_action_->setObjectName(QStringLiteral("redoAction"));
     rotate_left_action_ = makeAction(
@@ -1706,6 +1804,11 @@ void ImageEditorWindow::createActions() {
     cancel_crop_action_->setEnabled(false);
     addAction(cancel_crop_action_);
     connect(cancel_crop_action_, &QAction::triggered, this, [this]() {
+        if (canvas_ != nullptr && canvas_->areaSelectionGestureActive()) {
+            canvas_->cancelAreaSelectionGesture();
+            statusBar()->showMessage(QStringLiteral("Area selection cancelled"), 2500);
+            return;
+        }
         if (!crop_action_->isChecked()) return;
         crop_action_->setChecked(false);
         canvas_->setCropMode(false);
@@ -1802,6 +1905,28 @@ void ImageEditorWindow::createActions() {
             : (current == ToolSidebar::Tool::Select ? ToolSidebar::Tool::None : current));
     });
 
+    area_selection_tool_action_ = new QAction(QStringLiteral("Area Selection"), this);
+    area_selection_tool_action_->setObjectName(QStringLiteral("areaSelectionToolAction"));
+    area_selection_tool_action_->setCheckable(true);
+    registerShortcutAction(area_selection_tool_action_, QKeySequence(Qt::Key_M));
+    addAction(area_selection_tool_action_);
+    connect(area_selection_tool_action_, &QAction::toggled, this, [this](bool active) {
+        const auto current = tool_sidebar_->activeTool();
+        tool_sidebar_->setActiveTool(active ? ToolSidebar::Tool::AreaSelect
+            : (current == ToolSidebar::Tool::AreaSelect ? ToolSidebar::Tool::None : current));
+    });
+
+    deselect_area_selection_action_ = new QAction(QStringLiteral("Deselect"), this);
+    deselect_area_selection_action_->setObjectName(QStringLiteral("deselectAreaSelectionAction"));
+    registerShortcutAction(deselect_area_selection_action_,
+                           QKeySequence(Qt::CTRL | Qt::Key_D));
+    addAction(deselect_area_selection_action_);
+    connect(deselect_area_selection_action_, &QAction::triggered, this, [this]() {
+        if (canvas_ == nullptr || editingFieldHasFocus()) return;
+        canvas_->clearAreaSelection();
+        updateDeleteActions();
+    });
+
     delete_objects_action_ = new QAction(QStringLiteral("Delete Selected Objects"), this);
     delete_objects_action_->setObjectName(QStringLiteral("deleteSelectedObjectsAction"));
     connect(delete_objects_action_, &QAction::triggered, this,
@@ -1837,6 +1962,7 @@ void ImageEditorWindow::createActions() {
     edit_menu->addAction(redo_action_);
     edit_menu->addSeparator();
     edit_menu->addAction(delete_selection_action_);
+    edit_menu->addAction(deselect_area_selection_action_);
     edit_menu->addAction(delete_objects_action_);
     edit_menu->addSeparator();
     edit_menu->addAction(crop_action_);
@@ -2008,6 +2134,8 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
         text_options_action_->setVisible(false);
         text_options_widget_->setVisible(false);
         selection_options_action_->setVisible(false);
+        area_selection_options_action_->setVisible(false);
+        area_selection_options_widget_->setVisible(false);
         layer_panel_->setDocument(ImageDocumentData{}, {}, {}, {}, {}, {}, {});
         layer_panel_->setQuickExportEnabled(false);
         undo_action_->setEnabled(false);
@@ -2109,6 +2237,7 @@ void ImageEditorWindow::updateSelectionContext() {
         if (shapes_tool_action_ != nullptr) shapes_tool_action_->setEnabled(false);
         if (text_tool_action_ != nullptr) text_tool_action_->setEnabled(false);
         if (select_tool_action_ != nullptr) select_tool_action_->setEnabled(false);
+        if (area_selection_tool_action_ != nullptr) area_selection_tool_action_->setEnabled(false);
         if (delete_objects_action_ != nullptr) delete_objects_action_->setEnabled(false);
         updateDeleteActions();
         return;
@@ -2123,12 +2252,14 @@ void ImageEditorWindow::updateSelectionContext() {
     flip_horizontal_action_->setEnabled(selected_item_transformable);
     flip_vertical_action_->setEnabled(selected_item_transformable);
     fit_action_->setEnabled(true);
-    cancel_crop_action_->setEnabled(crop_action_->isChecked() && selected_item_transformable);
+    cancel_crop_action_->setEnabled((crop_action_->isChecked() && selected_item_transformable) ||
+        tool_sidebar_->activeTool() == ToolSidebar::Tool::AreaSelect);
     paint_tool_action_->setEnabled(selected_layer_editable);
     eraser_tool_action_->setEnabled(selected_layer_editable);
     shapes_tool_action_->setEnabled(true);
     text_tool_action_->setEnabled(true);
     select_tool_action_->setEnabled(true);
+    area_selection_tool_action_->setEnabled(true);
     updateDeleteActions();
     updateToolOptions();
 }
@@ -2160,12 +2291,14 @@ void ImageEditorWindow::resizeCanvas() {
     CanvasSizeDialog dialog(session_.renderedImage().size(), this);
     if (dialog.exec() != QDialog::Accepted) return;
     QString error;
+    const QPoint old_offset = session_.data().canvas_base_offset;
     if (!session_.resizeCanvas(dialog.canvasSize(), dialog.anchor(), &error)) {
         if (!error.isEmpty()) reportError(QStringLiteral("resize_canvas"), error);
         return;
     }
     selected_object_ids_.clear();
-    updateView();
+    updateView(true);
+    canvas_->translateAreaSelection(session_.data().canvas_base_offset - old_offset);
     statusBar()->showMessage(QStringLiteral("Canvas resized"), 3000);
 }
 
@@ -2586,10 +2719,14 @@ void ImageEditorWindow::handleCrop(const QRect& crop) {
 
 void ImageEditorWindow::handlePaintStroke(const QVector<QPointF>& points,
                                           const QColor& color,
-                                          int diameter) {
+                                          int diameter,
+                                          std::optional<QPainterPath> clipping_path) {
+    if (clipping_path.has_value() && clipping_path->isEmpty()) return;
     QString error;
-    if (editingMask() ? session_.applyLayerMaskStroke(points, color, diameter, &error)
-                      : session_.applyPaintStroke(points, color, diameter, &error)) {
+    if (editingMask() ? session_.applyLayerMaskStroke(
+                            points, color, diameter, &error, std::move(clipping_path))
+                      : session_.applyPaintStroke(
+                            points, color, diameter, &error, std::move(clipping_path))) {
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Paint stroke applied"), 1800);
     } else if (!error.isEmpty()) {
@@ -2597,10 +2734,14 @@ void ImageEditorWindow::handlePaintStroke(const QVector<QPointF>& points,
     }
 }
 
-void ImageEditorWindow::handleEraseStroke(const QVector<QPointF>& points, int diameter) {
+void ImageEditorWindow::handleEraseStroke(const QVector<QPointF>& points, int diameter,
+                                          std::optional<QPainterPath> clipping_path) {
+    if (clipping_path.has_value() && clipping_path->isEmpty()) return;
     QString error;
-    if (editingMask() ? session_.applyLayerMaskEraseStroke(points, diameter, &error)
-                      : session_.applyEraseStroke(points, diameter, &error)) {
+    if (editingMask() ? session_.applyLayerMaskEraseStroke(
+                            points, diameter, &error, std::move(clipping_path))
+                      : session_.applyEraseStroke(
+                            points, diameter, &error, std::move(clipping_path))) {
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Erase stroke applied"), 1800);
     } else if (!error.isEmpty()) {
@@ -2617,6 +2758,7 @@ void ImageEditorWindow::deactivateCanvasTools() {
     }
     canvas_->setPaintMode(false);
     canvas_->setEraserMode(false);
+    canvas_->setAreaSelectionMode(false);
     canvas_->setCropMode(false);
     canvas_->setShapeCreationMode(false);
     canvas_->setObjectSelectionMode(false);

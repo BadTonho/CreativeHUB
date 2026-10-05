@@ -78,10 +78,11 @@ publication retain their previous output on failure.
   5 adds layer-local eraser strokes; version 6 adds editable shape operations;
   version 7 adds stable UUIDs to paint and eraser strokes; version 8 adds
   one-level groups. Version 9 adds text, version 10 adds raster layer masks,
-  version 11 adds linked raster images, and version 12 adds independent current
-  canvas bounds with a base-image offset. The original base dimensions remain
-  available for relink validation. The reader continues to accept versions
-  1–11 and generates
+  version 11 adds linked raster images, version 12 adds independent current
+  canvas bounds with a base-image offset, and version 13 adds persisted
+  selection clips on paint and eraser strokes. Area Selection itself remains
+  temporary per tab. The original base dimensions remain available for relink
+  validation. The reader continues to accept versions 1–12 and generates
   in-memory IDs for older strokes. Its data format is specified in
   [`FORMAT.md`](FORMAT.md).
 - `ImageExportSnapshot` captures the current source image, document data, and
@@ -252,7 +253,7 @@ publication retain their previous output on failure.
   atomically publish the flattened PNG. Linked saves use a per-document
   `QLockFile` plus a SHA-256 baseline check to reject concurrent Image Editor
   revisions before replacing the document. The source image is never written.
-  The `.cimg` schema is version 12; host links live in the Video Editor's
+  The `.cimg` schema is version 13; host links live in the Video Editor's
   `.csp` document.
 - `ImageEditorLogger` writes bounded JSON Lines error entries under the local
   application data directory. Technical failures are logged before a message

@@ -1037,6 +1037,142 @@ bool testEditableTextUi(const QString& directory) {
 
 } // namespace
 
+bool testAreaSelectionToolUi(const QString& root) {
+    const QString source_path = root + QStringLiteral("/area-selection-ui.png");
+    QImage source(32, 24, QImage::Format_ARGB32);
+    source.fill(Qt::transparent);
+    QImageWriter writer(source_path, "png");
+    if (!writer.write(source)) return false;
+
+    image_editor::ImageEditorWindow window;
+    window.resize(960, 720);
+    window.show();
+    if (!window.openImagePath(source_path)) return false;
+    QCoreApplication::processEvents();
+
+    auto* canvas = window.findChild<image_editor::ImageCanvas*>();
+    auto* area_tool = window.findChild<QAction*>(QStringLiteral("areaSelectionToolAction"));
+    auto* paint_tool = window.findChild<QAction*>(QStringLiteral("paintToolAction"));
+    auto* deselect = window.findChild<QAction*>(QStringLiteral("deselectAreaSelectionAction"));
+    auto* shape_combo = window.findChild<QComboBox*>(QStringLiteral("areaSelectionShapeComboBox"));
+    auto* mode_combo = window.findChild<QComboBox*>(QStringLiteral("areaSelectionModeComboBox"));
+    auto* options = window.findChild<QWidget*>(QStringLiteral("areaSelectionOptionsWidget"));
+    if (!canvas || !area_tool || !paint_tool || !deselect || !shape_combo ||
+        !mode_combo || !options || area_tool->shortcut() != QKeySequence(Qt::Key_M) ||
+        deselect->shortcut() != QKeySequence(Qt::CTRL | Qt::Key_D) ||
+        shape_combo->currentData().toInt() != 0 || mode_combo->currentData().toInt() != 0) {
+        std::cerr << "Area Selection controls or default shortcuts were not created.\n";
+        return false;
+    }
+    if (options->isVisible()) {
+        std::cerr << "Area Selection options appeared before the tool was activated.\n";
+        return false;
+    }
+    area_tool->trigger();
+    QCoreApplication::processEvents();
+    if (!options->isVisible() || !canvas->areaSelectionMode()) {
+        std::cerr << "Area Selection did not activate its canvas tool and options.\n";
+        return false;
+    }
+
+    const auto widgetPoint = [canvas](qreal x, qreal y) {
+        return QPoint(qRound(canvas->width() / 2.0 +
+                                (x - 16.0) * canvas->zoomFactor()),
+                      qRound(canvas->height() / 2.0 +
+                                (y - 12.0) * canvas->zoomFactor()));
+    };
+    const auto drag = [canvas, &widgetPoint](qreal x1, qreal y1, qreal x2, qreal y2) {
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(x1, y1));
+        QTest::mouseMove(canvas, widgetPoint(x2, y2));
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(x2, y2));
+        QCoreApplication::processEvents();
+    };
+    drag(4, 4, 15, 15);
+    const auto first_selection = canvas->areaSelectionClipPath();
+    if (!first_selection || !first_selection->contains(QPointF(6, 6)) ||
+        first_selection->contains(QPointF(22, 8)) || window.windowTitle().startsWith('*')) {
+        std::cerr << "Replace selection did not create a clean, bounded rectangle.\n";
+        return false;
+    }
+
+    paint_tool->trigger();
+    QCoreApplication::processEvents();
+    if (canvas->areaSelectionMode() || !canvas->hasAreaSelection() || options->isVisible()) {
+        std::cerr << "Switching tools removed the area selection or kept stale tool options.\n";
+        return false;
+    }
+    QTest::keyClick(canvas, Qt::Key_M);
+    QCoreApplication::processEvents();
+    if (!canvas->areaSelectionMode()) {
+        std::cerr << "The M shortcut did not activate Area Selection.\n";
+        return false;
+    }
+
+    shape_combo->setCurrentIndex(1);
+    mode_combo->setCurrentIndex(1);
+    drag(20, 6, 28, 17);
+    auto combined = canvas->areaSelectionClipPath();
+    if (!combined || !combined->contains(QPointF(23, 10))) {
+        std::cerr << "Ellipse Add did not expand the area selection.\n";
+        return false;
+    }
+    mode_combo->setCurrentIndex(2);
+    drag(6, 6, 11, 11);
+    auto subtracted = canvas->areaSelectionClipPath();
+    if (!subtracted || subtracted->contains(QPointF(8, 8)) ||
+        !subtracted->contains(QPointF(5, 5))) {
+        std::cerr << "Subtract did not remove only the selected overlap.\n";
+        return false;
+    }
+
+    mode_combo->setCurrentIndex(0);
+    const auto before_cancel = canvas->areaSelectionClipPath();
+    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(2, 2));
+    QTest::mouseMove(canvas, widgetPoint(12, 12));
+    QTest::keyClick(canvas, Qt::Key_Escape);
+    QCoreApplication::processEvents();
+    if (!canvas->hasAreaSelection() || canvas->areaSelectionGestureActive() ||
+        canvas->areaSelectionClipPath() != before_cancel) {
+        std::cerr << "Escape did not cancel the gesture while preserving the prior selection.\n";
+        return false;
+    }
+
+    deselect->trigger();
+    QCoreApplication::processEvents();
+    if (canvas->hasAreaSelection() || deselect->isEnabled()) {
+        std::cerr << "Deselect did not clear the area selection.\n";
+        return false;
+    }
+    QTest::keyClick(canvas, Qt::Key_M);
+    drag(3, 3, 8, 8);
+    QTest::keyClick(canvas, Qt::Key_D, Qt::ControlModifier);
+    QCoreApplication::processEvents();
+    if (canvas->hasAreaSelection()) {
+        std::cerr << "Ctrl+D did not clear the area selection.\n";
+        return false;
+    }
+
+    QTest::keyClick(canvas, Qt::Key_M);
+    mode_combo->setCurrentIndex(0);
+    drag(1, 1, 31, 23);
+    mode_combo->setCurrentIndex(2);
+    drag(1, 1, 31, 23);
+    const auto empty_selection = canvas->areaSelectionClipPath();
+    if (!empty_selection || !empty_selection->isEmpty()) {
+        std::cerr << "Subtracting the full canvas did not retain an active empty selection.\n";
+        return false;
+    }
+    paint_tool->trigger();
+    QTest::mouseClick(canvas, Qt::LeftButton, Qt::NoModifier, canvas->rect().center());
+    QCoreApplication::processEvents();
+    auto* undo = window.findChild<QAction*>(QStringLiteral("undoAction"));
+    if (window.windowTitle().startsWith('*') || (undo != nullptr && undo->isEnabled())) {
+        std::cerr << "An empty area selection allowed painting or dirtied the document.\n";
+        return false;
+    }
+    return true;
+}
+
 bool testGeneralCanvasSelection() {
     image_editor::ImageCanvas canvas;
     canvas.resize(640, 480);
@@ -1289,6 +1425,8 @@ bool testDocumentTabs(const QString& directory) {
     auto* next_tab = window.findChild<QAction*>(QStringLiteral("nextDocumentTabAction"));
     auto* previous_tab = window.findChild<QAction*>(QStringLiteral("previousDocumentTabAction"));
     auto* select_tool = window.findChild<QAction*>(QStringLiteral("selectShapesToolAction"));
+    auto* area_selection_tool = window.findChild<QAction*>(
+        QStringLiteral("areaSelectionToolAction"));
     auto* delete_objects = window.findChild<QAction*>(
         QStringLiteral("deleteSelectedObjectsAction"));
     auto* new_tab_open_image = window.findChild<QAction*>(
@@ -1298,7 +1436,7 @@ bool testDocumentTabs(const QString& directory) {
     if (tabs == nullptr || stack == nullptr || new_tab_button == nullptr ||
         add_layer == nullptr || layer_tree == nullptr || undo == nullptr || redo == nullptr ||
         close_tab == nullptr || next_tab == nullptr || previous_tab == nullptr ||
-        select_tool == nullptr || delete_objects == nullptr ||
+        select_tool == nullptr || area_selection_tool == nullptr || delete_objects == nullptr ||
         new_tab_open_image == nullptr || new_tab_open_document == nullptr ||
         close_tab->property("defaultShortcut").toString() !=
             QKeySequence(QKeySequence::Close).toString(QKeySequence::PortableText) ||
@@ -1333,6 +1471,26 @@ bool testDocumentTabs(const QString& directory) {
     if (first_canvas == nullptr) return false;
     first_canvas->fitToWindow();
     const double first_zoom = first_canvas->zoomFactor();
+    area_selection_tool->trigger();
+    QCoreApplication::processEvents();
+    const auto first_canvas_point = [first_canvas](qreal x, qreal y) {
+        const qreal zoom = first_canvas->zoomFactor();
+        return QPoint(qRound((first_canvas->width() - 72.0 * zoom) / 2.0 + x * zoom),
+                      qRound((first_canvas->height() - 54.0 * zoom) / 2.0 + y * zoom));
+    };
+    QTest::mousePress(first_canvas, Qt::LeftButton, Qt::NoModifier,
+                      first_canvas_point(10, 10));
+    QTest::mouseMove(first_canvas, first_canvas_point(22, 22));
+    QTest::mouseRelease(first_canvas, Qt::LeftButton, Qt::NoModifier,
+                        first_canvas_point(22, 22));
+    QCoreApplication::processEvents();
+    const auto first_tab_area_selection = first_canvas->areaSelectionClipPath();
+    if (!first_tab_area_selection ||
+        !first_tab_area_selection->contains(QPointF(16, 16)) ||
+        window.windowTitle().startsWith('*')) {
+        std::cerr << "Creating a selection did not remain temporary on the first tab.\n";
+        return false;
+    }
     add_layer->click();
     if (layerRowCount(layer_tree) != 3 || !undo->isEnabled() ||
         !tabs->tabText(0).startsWith('*')) {
@@ -1355,6 +1513,7 @@ bool testDocumentTabs(const QString& directory) {
     }
     auto* second_canvas = stack->currentWidget()->findChild<image_editor::ImageCanvas*>();
     if (second_canvas == nullptr || second_canvas == first_canvas ||
+        second_canvas->hasAreaSelection() ||
         layerRowCount(layer_tree) != 2 || undo->isEnabled() ||
         layer_tree->selectedItems().size() != 1 ||
         layer_tree->currentItem() == nullptr ||
@@ -1366,6 +1525,8 @@ bool testDocumentTabs(const QString& directory) {
     next_tab->trigger();
     QCoreApplication::processEvents();
     if (stack->currentWidget()->findChild<image_editor::ImageCanvas*>() != first_canvas ||
+        first_canvas->areaSelectionClipPath() != first_tab_area_selection ||
+        second_canvas->hasAreaSelection() ||
         layerRowCount(layer_tree) != 3 || first_canvas->zoomFactor() != first_zoom ||
         layer_tree->selectedItems().size() != 2 ||
         layer_tree->currentItem() == nullptr ||
@@ -1797,6 +1958,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Layer mask thumbnails, brush targeting, or linked publication failed.\n";
         return 1;
     }
+    if (!testAreaSelectionToolUi(temporary.path())) return 1;
 
     if (!testGeneralCanvasSelection()) return 1;
     if (!testLayerGroupsUi(temporary.path())) {
@@ -2280,7 +2442,7 @@ int main(int argc, char* argv[]) {
         tool_options_toolbar == nullptr || paint_options_action == nullptr ||
         paint_size_options == nullptr ||
         brush_size_slider == nullptr || brush_size == nullptr || redo_action == nullptr ||
-        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 6 ||
+        crop_action == nullptr || tool_sidebar->findChildren<QToolButton*>().size() != 7 ||
         paint_button->isChecked() || paint_options_action->isVisible() ||
         paint_size_options->isVisible() ||
         !tool_options_toolbar->isVisible() || tool_options_toolbar->height() < 40 ||
@@ -2781,6 +2943,111 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    auto* area_selection_action = window.findChild<QAction*>(
+        QStringLiteral("areaSelectionToolAction"));
+    if (area_selection_action == nullptr) {
+        std::cerr << "Area Selection action is unavailable during Canvas Size checks.\n";
+        return 1;
+    }
+    area_selection_action->trigger();
+    const auto areaCanvasPoint = [canvas](qreal x, qreal y) {
+        return QPoint(qRound(canvas->width() / 2.0 + (x - 65.0) * canvas->zoomFactor()),
+                      qRound(canvas->height() / 2.0 + (y - 45.0) * canvas->zoomFactor()));
+    };
+    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, areaCanvasPoint(10, 10));
+    QTest::mouseMove(canvas, areaCanvasPoint(20, 20));
+    QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, areaCanvasPoint(20, 20));
+    QCoreApplication::processEvents();
+    auto area_before_resize = canvas->areaSelectionClipPath();
+    if (!area_before_resize || !area_before_resize->contains(QPointF(15, 15))) {
+        std::cerr << "Area Selection could not be prepared for the resize history check.\n";
+        return 1;
+    }
+    QTimer::singleShot(0, []() {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr || dialog->objectName() != QStringLiteral("canvasSizeDialog")) return;
+        auto* preset = dialog->findChild<QComboBox*>(QStringLiteral("canvasSizePresetCombo"));
+        auto* width = dialog->findChild<QSpinBox*>(QStringLiteral("canvasSizeWidthSpin"));
+        auto* height = dialog->findChild<QSpinBox*>(QStringLiteral("canvasSizeHeightSpin"));
+        auto* bottom_right = dialog->findChild<QRadioButton*>(
+            QStringLiteral("canvasSizeAnchorBottomrightButton"));
+        auto* buttons = dialog->findChild<QDialogButtonBox*>(QStringLiteral("canvasSizeButtons"));
+        if (preset == nullptr || width == nullptr || height == nullptr ||
+            bottom_right == nullptr || buttons == nullptr) return;
+        preset->setCurrentIndex(5);
+        width->setValue(150);
+        height->setValue(110);
+        bottom_right->setChecked(true);
+        buttons->button(QDialogButtonBox::Ok)->click();
+    });
+    resize_canvas_action->trigger();
+    auto area_after_resize = canvas->areaSelectionClipPath();
+    if (!area_after_resize || !area_after_resize->contains(QPointF(35, 35))) {
+        std::cerr << "Canvas Resize did not translate the temporary area selection.\n";
+        return 1;
+    }
+    undo_action->trigger();
+    auto area_after_undo = canvas->areaSelectionClipPath();
+    if (!area_after_undo || !area_after_undo->contains(QPointF(15, 15))) {
+        std::cerr << "Undo did not restore the area selection with the prior canvas bounds.\n";
+        return 1;
+    }
+    redo_action->trigger();
+    auto area_after_redo = canvas->areaSelectionClipPath();
+    if (!area_after_redo || !area_after_redo->contains(QPointF(35, 35))) {
+        std::cerr << "Redo did not restore the area selection with the resized canvas bounds.\n";
+        return 1;
+    }
+    QTimer::singleShot(0, []() {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr || dialog->objectName() != QStringLiteral("canvasSizeDialog")) return;
+        auto* preset = dialog->findChild<QComboBox*>(QStringLiteral("canvasSizePresetCombo"));
+        auto* width = dialog->findChild<QSpinBox*>(QStringLiteral("canvasSizeWidthSpin"));
+        auto* height = dialog->findChild<QSpinBox*>(QStringLiteral("canvasSizeHeightSpin"));
+        auto* top_left = dialog->findChild<QRadioButton*>(
+            QStringLiteral("canvasSizeAnchorTopleftButton"));
+        auto* buttons = dialog->findChild<QDialogButtonBox*>(QStringLiteral("canvasSizeButtons"));
+        if (preset == nullptr || width == nullptr || height == nullptr ||
+            top_left == nullptr || buttons == nullptr) return;
+        preset->setCurrentIndex(5);
+        width->setValue(35);
+        height->setValue(35);
+        top_left->setChecked(true);
+        buttons->button(QDialogButtonBox::Ok)->click();
+    });
+    resize_canvas_action->trigger();
+    auto area_after_crop = canvas->areaSelectionClipPath();
+    if (!area_after_crop || !area_after_crop->contains(QPointF(34, 34)) ||
+        area_after_crop->contains(QPointF(38, 38))) {
+        std::cerr << "Canvas Resize did not crop the visible area selection to the new bounds.\n";
+        return 1;
+    }
+    undo_action->trigger();
+    auto area_after_crop_undo = canvas->areaSelectionClipPath();
+    if (!area_after_crop_undo || !area_after_crop_undo->contains(QPointF(38, 38))) {
+        std::cerr << "Undo did not restore the cropped area selection.\n";
+        return 1;
+    }
+    redo_action->trigger();
+    auto area_after_crop_redo = canvas->areaSelectionClipPath();
+    if (!area_after_crop_redo || area_after_crop_redo->contains(QPointF(38, 38))) {
+        std::cerr << "Redo did not reapply the area-selection crop.\n";
+        return 1;
+    }
+    auto* deselect_area_action = window.findChild<QAction*>(
+        QStringLiteral("deselectAreaSelectionAction"));
+    if (deselect_area_action == nullptr) {
+        std::cerr << "Deselect action is unavailable after the Canvas Size check.\n";
+        return 1;
+    }
+    deselect_area_action->trigger();
+    undo_action->trigger();
+    undo_action->trigger();
+    if (!status_label->text().contains(QStringLiteral("130 × 90 px"))) {
+        std::cerr << "Canvas Size selection-history checks did not restore the surrounding fixture.\n";
+        return 1;
+    }
+
     auto* add_layer_button = window.findChild<QToolButton*>(
         QStringLiteral("addImageLayerButton"));
     auto* delete_layer_button = window.findChild<QToolButton*>(
@@ -2905,9 +3172,12 @@ int main(int argc, char* argv[]) {
     auto* linked_canvas = linked_window.findChild<image_editor::ImageCanvas*>();
     auto* linked_paint_action = linked_window.findChild<QAction*>(
         QStringLiteral("paintToolAction"));
+    auto* linked_area_selection_action = linked_window.findChild<QAction*>(
+        QStringLiteral("areaSelectionToolAction"));
     auto* linked_save_action = linked_window.findChild<QAction*>(
         QStringLiteral("saveDocumentAction"));
     if (linked_canvas == nullptr || linked_paint_action == nullptr ||
+        linked_area_selection_action == nullptr ||
         linked_save_action == nullptr) {
         std::cerr << "Linked mode did not expose the normal editing and save actions.\n";
         return 1;
@@ -2919,6 +3189,18 @@ int main(int argc, char* argv[]) {
         std::cerr << "The first linked PNG did not preserve the source pixels and transparency.\n";
         return 1;
     }
+    linked_area_selection_action->trigger();
+    const auto linkedCanvasPoint = [linked_canvas](qreal x, qreal y) {
+        const qreal zoom = linked_canvas->zoomFactor();
+        return QPoint(qRound((linked_canvas->width() - 32.0 * zoom) / 2.0 + x * zoom),
+                      qRound((linked_canvas->height() - 24.0 * zoom) / 2.0 + y * zoom));
+    };
+    QTest::mousePress(linked_canvas, Qt::LeftButton, Qt::NoModifier,
+                      linkedCanvasPoint(10, 7));
+    QTest::mouseMove(linked_canvas, linkedCanvasPoint(22, 17));
+    QTest::mouseRelease(linked_canvas, Qt::LeftButton, Qt::NoModifier,
+                        linkedCanvasPoint(22, 17));
+    QCoreApplication::processEvents();
     linked_paint_action->trigger();
     QCoreApplication::processEvents();
     QTest::mouseClick(linked_canvas, Qt::LeftButton, Qt::NoModifier,
@@ -2934,8 +3216,9 @@ int main(int argc, char* argv[]) {
     QCoreApplication::processEvents();
     QImage published_after_save(linked_output);
     if (published_after_save.isNull() ||
-        published_after_save.pixelColor(16, 12) == QColor(240, 20, 10, 255)) {
-        std::cerr << "Saving the linked document did not publish the edited PNG.\n";
+        published_after_save.pixelColor(16, 12) == QColor(240, 20, 10, 255) ||
+        published_after_save.pixelColor(6, 6) != QColor(240, 20, 10, 255)) {
+        std::cerr << "Saving the selected linked stroke did not publish only its clipped pixels.\n";
         return 1;
     }
     QFile source_after_edit(linked_source);
@@ -3275,13 +3558,13 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    if (shape_document_json.value("version").toInt() != 12 ||
+    if (shape_document_json.value("version").toInt() != 13 ||
         persisted_shape_layer.isEmpty() ||
         !persisted_shape_layer.value("name").toString().startsWith("Shape ") ||
         persisted_shape_layer.value("operations").toArray().size() != 1 ||
         persisted_shape.value("kind").toString() != "shape" ||
         persisted_shape.value("fill_enabled").toBool()) {
-        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in v12: version="
+        std::cerr << "The shape's dedicated layer, resize, or style edits were not persisted in v13: version="
                   << shape_document_json.value("version").toInt()
                   << " operations=" << persisted_shape_layer.value("operations").toArray().size()
                   << " layer=" << persisted_shape_layer.value("name").toString().toStdString()

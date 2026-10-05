@@ -204,7 +204,7 @@ void deletionTests(const QString& root) {
     require(session.undo() && session.data() == before && session.selectedLayerId() == second &&
         session.renderedImage() == rendered && session.redo() && session.data() == deleted,
         "Batch deletion was not one complete history edit.");
-    require(session.saveDocument() && json(doc)["version"].toInt() == 12,
+    require(session.saveDocument() && json(doc)["version"].toInt() == 13,
         "Deletion changed the document format.");
     ImageDocumentSession reopened;
     require(reopened.openDocument(doc) && reopened.data() == deleted,
@@ -250,11 +250,11 @@ void persistenceTests(const QString& root) {
     const QString doc=root+"/raster.cimg";
     require(s.saveDocument(doc,&error),error);
     auto encoded=json(doc);
-    require(encoded["version"].toInt()==12 &&
+    require(encoded["version"].toInt()==13 &&
         encoded["layers"].toArray().last().toObject()["operations"].toArray().first().toObject()["path"].toString()=="linked.png",
-        "v11 linked raster reference did not survive the v12 save.");
+        "v11 linked raster reference did not survive the v13 save.");
     ImageDocumentSession reopened; require(reopened.openDocument(doc,&error),error);
-    require(reopened.data()==s.data() && reopened.renderedImage()==s.renderedImage(), "v11 linked raster data did not round-trip in v12.");
+    require(reopened.data()==s.data() && reopened.renderedImage()==s.renderedImage(), "v11 linked raster data did not round-trip in v13.");
     require(QDir().mkpath(root+"/save-as"), "Save As fixture failed.");
     require(s.saveDocument(root+"/save-as/copy.cimg",&error),error);
     require(QDir::isAbsolutePath(json(root+"/save-as/copy.cimg")["layers"].toArray().last().toObject()["operations"].toArray().first().toObject()["path"].toString()),
@@ -262,7 +262,7 @@ void persistenceTests(const QString& root) {
     require(s.setLayerOpacity(s.selectedLayerId(),70), "Recovery dirty fixture failed.");
     RecoveryStore recovery(root+"/recovery"); require(recovery.save(s,&error),error);
     const auto envelope=json(recovery.pathFor(s));
-    require(envelope["version"].toInt()==1 && envelope["document"].toObject()["version"].toInt()==12, "Recovery version incorrect.");
+    require(envelope["version"].toInt()==1 && envelope["document"].toObject()["version"].toInt()==13, "Recovery version incorrect.");
     ImageDocumentSession restored; require(restored.restoreRecovery(recovery.pathFor(s),&error) &&
         restored.renderedImage()==s.renderedImage(),error);
     const auto frozen=s.exportSnapshot();
@@ -337,7 +337,7 @@ void persistenceTests(const QString& root) {
     ImageDocumentSession legacy; require(legacy.createCanvas({16,16},Qt::transparent) && legacy.saveDocument(root+"/legacy.cimg"), "Migration fixture failed.");
     auto v10=json(root+"/legacy.cimg"); v10["version"]=10; write(root+"/legacy.cimg",QJsonDocument(v10).toJson());
     require(legacy.openDocument(root+"/legacy.cimg") && legacy.saveDocument() &&
-        json(root+"/legacy.cimg")["version"].toInt()==12, "v10 migration failed.");
+        json(root+"/legacy.cimg")["version"].toInt()==13, "v10 migration failed.");
 }
 }
 int main(int argc,char** argv) {

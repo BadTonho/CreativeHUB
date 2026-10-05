@@ -101,6 +101,21 @@ QIcon selectToolIcon() {
     return QIcon(icon);
 }
 
+QIcon areaSelectionToolIcon() {
+    QPixmap icon(32, 32);
+    icon.fill(Qt::transparent);
+    QPainter painter(&icon);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(QColor(102, 194, 244), 2.0, Qt::DashLine));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(QRectF(5.0, 6.0, 22.0, 19.0));
+    painter.setPen(QPen(QColor(237, 242, 248), 2.0, Qt::SolidLine,
+                        Qt::RoundCap, Qt::RoundJoin));
+    painter.drawLine(QPointF(11, 12), QPointF(21, 12));
+    painter.drawLine(QPointF(11, 17), QPointF(18, 17));
+    return QIcon(icon);
+}
+
 QIcon textToolIcon() {
     QPixmap icon(32, 32);
     icon.fill(Qt::transparent);
@@ -180,6 +195,17 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     select_shapes_button_->setFixedSize(40, 40);
     layout->addWidget(select_shapes_button_, 0, Qt::AlignHCenter);
 
+    area_selection_button_ = new QToolButton(this);
+    area_selection_button_->setObjectName(QStringLiteral("areaSelectionToolButton"));
+    area_selection_button_->setToolTip(QStringLiteral("Area Selection"));
+    area_selection_button_->setAccessibleName(QStringLiteral("Area Selection tool"));
+    area_selection_button_->setIcon(areaSelectionToolIcon());
+    area_selection_button_->setIconSize(QSize(24, 24));
+    area_selection_button_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    area_selection_button_->setCheckable(true);
+    area_selection_button_->setFixedSize(40, 40);
+    layout->addWidget(area_selection_button_, 0, Qt::AlignHCenter);
+
     layout->addStretch(1);
 
     color_button_ = new QToolButton(this);
@@ -207,6 +233,10 @@ ToolSidebar::ToolSidebar(QWidget* parent) : QWidget(parent) {
     connect(select_shapes_button_, &QToolButton::toggled, this, [this](bool active) {
         if (active) setActiveTool(Tool::Select);
         else if (active_tool_ == Tool::Select) setActiveTool(Tool::None);
+    });
+    connect(area_selection_button_, &QToolButton::toggled, this, [this](bool active) {
+        if (active) setActiveTool(Tool::AreaSelect);
+        else if (active_tool_ == Tool::AreaSelect) setActiveTool(Tool::None);
     });
     connect(text_button_, &QToolButton::toggled, this, [this](bool active) {
         if (active) setActiveTool(Tool::Text);
@@ -265,6 +295,11 @@ void ToolSidebar::setSelectToolActive(bool active) {
         (active_tool_ == Tool::Select ? Tool::None : active_tool_));
 }
 
+void ToolSidebar::setAreaSelectionToolActive(bool active) {
+    setActiveTool(active ? Tool::AreaSelect :
+        (active_tool_ == Tool::AreaSelect ? Tool::None : active_tool_));
+}
+
 void ToolSidebar::setTextToolActive(bool active) {
     setActiveTool(active ? Tool::Text :
         (active_tool_ == Tool::Text ? Tool::None : active_tool_));
@@ -283,11 +318,13 @@ void ToolSidebar::setActiveTool(Tool tool) {
         const QSignalBlocker shapes_blocker(shapes_button_);
         const QSignalBlocker text_blocker(text_button_);
         const QSignalBlocker select_shapes_blocker(select_shapes_button_);
+        const QSignalBlocker area_selection_blocker(area_selection_button_);
         paint_button_->setChecked(tool == Tool::Paint);
         eraser_button_->setChecked(tool == Tool::Eraser);
         shapes_button_->setChecked(tool == Tool::Shapes);
         text_button_->setChecked(tool == Tool::Text);
         select_shapes_button_->setChecked(tool == Tool::Select);
+        area_selection_button_->setChecked(tool == Tool::AreaSelect);
     }
     updateControls();
     if (changed) emit activeToolChanged(active_tool_);
@@ -313,6 +350,10 @@ bool ToolSidebar::selectToolActive() const noexcept {
     return active_tool_ == Tool::Select;
 }
 
+bool ToolSidebar::areaSelectionToolActive() const noexcept {
+    return active_tool_ == Tool::AreaSelect;
+}
+
 QColor ToolSidebar::brushColor() const {
     return brush_color_;
 }
@@ -324,6 +365,7 @@ void ToolSidebar::updateControls() {
     shapes_button_->setEnabled(document_available_);
     text_button_->setEnabled(document_available_);
     select_shapes_button_->setEnabled(document_available_);
+    area_selection_button_->setEnabled(document_available_);
     paint_button_->setToolTip(editable_layer_available
         ? QStringLiteral("Paint")
         : (document_available_
@@ -337,6 +379,9 @@ void ToolSidebar::updateControls() {
     select_shapes_button_->setToolTip(document_available_
         ? QStringLiteral("Selection")
         : QStringLiteral("Open an image to use Selection"));
+    area_selection_button_->setToolTip(document_available_
+        ? QStringLiteral("Area Selection")
+        : QStringLiteral("Open an image to use Area Selection"));
     shapes_button_->setToolTip(document_available_
         ? QStringLiteral("Shapes")
         : QStringLiteral("Open an image to use Shapes"));

@@ -100,8 +100,10 @@ private:
     void handleCrop(const QRect& crop);
     void handlePaintStroke(const QVector<QPointF>& points,
                            const QColor& color,
-                           int diameter);
-    void handleEraseStroke(const QVector<QPointF>& points, int diameter);
+                           int diameter,
+                           std::optional<QPainterPath> clipping_path = {});
+    void handleEraseStroke(const QVector<QPointF>& points, int diameter,
+                           std::optional<QPainterPath> clipping_path = {});
     void updateCanvasToolState(ToolSidebar::Tool tool, bool preserveSelection = false);
     void updateCanvasBrush();
     void updateShapeOptions();
@@ -140,9 +142,11 @@ private:
     QWidgetAction* shape_options_action_ = nullptr;
     QWidgetAction* text_options_action_ = nullptr;
     QWidgetAction* selection_options_action_ = nullptr;
+    QWidgetAction* area_selection_options_action_ = nullptr;
     QWidget* paint_size_options_ = nullptr;
     QWidget* shape_options_widget_ = nullptr;
     QWidget* text_options_widget_ = nullptr;
+    QWidget* area_selection_options_widget_ = nullptr;
     QDialog* shape_palette_window_ = nullptr;
     QButtonGroup* shape_palette_button_group_ = nullptr;
     QList<QToolButton*> shape_palette_buttons_;
@@ -160,6 +164,8 @@ private:
     QSpinBox* text_size_spin_ = nullptr;
     QPushButton* text_color_button_ = nullptr;
     QComboBox* text_alignment_combo_ = nullptr;
+    QComboBox* area_selection_shape_combo_ = nullptr;
+    QComboBox* area_selection_mode_combo_ = nullptr;
     QLabel* status_label_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
     QAction* relink_action_ = nullptr;
@@ -195,6 +201,8 @@ private:
     QAction* shapes_tool_action_ = nullptr;
     QAction* text_tool_action_ = nullptr;
     QAction* select_tool_action_ = nullptr;
+    QAction* area_selection_tool_action_ = nullptr;
+    QAction* deselect_area_selection_action_ = nullptr;
     QAction* delete_objects_action_ = nullptr;
     QAction* delete_selection_action_ = nullptr;
     ImageShapeData shape_style_;
@@ -206,6 +214,8 @@ private:
     bool shape_palette_positioned_ = false;
     int paint_diameter_ = 12;
     int eraser_diameter_ = 12;
+    int area_selection_shape_ = 0;
+    int area_selection_mode_ = 0;
     creative_suite::shortcuts::ShortcutManager shortcut_manager_{
         QStringLiteral("ImageEditor/KeyboardShortcuts")};
     QString linked_document_path_;
