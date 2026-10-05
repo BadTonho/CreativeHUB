@@ -1,6 +1,7 @@
 #include "image_canvas.h"
 #include "image_editor_window.h"
 #include "layer_panel.h"
+#include "selection/area_selection_tool.h"
 #include "tool_sidebar.h"
 
 #include <QAction>
@@ -1173,6 +1174,104 @@ bool testAreaSelectionToolUi(const QString& root) {
     return true;
 }
 
+bool testAreaSelectionToolState() {
+    using image_editor::AreaSelectionTool;
+    const QRectF image_bounds(0.0, 0.0, 32.0, 24.0);
+    AreaSelectionTool tool;
+    if (tool.hasSelection() || tool.gestureActive() || tool.clipPath(image_bounds)) {
+        std::cerr << "Area Selection did not start with an empty state.\n";
+        return false;
+    }
+
+    tool.beginGesture(QPointF(4.0, 4.0));
+    tool.updateGesture(QPointF(15.0, 15.0));
+    const QPainterPath first_preview = tool.previewPath(image_bounds);
+    if (!first_preview.contains(QPointF(6.0, 6.0)) ||
+        first_preview.contains(QPointF(22.0, 8.0)) ||
+        tool.finishGesture(QPointF(15.0, 15.0), image_bounds).status !=
+            AreaSelectionTool::FinishStatus::Applied) {
+        std::cerr << "Area Selection did not preview and apply a rectangle.\n";
+        return false;
+    }
+    const auto first_selection = tool.clipPath(image_bounds);
+    if (!first_selection || !first_selection->contains(QPointF(6.0, 6.0))) {
+        std::cerr << "Area Selection did not expose its committed clipping path.\n";
+        return false;
+    }
+
+    tool.setOptions(AreaSelectionTool::Shape::Ellipse,
+                    AreaSelectionTool::CombineMode::Add);
+    tool.beginGesture(QPointF(20.0, 6.0));
+    tool.updateGesture(QPointF(28.0, 17.0));
+    if (!tool.previewPath(image_bounds).contains(QPointF(24.0, 11.0)) ||
+        tool.finishGesture(QPointF(28.0, 17.0), image_bounds).status !=
+            AreaSelectionTool::FinishStatus::Applied) {
+        std::cerr << "Area Selection did not preview and add an ellipse.\n";
+        return false;
+    }
+
+    tool.setOptions(AreaSelectionTool::Shape::Rectangle,
+                    AreaSelectionTool::CombineMode::Subtract);
+    tool.beginGesture(QPointF(6.0, 6.0));
+    tool.updateGesture(QPointF(11.0, 11.0));
+    const QPainterPath subtract_preview = tool.previewPath(image_bounds);
+    if (subtract_preview.contains(QPointF(8.0, 8.0)) ||
+        !subtract_preview.contains(QPointF(5.0, 5.0))) {
+        std::cerr << "Area Selection did not preview subtraction correctly.\n";
+        return false;
+    }
+    if (tool.finishGesture(QPointF(11.0, 11.0), image_bounds).status !=
+        AreaSelectionTool::FinishStatus::Applied) {
+        std::cerr << "Area Selection did not apply the subtract gesture.\n";
+        return false;
+    }
+    const auto subtracted = tool.clipPath(image_bounds);
+    if (!subtracted || subtracted->contains(QPointF(8.0, 8.0)) ||
+        !subtracted->contains(QPointF(5.0, 5.0))) {
+        std::cerr << "Area Selection committed an incorrect subtract result.\n";
+        return false;
+    }
+
+    const auto before_cancel = tool.clipPath(image_bounds);
+    tool.beginGesture(QPointF(2.0, 2.0));
+    tool.updateGesture(QPointF(12.0, 12.0));
+    if (!tool.cancelGesture() || tool.gestureActive() ||
+        tool.clipPath(image_bounds) != before_cancel ||
+        tool.finishGesture(QPointF(12.0, 12.0), image_bounds).status !=
+            AreaSelectionTool::FinishStatus::NoSelection) {
+        std::cerr << "Cancelling a selection gesture changed the prior selection.\n";
+        return false;
+    }
+
+    if (!tool.translateSelection(QPoint(2, 1))) {
+        std::cerr << "Area Selection did not translate its active path.\n";
+        return false;
+    }
+    const auto translated = tool.clipPath(image_bounds);
+    if (!translated || !translated->contains(QPointF(7.0, 14.0)) ||
+        translated->contains(QPointF(5.0, 13.0))) {
+        std::cerr << "Area Selection translation did not move the clipping path.\n";
+        return false;
+    }
+
+    tool.setOptions(AreaSelectionTool::Shape::Rectangle,
+                    AreaSelectionTool::CombineMode::Subtract);
+    tool.beginGesture(QPointF(0.0, 0.0));
+    tool.updateGesture(QPointF(32.0, 24.0));
+    if (tool.finishGesture(QPointF(32.0, 24.0), image_bounds).status !=
+            AreaSelectionTool::FinishStatus::Applied ||
+        !tool.hasSelection() || !tool.clipPath(image_bounds) ||
+        !tool.clipPath(image_bounds)->isEmpty()) {
+        std::cerr << "Subtracting the full image did not retain an active empty selection.\n";
+        return false;
+    }
+    if (!tool.clearSelection() || tool.hasSelection() || tool.clearSelection()) {
+        std::cerr << "Area Selection did not clear its active path exactly once.\n";
+        return false;
+    }
+    return true;
+}
+
 bool testGeneralCanvasSelection() {
     image_editor::ImageCanvas canvas;
     canvas.resize(640, 480);
@@ -1958,6 +2057,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Layer mask thumbnails, brush targeting, or linked publication failed.\n";
         return 1;
     }
+    if (!testAreaSelectionToolState()) return 1;
     if (!testAreaSelectionToolUi(temporary.path())) return 1;
 
     if (!testGeneralCanvasSelection()) return 1;

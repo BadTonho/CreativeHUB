@@ -3,6 +3,7 @@
 #include "image_document_store.h"
 #include "../tools/brush/eraser_tool.h"
 #include "../tools/brush/paint_tool.h"
+#include "../tools/selection/area_selection_tool.h"
 
 #include <QImage>
 #include <QColor>
@@ -47,8 +48,8 @@ public:
     void clearAreaSelection();
     void translateAreaSelection(const QPoint& delta);
     void cancelAreaSelectionGesture();
-    [[nodiscard]] bool hasAreaSelection() const noexcept { return area_selection_active_; }
-    [[nodiscard]] bool areaSelectionGestureActive() const noexcept { return selecting_area_; }
+    [[nodiscard]] bool hasAreaSelection() const noexcept;
+    [[nodiscard]] bool areaSelectionGestureActive() const noexcept;
     [[nodiscard]] bool areaSelectionMode() const noexcept { return area_selection_mode_; }
     [[nodiscard]] std::optional<QPainterPath> areaSelectionClipPath() const;
     void setShapeStyle(const ImageShapeData& style);
@@ -144,8 +145,6 @@ private:
     [[nodiscard]] bool rasterTransform() const;
     [[nodiscard]] QPointF unboundedImagePoint(const QPointF& position) const;
     void clearObjectInteraction();
-    [[nodiscard]] QPainterPath areaSelectionGesturePath() const;
-    [[nodiscard]] QPainterPath visibleAreaSelectionPath() const;
     void updateTextEditorContentAndGeometry();
     void updateTextEditorGeometry();
     void applyTextEditorStyle();
@@ -170,7 +169,6 @@ private:
     bool panning_ = false;
     bool creating_shape_ = false;
     bool selecting_objects_ = false;
-    bool selecting_area_ = false;
     bool selection_toggle_ = false;
     bool transforming_objects_ = false;
     bool resizing_objects_ = false;
@@ -182,12 +180,6 @@ private:
     QRectF crop_selection_;
     QPointF selection_start_;
     QRectF object_selection_rect_;
-    QPointF area_selection_start_;
-    QPointF area_selection_current_;
-    QPainterPath area_selection_path_;
-    bool area_selection_active_ = false;
-    AreaSelectionShape area_selection_shape_ = AreaSelectionShape::Rectangle;
-    AreaSelectionCombineMode area_selection_combine_mode_ = AreaSelectionCombineMode::Replace;
     QPointF pan_start_;
     QPointF initial_pan_;
     QPointF brush_resize_start_;
@@ -195,6 +187,7 @@ private:
     int brush_resize_initial_diameter_ = 12;
     PaintTool paint_tool_;
     EraserTool eraser_tool_;
+    AreaSelectionTool area_selection_tool_;
     ImageShapeData shape_style_;
     ImageTextData text_style_;
     ImageTextData text_editing_;

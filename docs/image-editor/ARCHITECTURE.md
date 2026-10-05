@@ -23,6 +23,12 @@ persistence, and recovery.
   and stroke-overlay drawing between the brush tools. `paint_tool.*` and
   `eraser_tool.*` own their gesture and preview rules; they return preview or
   edit requests for `ImageCanvas` to forward through its existing signals.
+- `src/ui/tools/selection/area_selection_tool.*` owns each canvas's temporary
+  Area Selection path, gesture geometry, Replace/Add/Subtract operations,
+  cancellation, bounds clipping, complexity limit, and preview overlay.
+  `ImageCanvas` maps pointer positions to image coordinates, forwards the
+  existing selection signals, and supplies the active clip path to brush tools.
+  The selection remains UI state and is not stored in the document or history.
   Tool families use subdirectories such as `brush/`, `selection/`, `shapes/`,
   and `text/` to keep the tools area navigable as it grows.
 
@@ -159,6 +165,10 @@ publication retain their previous output on failure.
   the image. On release, the system pointer returns to the press point; normal
   hover tracking resumes on subsequent mouse movement. The gesture updates the
   window controls without changing the document or history.
+- `AreaSelectionTool` keeps the temporary selection and draws its live
+  Replace/Add/Subtract preview. `ImageCanvas` continues to own mode exclusivity,
+  coordinate conversion, and canvas-resize translation, while its public
+  methods and signals remain the integration boundary used by the window.
 - `ImageCanvas` previews line, rectangle, and ellipse operations while drawing.
   **Selection** hit-tests paint strokes, erase strokes, and shapes across visible
   editable layers from top to bottom. Click selects the topmost object; Shift

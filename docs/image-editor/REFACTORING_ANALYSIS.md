@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; primeira extração de ferramentas implementada**.
+Status: **análise provisória; extrações de Pintura, Borracha e Seleção de Área implementadas**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -23,12 +23,12 @@ arquivos grandes:
 
 | Área | Responsabilidades atuais | Oportunidade |
 | --- | --- | --- |
-| `ui/canvas/image_canvas.cpp` e `.h` | Desenho e navegação do canvas, conversão de coordenadas, recorte, pintura, borracha, formas, edição de texto, seleção e transformação de objetos, seleção de área, estado dos gestos e roteamento de eventos do mouse e teclado | Delegar o estado e o comportamento específico das ferramentas a módulos próprios, mantendo no canvas a exibição, a navegação, a conversão de coordenadas e a hospedagem da ferramenta ativa. |
+| `ui/canvas/image_canvas.cpp` e `.h` | Desenho e navegação do canvas, conversão de coordenadas, recorte, formas, edição de texto, seleção e transformação de objetos, além do roteamento de eventos | Delegar o estado e o comportamento específico das ferramentas a módulos próprios, mantendo no canvas a exibição, a navegação, a conversão de coordenadas e a hospedagem da ferramenta ativa. |
 | `ui/windows/image_editor_window.cpp` e `.h` | Layout da janela, ativação e opções das ferramentas, ações e atalhos, abas de documentos, abrir/salvar, importar/exportar, confirmação de recuperação, registro de erros e fluxo de imagens vinculadas | Extrair responsabilidades coesas quando forem alteradas, mantendo a janela principal responsável por montar e coordenar a aplicação. |
 | `core/document/image_document_session.cpp` e `.h` | Ciclo de vida do documento, recursos de imagem, composição e prévias, operações de edição, gerenciamento de camadas/grupos/máscaras, seleção e Desfazer/Refazer | Manter uma sessão como fachada do estado e do histórico do documento e mover renderização e operações de domínio para módulos internos focados. |
 | `core/document/image_document_store.cpp` e `.h` | Serialização `.cimg`, validação, migrações, caminhos e serialização de recuperação | Avaliar auxiliares específicos do formato apenas quando houver necessidade; preservar as regras de compatibilidade e gravação atômica como uma fronteira testada. |
 
-No momento desta análise, os arquivos têm aproximadamente 1.950 linhas em
+No momento desta análise, os arquivos têm aproximadamente 1.816 linhas em
 `image_canvas.cpp`, 2.837 em `image_editor_window.cpp`, 3.173 em
 `image_document_session.cpp` e 1.401 em `image_document_store.cpp`. O tamanho é
 um sinal para análise, mas não é, por si só, motivo suficiente para dividir um
@@ -75,6 +75,13 @@ máscara grava preto. Seleção de Área é uma ferramenta distinta da Seleção
 Objetos: a primeira limita novos traços; a segunda seleciona e transforma
 objetos existentes.
 
+`AreaSelectionTool` mantém o caminho temporário da seleção por canvas, o gesto,
+as operações de substituir/adicionar/subtrair, o recorte aos limites da imagem,
+o limite de complexidade e a prévia visual. `ImageCanvas` converte os pontos
+para coordenadas da imagem, controla a exclusividade do modo e encaminha os
+sinais públicos já usados pela janela e pelas ferramentas de pincel. A seleção
+continua fora do documento e do histórico.
+
 A interface das ferramentas deve receber entradas leves em coordenadas da
 imagem e referências para callbacks de prévia e confirmação. Evite copiar
 buffers de imagem completos entre interface e núcleo durante eventos comuns do
@@ -111,13 +118,15 @@ montando os widgets e traduzindo ações da aplicação em operações do docume
 2. Concluída: definir um contexto interno pequeno e extrair Pintura e Borracha,
    mantendo os sinais do canvas e sem alterar o comportamento visível nem os
    dados persistidos.
-3. Extrair Seleção de Área e Seleção de Objetos como módulos distintos,
-   preservando a diferença entre seleção temporária e edição do documento.
-4. Extrair Formas e Texto, incluindo suas interações específicas de prévia e
+3. Concluída: extrair Seleção de Área para `ui/tools/selection/`, preservando
+   sua natureza temporária e os sinais públicos do canvas.
+4. Extrair Seleção de Objetos para módulo próprio, preservando a diferença
+   entre seleção temporária e edição do documento.
+5. Extrair Formas e Texto, incluindo suas interações específicas de prévia e
    edição.
-5. Separar renderização e operações do documento de `ImageDocumentSession`
+6. Separar renderização e operações do documento de `ImageDocumentSession`
    quando uma mudança de funcionalidade oferecer uma divisão clara.
-6. Rever as divisões da janela principal e da persistência apenas quando seus
+7. Rever as divisões da janela principal e da persistência apenas quando seus
    fluxos forem alterados; evitar uma reorganização geral do repositório.
 
 Cada etapa deve mover uma responsabilidade e preservar o comportamento antes
@@ -141,14 +150,14 @@ do início da etapa seguinte.
 - Mudanças em gestos ou visuais da interface precisam de validação manual
   documentada, além dos testes automatizados para comportamento determinístico
   das ferramentas e do documento.
-- A compilação Release da aplicação, da UI e da UI de exportação passou. Os
-  testes focados passaram em 8/8; os consumidores do Video Editor relacionados
-  à publicação de imagens também passaram. A suíte CTest completa passou em
-  69/70: `creative-suite-main-editor-project-settings-ui` não encontrou os
-  dois arquivos de mídia esperados pelo fixture. A validação manual completa
-  permanece pendente com o mantenedor. Esta extração não transforma a proposta
-  gradual em uma decisão final para as demais ferramentas ou para a arquitetura
-  completa.
+- A compilação Release da aplicação, da UI e da UI de exportação passou após a
+  extração de Pintura, Borracha e Seleção de Área. Os testes focados passaram
+  em 8/8, incluindo a nova cobertura de estado da ferramenta e os consumidores
+  do Video Editor relacionados à publicação de imagens. A suíte CTest completa
+  passou em 69/70: `creative-suite-main-editor-project-settings-ui` não encontrou
+  os dois arquivos de mídia esperados pelo fixture. A validação manual permanece
+  pendente com o mantenedor. Esta extração não transforma a proposta gradual em
+  uma decisão final para as demais ferramentas ou para a arquitetura completa.
 
 ## Referências
 

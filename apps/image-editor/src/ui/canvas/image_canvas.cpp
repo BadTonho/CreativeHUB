@@ -37,12 +37,6 @@
 namespace image_editor {
 namespace {
 
-QPainterPath rectPath(const QRectF& rect) {
-    QPainterPath path;
-    path.addRect(rect);
-    return path;
-}
-
 QString objectId(const ImageOperation& operation) {
     switch (operation.kind) {
     case OperationKind::PaintStroke: return operation.paint_stroke.id;
@@ -314,7 +308,7 @@ void ImageCanvas::setAreaSelectionMode(bool enabled) {
         text_creation_mode_ = false;
         object_selection_mode_ = false;
     }
-    selecting_area_ = false;
+    static_cast<void>(area_selection_tool_.cancelGesture());
     selecting_crop_ = false;
     creating_shape_ = false;
     creating_text_frame_ = false;
@@ -327,55 +321,48 @@ void ImageCanvas::setAreaSelectionMode(bool enabled) {
 
 void ImageCanvas::setAreaSelectionOptions(AreaSelectionShape shape,
                                           AreaSelectionCombineMode combine_mode) {
-    area_selection_shape_ = shape;
-    area_selection_combine_mode_ = combine_mode;
+    const auto tool_shape = shape == AreaSelectionShape::Ellipse
+        ? AreaSelectionTool::Shape::Ellipse : AreaSelectionTool::Shape::Rectangle;
+    AreaSelectionTool::CombineMode tool_combine_mode =
+        AreaSelectionTool::CombineMode::Replace;
+    switch (combine_mode) {
+    case AreaSelectionCombineMode::Add:
+        tool_combine_mode = AreaSelectionTool::CombineMode::Add;
+        break;
+    case AreaSelectionCombineMode::Subtract:
+        tool_combine_mode = AreaSelectionTool::CombineMode::Subtract;
+        break;
+    case AreaSelectionCombineMode::Replace:
+        break;
+    }
+    area_selection_tool_.setOptions(tool_shape, tool_combine_mode);
 }
 
 void ImageCanvas::clearAreaSelection() {
-    const bool changed = area_selection_active_ || !area_selection_path_.isEmpty();
-    area_selection_active_ = false;
-    area_selection_path_ = {};
-    cancelAreaSelectionGesture();
+    const bool changed = area_selection_tool_.clearSelection();
     if (changed) emit areaSelectionChanged(false);
     update();
 }
 
 void ImageCanvas::translateAreaSelection(const QPoint& delta) {
-    if (!area_selection_active_ || delta.isNull()) return;
-    area_selection_path_.translate(delta);
-    update();
+    if (area_selection_tool_.translateSelection(delta)) update();
 }
 
 void ImageCanvas::cancelAreaSelectionGesture() {
-    if (!selecting_area_) return;
-    selecting_area_ = false;
-    area_selection_start_ = {};
-    area_selection_current_ = {};
-    update();
+    if (area_selection_tool_.cancelGesture()) update();
 }
 
 std::optional<QPainterPath> ImageCanvas::areaSelectionClipPath() const {
-    if (!area_selection_active_) return {};
-    return visibleAreaSelectionPath();
+    return area_selection_tool_.clipPath(
+        QRectF(QPointF(0.0, 0.0), QSizeF(image_.size())));
 }
 
-QPainterPath ImageCanvas::visibleAreaSelectionPath() const {
-    if (!area_selection_active_ || image_.isNull()) return {};
-    const QRectF canvas_bounds(QPointF(0.0, 0.0), QSizeF(image_.size()));
-    return area_selection_path_.intersected(rectPath(canvas_bounds));
+bool ImageCanvas::hasAreaSelection() const noexcept {
+    return area_selection_tool_.hasSelection();
 }
 
-QPainterPath ImageCanvas::areaSelectionGesturePath() const {
-    if (!selecting_area_ || image_.isNull()) return {};
-    const QPointF start = widgetToImageCoordinates(area_selection_start_);
-    const QPointF end = widgetToImageCoordinates(area_selection_current_);
-    const QRectF bounds = QRectF(start, end).normalized();
-    if (bounds.width() <= 0.0 || bounds.height() <= 0.0) return {};
-    QPainterPath path;
-    if (area_selection_shape_ == AreaSelectionShape::Ellipse) path.addEllipse(bounds);
-    else path.addRect(bounds);
-    return path.intersected(rectPath(
-        QRectF(QPointF(0.0, 0.0), QSizeF(image_.size()))));
+bool ImageCanvas::areaSelectionGestureActive() const noexcept {
+    return area_selection_tool_.gestureActive();
 }
 
 void ImageCanvas::setShapeStyle(const ImageShapeData& style) {
@@ -1231,45 +1218,12 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     }
     painter.restore();
     painter.drawImage(target, transient_image_.isNull() ? image_ : transient_image_);
-    QPainterPath displayed_area_selection = visibleAreaSelectionPath();
-    if (selecting_area_) {
-        const QPainterPath gesture = areaSelectionGesturePath();
-        if (!gesture.isEmpty()) {
-            if (area_selection_combine_mode_ == AreaSelectionCombineMode::Replace) {
-                displayed_area_selection = gesture;
-            } else if (area_selection_combine_mode_ == AreaSelectionCombineMode::Add) {
-                displayed_area_selection = area_selection_active_
-                ? visibleAreaSelectionPath().united(gesture) : gesture;
-            } else {
-                displayed_area_selection = area_selection_active_
-                    ? visibleAreaSelectionPath().subtracted(gesture) : QPainterPath{};
-            }
-        }
-    }
-    if (area_selection_active_ || selecting_area_) {
-        displayed_area_selection = displayed_area_selection.intersected(
-            rectPath(QRectF(QPointF(0.0, 0.0), QSizeF(image_.size()))));
-        QTransform image_to_widget;
-        image_to_widget.translate(target.left(), target.top());
-        image_to_widget.scale(zoom_, zoom_);
-        const QPainterPath widget_selection = image_to_widget.map(displayed_area_selection);
-        painter.save();
-        painter.setClipRect(target);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        painter.fillPath(widget_selection, QColor(70, 165, 235, 28));
-        QPen dark_outline(QColor(20, 24, 30), 2.0, Qt::DashLine);
-        dark_outline.setCosmetic(true);
-        dark_outline.setDashOffset(0.0);
-        painter.setPen(dark_outline);
-        painter.setBrush(Qt::NoBrush);
-        painter.drawPath(widget_selection);
-        QPen light_outline(QColor(245, 248, 252), 1.0, Qt::DashLine);
-        light_outline.setCosmetic(true);
-        light_outline.setDashOffset(3.0);
-        painter.setPen(light_outline);
-        painter.drawPath(widget_selection);
-        painter.restore();
-    }
+    AreaSelectionToolRenderContext selection_context;
+    selection_context.image_bounds = QRectF(QPointF(0.0, 0.0), QSizeF(image_.size()));
+    selection_context.image_target = target;
+    selection_context.image_to_widget.translate(target.left(), target.top());
+    selection_context.image_to_widget.scale(zoom_, zoom_);
+    area_selection_tool_.paintOverlay(painter, selection_context);
     // While editing, QPlainTextEdit draws the live text, caret, and selection
     // together. Painting a second copy here makes selection appear duplicated
     // and misaligned as the editor grows. Committed text uses drawTextOverlay.
@@ -1408,9 +1362,8 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
     }
     if (area_selection_mode_ && event->button() == Qt::LeftButton &&
         imageTargetRect().contains(event->position())) {
-        selecting_area_ = true;
-        area_selection_start_ = event->position();
-        area_selection_current_ = event->position();
+        area_selection_tool_.beginGesture(
+            widgetToImageCoordinates(event->position()));
         update();
         event->accept();
         return;
@@ -1540,8 +1493,9 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (selecting_area_) {
-        area_selection_current_ = event->position();
+    if (area_selection_tool_.gestureActive()) {
+        area_selection_tool_.updateGesture(
+            widgetToImageCoordinates(event->position()));
         update();
         event->accept();
         return;
@@ -1619,33 +1573,14 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (event->button() == Qt::LeftButton && selecting_area_) {
-        area_selection_current_ = event->position();
-        const QPainterPath gesture = areaSelectionGesturePath();
-        selecting_area_ = false;
-        area_selection_start_ = {};
-        area_selection_current_ = {};
-        if (!gesture.isEmpty()) {
-            QPainterPath combined;
-            if (area_selection_combine_mode_ == AreaSelectionCombineMode::Replace) {
-                combined = gesture;
-            } else if (area_selection_combine_mode_ == AreaSelectionCombineMode::Add) {
-                combined = area_selection_active_
-                    ? visibleAreaSelectionPath().united(gesture) : gesture;
-            } else {
-                combined = area_selection_active_
-                    ? visibleAreaSelectionPath().subtracted(gesture) : QPainterPath{};
-            }
-            combined = combined.intersected(rectPath(
-                QRectF(QPointF(0.0, 0.0), QSizeF(image_.size()))));
-            if (combined.elementCount() > ImageDocumentStore::kMaximumStrokeClipPathElements) {
-                emit areaSelectionRejected(QStringLiteral(
-                    "The selection would exceed the supported geometry limit."));
-            } else {
-                area_selection_path_ = std::move(combined);
-                area_selection_active_ = true;
-                emit areaSelectionChanged(true);
-            }
+    if (event->button() == Qt::LeftButton && area_selection_tool_.gestureActive()) {
+        const auto result = area_selection_tool_.finishGesture(
+            widgetToImageCoordinates(event->position()),
+            QRectF(QPointF(0.0, 0.0), QSizeF(image_.size())));
+        if (result.status == AreaSelectionTool::FinishStatus::Applied) {
+            emit areaSelectionChanged(true);
+        } else if (result.status == AreaSelectionTool::FinishStatus::Rejected) {
+            emit areaSelectionRejected(result.rejection_reason);
         }
         update();
         event->accept();
@@ -1845,7 +1780,7 @@ void ImageCanvas::keyPressEvent(QKeyEvent* event) {
         event->accept();
         return;
     }
-    if (event->key() == Qt::Key_Escape && selecting_area_) {
+    if (event->key() == Qt::Key_Escape && area_selection_tool_.gestureActive()) {
         cancelAreaSelectionGesture();
         event->accept();
         return;
