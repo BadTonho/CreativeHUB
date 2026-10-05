@@ -1,4 +1,5 @@
 #include "image_document_session.h"
+#include "image_document_renderer.h"
 #include "image_document_store.h"
 #include "image_editor_logger.h"
 #include "recovery_store.h"
@@ -63,6 +64,83 @@ bool visuallyEquivalent(const QImage& left, const QImage& right, int tolerance =
         }
     }
     return true;
+}
+
+void testStatelessDocumentRenderer() {
+    using namespace image_editor;
+
+    const QString background_id = QStringLiteral("background");
+    const QString layer_id = QStringLiteral("paint-layer");
+    const QString group_id = QStringLiteral("paint-group");
+    const QString paint_id = QStringLiteral("green-mark");
+
+    QImage source(QSize(4, 3), QImage::Format_ARGB32_Premultiplied);
+    source.fill(Qt::blue);
+
+    ImageDocumentData document;
+    document.source_size = source.size();
+    document.canvas_size = source.size();
+    ImageLayerData background;
+    background.id = background_id;
+    background.name = QStringLiteral("Background");
+    background.background = true;
+    document.layers.append(background);
+
+    ImageLayerData paint_layer;
+    paint_layer.id = layer_id;
+    paint_layer.name = QStringLiteral("Paint");
+    paint_layer.parent_group_id = group_id;
+    ImageOperation paint;
+    paint.kind = OperationKind::PaintStroke;
+    paint.paint_stroke.id = paint_id;
+    paint.paint_stroke.points = {QPointF(1.5, 1.5)};
+    paint.paint_stroke.color = Qt::green;
+    paint.paint_stroke.diameter = 2;
+    paint_layer.operations.append(paint);
+    document.layers.append(paint_layer);
+
+    ImageGroupData group;
+    group.id = group_id;
+    group.name = QStringLiteral("Paint group");
+    group.layer_ids.append(layer_id);
+    document.groups.append(group);
+    document.root_stack = {{background_id, false}, {group_id, true}};
+
+    const QHash<QString, QImage> raster_images;
+    require(ImageDocumentRenderer::documentSize(document, source.size()) == source.size(),
+            QStringLiteral("The renderer should preserve the document bounds."));
+
+    const QImage composite = ImageDocumentRenderer::composite(
+        document, source, raster_images);
+    require(!composite.isNull() && composite.size() == source.size() &&
+                composite.pixelColor(1, 1) == QColor(Qt::green),
+            QStringLiteral("The stateless renderer should composite document operations."));
+
+    const QImage without_mark = ImageDocumentRenderer::composite(
+        document, source, raster_images, {paint_id});
+    require(!without_mark.isNull() && without_mark.pixelColor(1, 1) == QColor(Qt::blue),
+            QStringLiteral("The renderer should exclude requested object IDs from previews."));
+
+    const QImage selected_layer = ImageDocumentRenderer::selectedLayer(
+        document, source, raster_images, layer_id);
+    require(!selected_layer.isNull() &&
+                selected_layer.pixelColor(1, 1) == QColor(Qt::green) &&
+                selected_layer.pixelColor(3, 2).alpha() == 0,
+            QStringLiteral("The renderer should isolate a selected raster layer (center %1, edge %2).")
+                .arg(selected_layer.pixelColor(1, 1).name(QColor::HexArgb),
+                     selected_layer.pixelColor(3, 2).name(QColor::HexArgb)));
+
+    const QImage selected_group = ImageDocumentRenderer::selectedGroup(
+        document, source, raster_images, group_id);
+    require(!selected_group.isNull() &&
+                selected_group.pixelColor(1, 1) == QColor(Qt::green) &&
+                selected_group.pixelColor(3, 2).alpha() == 0,
+            QStringLiteral("The renderer should isolate a selected group."));
+
+    std::atomic_bool cancelled{true};
+    require(ImageDocumentRenderer::composite(
+                document, source, raster_images, {}, &cancelled).isNull(),
+            QStringLiteral("The renderer should stop when cancellation is requested."));
 }
 
 void testDocumentEditingAndUndoRedo(const QString& root) {
@@ -2654,6 +2732,7 @@ int main(int argc, char* argv[]) {
         testDocumentEditingAndUndoRedo(root);
         testCanvasCreationPersistenceAndRecovery(root);
         testCanvasResizingAnchorsPersistenceAndHistory(root);
+        testStatelessDocumentRenderer();
         testLegacyVersionOneDocument(root);
         testVersionTwoDocumentCompatibility(root);
         testVersionThreeMigrationToBackground(root);

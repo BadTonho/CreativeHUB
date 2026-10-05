@@ -11,8 +11,8 @@ persistence, and recovery.
 ## Source layout
 
 - `src/app/` contains the executable entry point.
-- `src/core/document/` contains the editable document session and `.cimg`
-  serialization.
+- `src/core/document/` contains the editable document session, stateless image
+  renderer, image exporter, and `.cimg` serialization.
 - `src/core/recovery/` contains local recovery snapshot persistence.
 - `src/core/diagnostics/` contains bounded technical error logging.
 - `src/ui/canvas/`, `src/ui/dialogs/`, `src/ui/layers/`, `src/ui/tools/`, and
@@ -96,6 +96,17 @@ context. They do not prevent document save or other layer edits. Export
 snapshots check only references participating in their visible scope before
 rendering or opening an output file. Full export, Quick Export, and linked PNG
 publication retain their previous output on failure.
+
+`ImageDocumentSession` remains the public document façade. It owns document
+state, edit history, imported-image references, selection, and the mutable
+layer-thumbnail cache. `ImageDocumentRenderer` receives const document and
+image references and produces composites, selected-layer/group renders,
+object-excluded previews, and thumbnail pixels; it owns no cache and does not
+mutate the document. `image_exporter.cpp` validates the export request, asks
+the renderer for the requested pixels, then handles JPEG flattening,
+cancellation, progress, and atomic file writing. This split keeps rendering
+and file encoding independent of session history while preserving the session
+and export entry points used by the UI.
 
 ## Runtime boundaries
 

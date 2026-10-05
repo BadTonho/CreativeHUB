@@ -152,8 +152,9 @@ montando os widgets e traduzindo ações da aplicação em operações do docume
    fluxo de confirmação pela janela.
 7. Concluída: extrair Recorte para `ui/tools/crop/`, mantendo no canvas o modo,
    a conversão de coordenadas e o sinal público de confirmação.
-8. Separar renderização e operações do documento de `ImageDocumentSession`
-   quando uma mudança de funcionalidade oferecer uma divisão clara.
+8. Concluída: extrair renderização para `ImageDocumentRenderer` sem estado e
+   exportação para `image_exporter.cpp`; manter na sessão o documento,
+   histórico, seleção e cache de miniaturas.
 9. Rever as divisões da janela principal e da persistência apenas quando seus
    fluxos forem alterados; evitar uma reorganização geral do repositório.
 
@@ -233,6 +234,19 @@ e os dois sentidos do arraste. A compilação Release do aplicativo e dos alvos
 de UI/exportação passou no Windows. Os testes focados do Image Editor passaram
 em 6/6 e a suíte CTest completa passou em 70/70 em 2026-10-05.
 `git diff --check` passou. A validação visual manual permanece com o mantenedor.
+
+A extração de renderização criou `ImageDocumentRenderer` para composição,
+rasterização, prévias sem objetos, imagens de camada/grupo e pixels de
+miniaturas. `ImageDocumentSession` continua como fachada e mantém o documento,
+seleção, histórico e cache mutável de miniaturas; o cálculo do tamanho do
+documento e a identificação de objetos agora são compartilhados. A implementação
+de `exportImageSnapshot` passou para `image_exporter.cpp`, que preserva
+validação, cancelamento, JPEG, progresso e gravação atômica. Os testes de
+renderização direta cobrem composição, camada, grupo, exclusão de objetos e
+cancelamento. Os alvos Release do Image Editor e os consumidores relacionados
+do Video Editor compilaram. Os 11 testes focados passaram e a suíte CTest
+completa passou em 70/70 em 2026-10-05. `git diff --check` passou. Não houve
+mudança visual, portanto não foi necessária uma verificação manual de interface.
 
 ## Referências
 
