@@ -14,6 +14,8 @@ add_library(creative-suite-image-editor-core STATIC
     src/core/document/image_document_geometry.h
     src/core/document/image_document_history.cpp
     src/core/document/image_document_history.h
+    src/core/document/image_document_object_editor.cpp
+    src/core/document/image_document_object_editor.h
     src/core/document/image_document_renderer.cpp
     src/core/document/image_document_renderer.h
     src/core/document/image_document_utils.h

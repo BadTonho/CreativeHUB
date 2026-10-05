@@ -1,5 +1,6 @@
 #include "image_document_session.h"
 #include "image_document_geometry.h"
+#include "image_document_object_editor.h"
 #include "image_document_renderer.h"
 #include "image_document_utils.h"
 #include "image_layer_mask_editor.h"
@@ -9,7 +10,6 @@
 #include <QImageReader>
 #include <QPainter>
 #include <QPainterPath>
-#include <QSet>
 #include <QTransform>
 #include <QDir>
 #include <QUuid>
@@ -23,72 +23,6 @@ namespace {
 
 void assignError(QString* error, const QString& message) {
     if (error != nullptr) *error = message;
-}
-
-void transformObjectGeometry(ImageOperation* operation,
-                             const ImageOperation& transform,
-                             const QSize& canvas_size,
-                             bool inverse = false) {
-    if (operation == nullptr) return;
-    auto transform_points = [&transform, &canvas_size, inverse](QVector<QPointF>* points) {
-        if (points == nullptr) return;
-        for (QPointF& point : *points) {
-            point = ImageDocumentGeometry::transformPoint(
-                point, transform, canvas_size, inverse);
-        }
-    };
-    switch (operation->kind) {
-    case OperationKind::RasterImage: {
-        const auto origin = ImageDocumentGeometry::transformPoint(
-            {}, transform, canvas_size, inverse);
-        const auto x = ImageDocumentGeometry::transformPoint(
-            {1, 0}, transform, canvas_size, inverse) - origin;
-        const auto y = ImageDocumentGeometry::transformPoint(
-            {0, 1}, transform, canvas_size, inverse) - origin;
-        // Raster geometry describes pixel edges; flips use the canvas edge.
-        QPointF offset = origin;
-        if (transform.kind == OperationKind::FlipHorizontal) offset.rx() += 1;
-        if (transform.kind == OperationKind::FlipVertical) offset.ry() += 1;
-        operation->raster.transform *= QTransform(x.x(), x.y(), y.x(), y.y(), offset.x(), offset.y());
-        break;
-    }
-    case OperationKind::PaintStroke:
-        transform_points(&operation->paint_stroke.points);
-        if (operation->paint_stroke.clipping_path.has_value()) {
-            operation->paint_stroke.clipping_path = ImageDocumentGeometry::operationTransform(
-                transform, canvas_size, inverse).map(
-                    *operation->paint_stroke.clipping_path);
-        }
-        break;
-    case OperationKind::EraseStroke:
-        transform_points(&operation->erase_stroke.points);
-        if (operation->erase_stroke.clipping_path.has_value()) {
-            operation->erase_stroke.clipping_path = ImageDocumentGeometry::operationTransform(
-                transform, canvas_size, inverse).map(
-                    *operation->erase_stroke.clipping_path);
-        }
-        break;
-    case OperationKind::Shape:
-        operation->shape.start = ImageDocumentGeometry::transformPoint(
-            operation->shape.start, transform, canvas_size, inverse);
-        operation->shape.end = ImageDocumentGeometry::transformPoint(
-            operation->shape.end, transform, canvas_size, inverse);
-        break;
-    case OperationKind::Text: {
-        const QPointF top_left = ImageDocumentGeometry::transformPoint(
-            operation->text.position, transform, canvas_size, inverse);
-        const QPointF bottom_right = ImageDocumentGeometry::transformPoint(
-            operation->text.position + QPointF(operation->text.box_width, 0.0),
-            transform, canvas_size, inverse);
-        operation->text.position = QPointF(std::min(top_left.x(), bottom_right.x()),
-                                           std::min(top_left.y(), bottom_right.y()));
-        operation->text.box_width = std::max<qreal>(1.0,
-            std::abs(bottom_right.x() - top_left.x()));
-        break;
-    }
-    default:
-        break;
-    }
 }
 
 bool layerTransformHasCapacity(const ImageLayerData& layer) {
@@ -173,7 +107,8 @@ bool ImageDocumentSession::importRasterImages(const QVector<PreparedRasterImage>
                 anchor.x() - size.width() * scale / 2, anchor.y() - size.height() * scale / 2)};
         if (const auto* parent = findGroup(data_, parent_id))
             for (qsizetype index = parent->operations.size(); index > 0; --index)
-                transformObjectGeometry(&op, parent->operations[index - 1], canvas, true);
+                ImageDocumentObjectEditor::transformGeometry(
+                    &op, parent->operations[index - 1], canvas, true);
         ImageLayerData layer;
         layer.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         layer.name = QFileInfo(path).fileName().left(ImageDocumentStore::kMaximumLayerNameLength);
@@ -683,11 +618,13 @@ QVector<ImageObjectPlacement> ImageDocumentSession::visibleObjects() const {
             placement.layer_opacity = effective_opacity;
             for (qsizetype suffix = index; suffix < layer.operations.size(); ++suffix) {
                 const auto& later = layer.operations.at(suffix);
-                transformObjectGeometry(&placement.operation, later, size);
+                ImageDocumentObjectEditor::transformGeometry(
+                    &placement.operation, later, size);
             }
             if (parent_group != nullptr) {
                 for (const auto& group_operation : parent_group->operations) {
-                    transformObjectGeometry(&placement.operation, group_operation, size);
+                    ImageDocumentObjectEditor::transformGeometry(
+                        &placement.operation, group_operation, size);
                 }
             }
             result.append(std::move(placement));
@@ -700,199 +637,35 @@ bool ImageDocumentSession::updateObjectsRendered(
     const QVector<ImageObjectPlacement>& objects, QString* error) {
     if (error != nullptr) error->clear();
     if (objects.isEmpty() || !hasSource()) return false;
-
-    struct Mutation {
-        qsizetype layer_index = -1;
-        qsizetype operation_index = -1;
-        ImageOperation operation;
-    };
-    QVector<Mutation> mutations;
-    QSet<QString> seen;
-    const QSize size = renderedSize();
-    for (const auto& placement : objects) {
-        const QString id = operationObjectId(placement.operation);
-        if (id.isEmpty() || seen.contains(id)) {
-            assignError(error, QStringLiteral("The selected objects are invalid or duplicated."));
-            return false;
-        }
-        seen.insert(id);
-
-        qsizetype layer_index = -1;
-        qsizetype operation_index = -1;
-        for (qsizetype candidate_layer = 1; candidate_layer < data_.layers.size(); ++candidate_layer) {
-            const auto& layer = data_.layers.at(candidate_layer);
-            if (layer.id != placement.layer_id || !effectiveLayerVisible(layer)) continue;
-            for (qsizetype candidate_operation = 0;
-                 candidate_operation < layer.operations.size(); ++candidate_operation) {
-                const auto& operation = layer.operations.at(candidate_operation);
-                if (operationObjectId(operation) == id &&
-                    operation.kind == placement.operation.kind) {
-                    layer_index = candidate_layer;
-                    operation_index = candidate_operation;
-                    break;
-                }
-            }
-            if (layer_index >= 0) break;
-        }
-        if (layer_index < 0) {
-            assignError(error, QStringLiteral("A selected object is no longer available."));
-            return false;
-        }
-
-        const auto& layer = data_.layers.at(layer_index);
-        ImageOperation stored = placement.operation;
-        const auto* parent_group = layer.parent_group_id.isEmpty()
-            ? nullptr : findGroup(data_, layer.parent_group_id);
-        if (parent_group != nullptr) {
-            for (qsizetype suffix = parent_group->operations.size(); suffix > 0; --suffix) {
-                transformObjectGeometry(&stored,
-                    parent_group->operations.at(suffix - 1), size, true);
-            }
-        }
-        for (qsizetype suffix = layer.operations.size(); suffix > operation_index + 1; --suffix) {
-            transformObjectGeometry(&stored, layer.operations.at(suffix - 1), size, true);
-        }
-
-        bool valid = false;
-        if (stored.kind == OperationKind::PaintStroke) {
-            const auto& stroke = stored.paint_stroke;
-            valid = !stroke.id.isEmpty() && stroke.color.isValid() &&
-                stroke.diameter >= 1 &&
-                stroke.diameter <= ImageDocumentStore::kMaximumPaintBrushDiameter &&
-                !stroke.points.isEmpty() &&
-                stroke.points.size() <= ImageDocumentStore::kMaximumPaintStrokePoints;
-            for (const auto& point : stroke.points) {
-                valid = valid && std::isfinite(point.x()) && std::isfinite(point.y()) &&
-                    point.x() >= 0.0 && point.y() >= 0.0 &&
-                    point.x() < size.width() && point.y() < size.height();
-            }
-        } else if (stored.kind == OperationKind::EraseStroke) {
-            const auto& stroke = stored.erase_stroke;
-            valid = !stroke.id.isEmpty() && stroke.diameter >= 1 &&
-                stroke.diameter <= ImageDocumentStore::kMaximumPaintBrushDiameter &&
-                !stroke.points.isEmpty() &&
-                stroke.points.size() <= ImageDocumentStore::kMaximumPaintStrokePoints;
-            for (const auto& point : stroke.points) {
-                valid = valid && std::isfinite(point.x()) && std::isfinite(point.y()) &&
-                    point.x() >= 0.0 && point.y() >= 0.0 &&
-                    point.x() < size.width() && point.y() < size.height();
-            }
-        } else if (stored.kind == OperationKind::Shape) {
-            valid = ImageDocumentStore::isValidShape(stored.shape, size, error);
-        } else if (stored.kind == OperationKind::RasterImage) {
-            const auto& original = layer.operations.at(operation_index).raster;
-            valid = stored.raster.id == original.id &&
-                stored.raster.source_path == original.source_path &&
-                stored.raster.source_size == original.source_size &&
-                ImageDocumentStore::isValidRaster(stored.raster, error);
-        } else if (stored.kind == OperationKind::Text) {
-            valid = ImageDocumentStore::isValidText(stored.text, size, error);
-        }
-        if (!valid) {
-            if (error == nullptr || error->isEmpty()) {
-                assignError(error, QStringLiteral("The selected object geometry is invalid."));
-            }
-            return false;
-        }
-        if (stored != layer.operations.at(operation_index)) {
-            mutations.append({layer_index, operation_index, std::move(stored)});
-        }
-    }
-
-    if (mutations.isEmpty()) return false;
-    pushEdit();
-    for (const auto& mutation : mutations) {
-        data_.layers[mutation.layer_index].operations[mutation.operation_index] =
-            mutation.operation;
-    }
-    layer_thumbnail_cache_.clear();
+    auto prepared = ImageDocumentObjectEditor::updateObjectsRendered(
+        data_, objects, renderedSize(), selected_layer_id_, selected_group_id_, error);
+    if (!prepared.has_value()) return false;
+    commitDocumentEdit(std::move(prepared->document),
+                       std::move(prepared->selected_layer_id),
+                       std::move(prepared->selected_group_id));
     return true;
 }
 
 bool ImageDocumentSession::updateShapeStyles(const QStringList& shape_ids,
                                              const ImageShapeData& style,
                                              QString* error) {
-    if (error != nullptr) error->clear();
-    if (shape_ids.isEmpty() || !style.stroke_color.isValid() ||
-        !style.fill_color.isValid() || style.stroke_width < 1 ||
-        style.stroke_width > ImageDocumentStore::kMaximumShapeStrokeWidth) return false;
-
-    struct Mutation {
-        qsizetype layer_index = -1;
-        qsizetype operation_index = -1;
-        ImageShapeData shape;
-    };
-    QVector<Mutation> mutations;
-    QSet<QString> seen;
-    const QSize size = renderedSize();
-    for (const QString& id : shape_ids) {
-        if (id.isEmpty() || seen.contains(id)) continue;
-        seen.insert(id);
-        bool found = false;
-        for (qsizetype layer_index = 1; layer_index < data_.layers.size() && !found; ++layer_index) {
-            const auto& layer = data_.layers.at(layer_index);
-            if (!layer.visible || layer.opacity == 0) continue;
-            for (qsizetype operation_index = 0;
-                 operation_index < layer.operations.size(); ++operation_index) {
-                const auto& operation = layer.operations.at(operation_index);
-                if (operation.kind != OperationKind::Shape || operation.shape.id != id) continue;
-                ImageShapeData updated = operation.shape;
-                updated.stroke_enabled = updated.kind == ImageShapeKind::Line
-                    ? true : style.stroke_enabled;
-                updated.stroke_color = style.stroke_color;
-                updated.stroke_width = style.stroke_width;
-                updated.fill_enabled = updated.kind == ImageShapeKind::Line
-                    ? false : style.fill_enabled;
-                updated.fill_color = style.fill_color;
-                if (!ImageDocumentStore::isValidShape(updated, size, error)) return false;
-                if (updated != operation.shape) {
-                    mutations.append({layer_index, operation_index, std::move(updated)});
-                }
-                found = true;
-                break;
-            }
-        }
-    }
-    if (mutations.isEmpty()) return false;
-    pushEdit();
-    for (const auto& mutation : mutations) {
-        data_.layers[mutation.layer_index].operations[mutation.operation_index].shape =
-            mutation.shape;
-    }
-    layer_thumbnail_cache_.clear();
+    auto prepared = ImageDocumentObjectEditor::updateShapeStyles(
+        data_, shape_ids, style, renderedSize(), selected_layer_id_,
+        selected_group_id_, error);
+    if (!prepared.has_value()) return false;
+    commitDocumentEdit(std::move(prepared->document),
+                       std::move(prepared->selected_layer_id),
+                       std::move(prepared->selected_group_id));
     return true;
 }
 
 bool ImageDocumentSession::deleteObjects(const QStringList& object_ids) {
-    QSet<QString> remaining;
-    for (const auto& id : object_ids) if (!id.isEmpty()) remaining.insert(id);
-    if (remaining.isEmpty()) return false;
-
-    bool found = false;
-    for (qsizetype layer_index = 1; layer_index < data_.layers.size() && !found; ++layer_index) {
-        for (const auto& operation : data_.layers.at(layer_index).operations) {
-            if (remaining.contains(operationObjectId(operation))) {
-                found = true;
-                break;
-            }
-        }
-    }
-    if (!found) return false;
-
-    pushEdit();
-    remaining.clear();
-    for (const auto& id : object_ids) if (!id.isEmpty()) remaining.insert(id);
-    for (qsizetype layer_index = 1; layer_index < data_.layers.size(); ++layer_index) {
-        auto& operations = data_.layers[layer_index].operations;
-        for (qsizetype index = operations.size(); index > 0; --index) {
-            const QString id = operationObjectId(operations.at(index - 1));
-            if (!id.isEmpty() && remaining.contains(id)) {
-                remaining.remove(id);
-                operations.removeAt(index - 1);
-            }
-        }
-    }
-    layer_thumbnail_cache_.clear();
+    auto prepared = ImageDocumentObjectEditor::deleteObjects(
+        data_, object_ids, selected_layer_id_, selected_group_id_);
+    if (!prepared.has_value()) return false;
+    commitDocumentEdit(std::move(prepared->document),
+                       std::move(prepared->selected_layer_id),
+                       std::move(prepared->selected_group_id));
     return true;
 }
 
@@ -1161,88 +934,15 @@ QString ImageDocumentSession::addShape(ImageShapeData shape, QString* error) {
         assignError(error, QStringLiteral("Open or relink an image before creating a shape."));
         return {};
     }
-    if (ImageLayerStackEditor::itemCount(data_) >= ImageDocumentStore::kMaximumLayers) {
-        assignError(error, QStringLiteral(
-            "The document has reached the maximum of 512 stack items."));
-        return {};
-    }
-    if (shape.id.isEmpty()) shape.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    if (!ImageDocumentStore::isValidShape(shape, renderedSize(), error)) return {};
-    for (const auto& layer : data_.layers) {
-        for (const auto& operation : layer.operations) {
-            if (operation.kind == OperationKind::Shape &&
-                operation.shape.id.compare(shape.id, Qt::CaseInsensitive) == 0) {
-                assignError(error, QStringLiteral("A shape with this ID already exists."));
-                return {};
-            }
-        }
-    }
-
-    const QString shape_id = shape.id;
-    int suffix = 1;
-    QString layer_name;
-    const auto nameExists = [this](const QString& candidate) {
-        const bool layer_match = std::any_of(data_.layers.cbegin(), data_.layers.cend(),
-            [&candidate](const ImageLayerData& layer) {
-                return layer.name.compare(candidate, Qt::CaseInsensitive) == 0;
-            });
-        const bool group_match = std::any_of(data_.groups.cbegin(), data_.groups.cend(),
-            [&candidate](const ImageGroupData& group) {
-                return group.name.compare(candidate, Qt::CaseInsensitive) == 0;
-            });
-        return layer_match || group_match;
-    };
-    do {
-        layer_name = QStringLiteral("Shape %1").arg(suffix++);
-    } while (nameExists(layer_name));
-
-    ImageLayerData shape_layer;
-    shape_layer.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    shape_layer.name = layer_name;
-    const QString parent_group_id = selected_group_id_.isEmpty()
-        ? parentGroupForLayer(selected_layer_id_) : QString{};
-    shape_layer.parent_group_id = parent_group_id;
-    ImageOperation operation;
-    operation.kind = OperationKind::Shape;
-    operation.shape = std::move(shape);
-
-    pushEdit();
-    if (!parent_group_id.isEmpty()) {
-        auto* parent = findGroup(data_, parent_group_id);
-        const qsizetype selected_index = parent->layer_ids.indexOf(selected_layer_id_);
-        parent->layer_ids.insert(selected_index < 0 ? parent->layer_ids.size()
-                                                   : selected_index + 1,
-                                 shape_layer.id);
-    } else {
-        qsizetype insertion_index = data_.root_stack.size();
-        if (!selected_group_id_.isEmpty()) {
-            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
-                if (data_.root_stack.at(index).group &&
-                    data_.root_stack.at(index).id == selected_group_id_) {
-                    insertion_index = index + 1;
-                    break;
-                }
-            }
-        } else {
-            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
-                if (!data_.root_stack.at(index).group &&
-                    data_.root_stack.at(index).id == selected_layer_id_) {
-                    insertion_index = index + 1;
-                    break;
-                }
-            }
-        }
-        data_.root_stack.insert(insertion_index, {shape_layer.id, false});
-    }
-    const QString new_layer_id = shape_layer.id;
-    data_.layers.append(std::move(shape_layer));
-    auto* new_layer = findLayer(data_, new_layer_id);
-    new_layer->operations.append(std::move(operation));
-    selected_layer_id_ = new_layer_id;
-    selected_group_id_.clear();
-    ImageLayerStackEditor::rebuildLayerOrder(data_);
-    layer_thumbnail_cache_.clear();
-    return shape_id;
+    auto prepared = ImageDocumentObjectEditor::addShape(
+        data_, std::move(shape), renderedSize(), selected_layer_id_,
+        selected_group_id_, error);
+    if (!prepared.has_value()) return {};
+    const QString object_id = prepared->object_id;
+    commitDocumentEdit(std::move(prepared->document),
+                       std::move(prepared->selected_layer_id),
+                       std::move(prepared->selected_group_id));
+    return object_id;
 }
 
 QString ImageDocumentSession::addText(ImageTextData text, QString* error) {
@@ -1251,107 +951,25 @@ QString ImageDocumentSession::addText(ImageTextData text, QString* error) {
         assignError(error, QStringLiteral("Open or relink an image before creating text."));
         return {};
     }
-    if (ImageLayerStackEditor::itemCount(data_) >= ImageDocumentStore::kMaximumLayers) {
-        assignError(error, QStringLiteral(
-            "The document has reached the maximum of 512 stack items."));
-        return {};
-    }
-    if (text.id.isEmpty()) text.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    if (!ImageDocumentStore::isValidText(text, renderedSize(), error)) return {};
-    for (const auto& layer : data_.layers) {
-        for (const auto& operation : layer.operations) {
-            if (operationObjectId(operation).compare(text.id, Qt::CaseInsensitive) == 0) {
-                assignError(error, QStringLiteral("An object with this ID already exists."));
-                return {};
-            }
-        }
-    }
-
-    int suffix = 1;
-    QString layer_name;
-    const auto nameExists = [this](const QString& candidate) {
-        const bool layer_match = std::any_of(data_.layers.cbegin(), data_.layers.cend(),
-            [&candidate](const ImageLayerData& layer) {
-                return layer.name.compare(candidate, Qt::CaseInsensitive) == 0;
-            });
-        const bool group_match = std::any_of(data_.groups.cbegin(), data_.groups.cend(),
-            [&candidate](const ImageGroupData& group) {
-                return group.name.compare(candidate, Qt::CaseInsensitive) == 0;
-            });
-        return layer_match || group_match;
-    };
-    do {
-        layer_name = QStringLiteral("Text %1").arg(suffix++);
-    } while (nameExists(layer_name));
-
-    ImageLayerData text_layer;
-    text_layer.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    text_layer.name = layer_name;
-    const QString parent_group_id = selected_group_id_.isEmpty()
-        ? parentGroupForLayer(selected_layer_id_) : QString{};
-    text_layer.parent_group_id = parent_group_id;
-    ImageOperation operation;
-    operation.kind = OperationKind::Text;
-    operation.text = std::move(text);
-    const QString text_id = operation.text.id;
-
-    pushEdit();
-    if (!parent_group_id.isEmpty()) {
-        auto* parent = findGroup(data_, parent_group_id);
-        const qsizetype selected_index = parent->layer_ids.indexOf(selected_layer_id_);
-        parent->layer_ids.insert(selected_index < 0 ? parent->layer_ids.size()
-                                                  : selected_index + 1,
-                                 text_layer.id);
-    } else {
-        qsizetype insertion_index = data_.root_stack.size();
-        if (!selected_group_id_.isEmpty()) {
-            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
-                if (data_.root_stack.at(index).group &&
-                    data_.root_stack.at(index).id == selected_group_id_) {
-                    insertion_index = index + 1;
-                    break;
-                }
-            }
-        } else {
-            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
-                if (!data_.root_stack.at(index).group &&
-                    data_.root_stack.at(index).id == selected_layer_id_) {
-                    insertion_index = index + 1;
-                    break;
-                }
-            }
-        }
-        data_.root_stack.insert(insertion_index, {text_layer.id, false});
-    }
-    const QString new_layer_id = text_layer.id;
-    data_.layers.append(std::move(text_layer));
-    findLayer(data_, new_layer_id)->operations.append(std::move(operation));
-    selected_layer_id_ = new_layer_id;
-    selected_group_id_.clear();
-    ImageLayerStackEditor::rebuildLayerOrder(data_);
-    layer_thumbnail_cache_.clear();
-    return text_id;
+    auto prepared = ImageDocumentObjectEditor::addText(
+        data_, std::move(text), renderedSize(), selected_layer_id_,
+        selected_group_id_, error);
+    if (!prepared.has_value()) return {};
+    const QString object_id = prepared->object_id;
+    commitDocumentEdit(std::move(prepared->document),
+                       std::move(prepared->selected_layer_id),
+                       std::move(prepared->selected_group_id));
+    return object_id;
 }
 
 bool ImageDocumentSession::updateText(const ImageTextData& text, QString* error) {
-    if (error != nullptr) error->clear();
-    if (!ImageDocumentStore::isValidText(text, renderedSize(), error)) return false;
-    for (qsizetype layer_index = 0; layer_index < data_.layers.size(); ++layer_index) {
-        auto& layer = data_.layers[layer_index];
-        if (layer.background) continue;
-        for (qsizetype operation_index = 0;
-             operation_index < layer.operations.size(); ++operation_index) {
-            auto& operation = layer.operations[operation_index];
-            if (operation.kind != OperationKind::Text || operation.text.id != text.id) continue;
-            if (operation.text == text) return false;
-            pushEdit();
-            data_.layers[layer_index].operations[operation_index].text = text;
-            layer_thumbnail_cache_.clear();
-            return true;
-        }
-    }
-    assignError(error, QStringLiteral("The selected text no longer exists."));
-    return false;
+    auto prepared = ImageDocumentObjectEditor::updateText(
+        data_, text, renderedSize(), selected_layer_id_, selected_group_id_, error);
+    if (!prepared.has_value()) return false;
+    commitDocumentEdit(std::move(prepared->document),
+                       std::move(prepared->selected_layer_id),
+                       std::move(prepared->selected_group_id));
+    return true;
 }
 
 bool ImageDocumentSession::findText(const QString& text_id,
@@ -1371,75 +989,35 @@ bool ImageDocumentSession::findText(const QString& text_id,
 }
 
 bool ImageDocumentSession::updateShape(const ImageShapeData& shape, QString* error) {
-    if (error != nullptr) error->clear();
-    if (!ImageDocumentStore::isValidShape(shape, renderedSize(), error)) return false;
-    for (qsizetype layer_index = 0; layer_index < data_.layers.size(); ++layer_index) {
-        const auto& layer = data_.layers.at(layer_index);
-        if (layer.background) continue;
-        for (qsizetype operation_index = 0;
-             operation_index < layer.operations.size(); ++operation_index) {
-            const auto& operation = layer.operations.at(operation_index);
-            if (operation.kind != OperationKind::Shape || operation.shape.id != shape.id) continue;
-            if (operation.shape == shape) return false;
-            pushEdit();
-            data_.layers[layer_index].operations[operation_index].shape = shape;
-            layer_thumbnail_cache_.clear();
-            return true;
-        }
-    }
-    assignError(error, QStringLiteral("The selected shape no longer exists."));
-    return false;
+    auto prepared = ImageDocumentObjectEditor::updateShape(
+        data_, shape, renderedSize(), selected_layer_id_, selected_group_id_, error);
+    if (!prepared.has_value()) return false;
+    commitDocumentEdit(std::move(prepared->document),
+                       std::move(prepared->selected_layer_id),
+                       std::move(prepared->selected_group_id));
+    return true;
 }
 
 bool ImageDocumentSession::updateShapeRendered(const ImageShapeData& rendered_shape,
                                                QString* error) {
-    ImageShapeData stored_shape = rendered_shape;
-    const QSize size = renderedSize();
-    for (const auto& layer : data_.layers) {
-        if (layer.background) continue;
-        for (qsizetype index = 0; index < layer.operations.size(); ++index) {
-            const auto& operation = layer.operations.at(index);
-            if (operation.kind != OperationKind::Shape ||
-                operation.shape.id != rendered_shape.id) continue;
-            if (!layer.parent_group_id.isEmpty()) {
-                const auto* parent_group = findGroup(data_, layer.parent_group_id);
-                if (parent_group != nullptr) {
-                    for (qsizetype suffix = parent_group->operations.size(); suffix > 0; --suffix) {
-                        stored_shape.start = ImageDocumentGeometry::transformPoint(stored_shape.start,
-                            parent_group->operations.at(suffix - 1), size, true);
-                        stored_shape.end = ImageDocumentGeometry::transformPoint(stored_shape.end,
-                            parent_group->operations.at(suffix - 1), size, true);
-                    }
-                }
-            }
-            for (qsizetype suffix = layer.operations.size(); suffix > index + 1; --suffix) {
-                const auto& later = layer.operations.at(suffix - 1);
-                stored_shape.start = ImageDocumentGeometry::transformPoint(
-                    stored_shape.start, later, size, true);
-                stored_shape.end = ImageDocumentGeometry::transformPoint(
-                    stored_shape.end, later, size, true);
-            }
-            return updateShape(stored_shape, error);
-        }
-    }
-    assignError(error, QStringLiteral("The selected shape no longer exists."));
-    return false;
+    auto prepared = ImageDocumentObjectEditor::updateShapeRendered(
+        data_, rendered_shape, renderedSize(), selected_layer_id_,
+        selected_group_id_, error);
+    if (!prepared.has_value()) return false;
+    commitDocumentEdit(std::move(prepared->document),
+                       std::move(prepared->selected_layer_id),
+                       std::move(prepared->selected_group_id));
+    return true;
 }
 
 bool ImageDocumentSession::deleteShape(const QString& shape_id) {
-    for (qsizetype layer_index = 0; layer_index < data_.layers.size(); ++layer_index) {
-        const auto& layer = data_.layers.at(layer_index);
-        if (layer.background) continue;
-        for (qsizetype index = 0; index < layer.operations.size(); ++index) {
-            const auto& operation = layer.operations.at(index);
-            if (operation.kind != OperationKind::Shape || operation.shape.id != shape_id) continue;
-            pushEdit();
-            data_.layers[layer_index].operations.removeAt(index);
-            layer_thumbnail_cache_.clear();
-            return true;
-        }
-    }
-    return false;
+    auto prepared = ImageDocumentObjectEditor::deleteShape(
+        data_, shape_id, selected_layer_id_, selected_group_id_);
+    if (!prepared.has_value()) return false;
+    commitDocumentEdit(std::move(prepared->document),
+                       std::move(prepared->selected_layer_id),
+                       std::move(prepared->selected_group_id));
+    return true;
 }
 
 bool ImageDocumentSession::findShape(const QString& shape_id,
@@ -1464,7 +1042,7 @@ QString ImageDocumentSession::addLayer() {
         data_, selected_layer_id_, selected_group_id_);
     if (!edit.has_value()) return {};
     const QString layer_id = edit->selected_layer_id;
-    commitLayerStackEdit(std::move(edit->document),
+    commitDocumentEdit(std::move(edit->document),
                          std::move(edit->selected_layer_id),
                          std::move(edit->selected_group_id));
     return layer_id;
@@ -1478,7 +1056,7 @@ bool ImageDocumentSession::deleteStackItems(const QVector<ImageStackItemData>& i
     auto edit = ImageLayerStackEditor::deleteItems(
         data_, items, selected_layer_id_, selected_group_id_);
     if (!edit.has_value()) return false;
-    commitLayerStackEdit(std::move(edit->document),
+    commitDocumentEdit(std::move(edit->document),
                          std::move(edit->selected_layer_id),
                          std::move(edit->selected_group_id));
     return true;
@@ -1618,7 +1196,7 @@ QString ImageDocumentSession::addGroup(QString* error) {
         data_, selected_layer_id_, selected_group_id_, error);
     if (!edit.has_value()) return {};
     const QString group_id = edit->selected_group_id;
-    commitLayerStackEdit(std::move(edit->document),
+    commitDocumentEdit(std::move(edit->document),
                          std::move(edit->selected_layer_id),
                          std::move(edit->selected_group_id));
     return group_id;
@@ -1629,7 +1207,7 @@ QString ImageDocumentSession::groupLayers(const QStringList& layer_ids, QString*
         data_, layer_ids, selected_group_id_, error);
     if (!edit.has_value()) return {};
     const QString group_id = edit->selected_group_id;
-    commitLayerStackEdit(std::move(edit->document),
+    commitDocumentEdit(std::move(edit->document),
                          std::move(edit->selected_layer_id),
                          std::move(edit->selected_group_id));
     return group_id;
@@ -1639,7 +1217,7 @@ bool ImageDocumentSession::ungroup(const QString& group_id) {
     auto edit = ImageLayerStackEditor::ungroup(
         data_, group_id, selected_layer_id_, selected_group_id_);
     if (!edit.has_value()) return false;
-    commitLayerStackEdit(std::move(edit->document),
+    commitDocumentEdit(std::move(edit->document),
                          std::move(edit->selected_layer_id),
                          std::move(edit->selected_group_id));
     return true;
@@ -1693,7 +1271,7 @@ bool ImageDocumentSession::moveStackItem(const QString& item_id,
         data_, item_id, is_group, target_group_id, insertion_index,
         selected_layer_id_, selected_group_id_);
     if (!edit.has_value()) return false;
-    commitLayerStackEdit(std::move(edit->document),
+    commitDocumentEdit(std::move(edit->document),
                          std::move(edit->selected_layer_id),
                          std::move(edit->selected_group_id));
     return true;
@@ -1706,7 +1284,7 @@ bool ImageDocumentSession::moveStackItemBy(const QString& item_id,
         data_, item_id, is_group, direction,
         selected_layer_id_, selected_group_id_);
     if (!edit.has_value()) return false;
-    commitLayerStackEdit(std::move(edit->document),
+    commitDocumentEdit(std::move(edit->document),
                          std::move(edit->selected_layer_id),
                          std::move(edit->selected_group_id));
     return true;
@@ -1825,7 +1403,7 @@ void ImageDocumentSession::pushEdit() {
     recordEditSnapshot(data_, selected_layer_id_, selected_group_id_);
 }
 
-void ImageDocumentSession::commitLayerStackEdit(
+void ImageDocumentSession::commitDocumentEdit(
     ImageDocumentData document, QString selected_layer_id,
     QString selected_group_id) {
     pushEdit();

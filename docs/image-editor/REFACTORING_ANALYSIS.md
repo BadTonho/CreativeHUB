@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos, estado por aba, execução de importação/exportação de imagem, histórico de edição e codec do formato `.cimg` implementados**.
+Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, edição de objetos, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos, estado por aba, execução de importação/exportação de imagem, histórico de edição e codec do formato `.cimg` implementados**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -25,12 +25,12 @@ arquivos grandes:
 | --- | --- | --- |
 | `ui/canvas/image_canvas.cpp` e `.h` | Desenho e navegação do canvas, conversão de coordenadas, recorte, hospedagem dos widgets das ferramentas e roteamento de eventos | Continuar delegando o estado e o comportamento das ferramentas a módulos próprios, sem mover a apresentação do documento ou a conversão de coordenadas para cada ferramenta. |
 | `ui/windows/image_editor_window.cpp` e `.h` | Layout da janela, ativação e opções das ferramentas, ações e atalhos, abas de documentos, abrir/salvar, importar/exportar, confirmação de recuperação, registro de erros e fluxo de imagens vinculadas | Extrair responsabilidades coesas quando forem alteradas, mantendo a janela principal responsável por montar e coordenar a aplicação. |
-| `core/document/image_document_session.cpp` e `.h` | Ciclo de vida do documento, recursos de imagem, composição e prévias, operações de edição, gerenciamento de camadas/grupos/máscaras e seleção; delega as pilhas de Desfazer/Refazer | Manter a sessão como fachada e responsável por restaurar e validar o estado; deixar renderização, operações de domínio e mecânica do histórico em módulos internos focados. |
+| `core/document/image_document_session.cpp` e `.h` | Ciclo de vida do documento, recursos de imagem, composição e prévias, coordenação de edição, gerenciamento de camadas/grupos/máscaras e seleção; delega renderização, edição de objetos, pilha estrutural e Desfazer/Refazer | Manter a sessão como fachada e responsável por restaurar e validar o estado; extrair outras responsabilidades apenas quando houver uma fronteira de domínio coesa. |
 | `core/document/image_document_store.cpp` e `.h` | Fachada pública de persistência, leitura/gravação atômica, caminhos de arquivo e envelope de recuperação | Manter a API estável e delegar JSON versionado, migração e validação a `ImageDocumentCodec`; preservar a compatibilidade `.cimg` como uma fronteira testada. |
 
-No momento desta análise, os arquivos têm aproximadamente 1.816 linhas em
-`image_canvas.cpp`, 2.837 em `image_editor_window.cpp`, 3.173 em
-`image_document_session.cpp` e 1.401 em `image_document_store.cpp`. O tamanho é
+Após as extrações registradas até 2026-10-05, os arquivos têm aproximadamente
+962 linhas em `image_canvas.cpp`, 2.808 em `image_editor_window.cpp`, 1.524 em
+`image_document_session.cpp` e 179 em `image_document_store.cpp`. O tamanho é
 um sinal para análise, mas não é, por si só, motivo suficiente para dividir um
 módulo.
 
@@ -117,8 +117,8 @@ edição. Alguns módulos internos candidatos:
 
 - composição de imagem, rasterização de operações, renderização de prévias e
   miniaturas;
-- edições de objetos, como pintura, borracha, formas, texto e geometria de
-  imagens raster importadas;
+- edição de objetos por `ImageDocumentObjectEditor`, que prepara mutações sem
+  acessar histórico ou recursos raster carregados;
 - operações de camadas, grupos e máscaras;
 - leitura/gravação do documento e recuperação, com a persistência versionada
   atrás de uma fronteira estável.
@@ -162,7 +162,10 @@ montando os widgets e traduzindo ações da aplicação em operações do docume
 10. Concluída: extrair a preparação de operações estruturais de camadas e grupos
     para `ImageLayerStackEditor`. Manter na sessão a aplicação do resultado,
     seleção, histórico e invalidação de miniaturas.
-11. Rever as divisões da janela principal e da persistência apenas quando seus
+11. Concluída: extrair a preparação de edições de objetos para
+    `ImageDocumentObjectEditor`, cobrindo traços, raster, formas e texto; manter
+    aplicação, histórico e invalidação de miniaturas na sessão.
+12. Rever as divisões da janela principal e da persistência apenas quando seus
     fluxos forem alterados; evitar uma reorganização geral do repositório.
 
 Cada etapa deve mover uma responsabilidade e preservar o comportamento antes
@@ -351,6 +354,19 @@ documentos inválidos, caminhos raster, recuperação e falhas de gravação. O
 aplicativo e os alvos afetados do Image Editor compilaram em Release; os oito
 testes focados e a suíte CTest completa passaram (8/8 e 12/12) no Windows em
 2026-10-05. `git diff --check` passou. Não houve alteração visual.
+
+`ImageDocumentObjectEditor` agora prepara documentos candidatos para criar,
+editar, estilizar, transformar e excluir objetos. A extração inclui traços de
+Pintura/Borracha, referências raster, formas e texto; compartilha o mapeamento
+de geometria usado ao apresentar objetos transformados e ao inserir raster em
+grupos. A sessão continua verificando se há imagem carregada para criações,
+registrando uma edição no histórico, atualizando a seleção e invalidando
+miniaturas. A importação e religação raster, consultas e prévias continuam nos
+fluxos existentes. A cobertura direta está em
+`testImageDocumentObjectEditor`; a integração existente mantém Undo/Redo,
+persistência e renderização na sessão. Os alvos afetados do Image Editor
+compilaram em Release e a suíte CTest configurada passou em 12/12 no Windows em
+2026-10-05. `git diff --check` passou; não houve mudança visual.
 
 ## Referências
 

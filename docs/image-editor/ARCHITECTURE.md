@@ -87,6 +87,17 @@ an active group inserts above that group at root. Placement starts centered,
 fits down without enlargement, and maps canvas placement back through an
 existing parent group transform.
 
+`ImageDocumentObjectEditor` prepares candidate documents for object creation,
+editing, styling, transformation, and deletion without mutating the source
+document or accessing session state. It handles paint and erase strokes,
+linked raster images, shapes, and text; shape and text creation also prepare
+their new layer and resulting selection. The editor shares object-geometry
+mapping with the session's visible-object projection and raster placement.
+`ImageDocumentSession` checks loaded-image availability for creation, then
+commits a successful candidate as one history edit and invalidates thumbnails.
+Object queries and transient previews remain on the session; raster import and
+relink remain in their existing resource workflow.
+
 Selection manipulates only the raster matrix, including positions outside
 the canvas. Oriented corners resize in image-local axes, Alt permits independent
 scales, and the rotation handle rotates around the image center with optional

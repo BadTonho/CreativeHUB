@@ -180,9 +180,9 @@ private:
                             QString selected_layer_id,
                             QString selected_group_id = {});
     void restoreHistorySnapshot(ImageDocumentHistory::Snapshot snapshot);
-    void commitLayerStackEdit(ImageDocumentData document,
-                              QString selected_layer_id,
-                              QString selected_group_id);
+    void commitDocumentEdit(ImageDocumentData document,
+                            QString selected_layer_id,
+                            QString selected_group_id);
     [[nodiscard]] qsizetype groupIndex(const QString& group_id) const noexcept;
     [[nodiscard]] QString parentGroupForLayer(const QString& layer_id) const;
     [[nodiscard]] bool effectiveLayerVisible(const ImageLayerData& layer) const;

@@ -1,6 +1,7 @@
 #include "image_document_session.h"
 #include "image_document_codec.h"
 #include "image_document_history.h"
+#include "image_document_object_editor.h"
 #include "image_document_renderer.h"
 #include "image_document_store.h"
 #include "image_editor_logger.h"
@@ -2495,6 +2496,228 @@ void testImageLayerStackEditor() {
             QStringLiteral("Stack capacity rejection changed the candidate source."));
 }
 
+void testImageDocumentObjectEditor() {
+    using namespace image_editor;
+
+    const auto new_id = [] {
+        return QUuid::createUuid().toString(QUuid::WithoutBraces);
+    };
+    const QSize canvas_size(64, 48);
+    ImageDocumentData document;
+    document.base_kind = ImageBaseKind::Canvas;
+    document.canvas_size = canvas_size;
+    ImageLayerData background;
+    background.id = QStringLiteral("background");
+    background.name = QStringLiteral("Background");
+    background.background = true;
+    ImageLayerData base_layer;
+    base_layer.id = QStringLiteral("base-layer");
+    base_layer.name = QStringLiteral("Layer 1");
+    document.layers = {background, base_layer};
+    document.root_stack = {{background.id, false}, {base_layer.id, false}};
+    const ImageDocumentData original = document;
+    QString error;
+
+    ImageShapeData shape;
+    shape.id = new_id();
+    shape.start = QPointF(4, 5);
+    shape.end = QPointF(18, 20);
+    shape.fill_color = Qt::red;
+    auto added_shape = ImageDocumentObjectEditor::addShape(
+        document, shape, canvas_size, base_layer.id, {}, &error);
+    require(added_shape.has_value() && error.isEmpty() && document == original &&
+                added_shape->object_id == shape.id &&
+                added_shape->document.layers.size() == 3 &&
+                added_shape->document.layers.back().name == QStringLiteral("Shape 1") &&
+                added_shape->selected_layer_id == added_shape->document.layers.back().id &&
+                added_shape->selected_group_id.isEmpty(),
+            QStringLiteral("Shape creation did not prepare a new layer and resulting selection."));
+
+    ImageTextData text;
+    text.id = new_id();
+    text.content = QStringLiteral("T");
+    text.font_pixel_size = 12;
+    text.position = QPointF(3, 24);
+    text.box_width = 48;
+    auto added_text = ImageDocumentObjectEditor::addText(
+        added_shape->document, text, canvas_size,
+        added_shape->selected_layer_id, added_shape->selected_group_id, &error);
+    require(added_text.has_value() && error.isEmpty() &&
+                added_text->object_id == text.id &&
+                added_text->document.layers.back().name == QStringLiteral("Text 1") &&
+                added_text->selected_layer_id == added_text->document.layers.back().id &&
+                added_text->document.root_stack.at(3).id == added_text->selected_layer_id,
+            QStringLiteral("Text creation did not preserve stack placement or selection."));
+
+    ImageTextData duplicate_text = text;
+    duplicate_text.id = shape.id;
+    const ImageDocumentData before_duplicate = added_shape->document;
+    require(!ImageDocumentObjectEditor::addText(
+                added_shape->document, duplicate_text, canvas_size,
+                added_shape->selected_layer_id, {}, &error).has_value() &&
+                !error.isEmpty() && added_shape->document == before_duplicate,
+            QStringLiteral("A duplicate object ID changed the source document."));
+
+    ImageShapeData style = shape;
+    style.stroke_color = Qt::green;
+    style.fill_color = QColor(20, 220, 80);
+    style.stroke_width = 5;
+    auto styled = ImageDocumentObjectEditor::updateShapeStyles(
+        added_shape->document, {shape.id}, style, canvas_size,
+        base_layer.id, {}, &error);
+    require(styled.has_value() && error.isEmpty() &&
+                added_shape->document == before_duplicate &&
+                styled->document.layers.back().operations.front().shape == style,
+            QStringLiteral("Shape style preparation mutated the source or lost the new style."));
+
+    ImageShapeData updated_shape = style;
+    updated_shape.end += QPointF(2, 3);
+    auto shape_edit = ImageDocumentObjectEditor::updateShape(
+        styled->document, updated_shape, canvas_size,
+        styled->selected_layer_id, styled->selected_group_id, &error);
+    require(shape_edit.has_value() && error.isEmpty() &&
+                shape_edit->document.layers.back().operations.front().shape == updated_shape,
+            QStringLiteral("Direct shape editing did not prepare the requested geometry."));
+    auto text_edit = ImageDocumentObjectEditor::updateText(
+        added_text->document, ImageTextData{text.id,
+            QStringLiteral("U"), text.font_family, text.font_pixel_size,
+            text.color, text.alignment, text.position, text.box_width},
+        canvas_size, added_text->selected_layer_id, {}, &error);
+    require(text_edit.has_value() && error.isEmpty() &&
+                text_edit->document.layers.back().operations.front().text.content ==
+                    QStringLiteral("U"),
+            QStringLiteral("Direct text editing did not prepare the requested content."));
+    require(!ImageDocumentObjectEditor::updateShape(
+                document, shape, canvas_size, base_layer.id, {}, &error).has_value() &&
+                !error.isEmpty() && document == original,
+            QStringLiteral("Updating a missing shape mutated the source document."));
+
+    ImageDocumentData mixed = original;
+    ImageOperation paint;
+    paint.kind = OperationKind::PaintStroke;
+    paint.paint_stroke.id = new_id();
+    paint.paint_stroke.points = {QPointF(5, 8), QPointF(9, 8)};
+    paint.paint_stroke.color = Qt::blue;
+    paint.paint_stroke.diameter = 3;
+    ImageOperation erase;
+    erase.kind = OperationKind::EraseStroke;
+    erase.erase_stroke.id = new_id();
+    erase.erase_stroke.points = {QPointF(12, 8)};
+    erase.erase_stroke.diameter = 3;
+    ImageOperation raster;
+    raster.kind = OperationKind::RasterImage;
+    raster.raster.id = new_id();
+    raster.raster.source_path = QDir::current().filePath(QStringLiteral("object-editor.png"));
+    raster.raster.source_size = QSize(4, 4);
+    raster.raster.transform = QTransform::fromTranslate(20, 8);
+    ImageOperation shape_operation;
+    shape_operation.kind = OperationKind::Shape;
+    shape_operation.shape = shape;
+    shape_operation.shape.id = new_id();
+    shape_operation.shape.start = QPointF(28, 8);
+    shape_operation.shape.end = QPointF(36, 16);
+    ImageOperation text_operation;
+    text_operation.kind = OperationKind::Text;
+    text_operation.text = text;
+    text_operation.text.id = new_id();
+    text_operation.text.position = QPointF(40, 8);
+    text_operation.text.box_width = 16;
+    mixed.layers[1].operations = {paint, erase, raster, shape_operation, text_operation};
+    const ImageDocumentData mixed_original = mixed;
+    QVector<ImageObjectPlacement> placements;
+    for (const auto& operation : mixed.layers[1].operations)
+        placements.append({operation, base_layer.id, 100});
+    placements[0].operation.paint_stroke.points[0] += QPointF(2, 1);
+    placements[1].operation.erase_stroke.points[0] += QPointF(2, 1);
+    placements[2].operation.raster.transform = QTransform::fromTranslate(22, 9);
+    placements[3].operation.shape.start += QPointF(2, 1);
+    placements[3].operation.shape.end += QPointF(2, 1);
+    placements[4].operation.text.position += QPointF(2, 1);
+    auto transformed = ImageDocumentObjectEditor::updateObjectsRendered(
+        mixed, placements, canvas_size, base_layer.id, {}, &error);
+    require(transformed.has_value() && error.isEmpty() && mixed == mixed_original &&
+                transformed->document.layers[1].operations[0].paint_stroke.points[0] ==
+                    QPointF(7, 9) &&
+                transformed->document.layers[1].operations[1].erase_stroke.points[0] ==
+                    QPointF(14, 9) &&
+                transformed->document.layers[1].operations[2].raster.transform ==
+                    placements[2].operation.raster.transform &&
+                transformed->document.layers[1].operations[3].shape.start ==
+                    QPointF(30, 9) &&
+                transformed->document.layers[1].operations[4].text.position ==
+                    QPointF(42, 9),
+            QStringLiteral("Mixed object transforms did not prepare all five object kinds."));
+
+    auto duplicate_placements = QVector<ImageObjectPlacement>{placements[0], placements[0]};
+    require(!ImageDocumentObjectEditor::updateObjectsRendered(
+                mixed, duplicate_placements, canvas_size, base_layer.id, {}, &error).has_value() &&
+                !error.isEmpty() && mixed == mixed_original,
+            QStringLiteral("Duplicate object transforms changed the source document."));
+    auto invalid_placement = placements.front();
+    invalid_placement.operation.paint_stroke.points[0] = QPointF(100, 8);
+    require(!ImageDocumentObjectEditor::updateObjectsRendered(
+                mixed, {invalid_placement}, canvas_size, base_layer.id, {}, &error).has_value() &&
+                !error.isEmpty() && mixed == mixed_original,
+            QStringLiteral("An out-of-bounds transform changed the source document."));
+
+    ImageDocumentData grouped = original;
+    ImageGroupData group;
+    group.id = QStringLiteral("group-a");
+    group.name = QStringLiteral("Group");
+    group.layer_ids = {base_layer.id};
+    ImageOperation flip;
+    flip.kind = OperationKind::FlipHorizontal;
+    flip.transform_bounds = QRect(QPoint(), canvas_size);
+    group.operations.append(flip);
+    grouped.groups.append(group);
+    grouped.root_stack = {{background.id, false}, {group.id, true}};
+    grouped.layers[1].parent_group_id = group.id;
+    grouped.layers[1].operations.append(shape_operation);
+    ImageOperation rendered_shape = shape_operation;
+    ImageDocumentObjectEditor::transformGeometry(&rendered_shape, flip, canvas_size);
+    rendered_shape.shape.start += QPointF(2, 1);
+    rendered_shape.shape.end += QPointF(2, 1);
+    ImageOperation expected_shape = rendered_shape;
+    ImageDocumentObjectEditor::transformGeometry(&expected_shape, flip, canvas_size, true);
+    auto grouped_edit = ImageDocumentObjectEditor::updateShapeRendered(
+        grouped, rendered_shape.shape, canvas_size, base_layer.id, {}, &error);
+    require(grouped_edit.has_value() && error.isEmpty() &&
+                grouped.layers[1].operations.front().shape == shape_operation.shape &&
+                grouped_edit->document.layers[1].operations.front().shape == expected_shape.shape,
+            QStringLiteral("A rendered shape edit did not map back through its group transform."));
+
+    auto deleted = ImageDocumentObjectEditor::deleteObjects(
+        mixed, {paint.paint_stroke.id, erase.erase_stroke.id,
+                raster.raster.id, shape_operation.shape.id,
+                text_operation.text.id}, base_layer.id, {});
+    require(deleted.has_value() && mixed == mixed_original &&
+                deleted->document.layers[1].operations.isEmpty() &&
+                deleted->selected_layer_id == base_layer.id,
+            QStringLiteral("Mixed object deletion mutated its input or lost selection."));
+    auto deleted_shape = ImageDocumentObjectEditor::deleteShape(
+        added_shape->document, shape.id, added_shape->selected_layer_id, {});
+    require(deleted_shape.has_value() && added_shape->document == before_duplicate &&
+                deleted_shape->document.layers.back().operations.isEmpty(),
+            QStringLiteral("Shape deletion did not prepare an isolated candidate."));
+    require(!ImageDocumentObjectEditor::deleteObjects(
+                document, {QStringLiteral("missing")}, base_layer.id, {}).has_value() &&
+            !ImageDocumentObjectEditor::deleteShape(
+                document, QStringLiteral("missing"), base_layer.id, {}).has_value(),
+            QStringLiteral("Deleting missing objects produced an edit."));
+
+    ImageDocumentData full = original;
+    while (ImageLayerStackEditor::itemCount(full) < ImageDocumentStore::kMaximumLayers) {
+        ImageGroupData filler;
+        filler.id = QStringLiteral("filler-%1").arg(full.groups.size());
+        full.groups.append(std::move(filler));
+    }
+    const ImageDocumentData full_before = full;
+    require(!ImageDocumentObjectEditor::addShape(
+                full, shape, canvas_size, base_layer.id, {}, &error).has_value() &&
+                !error.isEmpty() && full == full_before,
+            QStringLiteral("Shape creation beyond the stack limit changed its source."));
+}
+
 void testLayerGroups(const QString& root) {
     image_editor::ImageDocumentSession session;
     QString error;
@@ -3057,6 +3280,7 @@ int main(int argc, char* argv[]) {
         testGeneralObjectOperations(root);
         testLayerManagementTransformsAndOpacity(root);
         testImageLayerStackEditor();
+        testImageDocumentObjectEditor();
         testLayerGroups(root);
         testAreaSelectionClipPersistenceAndRendering(root);
         testMissingSourceAndRelink(root);
