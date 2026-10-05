@@ -46,13 +46,17 @@ ui/
   canvas/
     image_canvas.*
   tools/
-    canvas_tool.*
-    paint_tool.*
-    eraser_tool.*
-    area_selection_tool.*
-    object_selection_tool.*
-    shape_tool.*
-    text_tool.*
+    brush/
+      brush_tool.*
+      paint_tool.*
+      eraser_tool.*
+    selection/
+      area_selection_tool.*
+      object_selection_tool.*
+    shapes/
+      shape_tool.*
+    text/
+      text_tool.*
     tool_sidebar.*
 ```
 

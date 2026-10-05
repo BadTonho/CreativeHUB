@@ -17,11 +17,14 @@ persistence, and recovery.
 - `src/core/diagnostics/` contains bounded technical error logging.
 - `src/ui/canvas/`, `src/ui/dialogs/`, `src/ui/layers/`, `src/ui/tools/`, and
   `src/ui/windows/` contain the canvas widget, creation dialogs, layer dock
-  panel, tool sidebar, and main application window respectively.
-- `src/ui/tools/brush_tool.*` shares stroke collection, cursor rendering, and
-  stroke-overlay drawing between the brush tools. `paint_tool.*` and
+  panel, tool sidebar and tool families, and main application window
+  respectively.
+- `src/ui/tools/brush/brush_tool.*` shares stroke collection, cursor rendering,
+  and stroke-overlay drawing between the brush tools. `paint_tool.*` and
   `eraser_tool.*` own their gesture and preview rules; they return preview or
   edit requests for `ImageCanvas` to forward through its existing signals.
+  Tool families use subdirectories such as `brush/`, `selection/`, `shapes/`,
+  and `text/` to keep the tools area navigable as it grows.
 
 ## Linked image resources and geometry
 

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "image_document_store.h"
-#include "../tools/eraser_tool.h"
-#include "../tools/paint_tool.h"
+#include "../tools/brush/eraser_tool.h"
+#include "../tools/brush/paint_tool.h"
 
 #include <QImage>
 #include <QColor>
