@@ -10,6 +10,8 @@ add_library(creative-suite-image-editor-core STATIC
     src/core/document/image_exporter.cpp
     src/core/document/image_document_geometry.cpp
     src/core/document/image_document_geometry.h
+    src/core/document/image_document_history.cpp
+    src/core/document/image_document_history.h
     src/core/document/image_document_renderer.cpp
     src/core/document/image_document_renderer.h
     src/core/document/image_document_utils.h

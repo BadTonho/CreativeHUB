@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos, estado por aba e execução de importação/exportação de imagem implementados**.
+Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos, estado por aba, execução de importação/exportação de imagem e histórico de edição implementados**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -25,7 +25,7 @@ arquivos grandes:
 | --- | --- | --- |
 | `ui/canvas/image_canvas.cpp` e `.h` | Desenho e navegação do canvas, conversão de coordenadas, recorte, hospedagem dos widgets das ferramentas e roteamento de eventos | Continuar delegando o estado e o comportamento das ferramentas a módulos próprios, sem mover a apresentação do documento ou a conversão de coordenadas para cada ferramenta. |
 | `ui/windows/image_editor_window.cpp` e `.h` | Layout da janela, ativação e opções das ferramentas, ações e atalhos, abas de documentos, abrir/salvar, importar/exportar, confirmação de recuperação, registro de erros e fluxo de imagens vinculadas | Extrair responsabilidades coesas quando forem alteradas, mantendo a janela principal responsável por montar e coordenar a aplicação. |
-| `core/document/image_document_session.cpp` e `.h` | Ciclo de vida do documento, recursos de imagem, composição e prévias, operações de edição, gerenciamento de camadas/grupos/máscaras, seleção e Desfazer/Refazer | Manter uma sessão como fachada do estado e do histórico do documento e mover renderização e operações de domínio para módulos internos focados. |
+| `core/document/image_document_session.cpp` e `.h` | Ciclo de vida do documento, recursos de imagem, composição e prévias, operações de edição, gerenciamento de camadas/grupos/máscaras e seleção; delega as pilhas de Desfazer/Refazer | Manter a sessão como fachada e responsável por restaurar e validar o estado; deixar renderização, operações de domínio e mecânica do histórico em módulos internos focados. |
 | `core/document/image_document_store.cpp` e `.h` | Serialização `.cimg`, validação, migrações, caminhos e serialização de recuperação | Avaliar auxiliares específicos do formato apenas quando houver necessidade; preservar as regras de compatibilidade e gravação atômica como uma fronteira testada. |
 
 No momento desta análise, os arquivos têm aproximadamente 1.816 linhas em
@@ -325,6 +325,20 @@ e de erro do controller. O aplicativo e os alvos de UI, exportação e raster
 compilaram em Release; os três testes focados passaram e a suíte CTest completa
 passou em 12/12 no Windows em 2026-10-05. `git diff --check` passou. A inspeção
 visual fica com o mantenedor.
+
+A mecânica das pilhas de Desfazer/Refazer foi movida para
+`ImageDocumentHistory`, em `core/document/`. O módulo guarda snapshots com o
+documento, as seleções de camada/grupo e referências compartilhadas às imagens
+raster; limita a pilha de Undo a 100 entradas e descarta Redo ao registrar uma
+edição nova. `ImageDocumentSession` continua como fachada: encerra edições de
+opacidade agrupadas, restaura o snapshot, valida a seleção, preserva recursos
+raster absolutos que já estavam carregados e invalida miniaturas. Testes diretos
+cobrem histórico vazio, ordem das transições, limpeza de Redo, limite, limpeza
+e preservação dos dados do snapshot; a cobertura de sessão existente permanece
+para operações integradas. A aplicação e os alvos afetados do Image Editor
+compilaram em Release no Windows; os oito testes focados passaram e a suíte
+CTest completa passou em 12/12 em 2026-10-05. `git diff --check` passou. Não
+houve mudança visual, então a verificação manual da interface não se aplica.
 
 ## Referências
 

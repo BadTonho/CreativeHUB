@@ -1,6 +1,7 @@
 #pragma once
 
 #include "image_exporter.h"
+#include "image_document_history.h"
 #include "image_document_store.h"
 #include "image_raster_import.h"
 
@@ -147,8 +148,8 @@ public:
     [[nodiscard]] bool hasSource() const noexcept { return !source_image_.isNull(); }
     [[nodiscard]] bool sourceIsMissing() const noexcept { return !hasSource() && !data_.source_path.isEmpty(); }
     [[nodiscard]] bool isDirty() const noexcept;
-    [[nodiscard]] bool canUndo() const noexcept { return !undo_stack_.isEmpty(); }
-    [[nodiscard]] bool canRedo() const noexcept { return !redo_stack_.isEmpty(); }
+    [[nodiscard]] bool canUndo() const noexcept { return history_.canUndo(); }
+    [[nodiscard]] bool canRedo() const noexcept { return history_.canRedo(); }
     [[nodiscard]] bool hasDocument() const noexcept {
         return data_.base_kind == ImageBaseKind::Canvas || !data_.source_path.isEmpty();
     }
@@ -162,13 +163,6 @@ public:
     [[nodiscard]] bool selectedLayerIsEditable() const noexcept;
 
 private:
-    struct EditSnapshot {
-        ImageDocumentData document;
-        QString selected_layer_id;
-        QString selected_group_id;
-        QHash<QString, QImage> raster_images;
-    };
-
     struct LayerThumbnailCacheEntry {
         QVector<ImageOperation> operations;
         QSize source_size;
@@ -185,6 +179,7 @@ private:
     void recordEditSnapshot(ImageDocumentData before,
                             QString selected_layer_id,
                             QString selected_group_id = {});
+    void restoreHistorySnapshot(ImageDocumentHistory::Snapshot snapshot);
     void commitLayerStackEdit(ImageDocumentData document,
                               QString selected_layer_id,
                               QString selected_group_id);
@@ -218,12 +213,10 @@ private:
     QVector<ImageGroupData> baseline_groups_;
     QVector<ImageStackItemData> baseline_root_stack_;
     bool force_dirty_ = false;
-    QVector<EditSnapshot> undo_stack_;
-    QVector<EditSnapshot> redo_stack_;
+    ImageDocumentHistory history_;
     mutable QHash<QString, LayerThumbnailCacheEntry> layer_thumbnail_cache_;
     ImageDocumentData opacity_edit_snapshot_;
     bool opacity_edit_active_ = false;
-    static constexpr qsizetype kMaximumHistoryEntries = 100;
 };
 
 } // namespace image_editor

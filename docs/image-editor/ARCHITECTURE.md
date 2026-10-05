@@ -125,7 +125,11 @@ progress dialog remains in `ui/dialogs/` because image import also uses it.
   one-level groups, and the active layer or group identity. Layer and group
   visibility, opacity, order, names, transforms, and group membership are
   document edits with undo/redo. The active selection is session state and
-  does not make the document dirty.
+  does not make the document dirty. `ImageDocumentHistory` owns the in-memory
+  Undo/Redo stacks and their snapshots; the session restores documents,
+  validates the saved selection, retains loaded raster resources, and
+  invalidates thumbnails after a history transition. A new edit clears Redo,
+  and the history retains at most 100 Undo entries.
 - Version 1–3 operation sequences remain attached to Background so legacy
   documents render unchanged. New layer operations render on the fixed canvas;
   layer crops clear pixels outside the selected rectangle, while rotations and

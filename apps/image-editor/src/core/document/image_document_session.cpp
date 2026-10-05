@@ -267,8 +267,7 @@ bool ImageDocumentSession::createCanvas(const QSize& size,
     baseline_groups_ = data_.groups;
     baseline_root_stack_ = data_.root_stack;
     force_dirty_ = true;
-    undo_stack_.clear();
-    redo_stack_.clear();
+    history_.clear();
     opacity_edit_active_ = false;
     return true;
 }
@@ -321,8 +320,7 @@ bool ImageDocumentSession::openImage(const QString& source_path, QString* error)
     baseline_groups_ = data_.groups;
     baseline_root_stack_ = data_.root_stack;
     force_dirty_ = false;
-    undo_stack_.clear();
-    redo_stack_.clear();
+    history_.clear();
     opacity_edit_active_ = false;
     return true;
 }
@@ -377,8 +375,7 @@ bool ImageDocumentSession::openDocument(const QString& document_path, QString* e
     baseline_groups_ = data_.groups;
     baseline_root_stack_ = data_.root_stack;
     force_dirty_ = false;
-    undo_stack_.clear();
-    redo_stack_.clear();
+    history_.clear();
     opacity_edit_active_ = false;
     return true;
 }
@@ -436,8 +433,7 @@ bool ImageDocumentSession::restoreRecovery(const QString& recovery_path, QString
     baseline_groups_ = data_.groups;
     baseline_root_stack_ = data_.root_stack;
     force_dirty_ = true;
-    undo_stack_.clear();
-    redo_stack_.clear();
+    history_.clear();
     opacity_edit_active_ = false;
     return true;
 }
@@ -1801,10 +1797,27 @@ void ImageDocumentSession::initializeDefaultLayers() {
 void ImageDocumentSession::recordEditSnapshot(ImageDocumentData before,
                                               QString selected_layer_id,
                                               QString selected_group_id) {
-    undo_stack_.append({std::move(before), std::move(selected_layer_id),
-                        std::move(selected_group_id), raster_images_});
-    if (undo_stack_.size() > kMaximumHistoryEntries) undo_stack_.removeFirst();
-    redo_stack_.clear();
+    history_.record({std::move(before), std::move(selected_layer_id),
+                     std::move(selected_group_id), raster_images_});
+}
+
+void ImageDocumentSession::restoreHistorySnapshot(
+    ImageDocumentHistory::Snapshot snapshot) {
+    data_ = std::move(snapshot.document);
+    const auto retained = raster_images_;
+    raster_images_ = std::move(snapshot.raster_images);
+    for (auto it = retained.cbegin(); it != retained.cend(); ++it) {
+        if (QDir::isAbsolutePath(it.key()) && !raster_images_.contains(it.key()))
+            raster_images_.insert(it.key(), it.value());
+    }
+    layer_thumbnail_cache_.clear();
+    selected_group_id_ = groupIndex(snapshot.selected_group_id) >= 0
+        ? std::move(snapshot.selected_group_id) : QString{};
+    selected_layer_id_ = selected_group_id_.isEmpty() &&
+            layerIndex(snapshot.selected_layer_id) >= 0
+        ? std::move(snapshot.selected_layer_id)
+        : (selected_group_id_.isEmpty() && !data_.layers.isEmpty()
+            ? data_.layers.back().id : QString{});
 }
 
 void ImageDocumentSession::pushEdit() {
@@ -1912,41 +1925,19 @@ void ImageDocumentSession::flipVertical() {
 
 bool ImageDocumentSession::undo() {
     endLayerOpacityEdit();
-    if (undo_stack_.isEmpty()) return false;
-    redo_stack_.append({data_, selected_layer_id_, selected_group_id_, raster_images_});
-    const auto previous = undo_stack_.takeLast();
-    data_ = previous.document;
-    const auto retained = raster_images_;
-    raster_images_ = previous.raster_images;
-    for (auto it = retained.cbegin(); it != retained.cend(); ++it)
-        if (QDir::isAbsolutePath(it.key()) && !raster_images_.contains(it.key())) raster_images_.insert(it.key(), it.value());
-    layer_thumbnail_cache_.clear();
-    selected_group_id_ = groupIndex(previous.selected_group_id) >= 0
-        ? previous.selected_group_id : QString{};
-    selected_layer_id_ = selected_group_id_.isEmpty() && layerIndex(previous.selected_layer_id) >= 0
-        ? previous.selected_layer_id
-        : (selected_group_id_.isEmpty() && !data_.layers.isEmpty()
-            ? data_.layers.back().id : QString{});
+    auto previous = history_.undo(
+        {data_, selected_layer_id_, selected_group_id_, raster_images_});
+    if (!previous.has_value()) return false;
+    restoreHistorySnapshot(std::move(*previous));
     return true;
 }
 
 bool ImageDocumentSession::redo() {
     endLayerOpacityEdit();
-    if (redo_stack_.isEmpty()) return false;
-    undo_stack_.append({data_, selected_layer_id_, selected_group_id_, raster_images_});
-    const auto next = redo_stack_.takeLast();
-    data_ = next.document;
-    const auto retained = raster_images_;
-    raster_images_ = next.raster_images;
-    for (auto it = retained.cbegin(); it != retained.cend(); ++it)
-        if (QDir::isAbsolutePath(it.key()) && !raster_images_.contains(it.key())) raster_images_.insert(it.key(), it.value());
-    layer_thumbnail_cache_.clear();
-    selected_group_id_ = groupIndex(next.selected_group_id) >= 0
-        ? next.selected_group_id : QString{};
-    selected_layer_id_ = selected_group_id_.isEmpty() && layerIndex(next.selected_layer_id) >= 0
-        ? next.selected_layer_id
-        : (selected_group_id_.isEmpty() && !data_.layers.isEmpty()
-            ? data_.layers.back().id : QString{});
+    auto next = history_.redo(
+        {data_, selected_layer_id_, selected_group_id_, raster_images_});
+    if (!next.has_value()) return false;
+    restoreHistorySnapshot(std::move(*next));
     return true;
 }
 

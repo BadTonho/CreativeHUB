@@ -1,4 +1,5 @@
 #include "image_document_session.h"
+#include "image_document_history.h"
 #include "image_document_renderer.h"
 #include "image_document_store.h"
 #include "image_editor_logger.h"
@@ -46,6 +47,104 @@ QImage sampleImage() {
     image.setPixelColor(2, 2, QColor(0, 0, 90));
     image.setPixelColor(3, 2, QColor(90, 90, 90));
     return image;
+}
+
+void testImageDocumentHistory() {
+    using namespace image_editor;
+
+    ImageDocumentHistory history;
+    require(!history.canUndo() && !history.canRedo() &&
+                !history.undo({}).has_value() && !history.redo({}).has_value(),
+            QStringLiteral("A new document history should be empty."));
+
+    QImage raster(QSize(3, 2), QImage::Format_ARGB32_Premultiplied);
+    raster.fill(Qt::magenta);
+    const qint64 raster_cache_key = raster.cacheKey();
+
+    ImageDocumentHistory::Snapshot before;
+    before.document.canvas_size = QSize(10, 11);
+    before.selected_layer_id = QStringLiteral("layer-before");
+    before.selected_group_id = QStringLiteral("group-before");
+    before.raster_images.insert(QStringLiteral("raster-id"), raster);
+
+    ImageDocumentHistory::Snapshot after;
+    after.document.canvas_size = QSize(20, 21);
+    after.selected_layer_id = QStringLiteral("layer-after");
+    after.selected_group_id = QStringLiteral("group-after");
+    after.raster_images.insert(QStringLiteral("raster-id"), raster);
+
+    history.record(before);
+    history.record(after);
+    require(history.canUndo() && !history.canRedo(),
+            QStringLiteral("Recording an edit should enable Undo only."));
+
+    ImageDocumentHistory::Snapshot current;
+    current.document.canvas_size = QSize(30, 31);
+    current.selected_layer_id = QStringLiteral("layer-current");
+    current.selected_group_id = QStringLiteral("group-current");
+    current.raster_images.insert(QStringLiteral("raster-id"), raster);
+    auto restored = history.undo(std::move(current));
+    require(restored.has_value() && restored->document.canvas_size == QSize(20, 21) &&
+                restored->selected_layer_id == QStringLiteral("layer-after") &&
+                restored->selected_group_id == QStringLiteral("group-after") &&
+                restored->raster_images.contains(QStringLiteral("raster-id")) &&
+                restored->raster_images.value(QStringLiteral("raster-id")).cacheKey() ==
+                    raster_cache_key &&
+                history.canUndo() && history.canRedo(),
+            QStringLiteral("Undo should restore the previous document, selection and raster references."));
+
+    auto redone = history.redo(std::move(*restored));
+    require(redone.has_value() && redone->document.canvas_size == QSize(30, 31) &&
+                redone->selected_layer_id == QStringLiteral("layer-current") &&
+                redone->selected_group_id == QStringLiteral("group-current") &&
+                redone->raster_images.value(QStringLiteral("raster-id")).cacheKey() ==
+                    raster_cache_key &&
+                history.canUndo() && !history.canRedo(),
+            QStringLiteral("Redo should restore snapshots in the original order."));
+
+    ImageDocumentHistory redo_clearing;
+    redo_clearing.record(before);
+    redo_clearing.record(after);
+    ImageDocumentHistory::Snapshot latest;
+    latest.document.canvas_size = QSize(30, 31);
+    auto prior = redo_clearing.undo(std::move(latest));
+    require(prior.has_value() && redo_clearing.canRedo(),
+            QStringLiteral("Undo should create a Redo entry."));
+    ImageDocumentHistory::Snapshot new_edit;
+    new_edit.document.canvas_size = QSize(40, 41);
+    redo_clearing.record(std::move(new_edit));
+    require(redo_clearing.canUndo() && !redo_clearing.canRedo(),
+            QStringLiteral("A new edit after Undo should clear Redo."));
+
+    ImageDocumentHistory bounded;
+    for (int index = 0; index < 105; ++index) {
+        ImageDocumentHistory::Snapshot entry;
+        entry.document.canvas_size = QSize(index + 1, 1);
+        bounded.record(std::move(entry));
+    }
+    ImageDocumentHistory::Snapshot bounded_current;
+    std::optional<ImageDocumentHistory::Snapshot> oldest_retained;
+    for (int index = 0; index < 100; ++index) {
+        oldest_retained = bounded.undo(std::move(bounded_current));
+        require(oldest_retained.has_value(),
+                QStringLiteral("The history should retain exactly the latest 100 entries."));
+        bounded_current = std::move(*oldest_retained);
+    }
+    require(!bounded.canUndo() && bounded.canRedo() &&
+                bounded_current.document.canvas_size.width() == 6,
+            QStringLiteral("The history should discard entries older than its 100-entry limit."));
+
+    ImageDocumentHistory clearable;
+    clearable.record(before);
+    clearable.record(after);
+    ImageDocumentHistory::Snapshot clearable_current;
+    clearable_current.document.canvas_size = QSize(30, 31);
+    auto clearable_previous = clearable.undo(std::move(clearable_current));
+    require(clearable_previous.has_value() && clearable.canUndo() && clearable.canRedo(),
+            QStringLiteral("The clear test should have both Undo and Redo entries."));
+    clearable.clear();
+    require(!clearable.canUndo() && !clearable.canRedo(),
+            QStringLiteral("Clearing history should remove both Undo and Redo entries."));
 }
 
 bool writeImage(const QString& path, const QImage& image, const QByteArray& format = "png") {
@@ -2873,6 +2972,7 @@ int main(int argc, char* argv[]) {
     }
     const QString root = temporary.path();
     try {
+        testImageDocumentHistory();
         testDocumentEditingAndUndoRedo(root);
         testCanvasCreationPersistenceAndRecovery(root);
         testCanvasResizingAnchorsPersistenceAndHistory(root);
