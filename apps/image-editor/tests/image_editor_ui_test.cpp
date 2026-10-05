@@ -2127,6 +2127,22 @@ bool testDocumentTabs(const QString& directory) {
         return false;
     }
     const double second_zoom = second_canvas->zoomFactor();
+    tabs->setMovable(true);
+    tabs->moveTab(0, 1);
+    QCoreApplication::processEvents();
+    const bool second_state_survived_reorder = tabs->currentIndex() == 0 &&
+        stack->currentWidget()->findChild<image_editor::ImageCanvas*>() == second_canvas &&
+        layerRowCount(layer_tree) == 2 && !undo->isEnabled() &&
+        second_canvas->zoomFactor() == second_zoom;
+    tabs->moveTab(0, 1);
+    tabs->setMovable(false);
+    QCoreApplication::processEvents();
+    if (!second_state_survived_reorder || tabs->currentIndex() != 1 ||
+        stack->currentWidget()->findChild<image_editor::ImageCanvas*>() != second_canvas ||
+        layerRowCount(layer_tree) != 2 || undo->isEnabled()) {
+        std::cerr << "Reordering tabs did not preserve the active document state.\n";
+        return false;
+    }
     next_tab->trigger();
     QCoreApplication::processEvents();
     if (stack->currentWidget()->findChild<image_editor::ImageCanvas*>() != first_canvas ||

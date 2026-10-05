@@ -8,9 +8,12 @@
 #include <creative_suite/shortcuts/shortcut_manager.h>
 
 #include <QByteArray>
+#include <QHash>
 #include <QMainWindow>
 #include <QStringList>
 #include <QVector>
+
+#include <memory>
 
 class QAction;
 class QButtonGroup;
@@ -71,6 +74,17 @@ private:
     void resetActiveDocumentState();
     void resetActiveDocumentSelection();
     [[nodiscard]] bool hasActiveDocumentTab() const noexcept;
+    [[nodiscard]] ImageEditorDocumentTab& activeTabState() noexcept;
+    [[nodiscard]] const ImageEditorDocumentTab& activeTabState() const noexcept;
+    [[nodiscard]] ImageDocumentSession& activeSession() noexcept;
+    [[nodiscard]] ImageCanvas* activeCanvas() noexcept;
+    [[nodiscard]] QHash<QString, QString>& loggedRasterProblems() noexcept;
+    [[nodiscard]] QStringList& selectedObjectIds() noexcept;
+    [[nodiscard]] QVector<ImageStackItemData>& selectedStackItems() noexcept;
+    [[nodiscard]] QString& selectedMaskLayerId() noexcept;
+    [[nodiscard]] QString& linkedDocumentPath() noexcept;
+    [[nodiscard]] QString& linkedOutputPath() noexcept;
+    [[nodiscard]] QByteArray& linkedDocumentFingerprint() noexcept;
     [[nodiscard]] bool openImagePathInTarget(const QString& path, OpenTarget target);
     [[nodiscard]] bool openDocumentPathInTarget(const QString& path, OpenTarget target);
     void createActions();
@@ -125,11 +139,9 @@ private:
                      const QString& cause,
                      const QString& path = {});
 
-    ImageDocumentSession session_;
     ImageEditorLogger logger_;
     RecoveryStore recovery_store_;
     ToolSidebar* tool_sidebar_ = nullptr;
-    ImageCanvas* canvas_ = nullptr;
     QTabBar* document_tab_bar_ = nullptr;
     QStackedWidget* document_stack_ = nullptr;
     QToolButton* new_document_tab_button_ = nullptr;
@@ -172,7 +184,7 @@ private:
     QAction* import_layer_action_ = nullptr;
     QAction* relink_raster_action_ = nullptr;
     bool importing_ = false;
-    QHash<QString, QString> logged_raster_problems_;
+    std::unique_ptr<ImageEditorDocumentTab> empty_document_state_;
     QAction* new_canvas_action_ = nullptr;
     QAction* resize_canvas_action_ = nullptr;
     QAction* save_action_ = nullptr;
@@ -207,9 +219,6 @@ private:
     QAction* delete_selection_action_ = nullptr;
     ImageShapeData shape_style_;
     ImageTextData text_style_;
-    QStringList selected_object_ids_;
-    QVector<ImageStackItemData> selected_stack_items_;
-    QString selected_mask_layer_id_;
     bool shape_colors_initialized_ = false;
     bool shape_palette_positioned_ = false;
     int paint_diameter_ = 12;
@@ -218,9 +227,6 @@ private:
     int area_selection_mode_ = 0;
     creative_suite::shortcuts::ShortcutManager shortcut_manager_{
         QStringLiteral("ImageEditor/KeyboardShortcuts")};
-    QString linked_document_path_;
-    QString linked_output_path_;
-    QByteArray linked_document_fingerprint_;
 };
 
 } // namespace image_editor

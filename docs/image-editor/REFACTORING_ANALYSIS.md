@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação, preparação de máscaras e operações estruturais de camadas/grupos implementadas**.
+Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos e estado por aba implementados**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -290,6 +290,17 @@ de camadas da raiz para cima e para baixo sem perder itens; o checklist manual
 também pede conferir o arraste e a composição. Aplicação, core e UI compilaram
 em Release, e os testes focados de core e UI passaram em 2/2 no Windows em
 2026-10-05. A confirmação visual do arraste permanece com o mantenedor.
+
+A refatoração das abas removeu a cópia dos dados da aba ativa e as trocas de
+estado durante a navegação. Cada contexto agora mantém sua sessão, canvas,
+seleções, diagnósticos e metadados de imagem vinculada; os comandos da janela
+acessam esses dados pelo contexto ativo. As preferências das ferramentas
+continuam compartilhadas. `testDocumentTabs` verifica que a sessão, o histórico,
+o canvas e o zoom permanecem associados ao documento durante a reordenação e a
+alternância de abas, além da cobertura existente de fechamento e recuperação.
+O aplicativo e o alvo de UI compilaram em Release no Windows; o teste focado de
+abas passou, a suíte CTest passou em 70/70 e `git diff --check` passou em
+2026-10-05. A verificação visual permanece com o mantenedor.
 
 ## Referências
 

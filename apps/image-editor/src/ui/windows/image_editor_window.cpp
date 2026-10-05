@@ -203,6 +203,7 @@ bool saveJpegExportPreferences(const ImageExportOptions& options,
 ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_directory)
     : QMainWindow(parent),
       recovery_store_(std::move(recovery_data_directory)) {
+    empty_document_state_ = std::make_unique<ImageEditorDocumentTab>();
     setWindowTitle(QStringLiteral("Image Editor"));
     resize(1180, 760);
 
@@ -268,11 +269,8 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_dire
     connect(layer_panel_, &LayerPanel::deletionSelectionChanged, this,
             [this]() {
                 const auto selected_items = layer_panel_->selectedStackItems();
-                selected_stack_items_ = selected_items.size() > 1
+                selectedStackItems() = selected_items.size() > 1
                     ? selected_items : QVector<ImageStackItemData>{};
-                if (hasActiveDocumentTab())
-                    document_tabs_.at(active_document_tab_)->selected_stack_items =
-                        selected_stack_items_;
                 updateDeleteActions();
             });
     connect(layer_panel_, &LayerPanel::quickExportRequested, this,
@@ -284,16 +282,16 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_dire
     connect(tool_sidebar_, &ToolSidebar::brushColorChanged,
             this, [this](const QColor&) { updateCanvasBrush(); });
     connect(layer_panel_, &LayerPanel::layerSelected, this, [this](const QString& id) {
-        static_cast<void>(session_.selectLayer(id));
-        selected_mask_layer_id_.clear();
-        selected_object_ids_.clear();
-        for (const auto& object : session_.visibleObjects())
+        static_cast<void>(activeSession().selectLayer(id));
+        selectedMaskLayerId().clear();
+        selectedObjectIds().clear();
+        for (const auto& object : activeSession().visibleObjects())
             if (object.layer_id == id && object.operation.kind == OperationKind::RasterImage) {
-                selected_object_ids_ = {object.operation.raster.id};
+                selectedObjectIds() = {object.operation.raster.id};
                 break;
             }
         updateObjectPlacements();
-        if (!session_.selectedLayerIsEditable() &&
+        if (!activeSession().selectedLayerIsEditable() &&
             tool_sidebar_->activeTool() != ToolSidebar::Tool::Select &&
             tool_sidebar_->activeTool() != ToolSidebar::Tool::Shapes) {
             deactivateCanvasTools();
@@ -301,41 +299,41 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_dire
         updateSelectionContext();
     });
     connect(layer_panel_, &LayerPanel::groupSelected, this, [this](const QString& id) {
-        const bool mask_changed = !selected_mask_layer_id_.isEmpty();
-        selected_mask_layer_id_.clear();
-        selected_object_ids_.clear();
+        const bool mask_changed = !selectedMaskLayerId().isEmpty();
+        selectedMaskLayerId().clear();
+        selectedObjectIds().clear();
         updateObjectPlacements();
-        if (session_.selectGroup(id) || mask_changed) updateSelectionContext();
+        if (activeSession().selectGroup(id) || mask_changed) updateSelectionContext();
     });
     connect(layer_panel_, &LayerPanel::layerMaskSelected, this, [this](const QString& id) {
-        static_cast<void>(session_.selectLayer(id));
-        selected_mask_layer_id_ = id;
-        selected_object_ids_.clear();
+        static_cast<void>(activeSession().selectLayer(id));
+        selectedMaskLayerId() = id;
+        selectedObjectIds().clear();
         updateObjectPlacements();
         updateSelectionContext();
     });
     connect(layer_panel_, &LayerPanel::addLayerMaskRequested, this, [this](const QString& id) {
-        if (!session_.addLayerMask(id)) return;
-        static_cast<void>(session_.selectLayer(id));
-        selected_mask_layer_id_ = id;
-        selected_object_ids_.clear();
+        if (!activeSession().addLayerMask(id)) return;
+        static_cast<void>(activeSession().selectLayer(id));
+        selectedMaskLayerId() = id;
+        selectedObjectIds().clear();
         updateView(true);
     });
     connect(layer_panel_, &LayerPanel::removeLayerMaskRequested, this, [this](const QString& id) {
-        if (session_.removeLayerMask(id)) updateView(true);
+        if (activeSession().removeLayerMask(id)) updateView(true);
     });
     connect(layer_panel_, &LayerPanel::layerMaskEnabledChanged, this,
             [this](const QString& id, bool enabled) {
-                if (session_.setLayerMaskEnabled(id, enabled)) updateView(true);
+                if (activeSession().setLayerMaskEnabled(id, enabled)) updateView(true);
             });
     connect(layer_panel_, &LayerPanel::layerVisibilityChanged, this,
             [this](const QString& id, bool visible) {
-                if (session_.setLayerVisible(id, visible)) updateView(true);
+                if (activeSession().setLayerVisible(id, visible)) updateView(true);
             });
     connect(layer_panel_, &LayerPanel::layerRenamed, this,
             [this](const QString& id, const QString& name) {
                 QString error;
-                if (session_.renameLayer(id, name, &error)) updateView(true);
+                if (activeSession().renameLayer(id, name, &error)) updateView(true);
                 else {
                     updateView(true);
                     if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
@@ -343,58 +341,58 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_dire
             });
     connect(layer_panel_, &LayerPanel::groupVisibilityChanged, this,
             [this](const QString& id, bool visible) {
-                if (session_.setGroupVisible(id, visible)) updateView(true);
+                if (activeSession().setGroupVisible(id, visible)) updateView(true);
             });
     connect(layer_panel_, &LayerPanel::groupRenamed, this,
             [this](const QString& id, const QString& name) {
                 QString error;
-                if (session_.renameGroup(id, name, &error)) updateView(true);
+                if (activeSession().renameGroup(id, name, &error)) updateView(true);
                 else {
                     updateView(true);
                     if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
                 }
             });
     connect(layer_panel_, &LayerPanel::addLayerRequested, this, [this]() {
-        const QString id = session_.addLayer();
+        const QString id = activeSession().addLayer();
         if (id.isEmpty()) {
             statusBar()->showMessage(QStringLiteral("A layer could not be added"), 3000);
             return;
         }
-        selected_stack_items_.clear();
-        static_cast<void>(session_.selectLayer(id));
+        selectedStackItems().clear();
+        static_cast<void>(activeSession().selectLayer(id));
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Layer added"), 1800);
     });
     connect(layer_panel_, &LayerPanel::addGroupRequested, this, [this]() {
         QString error;
-        const QString id = session_.addGroup(&error);
+        const QString id = activeSession().addGroup(&error);
         if (id.isEmpty()) {
             if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
             return;
         }
-        selected_stack_items_.clear();
+        selectedStackItems().clear();
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Group added"), 1800);
     });
     connect(layer_panel_, &LayerPanel::groupSelectedLayersRequested, this,
             [this](const QStringList& ids) {
                 QString error;
-                if (session_.groupLayers(ids, &error).isEmpty()) {
+                if (activeSession().groupLayers(ids, &error).isEmpty()) {
                     if (!error.isEmpty()) statusBar()->showMessage(error, 4000);
                     return;
                 }
-                selected_stack_items_.clear();
+                selectedStackItems().clear();
                 updateView(true);
                 statusBar()->showMessage(QStringLiteral("Layers grouped"), 1800);
             });
     connect(layer_panel_, &LayerPanel::deleteStackItemsRequested, this,
             [this](const QVector<ImageStackItemData>& items) {
-                canvas_->commitTextEditing();
-                if (!session_.deleteStackItems(items)) return;
-                selected_stack_items_.clear();
-                selected_object_ids_.clear();
-                selected_mask_layer_id_.clear();
-                if (!session_.selectedLayerIsEditable() &&
+                activeCanvas()->commitTextEditing();
+                if (!activeSession().deleteStackItems(items)) return;
+                selectedStackItems().clear();
+                selectedObjectIds().clear();
+                selectedMaskLayerId().clear();
+                if (!activeSession().selectedLayerIsEditable() &&
                     tool_sidebar_->activeTool() != ToolSidebar::Tool::Select &&
                     tool_sidebar_->activeTool() != ToolSidebar::Tool::Shapes) {
                     deactivateCanvasTools();
@@ -404,27 +402,27 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_dire
             });
     connect(layer_panel_, &LayerPanel::ungroupRequested, this,
             [this](const QString& id) {
-                if (!session_.ungroup(id)) return;
-                selected_stack_items_.clear();
+                if (!activeSession().ungroup(id)) return;
+                selectedStackItems().clear();
                 updateView(true);
             });
     connect(layer_panel_, &LayerPanel::moveStackItemRequested, this,
             [this](const QString& id, bool is_group, const QString& target_group_id,
                    qsizetype insertion_index) {
-                if (session_.moveStackItem(id, is_group, target_group_id, insertion_index)) {
+                if (activeSession().moveStackItem(id, is_group, target_group_id, insertion_index)) {
                     updateView(true);
                 }
             });
     connect(layer_panel_, &LayerPanel::opacityEditStarted, this,
-            [this]() { session_.beginLayerOpacityEdit(); });
+            [this]() { activeSession().beginLayerOpacityEdit(); });
     connect(layer_panel_, &LayerPanel::stackOpacityChanged, this,
             [this](const QString& id, bool is_group, int opacity) {
-                const bool changed = is_group ? session_.setGroupOpacity(id, opacity)
-                                              : session_.setLayerOpacity(id, opacity);
+                const bool changed = is_group ? activeSession().setGroupOpacity(id, opacity)
+                                              : activeSession().setLayerOpacity(id, opacity);
                 if (changed) updateView(true);
             });
     connect(layer_panel_, &LayerPanel::opacityEditFinished, this, [this]() {
-        session_.endLayerOpacityEdit();
+        activeSession().endLayerOpacityEdit();
         updateView(true);
     });
 
@@ -433,8 +431,7 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent, QString recovery_data_dire
     autosave_timer_->setInterval(60'000);
     connect(autosave_timer_, &QTimer::timeout, this, [this]() {
         for (int index = 0; index < document_tabs_.size(); ++index) {
-            const ImageDocumentSession& document = index == active_document_tab_
-                ? session_ : document_tabs_.at(index)->session;
+            const ImageDocumentSession& document = document_tabs_.at(index)->session;
             if (!document.isDirty() || !document.hasSource()) continue;
             QString error;
             if (!recovery_store_.save(document, &error)) {
@@ -468,19 +465,19 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
             });
     connect(canvas, &ImageCanvas::erasePreviewRequested, this,
             [this, canvas](const QVector<QPointF>& points, int diameter) {
-                if (canvas_ == nullptr) return;
-                canvas_->setTransientImage(
+                if (activeCanvas() == nullptr) return;
+                activeCanvas()->setTransientImage(
                     editingMask()
-                        ? session_.renderedImageWithMaskStroke(
+                        ? activeSession().renderedImageWithMaskStroke(
                             points, Qt::black, diameter, canvas->areaSelectionClipPath())
-                        : session_.renderedImageWithEraseStroke(
+                        : activeSession().renderedImageWithEraseStroke(
                             points, diameter, canvas->areaSelectionClipPath()));
             });
     connect(canvas, &ImageCanvas::maskPaintPreviewRequested, this,
             [this, canvas](const QVector<QPointF>& points, const QColor& color, int diameter) {
-                if (canvas_ != nullptr)
-                    canvas_->setTransientImage(
-                        session_.renderedImageWithMaskStroke(
+                if (activeCanvas() != nullptr)
+                    activeCanvas()->setTransientImage(
+                        activeSession().renderedImageWithMaskStroke(
                             points, color, diameter, canvas->areaSelectionClipPath()));
             });
     connect(canvas, &ImageCanvas::erasePreviewCleared, canvas, [canvas]() {
@@ -509,27 +506,27 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
     });
     connect(canvas, &ImageCanvas::objectsSelected, this,
             [this](const QStringList& object_ids, const QString& layer_id) {
-                if (canvas_ == nullptr) return;
-                selected_object_ids_ = object_ids;
-                const bool mask_changed = !selected_mask_layer_id_.isEmpty();
-                selected_mask_layer_id_.clear();
-                canvas_->setMaskEditing(false);
-                const bool layer_changed = !layer_id.isEmpty() && session_.selectLayer(layer_id);
+                if (activeCanvas() == nullptr) return;
+                selectedObjectIds() = object_ids;
+                const bool mask_changed = !selectedMaskLayerId().isEmpty();
+                selectedMaskLayerId().clear();
+                activeCanvas()->setMaskEditing(false);
+                const bool layer_changed = !layer_id.isEmpty() && activeSession().selectLayer(layer_id);
                 if (layer_changed) {
-                    selected_mask_layer_id_.clear();
+                    selectedMaskLayerId().clear();
                     updateLayerPanel();
                     updateSelectionContext();
                 }
-                for (const auto& placement : session_.visibleObjects()) {
-                    if (!selected_object_ids_.contains(imageObjectId(placement.operation))) continue;
+                for (const auto& placement : activeSession().visibleObjects()) {
+                    if (!selectedObjectIds().contains(imageObjectId(placement.operation))) continue;
                     if (placement.operation.kind == OperationKind::Shape) {
                         shape_style_ = placement.operation.shape;
-                        canvas_->setShapeStyle(shape_style_);
+                        activeCanvas()->setShapeStyle(shape_style_);
                         break;
                     }
                     if (placement.operation.kind == OperationKind::Text) {
                         text_style_ = placement.operation.text;
-                        canvas_->setTextStyle(text_style_);
+                        activeCanvas()->setTextStyle(text_style_);
                         break;
                     }
                 }
@@ -542,19 +539,19 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
             });
     connect(canvas, &ImageCanvas::objectTransformStarted, this,
             [this](const QStringList& object_ids) {
-                if (canvas_ == nullptr) return;
-                for (const auto& object : session_.visibleObjects())
+                if (activeCanvas() == nullptr) return;
+                for (const auto& object : activeSession().visibleObjects())
                     if (object_ids.contains(imageObjectId(object.operation)) &&
                         object.operation.kind == OperationKind::RasterImage) {
-                        canvas_->setTransientImage(session_.renderedImage());
+                        activeCanvas()->setTransientImage(activeSession().renderedImage());
                         return;
                     }
-                canvas_->setTransientImage(session_.renderedImageWithoutObjects(object_ids));
+                activeCanvas()->setTransientImage(activeSession().renderedImageWithoutObjects(object_ids));
             });
     connect(canvas, &ImageCanvas::objectsPreviewRequested, this,
             [this](const QVector<ImageObjectPlacement>& objects) {
-                if (canvas_ != nullptr)
-                    canvas_->setTransientImage(session_.renderedImageWithObjects(objects));
+                if (activeCanvas() != nullptr)
+                    activeCanvas()->setTransientImage(activeSession().renderedImageWithObjects(objects));
             });
     connect(canvas, &ImageCanvas::imagesDropped, this,
             [this](const QStringList& paths, const QPointF& center) {
@@ -591,60 +588,32 @@ int ImageEditorWindow::addDocumentTab(bool activate) {
 
 void ImageEditorWindow::activateDocumentTab(int index) {
     if (index < 0 || index >= document_tabs_.size()) {
-        if (active_document_tab_ >= 0 && canvas_ != nullptr) canvas_->commitTextEditing();
+        if (active_document_tab_ >= 0 && activeCanvas() != nullptr)
+            activeCanvas()->commitTextEditing();
         if (active_document_tab_ >= 0) {
-            selected_stack_items_ = layer_panel_->selectedStackItems();
-            auto* previous = document_tabs_.at(active_document_tab_);
-            std::swap(session_, previous->session);
-            std::swap(selected_object_ids_, previous->selected_object_ids);
-            std::swap(selected_stack_items_, previous->selected_stack_items);
-            std::swap(selected_mask_layer_id_, previous->selected_mask_layer_id);
-            std::swap(logged_raster_problems_, previous->logged_raster_problems);
-            std::swap(linked_document_path_, previous->linked_document_path);
-            std::swap(linked_output_path_, previous->linked_output_path);
-            std::swap(linked_document_fingerprint_, previous->linked_document_fingerprint);
+            selectedStackItems() = layer_panel_->selectedStackItems();
         }
         active_document_tab_ = -1;
-        canvas_ = nullptr;
         resetActiveDocumentState();
         updateView();
         return;
     }
     if (index == active_document_tab_) {
-        canvas_ = document_tabs_.at(index)->canvas;
         document_stack_->setCurrentWidget(document_tabs_.at(index)->page);
         updateView(true);
         return;
     }
 
-    if (active_document_tab_ >= 0 && canvas_ != nullptr) canvas_->commitTextEditing();
     if (active_document_tab_ >= 0) {
-        selected_stack_items_ = layer_panel_->selectedStackItems();
-        auto* previous = document_tabs_.at(active_document_tab_);
-        std::swap(session_, previous->session);
-        std::swap(selected_object_ids_, previous->selected_object_ids);
-        std::swap(selected_stack_items_, previous->selected_stack_items);
-        std::swap(selected_mask_layer_id_, previous->selected_mask_layer_id);
-        std::swap(logged_raster_problems_, previous->logged_raster_problems);
-        std::swap(linked_document_path_, previous->linked_document_path);
-        std::swap(linked_output_path_, previous->linked_output_path);
-        std::swap(linked_document_fingerprint_, previous->linked_document_fingerprint);
+        if (activeCanvas() != nullptr) activeCanvas()->commitTextEditing();
+        selectedStackItems() = layer_panel_->selectedStackItems();
     }
 
     active_document_tab_ = index;
     auto* tab = document_tabs_.at(index);
-    std::swap(session_, tab->session);
-    std::swap(selected_object_ids_, tab->selected_object_ids);
-    std::swap(selected_stack_items_, tab->selected_stack_items);
-    std::swap(selected_mask_layer_id_, tab->selected_mask_layer_id);
-    std::swap(logged_raster_problems_, tab->logged_raster_problems);
-    std::swap(linked_document_path_, tab->linked_document_path);
-    std::swap(linked_output_path_, tab->linked_output_path);
-    std::swap(linked_document_fingerprint_, tab->linked_document_fingerprint);
-    canvas_ = tab->canvas;
     document_stack_->setCurrentWidget(tab->page);
-    canvas_->setShapeStyle(shape_style_);
-    canvas_->setTextStyle(text_style_);
+    tab->canvas->setShapeStyle(shape_style_);
+    tab->canvas->setTextStyle(text_style_);
     updateCanvasToolState(tool_sidebar_->activeTool(), true);
     updateView(true);
 }
@@ -653,7 +622,7 @@ void ImageEditorWindow::closeDocumentTab(int index) {
     if (importing_ || index < 0 || index >= document_tabs_.size()) return;
     auto* closing = document_tabs_.at(index);
     if (!closing->linked_document_path.isEmpty() ||
-        (index == active_document_tab_ && !linked_document_path_.isEmpty())) return;
+        (index == active_document_tab_ && !linkedDocumentPath().isEmpty())) return;
 
     const int previous_active = active_document_tab_;
     if (index != active_document_tab_) {
@@ -670,7 +639,7 @@ void ImageEditorWindow::closeDocumentTab(int index) {
         return;
     }
 
-    const QString recovery_path = recovery_store_.pathFor(session_);
+    const QString recovery_path = recovery_store_.pathFor(activeSession());
     if (!recovery_path.isEmpty()) static_cast<void>(recovery_store_.remove(recovery_path));
     const int next_active = previous_active >= 0 && previous_active != index
         ? previous_active - (previous_active > index ? 1 : 0)
@@ -687,7 +656,6 @@ void ImageEditorWindow::closeDocumentTab(int index) {
     delete closing->page;
     delete closing;
     active_document_tab_ = -1;
-    canvas_ = nullptr;
     resetActiveDocumentState();
 
     if (next_active >= 0 && next_active < document_tabs_.size()) {
@@ -700,7 +668,7 @@ void ImageEditorWindow::closeDocumentTab(int index) {
 }
 
 void ImageEditorWindow::openNewTabMenu() {
-    if (!linked_document_path_.isEmpty() || importing_) return;
+    if (!linkedDocumentPath().isEmpty() || importing_) return;
     QMenu menu(this);
     new_tab_canvas_action_->setEnabled(true);
     new_tab_open_image_action_->setEnabled(true);
@@ -715,41 +683,89 @@ void ImageEditorWindow::openNewTabMenu() {
 void ImageEditorWindow::updateDocumentTabLabel() {
     if (!hasActiveDocumentTab()) return;
     QString label;
-    if (!session_.documentPath().isEmpty()) {
-        label = QFileInfo(session_.documentPath()).fileName();
-    } else if (!session_.sourcePath().isEmpty()) {
-        label = QFileInfo(session_.sourcePath()).fileName();
-    } else if (session_.hasDocument()) {
+    if (!activeSession().documentPath().isEmpty()) {
+        label = QFileInfo(activeSession().documentPath()).fileName();
+    } else if (!activeSession().sourcePath().isEmpty()) {
+        label = QFileInfo(activeSession().sourcePath()).fileName();
+    } else if (activeSession().hasDocument()) {
         label = QStringLiteral("Untitled Canvas");
     } else {
         label = QStringLiteral("New Document");
     }
-    if (session_.isDirty()) label.prepend('*');
+    if (activeSession().isDirty()) label.prepend('*');
     document_tab_bar_->setTabText(active_document_tab_, label);
     QString tooltip = label;
-    if (!session_.documentPath().isEmpty()) tooltip += QStringLiteral("\n") + session_.documentPath();
-    else if (!session_.sourcePath().isEmpty()) tooltip += QStringLiteral("\n") + session_.sourcePath();
+    if (!activeSession().documentPath().isEmpty()) tooltip += QStringLiteral("\n") + activeSession().documentPath();
+    else if (!activeSession().sourcePath().isEmpty()) tooltip += QStringLiteral("\n") + activeSession().sourcePath();
     document_tab_bar_->setTabToolTip(active_document_tab_, tooltip);
 }
 
 void ImageEditorWindow::resetActiveDocumentState() {
-    session_ = ImageDocumentSession{};
+    activeSession() = ImageDocumentSession{};
     resetActiveDocumentSelection();
-    linked_document_path_.clear();
-    linked_output_path_.clear();
-    linked_document_fingerprint_.clear();
+    linkedDocumentPath().clear();
+    linkedOutputPath().clear();
+    linkedDocumentFingerprint().clear();
 }
 
 void ImageEditorWindow::resetActiveDocumentSelection() {
-    selected_object_ids_.clear();
-    selected_stack_items_.clear();
-    selected_mask_layer_id_.clear();
-    logged_raster_problems_.clear();
-    if (canvas_ != nullptr) canvas_->clearAreaSelection();
+    selectedObjectIds().clear();
+    selectedStackItems().clear();
+    selectedMaskLayerId().clear();
+    loggedRasterProblems().clear();
+    if (activeCanvas() != nullptr) activeCanvas()->clearAreaSelection();
 }
 
 bool ImageEditorWindow::hasActiveDocumentTab() const noexcept {
     return active_document_tab_ >= 0 && active_document_tab_ < document_tabs_.size();
+}
+
+ImageEditorDocumentTab& ImageEditorWindow::activeTabState() noexcept {
+    return hasActiveDocumentTab()
+        ? *document_tabs_.at(active_document_tab_)
+        : *empty_document_state_;
+}
+
+const ImageEditorDocumentTab& ImageEditorWindow::activeTabState() const noexcept {
+    return hasActiveDocumentTab()
+        ? *document_tabs_.at(active_document_tab_)
+        : *empty_document_state_;
+}
+
+ImageDocumentSession& ImageEditorWindow::activeSession() noexcept {
+    return activeTabState().session;
+}
+
+ImageCanvas* ImageEditorWindow::activeCanvas() noexcept {
+    return activeTabState().canvas;
+}
+
+QHash<QString, QString>& ImageEditorWindow::loggedRasterProblems() noexcept {
+    return activeTabState().logged_raster_problems;
+}
+
+QStringList& ImageEditorWindow::selectedObjectIds() noexcept {
+    return activeTabState().selected_object_ids;
+}
+
+QVector<ImageStackItemData>& ImageEditorWindow::selectedStackItems() noexcept {
+    return activeTabState().selected_stack_items;
+}
+
+QString& ImageEditorWindow::selectedMaskLayerId() noexcept {
+    return activeTabState().selected_mask_layer_id;
+}
+
+QString& ImageEditorWindow::linkedDocumentPath() noexcept {
+    return activeTabState().linked_document_path;
+}
+
+QString& ImageEditorWindow::linkedOutputPath() noexcept {
+    return activeTabState().linked_output_path;
+}
+
+QByteArray& ImageEditorWindow::linkedDocumentFingerprint() noexcept {
+    return activeTabState().linked_document_fingerprint;
 }
 
 void ImageEditorWindow::createLayerPanel() {
@@ -959,13 +975,13 @@ void ImageEditorWindow::createToolOptionsBar() {
         updateCanvasBrush();
     });
     connect(eraser_preview_check_, &QCheckBox::toggled, this, [this](bool enabled) {
-        if (canvas_ != nullptr) canvas_->setEraserPreviewEnabled(enabled);
+        if (activeCanvas() != nullptr) activeCanvas()->setEraserPreviewEnabled(enabled);
     });
     const auto updateAreaSelectionOptions = [this]() {
         area_selection_shape_ = area_selection_shape_combo_->currentData().toInt();
         area_selection_mode_ = area_selection_mode_combo_->currentData().toInt();
-        if (canvas_ != nullptr) {
-            canvas_->setAreaSelectionOptions(
+        if (activeCanvas() != nullptr) {
+            activeCanvas()->setAreaSelectionOptions(
                 area_selection_shape_ == 1 ? ImageCanvas::AreaSelectionShape::Ellipse
                     : ImageCanvas::AreaSelectionShape::Rectangle,
                 area_selection_mode_ == 1 ? ImageCanvas::AreaSelectionCombineMode::Add
@@ -988,7 +1004,7 @@ void ImageEditorWindow::createToolOptionsBar() {
         }
         shape_style_.stroke_enabled = enabled;
         updateShapeOptions();
-        canvas_->setShapeStyle(shape_style_);
+        activeCanvas()->setShapeStyle(shape_style_);
         applyShapeStyleToSelection();
     });
     connect(shape_fill_check_, &QCheckBox::toggled, this, [this](bool enabled) {
@@ -1000,7 +1016,7 @@ void ImageEditorWindow::createToolOptionsBar() {
         }
         shape_style_.fill_enabled = enabled;
         updateShapeOptions();
-        canvas_->setShapeStyle(shape_style_);
+        activeCanvas()->setShapeStyle(shape_style_);
         applyShapeStyleToSelection();
     });
     connect(shape_stroke_color_button_, &QPushButton::clicked, this, [this, refreshColorButton]() {
@@ -1010,7 +1026,7 @@ void ImageEditorWindow::createToolOptionsBar() {
         if (!color.isValid()) return;
         shape_style_.stroke_color = color;
         refreshColorButton(shape_stroke_color_button_, color);
-        canvas_->setShapeStyle(shape_style_);
+        activeCanvas()->setShapeStyle(shape_style_);
         applyShapeStyleToSelection();
     });
     connect(shape_fill_color_button_, &QPushButton::clicked, this, [this, refreshColorButton]() {
@@ -1020,25 +1036,25 @@ void ImageEditorWindow::createToolOptionsBar() {
         if (!color.isValid()) return;
         shape_style_.fill_color = color;
         refreshColorButton(shape_fill_color_button_, color);
-        canvas_->setShapeStyle(shape_style_);
+        activeCanvas()->setShapeStyle(shape_style_);
         applyShapeStyleToSelection();
     });
     connect(shape_stroke_width_spin_, qOverload<int>(&QSpinBox::valueChanged),
             this, [this](int width) {
                 shape_style_.stroke_width = width;
-                canvas_->setShapeStyle(shape_style_);
+                activeCanvas()->setShapeStyle(shape_style_);
                 applyShapeStyleToSelection();
             });
     connect(text_font_combo_, &QFontComboBox::currentFontChanged, this,
             [this](const QFont& font) {
                 text_style_.font_family = font.family();
-                canvas_->setTextStyle(text_style_);
+                activeCanvas()->setTextStyle(text_style_);
                 applyTextStyleToSelection();
             });
     connect(text_size_spin_, qOverload<int>(&QSpinBox::valueChanged), this,
             [this](int size) {
                 text_style_.font_pixel_size = size;
-                canvas_->setTextStyle(text_style_);
+                activeCanvas()->setTextStyle(text_style_);
                 applyTextStyleToSelection();
             });
     connect(text_color_button_, &QPushButton::clicked, this,
@@ -1049,14 +1065,14 @@ void ImageEditorWindow::createToolOptionsBar() {
                 if (!color.isValid()) return;
                 text_style_.color = color;
                 refreshTextColor();
-                canvas_->setTextStyle(text_style_);
+                activeCanvas()->setTextStyle(text_style_);
                 applyTextStyleToSelection();
             });
     connect(text_alignment_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this,
             [this](int index) {
                 text_style_.alignment = static_cast<ImageTextAlignment>(
                     text_alignment_combo_->itemData(index).toInt());
-                canvas_->setTextStyle(text_style_);
+                activeCanvas()->setTextStyle(text_style_);
                 applyTextStyleToSelection();
             });
     connect(delete_selected_shape_button_, &QPushButton::clicked,
@@ -1114,11 +1130,11 @@ void ImageEditorWindow::createShapePalette() {
 
 void ImageEditorWindow::updateToolOptions() {
     if (paint_options_action_ == nullptr || paint_size_options_ == nullptr ||
-        tool_sidebar_ == nullptr || canvas_ == nullptr) return;
+        tool_sidebar_ == nullptr || activeCanvas() == nullptr) return;
     const ToolSidebar::Tool active_tool = tool_sidebar_->activeTool();
-    const bool tool_active = active_tool != ToolSidebar::Tool::None && session_.hasSource();
-    const bool paint_active = active_tool == ToolSidebar::Tool::Paint && canvas_->paintMode();
-    const bool eraser_active = active_tool == ToolSidebar::Tool::Eraser && canvas_->eraserMode();
+    const bool tool_active = active_tool != ToolSidebar::Tool::None && activeSession().hasSource();
+    const bool paint_active = active_tool == ToolSidebar::Tool::Paint && activeCanvas()->paintMode();
+    const bool eraser_active = active_tool == ToolSidebar::Tool::Eraser && activeCanvas()->eraserMode();
     paint_options_action_->setVisible(tool_active && (paint_active || eraser_active));
     paint_size_options_->setVisible(tool_active && (paint_active || eraser_active));
     paint_size_options_->setEnabled(tool_active);
@@ -1131,12 +1147,12 @@ void ImageEditorWindow::updateToolOptions() {
                       : QStringLiteral("Brush size in pixels"));
     eraser_preview_check_->setVisible(eraser_active && !editingMask());
     const auto tool = tool_sidebar_->activeTool();
-    const auto placements = session_.visibleObjects();
+    const auto placements = activeSession().visibleObjects();
     const bool has_selected_shape = std::any_of(
         placements.cbegin(), placements.cend(),
         [this](const ImageObjectPlacement& placement) {
             return placement.operation.kind == OperationKind::Shape &&
-                selected_object_ids_.contains(placement.operation.shape.id);
+                selectedObjectIds().contains(placement.operation.shape.id);
         });
     const bool shapes_active = tool == ToolSidebar::Tool::Shapes ||
         (tool == ToolSidebar::Tool::Select && has_selected_shape);
@@ -1146,7 +1162,7 @@ void ImageEditorWindow::updateToolOptions() {
         placements.cbegin(), placements.cend(),
         [this](const ImageObjectPlacement& placement) {
             return placement.operation.kind == OperationKind::Text &&
-                selected_object_ids_.contains(placement.operation.text.id);
+                selectedObjectIds().contains(placement.operation.text.id);
         });
     const bool text_options_active = tool == ToolSidebar::Tool::Text ||
         (tool == ToolSidebar::Tool::Select && has_selected_text);
@@ -1191,20 +1207,20 @@ void ImageEditorWindow::updateShapeOptions() {
     shape_fill_color_button_->setStyleSheet(QStringLiteral("background-color: %1;").arg(
         shape_style_.fill_color.name(QColor::HexArgb)));
     shape_fill_color_button_->setToolTip(shape_style_.fill_color.name(QColor::HexArgb));
-    const auto placements = session_.visibleObjects();
+    const auto placements = activeSession().visibleObjects();
     const bool selecting_objects = tool_sidebar_->activeTool() == ToolSidebar::Tool::Select;
     const bool can_edit_selected_shape = selecting_objects &&
         std::any_of(placements.cbegin(), placements.cend(),
             [this](const ImageObjectPlacement& placement) {
                 return placement.operation.kind == OperationKind::Shape &&
-                    selected_object_ids_.contains(placement.operation.shape.id);
+                    selectedObjectIds().contains(placement.operation.shape.id);
             });
     const bool has_selected_fillable_shape = selecting_objects &&
         std::any_of(placements.cbegin(), placements.cend(),
             [this](const ImageObjectPlacement& placement) {
                 return placement.operation.kind == OperationKind::Shape &&
                     placement.operation.shape.kind != ImageShapeKind::Line &&
-                    selected_object_ids_.contains(placement.operation.shape.id);
+                    selectedObjectIds().contains(placement.operation.shape.id);
             });
     const bool shape_creation_active = tool_sidebar_->activeTool() == ToolSidebar::Tool::Shapes;
     const bool can_edit_fill_and_stroke = shape_creation_active
@@ -1221,7 +1237,7 @@ void ImageEditorWindow::updateShapeOptions() {
 
 void ImageEditorWindow::updateShapePalette() {
     if (shape_palette_button_group_ == nullptr) return;
-    const bool enabled = session_.hasSource();
+    const bool enabled = activeSession().hasSource();
     for (auto* button : shape_palette_buttons_) {
         if (button != nullptr) button->setEnabled(enabled);
     }
@@ -1265,13 +1281,13 @@ void ImageEditorWindow::openShapePalette() {
 }
 
 void ImageEditorWindow::setShapeKind(ImageShapeKind kind) {
-    if (tool_sidebar_ == nullptr || canvas_ == nullptr) return;
+    if (tool_sidebar_ == nullptr || activeCanvas() == nullptr) return;
     tool_sidebar_->setActiveTool(ToolSidebar::Tool::Shapes);
     if (tool_sidebar_->activeTool() != ToolSidebar::Tool::Shapes) return;
     if (shape_style_.kind != kind) {
         shape_style_.kind = kind;
         if (kind == ImageShapeKind::Line) shape_style_.fill_enabled = false;
-        canvas_->setShapeStyle(shape_style_);
+        activeCanvas()->setShapeStyle(shape_style_);
         applyShapeStyleToSelection(true);
     }
     updateShapePalette();
@@ -1279,44 +1295,44 @@ void ImageEditorWindow::setShapeKind(ImageShapeKind kind) {
 }
 
 void ImageEditorWindow::updateObjectPlacements() {
-    if (relink_raster_action_) relink_raster_action_->setEnabled(session_.hasSource() && !importing_ &&
-        selected_object_ids_.size() == 1 && session_.findRaster(selected_object_ids_.front(), nullptr));
-    const auto placements = session_.visibleObjects();
-    for (qsizetype index = selected_object_ids_.size(); index > 0; --index) {
-        const QString& id = selected_object_ids_.at(index - 1);
+    if (relink_raster_action_) relink_raster_action_->setEnabled(activeSession().hasSource() && !importing_ &&
+        selectedObjectIds().size() == 1 && activeSession().findRaster(selectedObjectIds().front(), nullptr));
+    const auto placements = activeSession().visibleObjects();
+    for (qsizetype index = selectedObjectIds().size(); index > 0; --index) {
+        const QString& id = selectedObjectIds().at(index - 1);
         const bool visible = std::any_of(placements.cbegin(), placements.cend(),
             [&id](const ImageObjectPlacement& placement) {
                 const auto& operation = placement.operation;
                 const QString object_id = imageObjectId(operation);
                 return object_id == id;
             });
-        if (!visible) selected_object_ids_.removeAt(index - 1);
+        if (!visible) selectedObjectIds().removeAt(index - 1);
     }
-    canvas_->setObjectPlacements(placements, selected_object_ids_);
+    activeCanvas()->setObjectPlacements(placements, selectedObjectIds());
 }
 
 void ImageEditorWindow::applyShapeStyleToSelection(bool include_kind) {
     Q_UNUSED(include_kind);
     QStringList shape_ids;
-    for (const auto& placement : session_.visibleObjects()) {
+    for (const auto& placement : activeSession().visibleObjects()) {
         if (placement.operation.kind == OperationKind::Shape &&
-            selected_object_ids_.contains(placement.operation.shape.id)) {
+            selectedObjectIds().contains(placement.operation.shape.id)) {
             shape_ids.append(placement.operation.shape.id);
         }
     }
     if (shape_ids.isEmpty()) return;
     QString error;
-    if (session_.updateShapeStyles(shape_ids, shape_style_, &error)) updateView(true);
+    if (activeSession().updateShapeStyles(shape_ids, shape_style_, &error)) updateView(true);
     else if (!error.isEmpty()) reportError(QStringLiteral("update_shape_style"), error);
 }
 
 void ImageEditorWindow::applyTextStyleToSelection() {
-    if (canvas_ == nullptr || canvas_->textEditing()) return;
+    if (activeCanvas() == nullptr || activeCanvas()->textEditing()) return;
     QVector<ImageObjectPlacement> updated;
-    for (auto placement : session_.visibleObjects()) {
+    for (auto placement : activeSession().visibleObjects()) {
         auto& operation = placement.operation;
         if (operation.kind != OperationKind::Text ||
-            !selected_object_ids_.contains(operation.text.id)) continue;
+            !selectedObjectIds().contains(operation.text.id)) continue;
         operation.text.font_family = text_style_.font_family;
         operation.text.font_pixel_size = text_style_.font_pixel_size;
         operation.text.color = text_style_.color;
@@ -1325,20 +1341,20 @@ void ImageEditorWindow::applyTextStyleToSelection() {
     }
     if (updated.isEmpty()) return;
     QString error;
-    if (session_.updateObjectsRendered(updated, &error)) updateView(true);
+    if (activeSession().updateObjectsRendered(updated, &error)) updateView(true);
     else if (!error.isEmpty()) {
         reportError(QStringLiteral("update_text_style"), error);
         ImageTextData stored;
-        if (session_.findText(updated.front().operation.text.id, &stored)) {
+        if (activeSession().findText(updated.front().operation.text.id, &stored)) {
             text_style_ = stored;
-            canvas_->setTextStyle(text_style_);
+            activeCanvas()->setTextStyle(text_style_);
             updateTextOptions();
         }
     }
 }
 
 void ImageEditorWindow::handleShapeCreated(const ImageShapeData& shape) {
-    if (session_.data().layers.size() + session_.data().groups.size() >=
+    if (activeSession().data().layers.size() + activeSession().data().groups.size() >=
         ImageDocumentStore::kMaximumLayers) {
         statusBar()->showMessage(
             QStringLiteral("Cannot create a shape: the 512-layer limit has been reached."),
@@ -1346,7 +1362,7 @@ void ImageEditorWindow::handleShapeCreated(const ImageShapeData& shape) {
         return;
     }
     QString error;
-    const QString id = session_.addShape(shape, &error);
+    const QString id = activeSession().addShape(shape, &error);
     if (id.isEmpty()) {
         if (!error.isEmpty()) reportError(QStringLiteral("create_shape"), error);
         return;
@@ -1357,20 +1373,20 @@ void ImageEditorWindow::handleShapeCreated(const ImageShapeData& shape) {
 
 void ImageEditorWindow::handleTextEditingStarted(const ImageTextData& text, bool existing) {
     if (existing) {
-        canvas_->setTransientImage(session_.renderedImageWithoutObjects({text.id}));
+        activeCanvas()->setTransientImage(activeSession().renderedImageWithoutObjects({text.id}));
     }
     text_style_.font_family = text.font_family;
     text_style_.font_pixel_size = text.font_pixel_size;
     text_style_.color = text.color;
     text_style_.alignment = text.alignment;
-    canvas_->setTextStyle(text_style_);
+    activeCanvas()->setTextStyle(text_style_);
     updateTextOptions();
 }
 
 void ImageEditorWindow::handleTextCommitted(const ImageTextData& text, bool existing) {
     if (text.content.isEmpty()) {
-        if (existing && session_.deleteObjects({text.id})) {
-            selected_object_ids_.removeAll(text.id);
+        if (existing && activeSession().deleteObjects({text.id})) {
+            selectedObjectIds().removeAll(text.id);
             updateView(true);
             statusBar()->showMessage(QStringLiteral("Text removed"), 1800);
         }
@@ -1378,7 +1394,7 @@ void ImageEditorWindow::handleTextCommitted(const ImageTextData& text, bool exis
     }
     if (existing) {
         QVector<ImageObjectPlacement> updated;
-        for (auto placement : session_.visibleObjects()) {
+        for (auto placement : activeSession().visibleObjects()) {
             if (placement.operation.kind != OperationKind::Text ||
                 placement.operation.text.id != text.id) continue;
             placement.operation.text = text;
@@ -1386,28 +1402,28 @@ void ImageEditorWindow::handleTextCommitted(const ImageTextData& text, bool exis
             break;
         }
         QString error;
-        if (!session_.updateObjectsRendered(updated, &error)) {
+        if (!activeSession().updateObjectsRendered(updated, &error)) {
             if (!error.isEmpty()) reportError(QStringLiteral("edit_text"), error);
             return;
         }
-        selected_object_ids_ = {text.id};
+        selectedObjectIds() = {text.id};
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Text updated"), 1800);
         return;
     }
-    if (session_.data().layers.size() + session_.data().groups.size() >=
+    if (activeSession().data().layers.size() + activeSession().data().groups.size() >=
         ImageDocumentStore::kMaximumLayers) {
         statusBar()->showMessage(
             QStringLiteral("Cannot create text: the 512-layer limit has been reached."), 4000);
         return;
     }
     QString error;
-    const QString id = session_.addText(text, &error);
+    const QString id = activeSession().addText(text, &error);
     if (id.isEmpty()) {
         if (!error.isEmpty()) reportError(QStringLiteral("create_text"), error);
         return;
     }
-    selected_object_ids_ = {id};
+    selectedObjectIds() = {id};
     updateView(true);
     statusBar()->showMessage(QStringLiteral("Text created"), 1800);
 }
@@ -1415,7 +1431,7 @@ void ImageEditorWindow::handleTextCommitted(const ImageTextData& text, bool exis
 void ImageEditorWindow::handleObjectsGeometryChanged(
     const QVector<ImageObjectPlacement>& objects) {
     QString error;
-    if (session_.updateObjectsRendered(objects, &error)) {
+    if (activeSession().updateObjectsRendered(objects, &error)) {
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Selected objects transformed"), 1500);
     } else if (!error.isEmpty()) {
@@ -1424,9 +1440,9 @@ void ImageEditorWindow::handleObjectsGeometryChanged(
 }
 
 void ImageEditorWindow::deleteSelectedObjects() {
-    if (canvas_ != nullptr) canvas_->commitTextEditing();
-    if (selected_object_ids_.isEmpty() || !session_.deleteObjects(selected_object_ids_)) return;
-    selected_object_ids_.clear();
+    if (activeCanvas() != nullptr) activeCanvas()->commitTextEditing();
+    if (selectedObjectIds().isEmpty() || !activeSession().deleteObjects(selectedObjectIds())) return;
+    selectedObjectIds().clear();
     updateView(true);
     statusBar()->showMessage(QStringLiteral("Selected objects deleted"), 1800);
 }
@@ -1436,42 +1452,42 @@ void ImageEditorWindow::deleteSelection() {
     QWidget* focus = QApplication::focusWidget();
     if (focus != nullptr && layer_panel_->isAncestorOf(focus)) {
         layer_panel_->requestDeleteSelection();
-    } else if (focus == canvas_ || focus == this) {
+    } else if (focus == activeCanvas() || focus == this) {
         deleteSelectedObjects();
     }
 }
 
 void ImageEditorWindow::updateDeleteActions() {
-    const bool can_delete_objects = canvas_ != nullptr && tool_sidebar_ != nullptr &&
-        session_.hasSource() && !selected_object_ids_.isEmpty() &&
-        tool_sidebar_->activeTool() == ToolSidebar::Tool::Select && !canvas_->textEditing();
+    const bool can_delete_objects = activeCanvas() != nullptr && tool_sidebar_ != nullptr &&
+        activeSession().hasSource() && !selectedObjectIds().isEmpty() &&
+        tool_sidebar_->activeTool() == ToolSidebar::Tool::Select && !activeCanvas()->textEditing();
     if (delete_selected_shape_button_ != nullptr) delete_selected_shape_button_->setEnabled(can_delete_objects);
     if (delete_objects_action_ != nullptr) delete_objects_action_->setEnabled(can_delete_objects);
     QWidget* focus = QApplication::focusWidget();
     const bool layers = focus != nullptr && layer_panel_->isAncestorOf(focus);
-    const bool canvas = focus == canvas_ || focus == this;
+    const bool canvas = focus == activeCanvas() || focus == this;
     if (deselect_area_selection_action_ != nullptr) {
-        deselect_area_selection_action_->setEnabled(canvas_ != nullptr &&
-            canvas_->hasAreaSelection() && !editingFieldHasFocus());
+        deselect_area_selection_action_->setEnabled(activeCanvas() != nullptr &&
+            activeCanvas()->hasAreaSelection() && !editingFieldHasFocus());
     }
     if (delete_selection_action_ == nullptr) return;
     delete_selection_action_->setEnabled(!editingFieldHasFocus() &&
-        ((layers && session_.hasDocument() && !layer_panel_->selectedStackItems().isEmpty()) ||
+        ((layers && activeSession().hasDocument() && !layer_panel_->selectedStackItems().isEmpty()) ||
          (canvas && can_delete_objects)));
 }
 
 void ImageEditorWindow::updateCanvasBrush() {
-    if (canvas_ == nullptr || tool_sidebar_ == nullptr) return;
+    if (activeCanvas() == nullptr || tool_sidebar_ == nullptr) return;
     const int diameter = tool_sidebar_->activeTool() == ToolSidebar::Tool::Eraser
         ? eraser_diameter_ : paint_diameter_;
-    canvas_->setBrush(tool_sidebar_->brushColor(), diameter);
+    activeCanvas()->setBrush(tool_sidebar_->brushColor(), diameter);
 }
 
 void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool preserveSelection) {
-    if (canvas_ == nullptr) return;
+    if (activeCanvas() == nullptr) return;
     if (!preserveSelection && tool == ToolSidebar::Tool::Shapes &&
-        !selected_object_ids_.isEmpty()) {
-        selected_object_ids_.clear();
+        !selectedObjectIds().isEmpty()) {
+        selectedObjectIds().clear();
         updateObjectPlacements();
     }
     if (tool != ToolSidebar::Tool::None && crop_action_ != nullptr &&
@@ -1510,69 +1526,69 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
         shape_colors_initialized_ = true;
     }
 
-    const bool has_source = session_.hasSource();
+    const bool has_source = activeSession().hasSource();
     // Mode setters also update the cursor, so disable the other modes before
     // enabling the selected one; otherwise a later disable can hide its cursor.
     if (tool == ToolSidebar::Tool::Paint && has_source) {
-        canvas_->setTextCreationMode(false);
-        canvas_->setEraserMode(false);
-        canvas_->setAreaSelectionMode(false);
-        canvas_->setShapeCreationMode(false);
-        canvas_->setObjectSelectionMode(false);
-        canvas_->setPaintMode(true);
+        activeCanvas()->setTextCreationMode(false);
+        activeCanvas()->setEraserMode(false);
+        activeCanvas()->setAreaSelectionMode(false);
+        activeCanvas()->setShapeCreationMode(false);
+        activeCanvas()->setObjectSelectionMode(false);
+        activeCanvas()->setPaintMode(true);
     } else if (tool == ToolSidebar::Tool::Eraser && has_source) {
-        canvas_->setTextCreationMode(false);
-        canvas_->setPaintMode(false);
-        canvas_->setAreaSelectionMode(false);
-        canvas_->setShapeCreationMode(false);
-        canvas_->setObjectSelectionMode(false);
-        canvas_->setEraserMode(true);
+        activeCanvas()->setTextCreationMode(false);
+        activeCanvas()->setPaintMode(false);
+        activeCanvas()->setAreaSelectionMode(false);
+        activeCanvas()->setShapeCreationMode(false);
+        activeCanvas()->setObjectSelectionMode(false);
+        activeCanvas()->setEraserMode(true);
     } else if (tool == ToolSidebar::Tool::Shapes && has_source) {
-        canvas_->setTextCreationMode(false);
-        canvas_->setPaintMode(false);
-        canvas_->setEraserMode(false);
-        canvas_->setAreaSelectionMode(false);
-        canvas_->setObjectSelectionMode(false);
-        canvas_->setShapeCreationMode(true);
+        activeCanvas()->setTextCreationMode(false);
+        activeCanvas()->setPaintMode(false);
+        activeCanvas()->setEraserMode(false);
+        activeCanvas()->setAreaSelectionMode(false);
+        activeCanvas()->setObjectSelectionMode(false);
+        activeCanvas()->setShapeCreationMode(true);
     } else if (tool == ToolSidebar::Tool::Select && has_source) {
-        canvas_->setTextCreationMode(false);
-        canvas_->setPaintMode(false);
-        canvas_->setEraserMode(false);
-        canvas_->setAreaSelectionMode(false);
-        canvas_->setShapeCreationMode(false);
-        canvas_->setObjectSelectionMode(true);
+        activeCanvas()->setTextCreationMode(false);
+        activeCanvas()->setPaintMode(false);
+        activeCanvas()->setEraserMode(false);
+        activeCanvas()->setAreaSelectionMode(false);
+        activeCanvas()->setShapeCreationMode(false);
+        activeCanvas()->setObjectSelectionMode(true);
     } else if (tool == ToolSidebar::Tool::AreaSelect && has_source) {
-        canvas_->setTextCreationMode(false);
-        canvas_->setPaintMode(false);
-        canvas_->setEraserMode(false);
-        canvas_->setShapeCreationMode(false);
-        canvas_->setObjectSelectionMode(false);
-        canvas_->setAreaSelectionMode(true);
+        activeCanvas()->setTextCreationMode(false);
+        activeCanvas()->setPaintMode(false);
+        activeCanvas()->setEraserMode(false);
+        activeCanvas()->setShapeCreationMode(false);
+        activeCanvas()->setObjectSelectionMode(false);
+        activeCanvas()->setAreaSelectionMode(true);
     } else if (tool == ToolSidebar::Tool::Text && has_source) {
-        canvas_->setPaintMode(false);
-        canvas_->setEraserMode(false);
-        canvas_->setAreaSelectionMode(false);
-        canvas_->setShapeCreationMode(false);
-        canvas_->setObjectSelectionMode(false);
-        canvas_->setTextCreationMode(true);
+        activeCanvas()->setPaintMode(false);
+        activeCanvas()->setEraserMode(false);
+        activeCanvas()->setAreaSelectionMode(false);
+        activeCanvas()->setShapeCreationMode(false);
+        activeCanvas()->setObjectSelectionMode(false);
+        activeCanvas()->setTextCreationMode(true);
     } else {
-        canvas_->setTextCreationMode(false);
-        canvas_->setPaintMode(false);
-        canvas_->setEraserMode(false);
-        canvas_->setAreaSelectionMode(false);
-        canvas_->setShapeCreationMode(false);
-        canvas_->setObjectSelectionMode(false);
+        activeCanvas()->setTextCreationMode(false);
+        activeCanvas()->setPaintMode(false);
+        activeCanvas()->setEraserMode(false);
+        activeCanvas()->setAreaSelectionMode(false);
+        activeCanvas()->setShapeCreationMode(false);
+        activeCanvas()->setObjectSelectionMode(false);
     }
-    canvas_->setShapeStyle(shape_style_);
-    canvas_->setTextStyle(text_style_);
-    canvas_->setAreaSelectionOptions(
+    activeCanvas()->setShapeStyle(shape_style_);
+    activeCanvas()->setTextStyle(text_style_);
+    activeCanvas()->setAreaSelectionOptions(
         area_selection_shape_ == 1 ? ImageCanvas::AreaSelectionShape::Ellipse
             : ImageCanvas::AreaSelectionShape::Rectangle,
         area_selection_mode_ == 1 ? ImageCanvas::AreaSelectionCombineMode::Add
             : (area_selection_mode_ == 2
                 ? ImageCanvas::AreaSelectionCombineMode::Subtract
                 : ImageCanvas::AreaSelectionCombineMode::Replace));
-    canvas_->setEraserPreviewEnabled(eraser_preview_check_->isChecked());
+    activeCanvas()->setEraserPreviewEnabled(eraser_preview_check_->isChecked());
     const int diameter = tool == ToolSidebar::Tool::Eraser
         ? eraser_diameter_ : paint_diameter_;
     {
@@ -1588,13 +1604,13 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
 
 bool ImageEditorWindow::importImagePaths(const QStringList& paths,
     std::optional<QPointF> center, const QString& relink_id) {
-    if (importing_ || paths.isEmpty() || !session_.hasSource()) return false;
+    if (importing_ || paths.isEmpty() || !activeSession().hasSource()) return false;
     if (relink_id.isEmpty() && paths.size() >
-        ImageDocumentStore::kMaximumLayers - session_.data().layers.size() - session_.data().groups.size()) {
+        ImageDocumentStore::kMaximumLayers - activeSession().data().layers.size() - activeSession().data().groups.size()) {
         reportError(QStringLiteral("import_images"), QStringLiteral("The batch exceeds the layer limit."));
         return false;
     }
-    canvas_->commitTextEditing();
+    activeCanvas()->commitTextEditing();
     importing_ = true;
     auto cancellation = std::make_shared<std::atomic_bool>(false);
     RasterImportResult result;
@@ -1624,18 +1640,18 @@ bool ImageEditorWindow::importImagePaths(const QStringList& paths,
     }
     QString error;
     const bool changed = relink_id.isEmpty()
-        ? session_.importRasterImages(result.images, center, &error)
-        : (result.images.size() == 1 && session_.relinkRaster(relink_id, result.images.front(), &error));
+        ? activeSession().importRasterImages(result.images, center, &error)
+        : (result.images.size() == 1 && activeSession().relinkRaster(relink_id, result.images.front(), &error));
     if (!changed) {
         reportError(QStringLiteral("import_or_relink_images"), error, paths.front());
         return false;
     }
-    selected_mask_layer_id_.clear();
+    selectedMaskLayerId().clear();
     if (relink_id.isEmpty()) {
-        selected_object_ids_.clear();
-        for (const auto& object : session_.visibleObjects())
-            if (object.layer_id == session_.selectedLayerId() && object.operation.kind == OperationKind::RasterImage)
-                selected_object_ids_ = {object.operation.raster.id};
+        selectedObjectIds().clear();
+        for (const auto& object : activeSession().visibleObjects())
+            if (object.layer_id == activeSession().selectedLayerId() && object.operation.kind == OperationKind::RasterImage)
+                selectedObjectIds() = {object.operation.raster.id};
     }
     tool_sidebar_->setActiveTool(ToolSidebar::Tool::Select);
     updateView(true);
@@ -1691,10 +1707,10 @@ void ImageEditorWindow::createActions() {
     import_layer_action_->setObjectName(QStringLiteral("importImageAsLayerAction"));
     registerShortcutAction(import_layer_action_, {});
     relink_raster_action_ = makeAction(QStringLiteral("Relink Image..."), {}, [this]() {
-        if (selected_object_ids_.size() != 1) return;
+        if (selectedObjectIds().size() != 1) return;
         const auto path = QFileDialog::getOpenFileName(this, QStringLiteral("Relink Image"), {},
             QStringLiteral("Images (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff)"));
-        if (!path.isEmpty()) (void)importImagePaths({path}, {}, selected_object_ids_.front());
+        if (!path.isEmpty()) (void)importImagePaths({path}, {}, selectedObjectIds().front());
     });
     relink_raster_action_->setObjectName(QStringLiteral("relinkRasterImageAction"));
     registerShortcutAction(relink_raster_action_, {});
@@ -1734,50 +1750,50 @@ void ImageEditorWindow::createActions() {
 
     undo_action_ = makeAction(
         QStringLiteral("Undo"), QKeySequence::Undo, [this]() {
-            canvas_->commitTextEditing();
-            const QPoint old_offset = session_.data().canvas_base_offset;
-            if (session_.undo()) {
+            activeCanvas()->commitTextEditing();
+            const QPoint old_offset = activeSession().data().canvas_base_offset;
+            if (activeSession().undo()) {
                 updateView(true);
-                if (canvas_ != nullptr) {
-                    canvas_->translateAreaSelection(
-                        session_.data().canvas_base_offset - old_offset);
+                if (activeCanvas() != nullptr) {
+                    activeCanvas()->translateAreaSelection(
+                        activeSession().data().canvas_base_offset - old_offset);
                 }
             }
         });
     undo_action_->setObjectName(QStringLiteral("undoAction"));
     redo_action_ = makeAction(
         QStringLiteral("Redo"), QKeySequence::Redo, [this]() {
-            canvas_->commitTextEditing();
-            const QPoint old_offset = session_.data().canvas_base_offset;
-            if (session_.redo()) {
+            activeCanvas()->commitTextEditing();
+            const QPoint old_offset = activeSession().data().canvas_base_offset;
+            if (activeSession().redo()) {
                 updateView(true);
-                if (canvas_ != nullptr) {
-                    canvas_->translateAreaSelection(
-                        session_.data().canvas_base_offset - old_offset);
+                if (activeCanvas() != nullptr) {
+                    activeCanvas()->translateAreaSelection(
+                        activeSession().data().canvas_base_offset - old_offset);
                 }
             }
         });
     redo_action_->setObjectName(QStringLiteral("redoAction"));
     rotate_left_action_ = makeAction(
         QStringLiteral("Rotate Left 90°"), {}, [this]() {
-            canvas_->commitTextEditing();
-            if (session_.hasSource()) { session_.rotateLeft(); updateView(); }
+            activeCanvas()->commitTextEditing();
+            if (activeSession().hasSource()) { activeSession().rotateLeft(); updateView(); }
         });
     rotate_right_action_ = makeAction(
         QStringLiteral("Rotate Right 90°"), {}, [this]() {
-            canvas_->commitTextEditing();
-            if (session_.hasSource()) { session_.rotateRight(); updateView(); }
+            activeCanvas()->commitTextEditing();
+            if (activeSession().hasSource()) { activeSession().rotateRight(); updateView(); }
         });
     rotate_right_action_->setObjectName(QStringLiteral("rotateRightAction"));
     flip_horizontal_action_ = makeAction(
         QStringLiteral("Flip Horizontal"), {}, [this]() {
-            canvas_->commitTextEditing();
-            if (session_.hasSource()) { session_.flipHorizontal(); updateView(); }
+            activeCanvas()->commitTextEditing();
+            if (activeSession().hasSource()) { activeSession().flipHorizontal(); updateView(); }
         });
     flip_vertical_action_ = makeAction(
         QStringLiteral("Flip Vertical"), {}, [this]() {
-            canvas_->commitTextEditing();
-            if (session_.hasSource()) { session_.flipVertical(); updateView(); }
+            activeCanvas()->commitTextEditing();
+            if (activeSession().hasSource()) { activeSession().flipVertical(); updateView(); }
         });
     crop_action_ = new QAction(QStringLiteral("Crop Selection"), this);
     crop_action_->setObjectName(QStringLiteral("cropSelectionAction"));
@@ -1787,31 +1803,31 @@ void ImageEditorWindow::createActions() {
             tool_sidebar_->setActiveTool(ToolSidebar::Tool::None);
         }
         updateToolOptions();
-        canvas_->setPaintMode(false);
-        canvas_->setEraserMode(false);
-        canvas_->setCropMode(enabled && session_.hasSource());
+        activeCanvas()->setPaintMode(false);
+        activeCanvas()->setEraserMode(false);
+        activeCanvas()->setCropMode(enabled && activeSession().hasSource());
         if (cancel_crop_action_ != nullptr) {
-            cancel_crop_action_->setEnabled(enabled && session_.hasSource());
+            cancel_crop_action_->setEnabled(enabled && activeSession().hasSource());
         }
         statusBar()->showMessage(enabled
             ? QStringLiteral("Drag over the image to crop; press Esc to cancel")
             : QStringLiteral("Ready"));
     });
     fit_action_ = makeAction(
-        QStringLiteral("Fit Image"), {}, [this]() { canvas_->fitToWindow(); });
+        QStringLiteral("Fit Image"), {}, [this]() { activeCanvas()->fitToWindow(); });
     cancel_crop_action_ = new QAction(QStringLiteral("Cancel Crop"), this);
     cancel_crop_action_->setObjectName(QStringLiteral("cancelCropAction"));
     cancel_crop_action_->setEnabled(false);
     addAction(cancel_crop_action_);
     connect(cancel_crop_action_, &QAction::triggered, this, [this]() {
-        if (canvas_ != nullptr && canvas_->areaSelectionGestureActive()) {
-            canvas_->cancelAreaSelectionGesture();
+        if (activeCanvas() != nullptr && activeCanvas()->areaSelectionGestureActive()) {
+            activeCanvas()->cancelAreaSelectionGesture();
             statusBar()->showMessage(QStringLiteral("Area selection cancelled"), 2500);
             return;
         }
         if (!crop_action_->isChecked()) return;
         crop_action_->setChecked(false);
-        canvas_->setCropMode(false);
+        activeCanvas()->setCropMode(false);
         statusBar()->showMessage(QStringLiteral("Crop cancelled"), 2500);
     });
 
@@ -1922,8 +1938,8 @@ void ImageEditorWindow::createActions() {
                            QKeySequence(Qt::CTRL | Qt::Key_D));
     addAction(deselect_area_selection_action_);
     connect(deselect_area_selection_action_, &QAction::triggered, this, [this]() {
-        if (canvas_ == nullptr || editingFieldHasFocus()) return;
-        canvas_->clearAreaSelection();
+        if (activeCanvas() == nullptr || editingFieldHasFocus()) return;
+        activeCanvas()->clearAreaSelection();
         updateDeleteActions();
     });
 
@@ -2090,41 +2106,42 @@ void ImageEditorWindow::openShortcutSettings() {
 }
 
 bool ImageEditorWindow::editingMask() const {
-    if (selected_mask_layer_id_.isEmpty() ||
-        selected_mask_layer_id_ != session_.selectedLayerId()) return false;
-    for (const auto& layer : session_.data().layers) {
-        if (layer.id == selected_mask_layer_id_) return layer.mask.has_value();
+    const auto& active_tab = activeTabState();
+    if (active_tab.selected_mask_layer_id.isEmpty() ||
+        active_tab.selected_mask_layer_id != active_tab.session.selectedLayerId()) return false;
+    for (const auto& layer : active_tab.session.data().layers) {
+        if (layer.id == active_tab.selected_mask_layer_id) return layer.mask.has_value();
     }
     return false;
 }
 
 void ImageEditorWindow::updateLayerPanel() {
-    const auto problems = session_.rasterSourceProblems();
+    const auto problems = activeSession().rasterSourceProblems();
     for (auto it = problems.cbegin(); it != problems.cend(); ++it)
-        if (logged_raster_problems_.value(it.key()) != it.value()) {
+        if (loggedRasterProblems().value(it.key()) != it.value()) {
             ImageRasterData raster;
-            (void)session_.findRaster(it.key(), &raster);
+            (void)activeSession().findRaster(it.key(), &raster);
             logger_.logError(QStringLiteral("load_imported_image"), it.value(), raster.source_path);
         }
-    logged_raster_problems_ = problems;
+    loggedRasterProblems() = problems;
     const QSize size(LayerPanel::kThumbnailWidth, LayerPanel::kThumbnailHeight);
-    layer_panel_->setDocument(session_.data(), session_.selectedLayerId(),
-        session_.selectedGroupId(), session_.renderedLayerThumbnails(size),
-        session_.renderedLayerMaskThumbnails(size), selected_mask_layer_id_, problems,
-        selected_stack_items_);
+    layer_panel_->setDocument(activeSession().data(), activeSession().selectedLayerId(),
+        activeSession().selectedGroupId(), activeSession().renderedLayerThumbnails(size),
+        activeSession().renderedLayerMaskThumbnails(size), selectedMaskLayerId(), problems,
+        selectedStackItems());
 }
 
 void ImageEditorWindow::updateView(bool preserveCanvasView) {
     updateDocumentTabLabel();
     const bool has_tab = hasActiveDocumentTab();
-    const bool linked = !linked_document_path_.isEmpty();
+    const bool linked = !linkedDocumentPath().isEmpty();
     new_document_tab_button_->setEnabled(!linked && !importing_);
     document_tab_bar_->setTabsClosable(!linked);
     close_document_tab_action_->setEnabled(has_tab && !linked);
     next_document_tab_action_->setEnabled(document_tabs_.size() > 1 && !linked);
     previous_document_tab_action_->setEnabled(document_tabs_.size() > 1 && !linked);
 
-    if (canvas_ == nullptr) {
+    if (activeCanvas() == nullptr) {
         tool_sidebar_->setDocumentAvailable(false);
         tool_sidebar_->setPaintingAllowed(false);
         paint_options_action_->setVisible(false);
@@ -2157,49 +2174,49 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
         updateSelectionContext();
         return;
     }
-    if (!editingMask()) selected_mask_layer_id_.clear();
-    canvas_->setMaskEditing(editingMask());
-    const QImage rendered = session_.renderedImage();
-    canvas_->setImage(rendered, !preserveCanvasView);
-    tool_sidebar_->setDocumentAvailable(session_.hasSource());
-    tool_sidebar_->setPaintingAllowed(session_.hasSource() &&
-                                      session_.selectedLayerIsEditable());
+    if (!editingMask()) selectedMaskLayerId().clear();
+    activeCanvas()->setMaskEditing(editingMask());
+    const QImage rendered = activeSession().renderedImage();
+    activeCanvas()->setImage(rendered, !preserveCanvasView);
+    tool_sidebar_->setDocumentAvailable(activeSession().hasSource());
+    tool_sidebar_->setPaintingAllowed(activeSession().hasSource() &&
+                                      activeSession().selectedLayerIsEditable());
     updateLayerPanel();
     updateObjectPlacements();
     updateToolOptions();
     updateCanvasBrush();
-    undo_action_->setEnabled(session_.canUndo());
-    redo_action_->setEnabled(session_.canRedo());
-    save_action_->setEnabled(session_.hasSource());
-    save_as_action_->setEnabled(session_.hasSource());
-    export_action_->setEnabled(session_.hasSource());
-    quick_export_action_->setEnabled(session_.hasSource());
-    layer_panel_->setQuickExportEnabled(session_.hasSource());
-    relink_action_->setEnabled(session_.sourceIsMissing());
-    import_layer_action_->setEnabled(session_.hasSource() && !importing_);
-    relink_raster_action_->setEnabled(session_.hasSource() && !importing_ &&
-        selected_object_ids_.size() == 1 && session_.findRaster(selected_object_ids_.front(), nullptr));
+    undo_action_->setEnabled(activeSession().canUndo());
+    redo_action_->setEnabled(activeSession().canRedo());
+    save_action_->setEnabled(activeSession().hasSource());
+    save_as_action_->setEnabled(activeSession().hasSource());
+    export_action_->setEnabled(activeSession().hasSource());
+    quick_export_action_->setEnabled(activeSession().hasSource());
+    layer_panel_->setQuickExportEnabled(activeSession().hasSource());
+    relink_action_->setEnabled(activeSession().sourceIsMissing());
+    import_layer_action_->setEnabled(activeSession().hasSource() && !importing_);
+    relink_raster_action_->setEnabled(activeSession().hasSource() && !importing_ &&
+        selectedObjectIds().size() == 1 && activeSession().findRaster(selectedObjectIds().front(), nullptr));
     new_canvas_action_->setEnabled(!linked);
-    resize_canvas_action_->setEnabled(session_.hasSource());
+    resize_canvas_action_->setEnabled(activeSession().hasSource());
     open_image_action_->setEnabled(!linked);
     open_document_action_->setEnabled(!linked);
-    save_as_action_->setEnabled(session_.hasSource() && !linked);
+    save_as_action_->setEnabled(activeSession().hasSource() && !linked);
     updateSelectionContext();
 
     QString title = QStringLiteral("Image Editor");
-    if (!session_.documentPath().isEmpty()) {
-        title = QFileInfo(session_.documentPath()).fileName() + QStringLiteral(" — Image Editor");
-    } else if (!session_.sourcePath().isEmpty()) {
-        title = QFileInfo(session_.sourcePath()).fileName() + QStringLiteral(" — Image Editor");
-    } else if (session_.hasDocument()) {
+    if (!activeSession().documentPath().isEmpty()) {
+        title = QFileInfo(activeSession().documentPath()).fileName() + QStringLiteral(" — Image Editor");
+    } else if (!activeSession().sourcePath().isEmpty()) {
+        title = QFileInfo(activeSession().sourcePath()).fileName() + QStringLiteral(" — Image Editor");
+    } else if (activeSession().hasDocument()) {
         title = QStringLiteral("Untitled Canvas — Image Editor");
     }
-    if (session_.isDirty()) title.prepend('*');
+    if (activeSession().isDirty()) title.prepend('*');
     if (linked) title += QStringLiteral(" [Linked]");
     setWindowTitle(title);
 
-    if (!session_.hasSource()) {
-        status_label_->setText(session_.sourceIsMissing()
+    if (!activeSession().hasSource()) {
+        status_label_->setText(activeSession().sourceIsMissing()
             ? QStringLiteral("Source image is missing — relink it to continue")
             : QStringLiteral("No image open"));
         return;
@@ -2207,23 +2224,23 @@ void ImageEditorWindow::updateView(bool preserveCanvasView) {
     const QSize size = rendered.size();
     status_label_->setText(QStringLiteral("%1 × %2 px  |  %3%")
         .arg(size.width()).arg(size.height())
-        .arg(static_cast<int>(canvas_->zoomFactor() * 100.0)));
+        .arg(static_cast<int>(activeCanvas()->zoomFactor() * 100.0)));
     if (editingMask()) status_label_->setText(status_label_->text() +
         QStringLiteral("  |  Editing layer mask — black hides, white reveals"));
 }
 
 void ImageEditorWindow::updateSelectionContext() {
-    if (canvas_ != nullptr) {
-        canvas_->setMaskEditing(editingMask());
-        canvas_->setEraserPreviewEnabled(eraser_preview_check_->isChecked());
+    if (activeCanvas() != nullptr) {
+        activeCanvas()->setMaskEditing(editingMask());
+        activeCanvas()->setEraserPreviewEnabled(eraser_preview_check_->isChecked());
     }
-    if (layer_panel_ != nullptr) layer_panel_->setSelectedMask(selected_mask_layer_id_);
+    if (layer_panel_ != nullptr) layer_panel_->setSelectedMask(selectedMaskLayerId());
     const QString mask_hint = QStringLiteral("  |  Editing layer mask — black hides, white reveals");
     QString status = status_label_->text();
     if (status.endsWith(mask_hint)) status.chop(mask_hint.size());
     if (editingMask()) status += mask_hint;
     status_label_->setText(status);
-    if (canvas_ == nullptr || tool_sidebar_ == nullptr || !session_.hasSource()) {
+    if (activeCanvas() == nullptr || tool_sidebar_ == nullptr || !activeSession().hasSource()) {
         if (tool_sidebar_ != nullptr) tool_sidebar_->setPaintingAllowed(false);
         if (crop_action_ != nullptr) crop_action_->setEnabled(false);
         if (rotate_left_action_ != nullptr) rotate_left_action_->setEnabled(false);
@@ -2242,9 +2259,9 @@ void ImageEditorWindow::updateSelectionContext() {
         updateDeleteActions();
         return;
     }
-    const bool selected_layer_editable = session_.selectedLayerIsEditable();
+    const bool selected_layer_editable = activeSession().selectedLayerIsEditable();
     const bool selected_item_transformable = selected_layer_editable ||
-        session_.selectedGroupIsActive();
+        activeSession().selectedGroupIsActive();
     tool_sidebar_->setPaintingAllowed(selected_layer_editable);
     crop_action_->setEnabled(selected_item_transformable);
     rotate_left_action_->setEnabled(selected_item_transformable);
@@ -2265,16 +2282,16 @@ void ImageEditorWindow::updateSelectionContext() {
 }
 
 void ImageEditorWindow::createNewCanvas(bool new_tab) {
-    if (new_tab && !linked_document_path_.isEmpty()) return;
+    if (new_tab && !linkedDocumentPath().isEmpty()) return;
     NewCanvasDialog dialog(this);
     if (dialog.exec() != QDialog::Accepted) return;
     if (!new_tab && hasActiveDocumentTab() && !confirmDiscardOrSave()) return;
-    if (!linked_document_path_.isEmpty()) return;
+    if (!linkedDocumentPath().isEmpty()) return;
     const bool created_tab = new_tab || !hasActiveDocumentTab();
     if (created_tab) static_cast<void>(addDocumentTab(true));
 
     QString error;
-    if (!session_.createCanvas(dialog.canvasSize(), dialog.backgroundColor(), &error)) {
+    if (!activeSession().createCanvas(dialog.canvasSize(), dialog.backgroundColor(), &error)) {
         reportError(QStringLiteral("create_canvas"), error);
         if (created_tab) closeDocumentTab(active_document_tab_);
         return;
@@ -2286,25 +2303,25 @@ void ImageEditorWindow::createNewCanvas(bool new_tab) {
 }
 
 void ImageEditorWindow::resizeCanvas() {
-    if (canvas_ == nullptr || !session_.hasSource()) return;
-    canvas_->commitTextEditing();
-    CanvasSizeDialog dialog(session_.renderedImage().size(), this);
+    if (activeCanvas() == nullptr || !activeSession().hasSource()) return;
+    activeCanvas()->commitTextEditing();
+    CanvasSizeDialog dialog(activeSession().renderedImage().size(), this);
     if (dialog.exec() != QDialog::Accepted) return;
     QString error;
-    const QPoint old_offset = session_.data().canvas_base_offset;
-    if (!session_.resizeCanvas(dialog.canvasSize(), dialog.anchor(), &error)) {
+    const QPoint old_offset = activeSession().data().canvas_base_offset;
+    if (!activeSession().resizeCanvas(dialog.canvasSize(), dialog.anchor(), &error)) {
         if (!error.isEmpty()) reportError(QStringLiteral("resize_canvas"), error);
         return;
     }
-    selected_object_ids_.clear();
+    selectedObjectIds().clear();
     updateView(true);
-    canvas_->translateAreaSelection(session_.data().canvas_base_offset - old_offset);
+    activeCanvas()->translateAreaSelection(activeSession().data().canvas_base_offset - old_offset);
     statusBar()->showMessage(QStringLiteral("Canvas resized"), 3000);
 }
 
 bool ImageEditorWindow::confirmDiscardOrSave(bool clearRecoveryOnDiscard) {
-    if (canvas_ != nullptr) canvas_->commitTextEditing();
-    if (!session_.isDirty()) return true;
+    if (activeCanvas() != nullptr) activeCanvas()->commitTextEditing();
+    if (!activeSession().isDirty()) return true;
     QMessageBox prompt(QMessageBox::Warning,
                        QStringLiteral("Unsaved image edits"),
                        QStringLiteral("Save the changes to this image document?"),
@@ -2316,7 +2333,7 @@ bool ImageEditorWindow::confirmDiscardOrSave(bool clearRecoveryOnDiscard) {
     if (prompt.clickedButton() == cancel) return false;
     if (prompt.clickedButton() == discard) {
         if (clearRecoveryOnDiscard) {
-            const QString recovery_path = recovery_store_.pathFor(session_);
+            const QString recovery_path = recovery_store_.pathFor(activeSession());
             if (!recovery_path.isEmpty()) static_cast<void>(recovery_store_.remove(recovery_path));
         }
         return true;
@@ -2337,13 +2354,13 @@ bool ImageEditorWindow::openImagePath(const QString& path) {
 
 bool ImageEditorWindow::openImagePathInTarget(const QString& path, OpenTarget target) {
     if (importing_ || path.isEmpty()) return false;
-    if (!linked_document_path_.isEmpty()) return false;
+    if (!linkedDocumentPath().isEmpty()) return false;
     if (target == OpenTarget::CurrentTab && hasActiveDocumentTab() &&
         !confirmDiscardOrSave()) return false;
     const bool created_tab = target == OpenTarget::NewTab || !hasActiveDocumentTab();
     if (created_tab) static_cast<void>(addDocumentTab(true));
     QString error;
-    if (!session_.openImage(path, &error)) {
+    if (!activeSession().openImage(path, &error)) {
         reportError(QStringLiteral("open_image"), error, path);
         if (created_tab) closeDocumentTab(active_document_tab_);
         return false;
@@ -2369,10 +2386,10 @@ bool ImageEditorWindow::openDocumentPath(const QString& path) {
 
 bool ImageEditorWindow::openDocumentPathInTarget(const QString& path, OpenTarget target) {
     if (importing_ || path.isEmpty()) return false;
-    if (!linked_document_path_.isEmpty()) return false;
+    if (!linkedDocumentPath().isEmpty()) return false;
     for (int index = 0; index < document_tabs_.size(); ++index) {
         const QString open_path = index == active_document_tab_
-            ? session_.documentPath() : document_tabs_.at(index)->session.documentPath();
+            ? activeSession().documentPath() : document_tabs_.at(index)->session.documentPath();
         if (open_path.isEmpty() || !sameLinkedPath(open_path, path)) continue;
         {
             const QSignalBlocker blocker(document_tab_bar_);
@@ -2386,7 +2403,7 @@ bool ImageEditorWindow::openDocumentPathInTarget(const QString& path, OpenTarget
     const bool created_tab = target == OpenTarget::NewTab || !hasActiveDocumentTab();
     if (created_tab) static_cast<void>(addDocumentTab(true));
     QString error;
-    if (!session_.openDocument(path, &error)) {
+    if (!activeSession().openDocument(path, &error)) {
         reportError(QStringLiteral("open_document"), error, path);
         if (created_tab) closeDocumentTab(active_document_tab_);
         return false;
@@ -2394,7 +2411,7 @@ bool ImageEditorWindow::openDocumentPathInTarget(const QString& path, OpenTarget
     resetActiveDocumentSelection();
     deactivateCanvasTools();
     updateView();
-    if (session_.sourceIsMissing()) {
+    if (activeSession().sourceIsMissing()) {
         QMessageBox prompt(QMessageBox::Warning,
                            QStringLiteral("Source image is missing"),
                            QStringLiteral("The editable document is open, but its source image could not be found."),
@@ -2434,9 +2451,9 @@ bool ImageEditorWindow::openLinkedImage(
     }
     const QString normalized_document_path = QFileInfo(document_path).absoluteFilePath();
     const QString normalized_output_path = QFileInfo(published_output_path).absoluteFilePath();
-    const bool reopening_linked_tab = !linked_document_path_.isEmpty();
+    const bool reopening_linked_tab = !linkedDocumentPath().isEmpty();
     if (reopening_linked_tab &&
-        !sameLinkedPath(linked_document_path_, normalized_document_path)) {
+        !sameLinkedPath(linkedDocumentPath(), normalized_document_path)) {
         reportError(QStringLiteral("open_linked_image"),
                     QStringLiteral("A different linked document is already open in this tab."),
                     normalized_document_path);
@@ -2462,14 +2479,14 @@ bool ImageEditorWindow::openLinkedImage(
     if (reopening_linked_tab) {
         if (!confirmDiscardOrSave()) return false;
         QString error;
-        if (!session_.openDocument(normalized_document_path, &error)) {
+        if (!activeSession().openDocument(normalized_document_path, &error)) {
             reportError(QStringLiteral("open_document"), error, normalized_document_path);
             return false;
         }
         resetActiveDocumentSelection();
         deactivateCanvasTools();
         updateView();
-        if (session_.sourceIsMissing()) {
+        if (activeSession().sourceIsMissing()) {
             QMessageBox prompt(QMessageBox::Warning,
                                QStringLiteral("Source image is missing"),
                                QStringLiteral("The editable document is open, but its source image could not be found."),
@@ -2483,28 +2500,28 @@ bool ImageEditorWindow::openLinkedImage(
     } else if (QFileInfo::exists(normalized_document_path)) {
         opened = openDocumentPath(normalized_document_path);
     } else if (openImagePath(source_path)) {
-        linked_document_path_ = normalized_document_path;
-        linked_output_path_ = normalized_output_path;
-        opened = saveToPath(linked_document_path_);
+        linkedDocumentPath() = normalized_document_path;
+        linkedOutputPath() = normalized_output_path;
+        opened = saveToPath(linkedDocumentPath());
     }
     if (!opened) {
-        linked_document_path_.clear();
-        linked_output_path_.clear();
-        linked_document_fingerprint_.clear();
+        linkedDocumentPath().clear();
+        linkedOutputPath().clear();
+        linkedDocumentFingerprint().clear();
         updateView();
         return false;
     }
 
-    linked_document_path_ = normalized_document_path;
-    linked_output_path_ = normalized_output_path;
+    linkedDocumentPath() = normalized_document_path;
+    linkedOutputPath() = normalized_output_path;
 
-    linked_document_fingerprint_ = documentFingerprint(linked_document_path_);
-    if (linked_document_fingerprint_.isEmpty()) {
+    linkedDocumentFingerprint() = documentFingerprint(linkedDocumentPath());
+    if (linkedDocumentFingerprint().isEmpty()) {
         reportError(QStringLiteral("open_linked_image"),
                     QStringLiteral("The linked document could not be fingerprinted."),
-                    linked_document_path_);
-        linked_document_path_.clear();
-        linked_output_path_.clear();
+                    linkedDocumentPath());
+        linkedDocumentPath().clear();
+        linkedOutputPath().clear();
         updateView();
         return false;
     }
@@ -2513,12 +2530,12 @@ bool ImageEditorWindow::openLinkedImage(
 }
 
 void ImageEditorWindow::relinkSource() {
-    if (!session_.sourceIsMissing()) return;
+    if (!activeSession().sourceIsMissing()) return;
     const QString path = QFileDialog::getOpenFileName(
         this, QStringLiteral("Relink Source Image"), {}, imageFilter());
     if (path.isEmpty()) return;
     QString error;
-    if (!session_.relinkSource(path, &error)) {
+    if (!activeSession().relinkSource(path, &error)) {
         reportError(QStringLiteral("relink_source"), error, path);
         return;
     }
@@ -2528,38 +2545,38 @@ void ImageEditorWindow::relinkSource() {
 }
 
 bool ImageEditorWindow::saveToPath(QString path) {
-    if (canvas_ != nullptr) canvas_->commitTextEditing();
-    const QString previous_recovery = recovery_store_.pathFor(session_);
+    if (activeCanvas() != nullptr) activeCanvas()->commitTextEditing();
+    const QString previous_recovery = recovery_store_.pathFor(activeSession());
     std::unique_ptr<QLockFile> linked_write_lock;
-    if (!linked_document_path_.isEmpty()) {
-        path = linked_document_path_;
+    if (!linkedDocumentPath().isEmpty()) {
+        path = linkedDocumentPath();
         linked_write_lock = std::make_unique<QLockFile>(
-            linked_document_path_ + QStringLiteral(".lock"));
+            linkedDocumentPath() + QStringLiteral(".lock"));
         if (!linked_write_lock->tryLock()) {
             reportError(
                 QStringLiteral("save_linked_document_conflict"),
                 QStringLiteral("Another Image Editor instance is saving this linked document. Try again after it finishes."),
-                linked_document_path_);
+                linkedDocumentPath());
             return false;
         }
-        if (QFileInfo::exists(linked_document_path_)) {
-            const auto current_fingerprint = documentFingerprint(linked_document_path_);
+        if (QFileInfo::exists(linkedDocumentPath())) {
+            const auto current_fingerprint = documentFingerprint(linkedDocumentPath());
             if (current_fingerprint.isEmpty() ||
-                current_fingerprint != linked_document_fingerprint_) {
+                current_fingerprint != linkedDocumentFingerprint()) {
                 reportError(
                     QStringLiteral("save_linked_document_conflict"),
                     QStringLiteral("The linked document changed outside this Image Editor window. Reopen it before saving to avoid overwriting a newer revision."),
-                    linked_document_path_);
+                    linkedDocumentPath());
                 return false;
             }
-        } else if (!linked_document_fingerprint_.isEmpty()) {
+        } else if (!linkedDocumentFingerprint().isEmpty()) {
             reportError(QStringLiteral("save_linked_document_conflict"),
                         QStringLiteral("The linked document was removed outside this Image Editor window."),
-                        linked_document_path_);
+                        linkedDocumentPath());
             return false;
         }
     }
-    if (path.isEmpty()) path = session_.documentPath();
+    if (path.isEmpty()) path = activeSession().documentPath();
     if (path.isEmpty()) {
         path = QFileDialog::getSaveFileName(
             this, QStringLiteral("Save Editable Image Document"), {},
@@ -2571,28 +2588,28 @@ bool ImageEditorWindow::saveToPath(QString path) {
     }
 
     QString error;
-    if (!session_.saveDocument(path, &error)) {
+    if (!activeSession().saveDocument(path, &error)) {
         reportError(QStringLiteral("save_document"), error, path);
         return false;
     }
-    if (!linked_document_path_.isEmpty()) {
-        linked_document_fingerprint_ = documentFingerprint(linked_document_path_);
-        if (linked_document_fingerprint_.isEmpty()) {
+    if (!linkedDocumentPath().isEmpty()) {
+        linkedDocumentFingerprint() = documentFingerprint(linkedDocumentPath());
+        if (linkedDocumentFingerprint().isEmpty()) {
             reportError(QStringLiteral("save_linked_document"),
                         QStringLiteral("The saved linked document could not be verified."),
-                        linked_document_path_);
+                        linkedDocumentPath());
             return false;
         }
-        if (!session_.exportImage(linked_output_path_, &error)) {
+        if (!activeSession().exportImage(linkedOutputPath(), &error)) {
             reportError(QStringLiteral("publish_linked_image"), error,
-                        linked_output_path_);
+                        linkedOutputPath());
             return false;
         }
     }
     static_cast<void>(recovery_store_.remove(previous_recovery));
     updateView();
     statusBar()->showMessage(
-        linked_document_path_.isEmpty()
+        linkedDocumentPath().isEmpty()
             ? QStringLiteral("Editable document saved")
             : QStringLiteral("Linked document saved and image published"), 3000);
     return true;
@@ -2611,7 +2628,7 @@ void ImageEditorWindow::saveDocumentAs() {
 }
 
 void ImageEditorWindow::exportImage(bool quick_export) {
-    canvas_->commitTextEditing();
+    activeCanvas()->commitTextEditing();
     QString selected_filter;
     const QString path = QFileDialog::getSaveFileName(
         this, quick_export ? QStringLiteral("Quick Export Selected Layer")
@@ -2655,11 +2672,11 @@ void ImageEditorWindow::exportImage(bool quick_export) {
         }
     }
     options.scope = quick_export
-        ? (session_.selectedGroupIsActive() ? ImageExportScope::SelectedGroup
+        ? (activeSession().selectedGroupIsActive() ? ImageExportScope::SelectedGroup
                                             : ImageExportScope::SelectedLayer)
         : ImageExportScope::Composite;
 
-    const ImageExportSnapshot snapshot = session_.exportSnapshot();
+    const ImageExportSnapshot snapshot = activeSession().exportSnapshot();
     auto cancellation_requested = std::make_shared<std::atomic_bool>(false);
     QThread worker_thread;
     auto* worker = new ImageExportWorker(
@@ -2709,11 +2726,11 @@ void ImageEditorWindow::exportImage(bool quick_export) {
 void ImageEditorWindow::handleCrop(const QRect& crop) {
     crop_action_->setChecked(false);
     QString error;
-    if (session_.applyCrop(crop, &error)) {
+    if (activeSession().applyCrop(crop, &error)) {
         updateView();
         statusBar()->showMessage(QStringLiteral("Image cropped"), 3000);
     } else if (!error.isEmpty()) {
-        reportError(QStringLiteral("crop_image"), error, session_.sourcePath());
+        reportError(QStringLiteral("crop_image"), error, activeSession().sourcePath());
     }
 }
 
@@ -2723,14 +2740,14 @@ void ImageEditorWindow::handlePaintStroke(const QVector<QPointF>& points,
                                           std::optional<QPainterPath> clipping_path) {
     if (clipping_path.has_value() && clipping_path->isEmpty()) return;
     QString error;
-    if (editingMask() ? session_.applyLayerMaskStroke(
+    if (editingMask() ? activeSession().applyLayerMaskStroke(
                             points, color, diameter, &error, std::move(clipping_path))
-                      : session_.applyPaintStroke(
+                      : activeSession().applyPaintStroke(
                             points, color, diameter, &error, std::move(clipping_path))) {
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Paint stroke applied"), 1800);
     } else if (!error.isEmpty()) {
-        reportError(QStringLiteral("paint_stroke"), error, session_.sourcePath());
+        reportError(QStringLiteral("paint_stroke"), error, activeSession().sourcePath());
     }
 }
 
@@ -2738,30 +2755,30 @@ void ImageEditorWindow::handleEraseStroke(const QVector<QPointF>& points, int di
                                           std::optional<QPainterPath> clipping_path) {
     if (clipping_path.has_value() && clipping_path->isEmpty()) return;
     QString error;
-    if (editingMask() ? session_.applyLayerMaskEraseStroke(
+    if (editingMask() ? activeSession().applyLayerMaskEraseStroke(
                             points, diameter, &error, std::move(clipping_path))
-                      : session_.applyEraseStroke(
+                      : activeSession().applyEraseStroke(
                             points, diameter, &error, std::move(clipping_path))) {
         updateView(true);
         statusBar()->showMessage(QStringLiteral("Erase stroke applied"), 1800);
     } else if (!error.isEmpty()) {
-        reportError(QStringLiteral("erase_stroke"), error, session_.sourcePath());
+        reportError(QStringLiteral("erase_stroke"), error, activeSession().sourcePath());
     }
 }
 
 void ImageEditorWindow::deactivateCanvasTools() {
-    if (canvas_ == nullptr || tool_sidebar_ == nullptr) return;
+    if (activeCanvas() == nullptr || tool_sidebar_ == nullptr) return;
     tool_sidebar_->setActiveTool(ToolSidebar::Tool::None);
     updateToolOptions();
     if (crop_action_ != nullptr && crop_action_->isChecked()) {
         crop_action_->setChecked(false);
     }
-    canvas_->setPaintMode(false);
-    canvas_->setEraserMode(false);
-    canvas_->setAreaSelectionMode(false);
-    canvas_->setCropMode(false);
-    canvas_->setShapeCreationMode(false);
-    canvas_->setObjectSelectionMode(false);
+    activeCanvas()->setPaintMode(false);
+    activeCanvas()->setEraserMode(false);
+    activeCanvas()->setAreaSelectionMode(false);
+    activeCanvas()->setCropMode(false);
+    activeCanvas()->setShapeCreationMode(false);
+    activeCanvas()->setObjectSelectionMode(false);
 }
 
 void ImageEditorWindow::maybeOfferRecovery() {
@@ -2785,14 +2802,14 @@ void ImageEditorWindow::maybeOfferRecovery() {
 
         const int index = addDocumentTab(true);
         QString error;
-        if (!session_.restoreRecovery(snapshot, &error)) {
+        if (!activeSession().restoreRecovery(snapshot, &error)) {
             reportError(QStringLiteral("restore_recovery"), error, snapshot);
             closeDocumentTab(index);
             continue;
         }
         deactivateCanvasTools();
         updateView();
-        if (session_.sourceIsMissing()) {
+        if (activeSession().sourceIsMissing()) {
             QMessageBox::information(this, QStringLiteral("Source image is missing"),
                 QStringLiteral("The recovered document needs its source image to be relinked."));
             relinkSource();
@@ -2826,7 +2843,7 @@ void ImageEditorWindow::closeEvent(QCloseEvent* event) {
             event->ignore();
             return;
         }
-        const QString recovery_path = recovery_store_.pathFor(session_);
+        const QString recovery_path = recovery_store_.pathFor(activeSession());
         if (!recovery_path.isEmpty()) recovery_paths.append(recovery_path);
     }
     for (const QString& recovery_path : recovery_paths)

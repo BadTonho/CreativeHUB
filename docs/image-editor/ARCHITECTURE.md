@@ -161,10 +161,13 @@ and export entry points used by the UI.
   the same selected-item export action as **File > Quick Export** and stays
   disabled until an image is open.
 - `ImageEditorWindow` starts with an empty workspace and owns a tab context for
-  every open document. Each context retains its `ImageDocumentSession`, canvas,
-  active layer, multi-selection in the Layers dock, canvas object selection,
-  linked-image metadata, and source diagnostics; each canvas keeps its own zoom
-  and pan. Tool settings remain shared. The **+** menu creates a canvas, opens
+  every open document. Each context is the source of truth for its
+  `ImageDocumentSession`, canvas and page, active layer, multi-selection in the
+  Layers dock, canvas object selection, linked-image metadata, and source
+  diagnostics; each canvas keeps its own zoom and pan. The window resolves
+  document-specific commands through the active context instead of swapping a
+  second copy of that state when tabs change. Tool settings remain shared. The
+  **+** menu creates a canvas, opens
   an image, or opens a `.cimg` in a new tab. File-menu Open and New Canvas
   replace the active tab after the save/discard/cancel prompt; opening an
   already-open `.cimg` selects its tab.
