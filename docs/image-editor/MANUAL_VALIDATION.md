@@ -184,8 +184,9 @@ still pending.
     the thumbnail keeps its content while the layer is hidden or its opacity
     is zero. Click the eye and confirm visibility changes without selecting
     that row. Add another layer, rename it, drag it both above and below another
-    layer, and confirm it remains in the stack and its pixels remain visible
-    according to the new stacking order. Also hide/show it and adjust its opacity; use Undo/Redo
+    layer, and confirm the moved row remains in the Layers list, stays selectable,
+    and its pixels remain visible according to the new stacking order. Also
+    hide/show it and adjust its opacity; use Undo/Redo
     and confirm layer thumbnails refresh after content edits and undo/redo,
     while the composite preview responds to visibility and opacity changes.
     Replace the document and confirm thumbnails show the new layer contents.

@@ -3690,10 +3690,13 @@ int main(int argc, char* argv[]) {
         QStringLiteral("deleteImageLayerButton"));
     auto* move_layer_down_button = window.findChild<QToolButton*>(
         QStringLiteral("moveImageLayerDownButton"));
+    auto* move_layer_up_button = window.findChild<QToolButton*>(
+        QStringLiteral("moveImageLayerUpButton"));
     auto* opacity_slider = window.findChild<QSlider*>(
         QStringLiteral("imageLayerOpacitySlider"));
     if (add_layer_button == nullptr || delete_layer_button == nullptr ||
-        move_layer_down_button == nullptr || opacity_slider == nullptr) {
+        move_layer_down_button == nullptr || move_layer_up_button == nullptr ||
+        opacity_slider == nullptr) {
         std::cerr << "The layer panel controls were not created.\n";
         return 1;
     }
@@ -3711,9 +3714,19 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     move_layer_down_button->click();
-    if (currentLayerRow(layer_list) != 1 ||
-        layer_list->currentItem()->text(0) != QStringLiteral("Overlay")) {
-        std::cerr << "Layer reordering did not preserve selection and order.\n";
+    if (layerRowCount(layer_list) != 3 || currentLayerRow(layer_list) != 1 ||
+        layer_list->topLevelItem(0)->text(0) != QStringLiteral("Layer 1") ||
+        layer_list->currentItem()->text(0) != QStringLiteral("Overlay") ||
+        !layer_list->topLevelItem(2)->data(0, Qt::UserRole + 3).toBool()) {
+        std::cerr << "Moving a layer down did not preserve every row and its order.\n";
+        return 1;
+    }
+    move_layer_up_button->click();
+    if (layerRowCount(layer_list) != 3 || currentLayerRow(layer_list) != 0 ||
+        layer_list->currentItem()->text(0) != QStringLiteral("Overlay") ||
+        layer_list->topLevelItem(1)->text(0) != QStringLiteral("Layer 1") ||
+        !layer_list->topLevelItem(2)->data(0, Qt::UserRole + 3).toBool()) {
+        std::cerr << "Moving a layer up did not preserve every row and its order.\n";
         return 1;
     }
     opacity_slider->setValue(60);

@@ -248,12 +248,14 @@ and export entry points used by the UI.
 - `LayerPanel` is hosted by a resizable, dockable right-side `QDockWidget`. It
   presents the stack as a top-to-bottom tree with groups, Ctrl/Shift
   multi-selection, and drag reordering or reparenting. A drag retains its source
-  layer ID from the start of the gesture through the drop. Group Selected accepts
-  only contiguous sibling raster layers. Ungroup preserves children; Delete
-  removes a group and its children together. Groups cannot nest, and group
-  thumbnails show the transformed composite. Each raster row has an isolated,
-  aspect-fitted thumbnail on the left, the layer name, and an eye visibility
-  button on the right.
+  layer ID from the start of the gesture through the drop. The document owns the
+  reordered stack, so the custom drag does not let Qt remove the source row a
+  second time after the panel refreshes from the committed document. Group
+  Selected accepts only contiguous sibling raster layers. Ungroup preserves
+  children; Delete removes a group and its children together. Groups cannot
+  nest, and group thumbnails show the transformed composite. Each raster row
+  has an isolated, aspect-fitted thumbnail on the left, the layer name, and an
+  eye visibility button on the right.
   Thumbnails use the canvas checkerboard colors behind transparent pixels and
   remain visible when a layer is hidden or has zero opacity. The session
   renders operations at thumbnail resolution and caches small per-layer

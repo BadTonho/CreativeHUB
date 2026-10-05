@@ -4,6 +4,8 @@
 
 #include <QAbstractItemView>
 #include <QApplication>
+#include <QCursor>
+#include <QDrag>
 #include <QDropEvent>
 #include <QEvent>
 #include <QFontMetrics>
@@ -192,13 +194,33 @@ public:
 
 protected:
     void startDrag(Qt::DropActions supported_actions) override {
-        const auto* source = currentItem();
+        auto* source = currentItem();
         dragged_item_id_ = source == nullptr
             ? QString{} : source->data(0, kItemIdRole).toString();
         dragged_item_is_group_ = source != nullptr &&
             source->data(0, kGroupRole).toBool();
         drag_source_active_ = !dragged_item_id_.isEmpty();
-        QTreeWidget::startDrag(supported_actions);
+
+        // The document/window handles the move and rebuilds this tree during
+        // the drop callback. QAbstractItemView::startDrag() removes the source
+        // row again after a MoveAction completes, which can then remove a row
+        // from the freshly rebuilt tree. Run the drag without that second,
+        // widget-level model mutation; the tree is always rebuilt from the
+        // committed document instead.
+        const Qt::DropActions move_actions = supported_actions & Qt::MoveAction;
+        if (source != nullptr && !dragged_item_id_.isEmpty() &&
+            move_actions.testFlag(Qt::MoveAction)) {
+            QDrag drag(this);
+            drag.setMimeData(mimeData({source}));
+            const QRect source_rect = visualItemRect(source);
+            if (source_rect.isValid()) {
+                drag.setPixmap(viewport()->grab(source_rect));
+                drag.setHotSpot(viewport()->mapFromGlobal(QCursor::pos()) -
+                                source_rect.topLeft());
+            }
+            (void)drag.exec(move_actions, Qt::MoveAction);
+        }
+
         drag_source_active_ = false;
         dragged_item_id_.clear();
         dragged_item_is_group_ = false;
