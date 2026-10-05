@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha, Seleção de Área e Seleção de Objetos implementadas**.
+Status: **análise provisória; extrações de Pintura, Borracha, Seleção de Área, Seleção de Objetos e Formas implementadas**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -23,7 +23,7 @@ arquivos grandes:
 
 | Área | Responsabilidades atuais | Oportunidade |
 | --- | --- | --- |
-| `ui/canvas/image_canvas.cpp` e `.h` | Desenho e navegação do canvas, conversão de coordenadas, recorte, formas, edição de texto, seleção e transformação de objetos, além do roteamento de eventos | Delegar o estado e o comportamento específico das ferramentas a módulos próprios, mantendo no canvas a exibição, a navegação, a conversão de coordenadas e a hospedagem da ferramenta ativa. |
+| `ui/canvas/image_canvas.cpp` e `.h` | Desenho e navegação do canvas, conversão de coordenadas, recorte, edição de texto e roteamento de eventos | Continuar delegando o estado e o comportamento das ferramentas a módulos próprios; texto ainda permanece no canvas até uma etapa separada. |
 | `ui/windows/image_editor_window.cpp` e `.h` | Layout da janela, ativação e opções das ferramentas, ações e atalhos, abas de documentos, abrir/salvar, importar/exportar, confirmação de recuperação, registro de erros e fluxo de imagens vinculadas | Extrair responsabilidades coesas quando forem alteradas, mantendo a janela principal responsável por montar e coordenar a aplicação. |
 | `core/document/image_document_session.cpp` e `.h` | Ciclo de vida do documento, recursos de imagem, composição e prévias, operações de edição, gerenciamento de camadas/grupos/máscaras, seleção e Desfazer/Refazer | Manter uma sessão como fachada do estado e do histórico do documento e mover renderização e operações de domínio para módulos internos focados. |
 | `core/document/image_document_store.cpp` e `.h` | Serialização `.cimg`, validação, migrações, caminhos e serialização de recuperação | Avaliar auxiliares específicos do formato apenas quando houver necessidade; preservar as regras de compatibilidade e gravação atômica como uma fronteira testada. |
@@ -130,11 +130,12 @@ montando os widgets e traduzindo ações da aplicação em operações do docume
 4. Concluída: extrair Seleção de Objetos para módulo próprio, incluindo
    seleção e transformações temporárias; preservar os sinais do canvas e deixar
    a janela/sessão confirmar as alterações no histórico do documento.
-5. Extrair Formas e Texto, incluindo suas interações específicas de prévia e
-   edição.
-6. Separar renderização e operações do documento de `ImageDocumentSession`
+5. Concluída: extrair a criação e a prévia de Formas para `ShapeTool`, mantendo
+   as configurações compartilhadas na janela e a confirmação pela sessão.
+6. Extrair Texto, incluindo suas interações específicas de prévia e edição.
+7. Separar renderização e operações do documento de `ImageDocumentSession`
    quando uma mudança de funcionalidade oferecer uma divisão clara.
-7. Rever as divisões da janela principal e da persistência apenas quando seus
+8. Rever as divisões da janela principal e da persistência apenas quando seus
    fluxos forem alterados; evitar uma reorganização geral do repositório.
 
 Cada etapa deve mover uma responsabilidade e preservar o comportamento antes
@@ -178,6 +179,16 @@ letreiro, limpar ao clicar no vazio, cancelamento e geometria de transformação
 os testes de canvas e raster mantêm a cobertura de prévias, alças, rotação,
 redimensionamento e integração com o histórico. A validação visual manual desta
 extração continua pendente com o mantenedor.
+
+A extração de Formas moveu o gesto, as restrições com Shift e o desenho da
+prévia para `ShapeTool`; `ImageCanvas` mantém a conversão de coordenadas e o
+sinal público, e a janela continua confirmando formas no documento. Os testes
+automatizados cobrem linha, retângulo, elipse, restrições, estilo capturado,
+prévia, cancelamento e geometria inválida. A compilação Release do aplicativo
+e dos alvos de UI/exportação passou no Windows; os cinco testes focados do
+Image Editor e a suíte CTest completa passaram (5/5 e 70/70) em 2026-10-05.
+`git diff --check` também passou. A validação visual manual permanece com o
+mantenedor.
 
 ## Referências
 

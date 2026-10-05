@@ -3,6 +3,7 @@
 #include "layer_panel.h"
 #include "selection/area_selection_tool.h"
 #include "selection/object/object_selection_tool.h"
+#include "shapes/shape_tool.h"
 #include "tool_sidebar.h"
 
 #include <QAction>
@@ -1273,6 +1274,127 @@ bool testAreaSelectionToolState() {
     return true;
 }
 
+bool testShapeToolState() {
+    using image_editor::ImageShapeData;
+    using image_editor::ImageShapeKind;
+    using image_editor::ShapeTool;
+
+    ShapeTool tool;
+    ImageShapeData line_style;
+    line_style.id = QStringLiteral("style-id-is-not-copied");
+    line_style.kind = ImageShapeKind::Line;
+    line_style.stroke_color = QColor(220, 30, 40);
+    line_style.stroke_width = 4;
+    line_style.fill_enabled = false;
+    tool.setStyle(line_style);
+
+    tool.beginGesture(QPointF(10.0, 10.0));
+    ImageShapeData changed_style = line_style;
+    changed_style.stroke_color = QColor(20, 40, 220);
+    tool.setStyle(changed_style);
+    tool.updateGesture(QPointF(20.0, 27.0), true);
+    const auto line_preview = tool.preview();
+    if (!line_preview || line_preview->id != QString{} ||
+        line_preview->stroke_color != line_style.stroke_color ||
+        std::abs((line_preview->end.x() - line_preview->start.x()) -
+                 (line_preview->end.y() - line_preview->start.y())) > 0.001 ||
+        std::abs(std::hypot(line_preview->end.x() - line_preview->start.x(),
+                            line_preview->end.y() - line_preview->start.y()) -
+                 std::hypot(10.0, 17.0)) > 0.001) {
+        std::cerr << "Shape Tool did not snapshot style or constrain a line to 45 degrees.\n";
+        return false;
+    }
+
+    QImage preview_image(64, 64, QImage::Format_ARGB32_Premultiplied);
+    preview_image.fill(Qt::transparent);
+    {
+        QPainter painter(&preview_image);
+        tool.paintOverlay(painter, {QRectF(0.0, 0.0, 64.0, 64.0), 1.0});
+    }
+    if (preview_image.pixelColor(16, 16) != line_style.stroke_color) {
+        std::cerr << "Shape Tool did not paint the in-progress line preview.\n";
+        return false;
+    }
+    const auto completed_line = tool.finishGesture(QPointF(20.0, 27.0), true);
+    if (!completed_line || tool.gestureActive() ||
+        completed_line->kind != ImageShapeKind::Line ||
+        completed_line->stroke_color != line_style.stroke_color) {
+        std::cerr << "Shape Tool did not return the completed line with its captured style.\n";
+        return false;
+    }
+
+    ImageShapeData rectangle_style;
+    rectangle_style.kind = ImageShapeKind::Rectangle;
+    rectangle_style.stroke_enabled = false;
+    rectangle_style.fill_enabled = true;
+    rectangle_style.fill_color = QColor(30, 190, 70);
+    tool.setStyle(rectangle_style);
+    tool.beginGesture(QPointF(20.0, 20.0));
+    tool.updateGesture(QPointF(25.0, 31.0), true);
+    const auto rectangle_preview = tool.preview();
+    if (!rectangle_preview || rectangle_preview->end != QPointF(31.0, 31.0)) {
+        std::cerr << "Shift did not constrain a rectangle to a square.\n";
+        return false;
+    }
+    preview_image.fill(Qt::transparent);
+    {
+        QPainter painter(&preview_image);
+        tool.paintOverlay(painter, {QRectF(0.0, 0.0, 64.0, 64.0), 1.0});
+    }
+    if (preview_image.pixelColor(26, 26) != rectangle_style.fill_color) {
+        std::cerr << "Shape Tool did not render the filled rectangle preview.\n";
+        return false;
+    }
+    if (!tool.finishGesture(QPointF(25.0, 31.0), true)) {
+        std::cerr << "Shape Tool rejected a valid rectangle gesture.\n";
+        return false;
+    }
+
+    ImageShapeData ellipse_style = rectangle_style;
+    ellipse_style.kind = ImageShapeKind::Ellipse;
+    ellipse_style.fill_color = QColor(30, 80, 210);
+    tool.setStyle(ellipse_style);
+    tool.beginGesture(QPointF(30.0, 30.0));
+    tool.updateGesture(QPointF(23.0, 26.0), true);
+    const auto ellipse_preview = tool.preview();
+    if (!ellipse_preview || ellipse_preview->end != QPointF(23.0, 23.0) ||
+        ellipse_preview->kind != ImageShapeKind::Ellipse) {
+        std::cerr << "Shift did not constrain an ellipse to a circle.\n";
+        return false;
+    }
+    if (!tool.finishGesture(QPointF(23.0, 26.0), true)) {
+        std::cerr << "Shape Tool rejected a valid ellipse gesture.\n";
+        return false;
+    }
+
+    tool.setStyle(rectangle_style);
+    tool.beginGesture(QPointF(5.0, 5.0));
+    tool.updateGesture(QPointF(18.0, 12.0), false);
+    const auto unconstrained_preview = tool.preview();
+    if (!unconstrained_preview || unconstrained_preview->end != QPointF(18.0, 12.0)) {
+        std::cerr << "Shape Tool constrained a gesture when Shift was not active.\n";
+        return false;
+    }
+    if (!tool.cancelGesture() || tool.gestureActive() || tool.preview() ||
+        tool.cancelGesture() || tool.finishGesture(QPointF(18.0, 12.0), false)) {
+        std::cerr << "Escape cancellation left a preview or returned an unfinished shape.\n";
+        return false;
+    }
+
+    tool.beginGesture(QPointF(4.0, 4.0));
+    if (tool.finishGesture(QPointF(4.0, 14.0), false)) {
+        std::cerr << "Shape Tool accepted a rectangle with zero width.\n";
+        return false;
+    }
+    tool.setStyle(line_style);
+    tool.beginGesture(QPointF(8.0, 8.0));
+    if (tool.finishGesture(QPointF(8.0, 8.0), false)) {
+        std::cerr << "Shape Tool accepted a zero-length line.\n";
+        return false;
+    }
+    return true;
+}
+
 bool testObjectSelectionToolState() {
     image_editor::ObjectSelectionTool tool;
 
@@ -2234,6 +2356,7 @@ int main(int argc, char* argv[]) {
     }
     if (!testAreaSelectionToolState()) return 1;
     if (!testAreaSelectionToolUi(temporary.path())) return 1;
+    if (!testShapeToolState()) return 1;
     if (!testObjectSelectionToolState()) return 1;
 
     if (!testGeneralCanvasSelection()) return 1;

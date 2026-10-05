@@ -5,6 +5,7 @@
 #include "../tools/brush/paint_tool.h"
 #include "../tools/selection/area_selection_tool.h"
 #include "../tools/selection/object/object_selection_tool.h"
+#include "../tools/shapes/shape_tool.h"
 
 #include <QImage>
 #include <QColor>
@@ -123,13 +124,6 @@ private:
         const QPointF& position, Qt::KeyboardModifiers modifiers) const;
     void dispatchObjectSelectionToolEvents(
         const QVector<ObjectSelectionToolEvent>& events);
-    [[nodiscard]] QPointF constrainShapePoint(const QPointF& point,
-                                             const QPointF& anchor,
-                                             ImageShapeKind kind,
-                                             bool shift) const;
-    void drawShapeOverlay(QPainter& painter,
-                          const ImageShapeData& shape,
-                          int opacity = 100) const;
     void drawTextOverlay(QPainter& painter,
                          const ImageTextData& text,
                          int opacity = 100) const;
@@ -159,7 +153,6 @@ private:
     bool resizing_brush_ = false;
     bool shift_constrain_held_ = false;
     bool panning_ = false;
-    bool creating_shape_ = false;
     QPointF crop_start_;
     QRectF crop_selection_;
     QPointF pan_start_;
@@ -171,7 +164,7 @@ private:
     EraserTool eraser_tool_;
     AreaSelectionTool area_selection_tool_;
     ObjectSelectionTool object_selection_tool_;
-    ImageShapeData shape_style_;
+    ShapeTool shape_tool_;
     ImageTextData text_style_;
     ImageTextData text_editing_;
     QPlainTextEdit* text_editor_ = nullptr;
@@ -181,7 +174,6 @@ private:
     bool creating_text_frame_ = false;
     QPointF text_frame_start_;
     QPointF text_frame_current_;
-    ImageShapeData shape_interaction_current_;
     QColor brush_color_ = Qt::black;
     int brush_diameter_ = 12;
 };

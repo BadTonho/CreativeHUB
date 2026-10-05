@@ -39,6 +39,12 @@ persistence, and recovery.
   geometry through the document history. The tool also provides hit testing to
   the canvas for entering text editing; text editing itself stays with the
   canvas.
+- `src/ui/tools/shapes/shape_tool.*` owns the in-progress shape gesture,
+  Shift-constrained geometry, invalid-geometry rejection, and shape preview.
+  Its shared painter renders both the preview and committed shape overlays.
+  `ImageCanvas` maps pointer positions to image coordinates and emits the
+  existing `shapeCreated` signal; `ImageEditorWindow` continues to own shared
+  shape settings and commits completed shapes through the document session.
   Tool families use subdirectories such as `brush/`, `selection/`, `shapes/`,
   and `text/` to keep the tools area navigable as it grows.
 
