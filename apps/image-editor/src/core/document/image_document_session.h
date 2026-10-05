@@ -185,8 +185,9 @@ private:
     void recordEditSnapshot(ImageDocumentData before,
                             QString selected_layer_id,
                             QString selected_group_id = {});
-    [[nodiscard]] qsizetype totalStackItemCount() const noexcept;
-    void rebuildLayerOrder();
+    void commitLayerStackEdit(ImageDocumentData document,
+                              QString selected_layer_id,
+                              QString selected_group_id);
     [[nodiscard]] qsizetype groupIndex(const QString& group_id) const noexcept;
     [[nodiscard]] QString parentGroupForLayer(const QString& layer_id) const;
     [[nodiscard]] bool effectiveLayerVisible(const ImageLayerData& layer) const;

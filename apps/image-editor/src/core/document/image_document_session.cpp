@@ -3,6 +3,7 @@
 #include "image_document_renderer.h"
 #include "image_document_utils.h"
 #include "image_layer_mask_editor.h"
+#include "image_layer_stack_editor.h"
 
 #include <QFileInfo>
 #include <QImageReader>
@@ -131,7 +132,8 @@ QHash<QString, QString> ImageDocumentSession::rasterSourceProblems() const {
 bool ImageDocumentSession::importRasterImages(const QVector<PreparedRasterImage>& images,
     std::optional<QPointF> center, QString* error) {
     if (!hasSource() || images.isEmpty() ||
-        images.size() > ImageDocumentStore::kMaximumLayers - totalStackItemCount() ||
+        images.size() > ImageDocumentStore::kMaximumLayers -
+            ImageLayerStackEditor::itemCount(data_) ||
         (center && (!std::isfinite(center->x()) || !std::isfinite(center->y())))) {
         assignError(error, QStringLiteral("Open a document and choose a batch within the layer limit."));
         return false;
@@ -184,7 +186,7 @@ bool ImageDocumentSession::importRasterImages(const QVector<PreparedRasterImage>
         selected_layer_id_ = layer.id;
     }
     selected_group_id_.clear();
-    rebuildLayerOrder();
+    ImageLayerStackEditor::rebuildLayerOrder(data_);
     layer_thumbnail_cache_.clear();
     return true;
 }
@@ -1163,7 +1165,7 @@ QString ImageDocumentSession::addShape(ImageShapeData shape, QString* error) {
         assignError(error, QStringLiteral("Open or relink an image before creating a shape."));
         return {};
     }
-    if (totalStackItemCount() >= ImageDocumentStore::kMaximumLayers) {
+    if (ImageLayerStackEditor::itemCount(data_) >= ImageDocumentStore::kMaximumLayers) {
         assignError(error, QStringLiteral(
             "The document has reached the maximum of 512 stack items."));
         return {};
@@ -1242,7 +1244,7 @@ QString ImageDocumentSession::addShape(ImageShapeData shape, QString* error) {
     new_layer->operations.append(std::move(operation));
     selected_layer_id_ = new_layer_id;
     selected_group_id_.clear();
-    rebuildLayerOrder();
+    ImageLayerStackEditor::rebuildLayerOrder(data_);
     layer_thumbnail_cache_.clear();
     return shape_id;
 }
@@ -1253,7 +1255,7 @@ QString ImageDocumentSession::addText(ImageTextData text, QString* error) {
         assignError(error, QStringLiteral("Open or relink an image before creating text."));
         return {};
     }
-    if (totalStackItemCount() >= ImageDocumentStore::kMaximumLayers) {
+    if (ImageLayerStackEditor::itemCount(data_) >= ImageDocumentStore::kMaximumLayers) {
         assignError(error, QStringLiteral(
             "The document has reached the maximum of 512 stack items."));
         return {};
@@ -1330,7 +1332,7 @@ QString ImageDocumentSession::addText(ImageTextData text, QString* error) {
     findLayer(data_, new_layer_id)->operations.append(std::move(operation));
     selected_layer_id_ = new_layer_id;
     selected_group_id_.clear();
-    rebuildLayerOrder();
+    ImageLayerStackEditor::rebuildLayerOrder(data_);
     layer_thumbnail_cache_.clear();
     return text_id;
 }
@@ -1462,63 +1464,14 @@ bool ImageDocumentSession::findShape(const QString& shape_id,
 }
 
 QString ImageDocumentSession::addLayer() {
-    if (!hasDocument() || totalStackItemCount() >= ImageDocumentStore::kMaximumLayers) return {};
-    int suffix = 1;
-    QString name;
-    const auto nameExists = [this](const QString& candidate) {
-        const auto layer_match = std::any_of(data_.layers.cbegin(), data_.layers.cend(),
-            [&candidate](const ImageLayerData& layer) {
-                return layer.name.compare(candidate, Qt::CaseInsensitive) == 0;
-            });
-        const auto group_match = std::any_of(data_.groups.cbegin(), data_.groups.cend(),
-            [&candidate](const ImageGroupData& group) {
-                return group.name.compare(candidate, Qt::CaseInsensitive) == 0;
-            });
-        return layer_match || group_match;
-    };
-    do {
-        name = QStringLiteral("Layer %1").arg(suffix++);
-    } while (nameExists(name));
-    ImageLayerData layer;
-    layer.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    layer.name = name;
-    const QString parent_group_id = selected_group_id_.isEmpty()
-        ? parentGroupForLayer(selected_layer_id_) : QString{};
-    layer.parent_group_id = parent_group_id;
-    pushEdit();
-    if (!parent_group_id.isEmpty()) {
-        auto* parent = findGroup(data_, parent_group_id);
-        const qsizetype selected_index = parent->layer_ids.indexOf(selected_layer_id_);
-        parent->layer_ids.insert(selected_index < 0 ? parent->layer_ids.size()
-                                                   : selected_index + 1,
-                                 layer.id);
-    } else {
-        qsizetype insertion_index = data_.root_stack.size();
-        if (!selected_group_id_.isEmpty()) {
-            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
-                if (data_.root_stack.at(index).group &&
-                    data_.root_stack.at(index).id == selected_group_id_) {
-                    insertion_index = index + 1;
-                    break;
-                }
-            }
-        } else {
-            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
-                if (!data_.root_stack.at(index).group &&
-                    data_.root_stack.at(index).id == selected_layer_id_) {
-                    insertion_index = index + 1;
-                    break;
-                }
-            }
-        }
-        data_.root_stack.insert(insertion_index, {layer.id, false});
-    }
-    data_.layers.append(layer);
-    selected_layer_id_ = layer.id;
-    selected_group_id_.clear();
-    rebuildLayerOrder();
-    layer_thumbnail_cache_.clear();
-    return layer.id;
+    auto edit = ImageLayerStackEditor::addLayer(
+        data_, selected_layer_id_, selected_group_id_);
+    if (!edit.has_value()) return {};
+    const QString layer_id = edit->selected_layer_id;
+    commitLayerStackEdit(std::move(edit->document),
+                         std::move(edit->selected_layer_id),
+                         std::move(edit->selected_group_id));
+    return layer_id;
 }
 
 bool ImageDocumentSession::deleteLayer(const QString& layer_id) {
@@ -1526,45 +1479,12 @@ bool ImageDocumentSession::deleteLayer(const QString& layer_id) {
 }
 
 bool ImageDocumentSession::deleteStackItems(const QVector<ImageStackItemData>& items) {
-    QSet<QString> layer_ids;
-    QSet<QString> group_ids;
-    for (const auto& item : items) {
-        if (item.group) {
-            const qsizetype index = groupIndex(item.id);
-            if (index < 0) continue;
-            group_ids.insert(item.id);
-            for (const auto& child : data_.groups.at(index).layer_ids) {
-                if (layerIndex(child) > 0) layer_ids.insert(child);
-            }
-        } else if (layerIndex(item.id) > 0) {
-            layer_ids.insert(item.id);
-        }
-    }
-    if (layer_ids.isEmpty() && group_ids.isEmpty()) return false;
-
-    const qsizetype selected_index = layerIndex(selected_layer_id_);
-    const bool removed_layer = layer_ids.contains(selected_layer_id_);
-    const bool removed_group = group_ids.contains(selected_group_id_);
-    pushEdit();
-    data_.root_stack.erase(std::remove_if(data_.root_stack.begin(), data_.root_stack.end(),
-        [&](const ImageStackItemData& item) {
-            return item.group ? group_ids.contains(item.id) : layer_ids.contains(item.id);
-        }), data_.root_stack.end());
-    for (auto& group : data_.groups) {
-        group.layer_ids.erase(std::remove_if(group.layer_ids.begin(), group.layer_ids.end(),
-            [&](const QString& id) { return layer_ids.contains(id); }), group.layer_ids.end());
-    }
-    data_.layers.erase(std::remove_if(data_.layers.begin(), data_.layers.end(),
-        [&](const ImageLayerData& layer) { return layer_ids.contains(layer.id); }), data_.layers.end());
-    data_.groups.erase(std::remove_if(data_.groups.begin(), data_.groups.end(),
-        [&](const ImageGroupData& group) { return group_ids.contains(group.id); }), data_.groups.end());
-    if (removed_layer || removed_group) {
-        const qsizetype replacement = std::clamp(selected_index, qsizetype{0}, data_.layers.size() - 1);
-        selected_layer_id_ = data_.layers.at(replacement).id;
-        selected_group_id_.clear();
-    }
-    rebuildLayerOrder();
-    layer_thumbnail_cache_.clear();
+    auto edit = ImageLayerStackEditor::deleteItems(
+        data_, items, selected_layer_id_, selected_group_id_);
+    if (!edit.has_value()) return false;
+    commitLayerStackEdit(std::move(edit->document),
+                         std::move(edit->selected_layer_id),
+                         std::move(edit->selected_group_id));
     return true;
 }
 
@@ -1698,152 +1618,34 @@ QHash<QString, QImage> ImageDocumentSession::renderedLayerMaskThumbnails(
 }
 
 QString ImageDocumentSession::addGroup(QString* error) {
-    if (error != nullptr) error->clear();
-    if (!hasDocument() || totalStackItemCount() >= ImageDocumentStore::kMaximumLayers) {
-        assignError(error, QStringLiteral("The document has reached the maximum of 512 stack items."));
-        return {};
-    }
-    int suffix = 1;
-    QString name;
-    const auto name_exists = [this](const QString& candidate) {
-        return std::any_of(data_.layers.cbegin(), data_.layers.cend(),
-            [&candidate](const ImageLayerData& layer) {
-                return layer.name.compare(candidate, Qt::CaseInsensitive) == 0;
-            }) || std::any_of(data_.groups.cbegin(), data_.groups.cend(),
-            [&candidate](const ImageGroupData& group) {
-                return group.name.compare(candidate, Qt::CaseInsensitive) == 0;
-            });
-    };
-    do { name = QStringLiteral("Group %1").arg(suffix++); } while (name_exists(name));
-
-    ImageGroupData group;
-    group.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    group.name = name;
-    qsizetype insertion_index = data_.root_stack.size();
-    if (!selected_group_id_.isEmpty()) {
-        for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
-            if (data_.root_stack.at(index).group &&
-                data_.root_stack.at(index).id == selected_group_id_) {
-                insertion_index = index + 1;
-                break;
-            }
-        }
-    } else if (!selected_layer_id_.isEmpty()) {
-        const QString selected_parent = parentGroupForLayer(selected_layer_id_);
-        for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
-            const auto& item = data_.root_stack.at(index);
-            const bool selected_root_layer = selected_parent.isEmpty() && !item.group &&
-                item.id == selected_layer_id_;
-            const bool selected_parent_group = !selected_parent.isEmpty() && item.group &&
-                item.id == selected_parent;
-            if (selected_root_layer || selected_parent_group) {
-                insertion_index = index + 1;
-                break;
-            }
-        }
-    }
-    const QString id = group.id;
-    pushEdit();
-    data_.groups.append(std::move(group));
-    data_.root_stack.insert(insertion_index, {id, true});
-    selected_layer_id_.clear();
-    selected_group_id_ = id;
-    layer_thumbnail_cache_.clear();
-    return id;
+    auto edit = ImageLayerStackEditor::addGroup(
+        data_, selected_layer_id_, selected_group_id_, error);
+    if (!edit.has_value()) return {};
+    const QString group_id = edit->selected_group_id;
+    commitLayerStackEdit(std::move(edit->document),
+                         std::move(edit->selected_layer_id),
+                         std::move(edit->selected_group_id));
+    return group_id;
 }
 
 QString ImageDocumentSession::groupLayers(const QStringList& layer_ids, QString* error) {
-    if (error != nullptr) error->clear();
-    if (layer_ids.size() < 2 || !selected_group_id_.isEmpty()) {
-        assignError(error, QStringLiteral("Select at least two contiguous root layers to group."));
-        return {};
-    }
-    QSet<QString> requested;
-    for (const auto& id : layer_ids) {
-        const auto* layer = findLayer(data_, id);
-        if (layer == nullptr || layer->background || !layer->parent_group_id.isEmpty() ||
-            requested.contains(id)) {
-            assignError(error, QStringLiteral("Only distinct root raster layers can be grouped."));
-            return {};
-        }
-        requested.insert(id);
-    }
-    QVector<qsizetype> positions;
-    for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
-        if (!data_.root_stack.at(index).group && requested.contains(data_.root_stack.at(index).id)) {
-            positions.append(index);
-        }
-    }
-    std::sort(positions.begin(), positions.end());
-    if (positions.size() != requested.size() ||
-        positions.back() - positions.front() + 1 != positions.size()) {
-        assignError(error, QStringLiteral("Group Selected requires contiguous sibling layers."));
-        return {};
-    }
-    if (totalStackItemCount() >= ImageDocumentStore::kMaximumLayers) {
-        assignError(error, QStringLiteral("The document has reached the maximum of 512 stack items."));
-        return {};
-    }
-    int suffix = 1;
-    QString name;
-    const auto name_exists = [this](const QString& candidate) {
-        return std::any_of(data_.layers.cbegin(), data_.layers.cend(),
-            [&candidate](const ImageLayerData& layer) {
-                return layer.name.compare(candidate, Qt::CaseInsensitive) == 0;
-            }) || std::any_of(data_.groups.cbegin(), data_.groups.cend(),
-            [&candidate](const ImageGroupData& group) {
-                return group.name.compare(candidate, Qt::CaseInsensitive) == 0;
-            });
-    };
-    do { name = QStringLiteral("Group %1").arg(suffix++); } while (name_exists(name));
-
-    ImageGroupData group;
-    group.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    group.name = name;
-    for (qsizetype index = positions.front(); index <= positions.back(); ++index) {
-        group.layer_ids.append(data_.root_stack.at(index).id);
-    }
-    const QString group_id = group.id;
-    pushEdit();
-    for (const auto& child_id : group.layer_ids) {
-        if (auto* child = findLayer(data_, child_id)) child->parent_group_id = group_id;
-    }
-    for (qsizetype index = positions.back(); index >= positions.front(); --index) {
-        data_.root_stack.removeAt(index);
-    }
-    data_.root_stack.insert(positions.front(), {group_id, true});
-    data_.groups.append(std::move(group));
-    selected_layer_id_.clear();
-    selected_group_id_ = group_id;
-    rebuildLayerOrder();
-    layer_thumbnail_cache_.clear();
+    auto edit = ImageLayerStackEditor::groupLayers(
+        data_, layer_ids, selected_group_id_, error);
+    if (!edit.has_value()) return {};
+    const QString group_id = edit->selected_group_id;
+    commitLayerStackEdit(std::move(edit->document),
+                         std::move(edit->selected_layer_id),
+                         std::move(edit->selected_group_id));
     return group_id;
 }
 
 bool ImageDocumentSession::ungroup(const QString& group_id) {
-    const qsizetype index = groupIndex(group_id);
-    if (index < 0) return false;
-    const auto root_item = std::find_if(data_.root_stack.cbegin(), data_.root_stack.cend(),
-        [&group_id](const ImageStackItemData& item) { return item.group && item.id == group_id; });
-    if (root_item == data_.root_stack.cend()) return false;
-    const qsizetype root_index = std::distance(data_.root_stack.cbegin(), root_item);
-    const QStringList children = data_.groups.at(index).layer_ids;
-    pushEdit();
-    data_.root_stack.removeAt(root_index);
-    for (qsizetype child_index = 0; child_index < children.size(); ++child_index) {
-        const QString child_id = children.at(child_index);
-        data_.root_stack.insert(root_index + child_index, {child_id, false});
-        if (auto* child = findLayer(data_, child_id)) child->parent_group_id.clear();
-    }
-    data_.groups.removeAt(index);
-    if (selected_group_id_ == group_id) {
-        selected_group_id_.clear();
-        selected_layer_id_ = children.isEmpty()
-            ? (data_.layers.isEmpty() ? QString{} : data_.layers.back().id)
-            : children.back();
-    }
-    rebuildLayerOrder();
-    layer_thumbnail_cache_.clear();
+    auto edit = ImageLayerStackEditor::ungroup(
+        data_, group_id, selected_layer_id_, selected_group_id_);
+    if (!edit.has_value()) return false;
+    commitLayerStackEdit(std::move(edit->document),
+                         std::move(edit->selected_layer_id),
+                         std::move(edit->selected_group_id));
     return true;
 }
 
@@ -1891,116 +1693,27 @@ bool ImageDocumentSession::moveStackItem(const QString& item_id,
                                          bool is_group,
                                          const QString& target_group_id,
                                          qsizetype insertion_index) {
-    if (is_group) {
-        if (!target_group_id.isEmpty() || groupIndex(item_id) < 0) return false;
-        qsizetype source_index = -1;
-        for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
-            if (data_.root_stack.at(index).group && data_.root_stack.at(index).id == item_id) {
-                source_index = index;
-                break;
-            }
-        }
-        if (source_index < 0) return false;
-        const qsizetype bounded_index = std::clamp(insertion_index,
-            qsizetype{1}, static_cast<qsizetype>(data_.root_stack.size()));
-        if (bounded_index == source_index || bounded_index == source_index + 1) return false;
-        pushEdit();
-        data_.root_stack.removeAt(source_index);
-        const qsizetype adjusted = bounded_index > source_index
-            ? bounded_index - 1 : bounded_index;
-        data_.root_stack.insert(adjusted, {item_id, true});
-    } else {
-        const qsizetype layer_index = layerIndex(item_id);
-        if (layer_index <= 0) return false;
-        const QString source_group_id = data_.layers.at(layer_index).parent_group_id;
-        if (!target_group_id.isEmpty() && groupIndex(target_group_id) < 0) return false;
-
-        const auto source_position = [&]() -> qsizetype {
-            if (source_group_id.isEmpty()) {
-                for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
-                    if (!data_.root_stack.at(index).group &&
-                        data_.root_stack.at(index).id == item_id) return index;
-                }
-            } else if (const auto* group = findGroup(data_, source_group_id)) {
-                return group->layer_ids.indexOf(item_id);
-            }
-            return -1;
-        }();
-        if (source_position < 0) return false;
-
-        qsizetype target_count = 0;
-        if (target_group_id.isEmpty()) target_count = data_.root_stack.size();
-        else target_count = findGroup(data_, target_group_id)->layer_ids.size();
-        qsizetype bounded_index = std::clamp(insertion_index, qsizetype{0}, target_count);
-        if (target_group_id.isEmpty()) bounded_index = std::max(qsizetype{1}, bounded_index);
-        if (source_group_id == target_group_id && bounded_index > source_position) {
-            --bounded_index;
-        }
-        if (source_group_id == target_group_id && bounded_index == source_position) return false;
-
-        pushEdit();
-        if (source_group_id.isEmpty()) {
-            for (qsizetype index = 0; index < data_.root_stack.size(); ++index) {
-                if (!data_.root_stack.at(index).group && data_.root_stack.at(index).id == item_id) {
-                    data_.root_stack.removeAt(index);
-                    break;
-                }
-            }
-        } else {
-            findGroup(data_, source_group_id)->layer_ids.removeAll(item_id);
-        }
-        auto* layer = findLayer(data_, item_id);
-        layer->parent_group_id = target_group_id;
-        if (target_group_id.isEmpty()) {
-            data_.root_stack.insert(bounded_index, {item_id, false});
-        } else {
-            findGroup(data_, target_group_id)->layer_ids.insert(bounded_index, item_id);
-        }
-    }
-    rebuildLayerOrder();
-    layer_thumbnail_cache_.clear();
+    auto edit = ImageLayerStackEditor::moveItem(
+        data_, item_id, is_group, target_group_id, insertion_index,
+        selected_layer_id_, selected_group_id_);
+    if (!edit.has_value()) return false;
+    commitLayerStackEdit(std::move(edit->document),
+                         std::move(edit->selected_layer_id),
+                         std::move(edit->selected_group_id));
     return true;
 }
 
 bool ImageDocumentSession::moveStackItemBy(const QString& item_id,
                                            bool is_group,
                                            int direction) {
-    if (direction != -1 && direction != 1) return false;
-    if (is_group) {
-        qsizetype index = -1;
-        for (qsizetype candidate = 1; candidate < data_.root_stack.size(); ++candidate) {
-            if (data_.root_stack.at(candidate).group &&
-                data_.root_stack.at(candidate).id == item_id) {
-                index = candidate;
-                break;
-            }
-        }
-        if (index < 0) return false;
-        const qsizetype target = index + direction;
-        if (target <= 0 || target >= data_.root_stack.size()) return false;
-        return moveStackItem(item_id, true, {}, target + (direction > 0 ? 1 : 0));
-    }
-    const qsizetype index = layerIndex(item_id);
-    if (index <= 0) return false;
-    const QString parent_id = data_.layers.at(index).parent_group_id;
-    qsizetype position = -1;
-    qsizetype count = 0;
-    if (parent_id.isEmpty()) {
-        count = data_.root_stack.size();
-        for (qsizetype candidate = 1; candidate < count; ++candidate) {
-            if (!data_.root_stack.at(candidate).group &&
-                data_.root_stack.at(candidate).id == item_id) position = candidate;
-        }
-    } else {
-        const auto* group = findGroup(data_, parent_id);
-        if (group == nullptr) return false;
-        count = group->layer_ids.size();
-        position = group->layer_ids.indexOf(item_id);
-    }
-    if (position < 0 || position + direction < (parent_id.isEmpty() ? 1 : 0) ||
-        position + direction >= count) return false;
-    return moveStackItem(item_id, false, parent_id,
-                         position + direction + (direction > 0 ? 1 : 0));
+    auto edit = ImageLayerStackEditor::moveItemBy(
+        data_, item_id, is_group, direction,
+        selected_layer_id_, selected_group_id_);
+    if (!edit.has_value()) return false;
+    commitLayerStackEdit(std::move(edit->document),
+                         std::move(edit->selected_layer_id),
+                         std::move(edit->selected_group_id));
+    return true;
 }
 
 void ImageDocumentSession::beginLayerOpacityEdit() {
@@ -2051,10 +1764,6 @@ bool ImageDocumentSession::selectedGroupIsActive() const noexcept {
     return groupIndex(selected_group_id_) >= 0;
 }
 
-qsizetype ImageDocumentSession::totalStackItemCount() const noexcept {
-    return data_.layers.size() + data_.groups.size();
-}
-
 qsizetype ImageDocumentSession::groupIndex(const QString& group_id) const noexcept {
     for (qsizetype index = 0; index < data_.groups.size(); ++index) {
         if (data_.groups.at(index).id == group_id) return index;
@@ -2072,25 +1781,6 @@ bool ImageDocumentSession::effectiveLayerVisible(const ImageLayerData& layer) co
     if (layer.parent_group_id.isEmpty()) return true;
     const auto* group = findGroup(data_, layer.parent_group_id);
     return group != nullptr && group->visible && group->opacity > 0;
-}
-
-void ImageDocumentSession::rebuildLayerOrder() {
-    QVector<ImageLayerData> ordered;
-    ordered.reserve(data_.layers.size());
-    const auto append_layer = [this, &ordered](const QString& id) {
-        const auto* layer = findLayer(data_, id);
-        if (layer != nullptr) ordered.append(*layer);
-    };
-    for (const auto& item : data_.root_stack) {
-        if (!item.group) {
-            append_layer(item.id);
-            continue;
-        }
-        const auto* group = findGroup(data_, item.id);
-        if (group == nullptr) continue;
-        for (const auto& layer_id : group->layer_ids) append_layer(layer_id);
-    }
-    data_.layers = std::move(ordered);
 }
 
 void ImageDocumentSession::initializeDefaultLayers() {
@@ -2120,6 +1810,16 @@ void ImageDocumentSession::recordEditSnapshot(ImageDocumentData before,
 void ImageDocumentSession::pushEdit() {
     endLayerOpacityEdit();
     recordEditSnapshot(data_, selected_layer_id_, selected_group_id_);
+}
+
+void ImageDocumentSession::commitLayerStackEdit(
+    ImageDocumentData document, QString selected_layer_id,
+    QString selected_group_id) {
+    pushEdit();
+    data_ = std::move(document);
+    selected_layer_id_ = std::move(selected_layer_id);
+    selected_group_id_ = std::move(selected_group_id);
+    layer_thumbnail_cache_.clear();
 }
 
 bool ImageDocumentSession::applySelectedGroupTransform(const ImageOperation& operation,

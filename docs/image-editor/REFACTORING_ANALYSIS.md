@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação e preparação de máscaras implementadas**.
+Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação, preparação de máscaras e operações estruturais de camadas/grupos implementadas**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -159,7 +159,10 @@ montando os widgets e traduzindo ações da aplicação em operações do docume
    `ImageLayerMaskEditor` e centralizar geometria de pontos, grupos, recortes e
    limites de imagem em `ImageDocumentGeometry`. Manter aplicação e histórico
    na sessão.
-10. Rever as divisões da janela principal e da persistência apenas quando seus
+10. Concluída: extrair a preparação de operações estruturais de camadas e grupos
+    para `ImageLayerStackEditor`. Manter na sessão a aplicação do resultado,
+    seleção, histórico e invalidação de miniaturas.
+11. Rever as divisões da janela principal e da persistência apenas quando seus
     fluxos forem alterados; evitar uma reorganização geral do repositório.
 
 Cada etapa deve mover uma responsabilidade e preservar o comportamento antes
@@ -265,6 +268,20 @@ consumidores do Video Editor compilaram em Release no Windows. Os 11 testes
 focados passaram; a suíte CTest completa passou em 70/70 em 2026-10-05.
 `git diff --check` passou. A extração não alterou a interface visual, então não
 foi necessária uma verificação manual.
+
+A extração de operações estruturais criou `ImageLayerStackEditor`, que prepara
+criação e exclusão de camadas/grupos, agrupamento, desagrupamento e movimentação
+entre raiz e grupos sem modificar a origem. A sessão aplica o resultado em um
+único passo de histórico, atualiza a seleção e invalida as miniaturas. O módulo
+também centraliza a contagem da pilha e a ordem achatada usada na importação de
+raster e na criação de formas e texto. Testes diretos cobrem inserção, exclusão,
+agrupamento, desagrupamento, movimentação, ordem, seleção, limites e rejeições
+sem mutação. A aplicação e os alvos de core, raster, máscaras, formatos, UI e
+exportação do Image Editor compilaram em Release; os consumidores relacionados
+do Video Editor também compilaram. Os 11 testes focados passaram, incluindo os
+consumidores de publicação do Video Editor, e a suíte CTest completa passou em
+70/70 no Windows Release em 2026-10-05. `git diff --check` passou. A inspeção
+visual manual permanece com o mantenedor.
 
 ## Referências
 

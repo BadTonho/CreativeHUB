@@ -266,8 +266,18 @@ and export entry points used by the UI.
   Shapes and Selection remain available; shapes created with Background
   selected are inserted immediately above it. Opacity slider drags are grouped
   into one undo entry.
-- `ImageDocumentSession::deleteStackItems` normalizes a batch of
-  `ImageStackItemData` references, ignores Background/unknown/duplicate entries,
+- `ImageLayerStackEditor` prepares structural stack edits from the document and
+  current selection, returning a candidate document and resulting selection
+  without mutating the source or accessing history. It owns layer/group
+  creation and deletion, grouping, ungrouping, moves between root and existing
+  groups, stack item counts, and reconstruction of the flattened layer order.
+  `ImageDocumentSession` commits successful results as one history edit, updates
+  selection, and invalidates thumbnails. It also uses the shared count/order
+  helpers when importing raster layers and creating shape or text layers.
+  Renaming, visibility, opacity, masks, and opacity drag grouping remain in the
+  session.
+- `ImageDocumentSession::deleteStackItems` delegates structural removal to
+  `ImageLayerStackEditor`; a batch ignores Background/unknown/duplicate entries
   and removes selected groups and their children in one history edit. Surviving
   groups keep their other children; selection moves to a surviving layer when
   its target is removed. `deleteLayer` and `deleteGroup` delegate to this method.

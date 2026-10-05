@@ -2,6 +2,7 @@
 #include "image_document_renderer.h"
 #include "image_document_store.h"
 #include "image_editor_logger.h"
+#include "image_layer_stack_editor.h"
 #include "recovery_store.h"
 
 #include <QGuiApplication>
@@ -22,6 +23,7 @@
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace {
 
@@ -2184,6 +2186,133 @@ void testExportAndFormatPlugins(const QString& root) {
     }
 }
 
+void testImageLayerStackEditor() {
+    using namespace image_editor;
+
+    ImageDocumentData document;
+    document.base_kind = ImageBaseKind::Canvas;
+    document.canvas_size = QSize(12, 8);
+    ImageLayerData background;
+    background.id = QStringLiteral("background");
+    background.name = QStringLiteral("Background");
+    background.background = true;
+    ImageLayerData first;
+    first.id = QStringLiteral("first");
+    first.name = QStringLiteral("First");
+    ImageLayerData second;
+    second.id = QStringLiteral("second");
+    second.name = QStringLiteral("Second");
+    ImageLayerData third;
+    third.id = QStringLiteral("third");
+    third.name = QStringLiteral("Third");
+    document.layers = {background, first, second, third};
+    document.root_stack = {{background.id, false}, {first.id, false},
+                           {second.id, false}, {third.id, false}};
+    const ImageDocumentData original = document;
+    require(ImageLayerStackEditor::itemCount(document) == 4,
+            QStringLiteral("Stack item count omitted layers."));
+
+    ImageDocumentData unordered = document;
+    std::reverse(unordered.layers.begin(), unordered.layers.end());
+    ImageLayerStackEditor::rebuildLayerOrder(unordered);
+    require(unordered.layers == document.layers,
+            QStringLiteral("Flattened layer order did not follow the root stack."));
+
+    QString error;
+    const auto noncontiguous = ImageLayerStackEditor::groupLayers(
+        document, {first.id, third.id}, {}, &error);
+    require(!noncontiguous.has_value() && !error.isEmpty() && document == original,
+            QStringLiteral("Rejected non-contiguous grouping changed its source document."));
+
+    const auto added = ImageLayerStackEditor::addLayer(
+        document, second.id, {});
+    require(added.has_value() && document == original &&
+            added->selected_group_id.isEmpty() &&
+            added->document.root_stack.size() == 5 &&
+            added->document.root_stack.at(3).id == added->selected_layer_id &&
+            added->document.layers.at(3).id == added->selected_layer_id,
+            QStringLiteral("Adding a layer did not prepare an inserted candidate and selection."));
+
+    const auto grouped = ImageLayerStackEditor::groupLayers(
+        document, {second.id, first.id}, {}, &error);
+    require(grouped.has_value() && error.isEmpty() && document == original &&
+            grouped->selected_layer_id.isEmpty() &&
+            grouped->selected_group_id == grouped->document.groups.front().id &&
+            grouped->document.groups.front().layer_ids == QStringList{first.id, second.id} &&
+            grouped->document.layers.at(1).parent_group_id == grouped->selected_group_id &&
+            grouped->document.layers.at(2).parent_group_id == grouped->selected_group_id,
+            QStringLiteral("Grouping did not preserve stack order or return the group selection."));
+
+    const QString group_id = grouped->selected_group_id;
+    const auto moved_into_root = ImageLayerStackEditor::moveItem(
+        grouped->document, second.id, false, {},
+        grouped->document.root_stack.size(), third.id, {});
+    require(moved_into_root.has_value() &&
+            moved_into_root->document.groups.front().layer_ids == QStringList{first.id} &&
+            moved_into_root->document.layers.at(3).id == second.id &&
+            moved_into_root->document.layers.at(3).parent_group_id.isEmpty() &&
+            moved_into_root->selected_layer_id == third.id,
+            QStringLiteral("Moving a child to the root lost membership or selection."));
+    const auto moved_into_group = ImageLayerStackEditor::moveItem(
+        moved_into_root->document, second.id, false, group_id, 1,
+        third.id, {});
+    require(moved_into_group.has_value() &&
+            moved_into_group->document.groups.front().layer_ids ==
+                QStringList{first.id, second.id},
+            QStringLiteral("Moving a root layer into a group did not preserve child order."));
+
+    const auto new_group = ImageLayerStackEditor::addGroup(
+        grouped->document, first.id, {}, &error);
+    require(new_group.has_value() && error.isEmpty() &&
+            new_group->document.root_stack.size() == 4 &&
+            new_group->document.root_stack.at(2).group &&
+            new_group->selected_group_id == new_group->document.root_stack.at(2).id,
+            QStringLiteral("Adding a group around a selected child created an invalid nesting."));
+    const auto reordered_group = ImageLayerStackEditor::moveItemBy(
+        new_group->document, group_id, true, 1,
+        new_group->selected_layer_id, new_group->selected_group_id);
+    require(reordered_group.has_value() &&
+            reordered_group->document.root_stack.at(1).id == new_group->selected_group_id &&
+            reordered_group->document.root_stack.at(2).id == group_id &&
+            reordered_group->selected_group_id == new_group->selected_group_id,
+            QStringLiteral("Moving a group changed its sibling order or selection incorrectly."));
+
+    const auto ungrouped = ImageLayerStackEditor::ungroup(
+        grouped->document, group_id, {}, group_id);
+    require(ungrouped.has_value() && ungrouped->document.groups.isEmpty() &&
+            ungrouped->document.root_stack.mid(1, 2) ==
+                QVector<ImageStackItemData>{{first.id, false}, {second.id, false}} &&
+            ungrouped->selected_layer_id == second.id &&
+            ungrouped->selected_group_id.isEmpty(),
+            QStringLiteral("Ungrouping did not restore child order and selection."));
+
+    const auto deleted = ImageLayerStackEditor::deleteItems(
+        grouped->document, {{group_id, true}}, first.id, {});
+    require(deleted.has_value() && deleted->document.groups.isEmpty() &&
+            deleted->document.layers == QVector<ImageLayerData>{background, third} &&
+            deleted->document.root_stack ==
+                QVector<ImageStackItemData>{{background.id, false}, {third.id, false}} &&
+            deleted->selected_layer_id == third.id,
+            QStringLiteral("Deleting a group did not remove its children or choose a valid selection."));
+    require(!ImageLayerStackEditor::deleteItems(
+                document, {{background.id, false}}, first.id, {}).has_value() &&
+            !ImageLayerStackEditor::moveItemBy(
+                document, background.id, false, -1, first.id, {}).has_value(),
+            QStringLiteral("Background was allowed to be deleted or reordered."));
+
+    ImageDocumentData full = document;
+    while (ImageLayerStackEditor::itemCount(full) < ImageDocumentStore::kMaximumLayers) {
+        ImageGroupData filler;
+        filler.id = QStringLiteral("filler-%1").arg(full.groups.size());
+        full.groups.append(std::move(filler));
+    }
+    const auto full_before = full;
+    require(!ImageLayerStackEditor::addLayer(full, first.id, {}).has_value() &&
+            !ImageLayerStackEditor::addGroup(full, first.id, {}, &error).has_value() &&
+            !error.isEmpty() && full == full_before,
+            QStringLiteral("Stack capacity rejection changed the candidate source."));
+}
+
 void testLayerGroups(const QString& root) {
     image_editor::ImageDocumentSession session;
     QString error;
@@ -2743,6 +2872,7 @@ int main(int argc, char* argv[]) {
         testCropNoOpAndInvalidOperations(root);
         testGeneralObjectOperations(root);
         testLayerManagementTransformsAndOpacity(root);
+        testImageLayerStackEditor();
         testLayerGroups(root);
         testAreaSelectionClipPersistenceAndRendering(root);
         testMissingSourceAndRelink(root);
