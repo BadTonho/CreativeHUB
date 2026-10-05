@@ -153,11 +153,14 @@ do início da etapa seguinte.
 - A compilação Release da aplicação, da UI e da UI de exportação passou após a
   extração de Pintura, Borracha e Seleção de Área. Os testes focados passaram
   em 8/8, incluindo a nova cobertura de estado da ferramenta e os consumidores
-  do Video Editor relacionados à publicação de imagens. A suíte CTest completa
-  passou em 69/70: `creative-suite-main-editor-project-settings-ui` não encontrou
-  os dois arquivos de mídia esperados pelo fixture. A validação manual permanece
-  pendente com o mantenedor. Esta extração não transforma a proposta gradual em
-  uma decisão final para as demais ferramentas ou para a arquitetura completa.
+  do Video Editor relacionados à publicação de imagens. A primeira execução
+  completa de CTest passou em 69/70 porque o executável Release de
+  `creative-suite-main-editor-main-window-tests` estava desatualizado e não
+  reconhecia `--project-settings`. Depois de recompilar esse alvo, o teste de
+  configurações e os quatro testes relacionados do Video Editor passaram. A
+  validação manual permanece pendente com o mantenedor. Esta extração não
+  transforma a proposta gradual em uma decisão final para as demais ferramentas
+  ou para a arquitetura completa.
 
 ## Referências
 
