@@ -329,15 +329,22 @@ documentation only; the CPU renderer described here remains the implementation.
 separate operation vector. Undo snapshots share operation buffers rather than
 copying a canvas-sized bitmap per stroke. `ImageDocumentSession` exposes mask
 creation/removal, enablement, painting, erasing, transient previews, and small
-mask thumbnails. Masks begin white and replay grayscale strokes and fixed
-canvas transforms. Mask luminance multiplies premultiplied layer pixels before
-opacity and group composition. Empty white masks avoid a full-size allocation.
-Exports and linked publication use the same raster-layer renderer.
+mask thumbnails. It delegates mask-stroke validation and operation preparation
+to the stateless `ImageLayerMaskEditor`; the session still applies the returned
+operation and records it in Undo/Redo. Mask previews append a prepared operation
+to a temporary document value and use the existing renderer without changing
+the session or history. Masks begin white and replay grayscale strokes and
+fixed-canvas transforms. Mask luminance multiplies premultiplied layer pixels
+before opacity and group composition. Empty white masks avoid a full-size
+allocation. Exports and linked publication use the same raster-layer renderer.
 
-Layer transforms are appended to both content and existing mask operations.
-Painting in a transformed parent group uses inverse group geometry. Object
-selection transforms affect content objects while the layer mask remains in
-the layer canvas. Masks are not independently selectable canvas objects.
+`ImageDocumentGeometry` centralizes point transforms, mapping stroke points and
+selection clips through parent-group operations, clip validation, and image
+bounds used by Paint, Eraser, and mask editing. Layer transforms are appended to
+both content and existing mask operations. Painting in a transformed parent
+group uses inverse group geometry. Object selection transforms affect content
+objects while the layer mask remains in the layer canvas. Masks are not
+independently selectable canvas objects.
 
 The Layers dock displays the grayscale mask beside the content thumbnail;
 the active target has a highlighted border and a disabled mask has a slash.

@@ -1,6 +1,8 @@
 #include "image_document_session.h"
+#include "image_document_geometry.h"
 #include "image_document_renderer.h"
 #include "image_document_utils.h"
+#include "image_layer_mask_editor.h"
 
 #include <QFileInfo>
 #include <QImageReader>
@@ -22,79 +24,6 @@ void assignError(QString* error, const QString& message) {
     if (error != nullptr) *error = message;
 }
 
-QPainterPath rectPath(const QRectF& rect) {
-    QPainterPath path;
-    path.addRect(rect);
-    return path;
-}
-
-QPointF transformShapePoint(QPointF point,
-                            const ImageOperation& operation,
-                            const QSize& canvas_size,
-                            bool inverse = false) {
-    const QRect bounds = operation.transform_bounds.isValid() &&
-        !operation.transform_bounds.isEmpty()
-        ? operation.transform_bounds : QRect(QPoint(), canvas_size);
-    if (operation.kind == OperationKind::FlipHorizontal) {
-        point.setX(bounds.x() + bounds.width() - 1.0 - point.x());
-    } else if (operation.kind == OperationKind::FlipVertical) {
-        point.setY(bounds.y() + bounds.height() - 1.0 - point.y());
-    } else if (operation.kind == OperationKind::Rotate) {
-        QTransform transform;
-        const qreal center_x = bounds.x() + bounds.width() / 2.0;
-        const qreal center_y = bounds.y() + bounds.height() / 2.0;
-        transform.translate(center_x, center_y);
-        transform.rotate((inverse ? -operation.quarter_turns : operation.quarter_turns) * 90.0);
-        transform.translate(-center_x, -center_y);
-        point = transform.map(point);
-    }
-    return point;
-}
-
-QTransform geometryTransform(const ImageOperation& operation,
-                             const QSize& canvas_size,
-                             bool inverse) {
-    const QPointF origin = transformShapePoint({}, operation, canvas_size, inverse);
-    const QPointF x_axis = transformShapePoint({1.0, 0.0}, operation,
-                                                canvas_size, inverse) - origin;
-    const QPointF y_axis = transformShapePoint({0.0, 1.0}, operation,
-                                                canvas_size, inverse) - origin;
-    return QTransform(x_axis.x(), x_axis.y(), y_axis.x(), y_axis.y(),
-                      origin.x(), origin.y());
-}
-
-void mapStrokeGeometryThroughGroup(QVector<QPointF>* points,
-                                   std::optional<QPainterPath>* clipping_path,
-                                   const ImageGroupData* parent,
-                                   const QSize& canvas_size) {
-    if (parent == nullptr) return;
-    for (auto operation = parent->operations.crbegin();
-         operation != parent->operations.crend(); ++operation) {
-        if (points != nullptr) {
-            for (QPointF& point : *points) {
-                point = transformShapePoint(point, *operation, canvas_size, true);
-            }
-        }
-        if (clipping_path != nullptr && clipping_path->has_value()) {
-            clipping_path->value() = geometryTransform(
-                *operation, canvas_size, true).map(clipping_path->value());
-        }
-    }
-}
-
-bool validStrokeClipPath(const QPainterPath& path) {
-    if (path.isEmpty() || path.elementCount() < 1 ||
-        path.elementCount() > ImageDocumentStore::kMaximumStrokeClipPathElements) return false;
-    for (int index = 0; index < path.elementCount(); ++index) {
-        const auto element = path.elementAt(index);
-        if (!std::isfinite(element.x) || !std::isfinite(element.y) ||
-            std::abs(element.x) > 1'000'000.0 || std::abs(element.y) > 1'000'000.0) {
-            return false;
-        }
-    }
-    return true;
-}
-
 void transformObjectGeometry(ImageOperation* operation,
                              const ImageOperation& transform,
                              const QSize& canvas_size,
@@ -103,14 +32,18 @@ void transformObjectGeometry(ImageOperation* operation,
     auto transform_points = [&transform, &canvas_size, inverse](QVector<QPointF>* points) {
         if (points == nullptr) return;
         for (QPointF& point : *points) {
-            point = transformShapePoint(point, transform, canvas_size, inverse);
+            point = ImageDocumentGeometry::transformPoint(
+                point, transform, canvas_size, inverse);
         }
     };
     switch (operation->kind) {
     case OperationKind::RasterImage: {
-        const auto origin = transformShapePoint({}, transform, canvas_size, inverse);
-        const auto x = transformShapePoint({1, 0}, transform, canvas_size, inverse) - origin;
-        const auto y = transformShapePoint({0, 1}, transform, canvas_size, inverse) - origin;
+        const auto origin = ImageDocumentGeometry::transformPoint(
+            {}, transform, canvas_size, inverse);
+        const auto x = ImageDocumentGeometry::transformPoint(
+            {1, 0}, transform, canvas_size, inverse) - origin;
+        const auto y = ImageDocumentGeometry::transformPoint(
+            {0, 1}, transform, canvas_size, inverse) - origin;
         // Raster geometry describes pixel edges; flips use the canvas edge.
         QPointF offset = origin;
         if (transform.kind == OperationKind::FlipHorizontal) offset.rx() += 1;
@@ -121,7 +54,7 @@ void transformObjectGeometry(ImageOperation* operation,
     case OperationKind::PaintStroke:
         transform_points(&operation->paint_stroke.points);
         if (operation->paint_stroke.clipping_path.has_value()) {
-            operation->paint_stroke.clipping_path = geometryTransform(
+            operation->paint_stroke.clipping_path = ImageDocumentGeometry::operationTransform(
                 transform, canvas_size, inverse).map(
                     *operation->paint_stroke.clipping_path);
         }
@@ -129,21 +62,21 @@ void transformObjectGeometry(ImageOperation* operation,
     case OperationKind::EraseStroke:
         transform_points(&operation->erase_stroke.points);
         if (operation->erase_stroke.clipping_path.has_value()) {
-            operation->erase_stroke.clipping_path = geometryTransform(
+            operation->erase_stroke.clipping_path = ImageDocumentGeometry::operationTransform(
                 transform, canvas_size, inverse).map(
                     *operation->erase_stroke.clipping_path);
         }
         break;
     case OperationKind::Shape:
-        operation->shape.start = transformShapePoint(
+        operation->shape.start = ImageDocumentGeometry::transformPoint(
             operation->shape.start, transform, canvas_size, inverse);
-        operation->shape.end = transformShapePoint(
+        operation->shape.end = ImageDocumentGeometry::transformPoint(
             operation->shape.end, transform, canvas_size, inverse);
         break;
     case OperationKind::Text: {
-        const QPointF top_left = transformShapePoint(
+        const QPointF top_left = ImageDocumentGeometry::transformPoint(
             operation->text.position, transform, canvas_size, inverse);
-        const QPointF bottom_right = transformShapePoint(
+        const QPointF bottom_right = ImageDocumentGeometry::transformPoint(
             operation->text.position + QPointF(operation->text.box_width, 0.0),
             transform, canvas_size, inverse);
         operation->text.position = QPointF(std::min(top_left.x(), bottom_right.x()),
@@ -985,11 +918,13 @@ QImage ImageDocumentSession::renderedImageWithEraseStroke(
     if (auto* selected = findLayer(preview_document, selected_layer_id_)) {
         QVector<QPointF> local_points = points;
         const auto* parent = findGroup(preview_document, selected->parent_group_id);
-        mapStrokeGeometryThroughGroup(&local_points, &clipping_path, parent, size);
+        ImageDocumentGeometry::mapStrokeGeometryThroughGroup(
+            &local_points, &clipping_path, parent, size);
         if (clipping_path.has_value()) {
             clipping_path = clipping_path->intersected(
-                rectPath(QRectF(QPointF(0.0, 0.0), QSizeF(size))));
-            if (!validStrokeClipPath(*clipping_path)) return renderedImage();
+                ImageDocumentGeometry::imageBoundsPath(size));
+            if (!ImageDocumentGeometry::isValidStrokeClipPath(*clipping_path))
+                return renderedImage();
         }
         ImageOperation preview;
         preview.kind = OperationKind::EraseStroke;
@@ -1121,7 +1056,8 @@ bool ImageDocumentSession::applyPaintStroke(const QVector<QPointF>& points,
             return false;
         }
     }
-    if (clipping_path.has_value() && !validStrokeClipPath(*clipping_path)) {
+    if (clipping_path.has_value() &&
+        !ImageDocumentGeometry::isValidStrokeClipPath(*clipping_path)) {
         assignError(error, QStringLiteral("The paint selection has invalid or excessive geometry."));
         return false;
     }
@@ -1129,11 +1065,12 @@ bool ImageDocumentSession::applyPaintStroke(const QVector<QPointF>& points,
 
     QVector<QPointF> local_points = points;
     const auto* parent = findGroup(data_, data_.layers.at(layerIndex(selected_layer_id_)).parent_group_id);
-    mapStrokeGeometryThroughGroup(&local_points, &clipping_path, parent, size);
+    ImageDocumentGeometry::mapStrokeGeometryThroughGroup(
+        &local_points, &clipping_path, parent, size);
     if (clipping_path.has_value()) {
         clipping_path = clipping_path->intersected(
-            rectPath(QRectF(QPointF(0.0, 0.0), QSizeF(size))));
-        if (!validStrokeClipPath(*clipping_path)) return false;
+            ImageDocumentGeometry::imageBoundsPath(size));
+        if (!ImageDocumentGeometry::isValidStrokeClipPath(*clipping_path)) return false;
     }
     for (QPointF& point : local_points) {
         if (!std::isfinite(point.x()) || !std::isfinite(point.y()) ||
@@ -1186,18 +1123,20 @@ bool ImageDocumentSession::applyEraseStroke(const QVector<QPointF>& points,
             return false;
         }
     }
-    if (clipping_path.has_value() && !validStrokeClipPath(*clipping_path)) {
+    if (clipping_path.has_value() &&
+        !ImageDocumentGeometry::isValidStrokeClipPath(*clipping_path)) {
         assignError(error, QStringLiteral("The erase selection has invalid or excessive geometry."));
         return false;
     }
 
     QVector<QPointF> local_points = points;
     const auto* parent = findGroup(data_, data_.layers.at(layerIndex(selected_layer_id_)).parent_group_id);
-    mapStrokeGeometryThroughGroup(&local_points, &clipping_path, parent, size);
+    ImageDocumentGeometry::mapStrokeGeometryThroughGroup(
+        &local_points, &clipping_path, parent, size);
     if (clipping_path.has_value()) {
         clipping_path = clipping_path->intersected(
-            rectPath(QRectF(QPointF(0.0, 0.0), QSizeF(size))));
-        if (!validStrokeClipPath(*clipping_path)) return false;
+            ImageDocumentGeometry::imageBoundsPath(size));
+        if (!ImageDocumentGeometry::isValidStrokeClipPath(*clipping_path)) return false;
     }
     for (QPointF& point : local_points) {
         if (!std::isfinite(point.x()) || !std::isfinite(point.y()) ||
@@ -1468,17 +1407,19 @@ bool ImageDocumentSession::updateShapeRendered(const ImageShapeData& rendered_sh
                 const auto* parent_group = findGroup(data_, layer.parent_group_id);
                 if (parent_group != nullptr) {
                     for (qsizetype suffix = parent_group->operations.size(); suffix > 0; --suffix) {
-                        stored_shape.start = transformShapePoint(stored_shape.start,
+                        stored_shape.start = ImageDocumentGeometry::transformPoint(stored_shape.start,
                             parent_group->operations.at(suffix - 1), size, true);
-                        stored_shape.end = transformShapePoint(stored_shape.end,
+                        stored_shape.end = ImageDocumentGeometry::transformPoint(stored_shape.end,
                             parent_group->operations.at(suffix - 1), size, true);
                     }
                 }
             }
             for (qsizetype suffix = layer.operations.size(); suffix > index + 1; --suffix) {
                 const auto& later = layer.operations.at(suffix - 1);
-                stored_shape.start = transformShapePoint(stored_shape.start, later, size, true);
-                stored_shape.end = transformShapePoint(stored_shape.end, later, size, true);
+                stored_shape.start = ImageDocumentGeometry::transformPoint(
+                    stored_shape.start, later, size, true);
+                stored_shape.end = ImageDocumentGeometry::transformPoint(
+                    stored_shape.end, later, size, true);
             }
             return updateShape(stored_shape, error);
         }
@@ -1696,92 +1637,58 @@ bool ImageDocumentSession::applyLayerMaskStroke(const QVector<QPointF>& points,
                                                 const QColor& color, int diameter,
                                                 QString* error,
                                                 std::optional<QPainterPath> clipping_path) {
-    if (error != nullptr) error->clear();
-    const qsizetype index = layerIndex(selected_layer_id_);
-    if (!hasSource() || !selectedLayerIsEditable() || index <= 0 ||
-        !data_.layers.at(index).mask.has_value()) {
-        assignError(error, QStringLiteral("Select a raster layer with a mask before painting its mask."));
-        return false;
-    }
-    const QSize size = renderedSize();
-    if (!color.isValid() || points.isEmpty() ||
-        points.size() > ImageDocumentStore::kMaximumPaintStrokePoints ||
-        diameter < 1 || diameter > ImageDocumentStore::kMaximumPaintBrushDiameter ||
-        data_.layers.at(index).mask->operations.size() >= ImageDocumentStore::kMaximumOperations) {
-        assignError(error, QStringLiteral("The mask stroke color, size, or operation count is invalid."));
-        return false;
-    }
-    QVector<QPointF> local_points;
-    local_points.reserve(points.size());
-    const auto* parent = findGroup(data_, data_.layers.at(index).parent_group_id);
-    if (clipping_path.has_value() && !validStrokeClipPath(*clipping_path)) {
-        assignError(error, QStringLiteral("The mask selection has invalid or excessive geometry."));
-        return false;
-    }
-    for (const auto& point : points) {
-        if (!std::isfinite(point.x()) || !std::isfinite(point.y()) ||
-            point.x() < 0.0 || point.y() < 0.0 ||
-            point.x() >= size.width() || point.y() >= size.height()) {
-            assignError(error, QStringLiteral("The mask stroke contains a point outside the canvas."));
-            return false;
-        }
-        QPointF local = point;
-        if (parent != nullptr) {
-            for (auto operation = parent->operations.crbegin(); operation != parent->operations.crend(); ++operation) {
-                local = transformShapePoint(local, *operation, size, true);
-            }
-        }
-        if (local.x() >= 0.0 && local.y() >= 0.0 && local.x() < size.width() && local.y() < size.height()) {
-            local_points.append(local);
-        }
-    }
-    mapStrokeGeometryThroughGroup(nullptr, &clipping_path, parent, size);
-    if (clipping_path.has_value()) {
-        clipping_path = clipping_path->intersected(
-            rectPath(QRectF(QPointF(0.0, 0.0), QSizeF(size))));
-        if (!validStrokeClipPath(*clipping_path)) return false;
-    }
-    if (color.alpha() == 0 || local_points.isEmpty()) return false;
-    ImageOperation operation;
-    operation.kind = OperationKind::PaintStroke;
-    operation.paint_stroke.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    operation.paint_stroke.points = std::move(local_points);
-    const int gray = qGray(color.rgb());
-    operation.paint_stroke.color = QColor(gray, gray, gray, color.alpha());
-    operation.paint_stroke.diameter = diameter;
-    operation.paint_stroke.clipping_path = std::move(clipping_path);
-    pushEdit();
-    data_.layers[index].mask->operations.append(std::move(operation));
-    return true;
+    return applyLayerMaskStrokeInternal(points, color, diameter, error,
+                                        std::move(clipping_path), false);
 }
 
 bool ImageDocumentSession::applyLayerMaskEraseStroke(const QVector<QPointF>& points,
                                                      int diameter, QString* error,
                                                      std::optional<QPainterPath> clipping_path) {
-    // Reuse paint validation/history; erasing a mask writes opaque black.
-    if (!applyLayerMaskStroke(points, Qt::black, diameter, error,
-                              std::move(clipping_path))) return false;
-    auto& operation = data_.layers[layerIndex(selected_layer_id_)].mask->operations.last();
-    operation.kind = OperationKind::EraseStroke;
-    operation.erase_stroke.id = operation.paint_stroke.id;
-    operation.erase_stroke.points = operation.paint_stroke.points;
-    operation.erase_stroke.diameter = diameter;
-    operation.paint_stroke = {};
+    // Erasing a mask writes opaque black, represented by an erase operation.
+    return applyLayerMaskStrokeInternal(points, Qt::black, diameter, error,
+                                        std::move(clipping_path), true);
+}
+
+bool ImageDocumentSession::applyLayerMaskStrokeInternal(
+    const QVector<QPointF>& points, const QColor& color, int diameter,
+    QString* error, std::optional<QPainterPath> clipping_path, bool erase) {
+    if (error != nullptr) error->clear();
+    if (!hasSource() || !selectedLayerIsEditable()) {
+        assignError(error, QStringLiteral(
+            "Select a raster layer with a mask before painting its mask."));
+        return false;
+    }
+
+    auto operation = ImageLayerMaskEditor::prepareStroke(
+        data_, selected_layer_id_, renderedSize(), points, color, diameter,
+        std::move(clipping_path), erase ? ImageLayerMaskStrokeKind::Erase
+                                        : ImageLayerMaskStrokeKind::Paint,
+        error);
+    if (!operation.has_value()) return false;
+
+    const qsizetype index = layerIndex(selected_layer_id_);
+    if (index < 0 || !data_.layers.at(index).mask.has_value()) return false;
+    pushEdit();
+    data_.layers[index].mask->operations.append(std::move(*operation));
     return true;
 }
 
 QImage ImageDocumentSession::renderedImageWithMaskStroke(
     const QVector<QPointF>& points, const QColor& color, int diameter,
     std::optional<QPainterPath> clipping_path) const {
-    // A preview uses implicitly shared document/source buffers and never edits history.
-    ImageDocumentSession preview;
-    preview.data_ = data_;
-    preview.source_image_ = source_image_;
-    preview.raster_images_ = raster_images_;
-    preview.selected_layer_id_ = selected_layer_id_;
-    if (!preview.applyLayerMaskStroke(points, color, diameter, nullptr,
-                                      std::move(clipping_path))) return renderedImage();
-    return preview.renderedImage();
+    if (!hasSource() || !selectedLayerIsEditable()) return renderedImage();
+    auto operation = ImageLayerMaskEditor::prepareStroke(
+        data_, selected_layer_id_, renderedSize(), points, color, diameter,
+        std::move(clipping_path), ImageLayerMaskStrokeKind::Paint);
+    if (!operation.has_value()) return renderedImage();
+
+    // The temporary document shares image buffers and leaves session history untouched.
+    ImageDocumentData preview_document = data_;
+    auto* layer = findLayer(preview_document, selected_layer_id_);
+    if (layer == nullptr || !layer->mask.has_value()) return renderedImage();
+    layer->mask->operations.append(std::move(*operation));
+    return ImageDocumentRenderer::composite(
+        preview_document, source_image_, raster_images_);
 }
 
 QHash<QString, QImage> ImageDocumentSession::renderedLayerMaskThumbnails(

@@ -8,9 +8,13 @@ find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui Widgets)
 add_library(creative-suite-image-editor-core STATIC
     src/core/document/image_exporter.h
     src/core/document/image_exporter.cpp
+    src/core/document/image_document_geometry.cpp
+    src/core/document/image_document_geometry.h
     src/core/document/image_document_renderer.cpp
     src/core/document/image_document_renderer.h
     src/core/document/image_document_utils.h
+    src/core/document/image_layer_mask_editor.cpp
+    src/core/document/image_layer_mask_editor.h
     src/core/document/image_raster_import.cpp
     src/core/document/image_raster_import.h
     src/core/document/image_document_store.cpp

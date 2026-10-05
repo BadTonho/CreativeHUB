@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto implementadas**.
+Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, renderização/exportação e preparação de máscaras implementadas**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -155,8 +155,12 @@ montando os widgets e traduzindo ações da aplicação em operações do docume
 8. Concluída: extrair renderização para `ImageDocumentRenderer` sem estado e
    exportação para `image_exporter.cpp`; manter na sessão o documento,
    histórico, seleção e cache de miniaturas.
-9. Rever as divisões da janela principal e da persistência apenas quando seus
-   fluxos forem alterados; evitar uma reorganização geral do repositório.
+9. Concluída: extrair a preparação de traços de máscara para
+   `ImageLayerMaskEditor` e centralizar geometria de pontos, grupos, recortes e
+   limites de imagem em `ImageDocumentGeometry`. Manter aplicação e histórico
+   na sessão.
+10. Rever as divisões da janela principal e da persistência apenas quando seus
+    fluxos forem alterados; evitar uma reorganização geral do repositório.
 
 Cada etapa deve mover uma responsabilidade e preservar o comportamento antes
 do início da etapa seguinte.
@@ -247,6 +251,20 @@ cancelamento. Os alvos Release do Image Editor e os consumidores relacionados
 do Video Editor compilaram. Os 11 testes focados passaram e a suíte CTest
 completa passou em 70/70 em 2026-10-05. `git diff --check` passou. Não houve
 mudança visual, portanto não foi necessária uma verificação manual de interface.
+
+A extração de máscaras criou `ImageLayerMaskEditor`, que valida o alvo e prepara
+operações de pintura ou borracha sem alterar o documento. `ImageDocumentSession`
+continua aplicando a operação e registrando o histórico; a prévia renderiza um
+documento temporário. `ImageDocumentGeometry` reúne a transformação de pontos,
+o mapeamento de traços e recortes através de grupos, a validação de recortes e
+os limites da imagem usados pelos fluxos de Pintura, Borracha e Máscaras. Os
+testes diretos verificam transformações, recortes, conversão de cor, alvo e
+pontos inválidos, limite de operações, no-op transparente e ausência de mutação
+durante a preparação. A aplicação e os alvos afetados do Image Editor e os três
+consumidores do Video Editor compilaram em Release no Windows. Os 11 testes
+focados passaram; a suíte CTest completa passou em 70/70 em 2026-10-05.
+`git diff --check` passou. A extração não alterou a interface visual, então não
+foi necessária uma verificação manual.
 
 ## Referências
 

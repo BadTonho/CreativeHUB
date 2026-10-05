@@ -1,8 +1,11 @@
 #include "image_document_session.h"
+#include "image_document_geometry.h"
+#include "image_layer_mask_editor.h"
 #include "recovery_store.h"
 
 #include <QGuiApplication>
 #include <QFile>
+#include <QLineF>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -40,6 +43,150 @@ void writeJson(const QString& path, const QJsonObject& document) {
     QFile file(path);
     require(file.open(QIODevice::WriteOnly), file.errorString());
     require(file.write(QJsonDocument(document).toJson()) > 0, file.errorString());
+}
+
+ImageDocumentData makeMaskEditorDocument() {
+    ImageDocumentData document;
+    document.base_kind = ImageBaseKind::Canvas;
+    document.source_size = QSize(16, 16);
+    document.canvas_size = QSize(16, 16);
+
+    ImageLayerData background;
+    background.id = QStringLiteral("background");
+    background.name = QStringLiteral("Background");
+    background.background = true;
+    document.layers.append(background);
+
+    ImageGroupData group;
+    group.id = QStringLiteral("group");
+    group.name = QStringLiteral("Group");
+    ImageOperation flip;
+    flip.kind = OperationKind::FlipHorizontal;
+    flip.transform_bounds = QRect(0, 0, 16, 16);
+    group.operations.append(flip);
+    group.layer_ids.append(QStringLiteral("masked"));
+    document.groups.append(group);
+
+    ImageLayerData masked;
+    masked.id = QStringLiteral("masked");
+    masked.name = QStringLiteral("Masked");
+    masked.parent_group_id = group.id;
+    masked.mask = ImageLayerMaskData{};
+    document.layers.append(masked);
+
+    document.root_stack.append({background.id, false});
+    document.root_stack.append({group.id, true});
+    return document;
+}
+
+void testDocumentGeometry() {
+    constexpr QSize canvas_size(16, 16);
+    ImageOperation flip;
+    flip.kind = OperationKind::FlipHorizontal;
+    flip.transform_bounds = QRect(0, 0, canvas_size.width(), canvas_size.height());
+
+    ImageGroupData group;
+    group.operations.append(flip);
+    QVector<QPointF> points{QPointF(4, 6)};
+    QPainterPath clip;
+    clip.addRect(QRectF(1, 2, 4, 3));
+    std::optional<QPainterPath> clipping_path{clip};
+    ImageDocumentGeometry::mapStrokeGeometryThroughGroup(
+        &points, &clipping_path, &group, canvas_size);
+    require(points.first() == QPointF(11, 6), "Group stroke mapping did not flip the point.");
+    require(clipping_path.has_value() &&
+            qFuzzyCompare(clipping_path->boundingRect().left(), 10.0) &&
+            qFuzzyCompare(clipping_path->boundingRect().right(), 14.0),
+            "Group stroke mapping did not transform the clip geometry.");
+
+    ImageOperation rotate;
+    rotate.kind = OperationKind::Rotate;
+    rotate.quarter_turns = 1;
+    rotate.transform_bounds = QRect(0, 0, canvas_size.width(), canvas_size.height());
+    const QPointF original(2.0, 3.0);
+    const QPointF transformed = ImageDocumentGeometry::transformPoint(
+        original, rotate, canvas_size);
+    const QPointF round_trip = ImageDocumentGeometry::transformPoint(
+        transformed, rotate, canvas_size, true);
+    require(QLineF(original, round_trip).length() < 0.001,
+            "Inverse point transformation did not restore the original point.");
+
+    const QPainterPath bounds = ImageDocumentGeometry::imageBoundsPath(canvas_size);
+    require(bounds.boundingRect() == QRectF(0, 0, 16, 16) &&
+            bounds.contains(QPointF(15, 15)) && !bounds.contains(QPointF(16, 16)),
+            "Image bounds geometry does not match the canvas extent.");
+    require(ImageDocumentGeometry::isValidStrokeClipPath(clip),
+            "A normal selection clip was rejected.");
+    require(!ImageDocumentGeometry::isValidStrokeClipPath(QPainterPath()),
+            "An empty selection clip was accepted.");
+    QPainterPath excessive;
+    excessive.moveTo(0, 0);
+    excessive.lineTo(1'000'001, 1);
+    require(!ImageDocumentGeometry::isValidStrokeClipPath(excessive),
+            "A clip with coordinates outside the accepted range was accepted.");
+}
+
+void testMaskEditor() {
+    const ImageDocumentData document = makeMaskEditorDocument();
+    const ImageDocumentData original = document;
+    const QVector<QPointF> points{QPointF(4, 6)};
+    QPainterPath selection;
+    selection.addRect(QRectF(2, 2, 8, 8));
+    QString error;
+
+    const auto paint = ImageLayerMaskEditor::prepareStroke(
+        document, QStringLiteral("masked"), QSize(16, 16), points,
+        QColor(240, 60, 10, 128), 3, selection,
+        ImageLayerMaskStrokeKind::Paint, &error);
+    require(paint.has_value() && error.isEmpty(), error);
+    require(paint->kind == OperationKind::PaintStroke &&
+            paint->paint_stroke.points == QVector<QPointF>{QPointF(11, 6)} &&
+            paint->paint_stroke.diameter == 3 &&
+            paint->paint_stroke.color.red() == qGray(QColor(240, 60, 10).rgb()) &&
+            paint->paint_stroke.color.red() == paint->paint_stroke.color.green() &&
+            paint->paint_stroke.color.alpha() == 128 &&
+            paint->paint_stroke.clipping_path.has_value(),
+            "Mask paint operation was not prepared with grayscale, alpha, group, and clip data.");
+
+    const auto erase = ImageLayerMaskEditor::prepareStroke(
+        document, QStringLiteral("masked"), QSize(16, 16), points,
+        Qt::black, 5, std::nullopt, ImageLayerMaskStrokeKind::Erase, &error);
+    require(erase.has_value() && error.isEmpty() &&
+            erase->kind == OperationKind::EraseStroke &&
+            erase->erase_stroke.points == QVector<QPointF>{QPointF(11, 6)} &&
+            erase->erase_stroke.diameter == 5,
+            "Mask eraser operation was not prepared correctly.");
+    require(document == original, "Preparing mask operations mutated the document.");
+
+    require(!ImageLayerMaskEditor::prepareStroke(
+                document, QStringLiteral("background"), QSize(16, 16), points,
+                Qt::black, 3, std::nullopt, ImageLayerMaskStrokeKind::Paint, &error) &&
+            !error.isEmpty(), "Background was accepted as a mask target.");
+    ImageDocumentData no_mask = document;
+    no_mask.layers.last().mask.reset();
+    require(!ImageLayerMaskEditor::prepareStroke(
+                no_mask, QStringLiteral("masked"), QSize(16, 16), points,
+                Qt::black, 3, std::nullopt, ImageLayerMaskStrokeKind::Paint, &error) &&
+            !error.isEmpty(), "A layer without a mask was accepted as a target.");
+    require(!ImageLayerMaskEditor::prepareStroke(
+                document, QStringLiteral("masked"), QSize(16, 16),
+                {QPointF(16, 1)}, Qt::black, 3, std::nullopt,
+                ImageLayerMaskStrokeKind::Paint, &error) && !error.isEmpty(),
+            "A stroke point outside the canvas was accepted.");
+
+    ImageDocumentData full_mask = document;
+    full_mask.layers.last().mask->operations.resize(
+        ImageDocumentStore::kMaximumOperations);
+    require(!ImageLayerMaskEditor::prepareStroke(
+                full_mask, QStringLiteral("masked"), QSize(16, 16), points,
+                Qt::black, 3, std::nullopt, ImageLayerMaskStrokeKind::Paint, &error) &&
+            !error.isEmpty(), "A full mask accepted another operation.");
+
+    const auto transparent = ImageLayerMaskEditor::prepareStroke(
+        document, QStringLiteral("masked"), QSize(16, 16), points,
+        Qt::transparent, 3, std::nullopt, ImageLayerMaskStrokeKind::Paint, &error);
+    require(!transparent.has_value() && error.isEmpty(),
+            "Transparent mask paint did not remain a no-op.");
 }
 
 void testMasks(const QString& root) {
@@ -284,6 +431,8 @@ int main(int argc, char** argv) {
     QTemporaryDir temporary;
     try {
         require(temporary.isValid(), "Could not create mask test directory.");
+        testDocumentGeometry();
+        testMaskEditor();
         testMasks(temporary.path());
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

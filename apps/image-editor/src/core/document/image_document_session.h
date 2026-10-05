@@ -190,6 +190,10 @@ private:
     [[nodiscard]] qsizetype groupIndex(const QString& group_id) const noexcept;
     [[nodiscard]] QString parentGroupForLayer(const QString& layer_id) const;
     [[nodiscard]] bool effectiveLayerVisible(const ImageLayerData& layer) const;
+    [[nodiscard]] bool applyLayerMaskStrokeInternal(
+        const QVector<QPointF>& points, const QColor& color, int diameter,
+        QString* error, std::optional<QPainterPath> clipping_path,
+        bool erase);
     [[nodiscard]] bool loadSource(const QString& path, QImage* image, QString* error) const;
     [[nodiscard]] QSize renderedSize() const;
     void loadRasterSources();
