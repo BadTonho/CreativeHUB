@@ -3,6 +3,7 @@
 #include "image_document_store.h"
 #include "../tools/brush/eraser_tool.h"
 #include "../tools/brush/paint_tool.h"
+#include "../tools/crop/crop_tool.h"
 #include "../tools/selection/area_selection_tool.h"
 #include "../tools/selection/object/object_selection_tool.h"
 #include "../tools/shapes/shape_tool.h"
@@ -112,7 +113,8 @@ protected:
 
 private:
     [[nodiscard]] QRectF imageTargetRect() const;
-    [[nodiscard]] QRect cropToImageCoordinates(const QRectF& selection) const;
+    [[nodiscard]] CropToolContext cropToolContext() const;
+    [[nodiscard]] QPointF widgetToCropImageCoordinates(const QPointF& position) const;
     [[nodiscard]] QPointF widgetToImageCoordinates(const QPointF& position) const;
     void updateHoverCursor(const QPointF& position);
     [[nodiscard]] BrushToolContext brushToolContext(const QPointF& position) const;
@@ -144,12 +146,9 @@ private:
     bool text_creation_mode_ = false;
     bool object_selection_mode_ = false;
     bool area_selection_mode_ = false;
-    bool selecting_crop_ = false;
     bool resizing_brush_ = false;
     bool shift_constrain_held_ = false;
     bool panning_ = false;
-    QPointF crop_start_;
-    QRectF crop_selection_;
     QPointF pan_start_;
     QPointF initial_pan_;
     QPointF brush_resize_start_;
@@ -157,6 +156,7 @@ private:
     int brush_resize_initial_diameter_ = 12;
     PaintTool paint_tool_;
     EraserTool eraser_tool_;
+    CropTool crop_tool_;
     AreaSelectionTool area_selection_tool_;
     ObjectSelectionTool object_selection_tool_;
     ShapeTool shape_tool_;

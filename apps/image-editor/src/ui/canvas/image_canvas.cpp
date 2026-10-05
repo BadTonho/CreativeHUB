@@ -51,7 +51,7 @@ void ImageCanvas::setImage(QImage image, bool resetView) {
     if (resetView) {
         pan_ = {};
         fit_to_window_ = true;
-        crop_selection_ = {};
+        static_cast<void>(crop_tool_.cancelGesture());
         clearAreaSelection();
         fitToWindow();
     }
@@ -68,10 +68,9 @@ void ImageCanvas::setCropMode(bool enabled) {
         shape_creation_mode_ = false;
         object_selection_mode_ = false;
     }
-    selecting_crop_ = false;
+    static_cast<void>(crop_tool_.cancelGesture());
     transient_image_ = {};
     resizing_brush_ = false;
-    crop_selection_ = {};
     setCursor(enabled ? Qt::CrossCursor
                       : ((paint_mode_ || eraser_mode_) ? Qt::BlankCursor : Qt::ArrowCursor));
     update();
@@ -89,8 +88,7 @@ void ImageCanvas::setPaintMode(bool enabled) {
     }
     transient_image_ = {};
     resizing_brush_ = false;
-    selecting_crop_ = false;
-    crop_selection_ = {};
+    static_cast<void>(crop_tool_.cancelGesture());
     setCursor(enabled ? Qt::BlankCursor
                       : (crop_mode_ ? Qt::CrossCursor
                                     : (eraser_mode_ ? Qt::BlankCursor : Qt::ArrowCursor)));
@@ -109,8 +107,7 @@ void ImageCanvas::setEraserMode(bool enabled) {
     }
     resizing_brush_ = false;
     transient_image_ = {};
-    selecting_crop_ = false;
-    crop_selection_ = {};
+    static_cast<void>(crop_tool_.cancelGesture());
     setCursor(enabled ? Qt::BlankCursor
                       : (crop_mode_ ? Qt::CrossCursor
                                      : (paint_mode_ ? Qt::BlankCursor : Qt::ArrowCursor)));
@@ -127,11 +124,10 @@ void ImageCanvas::setShapeCreationMode(bool enabled) {
         object_selection_mode_ = false;
         text_creation_mode_ = false;
     }
-    selecting_crop_ = false;
+    static_cast<void>(crop_tool_.cancelGesture());
     static_cast<void>(shape_tool_.cancelGesture());
     clearObjectInteraction();
     transient_image_ = {};
-    crop_selection_ = {};
     resetBrushTools(false);
     setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
     update();
@@ -154,7 +150,7 @@ void ImageCanvas::setTextCreationMode(bool enabled) {
     static_cast<void>(text_tool_.cancelFrame());
     clearObjectInteraction();
     transient_image_ = {};
-    crop_selection_ = {};
+    static_cast<void>(crop_tool_.cancelGesture());
     resetBrushTools(false);
     setCursor(enabled ? Qt::IBeamCursor : Qt::ArrowCursor);
     update();
@@ -170,11 +166,10 @@ void ImageCanvas::setObjectSelectionMode(bool enabled) {
         shape_creation_mode_ = false;
         text_creation_mode_ = false;
     }
-    selecting_crop_ = false;
+    static_cast<void>(crop_tool_.cancelGesture());
     static_cast<void>(shape_tool_.cancelGesture());
     clearObjectInteraction();
     transient_image_ = {};
-    crop_selection_ = {};
     resetBrushTools(false);
     setCursor(Qt::ArrowCursor);
     update();
@@ -191,7 +186,7 @@ void ImageCanvas::setAreaSelectionMode(bool enabled) {
         object_selection_mode_ = false;
     }
     static_cast<void>(area_selection_tool_.cancelGesture());
-    selecting_crop_ = false;
+    static_cast<void>(crop_tool_.cancelGesture());
     static_cast<void>(shape_tool_.cancelGesture());
     static_cast<void>(text_tool_.cancelFrame());
     clearObjectInteraction();
@@ -334,20 +329,19 @@ TextToolContext ImageCanvas::textToolContext() const {
     return {image_.size(), imageTargetRect(), zoom_};
 }
 
-QRect ImageCanvas::cropToImageCoordinates(const QRectF& selection) const {
-    const QRectF target = imageTargetRect();
-    const QRectF clipped = selection.normalized().intersected(target);
-    if (clipped.isEmpty() || zoom_ <= 0.0) return {};
+CropToolContext ImageCanvas::cropToolContext() const {
+    return {image_.size(), imageTargetRect(), zoom_};
+}
 
-    const int left = std::clamp(static_cast<int>(std::floor((clipped.left() - target.left()) / zoom_)),
-                                0, image_.width());
-    const int top = std::clamp(static_cast<int>(std::floor((clipped.top() - target.top()) / zoom_)),
-                               0, image_.height());
-    const int right = std::clamp(static_cast<int>(std::ceil((clipped.right() - target.left()) / zoom_)),
-                                 0, image_.width());
-    const int bottom = std::clamp(static_cast<int>(std::ceil((clipped.bottom() - target.top()) / zoom_)),
-                                  0, image_.height());
-    return QRect(left, top, right - left, bottom - top);
+QPointF ImageCanvas::widgetToCropImageCoordinates(const QPointF& position) const {
+    const QRectF target = imageTargetRect();
+    if (target.isEmpty() || zoom_ <= 0.0) return {};
+    const qreal x = (position.x() - target.left()) / zoom_;
+    const qreal y = (position.y() - target.top()) / zoom_;
+    // Crop coordinates describe image edges, so the far edge is width/height
+    // rather than the last pixel center used by widgetToImageCoordinates().
+    return {std::clamp(x, 0.0, static_cast<qreal>(image_.width())),
+            std::clamp(y, 0.0, static_cast<qreal>(image_.height()))};
 }
 
 QPointF ImageCanvas::widgetToImageCoordinates(const QPointF& position) const {
@@ -590,13 +584,7 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
     // together. Painting a second copy here duplicates selection; TextTool
     // paints committed text objects below.
 
-    if (crop_mode_ && selecting_crop_) {
-        const QRectF selection = crop_selection_.normalized().intersected(target);
-        painter.fillRect(selection, QColor(38, 150, 220, 36));
-        QPen pen(QColor(120, 205, 255), 1.5, Qt::DashLine);
-        painter.setPen(pen);
-        painter.drawRect(selection);
-    }
+    if (crop_mode_) crop_tool_.paintOverlay(painter, cropToolContext());
 
     const auto brush_context = brushToolContext({});
     if (paint_mode_) paint_tool_.paintOverlay(painter, brush_context);
@@ -655,9 +643,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
     }
     if (crop_mode_ && event->button() == Qt::LeftButton &&
         imageTargetRect().contains(event->position())) {
-        selecting_crop_ = true;
-        crop_start_ = event->position();
-        crop_selection_ = QRectF(crop_start_, crop_start_);
+        crop_tool_.beginGesture(widgetToCropImageCoordinates(event->position()));
         update();
         event->accept();
         return;
@@ -751,8 +737,8 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (selecting_crop_) {
-        crop_selection_ = QRectF(crop_start_, event->position()).normalized();
+    if (crop_tool_.gestureActive()) {
+        crop_tool_.updateGesture(widgetToCropImageCoordinates(event->position()));
         update();
         event->accept();
         return;
@@ -819,11 +805,10 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (event->button() == Qt::LeftButton && selecting_crop_) {
-        selecting_crop_ = false;
-        const QRect selection = cropToImageCoordinates(crop_selection_);
-        crop_selection_ = {};
-        if (selection.width() > 1 && selection.height() > 1) emit cropSelected(selection);
+    if (event->button() == Qt::LeftButton && crop_tool_.gestureActive()) {
+        const auto selection = crop_tool_.finishGesture(
+            widgetToCropImageCoordinates(event->position()), image_.size());
+        if (selection) emit cropSelected(*selection);
         update();
         event->accept();
         return;

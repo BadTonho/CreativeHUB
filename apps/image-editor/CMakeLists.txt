@@ -55,6 +55,8 @@ add_executable(creative-suite-image-editor
     src/ui/tools/brush/paint_tool.h
     src/ui/tools/brush/eraser_tool.cpp
     src/ui/tools/brush/eraser_tool.h
+    src/ui/tools/crop/crop_tool.cpp
+    src/ui/tools/crop/crop_tool.h
     src/ui/tools/selection/area_selection_tool.cpp
     src/ui/tools/selection/area_selection_tool.h
     src/ui/tools/selection/object/object_selection_tool.cpp

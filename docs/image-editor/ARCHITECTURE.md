@@ -23,6 +23,11 @@ persistence, and recovery.
   and stroke-overlay drawing between the brush tools. `paint_tool.*` and
   `eraser_tool.*` own their gesture and preview rules; they return preview or
   edit requests for `ImageCanvas` to forward through its existing signals.
+- `src/ui/tools/crop/crop_tool.*` owns the temporary crop gesture, normalized
+  and image-bounded geometry, selection preview, and pixel-region result.
+  `ImageCanvas` supplies positions in image-edge coordinates and the view
+  context, then forwards the existing `cropSelected` signal. `ImageEditorWindow`
+  still applies the crop through the document session and history.
 - `src/ui/tools/selection/area_selection_tool.*` owns each canvas's temporary
   Area Selection path, gesture geometry, Replace/Add/Subtract operations,
   cancellation, bounds clipping, complexity limit, and preview overlay.
@@ -50,8 +55,8 @@ persistence, and recovery.
   `ImageCanvas` maps pointer coordinates, supplies the image/view context, and
   forwards its stable public signals. `ImageEditorWindow` retains shared text
   options and commits confirmed edits through the document session.
-- Tool families use subdirectories such as `brush/`, `selection/`, `shapes/`,
-  and `text/` to keep the tools area navigable as it grows.
+- Tool families use subdirectories such as `brush/`, `crop/`, `selection/`,
+  `shapes/`, and `text/` to keep the tools area navigable as it grows.
 
 ## Linked image resources and geometry
 

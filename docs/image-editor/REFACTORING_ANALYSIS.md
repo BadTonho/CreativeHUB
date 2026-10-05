@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha, Seleção de Área, Seleção de Objetos, Formas e Texto implementadas**.
+Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto implementadas**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -50,6 +50,8 @@ ui/
       brush_tool.*
       paint_tool.*
       eraser_tool.*
+    crop/
+      crop_tool.*
     selection/
       area_selection_tool.*
       object_selection_tool.*
@@ -97,6 +99,12 @@ cancelamento. `ImageCanvas` converte as posições, fornece o contexto de tamanh
 e zoom e encaminha os sinais públicos existentes; a janela continua dona das
 opções compartilhadas e confirma o resultado na sessão do documento.
 
+`CropTool` mantém o gesto temporário, normaliza os cantos arrastados em qualquer
+ordem, limita a prévia aos limites da imagem e retorna a região válida em pixels.
+`ImageCanvas` converte as posições da interface para coordenadas de borda da
+imagem, coordena o modo ativo e preserva o sinal público; a janela aplica o
+resultado pela sessão e pelo histórico.
+
 As interfaces das ferramentas devem usar contextos leves e resultados/eventos
 para prévia e confirmação. Evite copiar buffers de imagem completos entre
 interface e núcleo durante eventos comuns do mouse.
@@ -142,9 +150,11 @@ montando os widgets e traduzindo ações da aplicação em operações do docume
 6. Concluída: extrair Texto para `ui/tools/text/`, incluindo criação de caixas,
    prévia, editor ao vivo e renderização, sem alterar os sinais do canvas nem o
    fluxo de confirmação pela janela.
-7. Separar renderização e operações do documento de `ImageDocumentSession`
+7. Concluída: extrair Recorte para `ui/tools/crop/`, mantendo no canvas o modo,
+   a conversão de coordenadas e o sinal público de confirmação.
+8. Separar renderização e operações do documento de `ImageDocumentSession`
    quando uma mudança de funcionalidade oferecer uma divisão clara.
-8. Rever as divisões da janela principal e da persistência apenas quando seus
+9. Rever as divisões da janela principal e da persistência apenas quando seus
    fluxos forem alterados; evitar uma reorganização geral do repositório.
 
 Cada etapa deve mover uma responsabilidade e preservar o comportamento antes
@@ -211,6 +221,18 @@ o mantenedor. A compilação Release do aplicativo e dos alvos de UI/exportaçã
 passou no Windows. Os testes focados do Image Editor passaram em 6/6, incluindo
 o teste de texto nativo; a suíte CTest completa passou em 70/70 em 2026-10-05.
 `git diff --check` passou.
+
+A extração de Recorte moveu o gesto, a normalização dos cantos, o recorte aos
+limites da imagem, a conversão para a região de pixels e a prévia para
+`CropTool`. O canvas mantém o modo, a conversão entre coordenadas da interface
+e bordas da imagem e o sinal público; a janela segue aplicando a edição ao
+histórico. A cobertura inclui prévia, arrastes normal e invertido, bordas,
+cancelamento, geometrias inválidas e integração com Undo/Redo. O checklist
+manual existente já cobre Recorte e foi complementado para verificar a prévia
+e os dois sentidos do arraste. A compilação Release do aplicativo e dos alvos
+de UI/exportação passou no Windows. Os testes focados do Image Editor passaram
+em 6/6 e a suíte CTest completa passou em 70/70 em 2026-10-05.
+`git diff --check` passou. A validação visual manual permanece com o mantenedor.
 
 ## Referências
 

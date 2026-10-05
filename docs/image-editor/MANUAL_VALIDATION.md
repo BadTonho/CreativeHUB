@@ -109,9 +109,13 @@ still pending.
 6. Open PNG, JPEG, BMP, WebP, and TIFF examples. Confirm each is decoded and
    its dimensions are shown. If a format fails, check that the Qt Image Formats
    plugins are present in the deployed `imageformats` directory.
-7. Fit the image, zoom with the mouse wheel, pan with the middle mouse button,
-   and drag a crop. Rotate both directions, flip horizontally and vertically,
-   then use Undo and Redo. Confirm the canvas and dirty marker update.
+7. Fit the image, zoom with the mouse wheel, and pan with the middle mouse
+   button. Drag a crop in both corner directions and confirm the preview stays
+   within the image, including when the pointer reaches an image edge. Release
+   to apply it on a layer with visible content, then use Undo and Redo; confirm
+   the layer content is cropped, the canvas dimensions stay fixed, and the dirty
+   marker updates. Rotate both directions and flip horizontally and vertically,
+   then verify Undo and Redo for those edits too.
 8. Open a disposable image and create a canvas in separate runs. Confirm Paint,
    Eraser, Shapes, and Selection appear as icons without labels in the
    compact left sidebar and start inactive. Confirm Selection shows a

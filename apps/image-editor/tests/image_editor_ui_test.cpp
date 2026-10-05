@@ -1,6 +1,7 @@
 #include "image_canvas.h"
 #include "image_editor_window.h"
 #include "layer_panel.h"
+#include "crop/crop_tool.h"
 #include "selection/area_selection_tool.h"
 #include "selection/object/object_selection_tool.h"
 #include "shapes/shape_tool.h"
@@ -1396,6 +1397,112 @@ bool testShapeToolState() {
     return true;
 }
 
+bool testCropToolState() {
+    using image_editor::CropTool;
+    using image_editor::CropToolContext;
+
+    CropTool tool;
+    const QSize image_size(100, 80);
+    const CropToolContext context{image_size, QRectF(20.0, 30.0, 200.0, 160.0), 2.0};
+    tool.beginGesture(QPointF(10.0, 10.0));
+    tool.updateGesture(QPointF(40.0, 30.0));
+    const auto preview_bounds = tool.preview(image_size);
+    QImage preview_image(240, 200, QImage::Format_ARGB32_Premultiplied);
+    preview_image.fill(Qt::transparent);
+    {
+        QPainter painter(&preview_image);
+        tool.paintOverlay(painter, context);
+    }
+    if (!preview_bounds || *preview_bounds != QRectF(10.0, 10.0, 30.0, 20.0) ||
+        preview_image.pixelColor(60, 60).alpha() == 0) {
+        std::cerr << "Crop Tool did not report or paint the active crop preview.\n";
+        return false;
+    }
+    const auto forward = tool.finishGesture(QPointF(40.0, 30.0), image_size);
+    if (!forward || *forward != QRect(10, 10, 30, 20) || tool.gestureActive()) {
+        std::cerr << "Crop Tool did not return the forward-drag image rectangle.\n";
+        return false;
+    }
+
+    tool.beginGesture(QPointF(40.0, 30.0));
+    const auto reverse = tool.finishGesture(QPointF(10.0, 10.0), image_size);
+    if (!reverse || *reverse != *forward) {
+        std::cerr << "Crop Tool did not normalize a reverse-corner drag.\n";
+        return false;
+    }
+
+    tool.beginGesture(QPointF(98.0, 78.0));
+    const auto edge_crop = tool.finishGesture(QPointF(120.0, 100.0), image_size);
+    if (!edge_crop || *edge_crop != QRect(98, 78, 2, 2)) {
+        std::cerr << "Crop Tool did not clip the crop to the full image edge.\n";
+        return false;
+    }
+
+    tool.beginGesture(QPointF(10.0, 10.0));
+    if (tool.finishGesture(QPointF(11.0, 20.0), image_size)) {
+        std::cerr << "Crop Tool accepted a crop that was only one pixel wide.\n";
+        return false;
+    }
+    tool.beginGesture(QPointF(10.0, 10.0));
+    if (tool.finishGesture(QPointF(20.0, 11.0), image_size)) {
+        std::cerr << "Crop Tool accepted a crop that was only one pixel high.\n";
+        return false;
+    }
+
+    tool.beginGesture(QPointF(15.0, 15.0));
+    tool.updateGesture(QPointF(35.0, 25.0));
+    if (!tool.cancelGesture() || tool.gestureActive() || tool.preview(image_size) ||
+        tool.cancelGesture() || tool.finishGesture(QPointF(35.0, 25.0), image_size)) {
+        std::cerr << "Crop Tool cancellation left an active preview or result.\n";
+        return false;
+    }
+    return true;
+}
+
+bool testCropCanvasMapping() {
+    image_editor::ImageCanvas canvas;
+    canvas.resize(640, 480);
+    canvas.show();
+    QCoreApplication::processEvents();
+    QImage image(100, 80, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::blue);
+    canvas.setImage(image);
+    canvas.setCropMode(true);
+
+    const qreal zoom = canvas.zoomFactor();
+    const QRectF target((canvas.width() - image.width() * zoom) / 2.0,
+                        (canvas.height() - image.height() * zoom) / 2.0,
+                        image.width() * zoom, image.height() * zoom);
+    const QPoint start(qRound(target.left() + 90.0 * zoom),
+                       qRound(target.top() + 70.0 * zoom));
+    const QPoint outside(qRound(target.right() + 20.0),
+                         qRound(target.bottom() + 20.0));
+    QSignalSpy crop_spy(&canvas, &image_editor::ImageCanvas::cropSelected);
+    QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+    QTest::mouseMove(&canvas, outside);
+    QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, outside);
+    if (crop_spy.size() != 1) {
+        std::cerr << "Canvas coordinate mapping did not emit the edge crop.\n";
+        return false;
+    }
+    const QRect edge_crop = qvariant_cast<QRect>(crop_spy.takeFirst().at(0));
+    if (edge_crop.x() + edge_crop.width() != image.width() ||
+        edge_crop.y() + edge_crop.height() != image.height()) {
+        std::cerr << "Canvas crop coordinates stopped short of the image's far edges.\n";
+        return false;
+    }
+
+    canvas.setCropMode(true);
+    QTest::mousePress(&canvas, Qt::LeftButton, Qt::NoModifier, start);
+    canvas.setCropMode(false);
+    QTest::mouseRelease(&canvas, Qt::LeftButton, Qt::NoModifier, outside);
+    if (crop_spy.size() != 0 || canvas.cropMode()) {
+        std::cerr << "Disabling crop mode did not cancel its in-progress gesture.\n";
+        return false;
+    }
+    return true;
+}
+
 bool testTextToolState() {
     using image_editor::ImageTextAlignment;
     using image_editor::ImageTextData;
@@ -2459,6 +2566,8 @@ int main(int argc, char* argv[]) {
     if (!testAreaSelectionToolState()) return 1;
     if (!testAreaSelectionToolUi(temporary.path())) return 1;
     if (!testShapeToolState()) return 1;
+    if (!testCropToolState()) return 1;
+    if (!testCropCanvasMapping()) return 1;
     if (!testTextToolState()) return 1;
     if (!testObjectSelectionToolState()) return 1;
 
@@ -2828,14 +2937,39 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    auto* crop_history_undo = window.findChild<QAction*>(QStringLiteral("undoAction"));
+    auto* crop_history_redo = window.findChild<QAction*>(QStringLiteral("redoAction"));
+    if (crop_history_undo == nullptr || crop_history_redo == nullptr) {
+        std::cerr << "Crop integration could not inspect document history.\n";
+        return 1;
+    }
+    const QString title_before_crop = window.windowTitle();
     canvas->setCropMode(true);
     QSignalSpy crop_spy(canvas, &image_editor::ImageCanvas::cropSelected);
     const QPoint crop_center = canvas->rect().center();
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, crop_center - QPoint(20, 20));
     QTest::mouseMove(canvas, crop_center + QPoint(20, 20));
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, crop_center + QPoint(20, 20));
-    if (crop_spy.size() != 1 || qvariant_cast<QRect>(crop_spy.takeFirst().at(0)).isEmpty()) {
+    const QRect emitted_crop = crop_spy.size() == 1
+        ? qvariant_cast<QRect>(crop_spy.takeFirst().at(0)) : QRect{};
+    if (emitted_crop.isEmpty()) {
         std::cerr << "The crop gesture did not emit a valid image-space rectangle.\n";
+        return 1;
+    }
+    if (!window.windowTitle().startsWith('*') || !crop_history_undo->isEnabled()) {
+        std::cerr << "The crop gesture did not apply a history-backed document edit.\n";
+        return 1;
+    }
+    crop_history_undo->trigger();
+    if (window.windowTitle() != title_before_crop || crop_history_undo->isEnabled() ||
+        !crop_history_redo->isEnabled()) {
+        std::cerr << "Undo did not restore the document state after cropping.\n";
+        return 1;
+    }
+    crop_history_redo->trigger();
+    if (!window.windowTitle().startsWith('*') || !crop_history_undo->isEnabled() ||
+        crop_history_redo->isEnabled()) {
+        std::cerr << "Redo did not restore the cropped document state.\n";
         return 1;
     }
 
