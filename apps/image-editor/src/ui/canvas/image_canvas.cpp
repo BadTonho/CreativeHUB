@@ -37,8 +37,6 @@
 namespace image_editor {
 namespace {
 
-constexpr qsizetype kMaximumPaintPreviewPoints = 100'000;
-
 QPainterPath rectPath(const QRectF& rect) {
     QPainterPath path;
     path.addRect(rect);
@@ -168,12 +166,9 @@ ImageCanvas::ImageCanvas(QWidget* parent) : QWidget(parent) {
 }
 
 void ImageCanvas::setImage(QImage image, bool resetView) {
-    if (erasing_ || !transient_image_.isNull()) emit erasePreviewCleared();
+    resetBrushTools(true);
     image_ = std::move(image);
     transient_image_ = {};
-    paint_points_.clear();
-    painting_ = false;
-    erasing_ = false;
     creating_shape_ = false;
     clearObjectInteraction();
     resizing_brush_ = false;
@@ -188,7 +183,7 @@ void ImageCanvas::setImage(QImage image, bool resetView) {
 }
 
 void ImageCanvas::setCropMode(bool enabled) {
-    if (erasing_ || !transient_image_.isNull()) emit erasePreviewCleared();
+    resetBrushTools(true);
     crop_mode_ = enabled;
     if (enabled) {
         area_selection_mode_ = false;
@@ -198,20 +193,16 @@ void ImageCanvas::setCropMode(bool enabled) {
         object_selection_mode_ = false;
     }
     selecting_crop_ = false;
-    painting_ = false;
-    erasing_ = false;
     transient_image_ = {};
     resizing_brush_ = false;
-    paint_points_.clear();
     crop_selection_ = {};
-    brush_cursor_visible_ = false;
     setCursor(enabled ? Qt::CrossCursor
                       : ((paint_mode_ || eraser_mode_) ? Qt::BlankCursor : Qt::ArrowCursor));
     update();
 }
 
 void ImageCanvas::setPaintMode(bool enabled) {
-    if (erasing_ || !transient_image_.isNull()) emit erasePreviewCleared();
+    resetBrushTools(true);
     paint_mode_ = enabled;
     if (enabled) {
         area_selection_mode_ = false;
@@ -220,14 +211,10 @@ void ImageCanvas::setPaintMode(bool enabled) {
         shape_creation_mode_ = false;
         object_selection_mode_ = false;
     }
-    painting_ = false;
-    erasing_ = false;
     transient_image_ = {};
     resizing_brush_ = false;
-    paint_points_.clear();
     selecting_crop_ = false;
     crop_selection_ = {};
-    brush_cursor_visible_ = false;
     setCursor(enabled ? Qt::BlankCursor
                       : (crop_mode_ ? Qt::CrossCursor
                                     : (eraser_mode_ ? Qt::BlankCursor : Qt::ArrowCursor)));
@@ -235,7 +222,7 @@ void ImageCanvas::setPaintMode(bool enabled) {
 }
 
 void ImageCanvas::setEraserMode(bool enabled) {
-    if (erasing_ || !transient_image_.isNull()) emit erasePreviewCleared();
+    resetBrushTools(true);
     eraser_mode_ = enabled;
     if (enabled) {
         area_selection_mode_ = false;
@@ -244,14 +231,10 @@ void ImageCanvas::setEraserMode(bool enabled) {
         shape_creation_mode_ = false;
         object_selection_mode_ = false;
     }
-    painting_ = false;
-    erasing_ = false;
     resizing_brush_ = false;
     transient_image_ = {};
-    paint_points_.clear();
     selecting_crop_ = false;
     crop_selection_ = {};
-    brush_cursor_visible_ = false;
     setCursor(enabled ? Qt::BlankCursor
                       : (crop_mode_ ? Qt::CrossCursor
                                      : (paint_mode_ ? Qt::BlankCursor : Qt::ArrowCursor)));
@@ -268,15 +251,12 @@ void ImageCanvas::setShapeCreationMode(bool enabled) {
         object_selection_mode_ = false;
         text_creation_mode_ = false;
     }
-    painting_ = false;
-    erasing_ = false;
     selecting_crop_ = false;
     creating_shape_ = false;
     clearObjectInteraction();
-    paint_points_.clear();
     transient_image_ = {};
     crop_selection_ = {};
-    brush_cursor_visible_ = false;
+    resetBrushTools(false);
     setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
     update();
 }
@@ -294,15 +274,12 @@ void ImageCanvas::setTextCreationMode(bool enabled) {
         shape_creation_mode_ = false;
         object_selection_mode_ = false;
     }
-    painting_ = false;
-    erasing_ = false;
     creating_shape_ = false;
     creating_text_frame_ = false;
     clearObjectInteraction();
-    paint_points_.clear();
     transient_image_ = {};
     crop_selection_ = {};
-    brush_cursor_visible_ = false;
+    resetBrushTools(false);
     setCursor(enabled ? Qt::IBeamCursor : Qt::ArrowCursor);
     update();
 }
@@ -317,15 +294,12 @@ void ImageCanvas::setObjectSelectionMode(bool enabled) {
         shape_creation_mode_ = false;
         text_creation_mode_ = false;
     }
-    painting_ = false;
-    erasing_ = false;
     selecting_crop_ = false;
     creating_shape_ = false;
     clearObjectInteraction();
-    paint_points_.clear();
     transient_image_ = {};
     crop_selection_ = {};
-    brush_cursor_visible_ = false;
+    resetBrushTools(false);
     setCursor(Qt::ArrowCursor);
     update();
 }
@@ -342,14 +316,11 @@ void ImageCanvas::setAreaSelectionMode(bool enabled) {
     }
     selecting_area_ = false;
     selecting_crop_ = false;
-    painting_ = false;
-    erasing_ = false;
     creating_shape_ = false;
     creating_text_frame_ = false;
     clearObjectInteraction();
-    paint_points_.clear();
     transient_image_ = {};
-    brush_cursor_visible_ = false;
+    resetBrushTools(false);
     setCursor(enabled ? Qt::CrossCursor : Qt::ArrowCursor);
     update();
 }
@@ -476,25 +447,21 @@ void ImageCanvas::setObjectPlacements(QVector<ImageObjectPlacement> placements,
 }
 
 void ImageCanvas::setEraserPreviewEnabled(bool enabled) {
-    if (mask_editing_) enabled = false;
-    eraser_preview_enabled_ = enabled;
-    if (erasing_ && !enabled) emit erasePreviewRequested(paint_points_, brush_diameter_);
-    if (erasing_ && enabled) {
-        transient_image_ = {};
-        emit erasePreviewCleared();
-    }
+    dispatchBrushToolEvents(
+        eraser_tool_.setPreviewEnabled(enabled, brushToolContext({})));
     update();
 }
 
 void ImageCanvas::setMaskEditing(bool enabled) {
     if (mask_editing_ == enabled) return;
     mask_editing_ = enabled;
-    painting_ = false;
-    erasing_ = false;
-    paint_points_.clear();
+    resetBrushTools(false);
     transient_image_ = {};
     emit erasePreviewCleared();
-    if (enabled) eraser_preview_enabled_ = false;
+    if (enabled) {
+        dispatchBrushToolEvents(
+            eraser_tool_.setPreviewEnabled(false, brushToolContext({})));
+    }
     update();
 }
 
@@ -1039,20 +1006,68 @@ void ImageCanvas::drawObjectOverlay(QPainter& painter,
     painter.restore();
 }
 
-void ImageCanvas::appendPaintPoint(const QPointF& point) {
-    if (!paint_points_.isEmpty() && paint_points_.back() == point) return;
-    if (paint_points_.size() >= kMaximumPaintPreviewPoints) {
-        paint_points_.last() = point;
-        return;
-    }
-    paint_points_.append(point);
+void ImageCanvas::updateHoverCursor(const QPointF& position) {
+    updateBrushToolCursor(position);
+    update();
 }
 
-void ImageCanvas::updateHoverCursor(const QPointF& position) {
-    brush_cursor_visible_ = (paint_mode_ || eraser_mode_) &&
-        imageTargetRect().contains(position);
-    if (brush_cursor_visible_) brush_cursor_position_ = position;
-    update();
+BrushToolContext ImageCanvas::brushToolContext(const QPointF& position) const {
+    BrushToolContext context;
+    context.widget_position = position;
+    context.image_position = widgetToImageCoordinates(position);
+    context.image_target = imageTargetRect();
+    context.zoom = zoom_;
+    context.color = brush_color_;
+    context.diameter = brush_diameter_;
+    context.mask_editing = mask_editing_;
+    context.area_selection = areaSelectionClipPath();
+    return context;
+}
+
+void ImageCanvas::dispatchBrushToolEvents(const QVector<BrushToolEvent>& events) {
+    for (const auto& event : events) {
+        switch (event.type) {
+        case BrushToolEventType::PaintStrokeSelected:
+            emit paintStrokeSelected(event.points, event.color, event.diameter);
+            break;
+        case BrushToolEventType::MaskPaintPreviewRequested:
+            emit maskPaintPreviewRequested(event.points, event.color, event.diameter);
+            break;
+        case BrushToolEventType::ErasePreviewRequested:
+            emit erasePreviewRequested(event.points, event.diameter);
+            break;
+        case BrushToolEventType::ErasePreviewCleared:
+            transient_image_ = {};
+            emit erasePreviewCleared();
+            break;
+        case BrushToolEventType::EraseStrokeSelected:
+            emit eraseStrokeSelected(event.points, event.diameter);
+            break;
+        }
+    }
+}
+
+void ImageCanvas::updateBrushToolCursor(const QPointF& position) {
+    const auto context = brushToolContext(position);
+    const bool visible = context.image_target.contains(position);
+    if (paint_mode_) paint_tool_.updateCursor(context, visible);
+    else paint_tool_.hideCursor();
+    if (eraser_mode_) eraser_tool_.updateCursor(context, visible);
+    else eraser_tool_.hideCursor();
+}
+
+void ImageCanvas::resetBrushTools(bool clear_preview_notification) {
+    const bool should_clear_preview =
+        eraser_tool_.drawing() || (paint_tool_.drawing() && mask_editing_) ||
+        !transient_image_.isNull();
+    (void)paint_tool_.cancel(mask_editing_);
+    (void)eraser_tool_.cancel();
+    paint_tool_.hideCursor();
+    eraser_tool_.hideCursor();
+    if (clear_preview_notification && should_clear_preview) {
+        emit erasePreviewCleared();
+    }
+    transient_image_ = {};
 }
 
 void ImageCanvas::applyTextEditorStyle() {
@@ -1267,55 +1282,9 @@ void ImageCanvas::paintEvent(QPaintEvent*) {
         painter.drawRect(selection);
     }
 
-    if (paint_mode_ || eraser_mode_) {
-        if (((!mask_editing_ && painting_) || (erasing_ && eraser_preview_enabled_)) && !paint_points_.isEmpty()) {
-            QPainterPath path;
-            const auto toWidget = [&target, this](const QPointF& point) {
-                return QPointF(target.left() + point.x() * zoom_,
-                               target.top() + point.y() * zoom_);
-            };
-            path.moveTo(toWidget(paint_points_.front()));
-            for (qsizetype i = 1; i < paint_points_.size(); ++i) {
-                path.lineTo(toWidget(paint_points_.at(i)));
-            }
-            painter.save();
-            painter.setClipRect(target);
-            painter.setRenderHint(QPainter::Antialiasing, true);
-            if (area_selection_active_) {
-                QTransform image_to_widget;
-                image_to_widget.translate(target.left(), target.top());
-                image_to_widget.scale(zoom_, zoom_);
-                painter.setClipPath(image_to_widget.map(visibleAreaSelectionPath()),
-                                   Qt::IntersectClip);
-            }
-            const QColor stroke_color = eraser_mode_
-                ? QColor(240, 80, 125, 115) : brush_color_;
-            QPen pen(stroke_color, brush_diameter_ * zoom_, Qt::SolidLine,
-                     Qt::RoundCap, Qt::RoundJoin);
-            painter.setPen(pen);
-            if (paint_points_.size() == 1) {
-                const QPointF center = toWidget(paint_points_.front());
-                const qreal radius = brush_diameter_ * zoom_ / 2.0;
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(stroke_color);
-                painter.drawEllipse(center, radius, radius);
-            } else {
-                painter.drawPath(path);
-            }
-            painter.restore();
-        }
-        if (brush_cursor_visible_ && target.contains(brush_cursor_position_)) {
-            const qreal diameter = std::max(3.0, brush_diameter_ * zoom_);
-            const QRectF cursor(brush_cursor_position_.x() - diameter / 2.0,
-                                brush_cursor_position_.y() - diameter / 2.0,
-                                diameter, diameter);
-            painter.setBrush(Qt::NoBrush);
-            painter.setPen(QPen(QColor(18, 19, 22), 3.0));
-            painter.drawEllipse(cursor);
-            painter.setPen(QPen(QColor(242, 244, 248), 1.0));
-            painter.drawEllipse(cursor);
-        }
-    }
+    const auto brush_context = brushToolContext({});
+    if (paint_mode_) paint_tool_.paintOverlay(painter, brush_context);
+    if (eraser_mode_) eraser_tool_.paintOverlay(painter, brush_context);
 
     if (creating_shape_) {
         drawShapeOverlay(painter, shape_interaction_current_);
@@ -1423,8 +1392,7 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
         brush_resize_start_ = event->position();
         brush_resize_global_start_ = event->globalPosition().toPoint();
         brush_resize_initial_diameter_ = brush_diameter_;
-        brush_cursor_position_ = event->position();
-        brush_cursor_visible_ = true;
+        updateBrushToolCursor(event->position());
         update();
         event->accept();
         return;
@@ -1525,24 +1493,14 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
     }
     if (paint_mode_ && event->button() == Qt::LeftButton &&
         imageTargetRect().contains(event->position())) {
-        painting_ = true;
-        paint_points_.clear();
-        paint_points_.append(widgetToImageCoordinates(event->position()));
-        brush_cursor_position_ = event->position();
-        brush_cursor_visible_ = true;
-        if (mask_editing_) emit maskPaintPreviewRequested(paint_points_, brush_color_, brush_diameter_);
+        dispatchBrushToolEvents(paint_tool_.press(brushToolContext(event->position())));
         update();
         event->accept();
         return;
     }
     if (eraser_mode_ && event->button() == Qt::LeftButton &&
         imageTargetRect().contains(event->position())) {
-        erasing_ = true;
-        paint_points_.clear();
-        paint_points_.append(widgetToImageCoordinates(event->position()));
-        brush_cursor_position_ = event->position();
-        brush_cursor_visible_ = true;
-        if (!eraser_preview_enabled_) emit erasePreviewRequested(paint_points_, brush_diameter_);
+        dispatchBrushToolEvents(eraser_tool_.press(brushToolContext(event->position())));
         update();
         event->accept();
         return;
@@ -1619,17 +1577,10 @@ void ImageCanvas::mouseMoveEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (painting_ || erasing_) {
-        const QPointF point = widgetToImageCoordinates(event->position());
-        appendPaintPoint(point);
-        brush_cursor_position_ = event->position();
-        brush_cursor_visible_ = imageTargetRect().contains(event->position());
-        if (painting_ && mask_editing_) {
-            emit maskPaintPreviewRequested(paint_points_, brush_color_, brush_diameter_);
-        }
-        if (erasing_ && !eraser_preview_enabled_) {
-            emit erasePreviewRequested(paint_points_, brush_diameter_);
-        }
+    if (paint_tool_.drawing() || eraser_tool_.drawing()) {
+        const auto context = brushToolContext(event->position());
+        dispatchBrushToolEvents(paint_tool_.move(context));
+        dispatchBrushToolEvents(eraser_tool_.move(context));
         update();
         event->accept();
         return;
@@ -1653,8 +1604,7 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
     }
     if (event->button() == Qt::LeftButton && resizing_brush_) {
         resizing_brush_ = false;
-        brush_cursor_position_ = brush_resize_start_;
-        brush_cursor_visible_ = imageTargetRect().contains(brush_resize_start_);
+        updateBrushToolCursor(brush_resize_start_);
         QCursor::setPos(brush_resize_global_start_);
         update();
         event->accept();
@@ -1784,34 +1734,17 @@ void ImageCanvas::mouseReleaseEvent(QMouseEvent* event) {
         event->accept();
         return;
     }
-    if (event->button() == Qt::LeftButton && erasing_) {
-        appendPaintPoint(widgetToImageCoordinates(event->position()));
-        const QVector<QPointF> points = std::move(paint_points_);
-        erasing_ = false;
-        transient_image_ = {};
-        emit erasePreviewCleared();
-        brush_cursor_position_ = event->position();
-        brush_cursor_visible_ = imageTargetRect().contains(event->position());
+    if (event->button() == Qt::LeftButton && eraser_tool_.drawing()) {
+        dispatchBrushToolEvents(
+            eraser_tool_.release(brushToolContext(event->position())));
         update();
-        if (!points.isEmpty()) emit eraseStrokeSelected(points, brush_diameter_);
         event->accept();
         return;
     }
-    if (event->button() == Qt::LeftButton && painting_) {
-        const QPointF point = widgetToImageCoordinates(event->position());
-        appendPaintPoint(point);
-        const QVector<QPointF> points = std::move(paint_points_);
-        painting_ = false;
-        if (mask_editing_) {
-            transient_image_ = {};
-            emit erasePreviewCleared();
-        }
-        brush_cursor_position_ = event->position();
-        brush_cursor_visible_ = imageTargetRect().contains(event->position());
+    if (event->button() == Qt::LeftButton && paint_tool_.drawing()) {
+        dispatchBrushToolEvents(
+            paint_tool_.release(brushToolContext(event->position())));
         update();
-        if (!points.isEmpty()) {
-            emit paintStrokeSelected(points, brush_color_, brush_diameter_);
-        }
         event->accept();
         return;
     }
@@ -1891,8 +1824,9 @@ bool ImageCanvas::eventFilter(QObject* watched, QEvent* event) {
 }
 
 void ImageCanvas::leaveEvent(QEvent* event) {
-    if (!painting_ && !erasing_ && !resizing_brush_) {
-        brush_cursor_visible_ = false;
+    if (!paint_tool_.drawing() && !eraser_tool_.drawing() && !resizing_brush_) {
+        paint_tool_.hideCursor();
+        eraser_tool_.hideCursor();
         update();
     }
     QWidget::leaveEvent(event);
@@ -1924,13 +1858,10 @@ void ImageCanvas::keyPressEvent(QKeyEvent* event) {
         event->accept();
         return;
     }
-    if (event->key() == Qt::Key_Escape && (erasing_ || (painting_ && mask_editing_))) {
-        painting_ = false;
-        erasing_ = false;
-        paint_points_.clear();
-        transient_image_ = {};
-        emit erasePreviewCleared();
-        brush_cursor_visible_ = false;
+    if (event->key() == Qt::Key_Escape &&
+        (eraser_tool_.drawing() || (paint_tool_.drawing() && mask_editing_))) {
+        dispatchBrushToolEvents(eraser_tool_.cancel());
+        dispatchBrushToolEvents(paint_tool_.cancel(mask_editing_));
         update();
         event->accept();
         return;

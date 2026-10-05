@@ -18,6 +18,10 @@ persistence, and recovery.
 - `src/ui/canvas/`, `src/ui/dialogs/`, `src/ui/layers/`, `src/ui/tools/`, and
   `src/ui/windows/` contain the canvas widget, creation dialogs, layer dock
   panel, tool sidebar, and main application window respectively.
+- `src/ui/tools/brush_tool.*` shares stroke collection, cursor rendering, and
+  stroke-overlay drawing between the brush tools. `paint_tool.*` and
+  `eraser_tool.*` own their gesture and preview rules; they return preview or
+  edit requests for `ImageCanvas` to forward through its existing signals.
 
 ## Linked image resources and geometry
 
@@ -132,20 +136,26 @@ publication retain their previous output on failure.
   requires a transparent, white, or custom-color background. Canvas documents
   store this base metadata without generating a companion raster file.
 - `ImageCanvas` handles fit, zoom, middle-button panning, crop selection, and a
-  checkerboard behind transparent pixels. Paint and Eraser preview round strokes
-  during a drag and commit one image-space operation when released. Eraser's
-  default live preview renders a temporary composite with the selected layer
-  erased but does not mutate the document or history; the optional overlay
-  preview draws a translucent mark instead. Escape cancels an in-progress erase.
-  The eraser clears alpha only in the selected editable layer, revealing visible
-  lower layers; Background cannot be painted or erased. For either active tool,
-  `Ctrl+Alt` plus a left-button drag over the image adjusts that tool's size from
-  signed horizontal displacement at the press point: right increases and left
-  decreases at 1 px per screen pixel. Vertical movement is ignored. The tool
-  outline stays anchored at the press point during the drag, including when the
-  pointer leaves the image. On release, the system pointer returns to the press
-  point; normal hover tracking resumes on subsequent mouse movement. The gesture
-  updates the window controls without changing the document or history.
+  checkerboard behind transparent pixels. It converts pointer positions and
+  passes a lightweight context to `PaintTool` and `EraserTool`; each tool owns
+  its stroke gesture, cursor, and preview overlay. Tool requests return through
+  the existing canvas signals, while `ImageEditorWindow` and the document
+  session continue to compose previews and commit edits. Paint and Eraser commit
+  one image-space operation when released. Eraser's default live preview
+  renders a temporary composite with the selected layer erased but does not
+  mutate the document or history; the optional overlay preview draws a
+  translucent mark instead. Escape cancels an in-progress erase and mask-paint
+  gesture; regular paint keeps its existing cancellation behavior. The eraser
+  clears alpha only in the selected editable layer, revealing visible lower
+  layers; when targeting a mask it writes black instead, and Background cannot
+  be painted or erased. For either active tool, `Ctrl+Alt` plus a left-button
+  drag over the image adjusts that tool's size from signed horizontal
+  displacement at the press point: right increases and left decreases at 1 px
+  per screen pixel. Vertical movement is ignored. The tool outline stays
+  anchored at the press point during the drag, including when the pointer leaves
+  the image. On release, the system pointer returns to the press point; normal
+  hover tracking resumes on subsequent mouse movement. The gesture updates the
+  window controls without changing the document or history.
 - `ImageCanvas` previews line, rectangle, and ellipse operations while drawing.
   **Selection** hit-tests paint strokes, erase strokes, and shapes across visible
   editable layers from top to bottom. Click selects the topmost object; Shift

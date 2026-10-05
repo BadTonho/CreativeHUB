@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; nenhuma decisão de implementação foi aprovada**.
+Status: **análise provisória; primeira extração de ferramentas implementada**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -104,8 +104,9 @@ montando os widgets e traduzindo ações da aplicação em operações do docume
 
 1. Registrar o comportamento atual das ferramentas e manter a cobertura de
    regressão existente do canvas e do documento como referência.
-2. Definir uma interface pequena para as ferramentas e extrair Pintura e
-   Borracha sem alterar o comportamento visível nem os dados persistidos.
+2. Concluída: definir um contexto interno pequeno e extrair Pintura e Borracha,
+   mantendo os sinais do canvas e sem alterar o comportamento visível nem os
+   dados persistidos.
 3. Extrair Seleção de Área e Seleção de Objetos como módulos distintos,
    preservando a diferença entre seleção temporária e edição do documento.
 4. Extrair Formas e Texto, incluindo suas interações específicas de prévia e
@@ -136,7 +137,14 @@ do início da etapa seguinte.
 - Mudanças em gestos ou visuais da interface precisam de validação manual
   documentada, além dos testes automatizados para comportamento determinístico
   das ferramentas e do documento.
-- Esta análise não executou testes nem registra resultados de validação.
+- A compilação Release da aplicação, da UI e da UI de exportação passou. Os
+  testes focados passaram em 8/8; os consumidores do Video Editor relacionados
+  à publicação de imagens também passaram. A suíte CTest completa passou em
+  69/70: `creative-suite-main-editor-project-settings-ui` não encontrou os
+  dois arquivos de mídia esperados pelo fixture. A validação manual completa
+  permanece pendente com o mantenedor. Esta extração não transforma a proposta
+  gradual em uma decisão final para as demais ferramentas ou para a arquitetura
+  completa.
 
 ## Referências
 

@@ -72,6 +72,12 @@ add_executable(creative-suite-image-editor-ui-tests
     ../src/ui/dialogs/shortcut_settings_dialog.h
     ../src/ui/canvas/image_canvas.cpp
     ../src/ui/canvas/image_canvas.h
+    ../src/ui/tools/brush_tool.cpp
+    ../src/ui/tools/brush_tool.h
+    ../src/ui/tools/paint_tool.cpp
+    ../src/ui/tools/paint_tool.h
+    ../src/ui/tools/eraser_tool.cpp
+    ../src/ui/tools/eraser_tool.h
     ../src/ui/tools/tool_sidebar.cpp
     ../src/ui/tools/tool_sidebar.h
     ../src/ui/layers/layer_panel.cpp
@@ -135,6 +141,12 @@ add_executable(creative-suite-image-editor-export-ui-tests
     ../src/ui/dialogs/image_export_dialog.h
     ../src/ui/canvas/image_canvas.cpp
     ../src/ui/canvas/image_canvas.h
+    ../src/ui/tools/brush_tool.cpp
+    ../src/ui/tools/brush_tool.h
+    ../src/ui/tools/paint_tool.cpp
+    ../src/ui/tools/paint_tool.h
+    ../src/ui/tools/eraser_tool.cpp
+    ../src/ui/tools/eraser_tool.h
     ../src/ui/tools/tool_sidebar.cpp
     ../src/ui/tools/tool_sidebar.h
     ../src/ui/layers/layer_panel.cpp

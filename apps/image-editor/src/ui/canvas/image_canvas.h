@@ -1,6 +1,8 @@
 #pragma once
 
 #include "image_document_store.h"
+#include "../tools/eraser_tool.h"
+#include "../tools/paint_tool.h"
 
 #include <QImage>
 #include <QColor>
@@ -110,8 +112,11 @@ private:
     [[nodiscard]] QRectF imageTargetRect() const;
     [[nodiscard]] QRect cropToImageCoordinates(const QRectF& selection) const;
     [[nodiscard]] QPointF widgetToImageCoordinates(const QPointF& position) const;
-    void appendPaintPoint(const QPointF& point);
     void updateHoverCursor(const QPointF& position);
+    [[nodiscard]] BrushToolContext brushToolContext(const QPointF& position) const;
+    void dispatchBrushToolEvents(const QVector<BrushToolEvent>& events);
+    void updateBrushToolCursor(const QPointF& position);
+    void resetBrushTools(bool clear_preview_notification);
     [[nodiscard]] QPointF constrainShapePoint(const QPointF& point,
                                              const QPointF& anchor,
                                              ImageShapeKind kind,
@@ -159,10 +164,7 @@ private:
     bool text_creation_mode_ = false;
     bool object_selection_mode_ = false;
     bool area_selection_mode_ = false;
-    bool eraser_preview_enabled_ = false;
     bool selecting_crop_ = false;
-    bool painting_ = false;
-    bool erasing_ = false;
     bool resizing_brush_ = false;
     bool shift_constrain_held_ = false;
     bool panning_ = false;
@@ -191,7 +193,8 @@ private:
     QPointF brush_resize_start_;
     QPoint brush_resize_global_start_;
     int brush_resize_initial_diameter_ = 12;
-    QVector<QPointF> paint_points_;
+    PaintTool paint_tool_;
+    EraserTool eraser_tool_;
     ImageShapeData shape_style_;
     ImageTextData text_style_;
     ImageTextData text_editing_;
@@ -212,8 +215,6 @@ private:
     QPointF transform_fixed_anchor_;
     QColor brush_color_ = Qt::black;
     int brush_diameter_ = 12;
-    QPointF brush_cursor_position_;
-    bool brush_cursor_visible_ = false;
 };
 
 } // namespace image_editor
