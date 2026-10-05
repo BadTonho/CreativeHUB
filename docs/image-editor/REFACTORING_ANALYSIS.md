@@ -1,6 +1,6 @@
 # Análise de Refatoração do Image Editor
 
-Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, edição de objetos, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos, estado por aba, execução de importação/exportação de imagem, histórico de edição e codec do formato `.cimg` implementados**.
+Status: **análise provisória; extrações de Pintura, Borracha, Recorte, Seleção de Área, Seleção de Objetos, Formas e Texto, interface das opções de ferramentas e paleta de Formas, edição de objetos, renderização/exportação, preparação de máscaras, operações estruturais de camadas/grupos, estado por aba, execução de importação/exportação de imagem, histórico de edição e codec do formato `.cimg` implementados**.
 
 Tipo: **planejamento interno, destinado ao mantenedor**.
 
@@ -24,12 +24,12 @@ arquivos grandes:
 | Área | Responsabilidades atuais | Oportunidade |
 | --- | --- | --- |
 | `ui/canvas/image_canvas.cpp` e `.h` | Desenho e navegação do canvas, conversão de coordenadas, recorte, hospedagem dos widgets das ferramentas e roteamento de eventos | Continuar delegando o estado e o comportamento das ferramentas a módulos próprios, sem mover a apresentação do documento ou a conversão de coordenadas para cada ferramenta. |
-| `ui/windows/image_editor_window.cpp` e `.h` | Layout da janela, ativação e opções das ferramentas, ações e atalhos, abas de documentos, abrir/salvar, importar/exportar, confirmação de recuperação, registro de erros e fluxo de imagens vinculadas | Extrair responsabilidades coesas quando forem alteradas, mantendo a janela principal responsável por montar e coordenar a aplicação. |
+| `ui/windows/image_editor_window.cpp` e `.h` | Layout e coordenação da janela, estado compartilhado das ferramentas, ações e atalhos, abas de documentos, abrir/salvar, importar/exportar, confirmação de recuperação, registro de erros e fluxo de imagens vinculadas | Manter a janela como coordenadora; apresentação da barra de opções e da paleta de Formas agora fica em módulos próprios. Extrair outros fluxos apenas quando houver uma fronteira coesa. |
 | `core/document/image_document_session.cpp` e `.h` | Ciclo de vida do documento, recursos de imagem, composição e prévias, coordenação de edição, gerenciamento de camadas/grupos/máscaras e seleção; delega renderização, edição de objetos, pilha estrutural e Desfazer/Refazer | Manter a sessão como fachada e responsável por restaurar e validar o estado; extrair outras responsabilidades apenas quando houver uma fronteira de domínio coesa. |
 | `core/document/image_document_store.cpp` e `.h` | Fachada pública de persistência, leitura/gravação atômica, caminhos de arquivo e envelope de recuperação | Manter a API estável e delegar JSON versionado, migração e validação a `ImageDocumentCodec`; preservar a compatibilidade `.cimg` como uma fronteira testada. |
 
 Após as extrações registradas até 2026-10-05, os arquivos têm aproximadamente
-962 linhas em `image_canvas.cpp`, 2.808 em `image_editor_window.cpp`, 1.524 em
+962 linhas em `image_canvas.cpp`, 2.341 em `image_editor_window.cpp`, 1.524 em
 `image_document_session.cpp` e 179 em `image_document_store.cpp`. O tamanho é
 um sinal para análise, mas não é, por si só, motivo suficiente para dividir um
 módulo.
@@ -165,8 +165,11 @@ montando os widgets e traduzindo ações da aplicação em operações do docume
 11. Concluída: extrair a preparação de edições de objetos para
     `ImageDocumentObjectEditor`, cobrindo traços, raster, formas e texto; manter
     aplicação, histórico e invalidação de miniaturas na sessão.
-12. Rever as divisões da janela principal e da persistência apenas quando seus
-    fluxos forem alterados; evitar uma reorganização geral do repositório.
+12. Concluída: extrair a apresentação da barra de opções para
+    `ui/tools/options/` e a paleta de Formas para `ui/tools/shapes/`, mantendo
+    as configurações compartilhadas e a coordenação na janela.
+13. Continuar revisando outras divisões da janela e da persistência somente
+    quando seus fluxos forem alterados; evitar uma reorganização geral.
 
 Cada etapa deve mover uma responsabilidade e preservar o comportamento antes
 do início da etapa seguinte.
@@ -367,6 +370,17 @@ fluxos existentes. A cobertura direta está em
 persistência e renderização na sessão. Os alvos afetados do Image Editor
 compilaram em Release e a suíte CTest configurada passou em 12/12 no Windows em
 2026-10-05. `git diff --check` passou; não houve mudança visual.
+
+`ImageToolOptionsBar` agora constrói e apresenta as opções de Pintura, Borracha,
+Formas, Texto, Seleção de Objetos e Seleção de Área. `ShapePalette` mantém a
+janela flutuante e os botões de forma. A janela conserva tamanhos, estilos e
+opções compartilhadas, e encaminha as solicitações à ferramenta ou ao
+documento ativo. Os nomes dos objetos Qt e os fluxos de interação existentes
+foram preservados. Há cobertura direta dos sinais e da sincronização dos
+controles, além dos testes de integração existentes. A compilação e a execução
+dos testes foram adiadas a pedido do mantenedor para permitir trabalho paralelo
+no Motion Editor; `git diff --check` passou. A validação de compilação e testes
+continua pendente.
 
 ## Referências
 

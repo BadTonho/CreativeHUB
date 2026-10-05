@@ -51,6 +51,11 @@ persistence, and recovery.
   `ImageCanvas` maps pointer positions to image coordinates and emits the
   existing `shapeCreated` signal; `ImageEditorWindow` continues to own shared
   shape settings and commits completed shapes through the document session.
+- `src/ui/tools/options/image_tool_options_bar.*` owns the tool-options toolbar
+  controls and their presentation state. It emits user requests; the window
+  keeps shared tool settings and coordinates updates with the active canvas and
+  document. `src/ui/tools/shapes/shape_palette.*` owns the floating shape
+  picker and reports the selected kind for the window to apply.
 - `src/ui/tools/text/text_tool.*` owns text-frame creation, the hosted inline
   editor, its live layout and keyboard handling, and committed-text rendering.
   It reports start, commit, and cancellation through internal signals;

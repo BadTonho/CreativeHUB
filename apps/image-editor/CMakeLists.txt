@@ -83,8 +83,12 @@ add_executable(creative-suite-image-editor
     src/ui/tools/selection/object/object_selection_tool.h
     src/ui/tools/shapes/shape_tool.cpp
     src/ui/tools/shapes/shape_tool.h
+    src/ui/tools/shapes/shape_palette.cpp
+    src/ui/tools/shapes/shape_palette.h
     src/ui/tools/text/text_tool.cpp
     src/ui/tools/text/text_tool.h
+    src/ui/tools/options/image_tool_options_bar.cpp
+    src/ui/tools/options/image_tool_options_bar.h
     src/ui/tools/tool_sidebar.cpp
     src/ui/tools/tool_sidebar.h
     src/ui/layers/layer_panel.cpp

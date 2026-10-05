@@ -4,6 +4,8 @@
 #include "crop/crop_tool.h"
 #include "selection/area_selection_tool.h"
 #include "selection/object/object_selection_tool.h"
+#include "options/image_tool_options_bar.h"
+#include "shapes/shape_palette.h"
 #include "shapes/shape_tool.h"
 #include "text/text_tool.h"
 #include "tool_sidebar.h"
@@ -2568,6 +2570,109 @@ int main(int argc, char* argv[]) {
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, temporary.path());
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, temporary.path());
+
+    {
+        image_editor::ImageToolOptionsBar options;
+        auto* brush_size = options.findChild<QSpinBox*>(
+            QStringLiteral("paintBrushSizeSpinBox"));
+        auto* brush_slider = options.findChild<QSlider*>(
+            QStringLiteral("paintBrushSizeSlider"));
+        auto* eraser_preview = options.findChild<QCheckBox*>(
+            QStringLiteral("eraserPreviewCheckBox"));
+        auto* shape_stroke = options.findChild<QCheckBox*>(
+            QStringLiteral("shapeStrokeCheckBox"));
+        auto* shape_width = options.findChild<QSpinBox*>(
+            QStringLiteral("shapeStrokeWidthSpinBox"));
+        auto* text_size = options.findChild<QSpinBox*>(
+            QStringLiteral("textSizeSpinBox"));
+        auto* delete_objects = options.findChild<QPushButton*>(
+            QStringLiteral("deleteSelectedShapeButton"));
+        auto* area_shape = options.findChild<QComboBox*>(
+            QStringLiteral("areaSelectionShapeComboBox"));
+        auto* area_mode = options.findChild<QComboBox*>(
+            QStringLiteral("areaSelectionModeComboBox"));
+        if (brush_size == nullptr || brush_slider == nullptr || eraser_preview == nullptr ||
+            shape_stroke == nullptr || shape_width == nullptr || text_size == nullptr ||
+            delete_objects == nullptr || area_shape == nullptr || area_mode == nullptr) {
+            std::cerr << "The tool options module did not create its expected controls.\n";
+            return 1;
+        }
+        QSignalSpy brush_changed(&options,
+            &image_editor::ImageToolOptionsBar::brushDiameterChanged);
+        QSignalSpy preview_changed(&options,
+            &image_editor::ImageToolOptionsBar::eraserPreviewToggled);
+        QSignalSpy stroke_changed(&options,
+            &image_editor::ImageToolOptionsBar::shapeStrokeToggled);
+        QSignalSpy stroke_width_changed(&options,
+            &image_editor::ImageToolOptionsBar::shapeStrokeWidthChanged);
+        QSignalSpy text_size_changed(&options,
+            &image_editor::ImageToolOptionsBar::textSizeChanged);
+        QSignalSpy area_changed(&options,
+            &image_editor::ImageToolOptionsBar::areaSelectionOptionsChanged);
+        QSignalSpy delete_requested(&options,
+            &image_editor::ImageToolOptionsBar::deleteSelectedObjectsRequested);
+        options.setBrushOptionsState(true, 28, true, false, false);
+        if (brush_size->value() != 28 || brush_slider->value() != 28 ||
+            eraser_preview->isHidden()) {
+            std::cerr << "Tool options state did not update the brush controls.\n";
+            return 1;
+        }
+        brush_size->setValue(34);
+        if (brush_changed.count() != 1 || brush_slider->value() != 34 ||
+            brush_changed.at(0).at(0).toInt() != 34) {
+            std::cerr << "Brush-size edits did not emit a synchronized value.\n";
+            return 1;
+        }
+        image_editor::ImageShapeData shape_style;
+        shape_style.stroke_enabled = true;
+        shape_style.stroke_width = 7;
+        options.setShapeOptionsVisible(true);
+        options.setShapeOptionsState(shape_style, true, true, true, true);
+        if (!shape_stroke->isChecked() || shape_width->value() != 7) {
+            std::cerr << "The shape options module did not apply the supplied style.\n";
+            return 1;
+        }
+        shape_width->setValue(9);
+        options.setTextOptionsState(image_editor::ImageTextData{});
+        text_size->setValue(image_editor::ImageTextData{}.font_pixel_size + 1);
+        eraser_preview->setChecked(true);
+        shape_stroke->setChecked(false);
+        area_shape->setCurrentIndex(area_shape->findData(1));
+        area_mode->setCurrentIndex(area_mode->findData(2));
+        options.setDeleteSelectedObjectsEnabled(true);
+        delete_objects->click();
+        if (preview_changed.count() != 1 || stroke_changed.count() != 1 ||
+            stroke_width_changed.count() != 1 || text_size_changed.count() != 1 ||
+            area_changed.count() != 2 || area_changed.at(0).at(0).toInt() != 1 ||
+            area_changed.at(1).at(1).toInt() != 2 || delete_requested.count() != 1) {
+            std::cerr << "Tool options controls did not report their requested changes.\n";
+            return 1;
+        }
+
+        image_editor::ShapePalette palette;
+        auto* ellipse = palette.findChild<QToolButton*>(
+            QStringLiteral("shapePaletteEllipseButton"));
+        auto* rectangle = palette.findChild<QToolButton*>(
+            QStringLiteral("shapePaletteRectangleButton"));
+        QSignalSpy shape_selected(&palette, &image_editor::ShapePalette::shapeKindSelected);
+        if (ellipse == nullptr || rectangle == nullptr) {
+            std::cerr << "The shape palette did not create its expected choices.\n";
+            return 1;
+        }
+        palette.setSelectedKind(image_editor::ImageShapeKind::Ellipse);
+        palette.setDocumentAvailable(false);
+        if (!ellipse->isChecked() || ellipse->isEnabled()) {
+            std::cerr << "The shape palette did not reflect document availability and style.\n";
+            return 1;
+        }
+        palette.setDocumentAvailable(true);
+        rectangle->click();
+        if (shape_selected.count() != 1 || shape_selected.at(0).at(0).toInt() !=
+                static_cast<int>(image_editor::ImageShapeKind::Rectangle)) {
+            std::cerr << "The shape palette did not emit its selected shape kind.\n";
+            return 1;
+        }
+    }
 
     if (!testWindowTextGrowth()) return 1;
     if (!testTextEditorGrowthLayout()) return 1;

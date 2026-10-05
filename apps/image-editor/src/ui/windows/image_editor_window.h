@@ -16,30 +16,22 @@
 #include <memory>
 
 class QAction;
-class QButtonGroup;
-class QCheckBox;
 class QCloseEvent;
 class QDockWidget;
-class QDialog;
-class QComboBox;
-class QFontComboBox;
 class QKeySequence;
 class QLabel;
-class QSlider;
-class QSpinBox;
-class QPushButton;
-class QToolBar;
 class QTabBar;
 class QToolButton;
 class QTimer;
 class QStackedWidget;
 class QWidget;
-class QWidgetAction;
 
 namespace image_editor {
 
 class ImageCanvas;
+class ImageToolOptionsBar;
 class LayerPanel;
+class ShapePalette;
 class ToolSidebar;
 struct ImageEditorDocumentTab;
 
@@ -89,7 +81,6 @@ private:
     [[nodiscard]] bool openDocumentPathInTarget(const QString& path, OpenTarget target);
     void createActions();
     void createToolOptionsBar();
-    void createShapePalette();
     void createLayerPanel();
     void registerShortcutAction(QAction* action, const QKeySequence& default_sequence);
     void loadShortcutPreferences();
@@ -149,41 +140,15 @@ private:
     int active_document_tab_ = -1;
     QDockWidget* layer_dock_ = nullptr;
     LayerPanel* layer_panel_ = nullptr;
-    QToolBar* tool_options_toolbar_ = nullptr;
-    QWidgetAction* paint_options_action_ = nullptr;
-    QWidgetAction* shape_options_action_ = nullptr;
-    QWidgetAction* text_options_action_ = nullptr;
-    QWidgetAction* selection_options_action_ = nullptr;
-    QWidgetAction* area_selection_options_action_ = nullptr;
-    QWidget* paint_size_options_ = nullptr;
-    QWidget* shape_options_widget_ = nullptr;
-    QWidget* text_options_widget_ = nullptr;
-    QWidget* area_selection_options_widget_ = nullptr;
-    QDialog* shape_palette_window_ = nullptr;
-    QButtonGroup* shape_palette_button_group_ = nullptr;
-    QList<QToolButton*> shape_palette_buttons_;
-    QSlider* brush_size_slider_ = nullptr;
-    QSpinBox* brush_size_spin_ = nullptr;
-    QLabel* tool_size_label_ = nullptr;
-    QCheckBox* eraser_preview_check_ = nullptr;
-    QCheckBox* shape_stroke_check_ = nullptr;
-    QCheckBox* shape_fill_check_ = nullptr;
-    QPushButton* shape_stroke_color_button_ = nullptr;
-    QPushButton* shape_fill_color_button_ = nullptr;
-    QSpinBox* shape_stroke_width_spin_ = nullptr;
-    QPushButton* delete_selected_shape_button_ = nullptr;
-    QFontComboBox* text_font_combo_ = nullptr;
-    QSpinBox* text_size_spin_ = nullptr;
-    QPushButton* text_color_button_ = nullptr;
-    QComboBox* text_alignment_combo_ = nullptr;
-    QComboBox* area_selection_shape_combo_ = nullptr;
-    QComboBox* area_selection_mode_combo_ = nullptr;
+    ImageToolOptionsBar* tool_options_bar_ = nullptr;
+    ShapePalette* shape_palette_ = nullptr;
     QLabel* status_label_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
     QAction* relink_action_ = nullptr;
     QAction* import_layer_action_ = nullptr;
     QAction* relink_raster_action_ = nullptr;
     bool importing_ = false;
+    bool eraser_preview_enabled_ = false;
     std::unique_ptr<ImageEditorDocumentTab> empty_document_state_;
     QAction* new_canvas_action_ = nullptr;
     QAction* resize_canvas_action_ = nullptr;
@@ -220,7 +185,6 @@ private:
     ImageShapeData shape_style_;
     ImageTextData text_style_;
     bool shape_colors_initialized_ = false;
-    bool shape_palette_positioned_ = false;
     int paint_diameter_ = 12;
     int eraser_diameter_ = 12;
     int area_selection_shape_ = 0;
