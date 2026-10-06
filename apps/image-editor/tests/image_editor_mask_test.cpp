@@ -1,6 +1,6 @@
 #include "image_document_session.h"
-#include "image_document_geometry.h"
-#include "image_layer_mask_editor.h"
+#include "rendering/image_document_geometry.h"
+#include "editing/image_layer_mask_editor.h"
 #include "recovery_store.h"
 
 #include <QGuiApplication>

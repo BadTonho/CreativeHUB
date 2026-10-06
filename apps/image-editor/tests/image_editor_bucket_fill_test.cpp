@@ -1,4 +1,4 @@
-#include "image_bucket_fill.h"
+#include "rendering/image_bucket_fill.h"
 #include "image_document_session.h"
 #include "image_document_store.h"
 

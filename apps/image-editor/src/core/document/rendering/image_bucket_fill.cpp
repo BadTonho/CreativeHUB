@@ -1,5 +1,5 @@
-#include "image_bucket_fill.h"
-#include "image_document_geometry.h"
+#include "rendering/image_bucket_fill.h"
+#include "rendering/image_document_geometry.h"
 
 #include <QBitArray>
 

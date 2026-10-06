@@ -1,4 +1,4 @@
-#include "image_document_geometry.h"
+#include "rendering/image_document_geometry.h"
 
 #include <cmath>
 

@@ -1,11 +1,11 @@
 #include "image_document_session.h"
-#include "image_document_codec.h"
-#include "image_document_history.h"
-#include "image_document_object_editor.h"
-#include "image_document_renderer.h"
+#include "persistence/image_document_codec.h"
+#include "editing/image_document_history.h"
+#include "editing/image_document_object_editor.h"
+#include "rendering/image_document_renderer.h"
 #include "image_document_store.h"
 #include "image_editor_logger.h"
-#include "image_layer_stack_editor.h"
+#include "editing/image_layer_stack_editor.h"
 #include "recovery_store.h"
 
 #include <QGuiApplication>

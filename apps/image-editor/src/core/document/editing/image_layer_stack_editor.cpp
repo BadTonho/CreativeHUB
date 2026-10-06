@@ -1,4 +1,4 @@
-#include "image_layer_stack_editor.h"
+#include "editing/image_layer_stack_editor.h"
 
 #include "image_document_utils.h"
 

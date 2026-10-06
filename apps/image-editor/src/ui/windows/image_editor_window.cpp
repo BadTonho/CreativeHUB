@@ -1,7 +1,7 @@
 #include "image_editor_window.h"
 
 #include "image_canvas.h"
-#include "image_document_renderer.h"
+#include "rendering/image_document_renderer.h"
 #include "image_document_store.h"
 #include "image_export_dialog.h"
 #include "image_export_controller.h"

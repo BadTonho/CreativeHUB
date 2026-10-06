@@ -1,8 +1,8 @@
-#include "image_document_object_editor.h"
+#include "editing/image_document_object_editor.h"
 
-#include "image_document_geometry.h"
+#include "rendering/image_document_geometry.h"
 #include "image_document_utils.h"
-#include "image_layer_stack_editor.h"
+#include "editing/image_layer_stack_editor.h"
 
 #include <QSet>
 #include <QTransform>

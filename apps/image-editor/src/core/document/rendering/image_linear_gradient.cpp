@@ -1,5 +1,5 @@
-#include "image_linear_gradient.h"
-#include "image_document_geometry.h"
+#include "rendering/image_linear_gradient.h"
+#include "rendering/image_document_geometry.h"
 
 #include <algorithm>
 #include <cmath>

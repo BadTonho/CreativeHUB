@@ -1,8 +1,8 @@
 #include "image_editor_performance_log.h"
 #include "image_editor_performance_metrics.h"
 #include "image_document_session.h"
-#include "image_document_renderer.h"
-#include "image_exporter.h"
+#include "rendering/image_document_renderer.h"
+#include "import_export/image_exporter.h"
 
 #include <QFile>
 #include <QImage>

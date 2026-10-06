@@ -1,6 +1,6 @@
-#include "image_document_renderer.h"
-#include "image_bucket_fill.h"
-#include "image_linear_gradient.h"
+#include "rendering/image_document_renderer.h"
+#include "rendering/image_bucket_fill.h"
+#include "rendering/image_linear_gradient.h"
 #include "image_document_utils.h"
 #include "../diagnostics/image_editor_performance_metrics.h"
 

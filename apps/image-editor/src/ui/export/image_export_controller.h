@@ -1,6 +1,6 @@
 #pragma once
 
-#include "image_exporter.h"
+#include "import_export/image_exporter.h"
 
 class QWidget;
 

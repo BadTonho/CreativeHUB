@@ -1,6 +1,6 @@
 #pragma once
 
-#include "image_raster_import.h"
+#include "import_export/image_raster_import.h"
 
 class QWidget;
 

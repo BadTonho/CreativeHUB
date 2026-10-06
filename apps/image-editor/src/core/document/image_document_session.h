@@ -1,10 +1,10 @@
 #pragma once
 
-#include "image_exporter.h"
-#include "image_document_history.h"
+#include "import_export/image_exporter.h"
+#include "editing/image_document_history.h"
 #include "image_document_store.h"
-#include "image_raster_import.h"
-#include "image_layer_raster_cache.h"
+#include "import_export/image_raster_import.h"
+#include "rendering/image_layer_raster_cache.h"
 
 #include <QHash>
 #include <QImage>
