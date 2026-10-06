@@ -2,6 +2,7 @@
 #include "image_editor_window.h"
 #include "layer_panel.h"
 #include "crop/crop_tool.h"
+#include "eyedropper/eyedropper_tool.h"
 #include "selection/area_selection_tool.h"
 #include "selection/object/object_selection_tool.h"
 #include "options/image_tool_options_bar.h"
@@ -2851,6 +2852,19 @@ bool testPerformanceMetricsUi(const QString& temporary_directory) {
 
 bool testEyedropperTool() {
     const QColor expected_color(73, 131, 199, 157);
+    image_editor::EyedropperTool eyedropper_tool;
+    QImage sample_pixels(2, 2, QImage::Format_ARGB32);
+    sample_pixels.fill(Qt::black);
+    sample_pixels.setPixelColor(1, 0, expected_color);
+    const auto fractional_sample = eyedropper_tool.sample(
+        sample_pixels, QPointF(1.8, 0.7));
+    const auto empty_image_sample = eyedropper_tool.sample(QImage(), QPointF());
+    if (!fractional_sample || *fractional_sample != expected_color || empty_image_sample) {
+        std::cerr << "Eyedropper pixel lookup did not preserve RGBA, floor coordinates, "
+                     "or reject an empty image.\n";
+        return false;
+    }
+
     image_editor::ToolSidebar tool_sidebar;
     auto* eyedropper_button = tool_sidebar.findChild<QToolButton*>(
         QStringLiteral("eyedropperToolButton"));

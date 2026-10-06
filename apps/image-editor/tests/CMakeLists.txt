@@ -107,6 +107,8 @@ add_executable(creative-suite-image-editor-ui-tests
     ../src/ui/tools/brush/eraser_tool.h
     ../src/ui/tools/crop/crop_tool.cpp
     ../src/ui/tools/crop/crop_tool.h
+    ../src/ui/tools/eyedropper/eyedropper_tool.cpp
+    ../src/ui/tools/eyedropper/eyedropper_tool.h
     ../src/ui/tools/selection/area_selection_tool.cpp
     ../src/ui/tools/selection/area_selection_tool.h
     ../src/ui/tools/selection/object/object_selection_tool.cpp
@@ -205,6 +207,8 @@ add_executable(creative-suite-image-editor-export-ui-tests
     ../src/ui/tools/brush/eraser_tool.h
     ../src/ui/tools/crop/crop_tool.cpp
     ../src/ui/tools/crop/crop_tool.h
+    ../src/ui/tools/eyedropper/eyedropper_tool.cpp
+    ../src/ui/tools/eyedropper/eyedropper_tool.h
     ../src/ui/tools/selection/area_selection_tool.cpp
     ../src/ui/tools/selection/area_selection_tool.h
     ../src/ui/tools/selection/object/object_selection_tool.cpp
