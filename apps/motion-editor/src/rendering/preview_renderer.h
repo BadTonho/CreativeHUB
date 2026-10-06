@@ -17,6 +17,8 @@
 #include <optional>
 #include <vector>
 
+class QOffscreenSurface;
+
 namespace motion::ui {
 
 struct PreviewLayerSnapshot {
@@ -86,7 +88,9 @@ public:
     PreviewRenderer(QObject* result_receiver,
                     ResultHandler result_handler,
                     RenderFunction render_function = {},
-                    diagnostics::PerformanceMetrics* metrics = nullptr);
+                    diagnostics::PerformanceMetrics* metrics = nullptr,
+                    bool gpu_composition_enabled = false,
+                    QOffscreenSurface* gpu_surface = nullptr);
     ~PreviewRenderer() override;
 
     [[nodiscard]] std::uint64_t submit(

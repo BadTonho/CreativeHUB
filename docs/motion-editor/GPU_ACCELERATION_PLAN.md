@@ -1,17 +1,16 @@
 # GPU Acceleration Plan
 
-Status: **provisional Motion integration plan, saved on 2026-10-02;
-Motion implementation deferred**.
+Status: **provisional Motion integration; experimental preview composition
+implemented on 2026-10-06; native driver acceptance pending**.
 The first consumer of the shared GPU compositor is Video Editor. Each stage has a separate delivery and
 acceptance gate; completing one stage does not imply that the whole renderer
 has moved to the GPU.
 
-Motion Studio GPU integration and effects remain planned. The shared OpenGL
-adapter is implemented for the Video Editor's opt-in timeline preview and per-job
-offline export through 4K; the
-current Motion Studio renderer remains on CPU. Resume from Stage 1A by adopting
-that adapter when Motion integration is requested, without creating another
-composition engine. See [Video Editor's delivery](../video-editor/GPU_ACCELERATION_PLAN.md).
+The shared OpenGL adapter is implemented for the Video Editor's opt-in timeline
+preview and per-job offline export through 4K; Motion Studio now has an opt-in
+experimental preview integration. Motion effects and offline export remain on
+CPU. Motion reuses the shared adapter and does not create another composition
+engine. See [Video Editor's delivery](../video-editor/GPU_ACCELERATION_PLAN.md).
 
 ## Current evidence and priorities
 
@@ -22,12 +21,19 @@ Video Editor's [export contract](../video-editor/GPU_EXPORT.md) now covers isola
 per-job worker resources, CPU fallback and separate schema-1 metrics. Shared RGBA
 and direct paths use two 16 KiB axis lookup buffers for UHD/portrait 4K. Its
 [export measurements](../video-editor/GPU_EXPORT_RESULTS.md) are additional reuse
-evidence; Motion Studio preview/effects/export remain CPU until its own integration.
+evidence; Motion Studio GPU effects and export remain CPU while preview
+composition is experimental and opt-in.
 
-The current pipeline rasterizes text/shapes and applies effects on the preview
-worker, then calls the shared CPU compositor. Offline export uses the same
-Motion-owned frame renderer. Existing diagnostics already separate decoding,
-effects, composition, full frame rendering, and request-to-viewer-paint times.
+The preview pipeline rasterizes text/shapes and applies effects on the preview
+worker, then calls the shared CPU compositor by default. With
+`CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`, it sends those same raster layers to
+the shared OpenGL compositor, reads the composed result back to RGBA, and keeps
+the existing viewer path. Unsupported contexts and composition failures fall
+back to CPU; after the first failure, the worker keeps using CPU for the rest of
+its lifetime to avoid repeated errors. Offline export continues to use the CPU
+compositor. Diagnostics schema 5 records GPU-composed frames, fallbacks,
+failures, upload/readback bytes, and upload, draw-submission, and readback
+durations.
 
 A read-only inspection of existing local diagnostic intervals on 2026-10-02
 found 1920 x 1080, two-layer samples with composition averages around
@@ -40,7 +46,7 @@ files are included in this plan.
 
 ## Stage 1 — Layer composition
 
-### 1A — Experimental backend and preview integration (planned)
+### 1A — Experimental backend and preview integration (implemented)
 
 - Adopt the optional OpenGL 3.2 Core compositor under `libs/composition/`, using
   the existing shared frame, transform, and ordered-layer contracts established
@@ -52,21 +58,31 @@ files are included in this plan.
 - Create the offscreen surface on the GUI thread; create, use, and release the
   context and its resources on the preview worker. Keep rendering off the UI
   thread and retain cancellation and generation checks.
-- Proposed opt-in: `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`. This setting does
-  not exist yet; introduce it with the backend and its regression coverage.
+- Opt-in: `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`. The setting is read once
+  when the application starts; all other values leave the CPU preview enabled.
   Default preview and offline export continue to use the CPU compositor.
   On GPU initialization or rendering failure, log the cause and compose the
   same request on the CPU. Hardware limits must also allow a CPU fallback.
 - Reuse bounded GPU allocations. Document source uploads and output readback
   explicitly rather than claiming a path without CPU/GPU transfers.
+- GPU frame/resource timing and byte totals are included in Motion preview
+  diagnostics schema 5. Export's frame renderer does not receive the opt-in
+  backend and remains CPU-only.
 - Keep `.motion` v4, recovery v1, `.cimg` v11, and `.csp` unchanged.
 
-### 1B — Regression coverage and measured acceptance (pending)
+### 1B — Regression coverage and measured acceptance (in progress)
 
 - Compare the GPU and CPU output for opaque/transparent sources, partial
   opacity, order, aspect fit, movement, scale, rotation, canvas edges, padded
   strides, blank frames, invalid input, and hardware limits. Determine and
   record a pixel tolerance for floating-point sampling and blend rounding.
+- Automated Motion preview regression checks exact CPU output after an
+  unavailable-context fallback and compares a layered image/shape request
+  with rasterized text against CPU output within two channel values when an
+  offscreen OpenGL surface is available. Shared compositor tests cover
+  transforms, alpha, ordering,
+  padded strides, cancellation, and hardware limits. These checks do not replace
+  native-driver acceptance.
 - Exercise rapid seeks, playback, cancellation, composition replacement,
   repeated opening/closing, context failure, and resource cleanup.
 - Use existing composition, full-render, and request-to-paint metrics, plus
@@ -126,10 +142,9 @@ unnecessary transfers have been removed where measurements justify it.
 
 ## Provisional technology decision
 
-OpenGL 3.2 Core through public Qt APIs is the proposed first experiment. The
-repository already deploys Qt OpenGL for Video Editor presentation, and the
-local Qt 6.7.2 installation supports these APIs. The implementation would add
-the Qt OpenGL module to Motion Studio's existing Qt dependencies. Track the
+OpenGL 3.2 Core through public Qt APIs is the first experimental backend. The
+repository already deploys Qt OpenGL for Video Editor presentation. Motion
+Studio now links the Qt OpenGL module and shared compositor target; track the
 deployed module and its existing Qt open-source license obligations.
 
 Benefits include reuse of the current C++ contracts and an isolated worker
@@ -168,9 +183,10 @@ while worker contexts can render to framebuffer objects. See the
 
 Record build, OS, GPU, driver, setting, actions, and outcome for each item.
 
-1. Open the same composition in default mode and with the GPU opt-in. Compare
-   layer order, transparent image/video edges, text/shapes, opacity, positions,
-   scaled content, and clockwise/counterclockwise rotation.
+1. Open the same composition once with the environment variable unset and once
+   with `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`. Compare layer order,
+   transparent image/video edges, text/shapes, opacity, positions, scaled
+   content, and clockwise/counterclockwise rotation.
 2. Seek rapidly, play/pause/loop, edit keys, replace the composition, and close
    during rendering. Confirm fresh frames and no freeze or resource errors.
 3. Include effects: they still run on the CPU before GPU composition. Compare
@@ -181,9 +197,8 @@ Record build, OS, GPU, driver, setting, actions, and outcome for each item.
 5. Compare the stage timing records and full-render/request-to-paint metrics
    under identical workloads; include upload and readback costs in the result.
 
-This is a future implementation checklist. Automated boundary coverage and
-native driver results must accompany the backend; this checklist does not
-establish acceptance by itself.
+This checklist records pending native-driver acceptance; automated boundary
+coverage does not establish platform acceptance by itself.
 
 ## Shared Video Editor stage 2 delivery
 

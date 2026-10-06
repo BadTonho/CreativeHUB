@@ -140,7 +140,7 @@ specified in [FORMAT.md](FORMAT.md).
 | creative-suite::animation | 2D transform data, keyframe storage, interpolation/easing validation, and linear/cubic-Bezier evaluation. It has no timeline, UI, or document dependency. | Evaluate the five transform properties consistently for Motion Studio preview, playback, and export. Motion Studio owns the Graph Editor, presets, history actions, and frame mapping. |
 | creative-suite::composition | CPU composition of raster frames using shared transforms, opacity, and alpha coverage. It has no UI, timeline, or project dependency. | Motion Studio uses it to composite active image, video, text, and shape frames in document order. Text and vector-shape rasterization remains Motion Studio-owned. |
 | creative-suite::effects | CPU RGBA visual processing with stable Video Editor filter definitions and a fused Color Adjustment entry point. It owns neither an application model nor UI. | Motion Studio delegates Color Adjustment processing and cancellation; it retains its effect variant, Inspector, history, blur implementation, and `.motion` persistence. |
-| creative-suite::composition-opengl | Optional public Qt/OpenGL 3.2 Core adapter for the shared ordered RGBA layer contract, worker resources, cancellation, 4K axis lookup buffers, RGBA readback, known allocation metrics and shared texture leases/fences with bounded reservations. Video Editor is the first preview/export consumer; see its [export contract](../video-editor/GPU_EXPORT.md). | Future Motion integration reuses this backend; current preview, effects and export remain CPU. |
+| creative-suite::composition-opengl | Optional public Qt/OpenGL 3.2 Core adapter for the shared ordered RGBA layer contract, worker resources, cancellation, 4K axis lookup buffers, RGBA readback, known allocation metrics and shared texture leases/fences with bounded reservations. Video Editor is the first preview/export consumer; see its [export contract](../video-editor/GPU_EXPORT.md). | Motion Studio uses it for opt-in experimental preview composition with CPU fallback; effects and export remain CPU. |
 | creative-suite::diagnostics | Structured local logging with caller-selected application log directories; the legacy no-argument default remains compatible with the Video Editor. | Reuse with a Motion Studio-specific application identifier and log directory. |
 | creative-suite::video-media | FFmpeg video playback session with a neutral optional DecodeObserver, including actual timestamp-seek outcomes and durations. It depends on FFmpeg and shared diagnostics, not preview UI. | Motion Studio keeps one playback session per source on its preview worker, uses sequential decoding for short forward gaps during playback, and reports seek/decode path metrics. Interactive seeking and export retain timestamp-based decoding. Its application-owned monotonic clock schedules composition frames; audio remains out of scope. |
 | creative-suite::video-encoding | Qt- and project-independent FFmpeg API for RGBA video encoding, optional interleaved stereo audio input, container/codec capability discovery, and atomic file publication. It shares the RGBA frame type but owns no composition, timeline, or UI. | Motion Studio schedules and renders immutable document snapshots, then uses the shared encoder for video-only output. The Video Editor uses the same encoding and discovery implementation while retaining timeline assembly, audio rendering, render queue, and application settings. |
@@ -275,10 +275,11 @@ validation.
   the target. One-frame advances keep the decoder's direct next-frame path;
   backward seeks and larger gaps use timestamp seeking. Failed forward decode
   retries by timestamp seek unless cancelled. Interactive scrubbing and export
-  keep their existing seek behavior. Motion preview schema v4 records actual
-  timestamp-seek outcomes and durations, forward-decode attempts/completions/
-  fallbacks, and discarded intermediate frames without logging media paths or
-  content.
+  keep their existing seek behavior. Motion preview schema v5 records GPU
+  composition/fallback counters, transfer bytes and stage timings, as well as
+  actual timestamp-seek outcomes and durations, forward-decode attempts/
+  completions/fallbacks, and discarded intermediate frames without logging
+  media paths or content.
 
 ## Language boundary
 

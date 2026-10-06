@@ -20,6 +20,9 @@ enum class PreviewTimingStage : std::size_t {
     TextShapeRasterization,
     Effects,
     Composition,
+    GpuCompositionUpload,
+    GpuCompositionDrawSubmission,
+    GpuCompositionReadback,
     FrameRender,
     RequestToViewerPaint,
     Count
@@ -51,6 +54,11 @@ struct PreviewMetricsSnapshot {
     std::uint64_t forward_decode_completions = 0;
     std::uint64_t forward_decode_fallbacks = 0;
     std::uint64_t discarded_intermediate_frames = 0;
+    std::uint64_t gpu_composition_frames = 0;
+    std::uint64_t gpu_composition_fallbacks = 0;
+    std::uint64_t gpu_composition_failures = 0;
+    std::uint64_t gpu_composition_uploaded_bytes = 0;
+    std::uint64_t gpu_composition_readback_bytes = 0;
     std::array<TimingSummary,
                static_cast<std::size_t>(PreviewTimingStage::Count)> timings{};
     std::array<TimingSummary,
@@ -94,6 +102,13 @@ public:
                              std::uint64_t duration_nanoseconds) noexcept;
     void recordForwardDecodeFallback() noexcept;
     void recordDiscardedIntermediateFrame() noexcept;
+    void recordGpuComposition(bool completed,
+                              bool failed,
+                              std::uint64_t uploaded_bytes,
+                              std::uint64_t readback_bytes,
+                              std::uint64_t upload_nanoseconds,
+                              std::uint64_t draw_submission_nanoseconds,
+                              std::uint64_t readback_nanoseconds) noexcept;
     void recordTiming(PreviewTimingStage stage,
                       std::uint64_t duration_nanoseconds) noexcept;
     void recordEffectTiming(PreviewEffectKind effect,
@@ -127,6 +142,11 @@ private:
     std::uint64_t forward_decode_completions_ = 0;
     std::uint64_t forward_decode_fallbacks_ = 0;
     std::uint64_t discarded_intermediate_frames_ = 0;
+    std::uint64_t gpu_composition_frames_ = 0;
+    std::uint64_t gpu_composition_fallbacks_ = 0;
+    std::uint64_t gpu_composition_failures_ = 0;
+    std::uint64_t gpu_composition_uploaded_bytes_ = 0;
+    std::uint64_t gpu_composition_readback_bytes_ = 0;
     std::array<TimingBucket,
                static_cast<std::size_t>(PreviewTimingStage::Count)> timings_{};
     std::array<TimingBucket,

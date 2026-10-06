@@ -4,6 +4,7 @@
 #include "../diagnostics/performance_metrics.h"
 
 #include <creative_suite/composition/frame_compositor.h>
+#include <creative_suite/composition/opengl_frame_compositor.h>
 #include <creative_suite/diagnostics/logger.h>
 #include <creative_suite/animation/animation.h>
 
@@ -88,6 +89,13 @@ void CompositionFrameRenderer::reset()
 {
     video_sessions_.clear();
     content_frames_.clear();
+}
+
+void CompositionFrameRenderer::shutdown()
+{
+    reset();
+    // OpenGlFrameCompositor must be destroyed on the same worker that created it.
+    gpu_compositor_.reset();
 }
 creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     const PreviewRequest& request,
@@ -347,6 +355,68 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
     }
     StageTimer composition_timer(
         record_preview_metrics_, diagnostics::PreviewTimingStage::Composition);
+    if (gpu_composition_enabled_ && !gpu_composition_disabled_after_failure_) {
+        using creative_suite::composition::OpenGlCompositionStatus;
+        creative_suite::composition::OpenGlCompositionTimings gpu_timings;
+        creative_suite::composition::OpenGlCompositionResult gpu_result;
+        try {
+            if (!gpu_compositor_) {
+                gpu_compositor_ = std::make_unique<
+                    creative_suite::composition::OpenGlFrameCompositor>(gpu_surface_);
+            }
+            gpu_result = gpu_compositor_->compose(
+                request.canvas_size.width,
+                request.canvas_size.height,
+                composition_layers,
+                should_cancel,
+                &gpu_timings);
+        } catch (const std::exception& error) {
+            gpu_result.status = OpenGlCompositionStatus::Failed;
+            gpu_result.operation = "compose";
+            gpu_result.cause = error.what();
+        } catch (...) {
+            gpu_result.status = OpenGlCompositionStatus::Failed;
+            gpu_result.operation = "compose";
+            gpu_result.cause = "Unknown OpenGL composition failure";
+        }
+        if (gpu_result.status == OpenGlCompositionStatus::Cancelled ||
+            (should_cancel && should_cancel())) {
+            return {};
+        }
+        if (gpu_result.status == OpenGlCompositionStatus::Complete &&
+            gpu_result.frame.has_value()) {
+            if (record_preview_metrics_) {
+                diagnostics::PerformanceMetrics::instance().recordGpuComposition(
+                    true, false, gpu_timings.uploaded_bytes, gpu_timings.readback_bytes,
+                    gpu_timings.upload_nanoseconds, gpu_timings.draw_submission_nanoseconds,
+                    gpu_timings.readback_nanoseconds);
+            }
+            return std::make_shared<const creative_suite::media::RgbaFrame>(
+                std::move(*gpu_result.frame));
+        }
+
+        gpu_composition_disabled_after_failure_ = true;
+        const bool gpu_failed = gpu_result.status == OpenGlCompositionStatus::Failed ||
+            gpu_result.status == OpenGlCompositionStatus::Complete;
+        creative_suite::diagnostics::Logger::instance().log(
+            gpu_failed ? creative_suite::diagnostics::Level::Error
+                       : creative_suite::diagnostics::Level::Warning,
+            "motion_preview", "gpu_composition_fallback",
+            gpu_result.cause.empty() ? "OpenGL composition is unavailable; using CPU composition"
+                                     : gpu_result.cause,
+            {{"gpu_operation", gpu_result.operation},
+             {"error_code", std::to_string(gpu_result.error_code)},
+             {"canvas_width", std::to_string(request.canvas_size.width)},
+             {"canvas_height", std::to_string(request.canvas_size.height)},
+             {"status", gpu_result.status == OpenGlCompositionStatus::Unsupported
+                    ? "unsupported" : "failed"}});
+        if (record_preview_metrics_) {
+            diagnostics::PerformanceMetrics::instance().recordGpuComposition(
+                false, gpu_failed, gpu_timings.uploaded_bytes, gpu_timings.readback_bytes,
+                gpu_timings.upload_nanoseconds, gpu_timings.draw_submission_nanoseconds,
+                gpu_timings.readback_nanoseconds);
+        }
+    }
     auto composed = creative_suite::composition::FrameCompositor::compose(
         request.canvas_size.width,
         request.canvas_size.height,
