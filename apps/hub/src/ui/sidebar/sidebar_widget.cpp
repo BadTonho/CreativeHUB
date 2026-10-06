@@ -36,10 +36,12 @@ SidebarWidget::SidebarWidget(QWidget* parent)
     layout->addWidget(sectionLabel);
 
     auto* allAppsBtn = new SidebarButton(QStringLiteral("Todos os Aplicativos"), this);
+    auto* projectsBtn = new SidebarButton(QStringLiteral("Projetos"), this);
     auto* updatesBtn = new SidebarButton(QStringLiteral("Atualizações"), this);
     auto* settingsBtn = new SidebarButton(QStringLiteral("Configurações"), this);
 
     m_buttons.push_back(allAppsBtn);
+    m_buttons.push_back(projectsBtn);
     m_buttons.push_back(updatesBtn);
     m_buttons.push_back(settingsBtn);
 
@@ -93,8 +95,8 @@ void SidebarWidget::setCurrentIndex(int index) {
 }
 
 void SidebarWidget::setUpdatesCount(int count) {
-    if (m_buttons.size() > 1) {
-        m_buttons[1]->setBadgeCount(count);
+    if (m_buttons.size() > 2) {
+        m_buttons[2]->setBadgeCount(count);
     }
 }
 

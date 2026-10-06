@@ -16,6 +16,8 @@ Follow the repository-wide requirements in
 | Install scheduling and restore after failed startup | Runtime state is covered indirectly; no real Inno Setup integration test | Close an editor to complete an update, then test installer failure and Hub restoration in a disposable Windows profile: **pending**. |
 | Hub's own update | Shared updater component and Hub startup integration | Install and update the Hub itself without changing editor installations: **pending**. |
 | Changelog discovery, semantic version sorting, and modal markdown display | `apps/hub/tests/test_changelog_reader.cpp` (`hub-changelog-reader-test`), `apps/hub/tests/test_app_details_modal.cpp` (`hub-details-modal-test`) | In Hub UI, open app details modal; verify changelog section renders notes or empty state gracefully: **covered**. |
+| Recent projects tracking, file-to-app detection, recency reordering, JSON persistence, and launch delegation | `apps/hub/tests/test_recent_projects.cpp` (`hub-recent-projects-test`) | Open Projects tab in Hub; open project file via dialog or quick cards; verify list updates with recency order, app badges, and removal: **covered**. |
+| Suite storage calculation, multi-directory cache discovery, byte formatting, and cache cleanup | `apps/hub/tests/test_storage_manager.cpp` (`hub-storage-manager-test`) | Open Settings tab in Hub; verify total cache size displays formatted bytes; trigger "Limpar Cache da Suíte" and verify feedback and size update: **covered**. |
 
 ## Manual Windows checklist
 

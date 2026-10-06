@@ -44,6 +44,23 @@ QIcon createUpdatesIcon(const QColor& color) {
     return QIcon(pixmap);
 }
 
+QIcon createProjectsIcon(const QColor& color) {
+    constexpr int size = 20;
+    QPixmap pixmap(size, size);
+    pixmap.fill(Qt::transparent);
+    QPainter p(&pixmap);
+    p.setRenderHint(QPainter::Antialiasing);
+    QPen pen(color, 1.8);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    p.setPen(pen);
+    p.setBrush(Qt::NoBrush);
+    p.drawRoundedRect(QRectF(2.5, 4.5, 15, 11), 2, 2);
+    p.drawLine(QPointF(2.5, 8.5), QPointF(17.5, 8.5));
+    p.drawLine(QPointF(7.5, 4.5), QPointF(9.5, 6.5));
+    return QIcon(pixmap);
+}
+
 QIcon createSettingsIcon(const QColor& color) {
     constexpr int size = 20;
     QPixmap pixmap(size, size);
@@ -114,6 +131,8 @@ void SidebarButton::updateVisuals() {
 
     if (m_title.contains(QStringLiteral("Aplicativos"))) {
         setIcon(createAppsIcon(iconColor));
+    } else if (m_title.contains(QStringLiteral("Projetos"))) {
+        setIcon(createProjectsIcon(iconColor));
     } else if (m_title.contains(QStringLiteral("Atualizações"))) {
         setIcon(createUpdatesIcon(iconColor));
     } else if (m_title.contains(QStringLiteral("Configurações"))) {

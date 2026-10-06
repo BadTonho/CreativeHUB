@@ -14,6 +14,8 @@
 #include <QResizeEvent>
 #include <QStatusBar>
 #include <QTimer>
+#include <QDesktopServices>
+#include <QUrl>
 
 namespace creative_suite::hub {
 
@@ -77,6 +79,11 @@ void MainWindow::setupUi() {
     connect(m_appsPage, &AppsPage::downloadAppRequested, this, &MainWindow::onDownloadApp);
     connect(m_appsPage, &AppsPage::cancelDownloadRequested, this, &MainWindow::onCancelDownload);
     m_pagesStack->addWidget(m_appsPage);
+
+    m_projectsPage = new ProjectsPage(&m_recentProjectsManager, &m_catalog, this);
+    connect(m_projectsPage, &ProjectsPage::openProjectRequested, this, &MainWindow::onOpenProject);
+    connect(m_projectsPage, &ProjectsPage::newProjectRequested, this, &MainWindow::onNewProject);
+    m_pagesStack->addWidget(m_projectsPage);
 
     m_updatesPage = new UpdatesPage(&m_catalog, this);
     connect(m_updatesPage, &UpdatesPage::appDetailsRequested, this, &MainWindow::onShowAppDetails);
@@ -297,6 +304,64 @@ void MainWindow::onOpenApp(const QString& appId) {
                 .arg(app.executableName())
         );
     }
+}
+
+void MainWindow::onOpenProject(const QString& filePath, const QString& appId) {
+    QString targetAppId = appId;
+    if (targetAppId.isEmpty()) {
+        targetAppId = RecentProjectsManager::detectAppForFile(filePath);
+    }
+
+    HubLogger::instance().logInfo(
+        QStringLiteral("MainWindow"),
+        QStringLiteral("onOpenProject"),
+        QStringLiteral("Abrindo projeto"),
+        QStringLiteral("%1 (%2)").arg(filePath, targetAppId)
+    );
+
+    auto appOpt = m_catalog.findApp(targetAppId);
+    if (appOpt.has_value()) {
+        const auto& app = *appOpt;
+        const bool success = m_launcher.launch(app, {filePath});
+        if (!success) {
+            QMessageBox::warning(
+                this,
+                QStringLiteral("Aplicativo não encontrado"),
+                QStringLiteral("Não foi possível encontrar ou executar o aplicativo '%1' para abrir o projeto '%2'. Certifique-se de que o aplicativo foi compilado.")
+                    .arg(app.name(), filePath)
+            );
+        } else {
+            m_recentProjectsManager.addOrUpdateProject(filePath, targetAppId);
+            if (m_projectsPage) {
+                m_projectsPage->refreshList();
+            }
+        }
+    } else {
+        // Fallback: try opening with default desktop tool
+        const bool opened = QDesktopServices::openUrl(QUrl::fromLocalFile(filePath));
+        if (opened) {
+            m_recentProjectsManager.addOrUpdateProject(filePath, targetAppId);
+            if (m_projectsPage) {
+                m_projectsPage->refreshList();
+            }
+        } else {
+            QMessageBox::warning(
+                this,
+                QStringLiteral("Não foi possível abrir o projeto"),
+                QStringLiteral("Não há nenhum aplicativo associado para abrir o arquivo '%1'.").arg(filePath)
+            );
+        }
+    }
+}
+
+void MainWindow::onNewProject(const QString& appId) {
+    HubLogger::instance().logInfo(
+        QStringLiteral("MainWindow"),
+        QStringLiteral("onNewProject"),
+        QStringLiteral("Criando novo projeto no aplicativo"),
+        appId
+    );
+    onOpenApp(appId);
 }
 
 void MainWindow::onDownloadApp(const QString& appId) {

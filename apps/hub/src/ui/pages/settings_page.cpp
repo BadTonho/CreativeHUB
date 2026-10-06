@@ -2,6 +2,7 @@
 #include "../../diagnostics/hub_logger.h"
 #include "../theme/hub_palette.h"
 #include "../theme/hub_style.h"
+#include "../../model/storage_manager.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -162,10 +163,100 @@ void SettingsPage::setupUi() {
     diagLayout->addLayout(logRow);
     mainLayout->addWidget(diagCard);
 
+    // Section 4: Armazenamento e Cache (Card)
+    auto* storageCard = new QFrame(scrollContainer);
+    storageCard->setStyleSheet(QStringLiteral(
+        "QFrame {"
+        "   background-color: #161616;"
+        "   border: 1px solid #262626;"
+        "   border-radius: 12px;"
+        "   padding: 14px 18px;"
+        "}"
+    ));
+    auto* storageLayout = new QVBoxLayout(storageCard);
+    storageLayout->setSpacing(12);
+
+    auto* storageSectionLabel = new QLabel(QStringLiteral("ARMAZENAMENTO E CACHE DA SUÍTE"), storageCard);
+    storageSectionLabel->setStyleSheet(QStringLiteral("font-size: 11px; font-weight: 800; color: #777777; letter-spacing: 0.8px; background: transparent;"));
+    storageLayout->addWidget(storageSectionLabel);
+
+    auto* storageDescLabel = new QLabel(
+        QStringLiteral("Gerencie o espaço em disco utilizado para pré-visualizações de linha do tempo, proxies de vídeo e arquivos temporários."),
+        storageCard
+    );
+    storageDescLabel->setWordWrap(true);
+    storageDescLabel->setStyleSheet(QStringLiteral("font-size: 12px; color: #888888; background: transparent;"));
+    storageLayout->addWidget(storageDescLabel);
+
+    auto* cacheInfoRow = new QHBoxLayout();
+    cacheInfoRow->setSpacing(8);
+
+    auto* cacheText = new QLabel(QStringLiteral("Espaço total em cache da suíte:"), storageCard);
+    cacheText->setStyleSheet(QStringLiteral("color: #d0d0d0; font-size: 13px; font-weight: 500; background: transparent;"));
+    cacheInfoRow->addWidget(cacheText);
+
+    m_cacheSizeLabel = new QLabel(QStringLiteral("Calculando..."), storageCard);
+    m_cacheSizeLabel->setStyleSheet(QStringLiteral("color: #ffffff; font-size: 13px; font-weight: 800; background: transparent;"));
+    cacheInfoRow->addWidget(m_cacheSizeLabel);
+    cacheInfoRow->addStretch();
+
+    storageLayout->addLayout(cacheInfoRow);
+
+    auto* cacheActionsRow = new QHBoxLayout();
+    cacheActionsRow->setSpacing(10);
+
+    auto* clearCacheBtn = new QPushButton(QStringLiteral("Limpar Cache Seguro"), storageCard);
+    clearCacheBtn->setFixedHeight(36);
+    clearCacheBtn->setCursor(Qt::PointingHandCursor);
+    clearCacheBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
+    connect(clearCacheBtn, &QPushButton::clicked, this, &SettingsPage::onClearCache);
+    cacheActionsRow->addWidget(clearCacheBtn);
+
+    auto* openCacheBtn = new QPushButton(QStringLiteral("Abrir Pasta de Cache"), storageCard);
+    openCacheBtn->setFixedHeight(36);
+    openCacheBtn->setCursor(Qt::PointingHandCursor);
+    openCacheBtn->setStyleSheet(HubStyle::secondaryButtonStyle());
+    connect(openCacheBtn, &QPushButton::clicked, this, &SettingsPage::onOpenCacheFolder);
+    cacheActionsRow->addWidget(openCacheBtn);
+
+    cacheActionsRow->addStretch();
+    storageLayout->addLayout(cacheActionsRow);
+
+    m_cacheStatusNote = new QLabel(storageCard);
+    m_cacheStatusNote->setVisible(false);
+    m_cacheStatusNote->setStyleSheet(QStringLiteral("color: #ffffff; font-size: 12px; font-weight: 600; background: transparent;"));
+    storageLayout->addWidget(m_cacheStatusNote);
+
+    mainLayout->addWidget(storageCard);
+
     mainLayout->addStretch();
 
     scrollArea->setWidget(scrollContainer);
     rootLayout->addWidget(scrollArea);
+
+    refreshCacheSize();
+}
+
+void SettingsPage::refreshCacheSize() {
+    const qint64 bytes = StorageManager::calculateTotalCacheSize();
+    if (m_cacheSizeLabel) {
+        m_cacheSizeLabel->setText(StorageManager::formatBytes(bytes));
+    }
+}
+
+void SettingsPage::onClearCache() {
+    StorageManager::clearSuiteCache();
+    refreshCacheSize();
+    if (m_cacheStatusNote) {
+        m_cacheStatusNote->setText(QStringLiteral("✓ Cache da suíte liberado com sucesso!"));
+        m_cacheStatusNote->setVisible(true);
+    }
+}
+
+void SettingsPage::onOpenCacheFolder() {
+    const QString cachePath = StorageManager::defaultCachePath();
+    QDir().mkpath(cachePath);
+    QDesktopServices::openUrl(QUrl::fromLocalFile(cachePath));
 }
 
 void SettingsPage::onBrowseInstallPath() {

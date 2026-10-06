@@ -18,7 +18,7 @@ public:
     [[nodiscard]] std::optional<QString> findExecutable(const QString& executableName) const;
     [[nodiscard]] bool isInstalled(const AppInfo& app) const;
 
-    bool launch(const AppInfo& app);
+    bool launch(const AppInfo& app, const QStringList& arguments = {});
 
 private:
     QStringList m_searchPaths;

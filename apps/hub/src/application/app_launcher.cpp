@@ -61,7 +61,7 @@ bool AppLauncher::isInstalled(const AppInfo& app) const {
     return findExecutable(app.executableName()).has_value();
 }
 
-bool AppLauncher::launch(const AppInfo& app) {
+bool AppLauncher::launch(const AppInfo& app, const QStringList& arguments) {
     const auto execPath = findExecutable(app.executableName());
     if (!execPath.has_value()) {
         HubLogger::instance().logError(
@@ -83,7 +83,7 @@ bool AppLauncher::launch(const AppInfo& app) {
         path
     );
 
-    const bool success = QProcess::startDetached(path, QStringList(), workingDir);
+    const bool success = QProcess::startDetached(path, arguments, workingDir);
     if (!success) {
         HubLogger::instance().logError(
             QStringLiteral("AppLauncher"),
