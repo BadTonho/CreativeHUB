@@ -2859,9 +2859,14 @@ bool testEyedropperTool() {
     const auto fractional_sample = eyedropper_tool.sample(
         sample_pixels, QPointF(1.8, 0.7));
     const auto empty_image_sample = eyedropper_tool.sample(QImage(), QPointF());
-    if (!fractional_sample || *fractional_sample != expected_color || empty_image_sample) {
+    QImage transparent_pixels(1, 1, QImage::Format_ARGB32);
+    transparent_pixels.fill(QColor(210, 60, 35, 0));
+    const auto transparent_sample = eyedropper_tool.sample(
+        transparent_pixels, QPointF(0.0, 0.0));
+    if (!fractional_sample || *fractional_sample != expected_color ||
+        empty_image_sample || transparent_sample) {
         std::cerr << "Eyedropper pixel lookup did not preserve RGBA, floor coordinates, "
-                     "or reject an empty image.\n";
+                     "or ignore empty pixels and images.\n";
         return false;
     }
 
@@ -2877,6 +2882,7 @@ bool testEyedropperTool() {
     canvas.resize(400, 300);
     QImage pixels(16, 16, QImage::Format_ARGB32);
     pixels.fill(expected_color);
+    pixels.setPixelColor(0, 0, QColor(210, 60, 35, 0));
     canvas.setImage(pixels);
     QObject::connect(&tool_sidebar, &image_editor::ToolSidebar::activeToolChanged,
         &canvas, [&canvas](image_editor::ToolSidebar::Tool tool) {
@@ -2908,6 +2914,15 @@ bool testEyedropperTool() {
         (canvas.width() - pixels.width() * canvas.zoomFactor()) / 2.0;
     const qreal target_top =
         (canvas.height() - pixels.height() * canvas.zoomFactor()) / 2.0;
+    const QPoint transparent_sample_position(
+        static_cast<int>(std::floor(target_left + canvas.zoomFactor() * 0.5)),
+        static_cast<int>(std::floor(target_top + canvas.zoomFactor() * 0.5)));
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier,
+                      transparent_sample_position);
+    QCoreApplication::processEvents();
+    const bool transparent_click_ignored = sampled.size() == 1 &&
+        tool_sidebar.brushColor() == expected_color && painted.isEmpty();
+
     const QPoint outside_position(static_cast<int>(std::floor(target_left / 2.0)),
                                   static_cast<int>(std::floor(target_top / 2.0)));
     QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, outside_position);
@@ -2922,12 +2937,36 @@ bool testEyedropperTool() {
         painted.at(0).at(1).value<QColor>() == expected_color &&
         !tool_sidebar.eyedropperToolActive() && !canvas.eyedropperMode();
 
-    if (!valid_sample || !outside_click_ignored || !paint_uses_sampled_color) {
+    auto* color_button = tool_sidebar.findChild<QToolButton*>(
+        QStringLiteral("paintBrushColorButton"));
+    tool_sidebar.setBrushColor(QColor(20, 30, 40, 0));
+    const QColor recovered_color(85, 60, 40, 220);
+    bool color_dialog_was_used = false;
+    bool color_dialog_started_opaque = false;
+    QTimer::singleShot(0, [&]() {
+        auto* dialog = qobject_cast<QColorDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr) return;
+        color_dialog_was_used = true;
+        color_dialog_started_opaque = dialog->currentColor().alpha() == 255;
+        dialog->setCurrentColor(recovered_color);
+        dialog->accept();
+    });
+    if (color_button != nullptr) color_button->click();
+    const bool transparent_color_can_be_changed = color_button != nullptr &&
+        color_dialog_was_used && color_dialog_started_opaque &&
+        tool_sidebar.brushColor() == recovered_color;
+
+    if (!valid_sample || !transparent_click_ignored || !outside_click_ignored ||
+        !paint_uses_sampled_color || !transparent_color_can_be_changed) {
         std::cerr << "Eyedropper check failed: sample=" << sampled.size()
+                  << ", transparent-click-ignored=" << transparent_click_ignored
                   << ", outside-ignored=" << outside_click_ignored
-                  << ", paint-color=" << paint_uses_sampled_color << '\n';
+                  << ", paint-color=" << paint_uses_sampled_color
+                  << ", transparent-color-recovery="
+                  << transparent_color_can_be_changed << '\n';
     }
-    return valid_sample && outside_click_ignored && paint_uses_sampled_color;
+    return valid_sample && transparent_click_ignored && outside_click_ignored &&
+        paint_uses_sampled_color && transparent_color_can_be_changed;
 }
 
 int main(int argc, char* argv[]) {
