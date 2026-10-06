@@ -27,6 +27,7 @@ enum class OperationKind {
     FlipVertical,
     PaintStroke,
     EraseStroke,
+    BucketFill,
     Shape,
     Text,
     RasterImage,
@@ -56,6 +57,15 @@ struct ImageEraseStroke {
     std::optional<QPainterPath> clipping_path;
 
     bool operator==(const ImageEraseStroke&) const = default;
+};
+
+struct ImageBucketFillData {
+    QPoint seed;
+    QColor color = Qt::black;
+    int tolerance = 0;
+    std::optional<QPainterPath> clipping_path;
+
+    bool operator==(const ImageBucketFillData&) const = default;
 };
 
 struct ImageShapeData {
@@ -116,6 +126,7 @@ struct ImageOperation {
     QRect transform_bounds;
     ImagePaintStroke paint_stroke;
     ImageEraseStroke erase_stroke;
+    ImageBucketFillData bucket_fill;
     ImageShapeData shape;
     ImageTextData text;
     ImageRasterData raster;
@@ -201,7 +212,7 @@ struct RecoveryDocumentData {
 
 class ImageDocumentStore final {
 public:
-    static constexpr int kCurrentDocumentVersion = 13;
+    static constexpr int kCurrentDocumentVersion = 14;
     static constexpr qint64 kMaximumCanvasPixels = 64LL * 1024LL * 1024LL;
     static constexpr qsizetype kMaximumPaintStrokePoints = 100'000;
     static constexpr qsizetype kMaximumStrokeClipPathElements = 100'000;

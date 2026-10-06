@@ -12,6 +12,8 @@ add_library(creative-suite-image-editor-core STATIC
     src/core/document/image_document_codec.h
     src/core/document/image_document_geometry.cpp
     src/core/document/image_document_geometry.h
+    src/core/document/image_bucket_fill.cpp
+    src/core/document/image_bucket_fill.h
     src/core/document/image_document_history.cpp
     src/core/document/image_document_history.h
     src/core/document/image_document_object_editor.cpp
@@ -82,6 +84,8 @@ add_executable(creative-suite-image-editor
     src/ui/tools/brush/paint_tool.h
     src/ui/tools/brush/eraser_tool.cpp
     src/ui/tools/brush/eraser_tool.h
+    src/ui/tools/bucket_fill/bucket_fill_tool.cpp
+    src/ui/tools/bucket_fill/bucket_fill_tool.h
     src/ui/tools/crop/crop_tool.cpp
     src/ui/tools/crop/crop_tool.h
     src/ui/tools/eyedropper/eyedropper_tool.cpp

@@ -222,6 +222,31 @@ void ImageCanvas::setEyedropperMode(bool enabled) {
     update();
 }
 
+void ImageCanvas::setBucketFillMode(bool enabled) {
+    if (bucket_fill_mode_ == enabled) return;
+    if (enabled && text_tool_.editing()) finishTextEditing(true);
+    if (enabled) {
+        resetBrushTools(true);
+        crop_mode_ = paint_mode_ = eraser_mode_ = shape_creation_mode_ = false;
+        text_creation_mode_ = object_selection_mode_ = area_selection_mode_ = false;
+        eyedropper_mode_ = false;
+        resizing_brush_ = false;
+        static_cast<void>(crop_tool_.cancelGesture());
+        static_cast<void>(area_selection_tool_.cancelGesture());
+        static_cast<void>(shape_tool_.cancelGesture());
+        static_cast<void>(text_tool_.cancelFrame());
+        clearObjectInteraction();
+        transient_image_ = {};
+    }
+    bucket_fill_mode_ = enabled;
+    setCursor(enabled ? Qt::PointingHandCursor : Qt::ArrowCursor);
+    update();
+}
+
+void ImageCanvas::setBucketFillTolerance(int tolerance) {
+    bucket_fill_tolerance_ = std::clamp(tolerance, 0, 255);
+}
+
 void ImageCanvas::setAreaSelectionOptions(AreaSelectionShape shape,
                                           AreaSelectionCombineMode combine_mode) {
     const auto tool_shape = shape == AreaSelectionShape::Ellipse
@@ -663,6 +688,15 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
             const auto sampled = eyedropper_tool_.sample(
                 image_, widgetToImageCoordinates(event->position()));
             if (sampled) emit colorSampled(*sampled);
+        }
+        event->accept();
+        return;
+    }
+    if (bucket_fill_mode_ && event->button() == Qt::LeftButton) {
+        if (!image_.isNull() && imageTargetRect().contains(event->position())) {
+            const auto seed = bucket_fill_tool_.seedAt(
+                widgetToImageCoordinates(event->position()), image_.size());
+            if (seed) emit bucketFillRequested(*seed, bucket_fill_tolerance_, brush_color_);
         }
         event->accept();
         return;

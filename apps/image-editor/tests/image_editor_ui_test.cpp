@@ -2969,6 +2969,84 @@ bool testEyedropperTool() {
         paint_uses_sampled_color && transparent_color_can_be_changed;
 }
 
+bool testBucketFillTool() {
+    image_editor::ToolSidebar sidebar;
+    auto* button = sidebar.findChild<QToolButton*>(
+        QStringLiteral("bucketFillToolButton"));
+    if (button == nullptr || button->isEnabled()) {
+        std::cerr << "Bucket Fill should be disabled without an editable layer.\n";
+        return false;
+    }
+
+    image_editor::ImageCanvas canvas;
+    canvas.resize(400, 300);
+    QImage pixels(16, 16, QImage::Format_ARGB32);
+    pixels.fill(QColor(12, 24, 36, 255));
+    canvas.setImage(pixels);
+    QObject::connect(&sidebar, &image_editor::ToolSidebar::activeToolChanged,
+        &canvas, [&canvas](image_editor::ToolSidebar::Tool tool) {
+            canvas.setBucketFillMode(tool == image_editor::ToolSidebar::Tool::BucketFill);
+        });
+    sidebar.setDocumentAvailable(true);
+    sidebar.setPaintingAllowed(true);
+
+    image_editor::ImageToolOptionsBar options;
+    auto* tolerance = options.findChild<QSpinBox*>(
+        QStringLiteral("bucketFillToleranceSpinBox"));
+    if (tolerance == nullptr || tolerance->value() != 0) {
+        std::cerr << "Bucket Fill tolerance should start at zero.\n";
+        return false;
+    }
+    QObject::connect(&options, &image_editor::ImageToolOptionsBar::bucketFillToleranceChanged,
+        &canvas, &image_editor::ImageCanvas::setBucketFillTolerance);
+    QSignalSpy tolerance_changed(&options,
+        &image_editor::ImageToolOptionsBar::bucketFillToleranceChanged);
+    options.setBucketFillOptionsState(true, 0);
+    tolerance->setValue(42);
+    if (tolerance_changed.count() != 1 ||
+        tolerance_changed.at(0).at(0).toInt() != 42) {
+        std::cerr << "Bucket Fill tolerance did not emit its selected value.\n";
+        return false;
+    }
+
+    canvas.show();
+    QCoreApplication::processEvents();
+    QSignalSpy fills(&canvas, &image_editor::ImageCanvas::bucketFillRequested);
+    button->click();
+    const QPoint inside = canvas.rect().center();
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, inside);
+    QCoreApplication::processEvents();
+    const int inside_count = fills.size();
+    const bool activated = sidebar.bucketFillToolActive() && canvas.cursor().shape() == Qt::PointingHandCursor;
+    const bool click_emitted = fills.size() == 1 &&
+        fills.at(0).at(0).value<QPoint>() == QPoint(7, 7) &&
+        fills.at(0).at(1).toInt() == 42;
+    const qreal target_left =
+        (canvas.width() - pixels.width() * canvas.zoomFactor()) / 2.0;
+    const qreal target_top =
+        (canvas.height() - pixels.height() * canvas.zoomFactor()) / 2.0;
+    const QPoint outside_position(static_cast<int>(std::floor(target_left / 2.0)),
+                                  static_cast<int>(std::floor(target_top / 2.0)));
+    QTest::mouseClick(&canvas, Qt::LeftButton, Qt::NoModifier, outside_position);
+    QCoreApplication::processEvents();
+    const bool outside_ignored = fills.size() == 1;
+    if (!activated || !click_emitted || !outside_ignored) {
+        std::cerr << "Bucket Fill UI details: active=" << activated
+                  << ", click=" << click_emitted
+                  << ", outside=" << outside_ignored
+                  << ", inside-count=" << inside_count
+                  << ", count=" << fills.size()
+                  << ", zoom=" << canvas.zoomFactor();
+        for (qsizetype index = 0; index < fills.size(); ++index) {
+            const auto seed = fills.at(index).at(0).value<QPoint>();
+            std::cerr << ", seed" << index << '=' << seed.x() << '/' << seed.y()
+                      << ", tolerance" << index << '=' << fills.at(index).at(1).toInt();
+        }
+        std::cerr << '\n';
+    }
+    return activated && click_emitted && outside_ignored;
+}
+
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
@@ -2988,6 +3066,10 @@ int main(int argc, char* argv[]) {
     if (application.arguments().contains(QStringLiteral("--eyedropper-only"))) {
         QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
         return testEyedropperTool() ? 0 : 1;
+    }
+    if (application.arguments().contains(QStringLiteral("--bucket-fill-only"))) {
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        return testBucketFillTool() ? 0 : 1;
     }
 
     {
@@ -3122,6 +3204,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     if (!testEyedropperTool()) return 1;
+    if (!testBucketFillTool()) return 1;
     if (!testWindowTeardownWithFocusedTextEditor(temporary.path())) return 1;
     if (!testDeletionUi(temporary.path())) return 1;
     if (!testRasterImagesUi(temporary.path())) return 1;

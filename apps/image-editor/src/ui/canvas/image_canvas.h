@@ -1,6 +1,7 @@
 #pragma once
 
 #include "image_document_store.h"
+#include "../tools/bucket_fill/bucket_fill_tool.h"
 #include "../tools/brush/eraser_tool.h"
 #include "../tools/brush/paint_tool.h"
 #include "../tools/crop/crop_tool.h"
@@ -48,6 +49,8 @@ public:
     void setObjectSelectionMode(bool enabled);
     void setAreaSelectionMode(bool enabled);
     void setEyedropperMode(bool enabled);
+    void setBucketFillMode(bool enabled);
+    void setBucketFillTolerance(int tolerance);
     void setAreaSelectionOptions(AreaSelectionShape shape,
                                  AreaSelectionCombineMode combine_mode);
     void clearAreaSelection();
@@ -90,6 +93,7 @@ signals:
     void eraseStrokeSelected(const QVector<QPointF>& image_points, int diameter);
     void brushDiameterChanged(int diameter);
     void colorSampled(const QColor& color);
+    void bucketFillRequested(const QPoint& seed, int tolerance, const QColor& color);
     void shapeCreated(const image_editor::ImageShapeData& shape);
     void textCommitted(const image_editor::ImageTextData& text, bool existing);
     void textEditingStarted(const image_editor::ImageTextData& text, bool existing);
@@ -151,6 +155,7 @@ private:
     bool object_selection_mode_ = false;
     bool area_selection_mode_ = false;
     bool eyedropper_mode_ = false;
+    bool bucket_fill_mode_ = false;
     bool resizing_brush_ = false;
     bool shift_constrain_held_ = false;
     bool panning_ = false;
@@ -163,12 +168,14 @@ private:
     EraserTool eraser_tool_;
     CropTool crop_tool_;
     EyedropperTool eyedropper_tool_;
+    BucketFillTool bucket_fill_tool_;
     AreaSelectionTool area_selection_tool_;
     ObjectSelectionTool object_selection_tool_;
     ShapeTool shape_tool_;
     TextTool text_tool_;
     QColor brush_color_ = Qt::black;
     int brush_diameter_ = 12;
+    int bucket_fill_tolerance_ = 0;
 };
 
 } // namespace image_editor

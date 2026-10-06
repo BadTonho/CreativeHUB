@@ -1,4 +1,5 @@
 #include "image_document_session.h"
+#include "image_bucket_fill.h"
 #include "../diagnostics/image_editor_performance_metrics.h"
 #include "image_document_geometry.h"
 #include "image_document_object_editor.h"
@@ -487,6 +488,15 @@ bool ImageDocumentSession::resizeCanvas(const QSize& size,
                 if (operation.erase_stroke.clipping_path.has_value()) {
                     operation.erase_stroke.clipping_path =
                         operation.erase_stroke.clipping_path->translated(delta);
+                }
+            } else if (operation.kind == OperationKind::BucketFill) {
+                const qint64 x = static_cast<qint64>(operation.bucket_fill.seed.x()) + delta.x();
+                const qint64 y = static_cast<qint64>(operation.bucket_fill.seed.y()) + delta.y();
+                if (!coordinate_safe(x) || !coordinate_safe(y)) return false;
+                operation.bucket_fill.seed = QPoint(static_cast<int>(x), static_cast<int>(y));
+                if (operation.bucket_fill.clipping_path.has_value()) {
+                    operation.bucket_fill.clipping_path =
+                        operation.bucket_fill.clipping_path->translated(delta);
                 }
             } else if (operation.kind == OperationKind::Shape) {
                 if (!shift_point(&operation.shape.start) || !shift_point(&operation.shape.end))
@@ -979,6 +989,83 @@ bool ImageDocumentSession::applyEraseStroke(const QVector<QPointF>& points,
     operation.erase_stroke.diameter = diameter;
     operation.erase_stroke.clipping_path = std::move(clipping_path);
     data_.layers[layerIndex(selected_layer_id_)].operations.append(std::move(operation));
+    layer_raster_cache_.invalidateLayer(selected_layer_id_);
+    return true;
+}
+
+bool ImageDocumentSession::applyBucketFill(
+    const QPoint& seed, const QColor& color, int tolerance, QString* error,
+    std::optional<QPainterPath> clipping_path, bool mask_target) {
+    if (error != nullptr) error->clear();
+    if (!hasSource() || !selectedLayerIsEditable()) {
+        assignError(error, QStringLiteral("Select an editable layer before filling."));
+        return false;
+    }
+    if (!color.isValid() || tolerance < 0 || tolerance > 255) {
+        assignError(error, QStringLiteral("The fill color or tolerance is invalid."));
+        return false;
+    }
+    if (mask_target) {
+        const qsizetype index = layerIndex(selected_layer_id_);
+        if (index < 0 || !data_.layers.at(index).mask.has_value()) {
+            assignError(error, QStringLiteral("Select a layer mask before filling it."));
+            return false;
+        }
+    }
+    if (clipping_path.has_value() &&
+        !ImageDocumentGeometry::isValidStrokeClipPath(*clipping_path)) {
+        assignError(error, QStringLiteral("The fill selection has invalid or excessive geometry."));
+        return false;
+    }
+
+    const QSize size = renderedSize();
+    if (seed.x() < 0 || seed.y() < 0 || seed.x() >= size.width() || seed.y() >= size.height())
+        return false;
+    QPointF local_seed(seed.x() + 0.5, seed.y() + 0.5);
+    QVector<QPointF> mapped_seed{local_seed};
+    const auto* layer = &data_.layers.at(layerIndex(selected_layer_id_));
+    const auto* parent = findGroup(data_, layer->parent_group_id);
+    ImageDocumentGeometry::mapStrokeGeometryThroughGroup(
+        &mapped_seed, &clipping_path, parent, size);
+    if (mapped_seed.size() != 1 || !std::isfinite(mapped_seed.front().x()) ||
+        !std::isfinite(mapped_seed.front().y()) ||
+        std::abs(mapped_seed.front().x()) > 1'000'000.0 ||
+        std::abs(mapped_seed.front().y()) > 1'000'000.0) {
+        assignError(error, QStringLiteral("The fill seed exceeds the supported local coordinate range."));
+        return false;
+    }
+    if (clipping_path.has_value()) {
+        clipping_path = clipping_path->intersected(ImageDocumentGeometry::imageBoundsPath(size));
+        if (!ImageDocumentGeometry::isValidStrokeClipPath(*clipping_path)) return false;
+    }
+
+    ImageBucketFillData fill;
+    fill.seed = QPoint(static_cast<int>(std::floor(mapped_seed.front().x())),
+                       static_cast<int>(std::floor(mapped_seed.front().y())));
+    fill.color = mask_target
+        ? QColor(qGray(color.rgb()), qGray(color.rgb()), qGray(color.rgb()), color.alpha())
+        : color;
+    fill.tolerance = tolerance;
+    fill.clipping_path = std::move(clipping_path);
+
+    QImage target = ImageDocumentRenderer::editableLayerTarget(
+        data_, source_image_, raster_images_, selected_layer_id_, mask_target);
+    bool changed = false;
+    if (target.isNull() || !ImageBucketFill::apply(&target, fill, &changed, error)) {
+        if (error != nullptr && error->isEmpty())
+            assignError(error, QStringLiteral("The selected layer could not be rendered for filling."));
+        return false;
+    }
+    if (!changed) return false;
+
+    ImageOperation operation;
+    operation.kind = OperationKind::BucketFill;
+    operation.bucket_fill = std::move(fill);
+    pushEdit();
+    auto& operations = mask_target
+        ? data_.layers[layerIndex(selected_layer_id_)].mask->operations
+        : data_.layers[layerIndex(selected_layer_id_)].operations;
+    operations.append(std::move(operation));
     layer_raster_cache_.invalidateLayer(selected_layer_id_);
     return true;
 }

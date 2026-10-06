@@ -11,7 +11,7 @@ release direction are recorded separately below. See the
 The current application supports one raster document at a time, either linked
 to an original image or created as a self-contained canvas. It provides a
 locked Background, editable raster layers, one-level groups, visibility,
-opacity, ordering, crop, quarter-turn rotation, flips, painting, erasing,
+opacity, ordering, crop, quarter-turn rotation, flips, painting, bucket fill, erasing,
 editable line/rectangle/ellipse shapes, editable text, raster layer masks,
 imported image layers, object selection and transforms, an RGBA Eyedropper that
 samples visible composite pixels with nonzero alpha into the paint color,
@@ -21,15 +21,18 @@ alignment, movement, and width resizing. While editing, its box grows
 horizontally to fit the longest line up to the canvas edge, then wraps and grows
 vertically. Text is kept editable in its own `Text N` layer.
 
-Documents use the provisional `.cimg` version 13 format. The application reads
-versions 1 through 12 and writes version 13, migrating older documents on save;
-version 1 recovery envelopes accept a version 13 document payload. Source images
+Documents use the provisional `.cimg` version 14 format. The application reads
+versions 1 through 13 and writes version 14, migrating older documents on save;
+version 1 recovery envelopes accept a version 14 document payload. Source images
 remain unchanged, and original source dimensions are retained for relinking.
 Area Selection is a separate tool from object Selection. Rectangle and ellipse
 gestures can replace, add to, or subtract from the temporary per-tab selection.
 New Paint and Eraser strokes, including mask edits, persist their clipping
-geometry in `.cimg` v13; the selection itself does not dirty or serialize with
-the document. Canvas documents can use standard presets or custom dimensions. Self-contained
+geometry in `.cimg` v13; bucket fills persist as v14 operations. Fill detection
+uses the active layer or selected mask, four-way connectivity, per-channel RGBA
+tolerance, brush color and alpha, and the active selection clip. No-op fills do
+not add history. The selection itself does not dirty or serialize with the
+document. Canvas documents can use standard presets or custom dimensions. Self-contained
 canvas documents currently allow up to 32768 pixels per side and 64 million
 pixels total. These are format limits, not performance claims.
 **Image > Canvas Size** changes current document bounds without resampling layer
@@ -84,9 +87,9 @@ performance guarantee is approved yet.
 ## Compatibility and Release Order
 
 The current implementation preserves the ability to open existing `.cimg`
-versions 1 through 12 and writes the current version 13 format on save. Automated
+versions 1 through 13 and writes the current version 14 format on save. Automated
 regression tests cover migration, canvas-size persistence, clipped paint/erase,
-and version 13 recovery payload. This implementation does not mark manual text checks or
+bucket-fill operations, and version 14 recovery payload. This implementation does not mark manual text checks or
 Video Editor linked-image acceptance complete.
 
 Per project policy, complete and accept the standalone minimum before accepting
@@ -139,7 +142,7 @@ editable stack items in one Undo/Redo edit; groups include their children.
 Background is protected, including mixed selections. Text, rename, and numeric
 fields keep normal character deletion. Deleting a missing image reference is
 allowed and can unblock exports. Original files are preserved. The document
-format remains v13 and the contextual shortcut is customizable.
+format remains v14 and the contextual shortcut is customizable.
 
 ## Outside This Release
 

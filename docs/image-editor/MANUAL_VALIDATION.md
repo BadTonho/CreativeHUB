@@ -64,6 +64,36 @@ signals during sampling is in `image_editor_ui_test.cpp`
 (`testEyedropperTool`, `creative-suite-image-editor-ui`). Native visual and
 cross-platform checks are pending.
 
+## Bucket Fill
+
+Use a disposable `.cimg` document with an editable layer containing adjacent
+regions of different colors and alpha. Keep a copy of the document for
+comparison.
+
+1. Select **Bucket Fill**. Confirm the tolerance control starts at `0` and
+accepts values from `0` through `255`. Click a region and confirm only its
+four-connected matching pixels are filled with the current brush color,
+including its alpha. A diagonally touching region should remain separate.
+2. Increase tolerance and click a region with nearby RGBA values. Confirm the
+maximum channel difference from the seed controls inclusion. Change the active
+layer's visibility and opacity and confirm they do not change detection.
+3. Create an Area Selection and fill across its edge. Confirm neither traversal
+nor output crosses the selection. Click outside the image and confirm there is
+no edit. Click a region already equal to the fill result and confirm the
+document stays clean and Undo history does not gain an entry.
+4. Select a layer mask thumbnail and fill a region with a colored brush value.
+Confirm the mask uses that color's grayscale value and alpha, affecting only
+the selected layer. Use Undo and Redo, then save and reopen the `.cimg` file;
+confirm the layer and mask results persist.
+
+Automated coverage is in `image_editor_bucket_fill_test.cpp`
+(`creative-suite-image-editor-bucket-fill`) and
+`image_editor_ui_test.cpp` (`testBucketFillTool`,
+`creative-suite-image-editor-ui`). It checks connectivity, RGBA tolerance,
+selection clipping, mask conversion, no-op history, Undo/Redo, v14 round-trip,
+tool activation, tolerance updates, and ignored outside-image clicks. Native
+visual checks remain pending.
+
 ## Performance collection and benchmark
 
 The collector is disabled by default. Use a disposable document for the UI

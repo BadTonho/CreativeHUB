@@ -34,6 +34,7 @@ public:
     void setSelectionOptionsVisible(bool visible);
     void setDeleteSelectedObjectsEnabled(bool enabled);
     void setAreaSelectionOptionsState(bool visible, int shape, int mode);
+    void setBucketFillOptionsState(bool visible, int tolerance);
     void hideAllOptions();
 
 signals:
@@ -50,6 +51,7 @@ signals:
     void textAlignmentChanged(int alignment);
     void areaSelectionOptionsChanged(int shape, int mode);
     void deleteSelectedObjectsRequested();
+    void bucketFillToleranceChanged(int tolerance);
 
 private:
     QWidgetAction* paint_options_action_ = nullptr;
@@ -57,11 +59,13 @@ private:
     QWidgetAction* text_options_action_ = nullptr;
     QWidgetAction* selection_options_action_ = nullptr;
     QWidgetAction* area_selection_options_action_ = nullptr;
+    QWidgetAction* bucket_fill_options_action_ = nullptr;
     QWidget* paint_size_options_ = nullptr;
     QWidget* shape_options_widget_ = nullptr;
     QWidget* text_options_widget_ = nullptr;
     QWidget* selection_options_widget_ = nullptr;
     QWidget* area_selection_options_widget_ = nullptr;
+    QWidget* bucket_fill_options_widget_ = nullptr;
     QLabel* tool_size_label_ = nullptr;
     QSlider* brush_size_slider_ = nullptr;
     QSpinBox* brush_size_spin_ = nullptr;
@@ -78,6 +82,7 @@ private:
     QComboBox* text_alignment_combo_ = nullptr;
     QComboBox* area_selection_shape_combo_ = nullptr;
     QComboBox* area_selection_mode_combo_ = nullptr;
+    QSpinBox* bucket_fill_tolerance_spin_ = nullptr;
 };
 
 } // namespace image_editor

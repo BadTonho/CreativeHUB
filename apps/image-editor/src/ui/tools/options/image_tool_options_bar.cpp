@@ -14,6 +14,8 @@
 #include <QWidget>
 #include <QWidgetAction>
 
+#include <algorithm>
+
 namespace image_editor {
 
 ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
@@ -182,6 +184,25 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
     addAction(area_selection_options_action_);
     area_selection_options_action_->setVisible(false);
 
+    bucket_fill_options_widget_ = new QWidget(this);
+    bucket_fill_options_widget_->setObjectName(QStringLiteral("bucketFillOptionsWidget"));
+    auto* bucket_fill_layout = new QHBoxLayout(bucket_fill_options_widget_);
+    bucket_fill_layout->setContentsMargins(8, 3, 8, 3);
+    bucket_fill_layout->setSpacing(7);
+    bucket_fill_layout->addWidget(new QLabel(QStringLiteral("Tolerance"), bucket_fill_options_widget_));
+    bucket_fill_tolerance_spin_ = new QSpinBox(bucket_fill_options_widget_);
+    bucket_fill_tolerance_spin_->setObjectName(QStringLiteral("bucketFillToleranceSpinBox"));
+    bucket_fill_tolerance_spin_->setAccessibleName(QStringLiteral("Bucket fill tolerance"));
+    bucket_fill_tolerance_spin_->setRange(0, 255);
+    bucket_fill_tolerance_spin_->setValue(0);
+    bucket_fill_tolerance_spin_->setFixedWidth(72);
+    bucket_fill_layout->addWidget(bucket_fill_tolerance_spin_);
+    bucket_fill_options_action_ = new QWidgetAction(this);
+    bucket_fill_options_action_->setObjectName(QStringLiteral("bucketFillOptionsAction"));
+    bucket_fill_options_action_->setDefaultWidget(bucket_fill_options_widget_);
+    addAction(bucket_fill_options_action_);
+    bucket_fill_options_action_->setVisible(false);
+
     connect(brush_size_slider_, &QSlider::valueChanged,
             brush_size_spin_, &QSpinBox::setValue);
     connect(brush_size_spin_, qOverload<int>(&QSpinBox::valueChanged),
@@ -221,6 +242,8 @@ ImageToolOptionsBar::ImageToolOptionsBar(QWidget* parent)
             this, [emitAreaSelectionOptions](int) { emitAreaSelectionOptions(); });
     connect(delete_selected_objects_button_, &QPushButton::clicked,
             this, &ImageToolOptionsBar::deleteSelectedObjectsRequested);
+    connect(bucket_fill_tolerance_spin_, qOverload<int>(&QSpinBox::valueChanged),
+            this, &ImageToolOptionsBar::bucketFillToleranceChanged);
 }
 
 void ImageToolOptionsBar::setBrushOptionsState(bool visible, int diameter,
@@ -327,6 +350,13 @@ void ImageToolOptionsBar::setAreaSelectionOptionsState(bool visible, int shape, 
     }
 }
 
+void ImageToolOptionsBar::setBucketFillOptionsState(bool visible, int tolerance) {
+    bucket_fill_options_action_->setVisible(visible);
+    bucket_fill_options_widget_->setVisible(visible);
+    const QSignalBlocker blocker(bucket_fill_tolerance_spin_);
+    bucket_fill_tolerance_spin_->setValue(std::clamp(tolerance, 0, 255));
+}
+
 void ImageToolOptionsBar::hideAllOptions() {
     setBrushOptionsState(false, brush_size_spin_->value(), false, false,
                          eraser_preview_check_->isChecked());
@@ -336,6 +366,7 @@ void ImageToolOptionsBar::hideAllOptions() {
     setTextOptionsState(ImageTextData{});
     setSelectionOptionsVisible(false);
     setAreaSelectionOptionsState(false, 0, 0);
+    setBucketFillOptionsState(false, bucket_fill_tolerance_spin_->value());
 }
 
 } // namespace image_editor

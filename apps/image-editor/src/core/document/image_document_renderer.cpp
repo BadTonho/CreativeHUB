@@ -1,4 +1,5 @@
 #include "image_document_renderer.h"
+#include "image_bucket_fill.h"
 #include "image_document_utils.h"
 #include "../diagnostics/image_editor_performance_metrics.h"
 
@@ -22,6 +23,7 @@ ImageEditorPerformanceStage operationPerformanceStage(OperationKind kind) noexce
     switch (kind) {
     case OperationKind::PaintStroke: return ImageEditorPerformanceStage::PaintStroke;
     case OperationKind::EraseStroke: return ImageEditorPerformanceStage::EraseStroke;
+    case OperationKind::BucketFill: return ImageEditorPerformanceStage::PaintStroke;
     case OperationKind::Shape: return ImageEditorPerformanceStage::Shape;
     case OperationKind::Text: return ImageEditorPerformanceStage::Text;
     case OperationKind::RasterImage: return ImageEditorPerformanceStage::RasterImage;
@@ -238,6 +240,11 @@ QImage applyOperations(QImage image,
         case OperationKind::EraseStroke:
             image = eraseStroke(std::move(image), operation.erase_stroke);
             break;
+        case OperationKind::BucketFill: {
+            bool changed = false;
+            if (!ImageBucketFill::apply(&image, operation.bucket_fill, &changed)) return {};
+            break;
+        }
         case OperationKind::Shape:
             image = drawShape(std::move(image), operation.shape);
             break;
@@ -252,12 +259,17 @@ QImage applyOperations(QImage image,
 QVector<ImageOperation> maskRenderOperations(const ImageLayerMaskData& mask) {
     QVector<ImageOperation> operations = mask.operations;
     for (auto& operation : operations) {
-        if (operation.kind != OperationKind::EraseStroke) continue;
-        operation.kind = OperationKind::PaintStroke;
-        operation.paint_stroke.points = operation.erase_stroke.points;
-        operation.paint_stroke.diameter = operation.erase_stroke.diameter;
-        operation.paint_stroke.clipping_path = operation.erase_stroke.clipping_path;
-        operation.paint_stroke.color = Qt::black;
+        if (operation.kind == OperationKind::EraseStroke) {
+            operation.kind = OperationKind::PaintStroke;
+            operation.paint_stroke.points = operation.erase_stroke.points;
+            operation.paint_stroke.diameter = operation.erase_stroke.diameter;
+            operation.paint_stroke.clipping_path = operation.erase_stroke.clipping_path;
+            operation.paint_stroke.color = Qt::black;
+        } else if (operation.kind == OperationKind::BucketFill) {
+            const QColor color = operation.bucket_fill.color;
+            const int gray = qGray(color.rgb());
+            operation.bucket_fill.color = QColor(gray, gray, gray, color.alpha());
+        }
     }
     return operations;
 }
@@ -617,6 +629,15 @@ QImage renderLayerThumbnail(const QHash<QString, QImage>& resources,
                 1, qRound(operation.paint_stroke.diameter * std::min(scale_x, scale_y)));
             break;
         }
+        case OperationKind::BucketFill:
+            scaled_operation.bucket_fill.seed = QPoint(
+                static_cast<int>(std::floor(operation.bucket_fill.seed.x() * scale_x)),
+                static_cast<int>(std::floor(operation.bucket_fill.seed.y() * scale_y)));
+            if (operation.bucket_fill.clipping_path.has_value()) {
+                scaled_operation.bucket_fill.clipping_path = QTransform::fromScale(
+                    scale_x, scale_y).map(*operation.bucket_fill.clipping_path);
+            }
+            break;
         case OperationKind::EraseStroke: {
             for (auto& point : scaled_operation.erase_stroke.points) {
                 point.setX(point.x() * scale_x);
@@ -699,6 +720,26 @@ QImage ImageDocumentRenderer::selectedGroup(const ImageDocumentData& document,
     const QString& group_id, const std::atomic_bool* cancellation_requested) {
     return renderSelectedGroup(raster_images, source_image, document, group_id,
                                cancellation_requested);
+}
+
+QImage ImageDocumentRenderer::editableLayerTarget(
+    const ImageDocumentData& document, const QImage& source_image,
+    const QHash<QString, QImage>& raster_images, const QString& layer_id,
+    bool mask_target) {
+    if (source_image.isNull() || layer_id.isEmpty()) return {};
+    const auto* layer = findLayer(document, layer_id);
+    if (layer == nullptr || layer->background ||
+        (mask_target && !layer->mask.has_value())) return {};
+    const QSize size = documentSize(document, source_image.size());
+    if (!size.isValid() || size.isEmpty()) return {};
+
+    QImage pixels(size, QImage::Format_ARGB32_Premultiplied);
+    if (pixels.isNull()) return {};
+    pixels.fill(mask_target ? Qt::white : Qt::transparent);
+    const auto& operations = mask_target
+        ? maskRenderOperations(*layer->mask) : layer->operations;
+    return applyOperations(std::move(pixels), operations, true, nullptr,
+                           mask_target ? QHash<QString, QImage>{} : raster_images);
 }
 
 QImage ImageDocumentRenderer::layerThumbnail(const ImageDocumentData& document,

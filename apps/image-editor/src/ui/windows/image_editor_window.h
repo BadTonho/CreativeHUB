@@ -118,6 +118,8 @@ private:
                            std::optional<QPainterPath> clipping_path = {});
     void handleEraseStroke(const QVector<QPointF>& points, int diameter,
                            std::optional<QPainterPath> clipping_path = {});
+    void handleBucketFill(const QPoint& seed, int tolerance, const QColor& color,
+                          std::optional<QPainterPath> clipping_path = {});
     void updateCanvasToolState(ToolSidebar::Tool tool, bool preserveSelection = false);
     void updateCanvasBrush();
     void updateShapeOptions();
@@ -175,6 +177,7 @@ private:
     QAction* relink_raster_action_ = nullptr;
     bool importing_ = false;
     bool eraser_preview_enabled_ = false;
+    int bucket_fill_tolerance_ = 0;
     std::unique_ptr<ImageEditorDocumentTab> empty_document_state_;
     QAction* new_canvas_action_ = nullptr;
     QAction* resize_canvas_action_ = nullptr;
