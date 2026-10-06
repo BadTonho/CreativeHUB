@@ -17,7 +17,7 @@
 namespace {
 
 #ifndef CREATIVE_SUITE_APP_VERSION
-#define CREATIVE_SUITE_APP_VERSION "0.1.6"
+#define CREATIVE_SUITE_APP_VERSION "0.1.0"
 #endif
 
 std::string pathToUtf8(const std::filesystem::path& path) {

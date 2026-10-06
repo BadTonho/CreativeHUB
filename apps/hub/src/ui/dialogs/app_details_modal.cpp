@@ -1,7 +1,6 @@
 #include "app_details_modal.h"
 #include "../theme/hub_palette.h"
 #include "../theme/hub_style.h"
-#include "../cards/app_status_badge.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -67,6 +66,7 @@ AppDetailsModal::AppDetailsModal(QWidget* parent)
     : QWidget(parent)
 {
     setAttribute(Qt::WA_OpaquePaintEvent, false);
+    setAttribute(Qt::WA_TransparentForMouseEvents, true);
     setFocusPolicy(Qt::StrongFocus);
     setVisible(false);
 
@@ -79,7 +79,7 @@ void AppDetailsModal::setupUi() {
     m_cardFrame->setStyleSheet(QString(R"(
         #ModalCardFrame {
             background-color: %1;
-            border: 1px solid #363644;
+            border: 1px solid #383848;
             border-radius: 14px;
         }
     )").arg(HubPalette::cardBackground.name()));
@@ -241,7 +241,26 @@ void AppDetailsModal::setBackdropOpacity(double opacity) {
     update();
 }
 
+void AppDetailsModal::clearFeatures() {
+    if (!m_featuresLayout) {
+        return;
+    }
+    while (auto* item = m_featuresLayout->takeAt(0)) {
+        if (auto* widget = item->widget()) {
+            delete widget;
+        }
+        delete item;
+    }
+}
+
 void AppDetailsModal::showApp(const AppInfo& app, const QRect& originRect) {
+    if (m_geometryAnim) {
+        m_geometryAnim->stop();
+    }
+    if (m_opacityAnim) {
+        m_opacityAnim->stop();
+    }
+
     m_isClosing = false;
     m_app = app;
     m_originRect = originRect;
@@ -253,37 +272,28 @@ void AppDetailsModal::showApp(const AppInfo& app, const QRect& originRect) {
     updateVisuals();
 
     const QRect target = targetCardRect();
-    QRect start = originRect;
-    if (!start.isValid() || start.isEmpty()) {
-        const int startW = static_cast<int>(target.width() * 0.75);
-        const int startH = static_cast<int>(target.height() * 0.75);
-        const int startX = target.x() + (target.width() - startW) / 2;
-        const int startY = target.y() + (target.height() - startH) / 2;
-        start = QRect(startX, startY, startW, startH);
-    }
+    const int startW = static_cast<int>(target.width() * 0.84);
+    const int startH = static_cast<int>(target.height() * 0.84);
+    const int startX = target.x() + (target.width() - startW) / 2;
+    const int startY = target.y() + (target.height() - startH) / 2;
+    const QRect start(startX, startY, startW, startH);
 
     setCardGeometry(start);
     setBackdropOpacity(0.0);
 
+    setAttribute(Qt::WA_TransparentForMouseEvents, false);
     setVisible(true);
     raise();
     setFocus();
 
-    if (m_geometryAnim && m_geometryAnim->state() == QAbstractAnimation::Running) {
-        m_geometryAnim->stop();
-    }
-    if (m_opacityAnim && m_opacityAnim->state() == QAbstractAnimation::Running) {
-        m_opacityAnim->stop();
-    }
-
     m_geometryAnim = new QPropertyAnimation(this, "cardGeometry", this);
-    m_geometryAnim->setDuration(260);
+    m_geometryAnim->setDuration(240);
     m_geometryAnim->setStartValue(start);
     m_geometryAnim->setEndValue(target);
     m_geometryAnim->setEasingCurve(QEasingCurve::OutCubic);
 
     m_opacityAnim = new QPropertyAnimation(this, "backdropOpacity", this);
-    m_opacityAnim->setDuration(240);
+    m_opacityAnim->setDuration(220);
     m_opacityAnim->setStartValue(0.0);
     m_opacityAnim->setEndValue(1.0);
     m_opacityAnim->setEasingCurve(QEasingCurve::OutCubic);
@@ -298,38 +308,42 @@ void AppDetailsModal::closeWithAnimation() {
     }
     m_isClosing = true;
 
-    QRect end = m_originRect;
-    if (!end.isValid() || end.isEmpty()) {
-        const QRect current = cardGeometry();
-        const int endW = static_cast<int>(current.width() * 0.75);
-        const int endH = static_cast<int>(current.height() * 0.75);
-        const int endX = current.x() + (current.width() - endW) / 2;
-        const int endY = current.y() + (current.height() - endH) / 2;
-        end = QRect(endX, endY, endW, endH);
-    }
+    // Immediately stop intercepting mouse events so parent is responsive
+    setAttribute(Qt::WA_TransparentForMouseEvents, true);
 
-    if (m_geometryAnim && m_geometryAnim->state() == QAbstractAnimation::Running) {
+    const QRect current = cardGeometry();
+    const int endW = static_cast<int>(current.width() * 0.84);
+    const int endH = static_cast<int>(current.height() * 0.84);
+    const int endX = current.x() + (current.width() - endW) / 2;
+    const int endY = current.y() + (current.height() - endH) / 2;
+    const QRect end(endX, endY, endW, endH);
+
+    if (m_geometryAnim) {
         m_geometryAnim->stop();
     }
-    if (m_opacityAnim && m_opacityAnim->state() == QAbstractAnimation::Running) {
+    if (m_opacityAnim) {
         m_opacityAnim->stop();
     }
 
     m_geometryAnim = new QPropertyAnimation(this, "cardGeometry", this);
-    m_geometryAnim->setDuration(220);
-    m_geometryAnim->setStartValue(cardGeometry());
+    m_geometryAnim->setDuration(200);
+    m_geometryAnim->setStartValue(current);
     m_geometryAnim->setEndValue(end);
     m_geometryAnim->setEasingCurve(QEasingCurve::OutCubic);
 
     m_opacityAnim = new QPropertyAnimation(this, "backdropOpacity", this);
-    m_opacityAnim->setDuration(200);
+    m_opacityAnim->setDuration(180);
     m_opacityAnim->setStartValue(m_backdropOpacity);
     m_opacityAnim->setEndValue(0.0);
     m_opacityAnim->setEasingCurve(QEasingCurve::OutCubic);
 
     connect(m_geometryAnim, &QPropertyAnimation::finished, this, [this]() {
         setVisible(false);
+        lower();
         m_isClosing = false;
+        if (parentWidget()) {
+            parentWidget()->setFocus();
+        }
         emit closed();
     });
 
@@ -357,38 +371,26 @@ void AppDetailsModal::updateVisuals() {
         m_actionButton->setStyleSheet(HubStyle::primaryButtonStyle());
     }
 
-    // Clear previous features
-    QLayoutItem* item = nullptr;
-    while ((item = m_featuresLayout->takeAt(0)) != nullptr) {
-        if (item->widget()) {
-            delete item->widget();
-        }
-        if (item->layout()) {
-            QLayoutItem* subItem = nullptr;
-            while ((subItem = item->layout()->takeAt(0)) != nullptr) {
-                delete subItem->widget();
-                delete subItem;
-            }
-            delete item->layout();
-        }
-        delete item;
-    }
+    // Safely clear previous features
+    clearFeatures();
 
-    // Add features
+    // Add features as row widgets
     for (const auto& feat : m_app.features()) {
-        auto* featRow = new QHBoxLayout();
-        featRow->setSpacing(10);
+        auto* rowWidget = new QWidget(m_cardFrame);
+        auto* rowLayout = new QHBoxLayout(rowWidget);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(10);
 
-        auto* check = new QLabel(QStringLiteral("✓"), m_cardFrame);
+        auto* check = new QLabel(QStringLiteral("✓"), rowWidget);
         check->setStyleSheet(QStringLiteral("color: %1; font-weight: bold; font-size: 13px;").arg(HubPalette::accentPrimary.name()));
-        featRow->addWidget(check);
+        rowLayout->addWidget(check);
 
-        auto* label = new QLabel(feat, m_cardFrame);
+        auto* label = new QLabel(feat, rowWidget);
         label->setWordWrap(true);
         label->setStyleSheet(QStringLiteral("font-size: 12px; color: #c4c4d2;"));
-        featRow->addWidget(label, 1);
+        rowLayout->addWidget(label, 1);
 
-        m_featuresLayout->addLayout(featRow);
+        m_featuresLayout->addWidget(rowWidget);
     }
 
     if (!m_app.projectFormat().isEmpty()) {
@@ -412,7 +414,6 @@ void AppDetailsModal::paintEvent(QPaintEvent*) {
 
 void AppDetailsModal::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
-        // Clicking outside the popup card closes it!
         if (m_cardFrame && !m_cardFrame->geometry().contains(event->pos())) {
             closeWithAnimation();
             return;

@@ -229,7 +229,7 @@ MainWindow::MainWindow(QWidget* parent,
             this,
             QStringLiteral("System"),
             QStringLiteral("Motion Studio\n\nVersion: %1\nExecutable: %2")
-                .arg(version.isEmpty() ? QStringLiteral("Beta 0.1.1") : version,
+                .arg(version.isEmpty() ? QStringLiteral("Beta 0.1.0") : version,
                      executable_path.isEmpty()
                          ? QStringLiteral("N/A")
                          : executable_path));

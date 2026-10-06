@@ -106,7 +106,7 @@ still pending.
 
 1. Configure and build `creative-suite-image-editor` in Release mode, then
    launch it from the build output. Open **Help > System** and confirm the
-   version reads **Beta 0.1.3** and the executable path is shown. Confirm the
+   version reads **Beta 0.1.0** and the executable path is shown. Confirm the
    temporary Image Editor icon appears on the executable, window, and taskbar.
 2. Use **File > New Canvas**. Try the square, portrait, story/reel, Full HD,
    and A4 presets, then create a custom-size canvas. Choose transparent, white,

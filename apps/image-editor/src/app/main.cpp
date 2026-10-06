@@ -10,7 +10,7 @@
 #include <QMessageBox>
 
 #ifndef CREATIVE_SUITE_APP_VERSION
-#define CREATIVE_SUITE_APP_VERSION "0.1.3"
+#define CREATIVE_SUITE_APP_VERSION "0.1.0"
 #endif
 
 int main(int argc, char* argv[]) {

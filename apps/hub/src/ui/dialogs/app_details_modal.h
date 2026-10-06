@@ -41,6 +41,7 @@ protected:
 private:
     void setupUi();
     void updateVisuals();
+    void clearFeatures();
     QRect targetCardRect() const;
     static QPixmap getAppIcon(const AppInfo& app);
 

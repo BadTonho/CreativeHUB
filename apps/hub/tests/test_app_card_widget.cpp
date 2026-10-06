@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
         QStringLiteral("Edição audiovisual e pós-produção"),
         QStringLiteral("Editor completo de vídeo."),
         QStringLiteral(""),
-        QStringLiteral("0.1.6"),
+        QStringLiteral("0.1.0"),
         QStringLiteral("creative-suite-video-editor.exe"),
         QStringLiteral(""),
         AppStatus::NotInstalled,

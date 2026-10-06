@@ -8,19 +8,19 @@
       "installer_asset": "creative-suite-hub-setup.exe"
     },
     "video-editor": {
-      "version": "0.1.6",
+      "version": "0.1.0",
       "name": "Video Editor",
       "executable": "creative-suite-video-editor.exe",
       "installer_asset": "creative-suite-video-editor-setup.exe"
     },
     "image-editor": {
-      "version": "0.1.3",
+      "version": "0.1.0",
       "name": "Image Editor",
       "executable": "creative-suite-image-editor.exe",
       "installer_asset": "creative-suite-image-editor-setup.exe"
     },
     "motion-editor": {
-      "version": "0.1.1",
+      "version": "0.1.0",
       "name": "Motion Studio",
       "executable": "creative-suite-motion-editor.exe",
       "installer_asset": "creative-suite-motion-editor-setup.exe"

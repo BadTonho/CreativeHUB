@@ -1,6 +1,6 @@
 # Motion Studio Roadmap
 
-Current application version: **Beta 0.1.1**.
+Current application version: **Beta 0.1.0**.
 
 Status: **2D MVP product scope approved; implementation is substantially
 complete, with acceptance and cross-platform validation in progress**. The
@@ -434,7 +434,7 @@ controls, ruler seeking, zoom and scrolling, layer editing, and keyframe
 interactions worked. The broader manual Windows validation remains pending:
 confirm the Motion Studio icon on
 the application window and executable; open **Help > System** and confirm
-it displays **Beta 0.1.1** and the executable path; open **Help > Open Log
+it displays **Beta 0.1.0** and the executable path; open **Help > Open Log
 Folder** and confirm the Motion Studio log directory opens, then verify the
 About text; verify the centered empty-state
 button opens composition creation and disappears after creation; confirm a

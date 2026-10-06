@@ -32,7 +32,7 @@ The schema version 1 catalog has this shape:
   "suite_version": "2026.10.0",
   "applications": {
     "video-editor": {
-      "version": "0.1.6",
+      "version": "0.1.0",
       "installer_asset": "creative-suite-video-editor-setup.exe",
       "size_bytes": 123456789,
       "sha256": "<64 lowercase hexadecimal characters>",
@@ -141,6 +141,8 @@ The current Release build passed **79/79 CTest tests**. Inno Setup 6.7.3
 compiled the four installers and the script generated `updates.json` with the
 measured package sizes and SHA-256 digests. The artifacts are in the ignored
 local directory `build/windows-release-assets`; they have not been published.
+Those local artifacts predate aligning the three editor versions to `0.1.0`,
+so regenerate them during release preparation before uploading anything.
 
 To build release assets, use the command and previous-release verification
 requirements in [`../packaging/windows/README.md`](../packaging/windows/README.md).

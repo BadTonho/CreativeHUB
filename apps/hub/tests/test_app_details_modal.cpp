@@ -1,5 +1,6 @@
 #include "ui/dialogs/app_details_modal.h"
 #include <QApplication>
+#include <QElapsedTimer>
 #include <cassert>
 #include <iostream>
 
@@ -14,7 +15,7 @@ int main(int argc, char* argv[]) {
         QStringLiteral("Edição audiovisual e pós-produção"),
         QStringLiteral("Editor completo de vídeo."),
         QStringLiteral(""),
-        QStringLiteral("0.1.6"),
+        QStringLiteral("0.1.0"),
         QStringLiteral("creative-suite-video-editor.exe"),
         QStringLiteral(""),
         AppStatus::NotInstalled,
@@ -35,8 +36,22 @@ int main(int argc, char* argv[]) {
     assert(modal.isVisible());
     assert(modal.cardGeometry().isValid());
 
+    bool closedSignalReceived = false;
+    QObject::connect(&modal, &AppDetailsModal::closed, [&closedSignalReceived]() {
+        closedSignalReceived = true;
+    });
+
     // Close with animation
     modal.closeWithAnimation();
+
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < 500) {
+        app.processEvents(QEventLoop::AllEvents, 50);
+    }
+
+    assert(closedSignalReceived);
+    assert(!modal.isVisible());
 
     std::cout << "All AppDetailsModal tests passed successfully!" << std::endl;
     return 0;
