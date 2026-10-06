@@ -142,7 +142,15 @@ void AppsPage::refreshCards() {
         connect(card, &AppCardWidget::openRequested, this, &AppsPage::openAppRequested);
         connect(card, &AppCardWidget::downloadRequested, this, &AppsPage::downloadAppRequested);
         connect(card, &AppCardWidget::cancelDownloadRequested, this, &AppsPage::cancelDownloadRequested);
-        connect(card, &AppCardWidget::detailsRequested, this, &AppsPage::appDetailsRequested);
+        connect(card, &AppCardWidget::expansionToggled, this, [this, card](const QString&, bool isExpanded) {
+            if (isExpanded) {
+                for (auto* other : m_cardWidgets) {
+                    if (other != card && other->isExpanded()) {
+                        other->collapse(true);
+                    }
+                }
+            }
+        });
 
         m_cardWidgets.push_back(card);
     }

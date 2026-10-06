@@ -97,7 +97,15 @@ void UpdatesPage::refreshUpdates() {
             auto* card = new AppCardWidget(this);
             card->setAppInfo(app);
             connect(card, &AppCardWidget::downloadRequested, this, &UpdatesPage::updateAppRequested);
-            connect(card, &AppCardWidget::detailsRequested, this, &UpdatesPage::appDetailsRequested);
+            connect(card, &AppCardWidget::expansionToggled, this, [this, card](const QString&, bool isExpanded) {
+                if (isExpanded) {
+                    for (auto* other : m_updateCards) {
+                        if (other != card && other->isExpanded()) {
+                            other->collapse(true);
+                        }
+                    }
+                }
+            });
             m_updateCards.push_back(card);
 
             const int row = updateIndex / columns;

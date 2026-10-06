@@ -85,8 +85,9 @@ O Hub poderá:
 
 - encontrar instalações registradas e ler seus metadados;
 - iniciar o editor escolhido e encaminhar argumentos documentados, se houver;
-- apresentar o estado da suíte e oferecer os mesmos recursos de atualização
-  disponíveis nos editores;
+- apresentar o estado da suíte e gerenciar as atualizações dos aplicativos
+  instalados. O Hub é o único aplicativo que controla atualizações de outros
+  componentes, com uma ação separada por aplicativo na primeira versão;
 - abrir a área de diagnóstico e recuperação de aplicativos;
 - mostrar versões disponíveis, compatibilidade e resultado da operação.
 
@@ -173,6 +174,27 @@ pessoa confirma se quer iniciar o download. Depois que o download termina, a
 instalação fica agendada e acontece automaticamente quando o aplicativo fecha.
 O aplicativo pode pedir que a pessoa o feche para concluir a atualização; não
 há uma segunda confirmação de instalação.
+
+Se a pessoa escolher não baixar, o aplicativo continua utilizável e mantém a
+atualização disponível em um botão discreto. Não deve repetir uma janela a cada
+abertura; a oferta permanece até a atualização ser instalada ou substituída por
+uma versão mais recente.
+
+Se o download for interrompido, o atualizador tenta retomá-lo quando possível.
+Se não conseguir, oferece uma nova tentativa. Um download incompleto não pode
+ser instalado, e a falha não impede o uso do aplicativo atual.
+A pessoa também pode cancelar o download em andamento; o arquivo parcial não é
+instalado e a versão já instalada permanece intacta.
+
+Cada editor consulta e atualiza apenas a própria instalação. Um editor não
+inicia atualizações dos outros aplicativos. O Hub pode consultar e gerenciar
+atualizações dos demais componentes instalados. Na primeira versão, o Hub mostra
+uma ação de atualização por aplicativo; uma ação para atualizar tudo fica para
+avaliação futura.
+
+Quando uma atualização é iniciada pelo Hub, um aplicativo fechado pode ser
+instalado assim que o download for concluído e validado. Se o aplicativo estiver
+aberto, a instalação aguarda o encerramento normal desse processo.
 
 Os quatro aplicativos e a ferramenta independente de recuperação devem usar a
 mesma base de atualização. O GitHub Releases será a fonte de distribuição para
@@ -286,22 +308,21 @@ commit que o gerou. As notas de release devem apontar limitações conhecidas e
 compatibilidade de formatos.
 
 O suporte a Windows, macOS e Linux precisa ser validado em máquinas ou runners
-representativos. Empacotamento, assinatura, notarização, elevação de
-permissões e instalação por usuário ou por sistema continuam decisões em
-aberto.
+representativos. Para a primeira versão do atualizador no Windows, a instalação
+será por usuário, sem exigir elevação para atualizar a instalação dessa conta.
+Formatos de pacote, assinatura e notarização continuam decisões em aberto.
 
-### Sugestão inicial de empacotamento — ainda não decidida
+### Sugestões de empacotamento — ainda não decididas
 
 O atualizador será implementado e validado primeiro no Windows, porque o
 trabalho de Linux ainda está em andamento e o mantenedor não tem acesso a uma
 máquina Mac para validar macOS. Para distribuição direta pelo GitHub Releases,
 estas são opções para avaliar; somente a proposta de Windows é imediata.
 
-- **Windows:** instalador `.exe` assinado e instalado por usuário, para que o
-  atualizador comum possa concluir a troca depois que o app fechar. O MSIX com
-  App Installer é uma alternativa se for desejável delegar parte das
-  atualizações ao Windows; ele oferece verificações ao abrir o app, mas exige
-  pacotes assinados por um certificado confiável.
+- **Windows:** para a primeira versão do atualizador, a instalação será por
+  usuário. O instalador `.exe` continua como opção a validar. O MSIX com App
+  Installer é uma alternativa se for desejável delegar parte das atualizações
+  ao Windows; ele exige pacotes assinados por um certificado confiável.
 - **macOS:** `.dmg` contendo o app `.app` assinado com Developer ID; notarizar
   a imagem de disco distribuída. A Apple também aceita instaladores e arquivos
   ZIP no fluxo de notarização.
@@ -339,8 +360,11 @@ e reversíveis:
    aberto, pode pedir que a pessoa o feche e aplica a atualização
    automaticamente quando o processo encerrar, sem nova confirmação.
 7. Confirma o resultado e registra a versão ativa.
-8. Se a aplicação falhar, interromper ou não passar pela validação definida,
-   permite reparar ou retornar à versão anterior.
+8. Se a instalação não concluir ou a validação antes de ativar a nova versão
+   falhar, o mecanismo restaura automaticamente a versão anterior.
+9. Se o aplicativo não iniciar depois de a atualização ter sido ativada, o Hub
+   ou a ferramenta de recuperação oferece à pessoa a opção de restaurar a
+   versão anterior; essa restauração não é automática.
 
 O mecanismo comum não deve substituir arquivos de um aplicativo que ainda
 esteja em execução. Se um aplicativo precisar atualizar a si próprio, a
@@ -351,6 +375,17 @@ mesma base, mas seu possível papel como helper ainda depende de validação.
 O registro de operação deve ser pequeno, versionado e resistente a interrupção
 de energia ou encerramento forçado. As etapas precisam poder ser retomadas ou
 desfeitas sem depender de memória do processo que iniciou a atualização.
+
+## Manter um caminho de atualização
+
+Nenhuma versão ainda suportada deve ficar sem um caminho para chegar a uma
+versão atual. O caminho pode ser direto ou passar por versões intermediárias,
+desde que o atualizador consiga conduzi-lo sem exigir que a pessoa descubra a
+sequência manualmente. Se o atualizador instalado não conseguir continuar, o Hub,
+a ferramenta de recuperação ou o instalador completo publicado no GitHub deve
+oferecer uma rota de recuperação. Uma atualização com falha não pode remover a
+versão funcional nem destruir o caminho para tentar novamente. Isso se aplica
+em sistemas operacionais suportados e com acesso à distribuição.
 
 ## Dados do usuário e privacidade
 
@@ -383,7 +418,8 @@ pasta fixa do Windows nem misturar diretórios temporários com dados permanente
    compatível.
 5. **Habilitar downloads e instalação no Windows:** implementar confirmação de
    download, instalação ao fechar o aplicativo, verificação, registro,
-   cancelamento seguro e rollback com retenção de uma versão anterior.
+   cancelamento seguro e rollback automático quando a instalação falhar,
+   mantendo uma versão anterior.
 6. **Criar a recuperação de aplicativo:** implementar um núcleo compartilhado
    de diagnóstico e reparo, exposto dentro do Hub e em um executável
    independente. Ele lê o registro de operações e restaura uma versão
@@ -400,7 +436,6 @@ distribuído.
 ## Decisões ainda em aberto
 
 - nome definitivo da suíte, organização e IDs públicos;
-- instalação por usuário ou por sistema e requisitos de elevação;
 - esquema e assinatura do catálogo de releases;
 - formatos de pacote e canais de lançamento por sistema operacional;
 - provedor e elegibilidade para assinatura Authenticode pública no Windows;
@@ -421,6 +456,18 @@ protocolo entre processos.
 - Cada ciclo publicado da suíte lista um artefato válido para os quatro
   aplicativos, sem anunciar uma nova versão de um aplicativo inalterado por
   engano.
+- A partir de cada versão ainda suportada, verificar um caminho até a versão
+  atual, direto ou por versões intermediárias, incluindo a rota de recuperação
+  caso o atualizador instalado não consiga prosseguir.
+- Abrir um editor oferece atualização somente para esse editor; o Hub consegue
+  gerenciar os outros aplicativos instalados com ações separadas por app.
+- Pelo Hub, atualizar um app fechado instala a versão validada após o download;
+  se o app estiver aberto, a instalação aguarda seu encerramento normal.
+- Adiar o download não bloqueia o editor nem repete uma janela a cada abertura;
+  a atualização continua disponível de forma discreta.
+- Um download interrompido pode ser retomado quando possível; se falhar, a
+  pessoa pode tentar novamente, e o app atual continua utilizável.
+- Cancelar um download não instala o arquivo parcial nem altera a versão ativa.
 - Os quatro aplicativos e a ferramenta de recuperação consultam a mesma fonte
   e aplicam os mesmos critérios de versão, assinatura, plataforma e
   compatibilidade.
@@ -430,7 +477,11 @@ protocolo entre processos.
 - Rejeitar artefatos com hash, assinatura, identidade ou plataforma incorretos.
 - Recuperar de encerramento forçado em cada etapa de staging e instalação.
 - Cancelar antes do commit sem deixar a instalação incompleta.
-- Restaurar uma versão anterior suportada após uma falha de inicialização.
+- Restaurar automaticamente a versão anterior se a instalação ou a validação
+  antes da ativação falhar.
+- Se o app falhar ao iniciar depois da ativação, oferecer pelo Hub ou pela
+  ferramenta de recuperação a opção de restaurar a versão anterior, sem fazer
+  rollback automaticamente.
 - Abrir projetos antigos depois de atualizar os aplicativos e preservar as
   regras documentadas de compatibilidade.
 - Diagnosticar problemas sem registrar tokens, conteúdo de projetos ou mídia.

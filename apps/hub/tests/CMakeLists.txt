@@ -13,6 +13,11 @@ target_link_libraries(hub-logger-test PRIVATE creative-suite-hub-core Qt6::Core)
 target_compile_features(hub-logger-test PRIVATE cxx_std_20)
 add_creative_suite_test(NAME hub-logger-test COMMAND hub-logger-test)
 
+add_executable(hub-card-widget-test test_app_card_widget.cpp)
+target_link_libraries(hub-card-widget-test PRIVATE creative-suite-hub-core Qt6::Widgets)
+target_compile_features(hub-card-widget-test PRIVATE cxx_std_20)
+add_creative_suite_test(NAME hub-card-widget-test COMMAND hub-card-widget-test)
+
 if(WIN32)
     get_target_property(QT_HUB_CORE_DLL Qt6::Core IMPORTED_LOCATION_RELEASE)
     if(NOT QT_HUB_CORE_DLL)
@@ -24,7 +29,8 @@ if(WIN32)
     foreach(TEST_TARGET IN ITEMS
             hub-catalog-test
             hub-launcher-test
-            hub-logger-test)
+            hub-logger-test
+            hub-card-widget-test)
         add_custom_command(TARGET ${TEST_TARGET} POST_BUILD
             COMMAND "${QT_HUB_DEPLOY_TOOL}"
                 --no-translations
