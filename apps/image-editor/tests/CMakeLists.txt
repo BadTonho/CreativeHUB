@@ -134,6 +134,12 @@ add_creative_suite_test(
 set_tests_properties(creative-suite-image-editor-ui PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
+add_creative_suite_test(
+    NAME creative-suite-image-editor-window-close
+    COMMAND creative-suite-image-editor-ui-tests --window-close-tabs)
+set_tests_properties(creative-suite-image-editor-window-close PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
 
 if(WIN32)
     target_link_libraries(creative-suite-image-editor-ui-tests PRIVATE user32)

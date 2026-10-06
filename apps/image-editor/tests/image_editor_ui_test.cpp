@@ -2558,6 +2558,166 @@ bool testMultiDocumentRecovery(const QString& directory) {
     return true;
 }
 
+bool testWindowCloseAcrossDirtyTabs(const QString& directory) {
+    const QString recovery_directory =
+        directory + QStringLiteral("/window-close-recovery-data");
+    image_editor::RecoveryStore recovery(recovery_directory);
+    QStringList document_paths;
+    QVector<int> original_layer_counts;
+    for (int index = 0; index < 3; ++index) {
+        QImage image(64 + index * 8, 48 + index * 6, QImage::Format_ARGB32);
+        image.fill(QColor(40 + index * 55, 80 + index * 35, 160 - index * 30));
+        const QString source_path = directory + QStringLiteral("/window-close-%1.png").arg(index);
+        const QString document_path = directory + QStringLiteral("/window-close-%1.cimg").arg(index);
+        if (!image.save(source_path)) return false;
+
+        image_editor::ImageDocumentSession document;
+        QString error;
+        if (!document.openImage(source_path, &error) ||
+            !document.saveDocument(document_path, &error)) {
+            std::cerr << "Could not prepare a saved document for the window-close test: "
+                      << error.toStdString() << '\n';
+            return false;
+        }
+        original_layer_counts.append(static_cast<int>(document.data().layers.size()));
+        document_paths.append(document_path);
+    }
+
+    image_editor::ImageEditorWindow window(nullptr, recovery_directory);
+    window.resize(1000, 700);
+    window.show();
+    if (!window.openDocumentPath(document_paths.at(0))) return false;
+    auto* tabs = window.findChild<QTabBar*>(QStringLiteral("imageDocumentTabBar"));
+    auto* add_layer = window.findChild<QToolButton*>(QStringLiteral("addImageLayerButton"));
+    auto* open_document_action = window.findChild<QAction*>(
+        QStringLiteral("newTabOpenEditableDocumentAction"));
+    auto* autosave = window.findChild<QTimer*>(QStringLiteral("imageEditorRecoveryTimer"));
+    if (tabs == nullptr || add_layer == nullptr || open_document_action == nullptr ||
+        autosave == nullptr || tabs->count() != 1) return false;
+
+    const auto openDocumentInNewTab = [&window, open_document_action](const QString& path) {
+        bool selected = false;
+        QTimer chooser;
+        chooser.setInterval(10);
+        QObject::connect(&chooser, &QTimer::timeout, &window,
+                         [&selected, &path, &chooser]() {
+            for (QWidget* widget : QApplication::topLevelWidgets()) {
+                auto* dialog = qobject_cast<QFileDialog*>(widget);
+                if (dialog == nullptr || !dialog->isVisible()) continue;
+                selected = true;
+                chooser.stop();
+                dialog->selectFile(path);
+                QMetaObject::invokeMethod(dialog, "accept", Qt::QueuedConnection);
+                return;
+            }
+        });
+        chooser.start();
+        open_document_action->trigger();
+        chooser.stop();
+        return selected;
+    };
+
+    const auto dirtyActiveDocument = [tabs, add_layer]() {
+        if (tabs->currentIndex() < 0) return false;
+        add_layer->click();
+        return tabs->tabText(tabs->currentIndex()).startsWith(QLatin1Char('*'));
+    };
+    if (!dirtyActiveDocument() || !openDocumentInNewTab(document_paths.at(1)) ||
+        tabs->count() != 2 || !dirtyActiveDocument() ||
+        !openDocumentInNewTab(document_paths.at(2)) || tabs->count() != 3 ||
+        !dirtyActiveDocument() || tabs->currentIndex() != 2) {
+        std::cerr << "Could not create three dirty document tabs for window close.\n";
+        return false;
+    }
+
+    QVector<QString> recovery_paths;
+    for (const QString& document_path : document_paths) {
+        image_editor::ImageDocumentSession identity;
+        QString error;
+        if (!identity.openDocument(document_path, &error)) return false;
+        recovery_paths.append(recovery.pathFor(identity));
+    }
+    if (!QMetaObject::invokeMethod(autosave, "timeout", Qt::DirectConnection) ||
+        recovery.snapshots().size() != 3) {
+        std::cerr << "Autosave did not create recovery snapshots for all dirty tabs.\n";
+        return false;
+    }
+
+    const auto closeWithReplies = [&window](const QStringList& replies,
+                                            int& handled_replies,
+                                            bool& unexpected_dialog) {
+        handled_replies = 0;
+        unexpected_dialog = false;
+        QTimer responder;
+        responder.setInterval(10);
+        QObject::connect(&responder, &QTimer::timeout, [&]() {
+            auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            if (prompt == nullptr) return;
+            if (handled_replies >= replies.size()) {
+                unexpected_dialog = true;
+                prompt->reject();
+                return;
+            }
+            const QString expected = replies.at(handled_replies);
+            for (QAbstractButton* button : prompt->buttons()) {
+                if (!button->text().contains(expected, Qt::CaseInsensitive)) continue;
+                ++handled_replies;
+                button->click();
+                return;
+            }
+            unexpected_dialog = true;
+            prompt->reject();
+        });
+        responder.start();
+        const bool accepted = window.close();
+        responder.stop();
+        return accepted;
+    };
+
+    int handled_replies = 0;
+    bool unexpected_dialog = false;
+    const bool first_close_accepted = closeWithReplies(
+        {QStringLiteral("Save"), QStringLiteral("Cancel")},
+        handled_replies, unexpected_dialog);
+    const QStringList snapshots_after_cancel = recovery.snapshots();
+    if (first_close_accepted || unexpected_dialog || handled_replies != 2 ||
+        !window.isVisible() || tabs->count() != 3 || tabs->currentIndex() != 2 ||
+        tabs->tabText(0).startsWith(QLatin1Char('*')) ||
+        !tabs->tabText(1).startsWith(QLatin1Char('*')) ||
+        !tabs->tabText(2).startsWith(QLatin1Char('*')) ||
+        snapshots_after_cancel.size() != 2 ||
+        snapshots_after_cancel.contains(recovery_paths.at(0)) ||
+        !snapshots_after_cancel.contains(recovery_paths.at(1)) ||
+        !snapshots_after_cancel.contains(recovery_paths.at(2))) {
+        std::cerr << "Cancelling a later tab close did not keep the window state and recovery data.\n";
+        return false;
+    }
+
+    const bool second_close_accepted = closeWithReplies(
+        {QStringLiteral("Discard"), QStringLiteral("Save")},
+        handled_replies, unexpected_dialog);
+    if (!second_close_accepted || unexpected_dialog || handled_replies != 2 ||
+        window.isVisible() || !recovery.snapshots().isEmpty()) {
+        std::cerr << "Accepting the remaining close prompts did not close and clean recovery data.\n";
+        return false;
+    }
+
+    image_editor::ImageDocumentSession first_saved;
+    image_editor::ImageDocumentSession second_discarded;
+    image_editor::ImageDocumentSession third_saved;
+    QString error;
+    if (!first_saved.openDocument(document_paths.at(0), &error) ||
+        !second_discarded.openDocument(document_paths.at(1), &error) ||
+        !third_saved.openDocument(document_paths.at(2), &error) ||
+        static_cast<int>(first_saved.data().layers.size()) != original_layer_counts.at(0) + 1 ||
+        static_cast<int>(second_discarded.data().layers.size()) != original_layer_counts.at(1) ||
+        static_cast<int>(third_saved.data().layers.size()) != original_layer_counts.at(2) + 1) {
+        std::cerr << "Window-close Save and Discard choices were not reflected in the documents.\n";
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
@@ -2570,6 +2730,10 @@ int main(int argc, char* argv[]) {
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, temporary.path());
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, temporary.path());
+    if (application.arguments().contains(QStringLiteral("--window-close-tabs"))) {
+        QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+        return testWindowCloseAcrossDirtyTabs(temporary.path()) ? 0 : 1;
+    }
 
     {
         image_editor::ImageToolOptionsBar options;
