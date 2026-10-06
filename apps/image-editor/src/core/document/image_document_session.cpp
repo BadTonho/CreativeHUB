@@ -1,5 +1,6 @@
 #include "image_document_session.h"
 #include "image_bucket_fill.h"
+#include "image_linear_gradient.h"
 #include "../diagnostics/image_editor_performance_metrics.h"
 #include "image_document_geometry.h"
 #include "image_document_object_editor.h"
@@ -497,6 +498,13 @@ bool ImageDocumentSession::resizeCanvas(const QSize& size,
                 if (operation.bucket_fill.clipping_path.has_value()) {
                     operation.bucket_fill.clipping_path =
                         operation.bucket_fill.clipping_path->translated(delta);
+                }
+            } else if (operation.kind == OperationKind::LinearGradient) {
+                if (!shift_point(&operation.linear_gradient.start) ||
+                    !shift_point(&operation.linear_gradient.end)) return false;
+                if (operation.linear_gradient.clipping_path.has_value()) {
+                    operation.linear_gradient.clipping_path =
+                        operation.linear_gradient.clipping_path->translated(delta);
                 }
             } else if (operation.kind == OperationKind::Shape) {
                 if (!shift_point(&operation.shape.start) || !shift_point(&operation.shape.end))
@@ -1066,6 +1074,121 @@ bool ImageDocumentSession::applyBucketFill(
         ? data_.layers[layerIndex(selected_layer_id_)].mask->operations
         : data_.layers[layerIndex(selected_layer_id_)].operations;
     operations.append(std::move(operation));
+    layer_raster_cache_.invalidateLayer(selected_layer_id_);
+    return true;
+}
+
+std::optional<ImageOperation> ImageDocumentSession::prepareLinearGradientOperation(
+    const QPointF& start, const QPointF& end, const QColor& color,
+    std::optional<QPainterPath> clipping_path, bool mask_target,
+    QString* error) const {
+    if (error != nullptr) error->clear();
+    if (!hasSource() || !selectedLayerIsEditable()) {
+        assignError(error, QStringLiteral("Select an editable layer before applying a gradient."));
+        return std::nullopt;
+    }
+    if (!color.isValid()) {
+        assignError(error, QStringLiteral("The gradient color is invalid."));
+        return std::nullopt;
+    }
+    const qsizetype index = layerIndex(selected_layer_id_);
+    if (index < 0 || (mask_target && !data_.layers.at(index).mask.has_value())) {
+        assignError(error, QStringLiteral("Select an editable layer or layer mask before applying a gradient."));
+        return std::nullopt;
+    }
+    const QSize size = renderedSize();
+    const auto point_in_canvas = [&size](const QPointF& point) {
+        return std::isfinite(point.x()) && std::isfinite(point.y()) &&
+            point.x() >= 0.0 && point.y() >= 0.0 &&
+            point.x() < size.width() && point.y() < size.height();
+    };
+    if (!point_in_canvas(start) || !point_in_canvas(end)) {
+        assignError(error, QStringLiteral("The gradient gesture must stay within the canvas."));
+        return std::nullopt;
+    }
+    if (clipping_path.has_value() &&
+        !ImageDocumentGeometry::isValidStrokeClipPath(*clipping_path)) {
+        assignError(error, QStringLiteral("The gradient selection has invalid or excessive geometry."));
+        return std::nullopt;
+    }
+
+    const auto* layer = &data_.layers.at(index);
+    QVector<QPointF> points{start, end};
+    const auto* parent = findGroup(data_, layer->parent_group_id);
+    ImageDocumentGeometry::mapStrokeGeometryThroughGroup(
+        &points, &clipping_path, parent, size);
+    for (const QPointF& point : points) {
+        if (!std::isfinite(point.x()) || !std::isfinite(point.y()) ||
+            std::abs(point.x()) > 1'000'000.0 || std::abs(point.y()) > 1'000'000.0) {
+            assignError(error, QStringLiteral("The gradient exceeds the supported local coordinate range."));
+            return std::nullopt;
+        }
+    }
+    if (clipping_path.has_value()) {
+        clipping_path = clipping_path->intersected(ImageDocumentGeometry::imageBoundsPath(size));
+        if (!ImageDocumentGeometry::isValidStrokeClipPath(*clipping_path)) {
+            assignError(error, QStringLiteral("The gradient selection could not be clipped to the canvas."));
+            return std::nullopt;
+        }
+    }
+
+    ImageOperation operation;
+    operation.kind = OperationKind::LinearGradient;
+    operation.linear_gradient.start = points.at(0);
+    operation.linear_gradient.end = points.at(1);
+    operation.linear_gradient.color = color;
+    if (mask_target) {
+        const int gray = qGray(color.rgb());
+        operation.linear_gradient.color = QColor(gray, gray, gray, color.alpha());
+    }
+    operation.linear_gradient.clipping_path = std::move(clipping_path);
+    return operation;
+}
+
+QImage ImageDocumentSession::renderedImageWithLinearGradient(
+    const QPointF& start, const QPointF& end, const QColor& color,
+    std::optional<QPainterPath> clipping_path, bool mask_target) const {
+    auto operation = prepareLinearGradientOperation(
+        start, end, color, std::move(clipping_path), mask_target, nullptr);
+    if (!operation.has_value()) return renderedImage();
+    ImageDocumentData preview_document = data_;
+    auto* layer = findLayer(preview_document, selected_layer_id_);
+    if (layer == nullptr) return renderedImage();
+    if (mask_target) {
+        if (!layer->mask.has_value()) return renderedImage();
+        layer->mask->operations.append(std::move(*operation));
+    } else {
+        layer->operations.append(std::move(*operation));
+    }
+    return ImageDocumentRenderer::composite(preview_document, source_image_, raster_images_);
+}
+
+bool ImageDocumentSession::applyLinearGradient(
+    const QPointF& start, const QPointF& end, const QColor& color, QString* error,
+    std::optional<QPainterPath> clipping_path, bool mask_target) {
+    if (error != nullptr) error->clear();
+    auto operation = prepareLinearGradientOperation(
+        start, end, color, std::move(clipping_path), mask_target, error);
+    if (!operation.has_value()) return false;
+
+    QImage target = ImageDocumentRenderer::editableLayerTarget(
+        data_, source_image_, raster_images_, selected_layer_id_, mask_target);
+    bool changed = false;
+    if (target.isNull() || !ImageLinearGradient::apply(
+            &target, operation->linear_gradient, &changed, error)) {
+        if (error != nullptr && error->isEmpty()) {
+            assignError(error, QStringLiteral("The selected layer could not be rendered for the gradient."));
+        }
+        return false;
+    }
+    if (!changed) return false;
+
+    pushEdit();
+    const qsizetype index = layerIndex(selected_layer_id_);
+    auto& operations = mask_target
+        ? data_.layers[index].mask->operations
+        : data_.layers[index].operations;
+    operations.append(std::move(*operation));
     layer_raster_cache_.invalidateLayer(selected_layer_id_);
     return true;
 }

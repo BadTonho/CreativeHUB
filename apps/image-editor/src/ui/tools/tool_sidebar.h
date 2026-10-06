@@ -11,7 +11,7 @@ class ToolSidebar final : public QWidget {
     Q_OBJECT
 
 public:
-    enum class Tool { None, Paint, BucketFill, Eraser, Shapes, Text, Select, AreaSelect, Eyedropper };
+    enum class Tool { None, Paint, BucketFill, LinearGradient, Eraser, Shapes, Text, Select, AreaSelect, Eyedropper };
     Q_ENUM(Tool)
 
     explicit ToolSidebar(QWidget* parent = nullptr);
@@ -20,6 +20,7 @@ public:
     void setPaintingAllowed(bool allowed);
     void setPaintToolActive(bool active);
     void setBucketFillToolActive(bool active);
+    void setLinearGradientToolActive(bool active);
     void setEraserToolActive(bool active);
     void setShapesToolActive(bool active);
     void setTextToolActive(bool active);
@@ -30,6 +31,7 @@ public:
 
     [[nodiscard]] bool paintToolActive() const noexcept;
     [[nodiscard]] bool bucketFillToolActive() const noexcept;
+    [[nodiscard]] bool linearGradientToolActive() const noexcept;
     [[nodiscard]] bool eraserToolActive() const noexcept;
     [[nodiscard]] bool shapesToolActive() const noexcept;
     [[nodiscard]] bool textToolActive() const noexcept;
@@ -51,6 +53,7 @@ private:
 
     QToolButton* paint_button_ = nullptr;
     QToolButton* bucket_fill_button_ = nullptr;
+    QToolButton* linear_gradient_button_ = nullptr;
     QToolButton* eraser_button_ = nullptr;
     QToolButton* shapes_button_ = nullptr;
     QToolButton* text_button_ = nullptr;

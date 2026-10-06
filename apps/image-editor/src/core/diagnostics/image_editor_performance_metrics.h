@@ -15,6 +15,7 @@ enum class ImageEditorPerformanceStage : std::size_t {
     OperationReplay,
     PaintStroke,
     EraseStroke,
+    LinearGradient,
     Shape,
     Text,
     RasterImage,

@@ -114,6 +114,7 @@ const char* imageEditorPerformanceStageName(
     case ImageEditorPerformanceStage::OperationReplay: return "operation_replay";
     case ImageEditorPerformanceStage::PaintStroke: return "paint_stroke";
     case ImageEditorPerformanceStage::EraseStroke: return "erase_stroke";
+    case ImageEditorPerformanceStage::LinearGradient: return "linear_gradient";
     case ImageEditorPerformanceStage::Shape: return "shape";
     case ImageEditorPerformanceStage::Text: return "text";
     case ImageEditorPerformanceStage::RasterImage: return "raster_image";

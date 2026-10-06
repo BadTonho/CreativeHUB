@@ -490,6 +490,20 @@ void ImageEditorWindow::connectCanvas(ImageCanvas* canvas) {
             [this, canvas](const QPoint& seed, int tolerance, const QColor& color) {
                 handleBucketFill(seed, tolerance, color, canvas->areaSelectionClipPath());
             });
+    connect(canvas, &ImageCanvas::linearGradientPreviewRequested, this,
+            [this, canvas](const QPointF& start, const QPointF& end, const QColor& color) {
+                if (activeCanvas() == nullptr || activeCanvas() != canvas) return;
+                canvas->setTransientImage(activeSession().renderedImageWithLinearGradient(
+                    start, end, color, canvas->areaSelectionClipPath(), editingMask()));
+            });
+    connect(canvas, &ImageCanvas::linearGradientPreviewCleared, canvas, [canvas]() {
+        canvas->setTransientImage({});
+    });
+    connect(canvas, &ImageCanvas::linearGradientRequested, this,
+            [this, canvas](const QPointF& start, const QPointF& end, const QColor& color) {
+                handleLinearGradient(
+                    start, end, color, canvas->areaSelectionClipPath());
+            });
     connect(canvas, &ImageCanvas::erasePreviewRequested, this,
             [this, canvas](const QVector<QPointF>& points, int diameter) {
                 if (activeCanvas() == nullptr) return;
@@ -1251,6 +1265,7 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
     }
     activeCanvas()->setEyedropperMode(false);
     activeCanvas()->setBucketFillMode(false);
+    activeCanvas()->setLinearGradientMode(false);
     if (paint_tool_action_ != nullptr) {
         const QSignalBlocker blocker(paint_tool_action_);
         paint_tool_action_->setChecked(tool == ToolSidebar::Tool::Paint);
@@ -1303,6 +1318,14 @@ void ImageEditorWindow::updateCanvasToolState(ToolSidebar::Tool tool, bool prese
         activeCanvas()->setPaintMode(false);
         activeCanvas()->setBucketFillTolerance(bucket_fill_tolerance_);
         activeCanvas()->setBucketFillMode(true);
+    } else if (tool == ToolSidebar::Tool::LinearGradient && has_source) {
+        activeCanvas()->setTextCreationMode(false);
+        activeCanvas()->setEraserMode(false);
+        activeCanvas()->setAreaSelectionMode(false);
+        activeCanvas()->setShapeCreationMode(false);
+        activeCanvas()->setObjectSelectionMode(false);
+        activeCanvas()->setPaintMode(false);
+        activeCanvas()->setLinearGradientMode(true);
     } else if (tool == ToolSidebar::Tool::Paint && has_source) {
         activeCanvas()->setTextCreationMode(false);
         activeCanvas()->setEraserMode(false);
@@ -2523,6 +2546,20 @@ void ImageEditorWindow::handleBucketFill(
         updateView(true);
     } else if (!error.isEmpty()) {
         reportError(QStringLiteral("bucket_fill"), error);
+    }
+}
+
+void ImageEditorWindow::handleLinearGradient(
+    const QPointF& start, const QPointF& end, const QColor& color,
+    std::optional<QPainterPath> clipping_path) {
+    if (activeCanvas() == nullptr || !activeSession().hasSource()) return;
+    QString error;
+    const bool changed = activeSession().applyLinearGradient(
+        start, end, color, &error, std::move(clipping_path), editingMask());
+    if (changed) {
+        updateView(true);
+    } else if (!error.isEmpty()) {
+        reportError(QStringLiteral("linear_gradient"), error);
     }
 }
 

@@ -66,6 +66,11 @@ public:
                                       QString* error = nullptr,
                                       std::optional<QPainterPath> clipping_path = {},
                                       bool mask_target = false);
+    [[nodiscard]] bool applyLinearGradient(
+        const QPointF& start, const QPointF& end, const QColor& color,
+        QString* error = nullptr,
+        std::optional<QPainterPath> clipping_path = {},
+        bool mask_target = false);
     [[nodiscard]] QString addShape(ImageShapeData shape, QString* error = nullptr);
     [[nodiscard]] bool updateShape(const ImageShapeData& shape,
                                    QString* error = nullptr);
@@ -153,6 +158,10 @@ public:
     [[nodiscard]] QImage renderedImageWithEraseStroke(
         const QVector<QPointF>& points, int diameter,
         std::optional<QPainterPath> clipping_path = {}) const;
+    [[nodiscard]] QImage renderedImageWithLinearGradient(
+        const QPointF& start, const QPointF& end, const QColor& color,
+        std::optional<QPainterPath> clipping_path = {},
+        bool mask_target = false) const;
     [[nodiscard]] QHash<QString, QImage> renderedLayerThumbnails(
         const QSize& maximum_size) const;
     [[nodiscard]] bool hasSource() const noexcept { return !source_image_.isNull(); }
@@ -206,6 +215,10 @@ private:
         const QVector<QPointF>& points, const QColor& color, int diameter,
         QString* error, std::optional<QPainterPath> clipping_path,
         bool erase);
+    [[nodiscard]] std::optional<ImageOperation> prepareLinearGradientOperation(
+        const QPointF& start, const QPointF& end, const QColor& color,
+        std::optional<QPainterPath> clipping_path, bool mask_target,
+        QString* error) const;
     [[nodiscard]] bool loadSource(const QString& path, QImage* image, QString* error) const;
     [[nodiscard]] QSize renderedSize() const;
     void loadRasterSources();

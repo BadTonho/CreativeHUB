@@ -2,6 +2,7 @@
 
 #include "image_document_store.h"
 #include "../tools/bucket_fill/bucket_fill_tool.h"
+#include "../tools/gradient/linear_gradient_tool.h"
 #include "../tools/brush/eraser_tool.h"
 #include "../tools/brush/paint_tool.h"
 #include "../tools/crop/crop_tool.h"
@@ -51,6 +52,7 @@ public:
     void setEyedropperMode(bool enabled);
     void setBucketFillMode(bool enabled);
     void setBucketFillTolerance(int tolerance);
+    void setLinearGradientMode(bool enabled);
     void setAreaSelectionOptions(AreaSelectionShape shape,
                                  AreaSelectionCombineMode combine_mode);
     void clearAreaSelection();
@@ -77,6 +79,7 @@ public:
     [[nodiscard]] bool paintMode() const noexcept { return paint_mode_; }
     [[nodiscard]] bool eraserMode() const noexcept { return eraser_mode_; }
     [[nodiscard]] bool eyedropperMode() const noexcept { return eyedropper_mode_; }
+    [[nodiscard]] bool linearGradientMode() const noexcept { return linear_gradient_mode_; }
     [[nodiscard]] double zoomFactor() const noexcept { return zoom_; }
 
 signals:
@@ -94,6 +97,13 @@ signals:
     void brushDiameterChanged(int diameter);
     void colorSampled(const QColor& color);
     void bucketFillRequested(const QPoint& seed, int tolerance, const QColor& color);
+    void linearGradientPreviewRequested(const QPointF& start,
+                                        const QPointF& end,
+                                        const QColor& color);
+    void linearGradientRequested(const QPointF& start,
+                                 const QPointF& end,
+                                 const QColor& color);
+    void linearGradientPreviewCleared();
     void shapeCreated(const image_editor::ImageShapeData& shape);
     void textCommitted(const image_editor::ImageTextData& text, bool existing);
     void textEditingStarted(const image_editor::ImageTextData& text, bool existing);
@@ -156,6 +166,7 @@ private:
     bool area_selection_mode_ = false;
     bool eyedropper_mode_ = false;
     bool bucket_fill_mode_ = false;
+    bool linear_gradient_mode_ = false;
     bool resizing_brush_ = false;
     bool shift_constrain_held_ = false;
     bool panning_ = false;
@@ -169,6 +180,7 @@ private:
     CropTool crop_tool_;
     EyedropperTool eyedropper_tool_;
     BucketFillTool bucket_fill_tool_;
+    LinearGradientTool linear_gradient_tool_;
     AreaSelectionTool area_selection_tool_;
     ObjectSelectionTool object_selection_tool_;
     ShapeTool shape_tool_;

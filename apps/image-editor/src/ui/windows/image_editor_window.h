@@ -120,6 +120,9 @@ private:
                            std::optional<QPainterPath> clipping_path = {});
     void handleBucketFill(const QPoint& seed, int tolerance, const QColor& color,
                           std::optional<QPainterPath> clipping_path = {});
+    void handleLinearGradient(const QPointF& start, const QPointF& end,
+                              const QColor& color,
+                              std::optional<QPainterPath> clipping_path = {});
     void updateCanvasToolState(ToolSidebar::Tool tool, bool preserveSelection = false);
     void updateCanvasBrush();
     void updateShapeOptions();
