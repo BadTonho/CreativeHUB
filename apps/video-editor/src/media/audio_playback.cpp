@@ -174,6 +174,11 @@ AudioPlaybackSession::AudioPlaybackSession(AudioPlaybackSession&&) noexcept = de
 AudioPlaybackSession& AudioPlaybackSession::operator=(AudioPlaybackSession&&) noexcept = default;
 
 std::unique_ptr<AudioPlaybackSession> AudioPlaybackSession::open(
+    const std::filesystem::path& source_path) {
+    return open(source_path, OutputSpec{});
+}
+
+std::unique_ptr<AudioPlaybackSession> AudioPlaybackSession::open(
     const std::filesystem::path& source_path,
     OutputSpec output) {
     try {

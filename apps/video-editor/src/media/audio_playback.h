@@ -21,8 +21,10 @@ public:
     using CancellationPredicate = std::function<bool()>;
 
     static std::unique_ptr<AudioPlaybackSession> open(
+        const std::filesystem::path& source_path);
+    static std::unique_ptr<AudioPlaybackSession> open(
         const std::filesystem::path& source_path,
-        OutputSpec output = {});
+        OutputSpec output);
 
     ~AudioPlaybackSession();
 
