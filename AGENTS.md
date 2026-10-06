@@ -221,6 +221,10 @@ Important decisions must be recorded in the documentation, indicating whether th
 - Keep the project organized into clear categories and subcategories. Avoid introducing an unnecessary monorepo structure; prefer a single coherent repository organized by modules and folders unless a concrete technical or organizational need justifies otherwise.
 - Do not add dependencies without justifying the need and license.
 - Do not delete, reset, or overwrite existing work without explicit authorization.
+- Do not generate application installers or release packages unless the user
+  explicitly requests them. Build only the application(s) and targets needed
+  for the requested change and its required verification; do not rebuild
+  unrelated applications or the whole suite without need.
 - Treat documentation as part of the implementation. Keep it aligned with the current code, architecture, behavior, and decisions, and update every affected document in the same change whenever code, UI, behavior, an API, a data format, build configuration, dependency, or project status changes. Verify the updated documentation against the implementation before considering the work complete.
 - Update the documentation whenever an architectural decision is made.
 - Whenever an application's version changes, create a version-specific changelog
