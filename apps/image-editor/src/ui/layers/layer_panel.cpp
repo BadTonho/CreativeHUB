@@ -181,14 +181,15 @@ public:
 
 class LayerTreeWidget final : public QTreeWidget {
 public:
+    using DropIndicatorPosition = QAbstractItemView::DropIndicatorPosition;
     using DropHandler = std::function<void(const QString&, bool, QTreeWidgetItem*,
-                                           QAbstractItemView::DropIndicatorPosition)>;
+                                           DropIndicatorPosition)>;
     using QTreeWidget::QTreeWidget;
     DropHandler drop_handler;
-    static bool isOnItem(QAbstractItemView::DropIndicatorPosition position) {
+    static bool isOnItem(DropIndicatorPosition position) {
         return position == OnItem;
     }
-    static bool isAboveItem(QAbstractItemView::DropIndicatorPosition position) {
+    static bool isAboveItem(DropIndicatorPosition position) {
         return position == AboveItem;
     }
 
@@ -510,7 +511,7 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
 
     tree->drop_handler = [this](const QString& source_id, bool source_group,
                                 QTreeWidgetItem* target,
-                                QAbstractItemView::DropIndicatorPosition indicator) {
+                                LayerTreeWidget::DropIndicatorPosition indicator) {
         if (source_id.isEmpty()) return;
         const auto source_layer = std::find_if(document_.layers.cbegin(),
             document_.layers.cend(), [&source_id](const ImageLayerData& layer) {
@@ -778,7 +779,7 @@ bool LayerPanel::canGroupSelectedLayers(QStringList* layer_ids) const {
 }
 
 void LayerPanel::requestMove(const QString& item_id, bool is_group, int direction) {
-    if (direction != -1 && direction != 1 || item_id.isEmpty()) return;
+    if ((direction != -1 && direction != 1) || item_id.isEmpty()) return;
     QString group_id;
     qsizetype position = -1;
     qsizetype count = 0;

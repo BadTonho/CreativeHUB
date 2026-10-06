@@ -14,6 +14,9 @@ AppLauncher::AppLauncher() {
     m_searchPaths.append(appDir);
 
     // Common sibling build directories
+    m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../video-editor")));
+    m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../image-editor")));
+    m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../motion-editor")));
     m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../video-editor/Release")));
     m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../image-editor/Release")));
     m_searchPaths.append(QDir(appDir).filePath(QStringLiteral("../motion-editor/Release")));
@@ -41,16 +44,25 @@ std::optional<QString> AppLauncher::findExecutable(const QString& executableName
         return std::nullopt;
     }
 
+    QStringList candidates = {executableName};
+    if (executableName.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive)) {
+        candidates.append(executableName.left(executableName.size() - 4));
+    } else {
+        candidates.append(executableName + QStringLiteral(".exe"));
+    }
+
     for (const auto& searchDir : m_searchPaths) {
         QDir dir(searchDir);
         if (!dir.exists()) {
             continue;
         }
 
-        const QString fullPath = dir.filePath(executableName);
-        QFileInfo fileInfo(fullPath);
-        if (fileInfo.exists() && fileInfo.isFile() && fileInfo.isExecutable()) {
-            return fullPath;
+        for (const auto& candidate : candidates) {
+            const QString fullPath = dir.filePath(candidate);
+            QFileInfo fileInfo(fullPath);
+            if (fileInfo.exists() && fileInfo.isFile() && fileInfo.isExecutable()) {
+                return fullPath;
+            }
         }
     }
 
