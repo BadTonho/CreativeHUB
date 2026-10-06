@@ -1,10 +1,10 @@
 # Análise de reorganização dos arquivos do Motion Studio
 
-**Status:** quatro etapas implementadas em 2026-10-06. Esta é uma nota
+**Status:** cinco etapas implementadas em 2026-10-06. Esta é uma nota
 provisória de planejamento, owner-only, em português; não registra uma decisão
 arquitetural definitiva.
 
-## Diagnóstico e resultado das quatro primeiras etapas
+## Diagnóstico e resultado das cinco primeiras etapas
 
 Antes da divisão, `apps/motion-editor/src/ui/main_window.cpp` tinha **2.814
 linhas físicas**. O arquivo concentrava abertura e salvamento de documentos,
@@ -54,15 +54,14 @@ claro. O namespace, os tipos, as assinaturas e o comportamento foram mantidos.
 O CMake, a janela principal e os dois testes consumidores apontam para o novo
 caminho. A cobertura manual do histórico permanece pendente conforme o roadmap.
 
-## Outras oportunidades identificadas
+### Quinta etapa: includes canônicos do timeline
 
-Estas sugestões permanecem fora do escopo executado nas quatro primeiras etapas.
-
-### Consolidar caminhos canônicos do timeline
-
-`src/ui/timeline_navigator.h` e `timeline_navigator_math.h` são cabeçalhos de
-encaminhamento para arquivos em `src/ui/timeline/`. Uma migração futura pode
-atualizar consumidores e decidir se esses encaminhadores ainda são necessários.
+Os consumidores agora incluem diretamente os cabeçalhos de
+`src/ui/timeline/`; os dois cabeçalhos de encaminhamento na raiz de `src/ui/`
+foram removidos do código e do CMake. O teste de UI inclui a régua
+explicitamente, preservando o acesso que antes vinha por inclusão indireta.
+Tipos, assinaturas e comportamento permanecem iguais. O arquivo e o alvo do
+teste não mudaram, então `ROADMAP.md` permaneceu inalterado.
 
 ## Estrutura de referência
 

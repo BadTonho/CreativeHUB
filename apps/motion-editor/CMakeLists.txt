@@ -76,8 +76,6 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/timeline/timeline_ruler.h
     src/ui/timeline/timeline_types.h
     src/ui/timeline/timeline_view_mapping.h
-    src/ui/timeline_navigator.h
-    src/ui/timeline_navigator_math.h
     src/ui/workspace/motion_workspace.cpp
     src/ui/workspace/motion_workspace.h
 )

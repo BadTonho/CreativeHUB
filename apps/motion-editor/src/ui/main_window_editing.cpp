@@ -5,7 +5,7 @@
 #include "inspector/inspector_widget.h"
 #include "media_pool_widget.h"
 #include "property_curve_editor.h"
-#include "timeline_navigator.h"
+#include "timeline/timeline_navigator.h"
 
 #include <creative_suite/animation/animation.h>
 #include <creative_suite/diagnostics/logger.h>

@@ -1,6 +1,6 @@
 #include "motion_workspace.h"
 
-#include "../timeline_navigator.h"
+#include "../timeline/timeline_navigator.h"
 #include <creative_suite/diagnostics/logger.h>
 
 #include <QDockWidget>

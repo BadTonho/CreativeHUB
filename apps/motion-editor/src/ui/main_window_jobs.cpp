@@ -7,7 +7,7 @@
 #include "export/motion_video_export.h"
 #include "media_pool_widget.h"
 #include "dialogs/motion_video_export_dialog.h"
-#include "timeline_navigator.h"
+#include "timeline/timeline_navigator.h"
 
 #include <creative_suite/animation/animation.h>
 #include <creative_suite/diagnostics/logger.h>

@@ -10,7 +10,7 @@
 #include "inspector/inspector_widget.h"
 #include "media_pool_widget.h"
 #include "dialogs/new_composition_dialog.h"
-#include "timeline_navigator.h"
+#include "timeline/timeline_navigator.h"
 #include "workspace/motion_workspace.h"
 
 #include <creative_suite/diagnostics/logger.h>

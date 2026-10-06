@@ -3,7 +3,7 @@
 #include "../settings/autosave_preferences.h"
 #include "rendering/layer_effect_worker_pool.h"
 #include "media_pool_widget.h"
-#include "timeline_navigator.h"
+#include "timeline/timeline_navigator.h"
 
 #include "rendering/preview_renderer.h"
 

@@ -6,7 +6,7 @@
 #include "media_pool_widget.h"
 #include "property_curve_editor.h"
 #include "rendering/preview_renderer.h"
-#include "timeline_navigator.h"
+#include "timeline/timeline_navigator.h"
 #include "workspace/motion_workspace.h"
 
 #include <creative_suite/diagnostics/logger.h>
