@@ -8,6 +8,8 @@
 #include "pages/apps_page.h"
 #include "pages/projects_page.h"
 #include "pages/updates_page.h"
+#include "pages/storage_page.h"
+#include "pages/backups_page.h"
 #include "pages/settings_page.h"
 #include "dialogs/app_details_modal.h"
 
@@ -56,6 +58,8 @@ private:
     AppsPage* m_appsPage{nullptr};
     ProjectsPage* m_projectsPage{nullptr};
     UpdatesPage* m_updatesPage{nullptr};
+    StoragePage* m_storagePage{nullptr};
+    BackupsPage* m_backupsPage{nullptr};
     SettingsPage* m_settingsPage{nullptr};
     AppDetailsModal* m_detailsModal{nullptr};
 

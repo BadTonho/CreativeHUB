@@ -38,14 +38,42 @@ SidebarWidget::SidebarWidget(QWidget* parent)
     auto* allAppsBtn = new SidebarButton(QStringLiteral("Todos os Aplicativos"), this);
     auto* projectsBtn = new SidebarButton(QStringLiteral("Projetos"), this);
     auto* updatesBtn = new SidebarButton(QStringLiteral("Atualizações"), this);
+
+    m_buttons.push_back(allAppsBtn); // 0
+    m_buttons.push_back(projectsBtn); // 1
+    m_buttons.push_back(updatesBtn); // 2
+
+    for (size_t i = 0; i < 3; ++i) {
+        layout->addWidget(m_buttons[i]);
+        connect(m_buttons[i], &QPushButton::clicked, this, [this, i]() {
+            selectButton(static_cast<int>(i));
+        });
+    }
+
+    layout->addSpacing(10);
+
+    auto* toolsLabel = new QLabel(QStringLiteral("SISTEMA & DADOS"), this);
+    toolsLabel->setStyleSheet(QStringLiteral(
+        "color: #555555;"
+        "font-size: 10px;"
+        "font-weight: 800;"
+        "letter-spacing: 1.2px;"
+        "padding-left: 8px;"
+        "margin-bottom: 6px;"
+        "margin-top: 4px;"
+        "background: transparent;"
+    ));
+    layout->addWidget(toolsLabel);
+
+    auto* storageBtn = new SidebarButton(QStringLiteral("Armazenamento"), this);
+    auto* backupsBtn = new SidebarButton(QStringLiteral("Backups"), this);
     auto* settingsBtn = new SidebarButton(QStringLiteral("Configurações"), this);
 
-    m_buttons.push_back(allAppsBtn);
-    m_buttons.push_back(projectsBtn);
-    m_buttons.push_back(updatesBtn);
-    m_buttons.push_back(settingsBtn);
+    m_buttons.push_back(storageBtn); // 3
+    m_buttons.push_back(backupsBtn); // 4
+    m_buttons.push_back(settingsBtn); // 5
 
-    for (size_t i = 0; i < m_buttons.size(); ++i) {
+    for (size_t i = 3; i < 6; ++i) {
         layout->addWidget(m_buttons[i]);
         connect(m_buttons[i], &QPushButton::clicked, this, [this, i]() {
             selectButton(static_cast<int>(i));

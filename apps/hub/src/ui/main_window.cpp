@@ -71,6 +71,11 @@ void MainWindow::setupUi() {
         if (m_pagesStack) {
             m_pagesStack->setCurrentIndex(index);
         }
+        if (index == 3 && m_storagePage) {
+            m_storagePage->refreshStorageInfo();
+        } else if (index == 4 && m_backupsPage) {
+            m_backupsPage->refreshBackupsList();
+        }
     });
     bodyLayout->addWidget(m_sidebarWidget);
 
@@ -93,6 +98,12 @@ void MainWindow::setupUi() {
     connect(m_updatesPage, &UpdatesPage::checkUpdatesRequested, this, &MainWindow::onRefreshApps);
     connect(m_updatesPage, &UpdatesPage::updateAppRequested, this, &MainWindow::onDownloadApp);
     m_pagesStack->addWidget(m_updatesPage);
+
+    m_storagePage = new StoragePage(this);
+    m_pagesStack->addWidget(m_storagePage);
+
+    m_backupsPage = new BackupsPage(this);
+    m_pagesStack->addWidget(m_backupsPage);
 
     m_settingsPage = new SettingsPage(this);
     m_pagesStack->addWidget(m_settingsPage);

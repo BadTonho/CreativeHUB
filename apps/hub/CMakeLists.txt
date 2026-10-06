@@ -58,6 +58,10 @@ add_library(creative-suite-hub-core STATIC
     src/ui/pages/projects_page.cpp
     src/ui/pages/updates_page.h
     src/ui/pages/updates_page.cpp
+    src/ui/pages/storage_page.h
+    src/ui/pages/storage_page.cpp
+    src/ui/pages/backups_page.h
+    src/ui/pages/backups_page.cpp
     src/ui/pages/settings_page.h
     src/ui/pages/settings_page.cpp
     src/ui/main_window.h
