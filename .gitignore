@@ -4,6 +4,7 @@ docs/image-editor/ideia.md
 docs/hub/ideia.md
 /.vscode/
 /build/
+/build-*/
 /out/
 /vcpkg_installed/
 /apps/**/vcpkg_installed/

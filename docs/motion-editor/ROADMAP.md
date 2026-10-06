@@ -545,6 +545,12 @@ composition without losing its layer or frame-rate data.
 - [ ] Profile representative compositions and validate export throughput,
   memory use, and codec behavior across target platforms.
 - [ ] Address measured bottlenecks before expanding the MVP scope.
+- [ ] (Provisional next initiative, after the performance gate) Build editable
+  cubic Bezier vector paths and 2D alpha masks. Start with Pen-created paths
+  and one invertible mask per image, video, text, or shape layer; then add
+  animated path keyframes, Undo/Redo, `.motion` version migration, and preview
+  and export parity. Defer multiple-mask operations and edge feathering until
+  profiling confirms they fit the performance budget.
 
 **Exit criteria:** the agreed MVP workflows pass regression coverage and
 manual visual checks, including save/reopen, recovery, and heavy-composition
@@ -573,10 +579,10 @@ gate.
   audio export out of this delivery. The `.motion` schema remains unchanged;
   automated worker lifecycle coverage exists, while manual UI interaction and
   cancellation during an active analysis remain pending.
-- [ ] Revisit animated masks, advanced effects and effect graphs, nested
-  compositions, particles, 3D features, and node-based workflows only after the core 2D motion workflows
-  meet their performance targets and a clear use case justifies their added
-  complexity.
+- [ ] Revisit advanced mask operations, effect graphs, nested compositions,
+  particles, 3D features, and node-based workflows only after the core 2D
+  motion workflows meet their performance targets and a clear use case
+  justifies their added complexity.
 
 ## Status legend
 
