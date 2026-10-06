@@ -11,6 +11,7 @@
 #include <QThread>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -51,6 +52,7 @@ void main() {
 constexpr char fragment_shader[] = R"GLSL(
 uniform sampler2D source_image;
 uniform float canvas_height;
+uniform int color_adjustment_count;
 uniform GEOMETRY_VEC2 center;
 uniform GEOMETRY_VEC2 displayed_size;
 uniform GEOMETRY_VEC2 rotation_cs;
@@ -58,9 +60,17 @@ uniform float opacity;
 uniform bool axis_aligned;
 layout(std140) uniform SourceLookupX { ivec4 lookup_x[1024]; };
 layout(std140) uniform SourceLookupY { ivec4 lookup_y[1024]; };
+layout(std140) uniform ColorAdjustments { vec4 color_adjustments[256]; };
 out vec4 color;
 int mappedX(int i) { return lookup_x[i / 4][i % 4]; }
 int mappedY(int i) { return lookup_y[i / 4][i % 4]; }
+vec3 adjustColor(vec3 rgb, vec4 parameters) {
+    rgb += parameters.x;
+    rgb = (rgb - vec3(0.5)) * parameters.y + vec3(0.5);
+    float luma = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+    rgb = vec3(luma) + (rgb - vec3(luma)) * parameters.z;
+    return floor(clamp(rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+}
 void main() {
     ivec2 size = textureSize(source_image, 0);
     ivec2 pixel;
@@ -78,6 +88,8 @@ void main() {
                        ivec2(0), size - ivec2(1));
     }
     vec4 source = texelFetch(source_image, pixel, 0);
+    for (int i = 0; i < color_adjustment_count; ++i)
+        source.rgb = adjustColor(source.rgb, color_adjustments[i]);
     color = vec4(source.rgb, source.a * opacity);
 }
 )GLSL";
@@ -169,7 +181,7 @@ struct OpenGlFrameCompositor::Impl {
     std::unique_ptr<QOpenGLFramebufferObject> output;
     GLuint texture = 0;
     GLuint vao = 0;
-    GLuint lookup_buffers[2]{};
+    GLuint lookup_buffers[3]{};
     std::uint64_t peak_known_bytes = 0;
     std::vector<GLint> source_lookup;
     int source_width = 0;
@@ -220,7 +232,7 @@ struct OpenGlFrameCompositor::Impl {
             program.reset();
             if (texture) gl->glDeleteTextures(1, &texture);
             if (vao) gl->glDeleteVertexArrays(1, &vao);
-            gl->glDeleteBuffers(2, lookup_buffers);
+            gl->glDeleteBuffers(3, lookup_buffers);
             context->doneCurrent();
         }
         for (auto& target : targets) {
@@ -279,10 +291,10 @@ struct OpenGlFrameCompositor::Impl {
         GLint block_size = 0, fragment_blocks = 0;
         gl->glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &block_size);
         gl->glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_BLOCKS, &fragment_blocks);
-        if (block_size < 16384 || fragment_blocks < 2)
+        if (block_size < 16384 || fragment_blocks < 3)
             return result(OpenGlCompositionStatus::Failed, "check-uniform-limits",
-                "Two 16 KiB geometry uniform blocks are required.");
-        gl->glGenBuffers(2, lookup_buffers);
+                "Two 16 KiB geometry blocks and one color adjustment block are required.");
+        gl->glGenBuffers(3, lookup_buffers);
         for (unsigned axis = 0; axis < 2; ++axis) {
             gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[axis]);
             gl->glBufferData(GL_UNIFORM_BUFFER, 16384, nullptr, GL_DYNAMIC_DRAW);
@@ -290,6 +302,14 @@ struct OpenGlFrameCompositor::Impl {
                 axis == 0 ? "SourceLookupX" : "SourceLookupY");
             gl->glUniformBlockBinding(program->programId(), block, axis);
         }
+        gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[2]);
+        gl->glBufferData(GL_UNIFORM_BUFFER, 256 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+        const auto adjustments_block = gl->glGetUniformBlockIndex(
+            program->programId(), "ColorAdjustments");
+        if (adjustments_block == GL_INVALID_INDEX)
+            return result(OpenGlCompositionStatus::Failed, "compile-shaders",
+                "The color adjustment shader block is unavailable.");
+        gl->glUniformBlockBinding(program->programId(), adjustments_block, 2);
         rememberResourcePeak();
         return result(OpenGlCompositionStatus::Complete);
     }
@@ -340,7 +360,8 @@ struct OpenGlFrameCompositor::Impl {
         std::uint64_t bytes = static_cast<std::uint64_t>(source_width) * source_height * 4;
         if (output && output->isValid()) bytes += static_cast<std::uint64_t>(output->width()) * output->height() * 4;
         for (const auto& target : targets) if (target.output && target.output->isValid()) bytes += target.bytes;
-        const std::uint64_t geometry = (lookup_buffers[0] ? 16384ULL : 0) + (lookup_buffers[1] ? 16384ULL : 0);
+        const std::uint64_t geometry = (lookup_buffers[0] ? 16384ULL : 0) +
+            (lookup_buffers[1] ? 16384ULL : 0) + (lookup_buffers[2] ? 4096ULL : 0);
         return {bytes, geometry, std::max(peak_known_bytes, bytes + geometry)};
     }
     void rememberResourcePeak() noexcept { peak_known_bytes = resources().peak_known_bytes; }
@@ -562,6 +583,19 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             return result(OpenGlCompositionStatus::Unsupported, "check-limits",
                 "Canvas exceeds the device texture limit or 256 MiB texture budget.");
         for (const auto& layer : layers) {
+            if (layer.gpu_color_adjustments.size() > 256)
+                return result(OpenGlCompositionStatus::Unsupported, "check-effects",
+                    "Color adjustment stack exceeds the 256-effect GPU limit.");
+            for (const auto& adjustment : layer.gpu_color_adjustments) {
+                if (!std::isfinite(adjustment.brightness) || adjustment.brightness < -100.0 ||
+                    adjustment.brightness > 100.0 ||
+                    !std::isfinite(adjustment.contrast_percent) ||
+                    adjustment.contrast_percent < 0.0 || adjustment.contrast_percent > 200.0 ||
+                    !std::isfinite(adjustment.saturation_percent) ||
+                    adjustment.saturation_percent < 0.0 || adjustment.saturation_percent > 200.0)
+                    return result(OpenGlCompositionStatus::Unsupported, "check-effects",
+                        "Color adjustment parameters are outside the shared effect contract.");
+            }
             if (usable(layer) && layer.transform.opacity > 0 &&
                 layer.transform.rotation_degrees != 0 && !p.precise_geometry)
                 return result(OpenGlCompositionStatus::Unsupported, "check-precision",
@@ -622,6 +656,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         gl->glBindTexture(GL_TEXTURE_2D, p.texture);
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 0, p.lookup_buffers[0]);
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 1, p.lookup_buffers[1]);
+        gl->glBindBufferBase(GL_UNIFORM_BUFFER, 2, p.lookup_buffers[2]);
         p.program->setUniformValue("source_image", 0);
         p.program->setUniformValue("canvas_height", static_cast<float>(height));
         measured.draw_submission_nanoseconds += elapsed(setup_started);
@@ -629,6 +664,27 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             if (cancelled()) return result(OpenGlCompositionStatus::Cancelled);
             if (!usable(layer) || layer.transform.opacity == 0) continue;
             const auto& f = *layer.frame;
+            p.program->setUniformValue("color_adjustment_count",
+                static_cast<int>(layer.gpu_color_adjustments.size()));
+            const auto color_adjustment_started = layer.gpu_color_adjustments.empty()
+                ? Clock::time_point{} : Clock::now();
+            if (!layer.gpu_color_adjustments.empty()) {
+                std::array<std::array<float, 4>, 256> packed_adjustments{};
+                for (std::size_t i = 0; i < layer.gpu_color_adjustments.size(); ++i) {
+                    const auto& adjustment = layer.gpu_color_adjustments[i];
+                    packed_adjustments[i] = {
+                        static_cast<float>(adjustment.brightness / 100.0),
+                        static_cast<float>(adjustment.contrast_percent / 100.0),
+                        static_cast<float>(adjustment.saturation_percent / 100.0), 0.0F};
+                }
+                const auto byte_count = static_cast<GLsizeiptr>(
+                    layer.gpu_color_adjustments.size() * sizeof(packed_adjustments[0]));
+                gl->glBindBuffer(GL_UNIFORM_BUFFER, p.lookup_buffers[2]);
+                gl->glBufferSubData(GL_UNIFORM_BUFFER, 0, byte_count,
+                    packed_adjustments.data());
+                measured.uploaded_bytes += static_cast<std::uint64_t>(byte_count);
+                measured.color_adjustment_count += layer.gpu_color_adjustments.size();
+            }
             const auto upload_started = Clock::now();
             if (p.source_width != f.width || p.source_height != f.height) {
                 gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, f.width, f.height, 0, GL_RGBA,
@@ -707,6 +763,9 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             set_geometry("rotation_cs", std::cos(radians), std::sin(radians));
             p.program->setUniformValue("opacity", static_cast<float>(t.opacity));
             gl->glDrawArrays(GL_TRIANGLES, 0, 3);
+            if (!layer.gpu_color_adjustments.empty())
+                measured.color_adjustment_submission_nanoseconds +=
+                    elapsed(color_adjustment_started);
             measured.draw_submission_nanoseconds += elapsed(draw_started) - geometry_upload_ns;
             if (const auto code = gl->glGetError(); code != GL_NO_ERROR)
                 return result(OpenGlCompositionStatus::Failed, "draw-layer",

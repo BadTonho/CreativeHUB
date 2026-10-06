@@ -55,8 +55,10 @@ other applications. Video Editor is the first consumer of the shared OpenGL
 compositor; Motion now has an opt-in experimental preview integration with CPU
 fallback.
 
-**Status: experimental preview composition implemented; GPU effects and export
-integration deferred.** Motion effects remain on CPU. Preview requires
+**Status: experimental preview composition and Color Adjustment implemented;
+Gaussian Blur GPU and export integration deferred.** Color Adjustment runs in
+the GPU composition shader for eligible preview stacks. Gaussian Blur and mixed
+stacks containing enabled blur remain on CPU. Preview requires
 `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1` and reads the composed result back to
 RGBA for the existing viewer. No GPU speedup or driver acceptance is claimed.
 
@@ -308,7 +310,7 @@ readiness checks remain in this roadmap and
 | `.motion` save/open, migrations, and invalid-file preservation | `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`), `motion_editor_ui_test.cpp` (`creative-suite-motion-editor-ui`) | Automated round trips and migration coverage exist. The owner reports repeatedly migrating the same long-lived project across persisted-format versions and says the migrations have worked. Invalid-file and cross-platform file/path results are not recorded. |
 | Autosave and restart recovery | `motion_recovery_store_test.cpp` (`creative-suite-motion-editor-recovery`), `motion_editor_ui_test.cpp` | Automated snapshots and UI recovery paths exist. Basic recovery was reported working on the Windows 11 reference PC on 2026-10-01; detailed restart/recovery scenarios remain pending (**P0 validation**). |
 | Preview, transforms, curves, and layer effects | `preview_renderer_test.cpp` (`creative-suite-motion-editor-preview`), `motion_editor_ui_test.cpp`; exported Color Adjustment pixels in `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`); shared evaluator coverage in `libs/tests/animation_test.cpp` and `libs/tests/composition_test.cpp`; shared color processing in `libs/tests/effects_test.cpp` (`creative-suite-effects`) | Offscreen tests cover preview, shared Color Adjustment delegation, export output, cancellation, timing, and interaction behavior. Real-hardware visual output and graphics-driver validation remain pending (**P2 validation**). |
-| Experimental GPU preview composition | `gpu_composition_test.cpp` (`creative-suite-motion-editor-gpu-composition`), `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), and shared `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`) | Automated coverage checks fallback output and CPU/GPU output parity when offscreen OpenGL is available. Manual GPU enabled/disabled checks and native graphics-driver validation remain pending (**P2 validation**). |
+| Experimental GPU composition and Color Adjustment preview | `gpu_composition_test.cpp` (`creative-suite-motion-editor-gpu-composition`), `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`), and shared `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`) | Automated coverage checks fallback output, ordered adjustment parity within one RGB level with exact alpha, cancellation, mixed-stack CPU fallback, and metrics when OpenGL is available. Manual GPU enabled/disabled checks and native graphics-driver validation remain pending (**P2 validation**). |
 | Performance diagnostics | `performance_metrics_test.cpp` (`creative-suite-motion-editor-performance`) | Tests cover metrics aggregation, not actual playback throughput. The 1080p/30 fps, 10-second, five-layer benchmark on the reference PC and other systems remains pending (**P2 validation**). |
 | Opaque video export and export controls | `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`), shared `libs/media/tests/video_encoder_test.cpp` | Automated output, cancellation, failure, and cancellation-exception message coverage exists; throughput, installed codecs, output profiles, and cross-platform behavior remain pending (**P1/P2 validation**). |
 | Optional audio-to-transform keyframe generation | `audio_keyframe_generation_test.cpp` (`creative-suite-motion-editor-audio-keyframes`) | Automated coverage includes per-frame RMS, whole-file peak normalization past the layer boundary, empty and silent sources, invalid audio, atomic track replacement, Undo/Redo, `.motion` round-trip, worker success and progress callbacks on the receiver thread, pre-start cancellation without an error log, and failure logging with operation, path, and layer ID. Manual generation and cancellation during an active UI analysis remain pending. |
@@ -427,8 +429,8 @@ before the target. One-frame advances keep the decoder's existing fast path;
 backward seeks, larger gaps, and interactive scrubbing use timestamp seeking.
 An unsuccessful forward decode falls back to timestamp seeking unless it was
 cancelled. Export retains its existing decode path. Preview performance schema
-v5 reports GPU composition outcomes and upload, draw-submission, and readback
-metrics, as well as actual timestamp-seek outcomes and time, forward-decode attempts,
+v6 reports GPU composition and Color Adjustment outcomes and upload,
+draw-submission, effect, and readback metrics, as well as actual timestamp-seek outcomes and time, forward-decode attempts,
 completions and fallbacks, and discarded intermediate frames. These counters
 are diagnostics; they do not change the automatic effect-worker policy.
 

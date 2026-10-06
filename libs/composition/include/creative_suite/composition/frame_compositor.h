@@ -1,6 +1,7 @@
 #pragma once
 
 #include <creative_suite/animation/animation.h>
+#include <creative_suite/effects/effects.h>
 #include <creative_suite/media/video_frame.h>
 
 #include <cstddef>
@@ -86,6 +87,10 @@ struct CompositionLayer {
     animation::Transform2D transform;
     AlphaCoveragePtr alpha_coverage;
     PreparedAlphaCoverageGeometryPtr prepared_alpha_geometry;
+    // Optional ordered Color Adjustment passes for OpenGL preview composition.
+    // The CPU compositor ignores this list; callers must provide an already
+    // processed frame when rendering through the CPU path.
+    std::vector<effects::ColorAdjustmentParameters> gpu_color_adjustments;
 };
 
 struct CompositionLayerTimings {

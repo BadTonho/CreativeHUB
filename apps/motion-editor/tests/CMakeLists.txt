@@ -105,6 +105,8 @@ target_link_libraries(creative-suite-motion-editor-export-tests PRIVATE
     creative-suite-motion-editor-core
     Qt6::Widgets
 )
+qt_import_plugins(creative-suite-motion-editor-export-tests
+    INCLUDE Qt6::QOffscreenIntegrationPlugin)
 target_compile_features(creative-suite-motion-editor-export-tests PRIVATE cxx_std_20)
 target_compile_definitions(creative-suite-motion-editor-export-tests PRIVATE
     MOTION_EDITOR_EXPORT_TEST_MEDIA_DIR="${PROJECT_SOURCE_DIR}/prototypes/testdata"

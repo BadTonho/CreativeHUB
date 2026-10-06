@@ -50,6 +50,7 @@ target_include_directories(creative-suite-composition PUBLIC
 )
 target_link_libraries(creative-suite-composition PUBLIC
     creative-suite::animation
+    creative-suite::effects
     creative-suite::media-frame
 )
 target_compile_features(creative-suite-composition PUBLIC cxx_std_20)

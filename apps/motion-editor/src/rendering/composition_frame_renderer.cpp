@@ -14,6 +14,7 @@
 #include <limits>
 #include <set>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 
 namespace motion::ui {
@@ -119,6 +120,20 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
 
     std::vector<creative_suite::composition::CompositionLayer> composition_layers;
     std::vector<creative_suite::media::RgbaFramePtr> owned_frames;
+    struct PendingGpuColorAdjustment {
+        std::size_t composition_index = 0;
+        model::LayerId layer_id = 0;
+        creative_suite::media::RgbaFramePtr source;
+        std::vector<model::LayerEffect> effects;
+    };
+    std::vector<PendingGpuColorAdjustment> pending_gpu_adjustments;
+    std::uint64_t cpu_color_adjustment_fallbacks = 0;
+    std::uint64_t gpu_color_adjustment_count = 0;
+    bool gpu_color_adjustment_failed = false;
+    std::string gpu_failure_operation;
+    std::int64_t gpu_failure_code = 0;
+    const bool try_gpu_effects = gpu_composition_enabled_ &&
+        !gpu_composition_disabled_after_failure_;
     std::set<model::LayerId> active_content_ids;
     composition_layers.reserve(request.layers.size());
     owned_frames.reserve(request.layers.size());
@@ -291,7 +306,34 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         }
 
         if (frame == nullptr) continue;
-        if (hasEnabledLayerEffects(layer.effects)) {
+        std::vector<creative_suite::effects::ColorAdjustmentParameters> gpu_adjustments;
+        const bool has_enabled_effects = hasEnabledLayerEffects(layer.effects);
+        const bool gpu_color_only_stack = try_gpu_effects && has_enabled_effects &&
+            model::validLayerEffects(layer.effects) &&
+            std::all_of(layer.effects.begin(), layer.effects.end(), [](const auto& effect) {
+                return std::visit([](const auto& value) {
+                    using Effect = std::decay_t<decltype(value)>;
+                    return !value.enabled ||
+                        std::is_same_v<Effect, model::ColorAdjustmentEffect>;
+                }, effect);
+            });
+        if (gpu_color_only_stack) {
+            gpu_adjustments.reserve(layer.effects.size());
+            for (const auto& effect : layer.effects) {
+                if (const auto* color = std::get_if<model::ColorAdjustmentEffect>(&effect);
+                    color && color->enabled) {
+                    gpu_adjustments.push_back({color->brightness,
+                        color->contrast_percent, color->saturation_percent});
+                }
+            }
+        } else if (gpu_composition_enabled_ && has_enabled_effects) {
+            cpu_color_adjustment_fallbacks += static_cast<std::uint64_t>(
+                std::count_if(layer.effects.begin(), layer.effects.end(), [](const auto& effect) {
+                    return std::holds_alternative<model::ColorAdjustmentEffect>(effect) &&
+                        std::get<model::ColorAdjustmentEffect>(effect).enabled;
+                }));
+        }
+        if (has_enabled_effects && !gpu_color_only_stack) {
             try {
                 StageTimer effects_timer(
                     record_preview_metrics_, diagnostics::PreviewTimingStage::Effects);
@@ -338,7 +380,15 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
             // text/shape layers remain pixel-sized at transform scale 1.
             transform.scale /= fit_scale;
         }
-        composition_layers.push_back(CompositionLayer{frame.get(), transform});
+        const auto composition_index = composition_layers.size();
+        composition_layers.push_back(CompositionLayer{frame.get(), transform, {}, {},
+            std::move(gpu_adjustments)});
+        if (!composition_layers.back().gpu_color_adjustments.empty()) {
+            gpu_color_adjustment_count +=
+                composition_layers.back().gpu_color_adjustments.size();
+            pending_gpu_adjustments.push_back({composition_index, layer.id, frame,
+                layer.effects});
+        }
     }
 
     for (auto cached = content_frames_.begin(); cached != content_frames_.end();) {
@@ -385,6 +435,13 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
         }
         if (gpu_result.status == OpenGlCompositionStatus::Complete &&
             gpu_result.frame.has_value()) {
+            if (record_preview_metrics_ &&
+                (gpu_timings.color_adjustment_count != 0 ||
+                 cpu_color_adjustment_fallbacks != 0)) {
+                diagnostics::PerformanceMetrics::instance().recordGpuColorAdjustment(
+                    gpu_timings.color_adjustment_count, cpu_color_adjustment_fallbacks, false,
+                    gpu_timings.color_adjustment_submission_nanoseconds);
+            }
             if (record_preview_metrics_) {
                 diagnostics::PerformanceMetrics::instance().recordGpuComposition(
                     true, false, gpu_timings.uploaded_bytes, gpu_timings.readback_bytes,
@@ -395,9 +452,12 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 std::move(*gpu_result.frame));
         }
 
-        gpu_composition_disabled_after_failure_ = true;
         const bool gpu_failed = gpu_result.status == OpenGlCompositionStatus::Failed ||
             gpu_result.status == OpenGlCompositionStatus::Complete;
+        gpu_color_adjustment_failed = gpu_failed;
+        gpu_failure_operation = gpu_result.operation;
+        gpu_failure_code = gpu_result.error_code;
+        gpu_composition_disabled_after_failure_ = true;
         creative_suite::diagnostics::Logger::instance().log(
             gpu_failed ? creative_suite::diagnostics::Level::Error
                        : creative_suite::diagnostics::Level::Warning,
@@ -415,6 +475,50 @@ creative_suite::media::RgbaFramePtr CompositionFrameRenderer::render(
                 false, gpu_failed, gpu_timings.uploaded_bytes, gpu_timings.readback_bytes,
                 gpu_timings.upload_nanoseconds, gpu_timings.draw_submission_nanoseconds,
                 gpu_timings.readback_nanoseconds);
+            diagnostics::PerformanceMetrics::instance().recordGpuColorAdjustment(
+                0, cpu_color_adjustment_fallbacks + gpu_color_adjustment_count,
+                gpu_color_adjustment_failed && gpu_color_adjustment_count != 0,
+                gpu_timings.color_adjustment_submission_nanoseconds);
+        }
+    }
+    if (gpu_composition_enabled_ && !try_gpu_effects &&
+        cpu_color_adjustment_fallbacks != 0 && record_preview_metrics_) {
+        diagnostics::PerformanceMetrics::instance().recordGpuColorAdjustment(
+            0, cpu_color_adjustment_fallbacks, false, 0);
+    }
+    for (const auto& pending : pending_gpu_adjustments) {
+        if (should_cancel && should_cancel()) return {};
+        try {
+            auto processed = std::make_shared<creative_suite::media::RgbaFrame>(
+                *pending.source);
+            const EffectTimingRecorder effect_timing_recorder =
+                [record = record_preview_metrics_](
+                    LayerEffectKind effect, std::uint64_t duration_nanoseconds) {
+                    if (!record) return;
+                    const auto kind = effect == LayerEffectKind::GaussianBlur
+                        ? diagnostics::PreviewEffectKind::GaussianBlur
+                        : diagnostics::PreviewEffectKind::ColorAdjustment;
+                    diagnostics::PerformanceMetrics::instance().recordEffectTiming(
+                        kind, duration_nanoseconds);
+                };
+            if (!applyLayerEffects(*processed, pending.effects, should_cancel,
+                                   effect_timing_recorder)) return {};
+            owned_frames.push_back(processed);
+            composition_layers[pending.composition_index].frame = processed.get();
+            composition_layers[pending.composition_index].gpu_color_adjustments.clear();
+        } catch (const std::exception& error) {
+            if (should_cancel && should_cancel()) return {};
+            if (fail_on_media_error) {
+                throw std::runtime_error("GPU effect fallback failed for layer " +
+                    std::to_string(pending.layer_id) + ": " + error.what());
+            }
+            creative_suite::diagnostics::Logger::instance().log(
+                creative_suite::diagnostics::Level::Error,
+                "motion_preview", "gpu_effect_cpu_fallback", error.what(),
+                {{"layer_id", std::to_string(pending.layer_id)},
+                 {"gpu_operation", gpu_failure_operation},
+                 {"error_code", std::to_string(gpu_failure_code)}});
+            return {};
         }
     }
     auto composed = creative_suite::composition::FrameCompositor::compose(

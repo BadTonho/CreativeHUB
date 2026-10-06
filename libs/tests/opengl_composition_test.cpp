@@ -112,6 +112,39 @@ void parity(OpenGlFrameCompositor& gpu) {
     for (const auto dimensions : {std::pair{1920, 1080}, {960, 540}, {480, 270}})
         compare(gpu, dimensions.first, dimensions.second, {{&opaque}}, "preview quality");
 }
+void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
+    auto source = fixture(23, 13, true, 7);
+    auto adjusted = source;
+    const std::vector<effects::ColorAdjustmentParameters> adjustments{
+        {18.0, 132.0, 74.0}, {-7.0, 83.0, 145.0}, {2.0, 105.0, 91.0}};
+    for (const auto& parameters : adjustments) {
+        require(effects::applyColorAdjustment(adjusted, parameters) ==
+                    effects::ProcessingResult::Completed,
+                "CPU reference adjustment failed");
+    }
+    CompositionLayer layer{&source};
+    layer.gpu_color_adjustments = adjustments;
+    const auto cpu = FrameCompositor::compose(source.width, source.height, {{&adjusted}});
+    OpenGlCompositionTimings timings;
+    const auto output = gpu.compose(source.width, source.height, {layer}, {}, &timings);
+    require(cpu && output.status == OpenGlCompositionStatus::Complete && output.frame,
+        "GPU color adjustment composition failed: " + output.operation + ": " + output.cause);
+    for (std::size_t i = 0; i < cpu->rgba_pixels.size(); ++i) {
+        const auto delta = std::abs(static_cast<int>(cpu->rgba_pixels[i]) -
+                                    static_cast<int>(output.frame->rgba_pixels[i]));
+        require(delta <= (i % 4 == 3 ? 0 : 1),
+            "GPU color adjustment exceeded the one-channel RGB tolerance or changed alpha");
+    }
+    require(timings.color_adjustment_count == adjustments.size() &&
+                timings.color_adjustment_submission_nanoseconds > 0,
+            "GPU color adjustment work is measured");
+
+    int cancellation_checks = 0;
+    const auto cancelled = gpu.compose(source.width, source.height, {layer},
+        [&] { return ++cancellation_checks >= 5; });
+    require(cancelled.status == OpenGlCompositionStatus::Cancelled && !cancelled.frame,
+        "cancelled GPU color adjustment does not publish a partial frame");
+}
 void cancellationAndLimits(OpenGlFrameCompositor& gpu) {
     auto f = fixture(16, 12, true);
     const std::vector<CompositionLayer> layers{{&f}, {&f}};
@@ -345,6 +378,7 @@ int main(int argc, char** argv) {
                     require(initial.status == OpenGlCompositionStatus::Complete,
                         "native initialization failed: " + initial.operation + ": " + initial.cause);
                     parity(gpu);
+                    colorAdjustmentParity(gpu);
                     if (activation == 0) highResolution(gpu);
                     cancellationAndLimits(gpu);
                     directCancellation(gpu);

@@ -25,7 +25,8 @@ bool PreviewMetricsSnapshot::hasActivity() const noexcept
         stale_results != 0 || timestamp_seek_attempts != 0 ||
         forward_decode_attempts != 0 || discarded_intermediate_frames != 0 ||
         gpu_composition_frames != 0 || gpu_composition_fallbacks != 0 ||
-        gpu_composition_failures != 0) return true;
+        gpu_composition_failures != 0 || gpu_color_adjustment_effects != 0 ||
+        gpu_color_adjustment_fallbacks != 0 || gpu_color_adjustment_failures != 0) return true;
     const auto has_timing = [](const auto& values) {
         return std::any_of(values.begin(), values.end(), [](const TimingSummary& timing) {
             return timing.count != 0;
@@ -51,6 +52,8 @@ void PerformanceMetrics::setEnabled(bool enabled) noexcept
         forward_decode_fallbacks_ = discarded_intermediate_frames_ = 0;
         gpu_composition_frames_ = gpu_composition_fallbacks_ = gpu_composition_failures_ = 0;
         gpu_composition_uploaded_bytes_ = gpu_composition_readback_bytes_ = 0;
+        gpu_color_adjustment_effects_ = gpu_color_adjustment_fallbacks_ =
+            gpu_color_adjustment_failures_ = 0;
         timings_ = {};
         effect_timings_ = {};
         request_started_.clear();
@@ -72,6 +75,8 @@ void PerformanceMetrics::reset() noexcept
     forward_decode_fallbacks_ = discarded_intermediate_frames_ = 0;
     gpu_composition_frames_ = gpu_composition_fallbacks_ = gpu_composition_failures_ = 0;
     gpu_composition_uploaded_bytes_ = gpu_composition_readback_bytes_ = 0;
+    gpu_color_adjustment_effects_ = gpu_color_adjustment_fallbacks_ =
+        gpu_color_adjustment_failures_ = 0;
     timings_ = {};
     effect_timings_ = {};
     request_started_.clear();
@@ -173,6 +178,21 @@ void PerformanceMetrics::recordGpuComposition(
     recordTimingLocked(PreviewTimingStage::GpuCompositionReadback, readback_nanoseconds);
 }
 
+void PerformanceMetrics::recordGpuColorAdjustment(
+    std::uint64_t applied_effects,
+    std::uint64_t fallback_effects,
+    bool failed,
+    std::uint64_t submission_nanoseconds) noexcept
+{
+    std::lock_guard lock(mutex_);
+    if (!enabled_) return;
+    gpu_color_adjustment_effects_ += applied_effects;
+    gpu_color_adjustment_fallbacks_ += fallback_effects;
+    if (failed) ++gpu_color_adjustment_failures_;
+    if (applied_effects != 0)
+        recordTimingLocked(PreviewTimingStage::GpuColorAdjustment, submission_nanoseconds);
+}
+
 void PerformanceMetrics::recordTiming(
     PreviewTimingStage stage,
     std::uint64_t duration_nanoseconds) noexcept
@@ -260,6 +280,12 @@ std::optional<PreviewMetricsSnapshot> PerformanceMetrics::takeSnapshotAndReset()
         std::exchange(gpu_composition_uploaded_bytes_, 0);
     result.gpu_composition_readback_bytes =
         std::exchange(gpu_composition_readback_bytes_, 0);
+    result.gpu_color_adjustment_effects =
+        std::exchange(gpu_color_adjustment_effects_, 0);
+    result.gpu_color_adjustment_fallbacks =
+        std::exchange(gpu_color_adjustment_fallbacks_, 0);
+    result.gpu_color_adjustment_failures =
+        std::exchange(gpu_color_adjustment_failures_, 0);
     for (std::size_t index = 0; index < timings_.size(); ++index) {
         auto& source = timings_[index];
         auto& destination = result.timings[index];
@@ -296,6 +322,7 @@ const char* previewTimingStageName(PreviewTimingStage stage) noexcept
     case PreviewTimingStage::GpuCompositionUpload: return "gpu_composition_upload";
     case PreviewTimingStage::GpuCompositionDrawSubmission: return "gpu_composition_draw_submission";
     case PreviewTimingStage::GpuCompositionReadback: return "gpu_composition_readback";
+    case PreviewTimingStage::GpuColorAdjustment: return "gpu_color_adjustment";
     case PreviewTimingStage::FrameRender: return "frame_render";
     case PreviewTimingStage::RequestToViewerPaint: return "request_to_viewer_paint";
     case PreviewTimingStage::Count: break;
@@ -322,7 +349,7 @@ creative_suite::diagnostics::Context makePreviewPerformanceContext(
         return value.has_value() ? std::to_string(*value) : std::string("N/A");
     };
     creative_suite::diagnostics::Context context{
-        {"schema_version", "5"},
+        {"schema_version", "6"},
         {"interval_ms", "1000"},
         {"process_cpu_percent", optionalNumber(resources.process_cpu_percent)},
         {"process_working_set_bytes", optionalNumber(resources.process_working_set_bytes)},
@@ -346,6 +373,9 @@ creative_suite::diagnostics::Context makePreviewPerformanceContext(
         {"gpu_composition_failures", std::to_string(metrics.gpu_composition_failures)},
         {"gpu_composition_uploaded_bytes", std::to_string(metrics.gpu_composition_uploaded_bytes)},
         {"gpu_composition_readback_bytes", std::to_string(metrics.gpu_composition_readback_bytes)},
+        {"gpu_color_adjustment_effects", std::to_string(metrics.gpu_color_adjustment_effects)},
+        {"gpu_color_adjustment_fallbacks", std::to_string(metrics.gpu_color_adjustment_fallbacks)},
+        {"gpu_color_adjustment_failures", std::to_string(metrics.gpu_color_adjustment_failures)},
         {"canvas_width", std::to_string(metadata.canvas_width)},
         {"canvas_height", std::to_string(metadata.canvas_height)},
         {"frame_rate_numerator", std::to_string(metadata.frame_rate_numerator)},

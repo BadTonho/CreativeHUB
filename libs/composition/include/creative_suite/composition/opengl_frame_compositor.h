@@ -26,6 +26,8 @@ struct OpenGlCompositionTimings {
     std::uint64_t readback_bytes = 0;
     std::uint64_t uploaded_layers = 0;
     std::uint64_t producer_fence_submission_nanoseconds = 0;
+    std::uint64_t color_adjustment_submission_nanoseconds = 0;
+    std::uint64_t color_adjustment_count = 0;
 };
 
 struct OpenGlCompositionResult {

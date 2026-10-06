@@ -127,7 +127,10 @@ int main(int argc, char* argv[])
             fallback_generation = generation;
             fallback_frame = std::move(frame);
         }, {}, &metrics, true, nullptr);
-    const auto fallback_request = request();
+    auto fallback_request = request();
+    fallback_request.layers.front().effects = {
+        motion::model::ColorAdjustmentEffect{true, 18.0, 132.0, 74.0},
+        motion::model::ColorAdjustmentEffect{true, -7.0, 83.0, 145.0}};
     const auto failed_context_generation = fallback_renderer.submit(fallback_request);
     require(waitFor([&] { return fallback_generation == failed_context_generation; }) &&
                 fallback_frame != nullptr && fallback_frame->width == 32 &&
@@ -138,12 +141,25 @@ int main(int argc, char* argv[])
     require(fallback_cpu_frame != nullptr &&
                 fallback_frame->rgba_pixels == fallback_cpu_frame->rgba_pixels,
             "failed GPU initialization preserves byte-identical CPU output");
+    creative_suite::media::RgbaFramePtr subsequent_fallback_frame;
+    const auto subsequent_fallback_generation = fallback_renderer.submit(fallback_request);
+    require(waitFor([&] {
+                return fallback_generation == subsequent_fallback_generation;
+            }) && fallback_frame != nullptr,
+            "the worker continues rendering after its OpenGL backend fails");
+    motion::ui::CompositionFrameRenderer subsequent_cpu_renderer(false);
+    subsequent_fallback_frame = subsequent_cpu_renderer.render(fallback_request);
+    require(subsequent_fallback_frame != nullptr &&
+                subsequent_fallback_frame->rgba_pixels == fallback_frame->rgba_pixels,
+            "subsequent requests remain byte-identical to CPU after disabling the worker GPU path");
     fallback_renderer.stopAndWait();
     auto fallback_snapshot = metrics.takeSnapshotAndReset();
     require(fallback_snapshot.has_value() &&
                 fallback_snapshot->gpu_composition_fallbacks == 1 &&
-                fallback_snapshot->gpu_composition_failures == 1,
-            "context failure increments GPU fallback and failure diagnostics");
+                fallback_snapshot->gpu_composition_failures == 1 &&
+                fallback_snapshot->gpu_color_adjustment_fallbacks == 4 &&
+                fallback_snapshot->gpu_color_adjustment_failures == 1,
+            "context failure falls back for color effects and later worker requests stay CPU");
 
     std::ifstream log_file(logger.log_path(), std::ios::binary);
     const std::string log_contents(
@@ -151,7 +167,6 @@ int main(int argc, char* argv[])
     require(log_contents.find("gpu_composition_fallback") != std::string::npos &&
                 log_contents.find("canvas_width=\"32\"") != std::string::npos,
             "GPU fallback logs the operation and canvas context");
-
     auto surface = creative_suite::composition::OpenGlFrameCompositor::createSurface();
     if (surface) {
         QObject gpu_receiver;
@@ -190,6 +205,82 @@ int main(int argc, char* argv[])
         std::cout << "gpu_composition_frames=" << gpu_snapshot->gpu_composition_frames
                   << " gpu_composition_fallbacks="
                   << gpu_snapshot->gpu_composition_fallbacks << '\n';
+
+        const bool gpu_backend_available = gpu_snapshot->gpu_composition_frames == 1;
+        motion::ui::PreviewLayerSnapshot color_layer;
+        color_layer.id = 10;
+        color_layer.kind = motion::model::LayerKind::Image;
+        color_layer.still_frame = imageFrame();
+        color_layer.effects = {
+            motion::model::ColorAdjustmentEffect{true, 18.0, 132.0, 74.0},
+            motion::model::ColorAdjustmentEffect{false, 100.0, 0.0, 0.0},
+            motion::model::ColorAdjustmentEffect{true, -7.0, 83.0, 145.0},
+            motion::model::ColorAdjustmentEffect{true, 2.0, 105.0, 91.0}};
+        if (gpu_backend_available) {
+            const motion::ui::PreviewRequest color_request{{2, 2}, {24, 1}, {color_layer}};
+            metrics.reset();
+            QObject color_receiver;
+            std::uint64_t color_generation = 0;
+            creative_suite::media::RgbaFramePtr color_gpu_frame;
+            motion::ui::PreviewRenderer color_renderer(
+                &color_receiver,
+                [&](std::uint64_t generation, motion::ui::PreviewRequestMode,
+                    std::uint64_t, creative_suite::media::RgbaFramePtr frame) {
+                    color_generation = generation;
+                    color_gpu_frame = std::move(frame);
+                }, {}, &metrics, true, surface.get());
+            const auto color_expected_generation = color_renderer.submit(color_request);
+            require(waitFor([&] { return color_generation == color_expected_generation; }) &&
+                        color_gpu_frame != nullptr,
+                    "GPU Color Adjustment preview produces a frame");
+            motion::ui::CompositionFrameRenderer color_cpu_renderer(false);
+            const auto color_cpu_frame = color_cpu_renderer.render(color_request);
+            require(color_cpu_frame != nullptr &&
+                        color_cpu_frame->rgba_pixels.size() == color_gpu_frame->rgba_pixels.size(),
+                    "CPU Color Adjustment reference produces a frame");
+            for (std::size_t index = 0; index < color_cpu_frame->rgba_pixels.size(); ++index) {
+                const auto delta = std::abs(static_cast<int>(color_cpu_frame->rgba_pixels[index]) -
+                                            static_cast<int>(color_gpu_frame->rgba_pixels[index]));
+                require(delta <= (index % 4 == 3 ? 0 : 1),
+                        "Motion GPU Color Adjustment matches CPU within one RGB level and exact alpha");
+            }
+            color_renderer.stopAndWait();
+            const auto color_snapshot = metrics.takeSnapshotAndReset();
+            require(color_snapshot.has_value() &&
+                        color_snapshot->gpu_color_adjustment_effects == 3 &&
+                        color_snapshot->gpu_color_adjustment_fallbacks == 0 &&
+                        color_snapshot->gpu_color_adjustment_failures == 0,
+                    "Motion GPU Color Adjustment records enabled effect counts without fallback");
+        }
+
+        color_layer.effects.insert(color_layer.effects.begin(),
+            motion::model::GaussianBlurEffect{true, 1.0});
+        const motion::ui::PreviewRequest mixed_request{{2, 2}, {24, 1}, {color_layer}};
+        metrics.reset();
+        QObject mixed_receiver;
+        std::uint64_t mixed_generation = 0;
+        creative_suite::media::RgbaFramePtr mixed_frame;
+        motion::ui::PreviewRenderer mixed_renderer(
+            &mixed_receiver,
+            [&](std::uint64_t generation, motion::ui::PreviewRequestMode,
+                std::uint64_t, creative_suite::media::RgbaFramePtr frame) {
+                mixed_generation = generation;
+                mixed_frame = std::move(frame);
+            }, {}, &metrics, true, surface.get());
+        const auto mixed_expected_generation = mixed_renderer.submit(mixed_request);
+        require(waitFor([&] { return mixed_generation == mixed_expected_generation; }) &&
+                    mixed_frame != nullptr,
+                "mixed CPU Gaussian Blur stack still renders through the preview");
+        motion::ui::CompositionFrameRenderer mixed_cpu_renderer(false);
+        const auto mixed_cpu_frame = mixed_cpu_renderer.render(mixed_request);
+        require(mixed_cpu_frame != nullptr && mixed_cpu_frame->rgba_pixels == mixed_frame->rgba_pixels,
+                "mixed Gaussian Blur and Color Adjustment stack remains byte-identical to CPU");
+        mixed_renderer.stopAndWait();
+        const auto mixed_snapshot = metrics.takeSnapshotAndReset();
+        require(mixed_snapshot.has_value() &&
+                    mixed_snapshot->gpu_color_adjustment_effects == 0 &&
+                    mixed_snapshot->gpu_color_adjustment_fallbacks == 3,
+                "Gaussian Blur sends the entire ordered effect stack through CPU");
     }
 
     return EXIT_SUCCESS;
