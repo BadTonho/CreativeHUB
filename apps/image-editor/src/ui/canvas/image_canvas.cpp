@@ -660,12 +660,9 @@ void ImageCanvas::mousePressEvent(QMouseEvent* event) {
     const auto modifiers = event->modifiers();
     if (eyedropper_mode_ && event->button() == Qt::LeftButton) {
         if (!image_.isNull() && imageTargetRect().contains(event->position())) {
-            const QPointF image_point = widgetToImageCoordinates(event->position());
-            const int x = std::clamp(static_cast<int>(std::floor(image_point.x())),
-                                     0, image_.width() - 1);
-            const int y = std::clamp(static_cast<int>(std::floor(image_point.y())),
-                                     0, image_.height() - 1);
-            emit colorSampled(image_.pixelColor(x, y));
+            const auto sampled = eyedropper_tool_.sample(
+                image_, widgetToImageCoordinates(event->position()));
+            if (sampled) emit colorSampled(*sampled);
         }
         event->accept();
         return;

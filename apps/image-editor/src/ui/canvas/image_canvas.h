@@ -4,6 +4,7 @@
 #include "../tools/brush/eraser_tool.h"
 #include "../tools/brush/paint_tool.h"
 #include "../tools/crop/crop_tool.h"
+#include "../tools/eyedropper/eyedropper_tool.h"
 #include "../tools/selection/area_selection_tool.h"
 #include "../tools/selection/object/object_selection_tool.h"
 #include "../tools/shapes/shape_tool.h"
@@ -161,6 +162,7 @@ private:
     PaintTool paint_tool_;
     EraserTool eraser_tool_;
     CropTool crop_tool_;
+    EyedropperTool eyedropper_tool_;
     AreaSelectionTool area_selection_tool_;
     ObjectSelectionTool object_selection_tool_;
     ShapeTool shape_tool_;
